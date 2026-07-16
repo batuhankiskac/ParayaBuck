@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parayabuck"
+version = "0.1.0"
+description = "Python trading bot for US stocks via Alpaca (paper first, live later)"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "click>=8.1",
+    "tabulate>=0.9",
+    "matplotlib>=3.8",
+    "alpaca-py>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+
+[project.scripts]
+parayabuck = "parayabuck.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+ignore_missing_imports = true
+exclude = [".venv/", "build/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

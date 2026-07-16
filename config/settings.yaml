@@ -1,0 +1,95 @@
+# ParayaBuck settings — Alpaca (US stocks)
+
+# --- Account ---
+account:
+  starting_balance: 10000.0    # USD paper starting balance
+  currency: USD
+
+# --- Risk ---
+risk:
+  max_position_size: 100       # max shares per trade
+  max_daily_loss: 300.0        # USD — stop trading if daily PnL <= -this
+  max_drawdown: 1500.0         # USD — stop trading if account dips this much from peak
+  risk_per_trade: 150.0        # USD — used for position sizing
+  commission_per_share: 0.0    # Alpaca is commission-free
+  slippage_cents: 0.01         # simulated slippage in dollars on each fill
+
+# --- Portfolio risk ---
+portfolio:
+  max_pct_per_position: 0.10   # max 10% of equity in one stock
+  max_pct_per_sector: 0.30     # max 30% of equity in one sector
+  max_positions: 15            # max concurrent open positions
+  min_cash_pct: 0.05           # always keep 5% in cash
+
+# --- Symbols (US stocks) ---
+symbols:
+  AAPL:
+    tick_size: 0.01
+    point_value: 1.0
+  MSFT:
+    tick_size: 0.01
+    point_value: 1.0
+  GOOGL:
+    tick_size: 0.01
+    point_value: 1.0
+  TSLA:
+    tick_size: 0.01
+    point_value: 1.0
+  NVDA:
+    tick_size: 0.01
+    point_value: 1.0
+  AMZN:
+    tick_size: 0.01
+    point_value: 1.0
+  SPY:
+    tick_size: 0.01
+    point_value: 1.0
+  QQQ:
+    tick_size: 0.01
+    point_value: 1.0
+  KO:
+    tick_size: 0.01
+    point_value: 1.0
+  PEP:
+    tick_size: 0.01
+    point_value: 1.0
+  JNJ:
+    tick_size: 0.01
+    point_value: 1.0
+  JPM:
+    tick_size: 0.01
+    point_value: 1.0
+  XOM:
+    tick_size: 0.01
+    point_value: 1.0
+
+# --- Strategy defaults ---
+strategy:
+  name: mean_reversion
+  params:
+    bb_period: 20
+    bb_std: 2.0
+    rsi_period: 14
+    oversold: 30
+    overbought: 70
+    allow_short: false
+    max_position: 50
+
+# --- Strategy allocation (for multi-strategy mode) ---
+strategy_allocations:
+  pairs_trading: 0.40
+  mean_reversion: 0.25
+  multi_factor: 0.20
+  vwap_reversion: 0.15
+
+# --- Backtest ---
+backtest:
+  symbol: SPY
+  timeframe: 15m
+  start: 2025-01-01
+  end: 2025-06-30
+
+# --- Alpaca ---
+alpaca:
+  paper: true
+  data_delayed: false

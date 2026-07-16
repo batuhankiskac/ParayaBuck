@@ -109,11 +109,23 @@ class AlpacaDataSource(DataSource):
         timeframe: str,
         start: datetime | str | None = None,
         end: datetime | str | None = None,
+        use_cache: bool = True,
     ) -> list[Bar]:
         cache_key = f"{symbol}_{timeframe}_{start}_{end}"
-        if cache_key not in self._cache:
-            self._cache[cache_key] = self._fetch_bars(symbol, timeframe, start, end)
-        return self._cache[cache_key]
+        if use_cache and cache_key in self._cache:
+            return self._cache[cache_key]
+        bars = self._fetch_bars(symbol, timeframe, start, end)
+        if use_cache:
+            self._cache[cache_key] = bars
+        return bars
+
+    def clear_cache(self) -> None:
+        self._cache.clear()
+
+    def clear_cache_for_symbol(self, symbol: str) -> None:
+        keys_to_remove = [k for k in self._cache if k.startswith(f"{symbol}_")]
+        for k in keys_to_remove:
+            del self._cache[k]
 
     def iterate_bars(
         self,

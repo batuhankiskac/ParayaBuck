@@ -249,6 +249,73 @@ def live(ctx: click.Context, strategy: str | None, symbol: str | None) -> None:
 
 
 @cli.command()
+@click.option("--timeframe", "-t", default="15m", help="Bar timeframe (1m/5m/15m/30m/1h)")
+@click.option("--poll", default=60, help="Poll interval in seconds")
+@click.option("--max-positions", default=8, help="Max concurrent positions")
+@click.option("--symbols", "-y", default=None, help="Comma-separated symbols (overrides config)")
+@click.option("--risk-pct", default=0.02, help="Risk per trade as fraction of equity")
+@click.option("--stop-loss", default=0.04, help="Hard stop-loss percentage")
+@click.option("--take-profit", default=0.06, help="Take-profit percentage")
+@click.option("--trail", default=0.03, help="Trailing stop percentage")
+@click.option("--paper/--real", default=True, help="Paper or real account (default: paper)")
+@click.pass_context
+def run(
+    ctx: click.Context,
+    timeframe: str,
+    poll: int,
+    max_positions: int,
+    symbols: str | None,
+    risk_pct: float,
+    stop_loss: float,
+    take_profit: float,
+    trail: float,
+    paper: bool,
+) -> None:
+    """Start the live trading bot — fire and forget mode.
+
+    The bot will:
+      1. Connect to Alpaca paper account
+      2. Fetch data for all configured symbols
+      3. Detect market regime per symbol → pick best strategy
+      4. Continuously poll for new data
+      5. Auto-buy when strategy signals
+      6. Auto-sell on stop-loss, take-profit, trailing stop, or exit signal
+      7. Re-check regime every 30 min, rotate strategies if market changes
+
+    Just run it and let it work. Press Ctrl+C to stop.
+    """
+    from parayabuck.data.alpaca import AlpacaDataSource
+    from parayabuck.execution.alpaca import AlpacaBroker
+    from parayabuck.execution.live_engine import LiveTradingEngine
+
+    cfg = ctx.obj["config"]
+    key, secret = _get_alpaca_credentials()
+
+    if symbols:
+        sym_list = [s.strip().upper() for s in symbols.split(",")]
+    else:
+        sym_list = list(cfg.symbols.keys())
+
+    broker = AlpacaBroker(key, secret, paper=paper)
+    data_source = AlpacaDataSource(key, secret)
+
+    engine = LiveTradingEngine(
+        broker=broker,
+        data_source=data_source,
+        symbols=sym_list,
+        timeframe=timeframe,
+        poll_interval=poll,
+        max_positions=max_positions,
+        risk_pct=risk_pct,
+        stop_loss_pct=stop_loss,
+        take_profit_pct=take_profit,
+        trail_pct=trail,
+    )
+
+    engine.run()
+
+
+@cli.command()
 @click.option("--timeframe", "-t", default="15m", help="Timeframe for backtest")
 @click.option("--start", default="2025-01-01", help="Start date (YYYY-MM-DD)")
 @click.option("--end", default="2025-06-30", help="End date (YYYY-MM-DD)")

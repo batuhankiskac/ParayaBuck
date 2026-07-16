@@ -12,6 +12,7 @@ from parayabuck.execution.paper import PaperBroker
 from parayabuck.logger import get_logger
 from parayabuck.models import Bar
 from parayabuck.risk.manager import RiskManager
+from parayabuck.risk.sizer import PositionSizer
 from parayabuck.strategy.base import Strategy
 
 log = get_logger("parayabuck.backtest")
@@ -94,11 +95,16 @@ class BacktestEngine:
         data_source: DataSource,
         broker: PaperBroker,
         risk_manager: RiskManager,
+        position_sizer: PositionSizer | None = None,
     ) -> None:
         self.config = config
         self.data = data_source
         self.broker = broker
         self.risk = risk_manager
+        self.position_sizer = position_sizer or PositionSizer(
+            risk_pct=config.risk.risk_per_trade / config.account.starting_balance,
+            max_qty=config.risk.max_position_size,
+        )
 
     def run(
         self,
@@ -132,12 +138,21 @@ class BacktestEngine:
             # Update market price for this bar
             self.broker.update_market_price(bar.symbol, bar.close, bar.timestamp)
 
+            # Update position sizer history
+            self.position_sizer.update_history(
+                bar.symbol, bar.high, bar.low, bar.close
+            )
+
             # Get current position
             position = self.broker.get_position(bar.symbol)
 
             # Ask strategy for an order
             order = strategy.on_bar(bar, position)
             if order is not None:
+                # Size the order using ATR/Kelly
+                order = self.position_sizer.size_order(
+                    order, self.broker.get_account()
+                )
                 # Pass through risk manager
                 order = self.risk.check_order(order, self.broker.get_account())
                 if order is not None:
@@ -147,6 +162,11 @@ class BacktestEngine:
             account = self.broker.get_account()
             equity_curve.append(account.equity)
             max_dd = max(max_dd, account.drawdown)
+
+            # Record closed trades for Kelly
+            for t in account.trades:
+                if t.realized_pnl != 0 and t.realized_pnl != -t.commission:
+                    self.position_sizer.record_trade(t.symbol, t.realized_pnl)
 
             # Check risk halt
             self.risk.check_account(account)

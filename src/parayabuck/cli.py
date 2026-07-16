@@ -249,6 +249,71 @@ def live(ctx: click.Context, strategy: str | None, symbol: str | None) -> None:
 
 
 @cli.command()
+@click.option("--timeframe", "-t", default="15m", help="Timeframe for backtest")
+@click.option("--start", default="2025-01-01", help="Start date (YYYY-MM-DD)")
+@click.option("--end", default="2025-06-30", help="End date (YYYY-MM-DD)")
+@click.option("--max-symbols", default=8, help="Max symbols to trade")
+@click.option("--plot/--no-plot", default=False, help="Save equity curve plot")
+@click.pass_context
+def auto(
+    ctx: click.Context,
+    timeframe: str,
+    start: str,
+    end: str,
+    max_symbols: int,
+    plot: bool,
+) -> None:
+    """Auto-pilot: selects symbols, detects regime, picks strategy, runs backtest.
+
+    This is the fully automated mode — you don't need to choose strategies
+    or symbols manually. The bot:
+
+      1. Fetches data for all configured symbols
+      2. Runs diversification analysis (sector + correlation filter)
+      3. Detects market regime per symbol (trend / range / crisis)
+      4. Selects the best strategy per regime
+      5. Allocates capital equally across selected symbols
+      6. Runs backtest per symbol with ATR/Kelly position sizing
+      7. Reports combined portfolio results
+    """
+    from parayabuck.backtest.auto_pilot import AutoPilotRunner
+    from parayabuck.data.alpaca import AlpacaDataSource
+
+    cfg = ctx.obj["config"]
+    key, secret = _get_alpaca_credentials()
+    data_source = AlpacaDataSource(key, secret)
+
+    click.echo("AUTO-PILOT MODE")
+    click.echo("=" * 60)
+    click.echo(f"  Timeframe:     {timeframe}")
+    click.echo(f"  Period:        {start} → {end}")
+    click.echo(f"  Max symbols:   {max_symbols}")
+    click.echo(f"  Starting cash: ${cfg.account.starting_balance:,.2f}")
+    click.echo("=" * 60)
+    click.echo("")
+
+    runner = AutoPilotRunner(
+        config=cfg,
+        data_source=data_source,
+        timeframe=timeframe,
+        max_symbols=max_symbols,
+    )
+
+    result = runner.run(start, end, cfg.account.starting_balance)
+
+    click.echo(result.summary())
+
+    if plot and result.equity_curve:
+        from parayabuck.analytics.plots import save_all_plots
+
+        all_pnls = [
+            s["pnl"] for sym in result.per_symbol for s in [sym]
+        ]
+        save_all_plots(result.equity_curve, all_pnls)
+        click.echo("\nPlots saved to output/")
+
+
+@cli.command()
 @click.pass_context
 def account(ctx: click.Context) -> None:
     """Show Alpaca account info."""

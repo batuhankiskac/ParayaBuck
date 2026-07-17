@@ -121,7 +121,7 @@ class AlpacaBroker(Broker):
     def get_position(self, symbol: str) -> Position:
         try:
             pos: Any = self._client.get_open_position(symbol)
-            qty = int(float(pos.qty))
+            qty = float(pos.qty)
             avg = float(pos.avg_entry_price)
             return Position(symbol=symbol, qty=qty, avg_price=avg)
         except Exception:
@@ -138,7 +138,7 @@ class AlpacaBroker(Broker):
         try:
             alpaca_positions: Any = self._client.get_all_positions()
             for p in alpaca_positions:
-                qty = int(float(p.qty))
+                qty = float(p.qty)
                 avg = float(p.avg_entry_price)
                 current = float(p.current_price)
                 pos = Position(symbol=p.symbol, qty=qty, avg_price=avg)

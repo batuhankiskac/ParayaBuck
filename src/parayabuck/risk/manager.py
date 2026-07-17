@@ -97,7 +97,7 @@ class RiskManager:
 
         return order
 
-    def calc_commission(self, qty: int) -> float:
+    def calc_commission(self, qty: float) -> float:
         return abs(qty) * self.risk_cfg.commission_per_share
 
     def can_trade(self) -> bool:

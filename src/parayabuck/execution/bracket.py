@@ -128,7 +128,7 @@ class TrailingStopManager:
 
 def create_bracket(
     symbol: str,
-    qty: int,
+    qty: float,
     entry_price: float,
     stop_price: float,
     target_price: float,

@@ -21,8 +21,10 @@ portfolio:
   max_positions: 15            # max concurrent open positions
   min_cash_pct: 0.05           # always keep 5% in cash
 
-# --- Symbols (US stocks) ---
+# --- Symbols (US stocks + crypto pairs) ---
+# Crypto pairs use "BASE/USD" format (e.g. BTC/USD) and trade 24/7.
 symbols:
+  # --- Stocks ---
   AAPL:
     tick_size: 0.01
     point_value: 1.0
@@ -60,6 +62,31 @@ symbols:
     tick_size: 0.01
     point_value: 1.0
   XOM:
+    tick_size: 0.01
+    point_value: 1.0
+  # --- Crypto (fractional qty, 24/7) ---
+  BTC/USD:
+    tick_size: 0.01
+    point_value: 1.0
+  ETH/USD:
+    tick_size: 0.01
+    point_value: 1.0
+  SOL/USD:
+    tick_size: 0.01
+    point_value: 1.0
+  ADA/USD:
+    tick_size: 0.0001
+    point_value: 1.0
+  XRP/USD:
+    tick_size: 0.0001
+    point_value: 1.0
+  DOGE/USD:
+    tick_size: 0.00001
+    point_value: 1.0
+  AVAX/USD:
+    tick_size: 0.01
+    point_value: 1.0
+  LINK/USD:
     tick_size: 0.01
     point_value: 1.0
 

@@ -52,14 +52,14 @@ class Bar:
 class Order:
     symbol: str
     side: Side
-    qty: int
+    qty: float
     order_type: OrderType = OrderType.MARKET
     limit_price: float | None = None
     stop_price: float | None = None
     tif: TimeInForce = TimeInForce.DAY
     status: OrderStatus = OrderStatus.PENDING
     filled_price: float | None = None
-    filled_qty: int = 0
+    filled_qty: float = 0.0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     filled_at: datetime | None = None
     order_id: str | None = None
@@ -76,7 +76,7 @@ class Order:
 @dataclass
 class Position:
     symbol: str
-    qty: int = 0          # positive = long, negative = short, 0 = flat
+    qty: float = 0.0          # positive = long, negative = short, 0 = flat
     avg_price: float = 0.0
 
     @property
@@ -102,7 +102,7 @@ class Trade:
     timestamp: datetime
     symbol: str
     side: Side
-    qty: int
+    qty: float
     price: float
     commission: float = 0.0
     realized_pnl: float = 0.0  # PnL realized on closing fills (0 for entries)

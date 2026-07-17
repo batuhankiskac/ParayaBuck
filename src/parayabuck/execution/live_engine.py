@@ -14,6 +14,7 @@ from parayabuck.risk.portfolio import PortfolioRiskManager
 from parayabuck.risk.sizer import PositionSizer
 from parayabuck.strategy.base import Strategy
 from parayabuck.strategy.regime import MarketRegime, RegimeDetector
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.live")
 
@@ -110,8 +111,8 @@ class LiveTradingEngine:
         broker: AlpacaBroker,
         data_source: AlpacaDataSource,
         symbols: list[str],
-        timeframe: str = "15m",
-        poll_interval: int = 60,
+        timeframe: str = "1m",
+        poll_interval: int = 15,
         warmup_bars: int = 300,
         max_positions: int = 8,
         risk_pct: float = 0.02,
@@ -540,9 +541,16 @@ class LiveTradingEngine:
             return 0.0
         return (exit_price - position.avg_price) * position.qty
 
-    @staticmethod
-    def _is_market_open() -> bool:
-        """Check if US market is open (9:30-16:00 ET, Mon-Fri)."""
+    def _is_market_open(self) -> bool:
+        """Check if any tradable market is open.
+
+        Crypto trades 24/7, so if any configured symbol is a crypto pair,
+        the engine stays active. For stock-only setups, US market hours
+        (9:30-16:00 ET, Mon-Fri) apply.
+        """
+        if any(is_crypto(s) for s in self.symbols):
+            return True
+
         from zoneinfo import ZoneInfo
 
         et = datetime.now(ZoneInfo("America/New_York"))

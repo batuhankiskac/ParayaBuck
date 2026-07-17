@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from parayabuck.logger import get_logger
 from parayabuck.models import Account, Order, Side
 from parayabuck.strategy.indicators import atr
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.risk.sizer")
 
@@ -53,8 +54,8 @@ class PositionSizer:
         risk_pct: float = 0.02,
         atr_period: int = 14,
         atr_multiplier: float = 2.0,
-        max_qty: int = 500,
-        min_qty: int = 1,
+        max_qty: float = 500,
+        min_qty: float = 1,
         kelly_fraction: float = 0.25,
         kelly_min_trades: int = 20,
         use_kelly: bool = True,
@@ -105,13 +106,16 @@ class PositionSizer:
         lows = list(self._lows.get(symbol, []))
         closes = list(self._closes.get(symbol, []))
 
+        crypto = is_crypto(symbol)
+        min_qty = self.min_qty if not crypto else 0.0001
+
         if len(closes) < self.atr_period + 1:
             log.debug(f"PositionSizer: not enough history for {symbol}, using min_qty")
-            return self._set_qty(order, self.min_qty)
+            return self._set_qty(order, min_qty)
 
         atr_val = atr(highs, lows, closes, self.atr_period)
         if atr_val is None or atr_val <= 0:
-            return self._set_qty(order, self.min_qty)
+            return self._set_qty(order, min_qty)
 
         stop_distance = atr_val * self.atr_multiplier
         entry_price = closes[-1]
@@ -119,17 +123,23 @@ class PositionSizer:
         equity = account.equity if account.equity > 0 else account.balance
 
         risk_amount = equity * self.risk_pct
-        qty = int(risk_amount / stop_distance)
+        qty = risk_amount / stop_distance
 
         if self.use_kelly:
             qty = self._apply_kelly(symbol, qty, equity, entry_price, stop_distance)
 
-        qty = max(qty, self.min_qty) if qty > 0 else 0
+        qty = max(qty, min_qty) if qty > 0 else 0
         qty = min(qty, self.max_qty)
 
         if qty == 0:
             log.debug(f"PositionSizer: {symbol} qty=0, skipping")
             return order  # will be rejected by risk manager
+
+        # Round shares to whole numbers; keep crypto fractional.
+        if not crypto:
+            qty = float(int(qty))
+            if qty < min_qty:
+                return order
 
         self._entry_prices[symbol] = entry_price
         log.debug(
@@ -150,11 +160,11 @@ class PositionSizer:
     def _apply_kelly(
         self,
         symbol: str,
-        base_qty: int,
+        base_qty: float,
         equity: float,
         entry_price: float,
         stop_distance: float,
-    ) -> int:
+    ) -> float:
         stats = self._stats.get(symbol)
         if stats is None or stats.total < self.kelly_min_trades:
             return base_qty
@@ -173,23 +183,23 @@ class PositionSizer:
                 f"Kelly: {symbol} negative edge (win_rate={p:.1%}, "
                 f"ratio={b:.2f}) → using half ATR size"
             )
-            return max(base_qty // 2, 1)
+            return max(base_qty / 2, 0.0001)
 
         adjusted_f = kelly_f * self.kelly_fraction
         adjusted_f = min(adjusted_f, 0.10)
 
         capital_to_risk = equity * adjusted_f
-        kelly_qty = int(capital_to_risk / stop_distance)
+        kelly_qty = capital_to_risk / stop_distance
 
         if kelly_qty < base_qty:
             log.debug(
                 f"Kelly reduced {symbol}: {base_qty} → {kelly_qty} "
                 f"(f={adjusted_f:.3f})"
             )
-        return max(kelly_qty, 1)
+        return max(kelly_qty, 0.0001)
 
     @staticmethod
-    def _set_qty(order: Order, qty: int) -> Order:
+    def _set_qty(order: Order, qty: float) -> Order:
         return Order(
             symbol=order.symbol,
             side=order.side,

@@ -31,10 +31,23 @@ SECTOR_MAP: dict[str, str] = {
     "XLF": "sector_etf",
     "XLV": "sector_etf",
     "XLE": "sector_etf",
+    # Crypto pairs (7/24, fractional qty)
+    "BTC/USD": "crypto",
+    "ETH/USD": "crypto",
+    "SOL/USD": "crypto",
+    "ADA/USD": "crypto",
+    "XRP/USD": "crypto",
+    "DOGE/USD": "crypto",
+    "AVAX/USD": "crypto",
+    "LINK/USD": "crypto",
+    "LTC/USD": "crypto",
+    "MATIC/USD": "crypto",
 }
 
 
 def get_sector(symbol: str) -> str:
+    if "/" in symbol:
+        return "crypto"
     return SECTOR_MAP.get(symbol, "other")
 
 

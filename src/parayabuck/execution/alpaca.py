@@ -91,11 +91,11 @@ class AlpacaBroker(Broker):
         while time.time() < deadline:
             try:
                 alpaca_order: Any = self._client.get_order_by_id(order.order_id)
-                status = str(alpaca_order.status)
-
-                if status in ("filled", "partially_filled"):
+                status = str(alpaca_order.status).lower()
+                # Handle both "filled" and "OrderStatus.FILLED" formats
+                if "filled" in status:
                     order.filled_price = float(alpaca_order.filled_avg_price or 0)
-                    order.filled_qty = int(alpaca_order.filled_qty or 0)
+                    order.filled_qty = float(alpaca_order.filled_qty or 0)
                     order.status = OrderStatus.FILLED
                     order.filled_at = datetime.now(UTC)
                     log.info(f"Filled: {order.symbol} {order.qty}@{order.filled_price}")

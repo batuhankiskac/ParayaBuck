@@ -86,6 +86,7 @@ class SymbolRuntime:
     last_bar_time: datetime | None = None
     warmup_done: bool = False
     bars_buffer: list[Bar] = field(default_factory=list)
+    order_pending: bool = False
 
 
 class LiveTradingEngine:
@@ -303,6 +304,9 @@ class LiveTradingEngine:
 
         for sym in self.symbols:
             try:
+                if not self._is_symbol_tradable(sym):
+                    continue
+
                 bars = self.data.get_bars(sym, self.timeframe, start, use_cache=False)
                 if not bars:
                     continue
@@ -315,6 +319,7 @@ class LiveTradingEngine:
                         new_bars.append(bar)
 
                 if new_bars:
+                    # Update buffer with all new bars so indicators see full history
                     rt.bars_buffer = (rt.bars_buffer + new_bars)[-self.warmup_bars :]
                     rt.last_bar_time = new_bars[-1].timestamp
 
@@ -323,8 +328,15 @@ class LiveTradingEngine:
                             rt.strategy.on_bar(bar, Position(symbol=sym))
                         rt.warmup_done = True
                     elif rt.strategy is not None:
-                        for bar in new_bars:
-                            self._process_bar(sym, bar)
+                        # Feed all new bars to strategy for state updates, but only
+                        # act on the LATEST bar's signal. This keeps strategy state
+                        # (EMA, prev_above, etc.) in sync without spamming orders.
+                        for bar in new_bars[:-1]:
+                            rt.strategy.on_bar(bar, self.broker.get_position(sym))
+
+                        # Process only the last bar for potential order execution
+                        if not rt.order_pending:
+                            self._process_bar(sym, new_bars[-1])
 
                 self.data.clear_cache_for_symbol(sym)
 
@@ -343,10 +355,14 @@ class LiveTradingEngine:
         order = rt.strategy.on_bar(bar, position)
 
         if order is not None:
-            if self._is_exit_signal(order, position):
-                self._execute_exit(order, position, bar)
-            else:
-                self._execute_entry(order, position, bar)
+            rt.order_pending = True
+            try:
+                if self._is_exit_signal(order, position):
+                    self._execute_exit(order, position, bar)
+                else:
+                    self._execute_entry(order, position, bar)
+            finally:
+                rt.order_pending = False
 
     def _is_exit_signal(self, order: Order, position: Position) -> bool:
         """Check if this order is closing an existing position."""
@@ -435,6 +451,9 @@ class LiveTradingEngine:
 
         for sym, pos in account.positions.items():
             if pos.is_flat:
+                continue
+
+            if not self._is_symbol_tradable(sym):
                 continue
 
             rt = self._runtimes.get(sym)
@@ -652,6 +671,21 @@ class LiveTradingEngine:
         (9:30-16:00 ET, Mon-Fri) apply.
         """
         if any(is_crypto(s) for s in self.symbols):
+            return True
+
+        from zoneinfo import ZoneInfo
+
+        et = datetime.now(ZoneInfo("America/New_York"))
+        if et.weekday() >= 5:
+            return False
+        market_open = et.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = et.replace(hour=16, minute=0, second=0, microsecond=0)
+        return market_open <= et <= market_close
+
+    @staticmethod
+    def _is_symbol_tradable(symbol: str) -> bool:
+        """Check if a specific symbol's market is open for trading."""
+        if is_crypto(symbol):
             return True
 
         from zoneinfo import ZoneInfo

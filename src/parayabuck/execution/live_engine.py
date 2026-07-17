@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -79,6 +80,7 @@ def _load_strategy(name: str, params: dict[str, Any] | None = None) -> Strategy:
 @dataclass
 class SymbolRuntime:
     """Per-symbol state for live trading."""
+
     symbol: str
     strategy: Strategy | None = None
     strategy_name: str = "none"
@@ -145,12 +147,8 @@ class LiveTradingEngine:
         self.regime_recheck_minutes = regime_recheck_minutes
 
         self.regime_detector = RegimeDetector(sma_period=50)
-        self.trailing_stops = TrailingStopManager(
-            trail_pct=trail_pct, min_profit_to_activate=0.005
-        )
-        self.sizer = PositionSizer(
-            risk_pct=risk_pct, max_qty=500, crypto_risk_pct=0.01
-        )
+        self.trailing_stops = TrailingStopManager(trail_pct=trail_pct, min_profit_to_activate=0.005)
+        self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500, crypto_risk_pct=0.01)
         self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500)
         self.portfolio_risk = PortfolioRiskManager(
             max_pct_per_position=0.15,
@@ -205,15 +203,44 @@ class LiveTradingEngine:
     def stop(self) -> None:
         self._running = False
 
+    @staticmethod
+    def _bars_per_day(symbol: str, timeframe: str) -> float:
+        """Estimate bars produced per calendar day for a symbol/timeframe.
+
+        Used to size warmup lookback windows. Crypto trades 24/7 (1440 min/day),
+        US stocks ~6.5h sessions (390 min/day).
+        """
+        minutes_per_bar = {
+            "1m": 1,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "1d": 1440,
+        }.get(timeframe, 60)
+        if minutes_per_bar >= 1440:
+            return 1.0
+        if is_crypto(symbol):
+            return 1440.0 / minutes_per_bar
+        return 390.0 / minutes_per_bar
+
     def _warmup(self) -> None:
         """Fetch initial data and prime all strategies."""
         log.info("Warming up — fetching historical data...")
 
-        days_back = max(self.warmup_bars // 10, 30)
-        start = (datetime.now(UTC) - timedelta(days=days_back)).strftime("%Y-%m-%d")
-
         for sym in self.symbols:
             try:
+                # Size the lookback window so we fetch RECENT bars without
+                # hitting the Alpaca 10000-bar limit. The API returns bars
+                # ascending from `start`, so an oversized window yields the
+                # OLDEST bars and leaves last_bar_time days in the past —
+                # which then makes the first live cycle treat thousands of
+                # recent bars as "new". Target ~2x warmup_bars with margin.
+                bpd = self._bars_per_day(sym, self.timeframe)
+                target = self.warmup_bars * 2
+                days_back = max(int(math.ceil(target / bpd * 1.2)), 2)
+                start = (datetime.now(UTC) - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
                 bars = self.data.get_bars(sym, self.timeframe, start, use_cache=False)
                 if not bars:
                     log.warning(f"  {sym}: no data received")
@@ -331,8 +358,13 @@ class LiveTradingEngine:
                         # Feed all new bars to strategy for state updates, but only
                         # act on the LATEST bar's signal. This keeps strategy state
                         # (EMA, prev_above, etc.) in sync without spamming orders.
+                        # Fetch position ONCE: it cannot change between bars in this
+                        # batch (no orders are submitted here), and calling the
+                        # broker per bar would make thousands of synchronous API
+                        # calls and hang the engine when new_bars is large.
+                        position = self.broker.get_position(sym)
                         for bar in new_bars[:-1]:
-                            rt.strategy.on_bar(bar, self.broker.get_position(sym))
+                            rt.strategy.on_bar(bar, position)
 
                         # Process only the last bar for potential order execution
                         if not rt.order_pending:
@@ -424,9 +456,7 @@ class LiveTradingEngine:
                     stop_price=sized.stop_price,
                     tif=sized.tif,
                 )
-                log.info(
-                    f"  {order.symbol}: high-volatility regime → halved qty to {half_qty}"
-                )
+                log.info(f"  {order.symbol}: high-volatility regime → halved qty to {half_qty}")
 
         checked = self.portfolio_risk.check_order(sized, account, bar.close)
         if checked is None:
@@ -441,9 +471,7 @@ class LiveTradingEngine:
             fill_price = result.filled_price or bar.close
             self.trailing_stops.set_entry(checked.symbol, fill_price, checked.side)
             self._entry_prices[checked.symbol] = fill_price
-            log.info(
-                f"ENTRY FILLED: {checked.symbol} {checked.qty} shares @ ${fill_price:.2f}"
-            )
+            log.info(f"ENTRY FILLED: {checked.symbol} {checked.qty} shares @ ${fill_price:.2f}")
 
     def _manage_positions(self) -> None:
         """Check all open positions for exit conditions (ATR-adaptive stops)."""
@@ -465,35 +493,28 @@ class LiveTradingEngine:
             crypto = is_crypto(sym)
 
             # Compute ATR-based stop/take; fall back to fixed % if ATR unavailable.
-            stop_price, take_profit_price = self._calc_exit_levels(
-                sym, entry, pos, crypto
-            )
+            stop_price, take_profit_price = self._calc_exit_levels(sym, entry, pos, crypto)
 
             if pos.is_long:
                 self.trailing_stops.update(sym, current_price, Side.BUY)
 
                 if stop_price > 0 and current_price <= stop_price:
                     log.warning(
-                        f"HARD STOP-LOSS: {sym} @ {current_price:.2f} "
-                        f"(stop={stop_price:.2f})"
+                        f"HARD STOP-LOSS: {sym} @ {current_price:.2f} (stop={stop_price:.2f})"
                     )
                     self._force_close(sym, pos, current_price)
                     continue
 
                 if take_profit_price > 0 and current_price >= take_profit_price:
                     log.info(
-                        f"TAKE PROFIT: {sym} @ {current_price:.2f} "
-                        f"(target={take_profit_price:.2f})"
+                        f"TAKE PROFIT: {sym} @ {current_price:.2f} (target={take_profit_price:.2f})"
                     )
                     self._force_close(sym, pos, current_price)
                     continue
 
                 trail_stop = self.trailing_stops.get_stop(sym)
                 if trail_stop and current_price <= trail_stop:
-                    log.info(
-                        f"TRAILING STOP: {sym} @ {current_price:.2f} "
-                        f"(trail={trail_stop:.2f})"
-                    )
+                    log.info(f"TRAILING STOP: {sym} @ {current_price:.2f} (trail={trail_stop:.2f})")
                     self._force_close(sym, pos, current_price)
             else:
                 self.trailing_stops.update(sym, current_price, Side.SELL)
@@ -645,7 +666,7 @@ class LiveTradingEngine:
             lines.append(
                 f"    {sym:6s} {direction:5s} {abs(pos.qty):4d} @ ${pos.avg_price:.2f} "
                 f"→ ${price:.2f}  PnL=${pnl:+.2f}  "
-                f"trail={'$'+f'{trail:.2f}' if trail else 'N/A'}"
+                f"trail={'$' + f'{trail:.2f}' if trail else 'N/A'}"
             )
 
         active_strats = [

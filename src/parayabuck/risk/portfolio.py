@@ -68,15 +68,56 @@ class PortfolioRiskManager:
         max_pct_per_sector: float = 0.30,
         max_positions: int = 15,
         min_cash_pct: float = 0.05,
+        max_daily_loss: float = 0.0,
+        max_drawdown: float = 0.0,
     ) -> None:
         self.max_pct_per_position = max_pct_per_position
         self.max_pct_per_sector = max_pct_per_sector
         self.max_positions = max_positions
         self.min_cash_pct = min_cash_pct
+        # Zero = disabled. When > 0, new BUY orders are rejected once the
+        # account's daily PnL or drawdown breaches these USD limits. Exits are
+        # always allowed (we never block risk-reducing orders).
+        self.max_daily_loss = max_daily_loss
+        self.max_drawdown = max_drawdown
 
     def check_order(self, order: Order, account: Account, current_price: float) -> Order | None:
-        """Return adjusted order if it passes portfolio risk, None if rejected."""
+        """Return adjusted order if it passes portfolio risk, None if rejected.
+
+        Exits (closing an existing position) always pass through unchanged —
+        we never block risk-reducing orders, even when a kill-switch is tripped
+        or a sector/position limit is saturated. Blocking an exit would strand
+        risk exactly when we most need to reduce it.
+        """
         if account.equity <= 0:
+            return None
+
+        # Kill-switches and concentration limits apply only to NEW entries
+        # (BUY that opens a long, or SELL that opens a short). An exit (SELL
+        # closing a long, BUY closing a short) must always be allowed so the
+        # engine can defensively close risk when limits are breached.
+        current_pos = account.get_position(order.symbol)
+        is_exit = (order.side == Side.SELL and current_pos.is_long) or (
+            order.side == Side.BUY and current_pos.is_short
+        )
+
+        if is_exit:
+            # Exits pass through unchanged — never trim or block them.
+            return order
+
+        if self.max_daily_loss > 0 and account.daily_pnl <= -self.max_daily_loss:
+            log.warning(
+                f"Order rejected: daily loss limit reached "
+                f"(daily PnL ${account.daily_pnl:+.2f} <= "
+                f"-${self.max_daily_loss:.2f})"
+            )
+            return None
+        drawdown = account.drawdown
+        if self.max_drawdown > 0 and drawdown >= self.max_drawdown:
+            log.warning(
+                f"Order rejected: max drawdown reached "
+                f"(${drawdown:.2f} >= ${self.max_drawdown:.2f})"
+            )
             return None
 
         crypto = is_crypto(order.symbol)
@@ -124,7 +165,6 @@ class PortfolioRiskManager:
 
         # Check max number of positions (only for new positions)
         if order.side == Side.BUY:
-            current_pos = account.get_position(order.symbol)
             if current_pos.is_flat:
                 active_positions = sum(1 for p in account.positions.values() if not p.is_flat)
                 if active_positions >= self.max_positions:

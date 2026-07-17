@@ -41,6 +41,13 @@ class MeanReversion(Strategy):
         risk_reward: Take-profit ratio (default 2.0)
         atr_multiplier: Stop-loss = ATR * multiplier (default 2.0)
         max_position: Max shares (default 100)
+        use_trend_filter: Skip longs when price below long SMA (default True).
+            Without this, mean reversion in a downtrend buys falling knives —
+            oversold dips keep making lower lows, stop keeps triggering.
+        trend_filter_period: SMA period for the trend filter (default 50)
+        min_stop_pct: Min stop distance as fraction of entry (default 0.02).
+            ATR*multiplier can be tiny on low timeframes, giving an
+            ineffective stop that fires immediately on noise.
     """
 
     name = "mean_reversion"
@@ -57,6 +64,9 @@ class MeanReversion(Strategy):
             risk_reward=params.get("risk_reward", 2.0),
             atr_multiplier=params.get("atr_multiplier", 2.0),
             max_position=params.get("max_position", 100),
+            use_trend_filter=params.get("use_trend_filter", True),
+            trend_filter_period=params.get("trend_filter_period", 50),
+            min_stop_pct=params.get("min_stop_pct", 0.02),
         )
         self.bb_period = int(self.params["bb_period"])
         self.bb_std = float(self.params["bb_std"])
@@ -68,6 +78,9 @@ class MeanReversion(Strategy):
         self.risk_reward = float(self.params["risk_reward"])
         self.atr_multiplier = float(self.params["atr_multiplier"])
         self.max_position = int(self.params["max_position"])
+        self.use_trend_filter = bool(self.params["use_trend_filter"])
+        self.trend_filter_period = int(self.params["trend_filter_period"])
+        self.min_stop_pct = float(self.params["min_stop_pct"])
 
         self._closes: deque[float] = deque(maxlen=200)
         self._highs: deque[float] = deque(maxlen=200)
@@ -142,15 +155,36 @@ class MeanReversion(Strategy):
         if atr_val is None:
             return None
 
+        # Trend filter: in a downtrend, oversold dips are falling knives —
+        # they keep making lower lows and the stop keeps triggering. Skip
+        # longs when price is below its long SMA. This single filter removes
+        # the bulk of mean-reversion losses in trending-down markets.
+        if self.use_trend_filter and self.trend_filter_period > 0:
+            tf_period = min(self.trend_filter_period, len(closes_list))
+            if tf_period > 0:
+                trend_sma = sum(closes_list[-tf_period:]) / tf_period
+                if bar.close < trend_sma:
+                    return None
+
+        # Min stop floor: ATR*multiplier can be a few cents on low timeframes,
+        # giving a stop that fires on the first noisy tick. Floor it at a
+        # small fraction of entry price so the stop has breathing room. Also
+        # lift the take-profit target by the same ratio so R:R is preserved.
+        atr_stop = atr_val * self.atr_multiplier
+        min_stop_dist = bar.close * self.min_stop_pct
+        stop_dist = max(atr_stop, min_stop_dist)
+        tp_dist = stop_dist * self.risk_reward
+
         # Long entry: price below lower band + RSI oversold + volume confirmation
         if bar.close <= bb.lower and rsi_val < self.oversold and vol_ok:
             self._entry_price = bar.close
-            self._stop_price = bar.close - atr_val * self.atr_multiplier
-            self._target_price = bb.middle
+            self._stop_price = bar.close - stop_dist
+            self._target_price = min(bb.middle, bar.close + tp_dist)
             qty = min(self.max_position, 1)
             log.info(
                 f"MR ENTRY long {bar.symbol}: close={bar.close:.2f} "
-                f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f}"
+                f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f} "
+                f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
             )
             return Order(
                 symbol=bar.symbol,
@@ -162,12 +196,13 @@ class MeanReversion(Strategy):
         # Short entry: price above upper band + RSI overbought
         if self.allow_short and bar.close >= bb.upper and rsi_val > self.overbought and vol_ok:
             self._entry_price = bar.close
-            self._stop_price = bar.close + atr_val * self.atr_multiplier
-            self._target_price = bb.middle
+            self._stop_price = bar.close + stop_dist
+            self._target_price = max(bb.middle, bar.close - tp_dist)
             qty = min(self.max_position, 1)
             log.info(
                 f"MR ENTRY short {bar.symbol}: close={bar.close:.2f} "
-                f"BB_upper={bb.upper:.2f} RSI={rsi_val:.1f}"
+                f"BB_upper={bb.upper:.2f} RSI={rsi_val:.1f} "
+                f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
             )
             return Order(
                 symbol=bar.symbol,

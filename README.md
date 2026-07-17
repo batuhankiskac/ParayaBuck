@@ -123,16 +123,21 @@ parayabuck paper -s mean_reversion -y AAPL -t 15m
 
 Fire-and-forget mod — otomatik strateji rotasyonu, risk yönetimi, çoklu sembol.
 
+> **Timeframe uyarısı:** Default `15m`. `1m`/`5m` gibi düşük timeframe'lerde ATR
+> çok küçük olur ve stop floor (~%4) TP'ten (~%0.1) çok uzaklaşır → risk:ödül
+> ters döner. Düşük timeframe'te mutlaka `--stop-loss` ve `--take-profit`'i
+> birlikte ve uyumlu ayarlayın. Günlük zarar kill-switch'i `$300`'de durur.
+
 ```
 Options:
-  -t, --timeframe TEXT     Bar periyodu (varsayılan: 15m)
+  -t, --timeframe TEXT     Bar periyodu (varsayılan: 15m) — 15m+ önerilir
   --poll INTEGER           Poll aralığı saniye (varsayılan: 60)
   --max-positions INTEGER  Maksimum eşzamanlı pozisyon (varsayılan: 8)
   -y, --symbols TEXT       Virgülle ayrılmış semboller (config'dekini ezer)
   --risk-pct FLOAT         Trade başına risk (equity oranı, varsayılan: 0.02)
   --stop-loss FLOAT        Hard stop-loss % (varsayılan: 0.04)
   --take-profit FLOAT      Take-profit % (varsayılan: 0.06)
-  --trail FLOAT            Trailing stop % (varsayılan: 0.03)
+  --trail FLOAT            Trailing stop % — sadece trend stratejilerinde (varsayılan: 0.03)
   --paper / --real         Paper veya real hesap (varsayılan: paper)
 ```
 

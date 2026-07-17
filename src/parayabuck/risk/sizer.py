@@ -60,6 +60,14 @@ class PositionSizer:
         kelly_min_trades: int = 20,
         use_kelly: bool = True,
         crypto_risk_pct: float = 0.01,
+        # Min stop distance as a fraction of entry price. This must match the
+        # stop floor used by LiveTradingEngine._calc_exit_levels; otherwise the
+        # sizer sizes for an ATR-based stop (a few cents on low timeframes)
+        # while the engine actually enforces a 4% floor stop — making the real
+        # risk 20-50x larger than the sizer assumed.
+        min_stop_pct: float = 0.04,
+        min_stop_pct_crypto: float = 0.025,
+        atr_tp_multiplier: float = 4.0,
     ) -> None:
         self.risk_pct = risk_pct
         self.crypto_risk_pct = crypto_risk_pct
@@ -70,6 +78,9 @@ class PositionSizer:
         self.kelly_fraction = kelly_fraction
         self.kelly_min_trades = kelly_min_trades
         self.use_kelly = use_kelly
+        self.min_stop_pct = min_stop_pct
+        self.min_stop_pct_crypto = min_stop_pct_crypto
+        self.atr_tp_multiplier = atr_tp_multiplier
 
         self._highs: dict[str, deque[float]] = {}
         self._lows: dict[str, deque[float]] = {}
@@ -117,8 +128,15 @@ class PositionSizer:
         if atr_val is None or atr_val <= 0:
             return self._set_qty(order, min_qty)
 
+        # Match the engine's stop floor so the sizer's notion of "risk per
+        # trade" matches the stop the engine will actually enforce. Without
+        # this, on low-ATR timeframes the sizer sizes for an ATR*2 stop (~$0.2
+        # on 1m AAPL) while the engine uses a 4% floor stop (~$9) — so a trade
+        # sized as "2% risk" actually risks ~40% of the allocated amount.
         stop_distance = atr_val * self.atr_multiplier
         entry_price = closes[-1]
+        min_stop_dist = entry_price * (self.min_stop_pct_crypto if crypto else self.min_stop_pct)
+        stop_distance = max(stop_distance, min_stop_dist)
 
         equity = account.equity if account.equity > 0 else account.balance
 

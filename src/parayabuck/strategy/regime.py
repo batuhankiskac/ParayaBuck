@@ -124,16 +124,22 @@ class RegimeDetector:
 
 
 def suggest_strategy(state: RegimeState) -> str:
-    """Suggest which strategy type to use given the current regime."""
-    if state.regime == MarketRegime.CRISIS:
+    """Suggest which strategy type to use given the current regime.
+
+    Single source of truth — kept in sync with
+    ``parayabuck.execution.live_engine.REGIME_TO_STRATEGY``.
+
+    A long-only bot must NOT trade in downtrends or high-volatility regimes:
+      - downtrend: catching oversold dips = catching falling knives
+      - high volatility: ATR stops are too wide, R:R unfavorable
+    """
+    if state.regime in (MarketRegime.CRISIS, MarketRegime.HIGH_VOLATILITY):
         return "none"
-    if state.regime == MarketRegime.HIGH_VOLATILITY:
+    if state.regime == MarketRegime.TRENDING_DOWN:
         return "none"
-    if state.regime in (MarketRegime.TRENDING_UP, MarketRegime.TRENDING_DOWN):
+    if state.regime in (MarketRegime.TRENDING_UP,):
         return "momentum"
-    if state.regime == MarketRegime.LOW_VOLATILITY:
-        return "mean_reversion"
-    if state.regime == MarketRegime.RANGING:
+    if state.regime in (MarketRegime.RANGING, MarketRegime.LOW_VOLATILITY):
         return "mean_reversion"
     return "none"
 

@@ -23,13 +23,22 @@ log = get_logger("parayabuck.live")
 
 REGIME_TO_STRATEGY: dict[str, str] = {
     "trending_up": "ema_crossover",
-    "trending_down": "mean_reversion",
+    # Long-only bot: downtrend = catching falling knives if we buy oversold dips.
+    "trending_down": "none",
     "ranging": "mean_reversion",
     "low_volatility": "mean_reversion",
-    "high_volatility": "mean_reversion",
+    # ATR stops become too wide vs. achievable TP → R:R unfavorable.
+    "high_volatility": "none",
     "crisis": "none",
     "unknown": "none",
 }
+
+# Strategies that ride trends benefit from a trailing stop (let winners run).
+# Mean-reversion / intraday-reversion strategies are better served by a fixed
+# ATR stop + take-profit target — using BOTH a trailing stop and an ATR hard
+# stop on the same position leads to premature exits (trailing fires before the
+# wider ATR stop, locking in small losses before the mean reversion plays out).
+TRAILING_STRATEGIES: frozenset[str] = frozenset({"ema_crossover", "multi_factor"})
 
 
 STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
@@ -115,8 +124,8 @@ class LiveTradingEngine:
         broker: AlpacaBroker,
         data_source: AlpacaDataSource,
         symbols: list[str],
-        timeframe: str = "1m",
-        poll_interval: int = 15,
+        timeframe: str = "15m",
+        poll_interval: int = 60,
         warmup_bars: int = 300,
         max_positions: int = 5,
         risk_pct: float = 0.02,
@@ -128,6 +137,8 @@ class LiveTradingEngine:
         crypto_take_profit_pct: float = 0.04,
         atr_stop_multiplier: float = 2.0,
         atr_tp_multiplier: float = 4.0,
+        max_daily_loss: float = 300.0,
+        max_drawdown: float = 1500.0,
     ) -> None:
         self.broker = broker
         self.data = data_source
@@ -144,15 +155,32 @@ class LiveTradingEngine:
         self.crypto_take_profit_pct = crypto_take_profit_pct
         self.atr_stop_multiplier = atr_stop_multiplier
         self.atr_tp_multiplier = atr_tp_multiplier
+        self.max_daily_loss = max_daily_loss
+        self.max_drawdown = max_drawdown
         self.regime_recheck_minutes = regime_recheck_minutes
 
         self.regime_detector = RegimeDetector(sma_period=50)
         self.trailing_stops = TrailingStopManager(trail_pct=trail_pct, min_profit_to_activate=0.005)
-        self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500, crypto_risk_pct=0.01)
+        self.sizer = PositionSizer(
+            risk_pct=risk_pct,
+            max_qty=500,
+            crypto_risk_pct=0.01,
+            # Match the engine's stop floor so the sizer's notion of "risk per
+            # trade" matches the actual stop distance the engine will enforce.
+            # Without this, on low-ATR timeframes (e.g. 1m) the sizer sizes for
+            # an ATR*2 stop (~$0.2) while the engine enforces a 4% floor stop
+            # (~$9) → real risk is 20-50x larger than intended.
+            min_stop_pct=stop_loss_pct,
+            min_stop_pct_crypto=crypto_stop_loss_pct,
+            atr_multiplier=atr_stop_multiplier,
+            atr_tp_multiplier=atr_tp_multiplier,
+        )
         self.portfolio_risk = PortfolioRiskManager(
             max_pct_per_position=0.15,
             max_pct_per_sector=0.35,
             max_positions=max_positions,
+            max_daily_loss=max_daily_loss,
+            max_drawdown=max_drawdown,
         )
 
         self._runtimes: dict[str, SymbolRuntime] = {
@@ -163,6 +191,12 @@ class LiveTradingEngine:
         self._running = False
         self._cycle_count = 0
         self._entry_prices: dict[str, float] = {}
+        # Daily-loss / drawdown kill-switch state. Once tripped, the engine
+        # stops opening NEW entries but keeps managing/exiting existing
+        # positions so capital is protected. Resets only on engine restart.
+        self._halted: bool = False
+        self._halt_reason: str | None = None
+        self._last_kill_switch_check: datetime | None = None
 
     def run(self) -> None:
         """Main loop — runs forever until Ctrl+C."""
@@ -176,8 +210,10 @@ class LiveTradingEngine:
         log.info(f"  Max positions: {self.max_positions}")
         log.info(f"  Risk/trade: {self.risk_pct:.1%}")
         log.info(f"  Stop loss:  {self.stop_loss_pct:.1%}")
-        log.info(f"  Trailing:   {self.trail_pct:.1%}")
+        log.info(f"  Trailing:   {self.trail_pct:.1%} (trend strategies only)")
         log.info(f"  Take profit:{self.take_profit_pct:.1%}")
+        log.info(f"  Daily loss kill-switch: ${self.max_daily_loss:.0f}")
+        log.info(f"  Drawdown kill-switch:   ${self.max_drawdown:.0f}")
         log.info("=" * 60)
 
         account = self.broker.get_account()
@@ -222,6 +258,29 @@ class LiveTradingEngine:
         if is_crypto(symbol):
             return 1440.0 / minutes_per_bar
         return 390.0 / minutes_per_bar
+
+    def _fetch_lookback_days(self) -> int:
+        """Days of history to fetch per poll cycle.
+
+        We need at least warmup_bars of history to keep the indicator buffer
+        full, plus a margin for the weekend gap (US stocks). Fetching 3x the
+        warmup window in calendar days gives enough overlap to never lose bars
+        between polls while staying well under Alpaca's 10000-bar page limit.
+        """
+        # Use the stock (non-crypto) bars-per-day as a conservative lower bound;
+        # crypto symbols will simply receive more bars than they need, which is
+        # cheap and harmless.
+        bpd = 390.0 / {
+            "1m": 1,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "1d": 1440,
+        }.get(self.timeframe, 60)
+        days = max(int(math.ceil(self.warmup_bars / bpd * 3)), 2)
+        # Cap: no reason to ever pull more than ~10 days per poll.
+        return min(days, 10)
 
     def _warmup(self) -> None:
         """Fetch initial data and prime all strategies."""
@@ -336,6 +395,11 @@ class LiveTradingEngine:
             return
 
         try:
+            # Kill-switch check first: if daily-loss / drawdown limit is hit,
+            # block NEW entries but still manage existing positions so we can
+            # exit them defensively.
+            self._check_kill_switch()
+
             self._fetch_new_bars()
             self._check_regime_rotation()
             self._manage_positions()
@@ -343,9 +407,62 @@ class LiveTradingEngine:
         except Exception as e:
             log.error(f"Cycle error: {e}", exc_info=True)
 
+    def _check_kill_switch(self) -> None:
+        """Halt new entries if daily loss or drawdown limits are breached.
+
+        Existing positions are still managed (exits allowed) so the engine
+        never abandons open risk. This was missing previously — the live engine
+        used PortfolioRiskManager which only enforces sector/position limits,
+        so the bot kept trading through losses indefinitely.
+        """
+        # Throttle: account fetch is a network call, no need to do it every
+        # 15s poll. Check at most once per minute.
+        now = datetime.now(UTC)
+        if (
+            self._last_kill_switch_check is not None
+            and (now - self._last_kill_switch_check).total_seconds() < 60
+            and not self._halted
+        ):
+            return
+        self._last_kill_switch_check = now
+
+        try:
+            account = self.broker.get_account()
+        except Exception as e:
+            log.warning(f"Kill-switch check skipped (account fetch failed): {e}")
+            return
+
+        if account.daily_pnl <= -self.max_daily_loss:
+            reason = (
+                f"Daily loss limit reached: daily PnL ${account.daily_pnl:+.2f} "
+                f"<= -${self.max_daily_loss:.2f}"
+            )
+            if not self._halted:
+                log.error(f"TRADING HALTED: {reason}")
+            self._halted = True
+            self._halt_reason = reason
+            return
+
+        drawdown = account.peak_equity - account.equity if account.peak_equity > 0 else 0.0
+        if drawdown >= self.max_drawdown:
+            reason = f"Max drawdown reached: ${drawdown:.2f} >= ${self.max_drawdown:.2f}"
+            if not self._halted:
+                log.error(f"TRADING HALTED: {reason}")
+            self._halted = True
+            self._halt_reason = reason
+            return
+
     def _fetch_new_bars(self) -> None:
-        """Fetch latest bars for all symbols."""
-        start = (datetime.now(UTC) - timedelta(days=5)).strftime("%Y-%m-%d")
+        """Fetch latest bars for all symbols.
+
+        The lookback window is sized to the timeframe so we don't pull 5 days
+        of 1m bars (thousands of rows) every 15s poll — that hammering burns
+        through the Alpaca rate limit and provides no benefit since we only
+        keep the last ``warmup_bars`` anyway. We fetch roughly 3x the warmup
+        window in calendar days, clamped to sane bounds.
+        """
+        days_back = self._fetch_lookback_days()
+        start = (datetime.now(UTC) - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
         for sym in self.symbols:
             try:
@@ -459,6 +576,13 @@ class LiveTradingEngine:
         if not position.is_flat:
             return
 
+        # Kill-switch: no new entries once daily-loss / drawdown limit is hit.
+        # Existing positions are still managed in _manage_positions so we can
+        # exit defensively, but we never add risk while halted.
+        if self._halted:
+            log.debug(f"Entry skipped ({order.symbol}): trading halted — {self._halt_reason}")
+            return
+
         account = self.broker.get_account()
         active = sum(1 for p in account.positions.values() if not p.is_flat)
         if active >= self.max_positions:
@@ -502,7 +626,14 @@ class LiveTradingEngine:
             log.info(f"ENTRY FILLED: {checked.symbol} {checked.qty} shares @ ${fill_price:.2f}")
 
     def _manage_positions(self) -> None:
-        """Check all open positions for exit conditions (ATR-adaptive stops)."""
+        """Check all open positions for exit conditions (ATR-adaptive stops).
+
+        Trailing stops are only applied to trend strategies (see
+        ``TRAILING_STRATEGIES``). Mean-reversion strategies use a fixed ATR
+        stop + TP target; running a trailing stop alongside that ATR stop
+        caused premature exits — the 3% trailing fired before the wider ATR
+        stop, locking in small losses before the reversion could play out.
+        """
         account = self.broker.get_account()
 
         for sym, pos in account.positions.items():
@@ -519,12 +650,14 @@ class LiveTradingEngine:
             current_price = rt.bars_buffer[-1].close
             entry = self._entry_prices.get(sym, 0)
             crypto = is_crypto(sym)
+            use_trailing = rt.strategy_name in TRAILING_STRATEGIES
 
             # Compute ATR-based stop/take; fall back to fixed % if ATR unavailable.
             stop_price, take_profit_price = self._calc_exit_levels(sym, entry, pos, crypto)
 
             if pos.is_long:
-                self.trailing_stops.update(sym, current_price, Side.BUY)
+                if use_trailing:
+                    self.trailing_stops.update(sym, current_price, Side.BUY)
 
                 if stop_price > 0 and current_price <= stop_price:
                     log.warning(
@@ -540,12 +673,16 @@ class LiveTradingEngine:
                     self._force_close(sym, pos, current_price)
                     continue
 
-                trail_stop = self.trailing_stops.get_stop(sym)
-                if trail_stop and current_price <= trail_stop:
-                    log.info(f"TRAILING STOP: {sym} @ {current_price:.2f} (trail={trail_stop:.2f})")
-                    self._force_close(sym, pos, current_price)
+                if use_trailing:
+                    trail_stop = self.trailing_stops.get_stop(sym)
+                    if trail_stop and current_price <= trail_stop:
+                        log.info(
+                            f"TRAILING STOP: {sym} @ {current_price:.2f} (trail={trail_stop:.2f})"
+                        )
+                        self._force_close(sym, pos, current_price)
             else:
-                self.trailing_stops.update(sym, current_price, Side.SELL)
+                if use_trailing:
+                    self.trailing_stops.update(sym, current_price, Side.SELL)
 
                 if stop_price > 0 and current_price >= stop_price:
                     log.warning(
@@ -563,13 +700,14 @@ class LiveTradingEngine:
                     self._force_close(sym, pos, current_price)
                     continue
 
-                trail_stop = self.trailing_stops.get_stop(sym)
-                if trail_stop and current_price >= trail_stop:
-                    log.info(
-                        f"TRAILING STOP (short): {sym} @ {current_price:.2f} "
-                        f"(trail={trail_stop:.2f})"
-                    )
-                    self._force_close(sym, pos, current_price)
+                if use_trailing:
+                    trail_stop = self.trailing_stops.get_stop(sym)
+                    if trail_stop and current_price >= trail_stop:
+                        log.info(
+                            f"TRAILING STOP (short): {sym} @ {current_price:.2f} "
+                            f"(trail={trail_stop:.2f})"
+                        )
+                        self._force_close(sym, pos, current_price)
 
     def _calc_exit_levels(
         self, symbol: str, entry: float, position: Position, crypto: bool
@@ -578,25 +716,32 @@ class LiveTradingEngine:
 
         Returns (stop_price, take_profit_price). Falls back to fixed % if ATR
         is unavailable or produces an implausibly small distance.
+
+        CRITICAL: both stop and take-profit get the same min-floor treatment.
+        Previously only the stop had a floor (``max(atr*mult, entry*stop_pct)``)
+        while the TP was left at ``atr*tp_mult``. On low-ATR timeframes (1m, 5m)
+        ATR is a few cents while the stop floor is ~4% away — so the stop was
+        40-100x further than the TP, inverting risk:reward to ~1:40. Each stop
+        hit then wiped out dozens of small TP wins, producing the steady bleed
+        the bot was showing. With matched floors, R:R stays near the intended
+        ``atr_tp_multiplier / atr_stop_multiplier`` ratio (default 2:1).
         """
         if entry <= 0:
             return 0.0, 0.0
 
+        stop_pct_fb = self.crypto_stop_loss_pct if crypto else self.stop_loss_pct
+        tp_pct_fb = self.crypto_take_profit_pct if crypto else self.take_profit_pct
+
         rt = self._runtimes.get(symbol)
         if rt is None or len(rt.bars_buffer) < 15:
-            stop_pct = self.crypto_stop_loss_pct if crypto else self.stop_loss_pct
-            tp_pct = self.crypto_take_profit_pct if crypto else self.take_profit_pct
             if position.is_long:
-                return entry * (1 - stop_pct), entry * (1 + tp_pct)
-            return entry * (1 + stop_pct), entry * (1 - tp_pct)
+                return entry * (1 - stop_pct_fb), entry * (1 + tp_pct_fb)
+            return entry * (1 + stop_pct_fb), entry * (1 - tp_pct_fb)
 
         highs = [b.high for b in rt.bars_buffer[-50:]]
         lows = [b.low for b in rt.bars_buffer[-50:]]
         closes = [b.close for b in rt.bars_buffer[-50:]]
         atr_val = atr(highs, lows, closes, 14)
-
-        stop_pct_fb = self.crypto_stop_loss_pct if crypto else self.stop_loss_pct
-        tp_pct_fb = self.crypto_take_profit_pct if crypto else self.take_profit_pct
 
         if atr_val is None or atr_val <= 0:
             if position.is_long:
@@ -606,9 +751,13 @@ class LiveTradingEngine:
         stop_dist = atr_val * self.atr_stop_multiplier
         tp_dist = atr_val * self.atr_tp_multiplier
 
-        # Guard against implausibly tight ATR stops (whipsaw protection).
+        # Matched floors: guard against implausibly tight ATR levels on both
+        # sides so whipsaw protection doesn't invert R:R. Without a TP floor,
+        # a tiny ATR gives a near-zero target while the stop sits at its floor.
         min_stop_dist = entry * stop_pct_fb
+        min_tp_dist = entry * tp_pct_fb
         stop_dist = max(stop_dist, min_stop_dist)
+        tp_dist = max(tp_dist, min_tp_dist)
 
         if position.is_long:
             return entry - stop_dist, entry + tp_dist
@@ -677,6 +826,15 @@ class LiveTradingEngine:
             f"  Daily PnL: ${account.daily_pnl:+.2f}",
             f"  Positions: {len(account.positions)}",
         ]
+
+        if self._halted:
+            lines.append(f"  ⛔ HALTED: {self._halt_reason}")
+        else:
+            lines.append(
+                f"  Kill-switch: daily ${account.daily_pnl:+.2f} / "
+                f"-${self.max_daily_loss:.0f}, drawdown ${account.drawdown:.2f} / "
+                f"${self.max_drawdown:.0f}"
+            )
 
         for sym, pos in account.positions.items():
             if pos.is_flat:

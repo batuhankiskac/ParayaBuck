@@ -59,8 +59,10 @@ class PositionSizer:
         kelly_fraction: float = 0.25,
         kelly_min_trades: int = 20,
         use_kelly: bool = True,
+        crypto_risk_pct: float = 0.01,
     ) -> None:
         self.risk_pct = risk_pct
+        self.crypto_risk_pct = crypto_risk_pct
         self.atr_period = atr_period
         self.atr_multiplier = atr_multiplier
         self.max_qty = max_qty
@@ -122,7 +124,8 @@ class PositionSizer:
 
         equity = account.equity if account.equity > 0 else account.balance
 
-        risk_amount = equity * self.risk_pct
+        risk_pct = self.crypto_risk_pct if crypto else self.risk_pct
+        risk_amount = equity * risk_pct
         qty = risk_amount / stop_distance
 
         if self.use_kelly:

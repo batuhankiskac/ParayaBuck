@@ -251,7 +251,7 @@ def live(ctx: click.Context, strategy: str | None, symbol: str | None) -> None:
 @cli.command()
 @click.option("--timeframe", "-t", default="1m", help="Bar timeframe (1m/5m/15m/30m/1h)")
 @click.option("--poll", default=15, help="Poll interval in seconds")
-@click.option("--max-positions", default=8, help="Max concurrent positions")
+@click.option("--max-positions", default=5, help="Max concurrent positions")
 @click.option("--symbols", "-y", default=None, help="Comma-separated symbols (overrides config)")
 @click.option("--risk-pct", default=0.02, help="Risk per trade as fraction of equity")
 @click.option("--stop-loss", default=0.04, help="Hard stop-loss percentage")

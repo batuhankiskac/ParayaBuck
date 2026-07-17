@@ -13,6 +13,7 @@ from parayabuck.models import Bar, Order, OrderType, Position, Side
 from parayabuck.risk.portfolio import PortfolioRiskManager
 from parayabuck.risk.sizer import PositionSizer
 from parayabuck.strategy.base import Strategy
+from parayabuck.strategy.indicators import atr
 from parayabuck.strategy.regime import MarketRegime, RegimeDetector
 from parayabuck.utils import is_crypto
 
@@ -24,7 +25,7 @@ REGIME_TO_STRATEGY: dict[str, str] = {
     "trending_down": "mean_reversion",
     "ranging": "mean_reversion",
     "low_volatility": "mean_reversion",
-    "high_volatility": "none",
+    "high_volatility": "mean_reversion",
     "crisis": "none",
     "unknown": "none",
 }
@@ -114,12 +115,16 @@ class LiveTradingEngine:
         timeframe: str = "1m",
         poll_interval: int = 15,
         warmup_bars: int = 300,
-        max_positions: int = 8,
+        max_positions: int = 5,
         risk_pct: float = 0.02,
         trail_pct: float = 0.03,
         stop_loss_pct: float = 0.04,
         take_profit_pct: float = 0.06,
         regime_recheck_minutes: int = 30,
+        crypto_stop_loss_pct: float = 0.025,
+        crypto_take_profit_pct: float = 0.04,
+        atr_stop_multiplier: float = 2.0,
+        atr_tp_multiplier: float = 4.0,
     ) -> None:
         self.broker = broker
         self.data = data_source
@@ -132,11 +137,18 @@ class LiveTradingEngine:
         self.trail_pct = trail_pct
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
+        self.crypto_stop_loss_pct = crypto_stop_loss_pct
+        self.crypto_take_profit_pct = crypto_take_profit_pct
+        self.atr_stop_multiplier = atr_stop_multiplier
+        self.atr_tp_multiplier = atr_tp_multiplier
         self.regime_recheck_minutes = regime_recheck_minutes
 
         self.regime_detector = RegimeDetector(sma_period=50)
         self.trailing_stops = TrailingStopManager(
             trail_pct=trail_pct, min_profit_to_activate=0.005
+        )
+        self.sizer = PositionSizer(
+            risk_pct=risk_pct, max_qty=500, crypto_risk_pct=0.01
         )
         self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500)
         self.portfolio_risk = PortfolioRiskManager(
@@ -380,6 +392,26 @@ class LiveTradingEngine:
         if sized.qty <= 0:
             return
 
+        # In high-volatility regimes, halve the position size for safety.
+        rt = self._runtimes.get(order.symbol)
+        if rt is not None and rt.regime == MarketRegime.HIGH_VOLATILITY:
+            half_qty = sized.qty / 2
+            crypto = is_crypto(order.symbol)
+            min_qty = 0.0001 if crypto else 1
+            if half_qty >= min_qty:
+                sized = Order(
+                    symbol=sized.symbol,
+                    side=sized.side,
+                    qty=half_qty,
+                    order_type=sized.order_type,
+                    limit_price=sized.limit_price,
+                    stop_price=sized.stop_price,
+                    tif=sized.tif,
+                )
+                log.info(
+                    f"  {order.symbol}: high-volatility regime → halved qty to {half_qty}"
+                )
+
         checked = self.portfolio_risk.check_order(sized, account, bar.close)
         if checked is None:
             return
@@ -398,42 +430,44 @@ class LiveTradingEngine:
             )
 
     def _manage_positions(self) -> None:
-        """Check all open positions for exit conditions."""
+        """Check all open positions for exit conditions (ATR-adaptive stops)."""
         account = self.broker.get_account()
 
         for sym, pos in account.positions.items():
             if pos.is_flat:
                 continue
 
-            bars = self._runtimes.get(sym)
-            if bars is None or not bars.bars_buffer:
+            rt = self._runtimes.get(sym)
+            if rt is None or not rt.bars_buffer:
                 continue
 
-            current_price = bars.bars_buffer[-1].close
+            current_price = rt.bars_buffer[-1].close
+            entry = self._entry_prices.get(sym, 0)
+            crypto = is_crypto(sym)
+
+            # Compute ATR-based stop/take; fall back to fixed % if ATR unavailable.
+            stop_price, take_profit_price = self._calc_exit_levels(
+                sym, entry, pos, crypto
+            )
 
             if pos.is_long:
                 self.trailing_stops.update(sym, current_price, Side.BUY)
 
-                hard_stop = self._entry_prices.get(sym, 0)
-                if hard_stop > 0:
-                    hard_stop_price = hard_stop * (1 - self.stop_loss_pct)
-                    take_profit_price = hard_stop * (1 + self.take_profit_pct)
+                if stop_price > 0 and current_price <= stop_price:
+                    log.warning(
+                        f"HARD STOP-LOSS: {sym} @ {current_price:.2f} "
+                        f"(stop={stop_price:.2f})"
+                    )
+                    self._force_close(sym, pos, current_price)
+                    continue
 
-                    if current_price <= hard_stop_price:
-                        log.warning(
-                            f"HARD STOP-LOSS: {sym} @ {current_price:.2f} "
-                            f"(stop={hard_stop_price:.2f})"
-                        )
-                        self._force_close(sym, pos, current_price)
-                        continue
-
-                    if current_price >= take_profit_price:
-                        log.info(
-                            f"TAKE PROFIT: {sym} @ {current_price:.2f} "
-                            f"(target={take_profit_price:.2f})"
-                        )
-                        self._force_close(sym, pos, current_price)
-                        continue
+                if take_profit_price > 0 and current_price >= take_profit_price:
+                    log.info(
+                        f"TAKE PROFIT: {sym} @ {current_price:.2f} "
+                        f"(target={take_profit_price:.2f})"
+                    )
+                    self._force_close(sym, pos, current_price)
+                    continue
 
                 trail_stop = self.trailing_stops.get_stop(sym)
                 if trail_stop and current_price <= trail_stop:
@@ -442,6 +476,75 @@ class LiveTradingEngine:
                         f"(trail={trail_stop:.2f})"
                     )
                     self._force_close(sym, pos, current_price)
+            else:
+                self.trailing_stops.update(sym, current_price, Side.SELL)
+
+                if stop_price > 0 and current_price >= stop_price:
+                    log.warning(
+                        f"HARD STOP-LOSS (short): {sym} @ {current_price:.2f} "
+                        f"(stop={stop_price:.2f})"
+                    )
+                    self._force_close(sym, pos, current_price)
+                    continue
+
+                if take_profit_price > 0 and current_price <= take_profit_price:
+                    log.info(
+                        f"TAKE PROFIT (short): {sym} @ {current_price:.2f} "
+                        f"(target={take_profit_price:.2f})"
+                    )
+                    self._force_close(sym, pos, current_price)
+                    continue
+
+                trail_stop = self.trailing_stops.get_stop(sym)
+                if trail_stop and current_price >= trail_stop:
+                    log.info(
+                        f"TRAILING STOP (short): {sym} @ {current_price:.2f} "
+                        f"(trail={trail_stop:.2f})"
+                    )
+                    self._force_close(sym, pos, current_price)
+
+    def _calc_exit_levels(
+        self, symbol: str, entry: float, position: Position, crypto: bool
+    ) -> tuple[float, float]:
+        """Calculate ATR-adaptive stop-loss and take-profit prices.
+
+        Returns (stop_price, take_profit_price). Falls back to fixed % if ATR
+        is unavailable or produces an implausibly small distance.
+        """
+        if entry <= 0:
+            return 0.0, 0.0
+
+        rt = self._runtimes.get(symbol)
+        if rt is None or len(rt.bars_buffer) < 15:
+            stop_pct = self.crypto_stop_loss_pct if crypto else self.stop_loss_pct
+            tp_pct = self.crypto_take_profit_pct if crypto else self.take_profit_pct
+            if position.is_long:
+                return entry * (1 - stop_pct), entry * (1 + tp_pct)
+            return entry * (1 + stop_pct), entry * (1 - tp_pct)
+
+        highs = [b.high for b in rt.bars_buffer[-50:]]
+        lows = [b.low for b in rt.bars_buffer[-50:]]
+        closes = [b.close for b in rt.bars_buffer[-50:]]
+        atr_val = atr(highs, lows, closes, 14)
+
+        stop_pct_fb = self.crypto_stop_loss_pct if crypto else self.stop_loss_pct
+        tp_pct_fb = self.crypto_take_profit_pct if crypto else self.take_profit_pct
+
+        if atr_val is None or atr_val <= 0:
+            if position.is_long:
+                return entry * (1 - stop_pct_fb), entry * (1 + tp_pct_fb)
+            return entry * (1 + stop_pct_fb), entry * (1 - tp_pct_fb)
+
+        stop_dist = atr_val * self.atr_stop_multiplier
+        tp_dist = atr_val * self.atr_tp_multiplier
+
+        # Guard against implausibly tight ATR stops (whipsaw protection).
+        min_stop_dist = entry * stop_pct_fb
+        stop_dist = max(stop_dist, min_stop_dist)
+
+        if position.is_long:
+            return entry - stop_dist, entry + tp_dist
+        return entry + stop_dist, entry - tp_dist
 
     def _force_close(self, symbol: str, position: Position, price: float) -> None:
         """Force-close a position immediately."""

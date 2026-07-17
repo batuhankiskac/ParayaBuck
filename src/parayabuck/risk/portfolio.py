@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from parayabuck.logger import get_logger
 from parayabuck.models import Account, Order, Side
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.risk.portfolio")
 
@@ -78,25 +79,29 @@ class PortfolioRiskManager:
         if account.equity <= 0:
             return None
 
+        crypto = is_crypto(order.symbol)
+        # Crypto trades in fractional quantities; stocks are whole shares.
+        min_lot = 0.0001 if crypto else 1
+
         order_value = order.qty * current_price
         pct_of_equity = order_value / account.equity
 
         # Check single position limit
         if pct_of_equity > self.max_pct_per_position:
-            max_shares = int(
-                (account.equity * self.max_pct_per_position) / current_price
-            )
-            if max_shares <= 0:
+            max_shares = (account.equity * self.max_pct_per_position) / current_price
+            if crypto:
+                max_shares = round(max_shares, 4)
+            else:
+                max_shares = int(max_shares)
+            if max_shares < min_lot:
                 log.warning(
                     f"Order rejected: {order.symbol} would exceed "
                     f"{self.max_pct_per_position:.0%} of equity"
                 )
                 return None
             from parayabuck.models import Order as OrderCls
-            log.info(
-                f"Trimming {order.symbol} from {order.qty} to {max_shares} shares "
-                f"(position limit)"
-            )
+
+            log.info(f"Trimming {order.symbol} from {order.qty} to {max_shares} (position limit)")
             order = OrderCls(
                 symbol=order.symbol,
                 side=order.side,
@@ -121,13 +126,9 @@ class PortfolioRiskManager:
         if order.side == Side.BUY:
             current_pos = account.get_position(order.symbol)
             if current_pos.is_flat:
-                active_positions = sum(
-                    1 for p in account.positions.values() if not p.is_flat
-                )
+                active_positions = sum(1 for p in account.positions.values() if not p.is_flat)
                 if active_positions >= self.max_positions:
-                    log.warning(
-                        f"Order rejected: max positions ({self.max_positions}) reached"
-                    )
+                    log.warning(f"Order rejected: max positions ({self.max_positions}) reached")
                     return None
 
         # Check cash buffer
@@ -135,17 +136,20 @@ class PortfolioRiskManager:
             cash_needed = order.qty * current_price
             available_cash = account.balance * (1 - self.min_cash_pct)
             if cash_needed > available_cash:
-                affordable = int(available_cash / current_price)
-                if affordable <= 0:
+                affordable = available_cash / current_price
+                if crypto:
+                    affordable = round(affordable, 4)
+                else:
+                    affordable = int(affordable)
+                if affordable < min_lot:
                     log.warning(
                         f"Order rejected: insufficient cash (need ${cash_needed:.0f}, "
                         f"available ${available_cash:.0f})"
                     )
                     return None
                 from parayabuck.models import Order as OrderCls
-                log.info(
-                    f"Trimming {order.symbol} to {affordable} shares (cash buffer)"
-                )
+
+                log.info(f"Trimming {order.symbol} to {affordable} (cash buffer)")
                 order = OrderCls(
                     symbol=order.symbol,
                     side=order.side,
@@ -161,7 +165,11 @@ class PortfolioRiskManager:
     def _sector_exposure(
         self, account: Account, sector: str, new_order: Order, current_price: float
     ) -> float:
-        """Calculate total sector exposure as fraction of equity (including new order)."""
+        """Calculate total sector exposure as fraction of equity (including new order).
+
+        Existing positions are valued at each position's own current/avg price
+        rather than the new order's price (which only applies to one symbol).
+        """
         if account.equity <= 0:
             return 1.0
 
@@ -170,10 +178,13 @@ class PortfolioRiskManager:
             if pos.is_flat:
                 continue
             if get_sector(sym) == sector:
-                sector_value += abs(pos.qty) * current_price
+                # Use the order's price for the symbol being traded; for others
+                # fall back to avg cost (best available proxy without live quotes).
+                price = current_price if sym == new_order.symbol else pos.avg_price
+                sector_value += abs(pos.qty) * price
 
-        if new_order.side == Side.BUY:
-            sector_value += new_order.qty * current_price
+        # Both BUY (new long) and SELL (new short) add gross exposure.
+        sector_value += new_order.qty * current_price
 
         return sector_value / account.equity
 

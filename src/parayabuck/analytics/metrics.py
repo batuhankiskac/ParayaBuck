@@ -89,11 +89,7 @@ def calculate_metrics(
         mean_return = 0.0
         volatility = 0.0
 
-    rf_per_period = risk_free_rate / bars_per_year
-    if volatility > 0:
-        sharpe = ((mean_return - rf_per_period) / (volatility / math.sqrt(bars_per_year)))
-    else:
-        sharpe = 0.0
+    # Sharpe is computed below (annualized) after volatility is finalised.
 
     downside_returns = [r for r in returns if r < 0]
     if downside_returns:
@@ -122,7 +118,7 @@ def calculate_metrics(
     else:
         calmar = 0.0
 
-    closing_trades = [t for t in trades if t.realized_pnl != -t.commission]
+    closing_trades = [t for t in trades if t.closes_position]
     wins = [t for t in closing_trades if t.realized_pnl > 0]
     losses = [t for t in closing_trades if t.realized_pnl < 0]
 
@@ -138,10 +134,14 @@ def calculate_metrics(
 
     avg_win = gross_profit / len(wins) if wins else 0.0
     avg_loss = -gross_loss / len(losses) if losses else 0.0
-    expectancy = (
-        (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
-        if closing_trades else 0.0
-    )
+    expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss) if closing_trades else 0.0
+
+    # Annualized Sharpe (mean_return is per-bar; multiply by periods/year and
+    # divide std by sqrt(periods/year) → multiply by sqrt(periods/year)).
+    if volatility > 0:
+        sharpe = (mean_return * bars_per_year - risk_free_rate) / volatility
+    else:
+        sharpe = 0.0
 
     return PerformanceMetrics(
         total_return=total_return,

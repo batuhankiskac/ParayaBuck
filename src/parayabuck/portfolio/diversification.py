@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from parayabuck.logger import get_logger
 from parayabuck.models import Bar
-from parayabuck.portfolio.correlation import CorrelationMatrix
+from parayabuck.portfolio.correlation import CorrelationMatrix, returns_from_prices
 from parayabuck.risk.portfolio import SECTOR_MAP, get_sector
 
 log = get_logger("parayabuck.portfolio.diversification")
@@ -91,10 +91,12 @@ class DiversificationEngine:
                 )
             )
 
-        scored.sort(key=lambda c: (
-            -c.liquidity_score,
-            c.volatility if c.volatility > 0 else 999,
-        ))
+        scored.sort(
+            key=lambda c: (
+                -c.liquidity_score,
+                c.volatility if c.volatility > 0 else 999,
+            )
+        )
 
         result = DiversificationResult()
 
@@ -117,15 +119,18 @@ class DiversificationEngine:
 
             bars = bars_by_symbol.get(candidate.symbol, [])
             if bars:
-                closes = [b.close for b in bars]
+                cand_returns = returns_from_prices([b.close for b in bars])
                 too_correlated = False
                 correlated_with = ""
+                corr = 0.0
                 for sel_sym in result.selected:
                     sel_bars = bars_by_symbol.get(sel_sym, [])
                     if not sel_bars:
                         continue
-                    sel_closes = [b.close for b in sel_bars]
-                    corr = self._correlation.calc_correlation(candidate.symbol, closes, sel_closes)
+                    sel_returns = returns_from_prices([b.close for b in sel_bars])
+                    corr = self._correlation.calc_correlation(
+                        candidate.symbol, cand_returns, sel_returns
+                    )
                     if corr > self.max_correlation:
                         too_correlated = True
                         correlated_with = sel_sym
@@ -139,9 +144,7 @@ class DiversificationEngine:
             result.selected.append(candidate.symbol)
             result.sector_counts[candidate.sector] = sector_count + 1
 
-        log.info(
-            f"Diversification: selected {len(result.selected)} stocks: {result.selected}"
-        )
+        log.info(f"Diversification: selected {len(result.selected)} stocks: {result.selected}")
         if result.rejected:
             for sym, reason in result.rejected[:5]:
                 log.debug(f"  Rejected {sym}: {reason}")
@@ -155,9 +158,7 @@ class DiversificationEngine:
         closes = [b.close for b in bars[-20:]]
         if len(closes) < 2:
             return 0.0
-        returns = [
-            abs(closes[i] / closes[i - 1] - 1) for i in range(1, len(closes))
-        ]
+        returns = [abs(closes[i] / closes[i - 1] - 1) for i in range(1, len(closes))]
         return sum(returns) / len(returns) if returns else 0.0
 
     @staticmethod

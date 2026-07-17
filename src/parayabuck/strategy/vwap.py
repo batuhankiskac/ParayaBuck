@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from parayabuck.logger import get_logger
 from parayabuck.models import Bar, Order, OrderType, Position, Side
@@ -10,6 +11,8 @@ from parayabuck.strategy.base import Strategy
 from parayabuck.strategy.indicators import vwap
 
 log = get_logger("parayabuck.strategy.vwap")
+
+_ET = ZoneInfo("America/New_York")
 
 
 class VWAPReversion(Strategy):
@@ -91,8 +94,14 @@ class VWAPReversion(Strategy):
         self._lows.clear()
         self._volumes.clear()
 
+    def _et(self, ts: datetime) -> datetime:
+        """Convert a (possibly tz-aware) bar timestamp to US Eastern time."""
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=ZoneInfo("UTC"))
+        return ts.astimezone(_ET)
+
     def _is_trading_window(self, bar: Bar) -> bool:
-        t = bar.timestamp
+        t = self._et(bar.timestamp)
         minutes_from_open = (t.hour - 9) * 60 + (t.minute - 30)
         minutes_to_close = (16 * 60) - (t.hour * 60 + t.minute)
         if minutes_from_open < self.trading_start_minutes:
@@ -102,14 +111,14 @@ class VWAPReversion(Strategy):
         return True
 
     def _is_near_eod(self, bar: Bar) -> bool:
-        t = bar.timestamp
+        t = self._et(bar.timestamp)
         minutes_to_close = (16 * 60) - (t.hour * 60 + t.minute)
         return minutes_to_close <= self.trading_end_minutes_offset
 
     def on_bar(self, bar: Bar, position: Position) -> Order | None:
         self._bars_seen += 1
 
-        bar_date = bar.timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
+        bar_date = self._et(bar.timestamp).replace(hour=0, minute=0, second=0, microsecond=0)
         if self._session_date != bar_date:
             self._reset_session(bar_date)
 
@@ -123,9 +132,7 @@ class VWAPReversion(Strategy):
 
         from parayabuck.strategy.indicators import rsi as calc_rsi
 
-        self._current_vwap = vwap(
-            list(self._highs), list(self._lows), list(self._volumes)
-        )
+        self._current_vwap = vwap(list(self._highs), list(self._lows), list(self._volumes))
         if self._current_vwap <= 0:
             return None
 

@@ -34,12 +34,17 @@ class BracketOrder:
             orders.append(self.take_profit)
         return orders
 
-    def on_stop_or_target_filled(self, filled_side: Side) -> None:
-        """Called when stop or target fills. Marks bracket as closed."""
+    def on_stop_or_target_filled(self, filled_side: Side, entry_side: Side = Side.BUY) -> None:
+        """Called when stop or target fills. Marks bracket as closed.
+
+        entry_side indicates which leg was the entry so we can report which
+        protective order triggered (a stop fills against us, a target in favor).
+        """
         self.active = False
         self.closed = True
-        other = "target" if filled_side == Side.SELL else "stop"
-        log.info(f"Bracket closed via {other} fill")
+        is_stop = self.stop_loss is not None and filled_side == self.stop_loss.side
+        label = "stop" if is_stop else "target"
+        log.info(f"Bracket closed via {label} fill")
 
 
 class TrailingStopManager:

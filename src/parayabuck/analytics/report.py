@@ -29,15 +29,17 @@ class DailyReporter:
 
         if self._current_date != today:
             self._current_date = today
-            self._daily_snapshots.append({
-                "date": today,
-                "equity": account.equity,
-                "balance": account.balance,
-                "realized_pnl": account.realized_pnl,
-                "unrealized_pnl": account.unrealized_pnl,
-                "daily_pnl": account.daily_pnl,
-                "positions": len([p for p in account.positions.values() if not p.is_flat]),
-            })
+            self._daily_snapshots.append(
+                {
+                    "date": today,
+                    "equity": account.equity,
+                    "balance": account.balance,
+                    "realized_pnl": account.realized_pnl,
+                    "unrealized_pnl": account.unrealized_pnl,
+                    "daily_pnl": account.daily_pnl,
+                    "positions": len([p for p in account.positions.values() if not p.is_flat]),
+                }
+            )
 
     def record_trade(self, trade: Trade) -> None:
         self._all_trades.append(trade)
@@ -45,9 +47,7 @@ class DailyReporter:
     def daily_summary(self, account: Account) -> str:
         """Generate today's summary."""
         today = datetime.now(UTC).strftime("%Y-%m-%d")
-        active_positions = [
-            (sym, pos) for sym, pos in account.positions.items() if not pos.is_flat
-        ]
+        active_positions = [(sym, pos) for sym, pos in account.positions.items() if not pos.is_flat]
 
         lines = [
             "",
@@ -71,10 +71,7 @@ class DailyReporter:
                     f"    {sym:6s} {direction:5s} {abs(pos.qty):4d} @ ${pos.avg_price:.2f}"
                 )
 
-        today_trades = [
-            t for t in self._all_trades
-            if t.timestamp.strftime("%Y-%m-%d") == today
-        ]
+        today_trades = [t for t in self._all_trades if t.timestamp.strftime("%Y-%m-%d") == today]
         if today_trades:
             lines.append("")
             lines.append(f"  Today's trades: {len(today_trades)}")
@@ -88,9 +85,7 @@ class DailyReporter:
         lines.append("=" * 60)
         return "\n".join(lines)
 
-    def full_report(
-        self, starting_balance: float, bars_per_year: int = 252
-    ) -> PerformanceMetrics:
+    def full_report(self, starting_balance: float, bars_per_year: int = 252) -> PerformanceMetrics:
         """Calculate full performance metrics."""
         return calculate_metrics(
             equity_curve=self._equity_curve or [starting_balance],

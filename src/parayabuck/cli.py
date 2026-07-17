@@ -65,8 +65,12 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
 @click.option("--timeframe", "-t", default=None, help="Timeframe (overrides config)")
 @click.option("--start", default=None, help="Start date (YYYY-MM-DD)")
 @click.option("--end", default=None, help="End date (YYYY-MM-DD)")
-@click.option("--source", default="alpaca", type=click.Choice(["alpaca", "csv"]),
-              help="Data source: alpaca (API) or csv (local file)")
+@click.option(
+    "--source",
+    default="alpaca",
+    type=click.Choice(["alpaca", "csv"]),
+    help="Data source: alpaca (API) or csv (local file)",
+)
 @click.option("--metrics/--no-metrics", default=True, help="Show detailed performance metrics")
 @click.option("--plot/--no-plot", default=False, help="Generate and save plots to output/")
 @click.pass_context
@@ -133,7 +137,7 @@ def backtest(
             )
             for t in result.trades
         ]
-        bars_per_year = _bars_per_year(tf)
+        bars_per_year = _bars_per_year(tf, sym)
         m = calculate_metrics(
             equity_curve=result.equity_curve or [cfg.account.starting_balance],
             trades=trade_models,
@@ -150,18 +154,26 @@ def backtest(
         click.echo("\nPlots saved to output/")
 
 
-def _bars_per_year(timeframe: str) -> int:
-    """Estimate bars per year for a given timeframe."""
-    trading_days = 252
-    mapping = {
-        "1m": trading_days * 390,
-        "5m": trading_days * 78,
-        "15m": trading_days * 26,
-        "30m": trading_days * 13,
-        "1h": trading_days * 7,
-        "1d": trading_days,
-    }
-    return mapping.get(timeframe, trading_days)
+def _bars_per_year(timeframe: str, symbol: str | None = None) -> int:
+    """Estimate bars per year for a given timeframe.
+
+    Crypto trades 24/7 (365 days), US stocks ~6.5h sessions (252 days).
+    """
+    from parayabuck.utils import is_crypto
+
+    days = 365 if (symbol and is_crypto(symbol)) else 252
+    minutes_per_bar = {
+        "1m": 1,
+        "5m": 5,
+        "15m": 15,
+        "30m": 30,
+        "1h": 60,
+        "1d": 1440,
+    }.get(timeframe, 60)
+    if minutes_per_bar >= 1440:
+        return days
+    mins_per_day = 1440 if (symbol and is_crypto(symbol)) else 390
+    return int(days * mins_per_day / minutes_per_bar)
 
 
 @cli.command()
@@ -196,18 +208,33 @@ def paper(
     account = broker.get_account()
     click.echo(f"Account equity: ${account.equity:,.2f} | Cash: ${account.balance:,.2f}")
 
-    # Run: poll latest bars, feed to strategy, execute orders
     import time
     from datetime import UTC, datetime, timedelta
 
+    # Warm up the strategy with enough history so indicators are primed and the
+    # first live bar can actually produce a signal (previously only the latest
+    # bar was fed, so indicators never had enough data to fire).
     strat.on_init()
+    warmup_days = 5
+    warmup_start = datetime.now(UTC) - timedelta(days=warmup_days)
+    warmup_bars = data_source.get_bars(sym, tf, warmup_start, datetime.now(UTC))
+    if warmup_bars:
+        pos = broker.get_position(sym)
+        for wb in warmup_bars:
+            broker.update_market_price(sym, wb.close, wb.timestamp)
+            strat.on_bar(wb, pos if pos.is_flat else broker.get_position(sym))
+        click.echo(f"Warmed up with {len(warmup_bars)} bars.")
+
     click.echo("Strategy started. Press Ctrl+C to stop.\n")
+
+    # Poll roughly at the timeframe cadence (default 60s for 1m).
+    tf_minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}.get(tf, 1)
+    poll_seconds = max(tf_minutes * 60, 15)
 
     try:
         while True:
-            # Get latest bars (last 50 for EMA warmup)
             end_dt = datetime.now(UTC)
-            start_dt = end_dt - timedelta(days=5)
+            start_dt = end_dt - timedelta(days=2)
             bars = data_source.get_bars(sym, tf, start_dt, end_dt)
 
             if bars:
@@ -216,14 +243,14 @@ def paper(
                 position = broker.get_position(sym)
 
                 order = strat.on_bar(latest_bar, position)
-                if order is not None:
-                    order = risk_mgr.check_order(order, broker.get_account())
-                    if order is not None:
-                        broker.submit_order(order)
+                pending = strat.pop_pending_orders() if hasattr(strat, "pop_pending_orders") else []
+                for od in ([order] if order is not None else []) + list(pending):
+                    checked = risk_mgr.check_order(od, broker.get_account())
+                    if checked is not None:
+                        broker.submit_order(checked)
 
-                # Print status
                 acct = broker.get_account()
-                pos = acct.get_position(sym) if sym in acct.positions else broker.get_position(sym)
+                pos = acct.get_position(sym)
                 click.echo(
                     f"{latest_bar.timestamp.strftime('%H:%M')} | "
                     f"{sym} ${latest_bar.close:.2f} | "
@@ -231,7 +258,9 @@ def paper(
                     f"Equity: ${acct.equity:,.2f}"
                 )
 
-            time.sleep(60)  # poll every minute
+                risk_mgr.tick_cooldown()
+
+            time.sleep(poll_seconds)
     except KeyboardInterrupt:
         click.echo("\nStopping...")
         strat.on_stop()
@@ -373,9 +402,7 @@ def auto(
     if plot and result.equity_curve:
         from parayabuck.analytics.plots import save_all_plots
 
-        all_pnls = [
-            s["pnl"] for sym in result.per_symbol for s in [sym]
-        ]
+        all_pnls = [s["pnl"] for s in result.per_symbol]
         save_all_plots(result.equity_curve, all_pnls)
         click.echo("\nPlots saved to output/")
 

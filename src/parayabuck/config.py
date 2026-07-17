@@ -80,9 +80,7 @@ class Config:
 def load_config(config_path: str | None = None) -> Config:
     load_dotenv()
 
-    path = Path(
-        config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml"
-    )
+    path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 

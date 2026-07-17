@@ -20,10 +20,10 @@ class MarketRegime(StrEnum):
 @dataclass
 class RegimeState:
     regime: MarketRegime
-    trend_strength: float   # ADX value
-    momentum: float         # RSI value
-    above_sma: bool         # price above long SMA
-    confidence: float       # 0-1, how confident we are
+    trend_strength: float  # ADX value
+    momentum: float  # RSI value
+    above_sma: bool  # price above long SMA
+    confidence: float  # 0-1, how confident we are
 
     def allows_mean_reversion(self) -> bool:
         return self.regime in (MarketRegime.RANGING, MarketRegime.LOW_VOLATILITY)
@@ -86,9 +86,7 @@ class RegimeDetector:
 
         recent_vol = self._avg_volatility(bars)
         if len(bars) >= self.vol_lookback * 2:
-            baseline_vol = self._avg_volatility(
-                bars[-self.vol_lookback * 2 : -self.vol_lookback]
-            )
+            baseline_vol = self._avg_volatility(bars[-self.vol_lookback * 2 : -self.vol_lookback])
         else:
             baseline_vol = recent_vol
         vol_ratio = recent_vol / baseline_vol if baseline_vol > 0 else 1.0
@@ -121,9 +119,7 @@ class RegimeDetector:
     def _avg_volatility(bars: list[Bar]) -> float:
         if len(bars) < 2:
             return 0.0
-        returns = [
-            abs(bars[i].close / bars[i - 1].close - 1) for i in range(1, len(bars))
-        ]
+        returns = [abs(bars[i].close / bars[i - 1].close - 1) for i in range(1, len(bars))]
         return sum(returns) / len(returns) if returns else 0.0
 
 

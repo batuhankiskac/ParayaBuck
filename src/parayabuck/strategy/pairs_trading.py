@@ -48,6 +48,7 @@ class PairsTrading(Strategy):
         )
         self.symbol_a = str(self.params["symbol_a"])
         self.symbol_b = str(self.params["symbol_b"])
+        self.symbols = [self.symbol_a, self.symbol_b]
         self.lookback = int(self.params["lookback"])
         self.entry_z = float(self.params["entry_z"])
         self.exit_z = float(self.params["exit_z"])
@@ -125,6 +126,15 @@ class PairsTrading(Strategy):
                     f"PAIRS ENTRY: short {qty_a} {self.symbol_a} + long {qty_b} {self.symbol_b} "
                     f"(z={z:.2f}, beta={self.beta:.2f})"
                 )
+                # A leg returned; B leg queued for the engine to submit.
+                self._pending_orders.append(
+                    Order(
+                        symbol=self.symbol_b,
+                        side=Side.BUY,
+                        qty=qty_b,
+                        order_type=OrderType.MARKET,
+                    )
+                )
                 return Order(
                     symbol=self.symbol_a,
                     side=Side.SELL,
@@ -137,6 +147,14 @@ class PairsTrading(Strategy):
                     f"PAIRS ENTRY: long {qty_a} {self.symbol_a} + short {qty_b} {self.symbol_b} "
                     f"(z={z:.2f}, beta={self.beta:.2f})"
                 )
+                self._pending_orders.append(
+                    Order(
+                        symbol=self.symbol_b,
+                        side=Side.SELL,
+                        qty=qty_b,
+                        order_type=OrderType.MARKET,
+                    )
+                )
                 return Order(
                     symbol=self.symbol_a,
                     side=Side.BUY,
@@ -148,6 +166,15 @@ class PairsTrading(Strategy):
             if z > -self.exit_z:
                 log.info(f"PAIRS EXIT (long_a_short_b): z={z:.2f} reverted")
                 self._state = "flat"
+                # Close A (sell) and close B (buy back short).
+                self._pending_orders.append(
+                    Order(
+                        symbol=self.symbol_b,
+                        side=Side.BUY,
+                        qty=qty_b,
+                        order_type=OrderType.MARKET,
+                    )
+                )
                 return Order(
                     symbol=self.symbol_a,
                     side=Side.SELL,
@@ -159,6 +186,15 @@ class PairsTrading(Strategy):
             if z < self.exit_z:
                 log.info(f"PAIRS EXIT (short_a_long_b): z={z:.2f} reverted")
                 self._state = "flat"
+                # Close A (buy back short) and close B (sell long).
+                self._pending_orders.append(
+                    Order(
+                        symbol=self.symbol_b,
+                        side=Side.SELL,
+                        qty=qty_b,
+                        order_type=OrderType.MARKET,
+                    )
+                )
                 return Order(
                     symbol=self.symbol_a,
                     side=Side.BUY,

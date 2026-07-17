@@ -90,9 +90,7 @@ class StrategyAllocator:
         }
 
     def record_trade(self, strategy_name: str, pnl: float) -> None:
-        perf = self._performances.setdefault(
-            strategy_name, StrategyPerformance(name=strategy_name)
-        )
+        perf = self._performances.setdefault(strategy_name, StrategyPerformance(name=strategy_name))
         if pnl > 0:
             perf.wins += 1
             perf.gross_profit += pnl
@@ -102,9 +100,7 @@ class StrategyAllocator:
         perf.total_pnl += pnl
 
     def update_equity(self, strategy_name: str, equity: float) -> None:
-        perf = self._performances.setdefault(
-            strategy_name, StrategyPerformance(name=strategy_name)
-        )
+        perf = self._performances.setdefault(strategy_name, StrategyPerformance(name=strategy_name))
         perf.equity_curve.append(equity)
 
     def get_allocation(self, strategy_name: str) -> float:
@@ -128,7 +124,7 @@ class StrategyAllocator:
 
             if self._performances[name].total_pnl < 0:
                 drawdown_penalty = min(0.5, abs(self._performances[name].total_pnl) / 1000)
-                new_frac *= (1 - drawdown_penalty)
+                new_frac *= 1 - drawdown_penalty
 
             new_allocs[name] = new_frac
 
@@ -167,9 +163,7 @@ class StrategyAllocator:
             perf = self._performances.get(name)
             pnl = perf.total_pnl if perf else 0
             sharpe = perf.sharpe if perf else 0
-            lines.append(
-                f"  {name:20s} {frac:6.1%}  PnL=${pnl:+8.2f}  Sharpe={sharpe:.2f}"
-            )
+            lines.append(f"  {name:20s} {frac:6.1%}  PnL=${pnl:+8.2f}  Sharpe={sharpe:.2f}")
         return "\n".join(lines)
 
     def get_performances(self) -> dict[str, StrategyPerformance]:

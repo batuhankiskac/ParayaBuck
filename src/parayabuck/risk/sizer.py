@@ -77,9 +77,7 @@ class PositionSizer:
         self._stats: dict[str, TradeStats] = {}
         self._entry_prices: dict[str, float] = {}
 
-    def update_history(
-        self, symbol: str, high: float, low: float, close: float
-    ) -> None:
+    def update_history(self, symbol: str, high: float, low: float, close: float) -> None:
         if symbol not in self._highs:
             self._highs[symbol] = deque(maxlen=200)
             self._lows[symbol] = deque(maxlen=200)
@@ -100,7 +98,7 @@ class PositionSizer:
 
     def size_order(self, order: Order, account: Account) -> Order:
         """Return order with adjusted quantity. Exit orders pass through unchanged."""
-        if order.side == Side.SELL and self._is_exit(order, account):
+        if self._is_exit(order, account):
             return order
 
         symbol = order.symbol
@@ -131,6 +129,10 @@ class PositionSizer:
         if self.use_kelly:
             qty = self._apply_kelly(symbol, qty, equity, entry_price, stop_distance)
 
+        # Kelly can only shrink or keep the ATR-based size, never grow it
+        # (avoids 5x blow-ups when Kelly fraction > risk_pct).
+        qty = min(qty, risk_amount / stop_distance)
+
         qty = max(qty, min_qty) if qty > 0 else 0
         qty = min(qty, self.max_qty)
 
@@ -153,6 +155,11 @@ class PositionSizer:
         return self._set_qty(order, qty)
 
     def _is_exit(self, order: Order, account: Account) -> bool:
+        """An exit closes an existing position in the opposite direction.
+
+        Note: a BUY that closes a short is also an exit and must NOT be resized
+        (we must close the exact qty we hold).
+        """
         pos = account.get_position(order.symbol)
         if order.side == Side.SELL and pos.is_long:
             return True
@@ -195,10 +202,7 @@ class PositionSizer:
         kelly_qty = capital_to_risk / stop_distance
 
         if kelly_qty < base_qty:
-            log.debug(
-                f"Kelly reduced {symbol}: {base_qty} → {kelly_qty} "
-                f"(f={adjusted_f:.3f})"
-            )
+            log.debug(f"Kelly reduced {symbol}: {base_qty} → {kelly_qty} (f={adjusted_f:.3f})")
         return max(kelly_qty, 0.0001)
 
     @staticmethod

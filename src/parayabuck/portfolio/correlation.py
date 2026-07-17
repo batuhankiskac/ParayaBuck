@@ -31,11 +31,7 @@ def pearson_correlation(x: Sequence[float], y: Sequence[float]) -> float:
 def returns_from_prices(prices: Sequence[float]) -> list[float]:
     if len(prices) < 2:
         return []
-    return [
-        prices[i] / prices[i - 1] - 1
-        for i in range(1, len(prices))
-        if prices[i - 1] != 0
-    ]
+    return [prices[i] / prices[i - 1] - 1 for i in range(1, len(prices)) if prices[i - 1] != 0]
 
 
 class CorrelationMatrix:
@@ -53,15 +49,18 @@ class CorrelationMatrix:
         self._matrix: dict[str, dict[str, float]] = {}
 
     def update(self, bars_by_symbol: dict[str, list[Bar]]) -> None:
+        # Reset and rebuild from the supplied snapshots so repeated calls don't
+        # double-count returns (deque maxlen only trims after overflow, leading
+        # to duplicated entries on each update).
         for symbol, bars in bars_by_symbol.items():
             if len(bars) < 2:
                 continue
             closes = [b.close for b in bars[-(self.lookback + 1) :]]
             rets = returns_from_prices(closes)
-            if symbol not in self._returns:
-                self._returns[symbol] = deque(maxlen=self.lookback)
+            buf: deque[float] = deque(maxlen=self.lookback)
             for r in rets:
-                self._returns[symbol].append(r)
+                buf.append(r)
+            self._returns[symbol] = buf
 
         self._compute_matrix()
 

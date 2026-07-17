@@ -63,15 +63,17 @@ class AutoPilotResult:
 
         rows = []
         for s in self.per_symbol:
-            rows.append([
-                s["symbol"],
-                s["strategy"],
-                s["regime"],
-                s["trades"],
-                f"${s['pnl']:+.2f}",
-                f"{s['win_rate']:.0%}",
-                f"{s['profit_factor']:.2f}",
-            ])
+            rows.append(
+                [
+                    s["symbol"],
+                    s["strategy"],
+                    s["regime"],
+                    s["trades"],
+                    f"${s['pnl']:+.2f}",
+                    f"{s['win_rate']:.0%}",
+                    f"{s['profit_factor']:.2f}",
+                ]
+            )
 
         lines.append(
             tabulate(
@@ -212,6 +214,7 @@ class AutoPilotRunner:
             strategy_name = REGIME_TO_STRATEGY.get(regime_state.regime.value, "none")
 
             from parayabuck.risk.portfolio import get_sector
+
             plan = SymbolPlan(
                 symbol=sym,
                 sector=get_sector(sym),
@@ -255,14 +258,11 @@ class AutoPilotRunner:
 
         # Allocate capital equally among active symbols
         per_symbol_capital = total_balance / len(active_plans)
-        log.info(
-            f"AUTO-PILOT: {len(active_plans)} symbols, "
-            f"${per_symbol_capital:,.2f} each"
-        )
+        log.info(f"AUTO-PILOT: {len(active_plans)} symbols, ${per_symbol_capital:,.2f} each")
 
         # Run backtest per symbol
         per_symbol_results: list[dict[str, Any]] = []
-        all_equity: list[float] = []
+        per_symbol_pnl: list[tuple[list[float], float]] = []
         total_pnl = 0.0
         total_trades = 0
         total_wins = 0
@@ -278,16 +278,18 @@ class AutoPilotRunner:
                 log.error(f"  {plan.symbol}: backtest failed — {e}")
                 continue
 
-            per_symbol_results.append({
-                "symbol": plan.symbol,
-                "strategy": plan.strategy_name,
-                "regime": plan.regime.value,
-                "trades": result.total_trades,
-                "pnl": result.total_pnl,
-                "win_rate": result.win_rate,
-                "profit_factor": result.profit_factor,
-                "max_drawdown": result.max_drawdown,
-            })
+            per_symbol_results.append(
+                {
+                    "symbol": plan.symbol,
+                    "strategy": plan.strategy_name,
+                    "regime": plan.regime.value,
+                    "trades": result.total_trades,
+                    "pnl": result.total_pnl,
+                    "win_rate": result.win_rate,
+                    "profit_factor": result.profit_factor,
+                    "max_drawdown": result.max_drawdown,
+                }
+            )
 
             total_pnl += result.total_pnl
             total_trades += result.total_trades
@@ -302,24 +304,24 @@ class AutoPilotRunner:
             total_gross_profit += sum(t["pnl"] for t in wins)
             total_gross_loss += sum(abs(t["pnl"]) for t in losses)
 
-            # Normalize equity curve and accumulate
-            if all_equity:
-                for i, eq in enumerate(result.equity_curve):
-                    if i < len(all_equity):
-                        all_equity[i] += eq - per_symbol_capital
-                    else:
-                        all_equity.append(per_symbol_capital + (eq - per_symbol_capital))
-            else:
-                all_equity = [
-                    per_symbol_capital + (eq - per_symbol_capital)
-                    for eq in result.equity_curve
-                ]
+            # Collect per-symbol PnL curves (equity - allocated capital) for
+            # later timestamp-aligned aggregation. Indexing by bar number across
+            # symbols with different trading hours (crypto 24/7 vs stocks 6.5h)
+            # is meaningless, so we align by wall-clock timestamp instead.
+            per_symbol_pnl.append((result.equity_curve, per_symbol_capital))
+
+        # Build a timestamp-aligned portfolio equity curve. Each per-symbol
+        # backtest ran independently, so we sum PnL contributions; when a symbol
+        # has no point at a given timestamp we carry its last known PnL forward.
+        all_equity = self._aggregate_equity(per_symbol_pnl, total_balance)
 
         win_rate = total_wins / total_closing if total_closing > 0 else 0.0
         profit_factor = (
             total_gross_profit / total_gross_loss
             if total_gross_loss > 0
-            else float("inf") if total_gross_profit > 0 else 0.0
+            else float("inf")
+            if total_gross_profit > 0
+            else 0.0
         )
 
         return AutoPilotResult(
@@ -345,6 +347,7 @@ class AutoPilotRunner:
         """Run backtest for a single symbol with the planned strategy."""
         # Create a sub-config with adjusted starting balance
         from copy import deepcopy
+
         sub_config = deepcopy(self.config)
         sub_config.account.starting_balance = capital
 
@@ -371,3 +374,28 @@ class AutoPilotRunner:
 
         log.info(f"  Backtest: {plan.symbol} with {plan.strategy_name} (${capital:,.0f})")
         return engine.run(strategy, plan.symbol, self.timeframe, start, end)
+
+    @staticmethod
+    def _aggregate_equity(
+        per_symbol_pnl: list[tuple[list[float], float]], total_balance: float
+    ) -> list[float]:
+        """Aggregate per-symbol equity curves into a portfolio equity curve.
+
+        Each entry is (equity_curve, allocated_capital). The PnL contribution of
+        a symbol at step i is `equity_curve[i] - allocated_capital`. Symbols have
+        different bar counts (crypto trades 24/7, stocks 6.5h), so we sum by
+        step index and carry each symbol's last PnL forward once its curve ends.
+        """
+        if not per_symbol_pnl:
+            return []
+        max_len = max(len(ec) for ec, _ in per_symbol_pnl) if per_symbol_pnl else 0
+        last_pnl = [0.0] * len(per_symbol_pnl)
+        out: list[float] = []
+        for i in range(max_len):
+            total_pnl_at_i = 0.0
+            for s, (ec, cap) in enumerate(per_symbol_pnl):
+                if i < len(ec):
+                    last_pnl[s] = ec[i] - cap
+                total_pnl_at_i += last_pnl[s]
+            out.append(total_balance + total_pnl_at_i)
+        return out

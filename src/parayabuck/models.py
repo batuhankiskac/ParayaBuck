@@ -44,7 +44,9 @@ class Bar:
     def __post_init__(self) -> None:
         if self.high < self.low:
             raise ValueError(f"Bar high ({self.high}) < low ({self.low})")
-        if self.close > self.high or self.close < self.low:
+        if not (self.low <= self.open <= self.high):
+            raise ValueError(f"Bar open ({self.open}) outside H/L range")
+        if not (self.low <= self.close <= self.high):
             raise ValueError(f"Bar close ({self.close}) outside H/L range")
 
 
@@ -76,7 +78,7 @@ class Order:
 @dataclass
 class Position:
     symbol: str
-    qty: float = 0.0          # positive = long, negative = short, 0 = flat
+    qty: float = 0.0  # positive = long, negative = short, 0 = flat
     avg_price: float = 0.0
 
     @property
@@ -106,6 +108,7 @@ class Trade:
     price: float
     commission: float = 0.0
     realized_pnl: float = 0.0  # PnL realized on closing fills (0 for entries)
+    closes_position: bool = False  # True only on fills that close/reduce a position
     trade_id: str | None = None
     order_id: str | None = None
 

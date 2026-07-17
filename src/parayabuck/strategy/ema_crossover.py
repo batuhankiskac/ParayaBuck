@@ -30,7 +30,10 @@ class EMACrossover(Strategy):
         self.fast_period = int(self.params["fast_ema"])
         self.slow_period = int(self.params["slow_ema"])
         self.allow_short = bool(self.params["allow_short"])
-        self._prices: deque[float] = deque(maxlen=self.slow_period)
+        # Keep enough history so the slow EMA has a stable seed (SMA over the
+        # first `slow_period` values) rather than being anchored to the oldest
+        # price in a too-short buffer.
+        self._prices: deque[float] = deque(maxlen=max(self.slow_period * 10, 200))
         self._prev_fast: float | None = None
         self._prev_slow: float | None = None
         self._prev_above: bool | None = None
@@ -39,9 +42,10 @@ class EMACrossover(Strategy):
         if len(self._prices) < period:
             return 0.0
         prices = list(self._prices)[-period:]
+        # Seed EMA with SMA of the first `period` values (standard EMA seeding).
         k = 2 / (period + 1)
-        ema = prices[0]
-        for p in prices[1:]:
+        ema = sum(prices[:period]) / period
+        for p in prices[period:]:
             ema = p * k + ema * (1 - k)
         return ema
 

@@ -73,6 +73,7 @@ class PaperBroker(Broker):
         position = self.account.get_position(order.symbol)
         commission = abs(order.qty) * self.config.risk.commission_per_share
         realized_pnl = 0.0
+        closes_position = False
 
         # Update position
         if position.is_flat:
@@ -88,11 +89,15 @@ class PaperBroker(Broker):
             position.qty = new_qty if position.is_long else -new_qty
         else:
             # Reducing or closing position
+            closes_position = True
             close_qty = min(abs(position.qty), order.qty)
             point_value = self.config.get_symbol_spec(order.symbol).point_value
-            realized_pnl = (fill_price - position.avg_price) * close_qty * (
-                1 if position.is_long else -1
-            ) * point_value
+            realized_pnl = (
+                (fill_price - position.avg_price)
+                * close_qty
+                * (1 if position.is_long else -1)
+                * point_value
+            )
             self.account.realized_pnl += realized_pnl
             self.account.balance += realized_pnl - commission
             self.account.daily_pnl += realized_pnl - commission
@@ -108,9 +113,7 @@ class PaperBroker(Broker):
                     position.avg_price = 0.0
                 else:
                     # Partial close
-                    position.qty = (
-                        abs(position.qty) - close_qty
-                    ) * (1 if position.is_long else -1)
+                    position.qty = (abs(position.qty) - close_qty) * (1 if position.is_long else -1)
 
         trade = Trade(
             timestamp=self._current_time,
@@ -120,6 +123,7 @@ class PaperBroker(Broker):
             price=fill_price,
             commission=commission,
             realized_pnl=realized_pnl - commission if realized_pnl != 0.0 else -commission,
+            closes_position=closes_position,
             order_id=order.order_id,
         )
         self.account.trades.append(trade)

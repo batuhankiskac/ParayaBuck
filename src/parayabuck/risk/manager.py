@@ -3,6 +3,7 @@ from __future__ import annotations
 from parayabuck.config import Config
 from parayabuck.logger import get_logger
 from parayabuck.models import Account, Order
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.risk.manager")
 
@@ -11,7 +12,8 @@ class RiskManager:
     """Checks every order against risk rules before it's sent.
 
     Rules enforced:
-      - Max position size (shares per trade)
+      - Max position size (shares per trade). Crypto uses a notional cap
+        interpreted as max units, applied fractionally.
       - Max daily loss (stop trading if daily PnL <= -max_daily_loss)
       - Max drawdown (stop trading if drawdown >= max_drawdown)
       - Position sizing based on risk_per_trade (optional)
@@ -40,10 +42,10 @@ class RiskManager:
         self._cooldown_remaining = bars
 
     def tick_cooldown(self) -> None:
-        """Decrement cooldown by one bar."""
+        """Decrement cooldown by one bar. Call once per bar/cycle."""
         if self._cooldown_remaining > 0:
             self._cooldown_remaining -= 1
-            if self._cooldown_remaining == 0:
+            if self._cooldown_remaining == 0 and self._trading_halted:
                 log.info("Cooldown ended, resuming trading")
                 self._trading_halted = False
                 self._halt_reason = None
@@ -78,12 +80,17 @@ class RiskManager:
         if self._trading_halted:
             return None
 
-        # Check max position size
+        # Check max position size. Crypto can be fractional, so don't int-truncate.
         if order.qty > self.risk_cfg.max_position_size:
+            capped = (
+                float(self.risk_cfg.max_position_size)
+                if is_crypto(order.symbol)
+                else int(self.risk_cfg.max_position_size)
+            )
             order = Order(
                 symbol=order.symbol,
                 side=order.side,
-                qty=self.risk_cfg.max_position_size,
+                qty=capped,
                 order_type=order.order_type,
                 limit_price=order.limit_price,
                 stop_price=order.stop_price,

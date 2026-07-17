@@ -16,6 +16,7 @@ def volatility_position_size(
     atr_period: int = 14,
     atr_multiplier: float = 2.0,
     max_qty: int = 1000,
+    side: str = "BUY",
 ) -> tuple[int, float]:
     """ATR-based position sizing.
 
@@ -31,6 +32,7 @@ def volatility_position_size(
         atr_period: ATR lookback period
         atr_multiplier: Stop distance = ATR * multiplier
         max_qty: Hard cap on shares
+        side: "BUY" (long, stop below) or "SELL" (short, stop above)
 
     Returns: (quantity, stop_price)
     """
@@ -45,7 +47,10 @@ def volatility_position_size(
     qty = min(qty, max_qty)
     qty = max(qty, 0)
 
-    stop_price = entry_price - stop_distance
+    if side.upper() == "SELL":
+        stop_price = entry_price + stop_distance
+    else:
+        stop_price = entry_price - stop_distance
     return qty, stop_price
 
 

@@ -128,7 +128,20 @@ class AlpacaDataSource(DataSource):
         end: datetime | str | None = None,
         use_cache: bool = True,
     ) -> list[Bar]:
-        cache_key = f"{symbol}_{timeframe}_{start}_{end}"
+        # Normalize start/end to stable string forms so identical queries hit
+        # the cache (datetime objects with microsecond precision would otherwise
+        # produce a new key on every call).
+        start_key = (
+            start.isoformat()
+            if isinstance(start, datetime)
+            else (str(start) if start is not None else "None")
+        )
+        end_key = (
+            end.isoformat()
+            if isinstance(end, datetime)
+            else (str(end) if end is not None else "None")
+        )
+        cache_key = f"{symbol}_{timeframe}_{start_key}_{end_key}"
         if use_cache and cache_key in self._cache:
             return self._cache[cache_key]
         bars = self._fetch_bars(symbol, timeframe, start, end)

@@ -102,7 +102,7 @@ def plot_monthly_returns(
         if chunk:
             compounded = 1.0
             for r in chunk:
-                compounded *= (1 + r)
+                compounded *= 1 + r
             monthly.append((compounded - 1) * 100)
 
     fig, ax = plt.subplots(figsize=(12, 4))

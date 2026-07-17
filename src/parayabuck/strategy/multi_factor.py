@@ -69,6 +69,7 @@ class MultiFactorMomentum(Strategy):
             allow_short=params.get("allow_short", False),
         )
         self.benchmark = str(self.params["benchmark"])
+        self.symbols = None  # set dynamically when benchmark feed is wired
         self.mom_3m_period = int(self.params["mom_3m_period"])
         self.mom_6m_period = int(self.params["mom_6m_period"])
         self.vol_period = int(self.params["vol_period"])
@@ -99,8 +100,7 @@ class MultiFactorMomentum(Strategy):
 
         recent_closes = closes[-self.vol_period :]
         vol_returns = [
-            abs(recent_closes[i] / recent_closes[i - 1] - 1)
-            for i in range(1, len(recent_closes))
+            abs(recent_closes[i] / recent_closes[i - 1] - 1) for i in range(1, len(recent_closes))
         ]
         volatility = (sum(vol_returns) / len(vol_returns) * 100) if vol_returns else 0
 
@@ -111,9 +111,7 @@ class MultiFactorMomentum(Strategy):
 
         recent_vol = sum(volumes[-10:]) / max(len(volumes[-10:]), 1)
         older_vol = sum(volumes[-20:-10]) / max(len(volumes[-20:-10]), 1)
-        volume_trend = (
-            (recent_vol / older_vol - 1) * 100 if older_vol > 0 else 0
-        )
+        volume_trend = (recent_vol / older_vol - 1) * 100 if older_vol > 0 else 0
 
         s_mom = self._normalize(mom_3m + mom_6m, -20, 40)
         s_vol = self._normalize(-volatility, -5, 5)
@@ -139,6 +137,16 @@ class MultiFactorMomentum(Strategy):
         if high == low:
             return 50.0
         return max(0.0, min(100.0, (value - low) / (high - low) * 100))
+
+    def update_benchmark_bar(self, bar: Bar) -> None:
+        """Feed a benchmark bar so relative-strength scoring has a reference.
+
+        MultiFactorMomentum is a single-symbol strategy that scores against a
+        benchmark (e.g. SPY). The benchmark is not traded, but its bars must be
+        supplied separately via this method (the backtest engine and live engine
+        do this when `strategy.benchmark` is set).
+        """
+        self._ensure_buffer(bar.symbol).append(bar)
 
     def on_bar(self, bar: Bar, position: Position) -> Order | None:
         self._bars_seen += 1
@@ -192,9 +200,7 @@ class MultiFactorMomentum(Strategy):
         # Short entry (optional)
         if self.allow_short and position.is_flat and score.total_score < 15:
             qty = min(self.max_position, 1)
-            log.info(
-                f"MF ENTRY short {bar.symbol}: score={score.total_score:.1f} (weak momentum)"
-            )
+            log.info(f"MF ENTRY short {bar.symbol}: score={score.total_score:.1f} (weak momentum)")
             return Order(
                 symbol=bar.symbol,
                 side=Side.SELL,
@@ -204,9 +210,7 @@ class MultiFactorMomentum(Strategy):
 
         # Exit short
         if position.is_short and score.total_score > 60:
-            log.info(
-                f"MF EXIT short {bar.symbol}: score={score.total_score:.1f} recovered"
-            )
+            log.info(f"MF EXIT short {bar.symbol}: score={score.total_score:.1f} recovered")
             return Order(
                 symbol=bar.symbol,
                 side=Side.BUY,

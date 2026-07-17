@@ -82,9 +82,7 @@ def kelly_position_size(
         return 0
 
     win_loss_ratio = avg_win / avg_loss
-    alloc_fraction = fractional_kelly(
-        win_rate, win_loss_ratio, kelly_fraction_value, max_alloc_pct
-    )
+    alloc_fraction = fractional_kelly(win_rate, win_loss_ratio, kelly_fraction_value, max_alloc_pct)
 
     capital_to_risk = capital * alloc_fraction
     qty = int(capital_to_risk / risk_per_share)

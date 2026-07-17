@@ -149,7 +149,6 @@ class LiveTradingEngine:
         self.regime_detector = RegimeDetector(sma_period=50)
         self.trailing_stops = TrailingStopManager(trail_pct=trail_pct, min_profit_to_activate=0.005)
         self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500, crypto_risk_pct=0.01)
-        self.sizer = PositionSizer(risk_pct=risk_pct, max_qty=500)
         self.portfolio_risk = PortfolioRiskManager(
             max_pct_per_position=0.15,
             max_pct_per_sector=0.35,
@@ -254,9 +253,29 @@ class LiveTradingEngine:
 
                 if rt.strategy is not None:
                     rt.strategy.on_init()
+                    # Warm up against the REAL broker position so strategy state
+                    # (entry/stop/target) matches what's actually held. Feeding
+                    # a synthetic flat position left strategies with stale stops
+                    # that triggered spurious exits on the first live bar.
+                    real_pos = self.broker.get_position(sym)
                     for bar in rt.bars_buffer:
-                        rt.strategy.on_bar(bar, Position(symbol=sym))
+                        rt.strategy.on_bar(bar, real_pos)
                     rt.warmup_done = True
+                    # If a real position exists, seed trailing stop + entry price
+                    # so protective logic works immediately after a restart.
+                    if not real_pos.is_flat:
+                        self._entry_prices[sym] = real_pos.avg_price
+                        self.trailing_stops.set_entry(
+                            sym,
+                            real_pos.avg_price,
+                            Side.BUY if real_pos.is_long else Side.SELL,
+                        )
+                        log.info(
+                            f"  {sym}: resumed open position "
+                            f"({'LONG' if real_pos.is_long else 'SHORT'} "
+                            f"{abs(real_pos.qty)} @ {real_pos.avg_price:.2f}), "
+                            f"stops seeded"
+                        )
                     log.info(
                         f"  {sym}: warmed up with {len(rt.bars_buffer)} bars, "
                         f"regime={rt.regime.value}, strategy={rt.strategy_name}"
@@ -320,7 +339,6 @@ class LiveTradingEngine:
             self._fetch_new_bars()
             self._check_regime_rotation()
             self._manage_positions()
-            self._check_new_entries()
             self._print_status()
         except Exception as e:
             log.error(f"Cycle error: {e}", exc_info=True)
@@ -351,8 +369,9 @@ class LiveTradingEngine:
                     rt.last_bar_time = new_bars[-1].timestamp
 
                     if rt.strategy is not None and not rt.warmup_done:
+                        real_pos = self.broker.get_position(sym)
                         for bar in rt.bars_buffer:
-                            rt.strategy.on_bar(bar, Position(symbol=sym))
+                            rt.strategy.on_bar(bar, real_pos)
                         rt.warmup_done = True
                     elif rt.strategy is not None:
                         # Feed all new bars to strategy for state updates, but only
@@ -386,15 +405,24 @@ class LiveTradingEngine:
         position = self.broker.get_position(symbol)
         order = rt.strategy.on_bar(bar, position)
 
+        # Collect the primary order (if any) plus multi-leg pending orders.
+        orders: list[Order] = []
         if order is not None:
-            rt.order_pending = True
-            try:
-                if self._is_exit_signal(order, position):
-                    self._execute_exit(order, position, bar)
+            orders.append(order)
+        orders.extend(rt.strategy.pop_pending_orders())
+
+        if not orders:
+            return
+
+        rt.order_pending = True
+        try:
+            for od in orders:
+                if self._is_exit_signal(od, self.broker.get_position(od.symbol)):
+                    self._execute_exit(od, self.broker.get_position(od.symbol), bar)
                 else:
-                    self._execute_entry(order, position, bar)
-            finally:
-                rt.order_pending = False
+                    self._execute_entry(od, self.broker.get_position(od.symbol), bar)
+        finally:
+            rt.order_pending = False
 
     def _is_exit_signal(self, order: Order, position: Position) -> bool:
         """Check if this order is closing an existing position."""
@@ -603,12 +631,6 @@ class LiveTradingEngine:
             self._entry_prices.pop(symbol, None)
             log.info(f"CLOSED: {symbol} PnL=${pnl:+.2f}")
 
-    def _check_new_entries(self) -> None:
-        """Check if regime allows new entries for symbols without positions."""
-        now = datetime.now(UTC)
-        if self._last_regime_check is None:
-            self._last_regime_check = now
-
     def _check_regime_rotation(self) -> None:
         """Periodically re-check regime and rotate strategies if needed."""
         now = datetime.now(UTC)
@@ -627,8 +649,9 @@ class LiveTradingEngine:
             self._detect_regime_and_assign_strategy(sym)
             if rt.strategy is not None and not rt.warmup_done:
                 rt.strategy.on_init()
+                real_pos = self.broker.get_position(sym)
                 for bar in rt.bars_buffer:
-                    rt.strategy.on_bar(bar, Position(symbol=sym))
+                    rt.strategy.on_bar(bar, real_pos)
                 rt.warmup_done = True
 
         self._last_regime_check = now
@@ -663,8 +686,9 @@ class LiveTradingEngine:
             price = rt.bars_buffer[-1].close if rt and rt.bars_buffer else pos.avg_price
             pnl = (price - pos.avg_price) * pos.qty
             trail = self.trailing_stops.get_stop(sym)
+            qty_fmt = f"{abs(pos.qty):.4f}" if is_crypto(sym) else f"{abs(pos.qty):.0f}"
             lines.append(
-                f"    {sym:6s} {direction:5s} {abs(pos.qty):4d} @ ${pos.avg_price:.2f} "
+                f"    {sym:6s} {direction:5s} {qty_fmt} @ ${pos.avg_price:.2f} "
                 f"→ ${price:.2f}  PnL=${pnl:+.2f}  "
                 f"trail={'$' + f'{trail:.2f}' if trail else 'N/A'}"
             )
@@ -730,6 +754,7 @@ class LiveTradingEngine:
         for sym, pos in account.positions.items():
             if not pos.is_flat:
                 direction = "LONG" if pos.is_long else "SHORT"
-                log.info(f"    {sym}: {direction} {abs(pos.qty)} @ ${pos.avg_price:.2f}")
+                qty_fmt = f"{abs(pos.qty):.4f}" if is_crypto(sym) else f"{abs(pos.qty):.0f}"
+                log.info(f"    {sym}: {direction} {qty_fmt} @ ${pos.avg_price:.2f}")
         log.info("=" * 60)
         log.info("NOTE: Open positions remain on Alpaca. They will NOT be auto-closed.")

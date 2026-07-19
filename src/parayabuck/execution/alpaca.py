@@ -21,6 +21,7 @@ from parayabuck.models import (
     Trade,
 )
 from parayabuck.models import OrderType as PBOderType
+from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.execution.alpaca")
 
@@ -37,6 +38,10 @@ class AlpacaBroker(Broker):
 
     def __init__(self, api_key: str, secret_key: str, paper: bool = True) -> None:
         self._client = TradingClient(api_key, secret_key, paper=paper)
+        # alpaca-py never sets an HTTP timeout → a slow API hangs the engine
+        # for tens of minutes. Patch the underlying session so every call is
+        # bounded; the engine's per-cycle try/except then handles the error.
+        patch_session_timeout(self._client._session, timeout=15.0)
         self._market_prices: dict[str, float] = {}
         self._current_time: datetime = datetime.now(UTC)
 

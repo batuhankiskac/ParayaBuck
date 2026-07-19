@@ -12,6 +12,7 @@ from parayabuck.data.base import DataSource
 from parayabuck.logger import get_logger
 from parayabuck.models import Bar
 from parayabuck.utils import is_crypto
+from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.data.alpaca")
 
@@ -37,6 +38,12 @@ class AlpacaDataSource(DataSource):
     def __init__(self, api_key: str, secret_key: str) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         self._crypto_client = CryptoHistoricalDataClient(api_key, secret_key)
+        # alpaca-py never sets an HTTP timeout → a stalled bar fetch hangs the
+        # engine for tens of minutes (observed 19-26 min hangs in production).
+        # Bound every request; the engine's per-symbol try/except then logs
+        # and skips the symbol instead of locking up the whole cycle.
+        patch_session_timeout(self._stock_client._session, timeout=30.0)
+        patch_session_timeout(self._crypto_client._session, timeout=30.0)
         self._cache: dict[str, list[Bar]] = {}
 
     def _fetch_bars(

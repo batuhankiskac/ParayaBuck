@@ -48,8 +48,10 @@ class AlpacaBarStream:
         if stock_symbols:
             self.stock.subscribe_bars(stock_handler, *stock_symbols)
         if crypto_symbols:
-            normalized = [symbol.replace("/", "") for symbol in crypto_symbols]
-            self.crypto.subscribe_bars(crypto_handler, *normalized)
+            # Alpaca's crypto WebSocket uses pair symbols (for example
+            # ``BTC/USD``).  Removing the slash produces an invalid subscribe
+            # payload and the server replies with ``invalid syntax (400)``.
+            self.crypto.subscribe_bars(crypto_handler, *crypto_symbols)
 
     def run_stock(self) -> None:
         self.stock.run()

@@ -36,6 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const paperModeCheck = document.getElementById('paperModeCheck');
     const maxDailyLossInput = document.getElementById('maxDailyLoss');
     const maxDrawdownInput = document.getElementById('maxDrawdown');
+    const timeframeInput = document.getElementById('timeframe');
+    const pollIntervalInput = document.getElementById('pollInterval');
+    const hostInput = document.getElementById('host');
+    const portInput = document.getElementById('port');
+    const openBrowserInput = document.getElementById('openBrowser');
+    const logLevelInput = document.getElementById('logLevel');
 
     let isPaperMode = true;
     let equityHistory = [];
@@ -287,6 +293,12 @@ document.addEventListener('DOMContentLoaded', () => {
             paperModeCheck.checked = data.paper_mode;
             maxDailyLossInput.value = data.max_daily_loss || 300;
             maxDrawdownInput.value = data.max_drawdown || 1500;
+            timeframeInput.value = data.timeframe || '15m';
+            pollIntervalInput.value = data.poll_interval || 60;
+            hostInput.value = data.host || '127.0.0.1';
+            portInput.value = data.port || 8000;
+            openBrowserInput.checked = data.open_browser !== false;
+            logLevelInput.value = data.log_level || 'INFO';
             settingsModal.classList.add('active');
         } catch (err) {
             alert("Ayarlar yüklenemedi: " + err.message);
@@ -304,7 +316,13 @@ document.addEventListener('DOMContentLoaded', () => {
             secret_key: secretKeyInput.value.trim(),
             paper_mode: paperModeCheck.checked,
             max_daily_loss: parseFloat(maxDailyLossInput.value),
-            max_drawdown: parseFloat(maxDrawdownInput.value)
+            max_drawdown: parseFloat(maxDrawdownInput.value),
+            timeframe: timeframeInput.value,
+            poll_interval: parseInt(pollIntervalInput.value, 10),
+            host: hostInput.value.trim(),
+            port: parseInt(portInput.value, 10),
+            open_browser: openBrowserInput.checked,
+            log_level: logLevelInput.value
         };
 
         try {

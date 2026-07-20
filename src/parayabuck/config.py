@@ -65,6 +65,18 @@ class AlpacaConfig:
 
 
 @dataclass
+class AppConfig:
+    """General Web UI and live-engine runtime settings."""
+
+    host: str = "127.0.0.1"
+    port: int = 8000
+    open_browser: bool = True
+    log_level: str = "INFO"
+    timeframe: str = "15m"
+    poll_interval: int = 60
+
+
+@dataclass
 class Config:
     account: AccountConfig
     risk: RiskConfig
@@ -72,6 +84,7 @@ class Config:
     strategy: StrategyConfig
     backtest: BacktestConfig
     alpaca: AlpacaConfig
+    app: AppConfig
     raw: dict[str, Any]
     portfolio: PortfolioConfig | None = None
     strategy_allocations: dict[str, float] | None = None
@@ -112,6 +125,7 @@ def load_config(config_path: str | None = None) -> Config:
         strategy=StrategyConfig(**raw["strategy"]),
         backtest=BacktestConfig(**raw["backtest"]),
         alpaca=AlpacaConfig(**raw.get("alpaca", {"paper": True, "data_delayed": False})),
+        app=AppConfig(**raw.get("app", {})),
         raw=raw,
         portfolio=portfolio_cfg,
         strategy_allocations=raw.get("strategy_allocations"),

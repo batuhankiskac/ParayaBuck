@@ -1,5 +1,14 @@
 # ParayaBuck settings — Alpaca (US stocks)
 
+# --- General program settings ---
+app:
+  host: 127.0.0.1
+  port: 8000
+  open_browser: true
+  log_level: INFO
+  timeframe: 15m
+  poll_interval: 60
+
 # --- Account ---
 account:
   starting_balance: 10000.0    # USD paper starting balance

@@ -179,10 +179,11 @@
     <div id="settingsModal" class="modal-backdrop">
         <div class="modal-content glass-panel">
             <div class="modal-header">
-                <h2>⚙️ Terminal & API Ayarları</h2>
+                <h2>⚙️ Bot Ayarları</h2>
                 <button id="closeSettingsBtn" class="modal-close">&times;</button>
             </div>
             <form id="settingsForm" class="modal-body">
+                <div class="settings-section-title">Bağlantı ve işlem modu</div>
                 <div class="form-group">
                     <label for="apiKey">Alpaca API Key</label>
                     <input type="text" id="apiKey" placeholder="PK..." required>
@@ -198,6 +199,7 @@
                     <label for="paperModeCheck">Paper Trading (Demo Modu)</label>
                 </div>
 
+                <div class="settings-section-title">Risk sınırları</div>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="maxDailyLoss">Maks. Günlük Loss ($)</label>
@@ -208,6 +210,50 @@
                         <input type="number" id="maxDrawdown" step="50" value="1500">
                     </div>
                 </div>
+
+                <div class="settings-section-title">Genel program ayarları</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="timeframe">Grafik / işlem periyodu</label>
+                        <select id="timeframe">
+                            <option value="1m">1 dakika</option>
+                            <option value="5m">5 dakika</option>
+                            <option value="15m">15 dakika</option>
+                            <option value="1h">1 saat</option>
+                            <option value="1d">1 gün</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="pollInterval">Piyasa kontrol aralığı (sn)</label>
+                        <input type="number" id="pollInterval" min="5" max="3600" step="5" value="60">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="host">Web arayüzü adresi</label>
+                        <input type="text" id="host" placeholder="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="port">Web arayüzü portu</label>
+                        <input type="number" id="port" min="1" max="65535" step="1" value="8000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="logLevel">Log seviyesi</label>
+                        <select id="logLevel">
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+                    <div class="form-group checkbox-group settings-checkbox">
+                        <input type="checkbox" id="openBrowser">
+                        <label for="openBrowser">Başlangıçta tarayıcıyı aç</label>
+                    </div>
+                </div>
+                <p class="settings-note">Port, adres ve log seviyesi değişiklikleri program yeniden başlatıldığında etkinleşir.</p>
 
                 <div class="modal-footer">
                     <button type="button" id="cancelSettingsBtn" class="btn btn-secondary">İptal</button>

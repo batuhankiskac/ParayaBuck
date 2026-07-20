@@ -79,8 +79,8 @@ class EngineManager:
                 broker=broker,
                 data_source=data_source,
                 symbols=symbols,
-                timeframe="15m",
-                poll_interval=60,
+                timeframe=cfg.app.timeframe,
+                poll_interval=cfg.app.poll_interval,
                 max_positions=cfg.portfolio.max_positions if cfg.portfolio else 5,
                 risk_pct=0.02,
                 stop_loss_pct=0.04,
@@ -208,6 +208,12 @@ class SettingsPayload(BaseModel):
     paper_mode: bool = Field(True, description="Paper mode toggle")
     max_daily_loss: float = Field(300.0)
     max_drawdown: float = Field(1500.0)
+    timeframe: str = Field("15m")
+    poll_interval: int = Field(60, ge=5, le=3600)
+    host: str = Field("127.0.0.1")
+    port: int = Field(8000, ge=1, le=65535)
+    open_browser: bool = Field(True)
+    log_level: str = Field("INFO")
 
 
 class ModePayload(BaseModel):
@@ -291,6 +297,12 @@ async def get_settings() -> dict[str, Any]:
         "paper_mode": manager.is_paper_mode(),
         "max_daily_loss": cfg_raw.get("risk", {}).get("max_daily_loss", 300.0),
         "max_drawdown": cfg_raw.get("risk", {}).get("max_drawdown", 1500.0),
+        "timeframe": cfg_raw.get("app", {}).get("timeframe", "15m"),
+        "poll_interval": cfg_raw.get("app", {}).get("poll_interval", 60),
+        "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
+        "port": cfg_raw.get("app", {}).get("port", 8000),
+        "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
+        "log_level": cfg_raw.get("app", {}).get("log_level", "INFO"),
     }
 
 
@@ -310,7 +322,15 @@ async def save_settings(payload: SettingsPayload) -> dict[str, str]:
 
         cfg_raw.setdefault("alpaca", {})["paper"] = payload.paper_mode
         cfg_raw.setdefault("risk", {})["max_daily_loss"] = payload.max_daily_loss
-        cfg_raw.get("risk", {})["max_drawdown"] = payload.max_drawdown
+        cfg_raw.setdefault("risk", {})["max_drawdown"] = payload.max_drawdown
+        cfg_raw["app"] = {
+            "host": payload.host.strip() or "127.0.0.1",
+            "port": payload.port,
+            "open_browser": payload.open_browser,
+            "log_level": payload.log_level.upper(),
+            "timeframe": payload.timeframe,
+            "poll_interval": payload.poll_interval,
+        }
 
         with open(manager.config_path, "w") as f:
             yaml.safe_dump(cfg_raw, f, sort_keys=False, default_flow_style=False)

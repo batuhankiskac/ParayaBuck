@@ -4,6 +4,9 @@ import os
 import webbrowser
 from threading import Thread
 from time import sleep
+from pathlib import Path
+
+import yaml
 
 import uvicorn
 
@@ -15,10 +18,16 @@ def main() -> None:
 
     Launches Uvicorn server serving FastAPI + Glassmorphic Web UI.
     """
-    setup_logging(level=os.getenv("LOG_LEVEL", "INFO"))
+    config_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
+    app_config: dict[str, object] = {}
+    if config_path.exists():
+        with config_path.open() as config_file:
+            app_config = (yaml.safe_load(config_file) or {}).get("app", {})
 
-    host = os.getenv("HOST", "127.0.0.1")
-    port = int(os.getenv("PORT", "8000"))
+    setup_logging(level=os.getenv("LOG_LEVEL", str(app_config.get("log_level", "INFO"))))
+
+    host = os.getenv("HOST", str(app_config.get("host", "127.0.0.1")))
+    port = int(os.getenv("PORT", str(app_config.get("port", 8000))))
     url = f"http://{host}:{port}"
 
     print("=" * 60)
@@ -34,7 +43,8 @@ def main() -> None:
             # A missing/default browser must not terminate the WebUI server.
             pass
 
-    if os.getenv("OPEN_BROWSER", "1").lower() not in {"0", "false", "no"}:
+    auto_open_browser = str(app_config.get("open_browser", True)).lower() not in {"0", "false", "no"}
+    if os.getenv("OPEN_BROWSER", "1").lower() not in {"0", "false", "no"} and auto_open_browser:
         Thread(target=open_browser, daemon=True).start()
 
     from parayabuck.web.server import app

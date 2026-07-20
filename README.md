@@ -20,9 +20,9 @@ Veya doğrudan python ile:
 python -m parayabuck
 ```
 
-Uygulama çalıştırıldığında Web UI sunucusu başlar ve tarayıcınız otomatik olarak **`http://127.0.0.1:8000`** adresinde açılır.
+Uygulama çalıştırıldığında Web UI sunucusu başlar. Varsayılan olarak tarayıcınız **`http://127.0.0.1:8000`** adresini açar; bu davranış Ayarlar içindeki gelişmiş program ayarlarından kapatılabilir.
 
-İlk açılışta bot, Alpaca kimlik bilgileri doluysa otomatik başlar. Kimlik yoksa Ayarlar sekmesinden (.env ve settings.yaml) kolayca girip kaydedebilirsiniz.
+Bot motoru güvenlik nedeniyle Web UI içinden **Motoru Başlat** düğmesine basıldığında çalışır. İlk kullanımda Alpaca kimlik bilgilerini Ayarlar sekmesinden (.env ve settings.yaml) girip kaydedebilirsiniz.
 
 ---
 
@@ -37,6 +37,8 @@ Uygulama çalıştırıldığında Web UI sunucusu başlar ve tarayıcınız oto
 
 Alpaca anahtarlarınızı Web UI açıldıktan sonra **Ayarlar** butonuna basarak girip kaydedin.
 
+`python -m parayabuck` ve `parayabuck` komutları yalnızca Web UI sunucusunu başlatır; emir, strateji veya backtest işlemleri için ayrı bir kullanıcı CLI'sı yoktur.
+
 ---
 
 ## Web UI Terminal Özellikleri
@@ -47,3 +49,7 @@ Alpaca anahtarlarınızı Web UI açıldıktan sonra **Ayarlar** butonuna basara
 - **Açık Pozisyonlar Tablosu**: LONG/SHORT badge rozetleri ve canlı kâr/zarar durumları.
 - **Terminal Konsol**: Real-time WebSocket üzerinden yayınlanan canlı sistem logları.
 - **Ayarlar Modalı**: Alpaca API anahtarları, risk limitleri ve mod ayarları.
+
+## Geliştirici araçları
+
+`scripts/generate_sample_data.py`, backtest/test geliştirmesi için sentetik OHLCV verisi üreten geliştirici aracıdır. Web UI'nin çalışma akışının parçası değildir.

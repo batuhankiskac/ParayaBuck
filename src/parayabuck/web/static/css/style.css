@@ -571,6 +571,32 @@ body {
     text-transform: uppercase;
 }
 
+.settings-intro {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+}
+
+.advanced-settings {
+    border-top: 1px solid var(--border-color);
+    margin-top: 20px;
+    padding-top: 16px;
+}
+
+.advanced-settings summary {
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    list-style-position: inside;
+}
+
+.advanced-settings[open] summary {
+    color: var(--accent-cyan);
+    margin-bottom: 14px;
+}
+
 .settings-note {
     color: var(--text-muted);
     font-size: 11px;

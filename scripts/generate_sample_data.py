@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Generate synthetic OHLCV data for testing the backtest engine.
+"""Developer-only helper for generating synthetic OHLCV backtest data.
 
 Creates a CSV file with realistic-looking price data using a random walk
 with mild upward drift and bar-to-bar volatility.
+
+This is not part of the end-user Web UI flow.
 
 Usage:
     python scripts/generate_sample_data.py --symbol MES --timeframe 5m \\

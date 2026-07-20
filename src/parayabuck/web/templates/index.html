@@ -183,6 +183,8 @@
                 <button id="closeSettingsBtn" class="modal-close">&times;</button>
             </div>
             <form id="settingsForm" class="modal-body">
+                <p class="settings-intro">Bot strateji seçimi, sinyal üretimi ve pozisyon yönetimini otomatik yapar. Buradan yalnızca bağlantı ve güvenlik sınırlarını belirlemen yeterli.</p>
+
                 <div class="settings-section-title">Bağlantı ve işlem modu</div>
                 <div class="form-group">
                     <label for="apiKey">Alpaca API Key</label>
@@ -211,49 +213,52 @@
                     </div>
                 </div>
 
-                <div class="settings-section-title">Genel program ayarları</div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="timeframe">Grafik / işlem periyodu</label>
-                        <select id="timeframe">
-                            <option value="1m">1 dakika</option>
-                            <option value="5m">5 dakika</option>
-                            <option value="15m">15 dakika</option>
-                            <option value="1h">1 saat</option>
-                            <option value="1d">1 gün</option>
-                        </select>
+                <details class="advanced-settings">
+                    <summary>Gelişmiş program ayarları</summary>
+                    <p class="settings-note">Bu alanlar normal kullanım için değiştirilmeye gerek duymaz. Botun çalışma periyodu ve teknik sunucu ayarları burada bulunur.</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="timeframe">İşlem periyodu</label>
+                            <select id="timeframe">
+                                <option value="1m">1 dakika</option>
+                                <option value="5m">5 dakika</option>
+                                <option value="15m">15 dakika</option>
+                                <option value="1h">1 saat</option>
+                                <option value="1d">1 gün</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pollInterval">Piyasa kontrol aralığı (sn)</label>
+                            <input type="number" id="pollInterval" min="5" max="3600" step="5" value="60">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="pollInterval">Piyasa kontrol aralığı (sn)</label>
-                        <input type="number" id="pollInterval" min="5" max="3600" step="5" value="60">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="host">Web arayüzü adresi</label>
+                            <input type="text" id="host" placeholder="127.0.0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="port">Web arayüzü portu</label>
+                            <input type="number" id="port" min="1" max="65535" step="1" value="8000">
+                        </div>
                     </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="host">Web arayüzü adresi</label>
-                        <input type="text" id="host" placeholder="127.0.0.1">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="logLevel">Log seviyesi</label>
+                            <select id="logLevel">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                        <div class="form-group checkbox-group settings-checkbox">
+                            <input type="checkbox" id="openBrowser">
+                            <label for="openBrowser">Başlangıçta tarayıcıyı aç</label>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="port">Web arayüzü portu</label>
-                        <input type="number" id="port" min="1" max="65535" step="1" value="8000">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="logLevel">Log seviyesi</label>
-                        <select id="logLevel">
-                            <option value="DEBUG">DEBUG</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
-                        </select>
-                    </div>
-                    <div class="form-group checkbox-group settings-checkbox">
-                        <input type="checkbox" id="openBrowser">
-                        <label for="openBrowser">Başlangıçta tarayıcıyı aç</label>
-                    </div>
-                </div>
-                <p class="settings-note">Port, adres ve log seviyesi değişiklikleri program yeniden başlatıldığında etkinleşir.</p>
+                    <p class="settings-note">Adres, port ve log seviyesi değişiklikleri program yeniden başlatıldığında etkinleşir.</p>
+                </details>
 
                 <div class="modal-footer">
                     <button type="button" id="cancelSettingsBtn" class="btn btn-secondary">İptal</button>

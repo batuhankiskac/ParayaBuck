@@ -50,6 +50,11 @@ STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
         "rsi_period": 14,
         "oversold": 30,
         "overbought": 70,
+        # The reclaim/climax variant is useful for research, but is too sparse
+        # as the default live entry on 5m bars. Keep the RSI + Bollinger +
+        # volume confirmation while allowing a valid oversold touch to act.
+        "climax_factor": 1.0,
+        "require_climax_exit": False,
         "allow_short": False,
         "max_position": 500,
     },
@@ -979,7 +984,7 @@ class LiveTradingEngine:
         # Existing positions are still managed in _manage_positions so we can
         # exit defensively, but we never add risk while halted.
         if self._halted:
-            log.debug(f"Entry skipped ({order.symbol}): trading halted — {self._halt_reason}")
+            log.warning(f"Entry skipped ({order.symbol}): trading halted — {self._halt_reason}")
             return
 
         # Global market filter: when SPY is below its 200-SMA or VIX is
@@ -990,7 +995,7 @@ class LiveTradingEngine:
             and order.side == Side.BUY
             and not is_crypto(order.symbol)
         ):
-            log.debug(
+            log.info(
                 f"Entry skipped ({order.symbol}): market filter RISK-OFF — "
                 f"{self._market_filter_state.reason}"
             )
@@ -1010,7 +1015,7 @@ class LiveTradingEngine:
             cap = self._strategy_position_caps[strategy_name]
             used = self._strategy_positions_used(strategy_name, account)
             if used >= cap:
-                log.debug(
+                log.info(
                     f"Entry skipped ({order.symbol}): strategy {strategy_name} "
                     f"at cap {used}/{cap}"
                 )

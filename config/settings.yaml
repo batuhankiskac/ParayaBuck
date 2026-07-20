@@ -144,6 +144,11 @@ strategy:
     rsi_period: 14
     oversold: 30
     overbought: 70
+    # On 5m live bars, requiring a 2x-volume climax and next-bar reclaim
+    # makes entries excessively rare. Keep volume/RSI/Bollinger confirmation,
+    # but allow the confirmed oversold bar itself to trigger.
+    climax_factor: 1.0
+    require_climax_exit: false
     allow_short: false
     max_position: 50
 strategy_allocations:

@@ -110,16 +110,56 @@ def atr(
     return atr_val
 
 
-def vwap(highs: Sequence[float], lows: Sequence[float], volumes: Sequence[int]) -> float:
+def vwap(
+    highs: Sequence[float],
+    lows: Sequence[float],
+    closes: Sequence[float] | None = None,
+    volumes: Sequence[int] = [],
+) -> float:
+    """Rolling VWAP over the supplied window.
+
+    Standard typical price is ``(H + L + C) / 3``. The previous implementation
+    used ``(H + L) / 2`` which under-weights the closing print and biases the
+    volume-weighted average low. For backward-compatibility callers that omit
+    ``closes`` we fall back to ``(H + L) / 2`` and emit a warning, but all
+    internal callers now pass closes.
+    """
     total_pv = 0.0
     total_v = 0
-    for hi, lo, v in zip(highs, lows, volumes, strict=True):
-        tp = (hi + lo) / 2
-        total_pv += tp * v
-        total_v += v
+    if closes is None:
+        # Legacy fallback: (H+L)/2 typical price.
+        for hi, lo, v in zip(highs, lows, volumes, strict=True):
+            tp = (hi + lo) / 2
+            total_pv += tp * v
+            total_v += v
+    else:
+        for hi, lo, c, v in zip(highs, lows, closes, volumes, strict=True):
+            tp = (hi + lo + c) / 3
+            total_pv += tp * v
+            total_v += v
     if total_v == 0:
         return 0.0
     return total_pv / total_v
+
+
+def session_vwap_step(
+    cum_pv: float, cum_v: float, high: float, low: float, close: float, volume: int
+) -> tuple[float, float, float]:
+    """Increment a cumulative *session* VWAP with one new bar.
+
+    Real intraday VWAP resets at the session open and accumulates volume-weighted
+    typical price until the close. Rolling-window "VWAPs" are not the same thing
+    and tend to lag the canonical intraday reference level that traders use.
+
+    Returns ``(new_cum_pv, new_cum_v, vwap)``. Callers keep the running
+    ``cum_pv`` / ``cum_v`` across bars within the same session and reset them
+    on a session boundary.
+    """
+    tp = (high + low + close) / 3
+    new_cum_pv = cum_pv + tp * volume
+    new_cum_v = cum_v + volume
+    vwap_val = new_cum_pv / new_cum_v if new_cum_v > 0 else 0.0
+    return new_cum_pv, new_cum_v, vwap_val
 
 
 def adx(

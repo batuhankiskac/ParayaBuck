@@ -15,7 +15,8 @@ from parayabuck.portfolio.diversification import DiversificationEngine
 from parayabuck.risk.manager import RiskManager
 from parayabuck.risk.sizer import PositionSizer
 from parayabuck.strategy.base import Strategy
-from parayabuck.strategy.regime import MarketRegime, RegimeDetector
+from parayabuck.strategy.regime import REGIME_TO_STRATEGY, MarketRegime, RegimeDetector
+from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.auto")
 
@@ -108,6 +109,26 @@ def _load_strategy_by_name(name: str, params: dict[str, Any] | None = None) -> S
         from parayabuck.strategy.ema_crossover import EMACrossover
 
         return EMACrossover(**params)
+    elif name == "donchian_breakout":
+        from parayabuck.strategy.donchian import DonchianBreakout
+
+        return DonchianBreakout(**params)
+    elif name == "orb":
+        from parayabuck.strategy.orb import OpeningRangeBreakout
+
+        return OpeningRangeBreakout(**params)
+    elif name == "gap_fade":
+        from parayabuck.strategy.gap_fade import GapFade
+
+        return GapFade(**params)
+    elif name == "dual_momentum":
+        from parayabuck.strategy.dual_momentum import DualMomentum
+
+        return DualMomentum(**params)
+    elif name == "sector_rotation":
+        from parayabuck.strategy.sector_rotation import SectorRotation
+
+        return SectorRotation(**params)
     else:
         raise ValueError(f"Unknown strategy: {name}")
 
@@ -130,7 +151,6 @@ STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
         "max_position": 500,
     },
     "vwap_reversion": {
-        "vwap_period": 30,
         "deviation_threshold": 1.0,
         "allow_short": False,
         "max_position": 500,
@@ -140,18 +160,46 @@ STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
         "slow_ema": 21,
         "allow_short": False,
     },
+    "donchian_breakout": {
+        "entry_period": 20,
+        "exit_period": 10,
+        "atr_period": 14,
+        "atr_filter_mult": 0.5,
+        "allow_short": False,
+        "max_position": 500,
+    },
+    "orb": {
+        "opening_minutes": 15,
+        "allow_short": False,
+        "max_position": 500,
+    },
+    "gap_fade": {
+        "min_gap_pct": 1.5,
+        "rsi_extreme": 25,
+        "allow_short": False,
+        "max_position": 500,
+    },
+    "dual_momentum": {
+        "momentum_period": 252,
+        "risk_free_symbol": "BIL",
+        "allow_short": False,
+        "max_position": 500,
+    },
+    "sector_rotation": {
+        "lookback": 63,
+        "top_n": 3,
+        "rebalance_bars": 21,
+        "max_position": 500,
+    },
 }
 
 
-REGIME_TO_STRATEGY: dict[str, str] = {
-    "trending_up": "ema_crossover",
-    "trending_down": "mean_reversion",
-    "ranging": "mean_reversion",
-    "low_volatility": "mean_reversion",
-    "high_volatility": "none",
-    "crisis": "none",
-    "unknown": "none",
-}
+# Auto-pilot uses the canonical map from the regime module so it stays in
+# sync with the live engine. Previously auto-pilot routed trending_down to
+# mean_reversion while the live engine routed it to "none" — a long-only bot
+# buying oversold dips in a downtrend is exactly the falling-knife case we
+# want to avoid.
+REGIME_TO_STRATEGY = REGIME_TO_STRATEGY  # re-export for backward import compat
 
 
 class AutoPilotRunner:
@@ -352,7 +400,27 @@ class AutoPilotRunner:
         sub_config.account.starting_balance = capital
 
         # Load strategy
-        params = STRATEGY_PARAMS.get(plan.strategy_name, {})
+        params = dict(STRATEGY_PARAMS.get(plan.strategy_name, {}))
+        # multi_factor's 3m/6m windows are daily-bar defaults; rescale them
+        # to the actual backtest timeframe so "6-month momentum" still means
+        # six months on 15m / 1h bars too. Without this, on 15m bars the
+        # strategy waits for 126 bars (~2 days) and treats that as half a year.
+        if plan.strategy_name == "multi_factor":
+            minutes_per_bar = {
+                "1m": 1,
+                "5m": 5,
+                "15m": 15,
+                "30m": 30,
+                "1h": 60,
+                "1d": 1440,
+            }.get(self.timeframe, 1440)
+            if minutes_per_bar >= 1440:
+                bpd = 252.0
+            elif is_crypto(plan.symbol):
+                bpd = 1440.0 / minutes_per_bar
+            else:
+                bpd = 390.0 / minutes_per_bar
+            params["bars_per_day"] = bpd
         strategy = _load_strategy_by_name(plan.strategy_name, params)
         plan.strategy = strategy
 

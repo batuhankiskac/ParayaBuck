@@ -24,6 +24,16 @@ class PerformanceMetrics:
     expectancy: float = 0.0
     total_trades: int = 0
     avg_hold_bars: float = 0.0
+    # Benchmark comparison metrics (populated when a benchmark series is
+    # supplied to calculate_metrics). A strategy's alpha is only meaningful
+    # relative to a passive buy-and-hold — without this, a strategy that
+    # returned 10% in a year when SPY returned 25% looks "profitable" but
+    # actually destroyed value vs. just holding the index.
+    benchmark_return: float = 0.0
+    alpha: float = 0.0
+    beta: float = 0.0
+    excess_return: float = 0.0  # total_return - benchmark_return
+    information_ratio: float = 0.0  # alpha / tracking_error
 
     def summary(self) -> str:
         lines = [
@@ -46,9 +56,17 @@ class PerformanceMetrics:
             f"  Avg win:           ${self.avg_win:,.2f}",
             f"  Avg loss:          ${self.avg_loss:,.2f}",
             f"  Expectancy:        ${self.expectancy:,.2f}",
-            "=" * 60,
-            "",
         ]
+        if self.benchmark_return != 0.0 or self.alpha != 0.0:
+            lines.append("")
+            lines.append("  vs. Benchmark (SPY buy & hold):")
+            lines.append(f"  Benchmark return:  {self.benchmark_return:+.2%}")
+            lines.append(f"  Excess return:     {self.excess_return:+.2%}")
+            lines.append(f"  Alpha (annual):    {self.alpha:+.2%}")
+            lines.append(f"  Beta:              {self.beta:.2f}")
+            lines.append(f"  Info ratio:        {self.information_ratio:.2f}")
+        lines.append("=" * 60)
+        lines.append("")
         return "\n".join(lines)
 
 
@@ -58,8 +76,17 @@ def calculate_metrics(
     starting_balance: float,
     bars_per_year: int = 252,
     risk_free_rate: float = 0.04,
+    benchmark_curve: list[float] | None = None,
 ) -> PerformanceMetrics:
-    """Calculate comprehensive performance metrics from equity curve and trades."""
+    """Calculate comprehensive performance metrics from equity curve and trades.
+
+    Args:
+        benchmark_curve: Optional benchmark equity curve (e.g. SPY buy & hold
+            with the same starting balance). When provided, alpha/beta/excess
+            return are computed. The curve must be the same length as
+            `equity_curve`; if it's longer or shorter, we align by truncating
+            to the shorter.
+    """
 
     if not equity_curve:
         return PerformanceMetrics()
@@ -143,6 +170,64 @@ def calculate_metrics(
     else:
         sharpe = 0.0
 
+    # Benchmark comparison: alpha, beta, excess return, information ratio.
+    # Without this a strategy that returned 10% in a year SPY returned 25%
+    # looks profitable but actually destroyed value vs. just holding SPY.
+    benchmark_return = 0.0
+    alpha = 0.0
+    beta = 0.0
+    excess_return = total_return_pct
+    information_ratio = 0.0
+    if benchmark_curve and len(benchmark_curve) >= 2:
+        # Align by truncating to the shorter curve.
+        n = min(len(equity_curve), len(benchmark_curve))
+        bench = benchmark_curve[-n:]
+        strat = equity_curve[-n:]
+        bench_return = (bench[-1] - bench[0]) / bench[0] if bench[0] > 0 else 0.0
+        strat_return = (strat[-1] - strat[0]) / strat[0] if strat[0] > 0 else 0.0
+        benchmark_return = bench_return
+        excess_return = strat_return - bench_return
+
+        # Per-bar returns for alpha/beta.
+        bench_rets = [
+            bench[i] / bench[i - 1] - 1
+            for i in range(1, len(bench))
+            if bench[i - 1] != 0
+        ]
+        strat_rets = [
+            strat[i] / strat[i - 1] - 1
+            for i in range(1, len(strat))
+            if strat[i - 1] != 0
+        ]
+        m = min(len(bench_rets), len(strat_rets))
+        if m > 1:
+            bench_rets = bench_rets[-m:]
+            strat_rets = strat_rets[-m:]
+            bench_mean = sum(bench_rets) / m
+            strat_mean = sum(strat_rets) / m
+            cov = sum(
+                (bench_rets[i] - bench_mean) * (strat_rets[i] - strat_mean)
+                for i in range(m)
+            ) / m
+            bench_var = sum((r - bench_mean) ** 2 for r in bench_rets) / m
+            if bench_var > 0:
+                beta = cov / bench_var
+                # Annualized alpha: strat annual return - beta * bench annual return
+                # minus risk-free (CAPM-style).
+                strat_annual = (1 + strat_mean) ** bars_per_year - 1
+                bench_annual = (1 + bench_mean) ** bars_per_year - 1
+                alpha = strat_annual - (risk_free_rate + beta * (bench_annual - risk_free_rate))
+            # Tracking error & information ratio.
+            active_returns = [strat_rets[i] - bench_rets[i] for i in range(m)]
+            if active_returns:
+                active_mean = sum(active_returns) / len(active_returns)
+                active_var = (
+                    sum((r - active_mean) ** 2 for r in active_returns) / len(active_returns)
+                )
+                tracking_error = active_var**0.5 * math.sqrt(bars_per_year)
+                if tracking_error > 0:
+                    information_ratio = (active_mean * bars_per_year) / tracking_error
+
     return PerformanceMetrics(
         total_return=total_return,
         total_return_pct=total_return_pct,
@@ -159,4 +244,9 @@ def calculate_metrics(
         avg_loss=avg_loss,
         expectancy=expectancy,
         total_trades=len(closing_trades),
+        benchmark_return=benchmark_return,
+        alpha=alpha,
+        beta=beta,
+        excess_return=excess_return,
+        information_ratio=information_ratio,
     )

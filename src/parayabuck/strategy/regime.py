@@ -127,21 +127,31 @@ def suggest_strategy(state: RegimeState) -> str:
     """Suggest which strategy type to use given the current regime.
 
     Single source of truth — kept in sync with
-    ``parayabuck.execution.live_engine.REGIME_TO_STRATEGY``.
+    ``parayabuck.execution.live_engine.REGIME_TO_STRATEGY`` (which is a cached
+    copy of ``REGIME_TO_STRATEGY`` below).
 
     A long-only bot must NOT trade in downtrends or high-volatility regimes:
       - downtrend: catching oversold dips = catching falling knives
       - high volatility: ATR stops are too wide, R:R unfavorable
     """
-    if state.regime in (MarketRegime.CRISIS, MarketRegime.HIGH_VOLATILITY):
-        return "none"
-    if state.regime == MarketRegime.TRENDING_DOWN:
-        return "none"
-    if state.regime in (MarketRegime.TRENDING_UP,):
-        return "momentum"
-    if state.regime in (MarketRegime.RANGING, MarketRegime.LOW_VOLATILITY):
-        return "mean_reversion"
-    return "none"
+    return REGIME_TO_STRATEGY.get(state.regime.value, "none")
+
+
+# Canonical regime -> strategy map. Both the live engine and auto-pilot import
+# this so they never drift apart (previously the auto-pilot routed
+# ``trending_down`` to mean_reversion while the live engine routed it to
+# ``none`` — long-only bot vs. falling-knife conflict).
+REGIME_TO_STRATEGY: dict[str, str] = {
+    "trending_up": "ema_crossover",
+    # Long-only bot: downtrend = catching falling knives if we buy oversold dips.
+    "trending_down": "none",
+    "ranging": "mean_reversion",
+    "low_volatility": "mean_reversion",
+    # ATR stops become too wide vs. achievable TP -> R:R unfavourable.
+    "high_volatility": "none",
+    "crisis": "none",
+    "unknown": "none",
+}
 
 
 class RegimeFilterStrategy:
@@ -185,4 +195,5 @@ __all__ = [
     "RegimeDetector",
     "RegimeFilterStrategy",
     "suggest_strategy",
+    "REGIME_TO_STRATEGY",
 ]

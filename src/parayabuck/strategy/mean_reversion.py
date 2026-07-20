@@ -15,12 +15,17 @@ class MeanReversion(Strategy):
     """Bollinger Bands + RSI mean reversion strategy.
 
     Entry Long:
-      - Price touches/closes below lower Bollinger Band
+      - Price closes below lower Bollinger Band
       - RSI < oversold_threshold (confirms oversold)
       - Volume > average volume (confirms participation)
+      - Optional volume climax: volume > avg * climax_factor (e.g. 2x) signals
+        capitulation — a flush-out that often marks the day's low. When
+        require_climax_exit is set, we additionally wait for the NEXT bar to
+        close back above the lower band before triggering, confirming buyers
+        have stepped in rather than catching a falling knife.
 
     Entry Short:
-      - Price touches/closes above upper Bollinger Band
+      - Price closes above upper Bollinger Band
       - RSI > overbought_threshold
       - allow_short = True
 
@@ -37,6 +42,12 @@ class MeanReversion(Strategy):
         oversold: RSI threshold for buy (default 30)
         overbought: RSI threshold for sell (default 70)
         volume_factor: Min volume / avg volume (default 1.0)
+        climax_factor: Volume spike ratio that qualifies as a capitulation
+            climax (default 2.0). Set <= volume_factor to disable.
+        require_climax_exit: If True, after a climax touch below the lower
+            band, wait for a close back above the lower band before buying.
+            This converts "touch lower band" into "capitulation + reclaim",
+            which is a much higher-quality mean-reversion trigger (default True).
         allow_short: Allow short selling (default False)
         risk_reward: Take-profit ratio (default 2.0)
         atr_multiplier: Stop-loss = ATR * multiplier (default 2.0)
@@ -60,6 +71,8 @@ class MeanReversion(Strategy):
             oversold=params.get("oversold", 30),
             overbought=params.get("overbought", 70),
             volume_factor=params.get("volume_factor", 1.0),
+            climax_factor=params.get("climax_factor", 2.0),
+            require_climax_exit=params.get("require_climax_exit", True),
             allow_short=params.get("allow_short", False),
             risk_reward=params.get("risk_reward", 2.0),
             atr_multiplier=params.get("atr_multiplier", 2.0),
@@ -74,6 +87,8 @@ class MeanReversion(Strategy):
         self.oversold = float(self.params["oversold"])
         self.overbought = float(self.params["overbought"])
         self.volume_factor = float(self.params["volume_factor"])
+        self.climax_factor = float(self.params["climax_factor"])
+        self.require_climax_exit = bool(self.params["require_climax_exit"])
         self.allow_short = bool(self.params["allow_short"])
         self.risk_reward = float(self.params["risk_reward"])
         self.atr_multiplier = float(self.params["atr_multiplier"])
@@ -89,6 +104,12 @@ class MeanReversion(Strategy):
         self._entry_price: float = 0.0
         self._stop_price: float = 0.0
         self._target_price: float = 0.0
+        # Hysteresis for climax-confirmation entries: after a climax touch
+        # below the lower band, we arm a "buy on next close back above lower"
+        # flag instead of buying the climax bar itself. This avoids buying the
+        # falling knife leg and waits for buyers to actually step in.
+        self._climax_armed_long: bool = False
+        self._climax_armed_short: bool = False
 
     def _avg_volume(self) -> float:
         if not self._volumes:
@@ -176,39 +197,110 @@ class MeanReversion(Strategy):
         tp_dist = stop_dist * self.risk_reward
 
         # Long entry: price below lower band + RSI oversold + volume confirmation
-        if bar.close <= bb.lower and rsi_val < self.oversold and vol_ok:
-            self._entry_price = bar.close
-            self._stop_price = bar.close - stop_dist
-            self._target_price = min(bb.middle, bar.close + tp_dist)
-            qty = min(self.max_position, 1)
-            log.info(
-                f"MR ENTRY long {bar.symbol}: close={bar.close:.2f} "
-                f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f} "
-                f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
-            )
-            return Order(
-                symbol=bar.symbol,
-                side=Side.BUY,
-                qty=qty,
-                order_type=OrderType.MARKET,
-            )
+        # Two modes:
+        #   1. require_climax_exit=True: arm on climax touch (vol > avg*climax_factor
+        #      AND close < lower band AND RSI < oversold), then trigger on the
+        #      NEXT bar that closes back ABOVE the lower band. This is the
+        #      "capitulation then reclaim" pattern — much higher quality than
+        #      blindly buying a single-bar touch.
+        #   2. require_climax_exit=False: trigger immediately on the climax
+        #      touch (legacy behaviour, but still requires climax_factor vol).
+        is_volume_climax = avg_vol > 0 and bar.volume >= avg_vol * self.climax_factor
+        is_climax_long = (
+            bar.close <= bb.lower
+            and rsi_val < self.oversold
+            and vol_ok
+            and is_volume_climax
+        )
 
-        # Short entry: price above upper band + RSI overbought
-        if self.allow_short and bar.close >= bb.upper and rsi_val > self.overbought and vol_ok:
-            self._entry_price = bar.close
-            self._stop_price = bar.close + stop_dist
-            self._target_price = max(bb.middle, bar.close - tp_dist)
-            qty = min(self.max_position, 1)
-            log.info(
-                f"MR ENTRY short {bar.symbol}: close={bar.close:.2f} "
-                f"BB_upper={bb.upper:.2f} RSI={rsi_val:.1f} "
-                f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
-            )
-            return Order(
-                symbol=bar.symbol,
-                side=Side.SELL,
-                qty=qty,
-                order_type=OrderType.MARKET,
-            )
+        if self.require_climax_exit:
+            if is_climax_long:
+                self._climax_armed_long = True
+                log.debug(
+                    f"MR climax arm long {bar.symbol}: close={bar.close:.2f} "
+                    f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f} vol={bar.volume:.0f}"
+                )
+            # Trigger only on a subsequent bar that reclaims the lower band.
+            if self._climax_armed_long and bar.close > bb.lower and rsi_val < 45:
+                self._climax_armed_long = False
+                self._entry_price = bar.close
+                self._stop_price = bar.close - stop_dist
+                self._target_price = min(bb.middle, bar.close + tp_dist)
+                qty = min(self.max_position, 1)
+                log.info(
+                    f"MR ENTRY long {bar.symbol} (reclaim): close={bar.close:.2f} "
+                    f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f} "
+                    f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
+                )
+                return Order(
+                    symbol=bar.symbol,
+                    side=Side.BUY,
+                    qty=qty,
+                    order_type=OrderType.MARKET,
+                )
+        else:
+            if is_climax_long:
+                self._entry_price = bar.close
+                self._stop_price = bar.close - stop_dist
+                self._target_price = min(bb.middle, bar.close + tp_dist)
+                qty = min(self.max_position, 1)
+                log.info(
+                    f"MR ENTRY long {bar.symbol}: close={bar.close:.2f} "
+                    f"BB_lower={bb.lower:.2f} RSI={rsi_val:.1f} "
+                    f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
+                )
+                return Order(
+                    symbol=bar.symbol,
+                    side=Side.BUY,
+                    qty=qty,
+                    order_type=OrderType.MARKET,
+                )
+
+        # Short entry: price above upper band + RSI overbought + climax volume
+        is_climax_short = (
+            self.allow_short
+            and bar.close >= bb.upper
+            and rsi_val > self.overbought
+            and vol_ok
+            and is_volume_climax
+        )
+
+        if self.require_climax_exit:
+            if is_climax_short:
+                self._climax_armed_short = True
+            if self._climax_armed_short and bar.close < bb.upper and rsi_val > 55:
+                self._climax_armed_short = False
+                self._entry_price = bar.close
+                self._stop_price = bar.close + stop_dist
+                self._target_price = max(bb.middle, bar.close - tp_dist)
+                qty = min(self.max_position, 1)
+                log.info(
+                    f"MR ENTRY short {bar.symbol} (reclaim): close={bar.close:.2f} "
+                    f"BB_upper={bb.upper:.2f} RSI={rsi_val:.1f} "
+                    f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
+                )
+                return Order(
+                    symbol=bar.symbol,
+                    side=Side.SELL,
+                    qty=qty,
+                    order_type=OrderType.MARKET,
+                )
+        else:
+            if is_climax_short:
+                self._entry_price = bar.close
+                self._stop_price = bar.close + stop_dist
+                self._target_price = max(bb.middle, bar.close - tp_dist)
+                qty = min(self.max_position, 1)
+                log.info(
+                    f"MR ENTRY short {bar.symbol}: close={bar.close:.2f} "
+                    f"BB_upper={bb.upper:.2f} RSI={rsi_val:.1f} "
+                    f"stop={self._stop_price:.2f} target={self._target_price:.2f}"
+                )
+                return Order(
+                    symbol=bar.symbol,
+                    side=Side.SELL,
+                    qty=qty,
+                    order_type=OrderType.MARKET,
+                )
 
         return None

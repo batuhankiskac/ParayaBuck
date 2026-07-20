@@ -39,19 +39,28 @@ class MultiFactorMomentum(Strategy):
       - Volume trend (increasing = better)
 
     Signal:
-      - Score > buy_threshold → BUY (if flat)
-      - Score < sell_threshold → SELL (if long)
+      - Score > buy_threshold -> BUY (if flat)
+      - Score < sell_threshold -> SELL (if long)
 
     Params:
         benchmark: Benchmark symbol (default "SPY")
-        mom_3m_period: Bars for 3-month momentum (default 63 ~ 3 months of trading days)
-        mom_6m_period: Bars for 6-month momentum (default 126)
+        mom_3m_period: Bars for 3-month momentum (default 63 ~ 3 months of
+            trading days on a *daily* timeframe). On intraday timeframes this
+            is automatically rescaled via ``bars_per_day`` so "3-month
+            momentum" still means three months, not three days.
+        mom_6m_period: Bars for 6-month momentum (default 126).
         vol_period: Volatility lookback (default 20)
         rsi_period: RSI period (default 14)
         buy_score: Min score to buy (default 65)
         sell_score: Score below which to sell (default 40)
         max_position: Max shares per stock (default 50)
         allow_short: Allow shorting low-score stocks (default False)
+        bars_per_day: Bars produced per calendar day for the timeframe the
+            strategy is running on. When set (the live engine wires this via
+            ``_bars_per_day``), the 3m/6m periods are rescaled to calendar
+            months rather than being treated as raw bar counts. This fixes the
+            previous behaviour where running the strategy on 15m bars made
+            "6-month momentum" mean ~2 days of history.
     """
 
     name = "multi_factor"
@@ -67,11 +76,21 @@ class MultiFactorMomentum(Strategy):
             sell_score=params.get("sell_score", 40),
             max_position=params.get("max_position", 50),
             allow_short=params.get("allow_short", False),
+            bars_per_day=params.get("bars_per_day"),
         )
         self.benchmark = str(self.params["benchmark"])
         self.symbols = None  # set dynamically when benchmark feed is wired
-        self.mom_3m_period = int(self.params["mom_3m_period"])
-        self.mom_6m_period = int(self.params["mom_6m_period"])
+        # Default 63/126 reflect *daily* bars (3m/6m of trading days). If the
+        # caller tells us the actual bars-per-day for the running timeframe,
+        # rescale the lookback windows so "3-month momentum" still means three
+        # months on 15m / 1h bars too. Without this, on 15m bars 126 bars is
+        # ~2 days, not 6 months — the factor scores were essentially noise.
+        daily_bpd = 252.0
+        bpd = float(self.params.get("bars_per_day") or daily_bpd)
+        self.bars_per_day = bpd
+        scale = bpd / daily_bpd if daily_bpd > 0 else 1.0
+        self.mom_3m_period = max(int(round(int(self.params["mom_3m_period"]) * scale)), 10)
+        self.mom_6m_period = max(int(round(int(self.params["mom_6m_period"]) * scale)), 20)
         self.vol_period = int(self.params["vol_period"])
         self.rsi_period = int(self.params["rsi_period"])
         self.buy_score = float(self.params["buy_score"])
@@ -79,12 +98,14 @@ class MultiFactorMomentum(Strategy):
         self.max_position = int(self.params["max_position"])
         self.allow_short = bool(self.params["allow_short"])
 
+        # Size the per-symbol buffer to hold ~2x the longest lookback so the
+        # scoring window stays full after warmup.
         self._symbol_bars: dict[str, deque[Bar]] = {}
         self._scores: dict[str, FactorScore] = {}
 
     def _ensure_buffer(self, symbol: str) -> deque[Bar]:
         if symbol not in self._symbol_bars:
-            self._symbol_bars[symbol] = deque(maxlen=300)
+            self._symbol_bars[symbol] = deque(maxlen=max(self.mom_6m_period * 2, 300))
         return self._symbol_bars[symbol]
 
     def _calc_score(self, symbol: str, benchmark_return: float) -> FactorScore | None:

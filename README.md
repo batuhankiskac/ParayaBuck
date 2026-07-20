@@ -1,22 +1,21 @@
 # ParayaBuck
 
-Python trading bot for **US stocks** via **Alpaca** API. Backtest, paper trade, and (eventually) live trade — all from the CLI.
+Python trading bot for **US stocks** via **Alpaca** API. Backtest, paper trade, and live trade — all from a **desktop GUI** (PySide6/Qt).
 
 ---
 
-## Quick Start (No API Key Required)
+## Quick Start
 
 ```bash
 # 1. Install
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 2. Generate synthetic data (5000 bars of 5m data)
-python scripts/generate_sample_data.py --symbol SPY --timeframe 5m --bars 5000
-
-# 3. Run backtest on synthetic data (CSV source)
-parayabuck backtest --source csv
+# 2. Launch the GUI
+parayabuck
 ```
+
+İlk açılışta bot, Alpaca kimlik bilgileri doluysa otomatik başlar. Kimlik yoksa Ayarlar sekmesine yönlendirilirsiniz.
 
 ---
 
@@ -27,20 +26,64 @@ parayabuck backtest --source csv
 | Clone | `git clone <repo> && cd ParayaBuck` |
 | Venv | `python3 -m venv .venv && source .venv/bin/activate` |
 | Install | `pip install -e ".[dev]"` |
-| Env | `cp .env.example .env` ve [Alpaca](https://app.alpaca.markets) anahtarlarını gir |
+| Run | `parayabuck` |
+
+Alpaca anahtarlarınızı GUI açıldıktan sonra **Ayarlar** sekmesinden girip kaydedin.
+
+---
+
+## GUI Genel Bakış
+
+Üç sekme:
+
+### 1. Bot
+
+- **Başlat / Durdur** butonları
+- Equity / Cash / Günlük PnL / Pozisyon sayısı (LCD göstergeler)
+- Yenileme aralığı ayarı (saniye)
+- Açık pozisyonlar tablosu
+- Log konsolu (seviye filtresi, otomatik kaydır, temizle)
+
+Bot açılışta otomatik başlar (kimlik bilgileri mevcutsa). Sembol listesi, timeframe ve risk parametreleri `config/settings.yaml`'den okunur. Regim tespiti → strateji seçimi → otomatik alım/satım tamamen arka planda çalışır.
+
+### 2. Hesap
+
+- **Paper / REAL** mod geçişi (REAL moda geçerken onay dialogu)
+- Equity, Cash, Realized/Unrealized PnL, Günlük PnL, Drawdown
+- Açık pozisyonlar tablosu
+- Yenile butonu (anlık snapshot)
+
+> Mod geçişi, bot duruyorken yapılabilir. Bot çalışıyken değiştirmek için önce **Durdur**'a basın. Seçim `config/settings.yaml`'in `alpaca.paper` alanına yazılır.
+
+### 3. Ayarlar
+
+Form tabanlı editör — ayar ezberlemeye gerek yok:
+
+- **.env** — Alpaca API Key / Secret Key (gizli alan), log seviyesi
+- **Account** — başlangıç bakiyesi, para birimi
+- **Risk** — maks. pozisyon, günlük kayıp, drawdown, trade başına risk, komisyon, slippage
+- **Portföy Riski** — pozisyon/sector %, maks. eşzamanlı pozisyon, min. nakit %
+- **Strateji** — varsayılan strateji + parametre tablosu (key/value)
+- **Backtest varsayılanları** — sembol, timeframe, tarih aralığı
+- **Alpaca** — paper modu, gecikmeli veri
+- **Semboller** — checkbox listesi ile aktif/pasif
+- **Kaydet / Yeniden Yükle / raw YAML** (ileridekiler için ham düzenleme)
+
+Kaydet'e bastığınızda hem `.env` hem `settings.yaml` yazılır. Bot çalışıyorsa "yeni ayarlarla yeniden başlat" dialogu açılır.
 
 ---
 
 ## Configuration
 
-### 1. `.env` — API credentials
+### `.env` — API credentials
 
 ```ini
 ALPACA_API_KEY=your_key
 ALPACA_SECRET_KEY=your_secret
+LOG_LEVEL=INFO
 ```
 
-### 2. `config/settings.yaml` — bot settings
+### `config/settings.yaml` — bot settings
 
 | Bölüm | Ne işe yarar |
 |-------|-------------|
@@ -52,48 +95,31 @@ ALPACA_SECRET_KEY=your_secret
 | `backtest` | Varsayılan sembol, timeframe, tarih aralığı |
 | `alpaca` | Paper/real modu, gecikmeli data |
 
+Tümünü GUI → Ayarlar sekmesinden düzenleyebilirsiniz.
+
 ---
 
-## CLI Komutları
+## Bot Çalışma Davranışı
 
-### `parayabuck backtest`
+Açılışta:
 
-Geçmiş veride strateji test et.
+1. `.env` ve `config/settings.yaml` okunur
+2. Alpaca'ya bağlanılır (paper veya real — `alpaca.paper`'a göre)
+3. Tüm semboller için warmup verisi çekilir
+4. Sembol başına **regim tespiti** yapılır (trend / ranging / kriz / volatilite)
+5. Regime'e göre en uygun strateji atanır (örn. trend → `ema_crossover`, ranging → `mean_reversion`)
+6. Poll döngüsü başlar (her `poll_interval` saniyede bir):
+   - Yeni bar çek
+   - Strateji sinyali varsa pozisyon aç/kapat
+   - ATR tabanlı stop-loss / take-profit / trailing stop kontrolü
+   - Kill-switch: günlük kayıp/drawdown limiti aşılırsa **yeni entry durur**, mevcut pozisyonlar yönetilmeye devam eder
+7. Her 30 dakikada regime re-check → gerekirse strateji rotate edilir
 
-```
-Options:
-  -s, --strategy TEXT     Strateji adı (config'deki varsayılanı ezer)
-  -y, --symbol TEXT       Sembol (örn: SPY, AAPL)
-  -t, --timeframe TEXT    Periyod (1m, 5m, 15m, 30m, 1h, 1d)
-  --start YYYY-MM-DD      Başlangıç tarihi
-  --end YYYY-MM-DD        Bitiş tarihi
-  --source [alpaca|csv]   Veri kaynağı (varsayılan: alpaca)
-  --metrics / --no-metrics Detaylı metrikler (Sharpe, drawdown vs.)
-  --plot / --no-plot      Equity eğrisi grafiği çiz (output/ klasörüne kaydeder)
-  --config, -c PATH       Config dosyası (varsayılan: config/settings.yaml)
-  --log-level LEVEL       DEBUG/INFO/WARNING/ERROR (varsayılan: INFO)
-```
+> **Timeframe uyarısı:** Varsayılan `15m`. `1m`/`5m` gibi düşük timeframe'lerde ATR çok küçük olur ve stop floor (~%4) TP'ten (~%0.1) çok uzaklaşır → risk:ödül ters döner. Düşük timeframe'te mutlaka stop-loss ve take-profit'i uyumlu ayarlayın (Ayarlar sekmesinden veya `config/settings.yaml`'den).
 
-Örnekler:
+---
 
-```bash
-# CSV data ile backtest (Alpaca hesabı gerekmez)
-parayabuck backtest --source csv
-
-# Farklı strateji
-parayabuck backtest -s ema_crossover -y AAPL -t 1d --start 2024-01-01 --end 2024-06-30
-
-# Grafik çiz
-parayabuck backtest --plot
-```
-
-### `parayabuck strategies`
-
-Kullanılabilir stratejileri listele.
-
-```
-parayabuck strategies
-```
+## Stratejiler
 
 | Strateji | Açıklama | Kullanım |
 |----------|----------|----------|
@@ -103,98 +129,7 @@ parayabuck strategies
 | `multi_factor` | Multi-faktor momentum | Trend piyasası |
 | `vwap_reversion` | VWAP intraday reversion | Gün içi |
 
-### `parayabuck paper`
-
-Alpaca paper hesabı ile canlı data üzerinde kağıt ticareti.
-
-```
-Options:
-  -s, --strategy TEXT   Strateji adı
-  -y, --symbol TEXT     Sembol
-  -t, --timeframe TEXT  Periyod
-```
-
-```bash
-# Alpaca paper hesabına bağlan, canlı data ile çalıştır
-parayabuck paper -s mean_reversion -y AAPL -t 15m
-```
-
-### `parayabuck run`
-
-Fire-and-forget mod — otomatik strateji rotasyonu, risk yönetimi, çoklu sembol.
-
-> **Timeframe uyarısı:** Default `15m`. `1m`/`5m` gibi düşük timeframe'lerde ATR
-> çok küçük olur ve stop floor (~%4) TP'ten (~%0.1) çok uzaklaşır → risk:ödül
-> ters döner. Düşük timeframe'te mutlaka `--stop-loss` ve `--take-profit`'i
-> birlikte ve uyumlu ayarlayın. Günlük zarar kill-switch'i `$300`'de durur.
-
-```
-Options:
-  -t, --timeframe TEXT     Bar periyodu (varsayılan: 15m) — 15m+ önerilir
-  --poll INTEGER           Poll aralığı saniye (varsayılan: 60)
-  --max-positions INTEGER  Maksimum eşzamanlı pozisyon (varsayılan: 8)
-  -y, --symbols TEXT       Virgülle ayrılmış semboller (config'dekini ezer)
-  --risk-pct FLOAT         Trade başına risk (equity oranı, varsayılan: 0.02)
-  --stop-loss FLOAT        Hard stop-loss % (varsayılan: 0.04)
-  --take-profit FLOAT      Take-profit % (varsayılan: 0.06)
-  --trail FLOAT            Trailing stop % — sadece trend stratejilerinde (varsayılan: 0.03)
-  --paper / --real         Paper veya real hesap (varsayılan: paper)
-```
-
-```bash
-# Tam otomatik: sembollere rejim analizi yap, strateji seç, çalıştır
-parayabuck run --symbols AAPL,MSFT,NVDA --timeframe 5m
-```
-
-### `parayabuck auto`
-
-Tam otomatik backtest — sembol seçimi, strateji rotasyonu, portföy backtest'i.
-
-```
-Options:
-  -t, --timeframe TEXT    Periyod (varsayılan: 15m)
-  --start YYYY-MM-DD      Başlangıç (varsayılan: 2025-01-01)
-  --end YYYY-MM-DD        Bitiş (varsayılan: 2025-06-30)
-  --max-symbols INTEGER   Maksimum sembol sayısı (varsayılan: 8)
-  --plot / --no-plot      Grafik çiz
-```
-
-```bash
-parayabuck auto --timeframe 1d --start 2024-01-01 --end 2024-12-31 --plot
-```
-
-### `parayabuck account`
-
-Alpaca hesap bilgilerini göster (bakiye, pozisyonlar, PnL).
-
-```bash
-parayabuck account
-```
-
-### `parayabuck diversify`
-
-Sembol evreninde çeşitlendirme analizi (sektör + korelasyon).
-
-```bash
-parayabuck diversify
-```
-
----
-
-## Adım Adım: İlk Backtest
-
-```bash
-# 1. Synthetic data oluştur
-python scripts/generate_sample_data.py --symbol SPY --timeframe 15m --bars 5000
-
-# 2. Farklı stratejileri dene
-parayabuck backtest -s mean_reversion --source csv --metrics
-parayabuck backtest -s ema_crossover --source csv --metrics
-parayabuck backtest -s vwap_reversion --source csv --metrics
-
-# 3. Grafiklerle karşılaştır
-parayabuck backtest -s mean_reversion --source csv --plot
-```
+Bot, sembol başına regime tespiti yaparak uygun stratejiyi otomatik seçer. Manuel seçim Ayarlar → Strateji dropdown'ından.
 
 ---
 
@@ -215,7 +150,35 @@ class MyStrategy(Strategy):
         return None
 ```
 
-Stratejiyi `cli.py` içindeki `_load_strategy()` fonksiyonuna ekle.
+Stratejiyi `parayabuck/gui/widgets/settings_panel.py`'deki `KNOWN_STRATEGIES` listesine ekleyin.
+
+---
+
+## Geliştirme
+
+```bash
+# Lint
+ruff check src/parayabuck
+
+# Typecheck
+mypy src/parayabuck/gui
+
+# GUI smoke test (headless)
+QT_QPA_PLATFORM=offscreen python -c "
+import sys
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+from pathlib import Path
+from parayabuck.gui.main_window import MainWindow, _apply_dark_palette
+MainWindow._auto_start = lambda self: None
+app = QApplication(sys.argv)
+_apply_dark_palette(app)
+w = MainWindow(Path('config/settings.yaml'), Path('.env.example'))
+w.show()
+QTimer.singleShot(500, app.quit)
+sys.exit(app.exec())
+"
+```
 
 ---
 

@@ -68,6 +68,12 @@ class PositionSizer:
         min_stop_pct: float = 0.04,
         min_stop_pct_crypto: float = 0.025,
         atr_tp_multiplier: float = 4.0,
+        # Enable fractional shares for stocks. Alpaca supports fractional qty
+        # on market orders for most liquid US equities — essential for small
+        # accounts so a $500 stock can still be sized to a $50 risk target
+        # instead of being rounded to 0 shares. When False, stock quantities
+        # are int-truncated (the legacy behaviour).
+        fractional_shares: bool = False,
     ) -> None:
         self.risk_pct = risk_pct
         self.crypto_risk_pct = crypto_risk_pct
@@ -81,6 +87,7 @@ class PositionSizer:
         self.min_stop_pct = min_stop_pct
         self.min_stop_pct_crypto = min_stop_pct_crypto
         self.atr_tp_multiplier = atr_tp_multiplier
+        self.fractional_shares = bool(fractional_shares)
 
         self._highs: dict[str, deque[float]] = {}
         self._lows: dict[str, deque[float]] = {}
@@ -158,8 +165,13 @@ class PositionSizer:
             log.debug(f"PositionSizer: {symbol} qty=0, skipping")
             return order  # will be rejected by risk manager
 
-        # Round shares to whole numbers; keep crypto fractional.
-        if not crypto:
+        # Round shares to whole numbers; keep crypto fractional. When
+        # fractional_shares is enabled, stocks also keep fractional qty
+        # (Alpaca supports this on market orders for liquid US equities).
+        # Without fractional shares, a $500 stock with a $50 risk target
+        # sizes to 0.1 shares and gets int-truncated to 0 — silently
+        # blocking the trade.
+        if not crypto and not self.fractional_shares:
             qty = float(int(qty))
             if qty < min_qty:
                 return order

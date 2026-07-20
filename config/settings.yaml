@@ -64,6 +64,47 @@ symbols:
   XOM:
     tick_size: 0.01
     point_value: 1.0
+  # --- Sector ETFs (for SectorRotation strategy) ---
+  XLK:
+    tick_size: 0.01
+    point_value: 1.0
+  XLF:
+    tick_size: 0.01
+    point_value: 1.0
+  XLE:
+    tick_size: 0.01
+    point_value: 1.0
+  XLV:
+    tick_size: 0.01
+    point_value: 1.0
+  XLY:
+    tick_size: 0.01
+    point_value: 1.0
+  XLP:
+    tick_size: 0.01
+    point_value: 1.0
+  XLI:
+    tick_size: 0.01
+    point_value: 1.0
+  XLB:
+    tick_size: 0.01
+    point_value: 1.0
+  XLU:
+    tick_size: 0.01
+    point_value: 1.0
+  XLRE:
+    tick_size: 0.01
+    point_value: 1.0
+  XLC:
+    tick_size: 0.01
+    point_value: 1.0
+  # --- Benchmark / safe-asset proxies (for DualMomentum + market filter) ---
+  BIL:
+    tick_size: 0.01
+    point_value: 1.0
+  VIXY:
+    tick_size: 0.01
+    point_value: 1.0
   # --- Crypto (fractional qty, 24/7) ---
   BTC/USD:
     tick_size: 0.01
@@ -103,11 +144,30 @@ strategy:
     max_position: 50
 
 # --- Strategy allocation (for multi-strategy mode) ---
+# Weights define how the engine's max_positions slots are distributed across
+# strategies. A 0.30-weighted strategy gets ~30% of the concurrent position
+# slots. Strategies not listed here share the remaining slots equally.
 strategy_allocations:
-  pairs_trading: 0.40
-  mean_reversion: 0.25
-  multi_factor: 0.20
-  vwap_reversion: 0.15
+  ema_crossover: 0.25
+  mean_reversion: 0.20
+  donchian_breakout: 0.15
+  vwap_reversion: 0.10
+  dual_momentum: 0.10
+  sector_rotation: 0.10
+  multi_factor: 0.05
+  orb: 0.05
+
+# --- Market filter (SPY 200-SMA + VIX proxy) ---
+# When SPY is below its 200-SMA or the VIX proxy (VIXY) is spiked above its
+# long-term average, new long entries are blocked market-wide. Existing
+# positions are still managed (exits always allowed).
+market_filter:
+  enabled: true
+  benchmark_symbol: SPY
+  benchmark_sma_period: 200
+  vix_proxy_symbol: VIXY
+  vix_proxy_sma_period: 50
+  vix_high_ratio: 1.5  # VIXY >= 1.5x its 50-SMA => crisis
 
 # --- Backtest ---
 backtest:

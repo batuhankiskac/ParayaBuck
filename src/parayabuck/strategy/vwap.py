@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 from parayabuck.logger import get_logger
 from parayabuck.models import Bar, Order, OrderType, Position, Side
 from parayabuck.strategy.base import Strategy
-from parayabuck.strategy.indicators import vwap
 
 log = get_logger("parayabuck.strategy.vwap")
 
@@ -16,9 +15,13 @@ _ET = ZoneInfo("America/New_York")
 
 
 class VWAPReversion(Strategy):
-    """VWAP reversion strategy (intraday).
+    """VWAP reversion strategy (intraday, session-cumulative VWAP).
 
-    Trades when price deviates significantly from VWAP, expecting reversion.
+    Trades when price deviates significantly from the *session-cumulative*
+    VWAP, expecting reversion. The VWAP is reset at each session open and
+    accumulated bar-by-bar using the standard ``(H+L+C)/3`` typical price —
+    this is the canonical intraday VWAP traders reference, not a rolling
+    window approximation.
 
     Entry Long:
       - Price below VWAP by more than deviation_threshold (e.g. 1%)
@@ -38,7 +41,6 @@ class VWAPReversion(Strategy):
     Best for liquid stocks with mean-reverting intraday behavior.
 
     Params:
-        vwap_period: Bars for VWAP calculation (default 30)
         deviation_threshold: Min % deviation from VWAP (default 1.0)
         rsi_period: RSI period (default 14)
         rsi_buy_max: Max RSI for buy (default 40)
@@ -49,13 +51,14 @@ class VWAPReversion(Strategy):
         trading_start_minutes: Skip first N minutes after open (default 15)
         trading_end_minutes_offset: Stop N minutes before close (default 30)
         force_eod_close: Close all positions near end of day (default True)
+        min_session_bars: Min bars in session before trading (default 3)
+            avoids trading on a thin 1-2 bar VWAP that's still meaningless.
     """
 
     name = "vwap_reversion"
 
     def __init__(self, **params: Any) -> None:
         super().__init__(
-            vwap_period=params.get("vwap_period", 30),
             deviation_threshold=params.get("deviation_threshold", 1.0),
             rsi_period=params.get("rsi_period", 14),
             rsi_buy_max=params.get("rsi_buy_max", 40),
@@ -66,8 +69,8 @@ class VWAPReversion(Strategy):
             trading_start_minutes=params.get("trading_start_minutes", 15),
             trading_end_minutes_offset=params.get("trading_end_minutes_offset", 30),
             force_eod_close=params.get("force_eod_close", True),
+            min_session_bars=params.get("min_session_bars", 3),
         )
-        self.vwap_period = int(self.params["vwap_period"])
         self.deviation_threshold = float(self.params["deviation_threshold"])
         self.rsi_period = int(self.params["rsi_period"])
         self.rsi_buy_max = float(self.params["rsi_buy_max"])
@@ -78,10 +81,14 @@ class VWAPReversion(Strategy):
         self.trading_start_minutes = int(self.params["trading_start_minutes"])
         self.trading_end_minutes_offset = int(self.params["trading_end_minutes_offset"])
         self.force_eod_close = bool(self.params["force_eod_close"])
+        self.min_session_bars = int(self.params["min_session_bars"])
 
-        self._highs: deque[float] = deque(maxlen=self.vwap_period)
-        self._lows: deque[float] = deque(maxlen=self.vwap_period)
-        self._volumes: deque[int] = deque(maxlen=self.vwap_period)
+        # Session-cumulative VWAP state. Reset on each new trading day.
+        self._cum_pv: float = 0.0
+        self._cum_v: float = 0.0
+        self._session_bars: int = 0
+        # Closes are kept in a longer buffer for RSI; intraday indicators
+        # like RSI work fine on the recent close history.
         self._closes: deque[float] = deque(maxlen=200)
         self._entry_price: float = 0.0
         self._stop_price: float = 0.0
@@ -90,9 +97,9 @@ class VWAPReversion(Strategy):
 
     def _reset_session(self, date: datetime) -> None:
         self._session_date = date
-        self._highs.clear()
-        self._lows.clear()
-        self._volumes.clear()
+        self._cum_pv = 0.0
+        self._cum_v = 0.0
+        self._session_bars = 0
 
     def _et(self, ts: datetime) -> datetime:
         """Convert a (possibly tz-aware) bar timestamp to US Eastern time."""
@@ -108,6 +115,8 @@ class VWAPReversion(Strategy):
             return False
         if minutes_to_close < self.trading_end_minutes_offset:
             return False
+        if self._session_bars < self.min_session_bars:
+            return False
         return True
 
     def _is_near_eod(self, bar: Bar) -> bool:
@@ -122,17 +131,16 @@ class VWAPReversion(Strategy):
         if self._session_date != bar_date:
             self._reset_session(bar_date)
 
-        self._highs.append(bar.high)
-        self._lows.append(bar.low)
-        self._volumes.append(bar.volume)
+        # Accumulate session VWAP with the standard (H+L+C)/3 typical price.
+        from parayabuck.strategy.indicators import rsi as calc_rsi
+        from parayabuck.strategy.indicators import session_vwap_step
+
+        self._cum_pv, self._cum_v, self._current_vwap = session_vwap_step(
+            self._cum_pv, self._cum_v, bar.high, bar.low, bar.close, bar.volume
+        )
+        self._session_bars += 1
         self._closes.append(bar.close)
 
-        if len(self._highs) < self.vwap_period:
-            return None
-
-        from parayabuck.strategy.indicators import rsi as calc_rsi
-
-        self._current_vwap = vwap(list(self._highs), list(self._lows), list(self._volumes))
         if self._current_vwap <= 0:
             return None
 

@@ -30,16 +30,9 @@ class PaperBroker(Broker):
             peak_equity=config.account.starting_balance,
         )
         self._market_prices: dict[str, float] = {}
+        self._last_bar_volume: dict[str, int] = {}
         self._current_time: datetime = datetime.now(UTC)
         self._daily_reset_balance: float = config.account.starting_balance
-
-    def update_market_price(
-        self, symbol: str, price: float, timestamp: datetime | None = None
-    ) -> None:
-        self._market_prices[symbol] = price
-        if timestamp is not None:
-            self._current_time = timestamp
-        self._update_equity()
 
     def submit_order(self, order: Order) -> Order:
         order.order_id = str(uuid.uuid4())
@@ -51,8 +44,22 @@ class PaperBroker(Broker):
         fill_price = self._market_prices[order.symbol]
         self.config.get_symbol_spec(order.symbol)
 
-        # Apply slippage
+        # Apply slippage. Two components:
+        #   1. A fixed per-share slippage (`slippage_cents` from config) —
+        #      models the bid/ask bounce on liquid names.
+        #   2. A spread-proportional component: when the order quantity is
+        #      large relative to bar volume, the fill slips further into the
+        #      book. We approximate market impact as:
+        #          impact = base_slip * (qty / max(bar_volume, 1))
+        #      This makes illiquid symbols and oversized orders realistically
+        #      more expensive — a fixed-cent slippage on a $1 stock is far
+        #      too optimistic.
         slip = self.config.risk.slippage_cents
+        bar_vol = self._last_bar_volume.get(order.symbol, 0)
+        if bar_vol > 0:
+            # Cap impact at 5x base slip so a truly huge order doesn't blow up.
+            impact_mult = min(abs(order.qty) / bar_vol, 5.0)
+            slip = slip * (1.0 + impact_mult)
         if order.side == Side.BUY:
             fill_price += slip
         else:
@@ -68,6 +75,24 @@ class PaperBroker(Broker):
         self._update_equity()
 
         return order
+
+    def update_market_price(
+        self, symbol: str, price: float, timestamp: datetime | None = None,
+        bar_volume: int = 0,
+    ) -> None:
+        """Update the market price for `symbol`.
+
+        Args:
+            bar_volume: Optional volume of the most recent bar. Used to
+                scale slippage on the next fill (large orders on low-volume
+                bars slip more — a realistic market-impact model).
+        """
+        self._market_prices[symbol] = price
+        if bar_volume > 0:
+            self._last_bar_volume[symbol] = bar_volume
+        if timestamp is not None:
+            self._current_time = timestamp
+        self._update_equity()
 
     def _apply_fill(self, order: Order, fill_price: float) -> None:
         position = self.account.get_position(order.symbol)

@@ -57,6 +57,11 @@ class PortfolioConfig:
 class AlpacaConfig:
     paper: bool
     data_delayed: bool
+    # Enable fractional shares for stocks. Alpaca supports fractional qty on
+    # market orders for most liquid US equities — essential for small accounts
+    # so a $500 stock like NVDA can still be sized to a $50 risk target
+    # instead of being rounded to 0 shares.
+    fractional_shares: bool = True
 
 
 @dataclass

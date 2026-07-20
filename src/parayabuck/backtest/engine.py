@@ -37,6 +37,15 @@ class BacktestResult:
     profit_factor: float
     trades: list[dict[str, Any]] = field(default_factory=list)
     equity_curve: list[float] = field(default_factory=list)
+    # Benchmark comparison: SPY buy & hold over the same period, started
+    # with the same balance. Populated when the engine could fetch SPY
+    # bars; empty when SPY data was unavailable.
+    benchmark_curve: list[float] = field(default_factory=list)
+    benchmark_return: float = 0.0
+    alpha: float = 0.0
+    beta: float = 0.0
+    excess_return: float = 0.0
+    information_ratio: float = 0.0
 
     def summary(self) -> str:
         lines = [
@@ -59,9 +68,17 @@ class BacktestResult:
             f"  Avg win:           ${self.avg_win:,.2f}",
             f"  Avg loss:          ${self.avg_loss:,.2f}",
             f"  Profit factor:     {self.profit_factor:.2f}",
-            "=" * 60,
-            "",
         ]
+        if self.benchmark_curve:
+            lines.append("")
+            lines.append("  vs. SPY buy & hold:")
+            lines.append(f"  Benchmark return:  {self.benchmark_return:+.2%}")
+            lines.append(f"  Excess return:     {self.excess_return:+.2%}")
+            lines.append(f"  Alpha (annual):    {self.alpha:+.2%}")
+            lines.append(f"  Beta:              {self.beta:.2f}")
+            lines.append(f"  Info ratio:        {self.information_ratio:.2f}")
+        lines.append("=" * 60)
+        lines.append("")
         return "\n".join(lines)
 
     def trade_table(self, last_n: int = 20) -> str:
@@ -98,6 +115,7 @@ class BacktestEngine:
         broker: PaperBroker,
         risk_manager: RiskManager,
         position_sizer: PositionSizer | None = None,
+        benchmark_symbol: str | None = "SPY",
     ) -> None:
         self.config = config
         self.data = data_source
@@ -107,6 +125,42 @@ class BacktestEngine:
             risk_pct=config.risk.risk_per_trade / config.account.starting_balance,
             max_qty=config.risk.max_position_size,
         )
+        # Benchmark symbol for buy & hold comparison. Set to None/empty to
+        # disable the benchmark (useful when SPY isn't available).
+        self.benchmark_symbol = benchmark_symbol or None
+
+    def _build_benchmark_curve(
+        self,
+        timeframe: str,
+        start: str | None,
+        end: str | None,
+        starting_balance: float,
+    ) -> list[float]:
+        """Build a buy & hold SPY equity curve over the backtest period.
+
+        The benchmark is a passive SPY buy & hold starting with the same
+        balance as the strategy. We size the initial position so that
+        starting_balance buys as many SPY shares as affordable, then track
+        the equity = shares * bar_close at each bar.
+
+        Returns an empty list when benchmark data is unavailable — the
+        strategy's metrics then degrade to the no-benchmark path (no
+        alpha/beta) rather than failing the whole backtest.
+        """
+        if not self.benchmark_symbol:
+            return []
+        try:
+            bars = self.data.get_bars(self.benchmark_symbol, timeframe, start, end)
+        except Exception as e:
+            log.warning(f"Benchmark {self.benchmark_symbol} fetch failed: {e}")
+            return []
+        if not bars:
+            return []
+        initial_price = bars[0].close
+        if initial_price <= 0:
+            return []
+        shares = starting_balance / initial_price
+        return [shares * b.close for b in bars]
 
     def run(
         self,
@@ -143,6 +197,13 @@ class BacktestEngine:
             f"from {bars[0].timestamp} to {bars[-1].timestamp}"
         )
 
+        # Build the benchmark curve over the same period. Aligned post-hoc
+        # by truncation in calculate_metrics when lengths differ (e.g. crypto
+        # 24/7 vs SPY 6.5h sessions produce different bar counts).
+        benchmark_curve = self._build_benchmark_curve(
+            timeframe, start, end, self.config.account.starting_balance
+        )
+
         max_dd = 0.0
         current_date = None
         equity_curve: list[float] = []
@@ -157,7 +218,9 @@ class BacktestEngine:
                 current_date = bar_date
 
             # Update market price for this bar
-            self.broker.update_market_price(bar.symbol, bar.close, bar.timestamp)
+            self.broker.update_market_price(
+                bar.symbol, bar.close, bar.timestamp, bar_volume=bar.volume
+            )
 
             # Update position sizer history
             self.position_sizer.update_history(bar.symbol, bar.high, bar.low, bar.close)
@@ -202,7 +265,9 @@ class BacktestEngine:
 
         strategy.on_stop()
 
-        return self._build_result(strategy, symbol, timeframe, bars, max_dd, equity_curve)
+        return self._build_result(
+            strategy, symbol, timeframe, bars, max_dd, equity_curve, benchmark_curve
+        )
 
     def _build_result(
         self,
@@ -212,6 +277,7 @@ class BacktestEngine:
         bars: list[Bar],
         max_drawdown: float,
         equity_curve: list[float],
+        benchmark_curve: list[float] | None = None,
     ) -> BacktestResult:
         account = self.broker.get_account()
         trades = account.trades
@@ -251,6 +317,25 @@ class BacktestEngine:
         avg_loss = sum(losses) / len(losses) if losses else 0.0
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
 
+        # Benchmark-relative metrics. When benchmark_curve is empty (e.g.
+        # SPY data unavailable on the configured plan), all benchmark fields
+        # stay at their defaults — the report just omits the benchmark
+        # section rather than failing.
+        from parayabuck.analytics.metrics import calculate_metrics
+
+        # Bars per year for annualization: stocks ~252 trading days, crypto
+        # 365. Detect from the symbol being traded.
+        from parayabuck.utils import is_crypto
+
+        bpd = 365 if is_crypto(symbol) else 252
+        metrics = calculate_metrics(
+            equity_curve=equity_curve,
+            trades=trades,
+            starting_balance=self.config.account.starting_balance,
+            bars_per_year=bpd,
+            benchmark_curve=benchmark_curve,
+        )
+
         result = BacktestResult(
             symbol=symbol,
             timeframe=timeframe,
@@ -269,6 +354,12 @@ class BacktestEngine:
             profit_factor=profit_factor,
             trades=trade_pnls,
             equity_curve=equity_curve,
+            benchmark_curve=benchmark_curve or [],
+            benchmark_return=metrics.benchmark_return,
+            alpha=metrics.alpha,
+            beta=metrics.beta,
+            excess_return=metrics.excess_return,
+            information_ratio=metrics.information_ratio,
         )
 
         return result

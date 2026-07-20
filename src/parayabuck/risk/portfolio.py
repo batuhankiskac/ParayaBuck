@@ -29,9 +29,21 @@ SECTOR_MAP: dict[str, str] = {
     "WMT": "consumer",
     "XOM": "energy",
     "CVX": "energy",
-    "XLF": "sector_etf",
+    # Sector ETFs (SPDR sector SPDRs).
+    "XLK": "sector_etf",
     "XLV": "sector_etf",
     "XLE": "sector_etf",
+    "XLF": "sector_etf",
+    "XLY": "sector_etf",
+    "XLP": "sector_etf",
+    "XLI": "sector_etf",
+    "XLB": "sector_etf",
+    "XLU": "sector_etf",
+    "XLRE": "sector_etf",
+    "XLC": "sector_etf",
+    # Benchmark / safe-asset proxies.
+    "BIL": "cash_proxy",
+    "VIXY": "volatility_proxy",
     # Crypto pairs (7/24, fractional qty)
     "BTC/USD": "crypto",
     "ETH/USD": "crypto",

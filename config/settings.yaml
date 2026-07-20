@@ -1,46 +1,38 @@
-# ParayaBuck settings — Alpaca (US stocks)
-
-# --- General program settings ---
 app:
   host: 127.0.0.1
   port: 8000
   open_browser: true
   log_level: INFO
-  timeframe: 15m
+  timeframe: 5m
   poll_interval: 60
-
-# --- Account ---
 account:
-  starting_balance: 10000.0    # USD paper starting balance
+  starting_balance: 10000.0
   currency: USD
-
-# --- Risk ---
 risk:
-  max_position_size: 100       # max shares per trade
-  max_daily_loss: 300.0        # USD — stop trading if daily PnL <= -this
-  max_drawdown: 1500.0         # USD — stop trading if account dips this much from peak
-  risk_per_trade: 150.0        # USD — used for position sizing
-  commission_per_share: 0.0    # Alpaca is commission-free
-  slippage_cents: 0.01         # simulated slippage in dollars on each fill
-  stop_loss_pct: 0.04          # equity minimum stop distance
-  take_profit_pct: 0.06        # equity minimum take-profit distance
+  max_position_size: 100
+  max_daily_loss: 300.0
+  max_drawdown: 1500.0
+  risk_per_trade: 150.0
+  commission_per_share: 0.0
+  slippage_cents: 0.01
+  stop_loss_pct: 0.04
+  take_profit_pct: 0.06
   trail_pct: 0.03
   crypto_stop_loss_pct: 0.025
   crypto_take_profit_pct: 0.04
   atr_stop_multiplier: 2.0
   atr_tp_multiplier: 4.0
-
-# --- Portfolio risk ---
+  # Minimum entry value in USD. Unit quantities are derived from the latest
+  # price (e.g. $5 / ETH price), so BTC, ETH and fractional stocks stay above
+  # Alpaca's changing minimum-order quantity.
+  min_stock_order_notional: 5.0
+  min_crypto_order_notional: 5.0
 portfolio:
-  max_pct_per_position: 0.10   # max 10% of equity in one stock
-  max_pct_per_sector: 0.30     # max 30% of equity in one sector
-  max_positions: 15            # max concurrent open positions
-  min_cash_pct: 0.05           # always keep 5% in cash
-
-# --- Symbols (US stocks + crypto pairs) ---
-# Crypto pairs use "BASE/USD" format (e.g. BTC/USD) and trade 24/7.
+  max_pct_per_position: 0.1
+  max_pct_per_sector: 0.3
+  max_positions: 15
+  min_cash_pct: 0.05
 symbols:
-  # --- Stocks ---
   AAPL:
     tick_size: 0.01
     point_value: 1.0
@@ -80,7 +72,6 @@ symbols:
   XOM:
     tick_size: 0.01
     point_value: 1.0
-  # --- Sector ETFs (for SectorRotation strategy) ---
   XLK:
     tick_size: 0.01
     point_value: 1.0
@@ -114,14 +105,12 @@ symbols:
   XLC:
     tick_size: 0.01
     point_value: 1.0
-  # --- Benchmark / safe-asset proxies (for DualMomentum + market filter) ---
   BIL:
     tick_size: 0.01
     point_value: 1.0
   VIXY:
     tick_size: 0.01
     point_value: 1.0
-  # --- Crypto (fractional qty, 24/7) ---
   BTC/USD:
     tick_size: 0.01
     point_value: 1.0
@@ -138,7 +127,7 @@ symbols:
     tick_size: 0.0001
     point_value: 1.0
   DOGE/USD:
-    tick_size: 0.00001
+    tick_size: 1.0e-05
     point_value: 1.0
   AVAX/USD:
     tick_size: 0.01
@@ -146,8 +135,6 @@ symbols:
   LINK/USD:
     tick_size: 0.01
     point_value: 1.0
-
-# --- Strategy defaults ---
 strategy:
   name: mean_reversion
   params:
@@ -158,43 +145,29 @@ strategy:
     overbought: 70
     allow_short: false
     max_position: 50
-
-# --- Strategy allocation (for multi-strategy mode) ---
-# Weights define how the engine's max_positions slots are distributed across
-# strategies. A 0.30-weighted strategy gets ~30% of the concurrent position
-# slots. Strategies not listed here share the remaining slots equally.
 strategy_allocations:
   ema_crossover: 0.25
-  mean_reversion: 0.20
+  mean_reversion: 0.2
   donchian_breakout: 0.15
-  vwap_reversion: 0.10
-  dual_momentum: 0.10
-  sector_rotation: 0.10
+  vwap_reversion: 0.1
+  dual_momentum: 0.1
+  sector_rotation: 0.1
   multi_factor: 0.05
   orb: 0.05
-
-# --- Market filter (SPY 200-SMA + VIX proxy) ---
-# When SPY is below its 200-SMA or the VIX proxy (VIXY) is spiked above its
-# long-term average, new long entries are blocked market-wide. Existing
-# positions are still managed (exits always allowed).
 market_filter:
   enabled: true
   benchmark_symbol: SPY
   benchmark_sma_period: 200
   vix_proxy_symbol: VIXY
   vix_proxy_sma_period: 50
-  vix_high_ratio: 1.5  # VIXY >= 1.5x its 50-SMA => crisis
-
-# --- Backtest ---
+  vix_high_ratio: 1.5
 backtest:
   symbol: SPY
   timeframe: 15m
   start: 2025-01-01
   end: 2025-06-30
-
-# --- Alpaca ---
 alpaca:
   paper: true
   data_delayed: false
-  stock_feed: iex             # iex=free real-time; sip=paid consolidated feed
+  stock_feed: iex
   fractional_shares: true

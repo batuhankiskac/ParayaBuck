@@ -247,6 +247,8 @@ class LiveTradingEngine:
         max_pct_per_sector: float = 0.30,
         min_cash_pct: float = 0.05,
         fractional_shares: bool = True,
+        min_stock_order_notional: float = 5.0,
+        min_crypto_order_notional: float = 5.0,
         strategy_params_by_name: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.broker = broker
@@ -289,6 +291,8 @@ class LiveTradingEngine:
             # stocks instead of being int-truncated to 0 shares.
             fractional_shares=fractional_shares,
             fixed_risk_amount=risk_per_trade_amount,
+            min_stock_order_notional=min_stock_order_notional,
+            min_crypto_order_notional=min_crypto_order_notional,
         )
         self.portfolio_risk = PortfolioRiskManager(
             max_pct_per_position=max_pct_per_position,
@@ -1020,8 +1024,7 @@ class LiveTradingEngine:
         rt = self._runtimes.get(order.symbol)
         if rt is not None and rt.regime == MarketRegime.HIGH_VOLATILITY:
             half_qty = sized.qty / 2
-            crypto = is_crypto(order.symbol)
-            min_qty = 0.0001 if crypto else 1
+            min_qty = self.sizer.minimum_entry_qty(order.symbol, bar.close)
             if half_qty >= min_qty:
                 sized = Order(
                     symbol=sized.symbol,
@@ -1036,6 +1039,14 @@ class LiveTradingEngine:
 
         checked = self.portfolio_risk.check_order(sized, account, bar.close)
         if checked is None:
+            return
+
+        min_entry_qty = self.sizer.minimum_entry_qty(checked.symbol, bar.close)
+        if checked.qty < min_entry_qty:
+            log.warning(
+                f"Entry skipped ({checked.symbol}): quantity {checked.qty} is below "
+                f"minimum {min_entry_qty:.8f} (${checked.qty * bar.close:.2f} notional)"
+            )
             return
 
         log.info(

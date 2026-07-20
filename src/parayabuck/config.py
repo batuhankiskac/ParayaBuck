@@ -30,6 +30,11 @@ class RiskConfig:
     crypto_take_profit_pct: float = 0.04
     atr_stop_multiplier: float = 2.0
     atr_tp_multiplier: float = 4.0
+    # Size fractional stock and crypto entries by dollar value instead of a
+    # fixed unit quantity.  A small buffer above Alpaca's $1 minimum prevents
+    # price movement between sizing and submission from invalidating orders.
+    min_stock_order_notional: float = 5.0
+    min_crypto_order_notional: float = 5.0
 
 
 @dataclass
@@ -161,6 +166,8 @@ def _validate_config(config: Config) -> None:
         "crypto_take_profit_pct",
         "atr_stop_multiplier",
         "atr_tp_multiplier",
+        "min_stock_order_notional",
+        "min_crypto_order_notional",
     ):
         if getattr(config.risk, name) <= 0:
             raise ValueError(f"risk.{name} must be positive")

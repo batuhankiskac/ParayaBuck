@@ -54,6 +54,37 @@ def test_crypto_day_order_is_normalized_to_gtc() -> None:
     assert submitted[0].client_order_id.startswith("parayabuck-")
 
 
+def test_order_quantity_is_raised_to_alpaca_asset_minimum() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    submitted: list[Any] = []
+
+    class Client:
+        def get_asset(self, symbol: str) -> Any:
+            return SimpleNamespace(
+                tradable=True,
+                fractionable=True,
+                min_order_size="0.00053453",
+                min_trade_increment="0.000000001",
+            )
+
+        def submit_order(self, request: Any) -> Any:
+            submitted.append(request)
+            return SimpleNamespace(id="order-minimum")
+
+        def get_order_by_id(self, order_id: str) -> Any:
+            return SimpleNamespace(
+                status="filled", filled_avg_price="1880.05", filled_qty="0.00053453"
+            )
+
+    broker._client = Client()
+    broker._asset_cache = {}
+
+    order = broker.submit_order(Order("ETH/USD", Side.BUY, 0.0001))
+
+    assert order.status == OrderStatus.FILLED
+    assert submitted[0].qty == pytest.approx(0.00053453)
+
+
 def test_paper_broker_uses_real_cash_accounting_and_limit_triggers() -> None:
     config = load_config()
     config.risk.slippage_cents = 0.0

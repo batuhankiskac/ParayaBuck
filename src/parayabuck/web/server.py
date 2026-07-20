@@ -132,6 +132,8 @@ class EngineManager:
                 ),
                 min_cash_pct=cfg.portfolio.min_cash_pct if cfg.portfolio else 0.05,
                 fractional_shares=cfg.alpaca.fractional_shares,
+                min_stock_order_notional=cfg.risk.min_stock_order_notional,
+                min_crypto_order_notional=cfg.risk.min_crypto_order_notional,
                 strategy_params_by_name={cfg.strategy.name: cfg.strategy.params},
                 use_global_market_filter=bool(market_filter.get("enabled", True)),
                 benchmark_symbol=str(market_filter.get("benchmark_symbol", "SPY")),

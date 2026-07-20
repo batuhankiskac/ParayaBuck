@@ -75,6 +75,8 @@ class PositionSizer:
         # are int-truncated (the legacy behaviour).
         fractional_shares: bool = False,
         fixed_risk_amount: float | None = None,
+        min_stock_order_notional: float = 5.0,
+        min_crypto_order_notional: float = 5.0,
     ) -> None:
         self.risk_pct = risk_pct
         self.crypto_risk_pct = crypto_risk_pct
@@ -90,6 +92,8 @@ class PositionSizer:
         self.atr_tp_multiplier = atr_tp_multiplier
         self.fractional_shares = bool(fractional_shares)
         self.fixed_risk_amount = fixed_risk_amount
+        self.min_stock_order_notional = min_stock_order_notional
+        self.min_crypto_order_notional = min_crypto_order_notional
 
         self._highs: dict[str, deque[float]] = {}
         self._lows: dict[str, deque[float]] = {}
@@ -127,7 +131,8 @@ class PositionSizer:
         closes = list(self._closes.get(symbol, []))
 
         crypto = is_crypto(symbol)
-        min_qty = self.min_qty if not crypto else 0.0001
+        entry_price = closes[-1] if closes else 0.0
+        min_qty = self.minimum_entry_qty(symbol, entry_price)
 
         if len(closes) < self.atr_period + 1:
             log.debug(f"PositionSizer: not enough history for {symbol}, using min_qty")
@@ -143,7 +148,6 @@ class PositionSizer:
         # on 1m AAPL) while the engine uses a 4% floor stop (~$9) — so a trade
         # sized as "2% risk" actually risks ~40% of the allocated amount.
         stop_distance = atr_val * self.atr_multiplier
-        entry_price = closes[-1]
         min_stop_dist = entry_price * (self.min_stop_pct_crypto if crypto else self.min_stop_pct)
         stop_distance = max(stop_distance, min_stop_dist)
 
@@ -189,6 +193,23 @@ class PositionSizer:
             f"risk=${risk_amount:.2f})"
         )
         return self._set_qty(order, qty)
+
+    def minimum_entry_qty(self, symbol: str, price: float) -> float:
+        """Return the minimum tradable entry quantity at ``price``.
+
+        Fractional assets use a USD notional floor, not a fixed coin/share
+        quantity. This avoids a value such as 0.0001 being valid for BTC but
+        too small for ETH. Whole-share stocks retain a one-share minimum.
+        """
+        crypto = is_crypto(symbol)
+        if not crypto and not self.fractional_shares:
+            return self.min_qty
+        if price <= 0:
+            return 0.0001 if crypto else self.min_qty
+        min_notional = (
+            self.min_crypto_order_notional if crypto else self.min_stock_order_notional
+        )
+        return min_notional / price
 
     def _is_exit(self, order: Order, account: Account) -> bool:
         """An exit closes an existing position in the opposite direction.

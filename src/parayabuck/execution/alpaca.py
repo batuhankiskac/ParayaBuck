@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from datetime import UTC, datetime
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, ROUND_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -189,17 +189,26 @@ class AlpacaBroker(Broker):
         min_size = getattr(asset, "min_order_size", None)
         qty_increment = getattr(asset, "min_trade_increment", None)
         price_increment = getattr(asset, "price_increment", None)
+        adjusted_to_minimum = False
         if min_size is not None and Decimal(str(order.qty)) < Decimal(str(min_size)):
-            raise ValueError(f"Order is below minimum size for {order.symbol}: {min_size}")
+            old_qty = order.qty
+            order.qty = float(Decimal(str(min_size)))
+            adjusted_to_minimum = True
+            log.warning(
+                f"Adjusted {order.symbol} quantity from {old_qty} to Alpaca minimum "
+                f"{order.qty}"
+            )
         if qty_increment is not None:
             order.qty = float(
                 (Decimal(str(order.qty)) / Decimal(str(qty_increment))).to_integral_value(
-                    rounding=ROUND_DOWN
+                    rounding=ROUND_UP if adjusted_to_minimum else ROUND_DOWN
                 )
                 * Decimal(str(qty_increment))
             )
             if order.qty <= 0:
                 raise ValueError(f"Order rounds to zero for {order.symbol}")
+        if min_size is not None and Decimal(str(order.qty)) < Decimal(str(min_size)):
+            raise ValueError(f"Order is below minimum size for {order.symbol}: {min_size}")
         if price_increment is not None:
             increment = Decimal(str(price_increment))
             if order.limit_price is not None:

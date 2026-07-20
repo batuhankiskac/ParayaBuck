@@ -11,13 +11,29 @@ def _account() -> Account:
 
 
 def test_crypto_minimum_quantity_is_based_on_dollar_notional() -> None:
-    sizer = PositionSizer(min_crypto_order_notional=5.0)
+    sizer = PositionSizer(min_crypto_order_notional=12.0)
     sizer.update_history("ETH/USD", 1_881, 1_879, 1_880.05)
 
     sized = sizer.size_order(Order("ETH/USD", Side.BUY, 1), _account())
 
-    assert sized.qty == pytest.approx(5.0 / 1_880.05)
+    assert sized.qty == pytest.approx(12.0 / 1_880.05)
     assert sized.qty > 0.00053453
+
+
+@pytest.mark.parametrize(
+    ("symbol", "price"),
+    [("SOL/USD", 76.97), ("ADA/USD", 0.16), ("BTC/USD", 118_000.0)],
+)
+def test_crypto_minimum_is_above_alpaca_ten_dollar_cost_basis(
+    symbol: str, price: float
+) -> None:
+    sizer = PositionSizer(min_crypto_order_notional=12.0)
+    sizer.update_history(symbol, price * 1.01, price * 0.99, price)
+
+    sized = sizer.size_order(Order(symbol, Side.BUY, 1), _account())
+
+    assert sized.qty * price == pytest.approx(12.0)
+    assert sized.qty * price >= 10.0
 
 
 def test_fractional_stock_minimum_quantity_is_based_on_dollar_notional() -> None:

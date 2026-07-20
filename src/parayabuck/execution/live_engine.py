@@ -248,7 +248,7 @@ class LiveTradingEngine:
         min_cash_pct: float = 0.05,
         fractional_shares: bool = True,
         min_stock_order_notional: float = 5.0,
-        min_crypto_order_notional: float = 5.0,
+        min_crypto_order_notional: float = 12.0,
         strategy_params_by_name: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.broker = broker

@@ -76,7 +76,7 @@ class PositionSizer:
         fractional_shares: bool = False,
         fixed_risk_amount: float | None = None,
         min_stock_order_notional: float = 5.0,
-        min_crypto_order_notional: float = 5.0,
+        min_crypto_order_notional: float = 12.0,
     ) -> None:
         self.risk_pct = risk_pct
         self.crypto_risk_pct = crypto_risk_pct

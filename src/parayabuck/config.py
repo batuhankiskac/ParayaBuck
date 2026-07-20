@@ -31,10 +31,10 @@ class RiskConfig:
     atr_stop_multiplier: float = 2.0
     atr_tp_multiplier: float = 4.0
     # Size fractional stock and crypto entries by dollar value instead of a
-    # fixed unit quantity.  A small buffer above Alpaca's $1 minimum prevents
-    # price movement between sizing and submission from invalidating orders.
+    # fixed unit quantity. Buffers above Alpaca's minimum notional ($10 for
+    # crypto) prevent price movement before submission from invalidating orders.
     min_stock_order_notional: float = 5.0
-    min_crypto_order_notional: float = 5.0
+    min_crypto_order_notional: float = 12.0
 
 
 @dataclass

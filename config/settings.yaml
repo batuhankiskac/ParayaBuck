@@ -24,9 +24,10 @@ risk:
   atr_tp_multiplier: 4.0
   # Minimum entry value in USD. Unit quantities are derived from the latest
   # price (e.g. $5 / ETH price), so BTC, ETH and fractional stocks stay above
-  # Alpaca's changing minimum-order quantity.
+  # Alpaca's minimum order value. Crypto uses $12 to stay safely above its
+  # current $10 cost-basis minimum.
   min_stock_order_notional: 5.0
-  min_crypto_order_notional: 5.0
+  min_crypto_order_notional: 12.0
 portfolio:
   max_pct_per_position: 0.1
   max_pct_per_sector: 0.3

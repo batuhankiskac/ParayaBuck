@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ParayaBuck — Algorithmic Trading Terminal</title>
+    <title>ParayaBuck V2 — Algorithmic Trading Terminal</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -168,7 +168,7 @@
                 <div id="terminalLogView" class="terminal-view">
                     <div class="log-line info">
                         <span class="log-time">[SYSTEM]</span>
-                        <span class="log-msg">ParayaBuck Web Terminal bağlantısı kuruldu.</span>
+                        <span class="log-msg">ParayaBuck V2 Web Terminal bağlantısı kuruldu.</span>
                     </div>
                 </div>
             </section>
@@ -215,7 +215,7 @@
 
                 <details class="advanced-settings">
                     <summary>Gelişmiş program ayarları</summary>
-                    <p class="settings-note">Bu alanlar normal kullanım için değiştirilmeye gerek duymaz. Botun çalışma periyodu ve teknik sunucu ayarları burada bulunur.</p>
+                    <p class="settings-note">V2 motoru veriyi WebSocket üzerinden alır. İşlem periyodu ve teknik sunucu ayarları burada bulunur.</p>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="timeframe">İşlem periyodu</label>
@@ -226,10 +226,6 @@
                                 <option value="1h">1 saat</option>
                                 <option value="1d">1 gün</option>
                             </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="pollInterval">Veri kontrol sıklığı (sn)</label>
-                            <input type="number" id="pollInterval" min="5" max="3600" step="5" value="60">
                         </div>
                     </div>
                     <div class="form-row">

@@ -12,7 +12,6 @@ from parayabuck.backtest.engine import BacktestEngine
 from parayabuck.config import load_config
 from parayabuck.data.base import DataSource
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.live_engine import LiveTradingEngine
 from parayabuck.execution.paper import PaperBroker
 from parayabuck.models import Bar, Order, OrderStatus, OrderType, Position, Side
 from parayabuck.risk.manager import RiskManager
@@ -160,17 +159,3 @@ def test_backtest_fills_signal_on_next_bar_open() -> None:
     engine.run(_BuyFirstBar(), "AAPL", "15m")
 
     assert broker.get_account().trades[0].price == pytest.approx(110)
-
-
-def test_live_engine_rejects_forming_bar() -> None:
-    engine = LiveTradingEngine(
-        broker=SimpleNamespace(),
-        data_source=SimpleNamespace(),
-        symbols=[],
-        use_global_market_filter=False,
-    )
-    forming = _bar(datetime.now(UTC) - timedelta(minutes=5), 100, 101, 99, 100)
-    closed = _bar(datetime.now(UTC) - timedelta(minutes=20), 100, 101, 99, 100)
-
-    assert not engine._bar_is_closed(forming)
-    assert engine._bar_is_closed(closed)

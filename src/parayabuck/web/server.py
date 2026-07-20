@@ -5,6 +5,7 @@ import logging
 import os
 import stat
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -23,6 +24,7 @@ from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.server")
 
+
 # Global Web Server State
 class EngineManager:
     def __init__(self) -> None:
@@ -33,14 +35,14 @@ class EngineManager:
         if not self.env_path.exists() and Path(".env.example").exists():
             self.env_path = Path(".env.example")
 
-        self.trading_thread: Any = None
         self.broker: Any = None
         self.engine: Any = None
+        self.runtime: Any = None
         self.engine_state: str = "stopped"
         self.last_account: dict[str, Any] | None = None
-        self.log_queues: set[
-            tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]
-        ] = set()
+        self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = (
+            set()
+        )
         self.stream_connections: set[WebSocket] = set()
         self._state_lock = threading.Lock()
 
@@ -60,6 +62,16 @@ class EngineManager:
         secret = os.getenv("ALPACA_SECRET_KEY")
         return key, secret
 
+    def current_engine_state(self) -> str:
+        with self._state_lock:
+            if (
+                self.engine_state == "running"
+                and self.runtime is not None
+                and not self.runtime.is_running
+            ):
+                self.engine_state = "error"
+            return self.engine_state
+
     def start_engine(self) -> None:
         with self._state_lock:
             if self.engine_state in {"starting", "running", "stopping"}:
@@ -76,93 +88,56 @@ class EngineManager:
 
         try:
             cfg = load_config(str(self.config_path))
-            if not paper and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+            if not paper and os.getenv("PARAYABUCK_V2_ENABLE_LIVE") != "YES":
                 raise ValueError(
-                    "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
+                    "Live trading is not armed. Set PARAYABUCK_V2_ENABLE_LIVE=YES "
                     "before starting the application."
                 )
-            from parayabuck.data.alpaca import AlpacaDataSource
-            from parayabuck.execution.alpaca import AlpacaBroker
-            from parayabuck.execution.live_engine import LiveTradingEngine
+            from parayabuck_v2.config import load_v2_config
+            from parayabuck_v2.runtime import V2Runtime
 
-            broker = AlpacaBroker(
-                key,
-                secret,
-                paper=paper,
-                peak_state_path=Path("data/runtime")
-                / ("paper_equity_peak.json" if paper else "live_equity_peak.json"),
-            )
-            data_source = AlpacaDataSource(
-                key,
-                secret,
-                stock_feed=cfg.alpaca.stock_feed,
-                data_delayed=cfg.alpaca.data_delayed,
-            )
             market_filter = cfg.raw.get("market_filter", {})
             vix_proxy = str(market_filter.get("vix_proxy_symbol", "VIXY"))
-            # Data-only helpers must not accidentally become independently
-            # traded runtime symbols.
             symbols = [symbol for symbol in cfg.symbols if symbol not in {vix_proxy, "BIL"}]
-
-            engine = LiveTradingEngine(
-                broker=broker,
-                data_source=data_source,
-                symbols=symbols,
-                timeframe=cfg.app.timeframe,
-                poll_interval=cfg.app.poll_interval,
-                max_positions=cfg.portfolio.max_positions if cfg.portfolio else 5,
-                risk_pct=cfg.risk.risk_per_trade / cfg.account.starting_balance,
-                stop_loss_pct=cfg.risk.stop_loss_pct,
-                take_profit_pct=cfg.risk.take_profit_pct,
-                trail_pct=cfg.risk.trail_pct,
-                crypto_stop_loss_pct=cfg.risk.crypto_stop_loss_pct,
-                crypto_take_profit_pct=cfg.risk.crypto_take_profit_pct,
-                atr_stop_multiplier=cfg.risk.atr_stop_multiplier,
-                atr_tp_multiplier=cfg.risk.atr_tp_multiplier,
-                max_daily_loss=cfg.risk.max_daily_loss,
-                max_drawdown=cfg.risk.max_drawdown,
-                strategy_allocations=cfg.strategy_allocations,
-                max_position_size=cfg.risk.max_position_size,
-                risk_per_trade_amount=cfg.risk.risk_per_trade,
-                max_pct_per_position=(
-                    cfg.portfolio.max_pct_per_position if cfg.portfolio else 0.10
+            v2_path = os.getenv("PARAYABUCK_V2_CONFIG", "config/settings_v2.yaml")
+            v2_config = load_v2_config(v2_path)
+            v2_config = replace(
+                v2_config,
+                risk=replace(
+                    v2_config.risk,
+                    daily_loss_limit_pct=min(
+                        1.0,
+                        cfg.risk.max_daily_loss / cfg.account.starting_balance,
+                    ),
+                    max_drawdown_pct=min(
+                        1.0,
+                        cfg.risk.max_drawdown / cfg.account.starting_balance,
+                    ),
                 ),
-                max_pct_per_sector=(
-                    cfg.portfolio.max_pct_per_sector if cfg.portfolio else 0.30
-                ),
-                min_cash_pct=cfg.portfolio.min_cash_pct if cfg.portfolio else 0.05,
-                fractional_shares=cfg.alpaca.fractional_shares,
-                min_stock_order_notional=cfg.risk.min_stock_order_notional,
-                min_crypto_order_notional=cfg.risk.min_crypto_order_notional,
-                strategy_params_by_name={cfg.strategy.name: cfg.strategy.params},
-                use_global_market_filter=bool(market_filter.get("enabled", True)),
-                benchmark_symbol=str(market_filter.get("benchmark_symbol", "SPY")),
-                vix_proxy_symbol=vix_proxy,
-                benchmark_sma_period=int(market_filter.get("benchmark_sma_period", 200)),
-                vix_proxy_sma_period=int(market_filter.get("vix_proxy_sma_period", 50)),
-                vix_high_ratio=float(market_filter.get("vix_high_ratio", 1.5)),
             )
-
-            self.broker = broker
-            self.engine = engine
-
-            def run_loop() -> None:
-                try:
-                    self.engine_state = "running"
-                    engine.run()
-                except Exception:
-                    log.exception("Engine failure")
-                    self.engine_state = "error"
-                finally:
-                    if self.engine_state != "error":
-                        self.engine_state = "stopped"
-
-            self.trading_thread = threading.Thread(target=run_loop, daemon=True)
-            self.trading_thread.start()
-            log.info("Live engine started in background thread.")
+            runtime = V2Runtime(
+                api_key=key,
+                secret_key=secret,
+                app_config=cfg,
+                v2_config=v2_config,
+                symbols=symbols,
+                paper=paper,
+            )
+            self.runtime = runtime
+            self.engine = runtime.engine
+            self.broker = runtime.broker
+            runtime.start()
+            self.engine_state = "running"
+            log.info("ParayaBuck V2 engine started from Web UI")
 
         except Exception:
             self.engine_state = "error"
+            runtime = self.runtime
+            if runtime is not None:
+                try:
+                    runtime.stop()
+                except Exception:
+                    log.exception("V2 cleanup after failed start")
             raise
 
     def stop_engine(self) -> None:
@@ -170,56 +145,48 @@ class EngineManager:
             if self.engine_state == "stopped":
                 return
             self.engine_state = "stopping"
-            engine = self.engine
-            thread = self.trading_thread
-        if engine is not None:
-            engine.stop()
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=5.0)
+            runtime = self.runtime
+        if runtime is not None:
+            runtime.stop()
         with self._state_lock:
-            self.engine_state = "stopped" if not thread or not thread.is_alive() else "error"
-        log.info("Live engine stopped.")
+            self.engine_state = "stopped"
+        log.info("ParayaBuck V2 engine stopped")
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         if self.broker is None:
             key, secret = self.get_credentials()
             if key and secret:
                 try:
-                    from parayabuck.execution.alpaca import AlpacaBroker
+                    from parayabuck_v2.execution.alpaca import AlpacaExecutionBroker
+
                     paper = self.is_paper_mode()
-                    self.broker = AlpacaBroker(
-                        key,
-                        secret,
-                        paper=paper,
-                        peak_state_path=Path("data/runtime")
-                        / ("paper_equity_peak.json" if paper else "live_equity_peak.json"),
-                    )
+                    self.broker = AlpacaExecutionBroker(key, secret, paper=paper)
                 except Exception as e:
                     log.warning(f"Could not connect broker: {e}")
 
         if self.broker is not None:
             try:
-                acct = self.broker.get_account()
+                acct = self.broker.account()
                 positions_list = []
-                for p in acct.positions.values():
+                for p in acct.positions:
                     if not p.is_flat:
-                        positions_list.append({
-                            "symbol": p.symbol,
-                            "direction": "LONG" if p.is_long else "SHORT",
-                            "qty": abs(p.qty),
-                            "avg_price": p.avg_price,
-                            "unrealized_pnl": p.unrealized_pnl(
-                                p.current_price if p.current_price is not None else p.avg_price
-                            ),
-                        })
+                        positions_list.append(
+                            {
+                                "symbol": p.symbol,
+                                "direction": "LONG" if p.qty > 0 else "SHORT",
+                                "qty": abs(p.qty),
+                                "avg_price": p.avg_price,
+                                "unrealized_pnl": p.unrealized_pnl,
+                            }
+                        )
 
                 snapshot = {
                     "equity": acct.equity,
-                    "cash": acct.balance,
+                    "cash": acct.cash,
                     "daily_pnl": acct.daily_pnl,
                     "realized_pnl": acct.realized_pnl,
                     "unrealized_pnl": acct.unrealized_pnl,
-                    "drawdown": acct.drawdown,
+                    "drawdown": max(0.0, acct.peak_equity - acct.equity),
                     "positions": positions_list,
                 }
                 self.last_account = snapshot
@@ -243,6 +210,7 @@ class EngineManager:
 
 manager = EngineManager()
 
+
 # Custom WebSocket Log Handler
 class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
@@ -251,7 +219,7 @@ class WebSocketLogHandler(logging.Handler):
             "levelno": record.levelno,
             "name": record.name,
             "message": record.getMessage(),
-            "time": record.asctime if hasattr(record, "asctime") else "",
+            "time": self.formatter.formatTime(record) if self.formatter else "",
         }
         for queue, loop in list(manager.log_queues):
             try:
@@ -259,12 +227,13 @@ class WebSocketLogHandler(logging.Handler):
             except Exception:
                 pass
 
+
 ws_log_handler = WebSocketLogHandler()
 ws_log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logging.getLogger().addHandler(ws_log_handler)
+logging.getLogger("parayabuck").addHandler(ws_log_handler)
 
 # FastAPI App
-app = FastAPI(title="ParayaBuck Modern Web Trading Terminal")
+app = FastAPI(title="ParayaBuck V2 Trading Terminal")
 
 
 def _trusted_browser_origin(origin: str | None) -> bool:
@@ -282,6 +251,7 @@ async def protect_local_control_api(request: Request, call_next: Any) -> Any:
         return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})
     return await call_next(request)
 
+
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -295,7 +265,6 @@ class SettingsPayload(BaseModel):
     max_daily_loss: float = Field(300.0, gt=0)
     max_drawdown: float = Field(1500.0, gt=0)
     timeframe: Literal["1m", "5m", "15m", "30m", "1h", "1d"] = "15m"
-    poll_interval: int = Field(60, ge=5, le=3600)
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = Field(True)
@@ -320,7 +289,7 @@ async def serve_index(request: Request) -> HTMLResponse:
 async def get_status() -> dict[str, Any]:
     key, _ = manager.get_credentials()
     return {
-        "state": manager.engine_state,
+        "state": manager.current_engine_state(),
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
     }
@@ -387,7 +356,6 @@ async def get_settings() -> dict[str, Any]:
         "max_daily_loss": cfg_raw.get("risk", {}).get("max_daily_loss", 300.0),
         "max_drawdown": cfg_raw.get("risk", {}).get("max_drawdown", 1500.0),
         "timeframe": cfg_raw.get("app", {}).get("timeframe", "15m"),
-        "poll_interval": cfg_raw.get("app", {}).get("poll_interval", 60),
         "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
         "port": cfg_raw.get("app", {}).get("port", 8000),
         "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
@@ -402,7 +370,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             raise ValueError("Bot is currently changing state; wait a moment and try again")
 
         # The web server and trading engine have separate lifecycles. Runtime
-        # settings (timeframe, poll interval and risk limits) only require the
+        # settings (timeframe and risk limits) only require the
         # trading engine to restart; shutting down the whole application also
         # removes the UI and is both confusing and unnecessary.
         restart_engine = manager.engine_state == "running"
@@ -441,7 +409,6 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             "open_browser": payload.open_browser,
             "log_level": payload.log_level.upper(),
             "timeframe": payload.timeframe,
-            "poll_interval": payload.poll_interval,
         }
 
         with open(manager.config_path, "w") as f:
@@ -484,7 +451,7 @@ async def websocket_stream(websocket: WebSocket) -> None:
         while True:
             account_data = await asyncio.to_thread(manager.fetch_account_snapshot)
             status_data = {
-                "state": manager.engine_state,
+                "state": manager.current_engine_state(),
                 "paper": manager.is_paper_mode(),
             }
             await websocket.send_json(

@@ -1,6 +1,46 @@
 # ParayaBuck
 
-Python trading bot for **US stocks** via **Alpaca** API. Backtest, paper trade, and live trade — all from a **Modern Glassmorphic Web Terminal** (FastAPI + Glassmorphic Web UI).
+Trading bot for **US stocks and crypto** via the **Alpaca** API. Backtest,
+paper trade and live trade are available through the V2 event-driven engine
+and Web terminal.
+
+## ParayaBuck v2
+
+The active engine lives in `src/parayabuck_v2` and is used by the Web UI as
+well as the shadow, paper/live and backtest entry points. Stocks and crypto
+have separate strategies; strategies produce scored, explainable signals and
+never submit orders directly.
+
+Safety defaults:
+
+- `shadow` is the default and never submits an Alpaca order.
+- `paper` requires the explicit `--confirm-paper YES` flag.
+- `live` requires both `--confirm-live YES` and the
+  `PARAYABUCK_V2_ENABLE_LIVE=YES` environment variable.
+- Decisions, rejected signals, order transitions, fills and account snapshots
+  are persisted in `data/runtime/parayabuck_v2.sqlite3`.
+
+Run shadow mode:
+
+```bash
+python -m parayabuck_v2 --mode shadow --symbols AAPL MSFT BTC/USD
+```
+
+Run Alpaca paper mode:
+
+```bash
+python -m parayabuck_v2 --mode paper --confirm-paper YES --symbols AAPL BTC/USD
+```
+
+Run an offline CSV backtest:
+
+```bash
+python scripts/run_v2_backtest.py data/historical/MES_5m_2024.csv \
+  --symbol MES --market equity --timeframe 5m
+```
+
+V2 risk and engine settings are in `config/settings_v2.yaml`. Do not enable
+live mode until out-of-sample, shadow and paper results have been reviewed.
 
 ---
 
@@ -22,12 +62,12 @@ python -m parayabuck
 
 Uygulama çalıştırıldığında Web UI sunucusu başlar. Varsayılan olarak tarayıcınız **`http://127.0.0.1:8000`** adresini açar; bu davranış Ayarlar içindeki gelişmiş program ayarlarından kapatılabilir.
 
-Bot motoru güvenlik nedeniyle Web UI içinden **Motoru Başlat** düğmesine basıldığında çalışır. İlk kullanımda Alpaca kimlik bilgilerini Ayarlar sekmesinden (.env ve settings.yaml) girip kaydedebilirsiniz.
+V2 motoru güvenlik nedeniyle Web UI içinden **Motoru Başlat** düğmesine basıldığında çalışır. İlk kullanımda Alpaca kimlik bilgilerini Ayarlar sekmesinden (.env ve settings.yaml) girip kaydedebilirsiniz.
 
 Gerçek para modu ayrıca uygulama başlatılmadan önce açıkça etkinleştirilmelidir:
 
 ```bash
-PARAYABUCK_ENABLE_LIVE=YES parayabuck
+PARAYABUCK_V2_ENABLE_LIVE=YES parayabuck
 ```
 
 Bu değişken olmadan gerçek para motoru başlamaz. Uygulama güvenlik nedeniyle yalnızca

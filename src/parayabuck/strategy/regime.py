@@ -126,9 +126,8 @@ class RegimeDetector:
 def suggest_strategy(state: RegimeState) -> str:
     """Suggest which strategy type to use given the current regime.
 
-    Single source of truth — kept in sync with
-    ``parayabuck.execution.live_engine.REGIME_TO_STRATEGY`` (which is a cached
-    copy of ``REGIME_TO_STRATEGY`` below).
+    Legacy backtest strategy suggestion. The active Web runtime uses the V2
+    regime and signal-ranking pipeline.
 
     A long-only bot must NOT trade in downtrends or high-volatility regimes:
       - downtrend: catching oversold dips = catching falling knives

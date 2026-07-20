@@ -4,7 +4,6 @@ app:
   open_browser: true
   log_level: INFO
   timeframe: 5m
-  poll_interval: 60
 account:
   starting_balance: 10000.0
   currency: USD

@@ -60,11 +60,8 @@ class PositionSizer:
         kelly_min_trades: int = 20,
         use_kelly: bool = True,
         crypto_risk_pct: float = 0.01,
-        # Min stop distance as a fraction of entry price. This must match the
-        # stop floor used by LiveTradingEngine._calc_exit_levels; otherwise the
-        # sizer sizes for an ATR-based stop (a few cents on low timeframes)
-        # while the engine actually enforces a 4% floor stop — making the real
-        # risk 20-50x larger than the sizer assumed.
+        # Min stop distance as a fraction of entry price. This keeps legacy
+        # backtest sizing aligned with its configured protective-stop floor.
         min_stop_pct: float = 0.04,
         min_stop_pct_crypto: float = 0.025,
         atr_tp_multiplier: float = 4.0,

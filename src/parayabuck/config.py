@@ -88,7 +88,6 @@ class AppConfig:
     open_browser: bool = True
     log_level: str = "INFO"
     timeframe: str = "15m"
-    poll_interval: int = 60
 
 
 @dataclass
@@ -173,8 +172,6 @@ def _validate_config(config: Config) -> None:
             raise ValueError(f"risk.{name} must be positive")
     if config.app.timeframe not in {"1m", "5m", "15m", "30m", "1h", "1d"}:
         raise ValueError(f"Unsupported app.timeframe: {config.app.timeframe}")
-    if config.app.poll_interval < 5:
-        raise ValueError("app.poll_interval must be at least 5 seconds")
     if config.alpaca.stock_feed not in {"iex", "sip", "delayed_sip"}:
         raise ValueError("alpaca.stock_feed must be iex, sip, or delayed_sip")
     for symbol, spec in config.symbols.items():

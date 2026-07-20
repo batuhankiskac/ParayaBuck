@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "parayabuck"
 version = "0.1.0"
-description = "Python trading bot for US stocks via Alpaca (paper first, live later)"
+description = "Python trading bot for US stocks via Alpaca API with Modern Web UI"
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.2",
@@ -15,14 +15,17 @@ dependencies = [
     "tabulate>=0.9",
     "matplotlib>=3.8",
     "alpaca-py>=0.30",
-    "PySide6>=6.6",
+    "fastapi>=0.100",
+    "uvicorn>=0.20",
+    "websockets>=12.0",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
-parayabuck = "parayabuck.gui.app:main"
+parayabuck = "parayabuck.web.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParayaBuck — Algorithmic Trading Terminal</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="navbar">
+            <div class="brand">
+                <span class="brand-logo">🚀</span>
+                <span class="brand-title">PARAYABUCK</span>
+                <span class="brand-badge">TERMINAL</span>
+            </div>
+
+            <div class="nav-status-group">
+                <!-- Mode Chip -->
+                <div id="modeChip" class="mode-chip paper">
+                    <span id="modeIcon">📜</span>
+                    <span id="modeText">PAPER DEMO</span>
+                </div>
+
+                <!-- Engine Pulse Dot & Status -->
+                <div class="status-indicator">
+                    <span id="statusDot" class="status-dot stopped"></span>
+                    <span id="statusText" class="status-text">Durdu</span>
+                </div>
+            </div>
+
+            <div class="nav-actions">
+                <button id="startBtn" class="btn btn-success">
+                    <span>▶</span> Motoru Başlat
+                </button>
+                <button id="stopBtn" class="btn btn-danger" disabled>
+                    <span>■</span> Durdur
+                </button>
+                <button id="settingsBtn" class="btn btn-secondary icon-btn">
+                    <span>⚙️</span> Ayarlar
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Layout -->
+        <main class="dashboard-content">
+            <!-- 6 Stat Cards Grid -->
+            <section class="stat-cards-grid">
+                <!-- Card 1: Equity -->
+                <div class="stat-card accent-indigo">
+                    <div class="card-header">
+                        <span class="card-icon">💎</span>
+                        <span class="card-title">Net Portföy (Equity)</span>
+                    </div>
+                    <div id="equityValue" class="card-value">$0.00</div>
+                    <div id="equitySub" class="card-sub">Canlı Bakiye Özeti</div>
+                </div>
+
+                <!-- Card 2: Cash -->
+                <div class="stat-card accent-blue">
+                    <div class="card-header">
+                        <span class="card-icon">💵</span>
+                        <span class="card-title">Kullanılabilir Nakit</span>
+                    </div>
+                    <div id="cashValue" class="card-value">$0.00</div>
+                    <div id="cashSub" class="card-sub">Serbest Bakiye</div>
+                </div>
+
+                <!-- Card 3: Daily PnL -->
+                <div class="stat-card accent-emerald">
+                    <div class="card-header">
+                        <span class="card-icon">📈</span>
+                        <span class="card-title">Günlük Kar / Zarar</span>
+                    </div>
+                    <div id="dailyPnlValue" class="card-value">$0.00</div>
+                    <div id="dailyPnlSub" class="card-sub">Bugünkü Toplam Değişim</div>
+                </div>
+
+                <!-- Card 4: Realized PnL -->
+                <div class="stat-card accent-purple">
+                    <div class="card-header">
+                        <span class="card-icon">🎯</span>
+                        <span class="card-title">Gerçekleşen PnL</span>
+                    </div>
+                    <div id="realizedPnlValue" class="card-value">$0.00</div>
+                    <div id="realizedPnlSub" class="card-sub">Kapatılan İşlemler Net</div>
+                </div>
+
+                <!-- Card 5: Unrealized PnL -->
+                <div class="stat-card accent-cyan">
+                    <div class="card-header">
+                        <span class="card-icon">📊</span>
+                        <span class="card-title">Açık Pozisyon PnL</span>
+                    </div>
+                    <div id="unrealizedPnlValue" class="card-value">$0.00</div>
+                    <div id="unrealizedPnlSub" class="card-sub">Anlık İşlem Farkı</div>
+                </div>
+
+                <!-- Card 6: Drawdown -->
+                <div class="stat-card accent-amber">
+                    <div class="card-header">
+                        <span class="card-icon">🛡️</span>
+                        <span class="card-title">Maksimum Düşüş</span>
+                    </div>
+                    <div id="drawdownValue" class="card-value">$0.00</div>
+                    <div id="drawdownSub" class="card-sub">Peak Bakiye Düşüşü</div>
+                </div>
+            </section>
+
+            <!-- Chart & Positions Row -->
+            <div class="dashboard-grid-row">
+                <!-- Portfolio Performance Chart -->
+                <section class="glass-panel chart-panel">
+                    <div class="panel-header">
+                        <h2>📊 Portföy Performans Grafiği</h2>
+                        <span class="live-pill">LIVE ANALYTICS</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="equityChart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Active Positions Table -->
+                <section class="glass-panel positions-panel">
+                    <div class="panel-header">
+                        <h2>⚡ Açık Pozisyonlar</h2>
+                        <span id="activePositionsBadge" class="count-badge">0 Açık</span>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Sembol</th>
+                                    <th>Yön</th>
+                                    <th>Miktar</th>
+                                    <th>Giriş Fiyatı</th>
+                                    <th>Açık PnL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsTableBody">
+                                <tr>
+                                    <td colspan="5" class="empty-state">Henüz açık pozisyon bulunmuyor</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Terminal Log Console -->
+            <section class="glass-panel terminal-panel">
+                <div class="panel-header">
+                    <div class="terminal-title">
+                        <span>💻 Canlı Motor Konsolu & Log Yayın Akışı</span>
+                    </div>
+                    <div class="terminal-actions">
+                        <button id="clearLogsBtn" class="btn btn-sm btn-secondary">🧹 Temizle</button>
+                    </div>
+                </div>
+                <div id="terminalLogView" class="terminal-view">
+                    <div class="log-line info">
+                        <span class="log-time">[SYSTEM]</span>
+                        <span class="log-msg">ParayaBuck Web Terminal bağlantısı kuruldu.</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Settings Modal Drawer -->
+    <div id="settingsModal" class="modal-backdrop">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2>⚙️ Terminal & API Ayarları</h2>
+                <button id="closeSettingsBtn" class="modal-close">&times;</button>
+            </div>
+            <form id="settingsForm" class="modal-body">
+                <div class="form-group">
+                    <label for="apiKey">Alpaca API Key</label>
+                    <input type="text" id="apiKey" placeholder="PK..." required>
+                </div>
+
+                <div class="form-group">
+                    <label for="secretKey">Alpaca Secret Key</label>
+                    <input type="password" id="secretKey" placeholder="🔑 Secret Key" required>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="paperModeCheck">
+                    <label for="paperModeCheck">Paper Trading (Demo Modu)</label>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="maxDailyLoss">Maks. Günlük Loss ($)</label>
+                        <input type="number" id="maxDailyLoss" step="10" value="300">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxDrawdown">Maks. Drawdown ($)</label>
+                        <input type="number" id="maxDrawdown" step="50" value="1500">
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="cancelSettingsBtn" class="btn btn-secondary">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet & Uygula</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Custom JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

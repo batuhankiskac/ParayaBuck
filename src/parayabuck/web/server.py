@@ -394,10 +394,23 @@ async def get_settings() -> dict[str, Any]:
 
 
 @app.post("/api/settings")
-async def save_settings(payload: SettingsPayload) -> dict[str, str]:
+async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
     try:
-        if manager.engine_state in {"starting", "running", "stopping"}:
-            raise ValueError("Stop the engine before changing settings")
+        if manager.engine_state in {"starting", "stopping"}:
+            raise ValueError("Bot is currently changing state; wait a moment and try again")
+
+        # The web server and trading engine have separate lifecycles. Runtime
+        # settings (timeframe, poll interval and risk limits) only require the
+        # trading engine to restart; shutting down the whole application also
+        # removes the UI and is both confusing and unnecessary.
+        restart_engine = manager.engine_state == "running"
+        if restart_engine:
+            manager.stop_engine()
+            if manager.engine_state != "stopped":
+                raise RuntimeError(
+                    "Bot could not stop safely. Use the Durdur button and try again."
+                )
+
         current_key, current_secret = manager.get_credentials()
         api_key = payload.api_key.strip() or current_key or ""
         secret_key = payload.secret_key.strip() or current_secret or ""
@@ -415,6 +428,8 @@ async def save_settings(payload: SettingsPayload) -> dict[str, str]:
             with open(manager.config_path) as f:
                 cfg_raw = yaml.safe_load(f) or {}
 
+        old_app = dict(cfg_raw.get("app", {}))
+
         cfg_raw.setdefault("alpaca", {})["paper"] = payload.paper_mode
         cfg_raw.setdefault("risk", {})["max_daily_loss"] = payload.max_daily_loss
         cfg_raw.setdefault("risk", {})["max_drawdown"] = payload.max_drawdown
@@ -431,7 +446,26 @@ async def save_settings(payload: SettingsPayload) -> dict[str, str]:
             yaml.safe_dump(cfg_raw, f, sort_keys=False, default_flow_style=False)
 
         manager.broker = None
-        return {"status": "success", "message": "Settings and credentials saved."}
+        if restart_engine:
+            manager.start_engine()
+
+        # These values belong to the web process itself. Saving them is safe,
+        # but they take effect the next time the application is launched.
+        app_restart_required = any(
+            old_app.get(name, default) != getattr(payload, name)
+            for name, default in {
+                "host": "127.0.0.1",
+                "port": 8000,
+                "open_browser": True,
+                "log_level": "INFO",
+            }.items()
+        )
+        return {
+            "status": "success",
+            "message": "Settings and credentials saved.",
+            "engine_restarted": restart_engine,
+            "app_restart_required": app_restart_required,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

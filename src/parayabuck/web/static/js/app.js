@@ -321,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     settingsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const submitBtn = settingsForm.querySelector('button[type="submit"]');
         const payload = {
             api_key: apiKeyInput.value.trim(),
             secret_key: secretKeyInput.value.trim(),
@@ -336,6 +337,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Kaydediliyor...';
             const res = await fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -344,9 +347,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Ayarlar kaydedilemedi');
             settingsModal.classList.remove('active');
-            appendLog("Ayarlar ve API bilgileri güncellendi.", "info");
+            if (data.engine_restarted) {
+                appendLog("Ayarlar uygulandı; işlem motoru yeni ayarlarla yeniden başlatıldı.", "info");
+            } else {
+                appendLog("Ayarlar ve API bilgileri güncellendi.", "info");
+            }
+            if (data.app_restart_required) {
+                appendLog("Web adresi/portu, tarayıcı veya log seviyesi değişikliği bir sonraki uygulama açılışında etkinleşecek.", "warning");
+            }
         } catch (err) {
             alert("Ayarlar kaydedilemedi: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Kaydet & Uygula';
         }
     });
 

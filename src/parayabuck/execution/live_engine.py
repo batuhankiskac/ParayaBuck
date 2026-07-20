@@ -353,6 +353,12 @@ class LiveTradingEngine:
         self._running = False
         self._stop_event = threading.Event()
         self._cycle_count = 0
+        # Observability counters accumulated between the five-minute status
+        # reports. A poll cycle is not a strategy evaluation unless a new
+        # timeframe candle has closed; exposing that distinction prevents a
+        # healthy, selective engine from looking stuck.
+        self._closed_bars_since_status = 0
+        self._signals_since_status = 0
         self._entry_prices: dict[str, float] = {}
         # Daily-loss / drawdown kill-switch state. Once tripped, the engine
         # stops opening NEW entries but keeps managing/exiting existing
@@ -838,6 +844,7 @@ class LiveTradingEngine:
                         new_bars.append(bar)
 
                 if new_bars:
+                    self._closed_bars_since_status += len(new_bars)
                     # Update buffer with all new bars so indicators see full history
                     rt.bars_buffer = (rt.bars_buffer + new_bars)[-self.warmup_bars :]
                     rt.last_bar_time = new_bars[-1].timestamp
@@ -890,6 +897,8 @@ class LiveTradingEngine:
 
         if not orders:
             return
+
+        self._signals_since_status += len(orders)
 
         rt.order_pending = True
         try:
@@ -1500,7 +1509,19 @@ class LiveTradingEngine:
             f"  Cash:      ${account.balance:,.2f}",
             f"  Daily PnL: ${account.daily_pnl:+.2f}",
             f"  Positions: {len(account.positions)}",
+            (
+                f"  Last 5m scan: {self._closed_bars_since_status} new closed "
+                f"{self.timeframe} bars, {self._signals_since_status} strategy signals"
+            ),
         ]
+
+        if self._closed_bars_since_status == 0:
+            lines.append(
+                f"  Waiting: poll cycles only check data; signals are evaluated "
+                f"when a new {self.timeframe} candle closes"
+            )
+        elif self._signals_since_status == 0:
+            lines.append("  No entry/exit setup met the active strategy rules in those bars")
 
         if self._halted:
             lines.append(f"  ⛔ HALTED: {self._halt_reason}")
@@ -1543,6 +1564,8 @@ class LiveTradingEngine:
         lines.append(f"  Active strategies: {', '.join(active_strats) or 'none'}")
         lines.append("=" * 60)
         log.info("\n".join(lines))
+        self._closed_bars_since_status = 0
+        self._signals_since_status = 0
 
     def _calc_pnl(self, symbol: str, exit_price: float, position: Position) -> float:
         """Calculate realized PnL for a closing trade."""

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from parayabuck.config import Config
 from parayabuck.logger import get_logger
-from parayabuck.models import Account, Order
+from parayabuck.models import Account, Order, Side
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.risk.manager")
@@ -77,7 +77,13 @@ class RiskManager:
 
     def check_order(self, order: Order, account: Account) -> Order | None:
         """Return the order if it passes risk checks, None if rejected."""
-        if self._trading_halted:
+        position = account.get_position(order.symbol)
+        is_exit = (order.side == Side.SELL and position.is_long) or (
+            order.side == Side.BUY and position.is_short
+        )
+        if is_exit:
+            return order
+        if self._trading_halted and not is_exit:
             return None
 
         # Check max position size. Crypto can be fractional, so don't int-truncate.
@@ -99,7 +105,7 @@ class RiskManager:
 
         # Check account risk
         self.check_account(account)
-        if self._trading_halted:
+        if self._trading_halted and not is_exit:
             return None
 
         return order

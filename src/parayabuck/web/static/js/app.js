@@ -199,7 +199,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const line = document.createElement('div');
         line.className = `log-line ${level.toLowerCase()}`;
         const timeStr = new Date().toLocaleTimeString();
-        line.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-msg">${msg}</span>`;
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'log-time';
+        timeSpan.textContent = `[${timeStr}]`;
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'log-msg';
+        messageSpan.textContent = ` ${msg}`;
+        line.append(timeSpan, messageSpan);
         terminalLogView.appendChild(line);
         terminalLogView.scrollTop = terminalLogView.scrollHeight;
     };
@@ -290,6 +296,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             apiKeyInput.value = data.api_key || '';
             secretKeyInput.value = data.secret_key || '';
+            if (data.has_credentials) {
+                apiKeyInput.placeholder = 'Mevcut anahtar korunacak';
+                secretKeyInput.placeholder = 'Mevcut secret korunacak';
+            }
             paperModeCheck.checked = data.paper_mode;
             maxDailyLossInput.value = data.max_daily_loss || 300;
             maxDrawdownInput.value = data.max_drawdown || 1500;

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-import time
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -162,6 +162,8 @@ class SymbolRuntime:
     # Engines increment this and force-close if `max_holding_bars` is exceeded
     # (set on the engine; strategy reads via `bars_in_trade`).
     bars_in_trade: int = 0
+    last_managed_bar_time: datetime | None = None
+    restored_position: bool = False
 
 
 class LiveTradingEngine:
@@ -210,6 +212,9 @@ class LiveTradingEngine:
         use_global_market_filter: bool = True,
         benchmark_symbol: str = "SPY",
         vix_proxy_symbol: str = "VIXY",
+        benchmark_sma_period: int = 200,
+        vix_proxy_sma_period: int = 50,
+        vix_high_ratio: float = 1.5,
         # Regime hysteresis: a regime must be stable for at least this many
         # re-check cycles before we rotate strategies. Without hysteresis, ADX
         # oscillating around its threshold flaps the strategy on every recheck,
@@ -236,6 +241,13 @@ class LiveTradingEngine:
         # get an equal share of the remaining slots. None/empty disables
         # per-strategy caps and falls back to a flat max_positions.
         strategy_allocations: dict[str, float] | None = None,
+        max_position_size: float = 500,
+        risk_per_trade_amount: float | None = None,
+        max_pct_per_position: float = 0.10,
+        max_pct_per_sector: float = 0.30,
+        min_cash_pct: float = 0.05,
+        fractional_shares: bool = True,
+        strategy_params_by_name: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.broker = broker
         self.data = data_source
@@ -260,7 +272,7 @@ class LiveTradingEngine:
         self.trailing_stops = TrailingStopManager(trail_pct=trail_pct, min_profit_to_activate=0.005)
         self.sizer = PositionSizer(
             risk_pct=risk_pct,
-            max_qty=500,
+            max_qty=max_position_size,
             crypto_risk_pct=0.01,
             # Match the engine's stop floor so the sizer's notion of "risk per
             # trade" matches the actual stop distance the engine will enforce.
@@ -275,14 +287,17 @@ class LiveTradingEngine:
             # liquid US equities on market orders), keep fractional qty so
             # small accounts can still size to a $50 risk target on $500+
             # stocks instead of being int-truncated to 0 shares.
-            fractional_shares=True,
+            fractional_shares=fractional_shares,
+            fixed_risk_amount=risk_per_trade_amount,
         )
         self.portfolio_risk = PortfolioRiskManager(
-            max_pct_per_position=0.15,
-            max_pct_per_sector=0.35,
+            max_pct_per_position=max_pct_per_position,
+            max_pct_per_sector=max_pct_per_sector,
             max_positions=max_positions,
+            min_cash_pct=min_cash_pct,
             max_daily_loss=max_daily_loss,
             max_drawdown=max_drawdown,
+            fractional_shares=fractional_shares,
         )
 
         # Global market filter (SPY 200-SMA + VIX proxy). Catches broad-market
@@ -291,7 +306,10 @@ class LiveTradingEngine:
 
         self.market_filter = GlobalMarketFilter(
             benchmark_symbol=benchmark_symbol,
+            benchmark_sma_period=benchmark_sma_period,
             vix_proxy_symbol=vix_proxy_symbol,
+            vix_proxy_sma_period=vix_proxy_sma_period,
+            vix_high_ratio=vix_high_ratio,
             enabled=use_global_market_filter,
         )
         self._market_filter_state: MarketFilterState = MarketFilterState(
@@ -314,6 +332,7 @@ class LiveTradingEngine:
         # one. When allocations are missing or empty, all strategies share
         # max_positions equally (the legacy behaviour).
         self.strategy_allocations = strategy_allocations or {}
+        self.strategy_params_by_name = strategy_params_by_name or {}
         self._strategy_position_caps: dict[str, int] = self._compute_strategy_caps(max_positions)
 
         # Per-symbol scale-out state: tracks whether we've already scaled out
@@ -324,6 +343,7 @@ class LiveTradingEngine:
         # handles it). We track which symbols have native brackets so
         # _manage_positions can skip them.
         self._native_bracket_active: set[str] = set()
+        self._broker_stop_active: set[str] = set()
 
         self._runtimes: dict[str, SymbolRuntime] = {
             sym: SymbolRuntime(symbol=sym) for sym in symbols
@@ -331,6 +351,7 @@ class LiveTradingEngine:
         self._last_regime_check: datetime | None = None
         self._last_status_print: datetime | None = None
         self._running = False
+        self._stop_event = threading.Event()
         self._cycle_count = 0
         self._entry_prices: dict[str, float] = {}
         # Daily-loss / drawdown kill-switch state. Once tripped, the engine
@@ -343,6 +364,7 @@ class LiveTradingEngine:
     def run(self) -> None:
         """Main loop — runs forever until Ctrl+C."""
         self._running = True
+        self._stop_event.clear()
         log.info("=" * 60)
         log.info("  ParayaBuck LIVE TRADING ENGINE — STARTING")
         log.info("=" * 60)
@@ -371,7 +393,7 @@ class LiveTradingEngine:
         try:
             while self._running:
                 self._cycle()
-                time.sleep(self.poll_interval)
+                self._stop_event.wait(self.poll_interval)
         except KeyboardInterrupt:
             log.info("\nStopping engine...")
         finally:
@@ -379,6 +401,7 @@ class LiveTradingEngine:
 
     def stop(self) -> None:
         self._running = False
+        self._stop_event.set()
 
     @staticmethod
     def _bars_per_day(symbol: str, timeframe: str) -> float:
@@ -442,6 +465,7 @@ class LiveTradingEngine:
                 start = (datetime.now(UTC) - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
                 bars = self.data.get_bars(sym, self.timeframe, start, use_cache=False)
+                bars = [bar for bar in bars if self._bar_is_closed(bar)]
                 if not bars:
                     log.warning(f"  {sym}: no data received")
                     continue
@@ -454,13 +478,15 @@ class LiveTradingEngine:
 
                 if rt.strategy is not None:
                     rt.strategy.on_init()
-                    # Warm up against the REAL broker position so strategy state
-                    # (entry/stop/target) matches what's actually held. Feeding
-                    # a synthetic flat position left strategies with stale stops
-                    # that triggered spurious exits on the first live bar.
+                    # Warm indicators with a flat synthetic position. A restored
+                    # live position is managed by the engine's broker-resident
+                    # protection until it becomes flat; strategy-local entry
+                    # state cannot be reconstructed from historical bars.
                     real_pos = self.broker.get_position(sym)
+                    flat = Position(symbol=sym)
                     for bar in rt.bars_buffer:
-                        rt.strategy.on_bar(bar, real_pos)
+                        rt.strategy.on_bar(bar, flat)
+                        rt.strategy.pop_pending_orders()
                     rt.warmup_done = True
                     # If a real position exists, seed trailing stop + entry price
                     # so protective logic works immediately after a restart.
@@ -471,6 +497,8 @@ class LiveTradingEngine:
                             real_pos.avg_price,
                             Side.BUY if real_pos.is_long else Side.SELL,
                         )
+                        rt.restored_position = True
+                        self._restore_position_protection(sym, real_pos)
                         log.info(
                             f"  {sym}: resumed open position "
                             f"({'LONG' if real_pos.is_long else 'SHORT'} "
@@ -481,6 +509,21 @@ class LiveTradingEngine:
                         f"  {sym}: warmed up with {len(rt.bars_buffer)} bars, "
                         f"regime={rt.regime.value}, strategy={rt.strategy_name}"
                     )
+
+                # Protection is independent of whether the current regime has
+                # an active strategy. An existing position must never be left
+                # unprotected merely because the regime maps to "none".
+                if sym not in self._entry_prices:
+                    restored = self.broker.get_position(sym)
+                    if not restored.is_flat:
+                        self._entry_prices[sym] = restored.avg_price
+                        self.trailing_stops.set_entry(
+                            sym,
+                            restored.avg_price,
+                            Side.BUY if restored.is_long else Side.SELL,
+                        )
+                        rt.restored_position = True
+                        self._restore_position_protection(sym, restored)
 
                 self.data.clear_cache_for_symbol(sym)
 
@@ -565,6 +608,7 @@ class LiveTradingEngine:
             return
 
         params = dict(STRATEGY_PARAMS.get(new_strategy_name, {}))
+        params.update(self.strategy_params_by_name.get(new_strategy_name, {}))
         # Pass the timeframe's bars-per-day to multi_factor so its 3m/6m
         # momentum windows are rescaled to calendar months rather than being
         # raw bar counts (which on 15m bars made "6m momentum" mean ~2 days).
@@ -619,6 +663,9 @@ class LiveTradingEngine:
                 # gracefully to a SPY-only filter.
                 log.debug(f"Market filter: VIX proxy fetch failed — {e}")
 
+            bench_bars = [bar for bar in bench_bars if self._bar_is_closed(bar)]
+            vix_bars = [bar for bar in vix_bars if self._bar_is_closed(bar)]
+
             new_state = self.market_filter.evaluate(bench_bars, vix_bars)
             prev_allowed = self._market_filter_state.allowed
             self._market_filter_state = new_state
@@ -645,8 +692,14 @@ class LiveTradingEngine:
         if not self.strategy_allocations:
             return {}
         caps: dict[str, int] = {}
-        total_weight = sum(self.strategy_allocations.values()) or 1.0
-        for name, weight in self.strategy_allocations.items():
+        active_strategy_names = set(REGIME_TO_STRATEGY.values()) - {"none"}
+        active_allocations = {
+            name: weight
+            for name, weight in self.strategy_allocations.items()
+            if name in active_strategy_names and weight > 0
+        }
+        total_weight = sum(active_allocations.values()) or 1.0
+        for name, weight in active_allocations.items():
             cap = max(1, round(max_positions * weight / total_weight))
             caps[name] = cap
         return caps
@@ -668,8 +721,19 @@ class LiveTradingEngine:
         """True if we currently hold no position in `symbol`."""
         try:
             return self.broker.get_position(symbol).is_flat
-        except Exception:
-            return True
+        except Exception as exc:
+            log.warning(f"Could not verify position state for {symbol}: {exc}")
+            return False
+
+    def _bar_is_closed(self, bar: Bar) -> bool:
+        """Never trade on a still-forming REST bar."""
+        minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
+        duration = timedelta(minutes=minutes.get(bar.timeframe, 1))
+        now = datetime.now(UTC)
+        timestamp = bar.timestamp
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        return now >= timestamp.astimezone(UTC) + duration
 
     def _cycle(self) -> None:
         """One poll cycle: fetch data, check exits, check entries, report."""
@@ -768,6 +832,8 @@ class LiveTradingEngine:
                 new_bars: list[Bar] = []
 
                 for bar in bars:
+                    if not self._bar_is_closed(bar):
+                        continue
                     if rt.last_bar_time is None or bar.timestamp > rt.last_bar_time:
                         new_bars.append(bar)
 
@@ -777,9 +843,10 @@ class LiveTradingEngine:
                     rt.last_bar_time = new_bars[-1].timestamp
 
                     if rt.strategy is not None and not rt.warmup_done:
-                        real_pos = self.broker.get_position(sym)
+                        flat = Position(symbol=sym)
                         for bar in rt.bars_buffer:
-                            rt.strategy.on_bar(bar, real_pos)
+                            rt.strategy.on_bar(bar, flat)
+                            rt.strategy.pop_pending_orders()
                         rt.warmup_done = True
                     elif rt.strategy is not None:
                         # Feed all new bars to strategy for state updates, but only
@@ -811,6 +878,8 @@ class LiveTradingEngine:
         self.sizer.update_history(symbol, bar.high, bar.low, bar.close)
 
         position = self.broker.get_position(symbol)
+        if position.is_flat:
+            rt.restored_position = False
         order = rt.strategy.on_bar(bar, position)
 
         # Collect the primary order (if any) plus multi-leg pending orders.
@@ -825,10 +894,17 @@ class LiveTradingEngine:
         rt.order_pending = True
         try:
             for od in orders:
-                if self._is_exit_signal(od, self.broker.get_position(od.symbol)):
-                    self._execute_exit(od, self.broker.get_position(od.symbol), bar)
+                current_position = self.broker.get_position(od.symbol)
+                if self._is_exit_signal(od, current_position) and rt.restored_position:
+                    log.debug(
+                        f"Ignoring strategy exit for restored {od.symbol}; "
+                        "engine protection remains authoritative until flat"
+                    )
+                    continue
+                if self._is_exit_signal(od, current_position):
+                    self._execute_exit(od, current_position, bar)
                 else:
-                    self._execute_entry(od, self.broker.get_position(od.symbol), bar)
+                    self._execute_entry(od, current_position, bar)
         finally:
             rt.order_pending = False
 
@@ -844,6 +920,11 @@ class LiveTradingEngine:
 
     def _execute_exit(self, order: Order, position: Position, bar: Bar) -> None:
         """Close a position."""
+        if not self._cancel_protective_orders(order.symbol):
+            log.error(
+                f"Exit signal ignored for {order.symbol}: protective orders remain active"
+            )
+            return
         order = Order(
             symbol=order.symbol,
             side=order.side,
@@ -860,9 +941,12 @@ class LiveTradingEngine:
             self._entry_prices.pop(order.symbol, None)
             self._scaled_out.discard(order.symbol)
             self._native_bracket_active.discard(order.symbol)
+            self._broker_stop_active.discard(order.symbol)
             rt = self._runtimes.get(order.symbol)
             if rt is not None:
                 rt.bars_in_trade = 0
+                rt.last_managed_bar_time = None
+                rt.restored_position = False
             pnl = self._calc_pnl(order.symbol, result.filled_price or bar.close, position)
             self.sizer.record_trade(order.symbol, pnl)
             log.info(f"EXIT FILLED: {order.symbol} PnL=${pnl:+.2f}")
@@ -870,6 +954,12 @@ class LiveTradingEngine:
     def _execute_entry(self, order: Order, position: Position, bar: Bar) -> None:
         """Open a new position with sizing and risk checks."""
         if not position.is_flat:
+            return
+        self._native_bracket_active.discard(order.symbol)
+        self._broker_stop_active.discard(order.symbol)
+
+        if hasattr(self.broker, "has_open_order") and self.broker.has_open_order(order.symbol):
+            log.warning(f"Entry skipped ({order.symbol}): broker has an open order")
             return
 
         # Kill-switch: no new entries once daily-loss / drawdown limit is hit.
@@ -882,7 +972,11 @@ class LiveTradingEngine:
         # Global market filter: when SPY is below its 200-SMA or VIX is
         # spiked, block new long entries market-wide. Shorts are still
         # allowed (the filter is asymmetric by design — long-only bot).
-        if not self._market_filter_state.allowed and order.side == Side.BUY:
+        if (
+            not self._market_filter_state.allowed
+            and order.side == Side.BUY
+            and not is_crypto(order.symbol)
+        ):
             log.debug(
                 f"Entry skipped ({order.symbol}): market filter RISK-OFF — "
                 f"{self._market_filter_state.reason}"
@@ -986,7 +1080,31 @@ class LiveTradingEngine:
             self._entry_prices[checked.symbol] = fill_price
             if submit_order.stop_price is not None and submit_order.limit_price is not None:
                 self._native_bracket_active.add(checked.symbol)
+            elif crypto:
+                protective = self.broker.submit_crypto_protective_stop(
+                    checked.symbol,
+                    result.filled_qty or checked.qty,
+                    stop_price,
+                    position_is_long=checked.side == Side.BUY,
+                )
+                if protective.status.value in {"REJECTED", "CANCELLED"}:
+                    log.error(
+                        f"Crypto protection failed for {checked.symbol}; closing entry"
+                    )
+                    live_position = self.broker.get_position(checked.symbol)
+                    self._force_close(checked.symbol, live_position, fill_price)
+                    return
+                self._broker_stop_active.add(checked.symbol)
             log.info(f"ENTRY FILLED: {checked.symbol} {checked.qty} shares @ ${fill_price:.2f}")
+        elif result.filled_qty > 0:
+            fill_price = result.filled_price or bar.close
+            self._entry_prices[checked.symbol] = fill_price
+            self.trailing_stops.set_entry(checked.symbol, fill_price, checked.side)
+            if submit_order.stop_price is not None and submit_order.limit_price is not None:
+                self._native_bracket_active.add(checked.symbol)
+            log.warning(
+                f"ENTRY PARTIALLY FILLED: {checked.symbol} {result.filled_qty}/{checked.qty}"
+            )
 
     def _calc_exit_levels_for_entry(
         self, entry_price: float, crypto: bool, is_long: bool
@@ -1006,8 +1124,11 @@ class LiveTradingEngine:
         # engine's _manage_positions will tighten them via trailing once
         # the position is open.
         if is_long:
-            return entry_price * (1 - stop_pct), entry_price * (1 + tp_pct)
-        return entry_price * (1 + stop_pct), entry_price * (1 - tp_pct)
+            stop, target = entry_price * (1 - stop_pct), entry_price * (1 + tp_pct)
+        else:
+            stop, target = entry_price * (1 + stop_pct), entry_price * (1 - tp_pct)
+        precision = 4 if entry_price < 1 else 2
+        return round(stop, precision), round(target, precision)
 
     def _manage_positions(self) -> None:
         """Check all open positions for exit conditions (ATR-adaptive stops).
@@ -1044,7 +1165,10 @@ class LiveTradingEngine:
 
             # Track bars-in-trade for time-based exit. The counter resets
             # when the position goes flat (handled in _execute_exit / _force_close).
-            rt.bars_in_trade += 1
+            current_bar_time = rt.bars_buffer[-1].timestamp
+            if rt.last_managed_bar_time != current_bar_time:
+                rt.bars_in_trade += 1
+                rt.last_managed_bar_time = current_bar_time
 
             # Time-based exit: force-close if the position has been open
             # longer than `max_holding_bars`. Useful for mean-reversion
@@ -1056,6 +1180,11 @@ class LiveTradingEngine:
                 )
                 current_price = rt.bars_buffer[-1].close
                 self._force_close(sym, pos, current_price)
+                continue
+
+            # Native bracket legs live at Alpaca. Do not race them with local
+            # hard stops, take-profit or scale-out orders.
+            if sym in self._native_bracket_active:
                 continue
 
             current_price = rt.bars_buffer[-1].close
@@ -1089,7 +1218,11 @@ class LiveTradingEngine:
                 if use_trailing:
                     self.trailing_stops.update(sym, current_price, Side.BUY)
 
-                if stop_price > 0 and current_price <= stop_price:
+                if (
+                    stop_price > 0
+                    and current_price <= stop_price
+                    and sym not in self._broker_stop_active
+                ):
                     log.warning(
                         f"HARD STOP-LOSS: {sym} @ {current_price:.2f} (stop={stop_price:.2f})"
                     )
@@ -1118,7 +1251,11 @@ class LiveTradingEngine:
                 if use_trailing:
                     self.trailing_stops.update(sym, current_price, Side.SELL)
 
-                if stop_price > 0 and current_price >= stop_price:
+                if (
+                    stop_price > 0
+                    and current_price >= stop_price
+                    and sym not in self._broker_stop_active
+                ):
                     log.warning(
                         f"HARD STOP-LOSS (short): {sym} @ {current_price:.2f} "
                         f"(stop={stop_price:.2f})"
@@ -1153,6 +1290,8 @@ class LiveTradingEngine:
         """
         if self.scale_out_pct <= 0 or self.scale_out_pct >= 1:
             return  # config disabled or invalid
+        if symbol in self._native_bracket_active or symbol in self._broker_stop_active:
+            return
         crypto = is_crypto(symbol)
         remaining_qty = abs(position.qty) * (1 - self.scale_out_pct)
         # Round stocks to whole shares; keep crypto fractional.
@@ -1239,6 +1378,9 @@ class LiveTradingEngine:
 
     def _force_close(self, symbol: str, position: Position, price: float) -> None:
         """Force-close a position immediately."""
+        if not self._cancel_protective_orders(symbol):
+            log.error(f"Close aborted for {symbol}: protective orders could not be cancelled")
+            return
         side = Side.SELL if position.is_long else Side.BUY
         order = Order(
             symbol=symbol,
@@ -1254,11 +1396,53 @@ class LiveTradingEngine:
             self._entry_prices.pop(symbol, None)
             self._scaled_out.discard(symbol)
             self._native_bracket_active.discard(symbol)
+            self._broker_stop_active.discard(symbol)
             # Reset the bars-in-trade counter so the next position starts fresh.
             rt = self._runtimes.get(symbol)
             if rt is not None:
                 rt.bars_in_trade = 0
+                rt.last_managed_bar_time = None
+                rt.restored_position = False
             log.info(f"CLOSED: {symbol} PnL=${pnl:+.2f}")
+
+    def _cancel_protective_orders(self, symbol: str) -> bool:
+        """Cancel broker-side children before a separate market exit."""
+        if symbol not in self._native_bracket_active and symbol not in self._broker_stop_active:
+            return True
+        cancel = getattr(self.broker, "cancel_open_orders", None)
+        if cancel is None:
+            return False
+        try:
+            cancelled = bool(cancel(symbol))
+        except Exception as exc:
+            log.error(f"Protective-order cancellation failed for {symbol}: {exc}")
+            return False
+        if cancelled:
+            self._native_bracket_active.discard(symbol)
+            self._broker_stop_active.discard(symbol)
+        return cancelled
+
+    def _restore_position_protection(self, symbol: str, position: Position) -> None:
+        """Reconcile or recreate broker-side protection after restart."""
+        try:
+            if self.broker.has_open_order(symbol):
+                self._broker_stop_active.add(symbol)
+                return
+            stop_price, _ = self._calc_exit_levels(
+                symbol, position.avg_price, position, is_crypto(symbol)
+            )
+            protective = self.broker.submit_protective_stop(
+                symbol,
+                abs(position.qty),
+                stop_price,
+                position_is_long=position.is_long,
+            )
+            if protective.status.value in {"REJECTED", "CANCELLED"}:
+                raise RuntimeError("broker rejected restored-position stop")
+            self._broker_stop_active.add(symbol)
+        except Exception as exc:
+            log.error(f"Could not protect restored position {symbol}: {exc}; closing it")
+            self._force_close(symbol, position, position.avg_price)
 
     def _check_regime_rotation(self) -> None:
         """Periodically re-check regime and rotate strategies if needed."""
@@ -1288,9 +1472,10 @@ class LiveTradingEngine:
                         self._bars_per_day(sym, self.timeframe),
                     )
                 rt.strategy.on_init()
-                real_pos = self.broker.get_position(sym)
+                flat = Position(symbol=sym)
                 for bar in rt.bars_buffer:
-                    rt.strategy.on_bar(bar, real_pos)
+                    rt.strategy.on_bar(bar, flat)
+                    rt.strategy.pop_pending_orders()
                 rt.warmup_done = True
 
         self._last_regime_check = now
@@ -1339,7 +1524,11 @@ class LiveTradingEngine:
             price = rt.bars_buffer[-1].close if rt and rt.bars_buffer else pos.avg_price
             pnl = (price - pos.avg_price) * pos.qty
             trail = self.trailing_stops.get_stop(sym)
-            qty_fmt = f"{abs(pos.qty):.4f}" if is_crypto(sym) else f"{abs(pos.qty):.0f}"
+            qty_fmt = (
+                f"{abs(pos.qty):.4f}"
+                if is_crypto(sym) or not float(abs(pos.qty)).is_integer()
+                else f"{abs(pos.qty):.0f}"
+            )
             lines.append(
                 f"    {sym:6s} {direction:5s} {qty_fmt} @ ${pos.avg_price:.2f} "
                 f"→ ${price:.2f}  PnL=${pnl:+.2f}  "
@@ -1370,30 +1559,21 @@ class LiveTradingEngine:
         """
         if any(is_crypto(s) for s in self.symbols):
             return True
-
-        from zoneinfo import ZoneInfo
-
-        et = datetime.now(ZoneInfo("America/New_York"))
-        if et.weekday() >= 5:
+        try:
+            return self.broker.is_market_open()
+        except Exception as exc:
+            log.warning(f"Could not verify Alpaca market clock: {exc}")
             return False
-        market_open = et.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = et.replace(hour=16, minute=0, second=0, microsecond=0)
-        return market_open <= et <= market_close
 
-    @staticmethod
-    def _is_symbol_tradable(symbol: str) -> bool:
+    def _is_symbol_tradable(self, symbol: str) -> bool:
         """Check if a specific symbol's market is open for trading."""
         if is_crypto(symbol):
             return True
-
-        from zoneinfo import ZoneInfo
-
-        et = datetime.now(ZoneInfo("America/New_York"))
-        if et.weekday() >= 5:
+        try:
+            return self.broker.is_market_open()
+        except Exception as exc:
+            log.warning(f"Could not verify market clock for {symbol}: {exc}")
             return False
-        market_open = et.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = et.replace(hour=16, minute=0, second=0, microsecond=0)
-        return market_open <= et <= market_close
 
     def _shutdown(self) -> None:
         """Clean up on shutdown."""
@@ -1407,7 +1587,11 @@ class LiveTradingEngine:
         for sym, pos in account.positions.items():
             if not pos.is_flat:
                 direction = "LONG" if pos.is_long else "SHORT"
-                qty_fmt = f"{abs(pos.qty):.4f}" if is_crypto(sym) else f"{abs(pos.qty):.0f}"
+                qty_fmt = (
+                    f"{abs(pos.qty):.4f}"
+                    if is_crypto(sym) or not float(abs(pos.qty)).is_integer()
+                    else f"{abs(pos.qty):.0f}"
+                )
                 log.info(f"    {sym}: {direction} {qty_fmt} @ ${pos.avg_price:.2f}")
         log.info("=" * 60)
         log.info("NOTE: Open positions remain on Alpaca. They will NOT be auto-closed.")

@@ -84,8 +84,8 @@ class GlobalMarketFilter:
         Args:
             benchmark_bars: historical bars for SPY (or the configured
                 benchmark). Must be at least `benchmark_sma_period` long to
-                produce a meaningful SMA; shorter inputs degrade to
-                "unknown -> allow" so the bot can still trade during warmup.
+                produce a meaningful SMA; shorter inputs fail closed so an
+                unavailable benchmark cannot silently enable new equity risk.
             vix_bars: historical bars for the VIX proxy. Optional — if None
                 or too short, only the SPY filter applies.
         """
@@ -99,7 +99,7 @@ class GlobalMarketFilter:
             )
 
         # SPY 200 SMA filter
-        spy_above = True
+        spy_above = False
         spy_reason = ""
         if benchmark_bars and len(benchmark_bars) >= self.benchmark_sma_period:
             closes = [b.close for b in benchmark_bars]
@@ -111,6 +111,12 @@ class GlobalMarketFilter:
                         f"{self.benchmark_symbol} below {self.benchmark_sma_period}-SMA "
                         f"({closes[-1]:.2f} < {sma_val:.2f})"
                     )
+        else:
+            received = len(benchmark_bars) if benchmark_bars else 0
+            spy_reason = (
+                f"insufficient {self.benchmark_symbol} history "
+                f"({received}/{self.benchmark_sma_period} bars)"
+            )
 
         # VIX proxy filter
         vix_high = False

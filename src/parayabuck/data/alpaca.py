@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
 from alpaca.data.requests import CryptoBarsRequest, StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
@@ -35,7 +36,13 @@ def parse_timeframe(tf: str) -> TimeFrame:
 class AlpacaDataSource(DataSource):
     """Historical and live stock bar data from Alpaca."""
 
-    def __init__(self, api_key: str, secret_key: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        stock_feed: str = "iex",
+        data_delayed: bool = False,
+    ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         self._crypto_client = CryptoHistoricalDataClient(api_key, secret_key)
         # alpaca-py never sets an HTTP timeout → a stalled bar fetch hangs the
@@ -45,6 +52,11 @@ class AlpacaDataSource(DataSource):
         patch_session_timeout(self._stock_client._session, timeout=30.0)
         patch_session_timeout(self._crypto_client._session, timeout=30.0)
         self._cache: dict[str, list[Bar]] = {}
+        feed_name = "delayed_sip" if data_delayed else stock_feed
+        try:
+            self._stock_feed = DataFeed(feed_name)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported Alpaca stock feed: {feed_name}") from exc
 
     def _fetch_bars(
         self,
@@ -60,11 +72,6 @@ class AlpacaDataSource(DataSource):
         start_dt = self._parse_dt(start) or (end_dt - timedelta(days=180))
 
         crypto = is_crypto(symbol)
-
-        # Free plan: can't query recent stock data (last ~15 min for SIP).
-        # Crypto has no such delay — it's real-time on the free plan.
-        if not crypto and end_dt > datetime.now(UTC) - timedelta(minutes=20):
-            end_dt = datetime.now(UTC) - timedelta(minutes=20)
 
         kind = "crypto" if crypto else "stock"
         log.info(f"Fetching {symbol} {timeframe} {kind} bars: {start_dt.date()} → {end_dt.date()}")
@@ -87,6 +94,8 @@ class AlpacaDataSource(DataSource):
                     start=start_dt,
                     end=end_dt,
                     limit=10000,
+                    feed=self._stock_feed,
+                    adjustment=Adjustment.ALL,
                 )
             )
         df = response.df
@@ -124,8 +133,9 @@ class AlpacaDataSource(DataSource):
         if val is None:
             return None
         if isinstance(val, datetime):
-            return val
-        return datetime.fromisoformat(val).replace(tzinfo=UTC)
+            return val.replace(tzinfo=UTC) if val.tzinfo is None else val.astimezone(UTC)
+        parsed = datetime.fromisoformat(val)
+        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
     def get_bars(
         self,

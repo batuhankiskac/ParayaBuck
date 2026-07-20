@@ -25,6 +25,7 @@ class ParamCombo:
     in_sample_result: BacktestResult | None = None
     out_of_sample_result: BacktestResult | None = None
     is_selected: bool = False
+    periods_per_year: int = 252
 
     @property
     def in_sample_pnl(self) -> float:
@@ -47,8 +48,9 @@ class ParamCombo:
         var_r = sum((r - mean_r) ** 2 for r in rets) / len(rets)
         if var_r <= 0:
             return 0.0
-        # Annualize roughly (252 bars/year for stocks).
-        sharpe = (mean_r * 252) / (var_r**0.5 * 252**0.5)
+        sharpe = (mean_r * self.periods_per_year) / (
+            var_r**0.5 * self.periods_per_year**0.5
+        )
         return float(sharpe)
 
 
@@ -181,7 +183,10 @@ def walk_forward_optimize(
     split_str = split_dt.isoformat()
 
     for i, params in enumerate(combos):
-        combo = ParamCombo(params=params)
+        combo = ParamCombo(
+            params=params,
+            periods_per_year=BacktestEngine._bars_per_year(symbol, timeframe),
+        )
         try:
             combo.in_sample_result = _run_single(
                 config, data_source, strategy_name, params,

@@ -53,11 +53,11 @@ def test_market_filter_disabled_allows_everything():
     assert state.allowed is True
 
 
-def test_market_filter_short_input_degrades_to_allow():
+def test_market_filter_short_input_fails_closed():
     """During warmup, with insufficient SPY history, the filter should
     degrade to allowed=True so the bot can still trade (rather than block
     everything for the first 200 bars)."""
     bars = _make_bars([100.0] * 50, symbol="SPY")
     mf = GlobalMarketFilter(benchmark_symbol="SPY")
     state = mf.evaluate(bars, vix_bars=None)
-    assert state.allowed is True
+    assert state.allowed is False

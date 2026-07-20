@@ -135,7 +135,7 @@ class BacktestEngine:
         start: str | None,
         end: str | None,
         starting_balance: float,
-    ) -> list[float]:
+    ) -> tuple[list[float], list[datetime]]:
         """Build a buy & hold SPY equity curve over the backtest period.
 
         The benchmark is a passive SPY buy & hold starting with the same
@@ -148,19 +148,31 @@ class BacktestEngine:
         alpha/beta) rather than failing the whole backtest.
         """
         if not self.benchmark_symbol:
-            return []
+            return [], []
         try:
             bars = self.data.get_bars(self.benchmark_symbol, timeframe, start, end)
         except Exception as e:
             log.warning(f"Benchmark {self.benchmark_symbol} fetch failed: {e}")
-            return []
+            return [], []
         if not bars:
-            return []
+            return [], []
         initial_price = bars[0].close
         if initial_price <= 0:
-            return []
+            return [], []
         shares = starting_balance / initial_price
-        return [shares * b.close for b in bars]
+        return [shares * b.close for b in bars], [b.timestamp for b in bars]
+
+    @staticmethod
+    def _bars_per_year(symbol: str, timeframe: str) -> int:
+        from parayabuck.utils import is_crypto
+
+        minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}
+        if timeframe == "1d":
+            return 365 if is_crypto(symbol) else 252
+        minutes_per_bar = minutes.get(timeframe, 60)
+        daily_minutes = 1440 if is_crypto(symbol) else 390
+        days = 365 if is_crypto(symbol) else 252
+        return int(days * daily_minutes / minutes_per_bar)
 
     def run(
         self,
@@ -200,14 +212,16 @@ class BacktestEngine:
         # Build the benchmark curve over the same period. Aligned post-hoc
         # by truncation in calculate_metrics when lengths differ (e.g. crypto
         # 24/7 vs SPY 6.5h sessions produce different bar counts).
-        benchmark_curve = self._build_benchmark_curve(
+        benchmark_curve, benchmark_timestamps = self._build_benchmark_curve(
             timeframe, start, end, self.config.account.starting_balance
         )
 
         max_dd = 0.0
         current_date = None
         equity_curve: list[float] = []
+        equity_timestamps: list[datetime] = []
         recorded_trade_ids: set[str | None] = set()
+        pending_orders: list[tuple[Order, datetime]] = []
 
         for bar in bars:
             # Reset daily PnL on new day
@@ -217,7 +231,24 @@ class BacktestEngine:
                     self.broker.reset_daily_pnl()
                 current_date = bar_date
 
-            # Update market price for this bar
+            # Orders generated from a completed bar can fill no earlier than a
+            # later bar. Evaluate them against this bar's open/high/low first.
+            self.broker.update_market_bar(bar, price=bar.open)
+            still_pending: list[tuple[Order, datetime]] = []
+            for pending, signal_time in pending_orders:
+                if pending.symbol != bar.symbol or bar.timestamp <= signal_time:
+                    still_pending.append((pending, signal_time))
+                    continue
+                checked = self.risk.check_order(pending, self.broker.get_account())
+                if checked is None:
+                    continue
+                result = self.broker.submit_order(checked)
+                if result.status.value == "PENDING":
+                    still_pending.append((result, signal_time))
+            pending_orders = still_pending
+
+            # Mark positions at the completed close before asking the strategy
+            # for a signal based on that close.
             self.broker.update_market_price(
                 bar.symbol, bar.close, bar.timestamp, bar_volume=bar.volume
             )
@@ -236,15 +267,19 @@ class BacktestEngine:
             # Drain any multi-leg pending orders (e.g. pairs B leg)
             orders_to_submit.extend(strategy.pop_pending_orders())
 
-            for od in orders_to_submit:
-                sized = self.position_sizer.size_order(od, self.broker.get_account())
+            for emitted in orders_to_submit:
+                sized = self.position_sizer.size_order(emitted, self.broker.get_account())
                 checked = self.risk.check_order(sized, self.broker.get_account())
                 if checked is not None:
-                    self.broker.submit_order(checked)
+                    pending_orders.append((checked, bar.timestamp))
 
             # Track max drawdown and equity curve
             account = self.broker.get_account()
-            equity_curve.append(account.equity)
+            if equity_timestamps and equity_timestamps[-1] == bar.timestamp:
+                equity_curve[-1] = account.equity
+            else:
+                equity_curve.append(account.equity)
+                equity_timestamps.append(bar.timestamp)
             max_dd = max(max_dd, account.drawdown)
 
             # Record NEWLY closed trades for Kelly (dedupe by order_id).
@@ -260,13 +295,20 @@ class BacktestEngine:
             self.risk.check_account(account)
             self.risk.tick_cooldown()
             if self.risk.is_halted:
-                log.warning(f"Trading halted: {self.risk.halt_reason}")
-                break
+                log.debug(f"New entries halted: {self.risk.halt_reason}")
 
         strategy.on_stop()
 
         return self._build_result(
-            strategy, symbol, timeframe, bars, max_dd, equity_curve, benchmark_curve
+            strategy,
+            symbol,
+            timeframe,
+            bars,
+            max_dd,
+            equity_curve,
+            benchmark_curve,
+            equity_timestamps,
+            benchmark_timestamps,
         )
 
     def _build_result(
@@ -278,6 +320,8 @@ class BacktestEngine:
         max_drawdown: float,
         equity_curve: list[float],
         benchmark_curve: list[float] | None = None,
+        equity_timestamps: list[datetime] | None = None,
+        benchmark_timestamps: list[datetime] | None = None,
     ) -> BacktestResult:
         account = self.broker.get_account()
         trades = account.trades
@@ -323,17 +367,15 @@ class BacktestEngine:
         # section rather than failing.
         from parayabuck.analytics.metrics import calculate_metrics
 
-        # Bars per year for annualization: stocks ~252 trading days, crypto
-        # 365. Detect from the symbol being traded.
-        from parayabuck.utils import is_crypto
-
-        bpd = 365 if is_crypto(symbol) else 252
+        periods_per_year = self._bars_per_year(symbol, timeframe)
         metrics = calculate_metrics(
             equity_curve=equity_curve,
             trades=trades,
             starting_balance=self.config.account.starting_balance,
-            bars_per_year=bpd,
+            bars_per_year=periods_per_year,
             benchmark_curve=benchmark_curve,
+            equity_timestamps=equity_timestamps,
+            benchmark_timestamps=benchmark_timestamps,
         )
 
         result = BacktestResult(

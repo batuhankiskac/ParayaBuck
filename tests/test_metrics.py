@@ -1,7 +1,7 @@
 """Unit tests for performance metrics and benchmark comparison."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from parayabuck.analytics.metrics import calculate_metrics
 from parayabuck.models import Trade
@@ -93,3 +93,18 @@ def test_metrics_win_rate_from_trades():
     assert m.avg_win == pytest_approx(50.0)
     assert m.avg_loss == pytest_approx(-30.0)
     assert m.profit_factor == pytest_approx(50.0 / 30.0)
+
+
+def test_benchmark_alignment_uses_matching_timestamps():
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    strategy_times = [start, start + timedelta(days=1), start + timedelta(days=2)]
+    benchmark_times = [start, start + timedelta(days=2)]
+    metrics = calculate_metrics(
+        [100.0, 110.0, 120.0],
+        trades=[],
+        starting_balance=100.0,
+        benchmark_curve=[100.0, 110.0],
+        equity_timestamps=strategy_times,
+        benchmark_timestamps=benchmark_times,
+    )
+    assert metrics.excess_return == pytest_approx(0.10)

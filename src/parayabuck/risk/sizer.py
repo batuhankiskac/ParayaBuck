@@ -74,6 +74,7 @@ class PositionSizer:
         # instead of being rounded to 0 shares. When False, stock quantities
         # are int-truncated (the legacy behaviour).
         fractional_shares: bool = False,
+        fixed_risk_amount: float | None = None,
     ) -> None:
         self.risk_pct = risk_pct
         self.crypto_risk_pct = crypto_risk_pct
@@ -88,6 +89,7 @@ class PositionSizer:
         self.min_stop_pct_crypto = min_stop_pct_crypto
         self.atr_tp_multiplier = atr_tp_multiplier
         self.fractional_shares = bool(fractional_shares)
+        self.fixed_risk_amount = fixed_risk_amount
 
         self._highs: dict[str, deque[float]] = {}
         self._lows: dict[str, deque[float]] = {}
@@ -148,7 +150,11 @@ class PositionSizer:
         equity = account.equity if account.equity > 0 else account.balance
 
         risk_pct = self.crypto_risk_pct if crypto else self.risk_pct
-        risk_amount = equity * risk_pct
+        risk_amount = (
+            self.fixed_risk_amount
+            if self.fixed_risk_amount is not None and not crypto
+            else equity * risk_pct
+        )
         qty = risk_amount / stop_distance
 
         if self.use_kelly:

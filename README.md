@@ -24,6 +24,17 @@ Uygulama çalıştırıldığında Web UI sunucusu başlar. Varsayılan olarak t
 
 Bot motoru güvenlik nedeniyle Web UI içinden **Motoru Başlat** düğmesine basıldığında çalışır. İlk kullanımda Alpaca kimlik bilgilerini Ayarlar sekmesinden (.env ve settings.yaml) girip kaydedebilirsiniz.
 
+Gerçek para modu ayrıca uygulama başlatılmadan önce açıkça etkinleştirilmelidir:
+
+```bash
+PARAYABUCK_ENABLE_LIVE=YES parayabuck
+```
+
+Bu değişken olmadan gerçek para motoru başlamaz. Uygulama güvenlik nedeniyle yalnızca
+`127.0.0.1`, `localhost` veya `::1` adresine bağlanır. Ücretsiz Alpaca hesaplarında
+gerçek zamanlı IEX verisi için `alpaca.stock_feed: iex`; uygun ücretli veri aboneliğinde
+`sip` kullanılabilir.
+
 ---
 
 ## Installation

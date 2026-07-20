@@ -30,17 +30,17 @@ SECTOR_MAP: dict[str, str] = {
     "XOM": "energy",
     "CVX": "energy",
     # Sector ETFs (SPDR sector SPDRs).
-    "XLK": "sector_etf",
-    "XLV": "sector_etf",
-    "XLE": "sector_etf",
-    "XLF": "sector_etf",
-    "XLY": "sector_etf",
-    "XLP": "sector_etf",
-    "XLI": "sector_etf",
-    "XLB": "sector_etf",
-    "XLU": "sector_etf",
-    "XLRE": "sector_etf",
-    "XLC": "sector_etf",
+    "XLK": "technology",
+    "XLV": "healthcare",
+    "XLE": "energy",
+    "XLF": "financial",
+    "XLY": "consumer_discretionary",
+    "XLP": "consumer_staples",
+    "XLI": "industrials",
+    "XLB": "materials",
+    "XLU": "utilities",
+    "XLRE": "real_estate",
+    "XLC": "communications",
     # Benchmark / safe-asset proxies.
     "BIL": "cash_proxy",
     "VIXY": "volatility_proxy",
@@ -82,6 +82,7 @@ class PortfolioRiskManager:
         min_cash_pct: float = 0.05,
         max_daily_loss: float = 0.0,
         max_drawdown: float = 0.0,
+        fractional_shares: bool = False,
     ) -> None:
         self.max_pct_per_position = max_pct_per_position
         self.max_pct_per_sector = max_pct_per_sector
@@ -92,6 +93,7 @@ class PortfolioRiskManager:
         # always allowed (we never block risk-reducing orders).
         self.max_daily_loss = max_daily_loss
         self.max_drawdown = max_drawdown
+        self.fractional_shares = fractional_shares
 
     def check_order(self, order: Order, account: Account, current_price: float) -> Order | None:
         """Return adjusted order if it passes portfolio risk, None if rejected.
@@ -134,7 +136,8 @@ class PortfolioRiskManager:
 
         crypto = is_crypto(order.symbol)
         # Crypto trades in fractional quantities; stocks are whole shares.
-        min_lot = 0.0001 if crypto else 1
+        fractional = crypto or self.fractional_shares
+        min_lot = 0.0001 if fractional else 1
 
         order_value = order.qty * current_price
         pct_of_equity = order_value / account.equity
@@ -142,7 +145,7 @@ class PortfolioRiskManager:
         # Check single position limit
         if pct_of_equity > self.max_pct_per_position:
             max_shares = (account.equity * self.max_pct_per_position) / current_price
-            if crypto:
+            if fractional:
                 max_shares = round(max_shares, 4)
             else:
                 max_shares = int(max_shares)
@@ -176,12 +179,11 @@ class PortfolioRiskManager:
             return None
 
         # Check max number of positions (only for new positions)
-        if order.side == Side.BUY:
-            if current_pos.is_flat:
-                active_positions = sum(1 for p in account.positions.values() if not p.is_flat)
-                if active_positions >= self.max_positions:
-                    log.warning(f"Order rejected: max positions ({self.max_positions}) reached")
-                    return None
+        if current_pos.is_flat:
+            active_positions = sum(1 for p in account.positions.values() if not p.is_flat)
+            if active_positions >= self.max_positions:
+                log.warning(f"Order rejected: max positions ({self.max_positions}) reached")
+                return None
 
         # Check cash buffer
         if order.side == Side.BUY:
@@ -189,7 +191,7 @@ class PortfolioRiskManager:
             available_cash = account.balance * (1 - self.min_cash_pct)
             if cash_needed > available_cash:
                 affordable = available_cash / current_price
-                if crypto:
+                if fractional:
                     affordable = round(affordable, 4)
                 else:
                     affordable = int(affordable)
@@ -232,7 +234,11 @@ class PortfolioRiskManager:
             if get_sector(sym) == sector:
                 # Use the order's price for the symbol being traded; for others
                 # fall back to avg cost (best available proxy without live quotes).
-                price = current_price if sym == new_order.symbol else pos.avg_price
+                price = (
+                    current_price
+                    if sym == new_order.symbol
+                    else (pos.current_price if pos.current_price is not None else pos.avg_price)
+                )
                 sector_value += abs(pos.qty) * price
 
         # Both BUY (new long) and SELL (new short) add gross exposure.

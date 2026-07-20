@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime
 
 from parayabuck.models import Trade
 
@@ -77,6 +78,8 @@ def calculate_metrics(
     bars_per_year: int = 252,
     risk_free_rate: float = 0.04,
     benchmark_curve: list[float] | None = None,
+    equity_timestamps: list[datetime] | None = None,
+    benchmark_timestamps: list[datetime] | None = None,
 ) -> PerformanceMetrics:
     """Calculate comprehensive performance metrics from equity curve and trades.
 
@@ -179,10 +182,42 @@ def calculate_metrics(
     excess_return = total_return_pct
     information_ratio = 0.0
     if benchmark_curve and len(benchmark_curve) >= 2:
-        # Align by truncating to the shorter curve.
-        n = min(len(equity_curve), len(benchmark_curve))
-        bench = benchmark_curve[-n:]
-        strat = equity_curve[-n:]
+        # Align on actual timestamps when available. Truncating a 24/7 crypto
+        # curve against regular-session SPY bars compares unrelated moments.
+        if (
+            equity_timestamps
+            and benchmark_timestamps
+            and len(equity_timestamps) == len(equity_curve)
+            and len(benchmark_timestamps) == len(benchmark_curve)
+        ):
+            strat_by_time = dict(zip(equity_timestamps, equity_curve, strict=True))
+            bench_by_time = dict(zip(benchmark_timestamps, benchmark_curve, strict=True))
+            common = sorted(set(strat_by_time) & set(bench_by_time))
+            strat = [strat_by_time[timestamp] for timestamp in common]
+            bench = [bench_by_time[timestamp] for timestamp in common]
+        else:
+            n = min(len(equity_curve), len(benchmark_curve))
+            bench = benchmark_curve[-n:]
+            strat = equity_curve[-n:]
+        if len(bench) < 2 or len(strat) < 2:
+            return PerformanceMetrics(
+                total_return=total_return,
+                total_return_pct=total_return_pct,
+                annualized_return=annualized_return,
+                sharpe_ratio=sharpe,
+                sortino_ratio=sortino,
+                max_drawdown=max_dd,
+                max_drawdown_pct=max_dd_pct,
+                calmar_ratio=calmar,
+                volatility=volatility,
+                win_rate=win_rate,
+                profit_factor=profit_factor,
+                avg_win=avg_win,
+                avg_loss=avg_loss,
+                expectancy=expectancy,
+                total_trades=len(closing_trades),
+                excess_return=total_return_pct,
+            )
         bench_return = (bench[-1] - bench[0]) / bench[0] if bench[0] > 0 else 0.0
         strat_return = (strat[-1] - strat[0]) / strat[0] if strat[0] > 0 else 0.0
         benchmark_return = bench_return

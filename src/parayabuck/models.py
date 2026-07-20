@@ -65,6 +65,7 @@ class Order:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     filled_at: datetime | None = None
     order_id: str | None = None
+    client_order_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.qty <= 0:
@@ -80,6 +81,7 @@ class Position:
     symbol: str
     qty: float = 0.0  # positive = long, negative = short, 0 = flat
     avg_price: float = 0.0
+    current_price: float | None = None
 
     @property
     def is_flat(self) -> bool:

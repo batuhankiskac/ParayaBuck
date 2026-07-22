@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from parayabuck.broker_models import Bar, Position
+from parayabuck.models import Bar, Position
 
 
 def make_bar(
@@ -120,7 +120,7 @@ def classify_signal(order) -> SignalType:
     """Classify an Order (or None) as a buy / sell / none signal."""
     if order is None:
         return "none"
-    from parayabuck.broker_models import Side
+    from parayabuck.models import Side
 
     return "buy" if order.side == Side.BUY else "sell"
 
@@ -131,7 +131,7 @@ def run_strategy(strategy, bars, position=None):
     Useful for one-shot assertions: "given this series, what's the final signal?".
     For multi-leg strategies (pairs, sector rotation), use `run_strategy_all`.
     """
-    from parayabuck.broker_models import Position as _Pos
+    from parayabuck.models import Position as _Pos
 
     pos = position if position is not None else _Pos(symbol=bars[0].symbol)
     last_order = None
@@ -146,7 +146,7 @@ def run_strategy(strategy, bars, position=None):
 
 def run_strategy_all(strategy, bars, position=None):
     """Feed `bars` to `strategy`; return all orders emitted (in order)."""
-    from parayabuck.broker_models import Position as _Pos
+    from parayabuck.models import Position as _Pos
 
     pos = position if position is not None else _Pos(symbol=bars[0].symbol)
     orders = []

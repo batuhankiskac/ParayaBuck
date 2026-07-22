@@ -1,13 +1,37 @@
 from __future__ import annotations
 
-from typing import Protocol
+from abc import ABC, abstractmethod
+from datetime import datetime
 
-from parayabuck.core.models import AccountSnapshot, Fill, OrderIntent, OrderState
+from parayabuck.models import Account, Order, Position
 
 
-class ExecutionBroker(Protocol):
-    def account(self) -> AccountSnapshot: ...
+class Broker(ABC):
+    """Abstract broker interface for order execution."""
 
-    def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]: ...
+    @abstractmethod
+    def submit_order(self, order: Order) -> Order:
+        """Submit an order and return the updated order with status."""
+        ...
 
-    def reconcile(self) -> None: ...
+    @abstractmethod
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel a pending order. Return True if cancelled."""
+        ...
+
+    @abstractmethod
+    def get_position(self, symbol: str) -> Position:
+        """Return current position for a symbol."""
+        ...
+
+    @abstractmethod
+    def get_account(self) -> Account:
+        """Return current account state."""
+        ...
+
+    @abstractmethod
+    def update_market_price(
+        self, symbol: str, price: float, timestamp: datetime | None = None
+    ) -> None:
+        """Update the current market price (used for unrealized PnL)."""
+        ...

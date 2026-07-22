@@ -1,3 +1,6 @@
-"""ParayaBuck — automated US stock trading bot with a Web UI."""
+"""ParayaBuck: event-driven, observable trading engine."""
 
-__version__ = "0.1.0"
+from parayabuck.config import EngineConfig, load_engine_config
+from parayabuck.engine import TradingEngine
+
+__all__ = ["TradingEngine", "EngineConfig", "load_engine_config"]

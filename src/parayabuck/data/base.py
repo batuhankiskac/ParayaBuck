@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from datetime import datetime
 
-from parayabuck.models import Bar
+from parayabuck.broker_models import Bar
 
 
 class DataSource(ABC):

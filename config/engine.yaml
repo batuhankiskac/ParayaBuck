@@ -1,0 +1,17 @@
+timeframe: 5m
+higher_timeframe: 1h
+minimum_signal_score: 65.0
+warmup_bars: 250
+shadow_mode: true
+decision_db_path: data/runtime/parayabuck.sqlite3
+risk:
+  risk_per_trade_pct: 0.005
+  max_position_pct: 0.10
+  max_crypto_exposure_pct: 0.20
+  max_sector_exposure_pct: 0.25
+  max_gross_exposure_pct: 0.60
+  max_positions: 5
+  daily_loss_limit_pct: 0.015
+  max_drawdown_pct: 0.10
+  minimum_risk_reward: 1.8
+  consecutive_loss_reduction_after: 3

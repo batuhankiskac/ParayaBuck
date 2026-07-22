@@ -1,191 +1,61 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
-from dotenv import load_dotenv
 
 
-@dataclass
-class SymbolSpec:
-    tick_size: float
-    point_value: float
+@dataclass(frozen=True)
+class RiskLimits:
+    risk_per_trade_pct: float = 0.005
+    max_position_pct: float = 0.10
+    max_crypto_exposure_pct: float = 0.20
+    max_sector_exposure_pct: float = 0.25
+    max_gross_exposure_pct: float = 0.60
+    max_positions: int = 5
+    daily_loss_limit_pct: float = 0.015
+    max_drawdown_pct: float = 0.10
+    minimum_risk_reward: float = 1.8
+    consecutive_loss_reduction_after: int = 3
 
-
-@dataclass
-class RiskConfig:
-    max_position_size: int
-    max_daily_loss: float
-    max_drawdown: float
-    risk_per_trade: float
-    commission_per_share: float
-    slippage_cents: float
-    stop_loss_pct: float = 0.04
-    take_profit_pct: float = 0.06
-    trail_pct: float = 0.03
-    crypto_stop_loss_pct: float = 0.025
-    crypto_take_profit_pct: float = 0.04
-    atr_stop_multiplier: float = 2.0
-    atr_tp_multiplier: float = 4.0
-    # Size fractional stock and crypto entries by dollar value instead of a
-    # fixed unit quantity. Buffers above Alpaca's minimum notional ($10 for
-    # crypto) prevent price movement before submission from invalidating orders.
-    min_stock_order_notional: float = 5.0
-    min_crypto_order_notional: float = 12.0
-
-
-@dataclass
-class AccountConfig:
-    starting_balance: float
-    currency: str
-
-
-@dataclass
-class StrategyConfig:
-    name: str
-    params: dict[str, Any]
-
-
-@dataclass
-class BacktestConfig:
-    symbol: str
-    timeframe: str
-    start: str
-    end: str
-
-
-@dataclass
-class PortfolioConfig:
-    max_pct_per_position: float
-    max_pct_per_sector: float
-    max_positions: int
-    min_cash_pct: float
-
-
-@dataclass
-class AlpacaConfig:
-    paper: bool
-    data_delayed: bool
-    # Enable fractional shares for stocks. Alpaca supports fractional qty on
-    # market orders for most liquid US equities — essential for small accounts
-    # so a $500 stock like NVDA can still be sized to a $50 risk target
-    # instead of being rounded to 0 shares.
-    fractional_shares: bool = True
-    # IEX is real-time and available on Alpaca Basic. Use SIP only when the
-    # account has the required market-data subscription.
-    stock_feed: str = "iex"
-
-
-@dataclass
-class AppConfig:
-    """General Web UI and live-engine runtime settings."""
-
-    host: str = "127.0.0.1"
-    port: int = 8000
-    open_browser: bool = True
-    log_level: str = "INFO"
-    timeframe: str = "15m"
-
-
-@dataclass
-class Config:
-    account: AccountConfig
-    risk: RiskConfig
-    symbols: dict[str, SymbolSpec]
-    strategy: StrategyConfig
-    backtest: BacktestConfig
-    alpaca: AlpacaConfig
-    app: AppConfig
-    raw: dict[str, Any]
-    portfolio: PortfolioConfig | None = None
-    strategy_allocations: dict[str, float] | None = None
-
-    def get_symbol_spec(self, symbol: str) -> SymbolSpec:
-        if symbol not in self.symbols:
-            raise KeyError(f"Symbol '{symbol}' not configured in settings.yaml")
-        return self.symbols[symbol]
-
-
-def load_config(config_path: str | None = None) -> Config:
-    load_dotenv()
-
-    path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-
-    with open(path) as f:
-        raw = yaml.safe_load(f)
-
-    symbols = {
-        name: SymbolSpec(
-            tick_size=s["tick_size"],
-            point_value=s["point_value"],
+    def __post_init__(self) -> None:
+        ratios = (
+            self.risk_per_trade_pct,
+            self.max_position_pct,
+            self.max_crypto_exposure_pct,
+            self.max_sector_exposure_pct,
+            self.max_gross_exposure_pct,
+            self.daily_loss_limit_pct,
+            self.max_drawdown_pct,
         )
-        for name, s in raw.get("symbols", {}).items()
-    }
-
-    portfolio_raw = raw.get("portfolio")
-    portfolio_cfg: PortfolioConfig | None = None
-    if portfolio_raw:
-        portfolio_cfg = PortfolioConfig(**portfolio_raw)
-
-    config = Config(
-        account=AccountConfig(**raw["account"]),
-        risk=RiskConfig(**raw["risk"]),
-        symbols=symbols,
-        strategy=StrategyConfig(**raw["strategy"]),
-        backtest=BacktestConfig(**raw["backtest"]),
-        alpaca=AlpacaConfig(**raw.get("alpaca", {"paper": True, "data_delayed": False})),
-        app=AppConfig(**raw.get("app", {})),
-        raw=raw,
-        portfolio=portfolio_cfg,
-        strategy_allocations=raw.get("strategy_allocations"),
-    )
-    _validate_config(config)
-    return config
+        if any(value <= 0 or value > 1 for value in ratios):
+            raise ValueError("Risk ratios must be in (0, 1]")
+        if self.max_positions <= 0 or self.minimum_risk_reward <= 0:
+            raise ValueError("Invalid risk limits")
 
 
-def _validate_config(config: Config) -> None:
-    """Reject unsafe or internally inconsistent runtime settings early."""
-    if config.account.starting_balance <= 0:
-        raise ValueError("account.starting_balance must be positive")
-    if config.risk.max_position_size <= 0:
-        raise ValueError("risk.max_position_size must be positive")
-    for name in ("max_daily_loss", "max_drawdown", "risk_per_trade"):
-        if getattr(config.risk, name) <= 0:
-            raise ValueError(f"risk.{name} must be positive")
-    for name in (
-        "stop_loss_pct",
-        "take_profit_pct",
-        "trail_pct",
-        "crypto_stop_loss_pct",
-        "crypto_take_profit_pct",
-        "atr_stop_multiplier",
-        "atr_tp_multiplier",
-        "min_stock_order_notional",
-        "min_crypto_order_notional",
-    ):
-        if getattr(config.risk, name) <= 0:
-            raise ValueError(f"risk.{name} must be positive")
-    if config.app.timeframe not in {"1m", "5m", "15m", "30m", "1h", "1d"}:
-        raise ValueError(f"Unsupported app.timeframe: {config.app.timeframe}")
-    if config.alpaca.stock_feed not in {"iex", "sip", "delayed_sip"}:
-        raise ValueError("alpaca.stock_feed must be iex, sip, or delayed_sip")
-    for symbol, spec in config.symbols.items():
-        if spec.tick_size <= 0 or spec.point_value <= 0:
-            raise ValueError(f"symbols.{symbol} tick_size and point_value must be positive")
-    if config.strategy_allocations is not None:
-        if any(weight < 0 for weight in config.strategy_allocations.values()):
-            raise ValueError("strategy_allocations may not contain negative weights")
-        if sum(config.strategy_allocations.values()) <= 0:
-            raise ValueError("strategy_allocations must have a positive total")
-    if config.portfolio is not None:
-        for name in ("max_pct_per_position", "max_pct_per_sector", "min_cash_pct"):
-            value = getattr(config.portfolio, name)
-            if not 0 <= value <= 1:
-                raise ValueError(f"portfolio.{name} must be between 0 and 1")
-        if config.portfolio.max_positions <= 0:
-            raise ValueError("portfolio.max_positions must be positive")
+@dataclass(frozen=True)
+class EngineConfig:
+    timeframe: str = "5m"
+    higher_timeframe: str = "1h"
+    minimum_signal_score: float = 65.0
+    warmup_bars: int = 250
+    shadow_mode: bool = True
+    decision_db_path: str = "data/runtime/parayabuck.sqlite3"
+    risk: RiskLimits = field(default_factory=RiskLimits)
+
+    def __post_init__(self) -> None:
+        if self.timeframe not in {"1m", "5m", "15m", "30m", "1h", "1d"}:
+            raise ValueError("Unsupported timeframe")
+        if not 0 <= self.minimum_signal_score <= 100 or self.warmup_bars < 50:
+            raise ValueError("Invalid signal score or warmup")
+
+
+def load_engine_config(path: str = "config/engine.yaml") -> EngineConfig:
+    config_path = Path(path)
+    if not config_path.exists():
+        return EngineConfig()
+    raw = yaml.safe_load(config_path.read_text()) or {}
+    risk = RiskLimits(**raw.pop("risk", {}))
+    return EngineConfig(risk=risk, **raw)

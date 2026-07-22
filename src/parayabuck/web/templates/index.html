@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ParayaBuck V2 — Algorithmic Trading Terminal</title>
+    <title>ParayaBuck — Algorithmic Trading Terminal</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -168,7 +168,7 @@
                 <div id="terminalLogView" class="terminal-view">
                     <div class="log-line info">
                         <span class="log-time">[SYSTEM]</span>
-                        <span class="log-msg">ParayaBuck V2 Web Terminal bağlantısı kuruldu.</span>
+                        <span class="log-msg">ParayaBuck Web Terminal bağlantısı kuruldu.</span>
                     </div>
                 </div>
             </section>
@@ -204,18 +204,18 @@
                 <div class="settings-section-title">Risk sınırları</div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="maxDailyLoss">Maks. Günlük Loss ($)</label>
-                        <input type="number" id="maxDailyLoss" step="10" value="300">
+                        <label for="maxDailyLoss">Maks. Günlük Zarar (%)</label>
+                        <input type="number" id="maxDailyLoss" step="0.1" min="0.01" max="100" value="1.5">
                     </div>
                     <div class="form-group">
-                        <label for="maxDrawdown">Maks. Drawdown ($)</label>
-                        <input type="number" id="maxDrawdown" step="50" value="1500">
+                        <label for="maxDrawdown">Maks. Drawdown (%)</label>
+                        <input type="number" id="maxDrawdown" step="0.1" min="0.01" max="100" value="10">
                     </div>
                 </div>
 
                 <details class="advanced-settings">
                     <summary>Gelişmiş program ayarları</summary>
-                    <p class="settings-note">V2 motoru veriyi WebSocket üzerinden alır. İşlem periyodu ve teknik sunucu ayarları burada bulunur.</p>
+                    <p class="settings-note">Motor veriyi WebSocket üzerinden alır. İşlem periyodu ve teknik sunucu ayarları burada bulunur.</p>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="timeframe">İşlem periyodu</label>

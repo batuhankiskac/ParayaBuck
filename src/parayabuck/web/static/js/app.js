@@ -300,8 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 secretKeyInput.placeholder = 'Mevcut secret korunacak';
             }
             paperModeCheck.checked = data.paper_mode;
-            maxDailyLossInput.value = data.max_daily_loss || 300;
-            maxDrawdownInput.value = data.max_drawdown || 1500;
+            maxDailyLossInput.value = data.daily_loss_limit_pct || 1.5;
+            maxDrawdownInput.value = data.max_drawdown_pct || 10;
             timeframeInput.value = data.timeframe || '15m';
             hostInput.value = data.host || '127.0.0.1';
             portInput.value = data.port || 8000;
@@ -324,8 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
             api_key: apiKeyInput.value.trim(),
             secret_key: secretKeyInput.value.trim(),
             paper_mode: paperModeCheck.checked,
-            max_daily_loss: parseFloat(maxDailyLossInput.value),
-            max_drawdown: parseFloat(maxDrawdownInput.value),
+            daily_loss_limit_pct: parseFloat(maxDailyLossInput.value),
+            max_drawdown_pct: parseFloat(maxDrawdownInput.value),
             timeframe: timeframeInput.value,
             host: hostInput.value.trim(),
             port: parseInt(portInput.value, 10),

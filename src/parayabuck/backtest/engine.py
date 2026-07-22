@@ -1,407 +1,110 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
+import math
+from dataclasses import dataclass
+from itertools import groupby
 
-from tabulate import tabulate
-
-from parayabuck.config import Config
-from parayabuck.data.base import DataSource
-from parayabuck.execution.paper import PaperBroker
-from parayabuck.logger import get_logger
-from parayabuck.models import Bar, Order
-from parayabuck.risk.manager import RiskManager
-from parayabuck.risk.sizer import PositionSizer
-from parayabuck.strategy.base import Strategy
-
-log = get_logger("parayabuck.backtest")
+from parayabuck.backtest.broker import BacktestBroker
+from parayabuck.config import EngineConfig
+from parayabuck.core.models import Bar
+from parayabuck.engine import TradingEngine
+from parayabuck.strategies.base import Strategy
 
 
-@dataclass
+@dataclass(frozen=True)
 class BacktestResult:
-    symbol: str
-    timeframe: str
-    start: datetime
-    end: datetime
-    total_bars: int
-    total_trades: int
-    starting_balance: float
-    ending_balance: float
+    starting_equity: float
     ending_equity: float
-    total_pnl: float
+    total_return: float
+    benchmark_return: float
+    excess_return: float
     max_drawdown: float
+    total_trades: int
     win_rate: float
-    avg_win: float
-    avg_loss: float
     profit_factor: float
-    trades: list[dict[str, Any]] = field(default_factory=list)
-    equity_curve: list[float] = field(default_factory=list)
-    # Benchmark comparison: SPY buy & hold over the same period, started
-    # with the same balance. Populated when the engine could fetch SPY
-    # bars; empty when SPY data was unavailable.
-    benchmark_curve: list[float] = field(default_factory=list)
-    benchmark_return: float = 0.0
-    alpha: float = 0.0
-    beta: float = 0.0
-    excess_return: float = 0.0
-    information_ratio: float = 0.0
-
-    def summary(self) -> str:
-        lines = [
-            "",
-            "=" * 60,
-            "  BACKTEST RESULTS",
-            "=" * 60,
-            f"  Symbol:            {self.symbol} ({self.timeframe})",
-            f"  Period:            {self.start.date()} → {self.end.date()}",
-            f"  Total bars:        {self.total_bars:,}",
-            f"  Total trades:      {self.total_trades}",
-            "",
-            f"  Starting balance:  ${self.starting_balance:,.2f}",
-            f"  Ending balance:    ${self.ending_balance:,.2f}",
-            f"  Ending equity:     ${self.ending_equity:,.2f}",
-            f"  Total PnL:         ${self.total_pnl:,.2f}",
-            f"  Max drawdown:      ${self.max_drawdown:,.2f}",
-            "",
-            f"  Win rate:          {self.win_rate:.1%}",
-            f"  Avg win:           ${self.avg_win:,.2f}",
-            f"  Avg loss:          ${self.avg_loss:,.2f}",
-            f"  Profit factor:     {self.profit_factor:.2f}",
-        ]
-        if self.benchmark_curve:
-            lines.append("")
-            lines.append("  vs. SPY buy & hold:")
-            lines.append(f"  Benchmark return:  {self.benchmark_return:+.2%}")
-            lines.append(f"  Excess return:     {self.excess_return:+.2%}")
-            lines.append(f"  Alpha (annual):    {self.alpha:+.2%}")
-            lines.append(f"  Beta:              {self.beta:.2f}")
-            lines.append(f"  Info ratio:        {self.information_ratio:.2f}")
-        lines.append("=" * 60)
-        lines.append("")
-        return "\n".join(lines)
-
-    def trade_table(self, last_n: int = 20) -> str:
-        if not self.trades:
-            return "  (no trades)"
-        rows = []
-        for t in self.trades[-last_n:]:
-            rows.append(
-                [
-                    t["timestamp"].strftime("%Y-%m-%d %H:%M"),
-                    t["side"],
-                    t["qty"],
-                    f"{t['price']:.2f}",
-                    f"${t['pnl']:+.2f}",
-                ]
-            )
-        return str(
-            tabulate(rows, headers=["Time", "Side", "Qty", "Price", "PnL"], tablefmt="simple")
-        )
+    expectancy: float
+    sharpe: float
+    sortino: float
+    equity_curve: tuple[float, ...]
+    realized_pnls: tuple[float, ...]
 
 
 class BacktestEngine:
-    """Event-driven backtest engine.
-
-    Iterates over historical bars, feeds them to the strategy, passes
-    any generated orders through the risk manager, and executes them
-    on the paper broker.
-    """
-
     def __init__(
         self,
-        config: Config,
-        data_source: DataSource,
-        broker: PaperBroker,
-        risk_manager: RiskManager,
-        position_sizer: PositionSizer | None = None,
-        benchmark_symbol: str | None = "SPY",
+        config: EngineConfig | None = None,
+        starting_equity: float = 10_000.0,
+        slippage_bps: float = 2.0,
+        commission: float = 0.0,
+        strategies: tuple[Strategy, ...] | None = None,
     ) -> None:
-        self.config = config
-        self.data = data_source
-        self.broker = broker
-        self.risk = risk_manager
-        self.position_sizer = position_sizer or PositionSizer(
-            risk_pct=config.risk.risk_per_trade / config.account.starting_balance,
-            max_qty=config.risk.max_position_size,
+        self.config = config or EngineConfig()
+        self.broker = BacktestBroker(starting_equity, slippage_bps, commission)
+        self.engine = TradingEngine(self.broker, self.config, strategies)
+        self.starting_equity = starting_equity
+
+    def run(self, bars: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
+        if warmup:
+            self.engine.seed(warmup)
+        ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))
+        curve: list[float] = []
+        recorded_pnls = 0
+        for _, grouped in groupby(ordered, key=lambda bar: bar.timestamp):
+            cycle = list(grouped)
+            for bar in cycle:
+                self.broker.advance(bar)
+            for pnl in self.broker.realized_pnls[recorded_pnls:]:
+                self.engine.risk.record_realized_pnl(pnl)
+            recorded_pnls = len(self.broker.realized_pnls)
+            self.engine.process_cycle(cycle)
+            curve.append(self.broker.account().equity)
+        benchmark_return = (
+            ordered[-1].close / ordered[0].close - 1
+            if len({bar.symbol for bar in ordered}) == 1 and ordered[0].close > 0
+            else 0.0
         )
-        # Benchmark symbol for buy & hold comparison. Set to None/empty to
-        # disable the benchmark (useful when SPY isn't available).
-        self.benchmark_symbol = benchmark_symbol or None
+        return self._result(curve, benchmark_return)
 
-    def _build_benchmark_curve(
-        self,
-        timeframe: str,
-        start: str | None,
-        end: str | None,
-        starting_balance: float,
-    ) -> tuple[list[float], list[datetime]]:
-        """Build a buy & hold SPY equity curve over the backtest period.
-
-        The benchmark is a passive SPY buy & hold starting with the same
-        balance as the strategy. We size the initial position so that
-        starting_balance buys as many SPY shares as affordable, then track
-        the equity = shares * bar_close at each bar.
-
-        Returns an empty list when benchmark data is unavailable — the
-        strategy's metrics then degrade to the no-benchmark path (no
-        alpha/beta) rather than failing the whole backtest.
-        """
-        if not self.benchmark_symbol:
-            return [], []
-        try:
-            bars = self.data.get_bars(self.benchmark_symbol, timeframe, start, end)
-        except Exception as e:
-            log.warning(f"Benchmark {self.benchmark_symbol} fetch failed: {e}")
-            return [], []
-        if not bars:
-            return [], []
-        initial_price = bars[0].close
-        if initial_price <= 0:
-            return [], []
-        shares = starting_balance / initial_price
-        return [shares * b.close for b in bars], [b.timestamp for b in bars]
+    def _result(self, curve: list[float], benchmark_return: float) -> BacktestResult:
+        ending = curve[-1] if curve else self.starting_equity
+        peak = self.starting_equity
+        max_drawdown = 0.0
+        for equity in curve:
+            peak = max(peak, equity)
+            max_drawdown = max(max_drawdown, (peak - equity) / peak if peak else 0.0)
+        pnls = self.broker.realized_pnls
+        wins = [pnl for pnl in pnls if pnl > 0]
+        losses = [pnl for pnl in pnls if pnl < 0]
+        returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
+        downside = [value for value in returns if value < 0]
+        mean_return = sum(returns) / len(returns) if returns else 0.0
+        std = self._stddev(returns)
+        downside_std = self._stddev(downside)
+        annualizer = math.sqrt(252 * 78)  # default 5m equity bars; comparative, not predictive
+        gross_profit = sum(wins)
+        gross_loss = abs(sum(losses))
+        return BacktestResult(
+            starting_equity=self.starting_equity,
+            ending_equity=ending,
+            total_return=ending / self.starting_equity - 1,
+            benchmark_return=benchmark_return,
+            excess_return=ending / self.starting_equity - 1 - benchmark_return,
+            max_drawdown=max_drawdown,
+            total_trades=len(pnls),
+            win_rate=len(wins) / len(pnls) if pnls else 0.0,
+            profit_factor=gross_profit / gross_loss
+            if gross_loss > 0
+            else (math.inf if gross_profit > 0 else 0.0),
+            expectancy=sum(pnls) / len(pnls) if pnls else 0.0,
+            sharpe=mean_return / std * annualizer if std > 0 else 0.0,
+            sortino=mean_return / downside_std * annualizer if downside_std > 0 else 0.0,
+            equity_curve=tuple(curve),
+            realized_pnls=tuple(pnls),
+        )
 
     @staticmethod
-    def _bars_per_year(symbol: str, timeframe: str) -> int:
-        from parayabuck.utils import is_crypto
-
-        minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}
-        if timeframe == "1d":
-            return 365 if is_crypto(symbol) else 252
-        minutes_per_bar = minutes.get(timeframe, 60)
-        daily_minutes = 1440 if is_crypto(symbol) else 390
-        days = 365 if is_crypto(symbol) else 252
-        return int(days * daily_minutes / minutes_per_bar)
-
-    def run(
-        self,
-        strategy: Strategy,
-        symbol: str,
-        timeframe: str,
-        start: str | None = None,
-        end: str | None = None,
-    ) -> BacktestResult:
-        log.info(f"Starting backtest: {strategy.name} on {symbol} {timeframe}")
-        strategy.on_init()
-
-        # Multi-symbol strategies (e.g. pairs) declare the symbols they consume.
-        symbols = strategy.symbols if strategy.symbols else [symbol]
-        bars_by_symbol: dict[str, list[Bar]] = {}
-        for s in symbols:
-            bs = self.data.get_bars(s, timeframe, start, end)
-            if not bs:
-                if s == symbol:
-                    raise ValueError(f"No bars found for {s} {timeframe}")
-                log.warning(f"No bars for auxiliary symbol {s}; strategy may misbehave")
-            bars_by_symbol[s] = bs
-
-        # Interleave bars by timestamp so multi-symbol strategies see them in order.
-        indexed: list[tuple[datetime, Bar]] = []
-        for s, bs in bars_by_symbol.items():
-            for b in bs:
-                indexed.append((b.timestamp, b))
-        indexed.sort(key=lambda x: x[0])
-        bars = [b for _, b in indexed]
-
-        log.info(
-            f"Loaded {len(bars):,} bars across {len(symbols)} symbol(s) "
-            f"from {bars[0].timestamp} to {bars[-1].timestamp}"
-        )
-
-        # Build the benchmark curve over the same period. Aligned post-hoc
-        # by truncation in calculate_metrics when lengths differ (e.g. crypto
-        # 24/7 vs SPY 6.5h sessions produce different bar counts).
-        benchmark_curve, benchmark_timestamps = self._build_benchmark_curve(
-            timeframe, start, end, self.config.account.starting_balance
-        )
-
-        max_dd = 0.0
-        current_date = None
-        equity_curve: list[float] = []
-        equity_timestamps: list[datetime] = []
-        recorded_trade_ids: set[str | None] = set()
-        pending_orders: list[tuple[Order, datetime]] = []
-
-        for bar in bars:
-            # Reset daily PnL on new day
-            bar_date = bar.timestamp.date()
-            if current_date != bar_date:
-                if current_date is not None:
-                    self.broker.reset_daily_pnl()
-                current_date = bar_date
-
-            # Orders generated from a completed bar can fill no earlier than a
-            # later bar. Evaluate them against this bar's open/high/low first.
-            self.broker.update_market_bar(bar, price=bar.open)
-            still_pending: list[tuple[Order, datetime]] = []
-            for pending, signal_time in pending_orders:
-                if pending.symbol != bar.symbol or bar.timestamp <= signal_time:
-                    still_pending.append((pending, signal_time))
-                    continue
-                checked = self.risk.check_order(pending, self.broker.get_account())
-                if checked is None:
-                    continue
-                result = self.broker.submit_order(checked)
-                if result.status.value == "PENDING":
-                    still_pending.append((result, signal_time))
-            pending_orders = still_pending
-
-            # Mark positions at the completed close before asking the strategy
-            # for a signal based on that close.
-            self.broker.update_market_price(
-                bar.symbol, bar.close, bar.timestamp, bar_volume=bar.volume
-            )
-
-            # Update position sizer history
-            self.position_sizer.update_history(bar.symbol, bar.high, bar.low, bar.close)
-
-            # Get current position
-            position = self.broker.get_position(bar.symbol)
-
-            # Ask strategy for an order
-            order = strategy.on_bar(bar, position)
-            orders_to_submit: list[Order] = []
-            if order is not None:
-                orders_to_submit.append(order)
-            # Drain any multi-leg pending orders (e.g. pairs B leg)
-            orders_to_submit.extend(strategy.pop_pending_orders())
-
-            for emitted in orders_to_submit:
-                sized = self.position_sizer.size_order(emitted, self.broker.get_account())
-                checked = self.risk.check_order(sized, self.broker.get_account())
-                if checked is not None:
-                    pending_orders.append((checked, bar.timestamp))
-
-            # Track max drawdown and equity curve
-            account = self.broker.get_account()
-            if equity_timestamps and equity_timestamps[-1] == bar.timestamp:
-                equity_curve[-1] = account.equity
-            else:
-                equity_curve.append(account.equity)
-                equity_timestamps.append(bar.timestamp)
-            max_dd = max(max_dd, account.drawdown)
-
-            # Record NEWLY closed trades for Kelly (dedupe by order_id).
-            for t in account.trades:
-                if not t.closes_position:
-                    continue
-                if t.order_id in recorded_trade_ids:
-                    continue
-                recorded_trade_ids.add(t.order_id)
-                self.position_sizer.record_trade(t.symbol, t.realized_pnl)
-
-            # Check risk halt and tick cooldown each bar
-            self.risk.check_account(account)
-            self.risk.tick_cooldown()
-            if self.risk.is_halted:
-                log.debug(f"New entries halted: {self.risk.halt_reason}")
-
-        strategy.on_stop()
-
-        return self._build_result(
-            strategy,
-            symbol,
-            timeframe,
-            bars,
-            max_dd,
-            equity_curve,
-            benchmark_curve,
-            equity_timestamps,
-            benchmark_timestamps,
-        )
-
-    def _build_result(
-        self,
-        strategy: Strategy,
-        symbol: str,
-        timeframe: str,
-        bars: list[Bar],
-        max_drawdown: float,
-        equity_curve: list[float],
-        benchmark_curve: list[float] | None = None,
-        equity_timestamps: list[datetime] | None = None,
-        benchmark_timestamps: list[datetime] | None = None,
-    ) -> BacktestResult:
-        account = self.broker.get_account()
-        trades = account.trades
-
-        # Use realized_pnl from each trade (closing fills have it, entries = -commission)
-        trade_pnls: list[dict[str, Any]] = []
-        wins: list[float] = []
-        losses: list[float] = []
-        gross_profit = 0.0
-        gross_loss = 0.0
-
-        for t in trades:
-            pnl = t.realized_pnl
-            trade_pnls.append(
-                {
-                    "timestamp": t.timestamp,
-                    "side": t.side.value,
-                    "qty": t.qty,
-                    "price": t.price,
-                    "pnl": pnl,
-                }
-            )
-            # Only closing fills count toward win/loss stats (entries have no PnL).
-            if not t.closes_position:
-                continue
-            if pnl > 0:
-                wins.append(pnl)
-                gross_profit += pnl
-            elif pnl < 0:
-                losses.append(pnl)
-                gross_loss += abs(pnl)
-
-        # Win rate is over closing trades only.
-        closing_trades = [t for t in trades if t.closes_position]
-        win_rate = len(wins) / len(closing_trades) if closing_trades else 0.0
-        avg_win = sum(wins) / len(wins) if wins else 0.0
-        avg_loss = sum(losses) / len(losses) if losses else 0.0
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
-
-        # Benchmark-relative metrics. When benchmark_curve is empty (e.g.
-        # SPY data unavailable on the configured plan), all benchmark fields
-        # stay at their defaults — the report just omits the benchmark
-        # section rather than failing.
-        from parayabuck.analytics.metrics import calculate_metrics
-
-        periods_per_year = self._bars_per_year(symbol, timeframe)
-        metrics = calculate_metrics(
-            equity_curve=equity_curve,
-            trades=trades,
-            starting_balance=self.config.account.starting_balance,
-            bars_per_year=periods_per_year,
-            benchmark_curve=benchmark_curve,
-            equity_timestamps=equity_timestamps,
-            benchmark_timestamps=benchmark_timestamps,
-        )
-
-        result = BacktestResult(
-            symbol=symbol,
-            timeframe=timeframe,
-            start=bars[0].timestamp,
-            end=bars[-1].timestamp,
-            total_bars=len(bars),
-            total_trades=len(trades),
-            starting_balance=self.config.account.starting_balance,
-            ending_balance=account.balance,
-            ending_equity=account.equity,
-            total_pnl=account.equity - self.config.account.starting_balance,
-            max_drawdown=max_drawdown,
-            win_rate=win_rate,
-            avg_win=avg_win,
-            avg_loss=avg_loss,
-            profit_factor=profit_factor,
-            trades=trade_pnls,
-            equity_curve=equity_curve,
-            benchmark_curve=benchmark_curve or [],
-            benchmark_return=metrics.benchmark_return,
-            alpha=metrics.alpha,
-            beta=metrics.beta,
-            excess_return=metrics.excess_return,
-            information_ratio=metrics.information_ratio,
-        )
-
-        return result
+    def _stddev(values: list[float]) -> float:
+        if len(values) < 2:
+            return 0.0
+        mean = sum(values) / len(values)
+        return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))

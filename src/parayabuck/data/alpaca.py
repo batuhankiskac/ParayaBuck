@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -9,15 +8,14 @@ from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDa
 from alpaca.data.requests import CryptoBarsRequest, StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
-from parayabuck.data.base import DataSource
+from parayabuck.core.models import Bar, Market
 from parayabuck.logger import get_logger
-from parayabuck.models import Bar
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.data.alpaca")
 
-_TIMEFRAME_MAP: dict[str, TimeFrame] = {
+_TIMEFRAMES = {
     "1m": TimeFrame(1, TimeFrameUnit.Minute),
     "5m": TimeFrame(5, TimeFrameUnit.Minute),
     "15m": TimeFrame(15, TimeFrameUnit.Minute),
@@ -27,14 +25,8 @@ _TIMEFRAME_MAP: dict[str, TimeFrame] = {
 }
 
 
-def parse_timeframe(tf: str) -> TimeFrame:
-    if tf not in _TIMEFRAME_MAP:
-        raise ValueError(f"Unsupported timeframe '{tf}'. Supported: {list(_TIMEFRAME_MAP)}")
-    return _TIMEFRAME_MAP[tf]
-
-
-class AlpacaDataSource(DataSource):
-    """Historical and live stock bar data from Alpaca."""
+class AlpacaHistoricalData:
+    """Bounded Alpaca REST client used to warm up the streaming engine."""
 
     def __init__(
         self,
@@ -45,97 +37,13 @@ class AlpacaDataSource(DataSource):
     ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         self._crypto_client = CryptoHistoricalDataClient(api_key, secret_key)
-        # alpaca-py never sets an HTTP timeout → a stalled bar fetch hangs the
-        # engine for tens of minutes (observed 19-26 min hangs in production).
-        # Bound every request; the engine's per-symbol try/except then logs
-        # and skips the symbol instead of locking up the whole cycle.
         patch_session_timeout(self._stock_client._session, timeout=30.0)
         patch_session_timeout(self._crypto_client._session, timeout=30.0)
-        self._cache: dict[str, list[Bar]] = {}
-        feed_name = "delayed_sip" if data_delayed else stock_feed
+        feed = "delayed_sip" if data_delayed else stock_feed
         try:
-            self._stock_feed = DataFeed(feed_name)
+            self._stock_feed = DataFeed(feed)
         except ValueError as exc:
-            raise ValueError(f"Unsupported Alpaca stock feed: {feed_name}") from exc
-
-    def _fetch_bars(
-        self,
-        symbol: str,
-        timeframe: str,
-        start: datetime | str | None,
-        end: datetime | str | None,
-    ) -> list[Bar]:
-        tf = parse_timeframe(timeframe)
-
-        # Default: last 6 months if not specified
-        end_dt = self._parse_dt(end) or datetime.now(UTC)
-        start_dt = self._parse_dt(start) or (end_dt - timedelta(days=180))
-
-        crypto = is_crypto(symbol)
-
-        kind = "crypto" if crypto else "stock"
-        log.info(f"Fetching {symbol} {timeframe} {kind} bars: {start_dt.date()} → {end_dt.date()}")
-        response: Any
-        if crypto:
-            response = self._crypto_client.get_crypto_bars(
-                CryptoBarsRequest(
-                    symbol_or_symbols=symbol,
-                    timeframe=tf,
-                    start=start_dt,
-                    end=end_dt,
-                    limit=10000,
-                )
-            )
-        else:
-            response = self._stock_client.get_stock_bars(
-                StockBarsRequest(
-                    symbol_or_symbols=symbol,
-                    timeframe=tf,
-                    start=start_dt,
-                    end=end_dt,
-                    limit=10000,
-                    feed=self._stock_feed,
-                    adjustment=Adjustment.ALL,
-                )
-            )
-        df = response.df
-
-        if df.empty:
-            return []
-
-        # df is multi-indexed (symbol, timestamp), reset to get columns
-        df = df.reset_index()
-        df = df.sort_values("timestamp")
-
-        bars: list[Bar] = []
-        for row in df.itertuples(index=False):
-            ts = row.timestamp
-            if hasattr(ts, "to_pydatetime"):
-                ts = ts.to_pydatetime()
-            bars.append(
-                Bar(
-                    timestamp=ts,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    open=float(row.open),
-                    high=float(row.high),
-                    low=float(row.low),
-                    close=float(row.close),
-                    volume=int(row.volume),
-                )
-            )
-
-        log.info(f"Got {len(bars)} bars for {symbol}")
-        return bars
-
-    @staticmethod
-    def _parse_dt(val: datetime | str | None) -> datetime | None:
-        if val is None:
-            return None
-        if isinstance(val, datetime):
-            return val.replace(tzinfo=UTC) if val.tzinfo is None else val.astimezone(UTC)
-        parsed = datetime.fromisoformat(val)
-        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+            raise ValueError(f"Unsupported Alpaca stock feed: {feed}") from exc
 
     def get_bars(
         self,
@@ -143,46 +51,69 @@ class AlpacaDataSource(DataSource):
         timeframe: str,
         start: datetime | str | None = None,
         end: datetime | str | None = None,
-        use_cache: bool = True,
     ) -> list[Bar]:
-        # Normalize start/end to stable string forms so identical queries hit
-        # the cache (datetime objects with microsecond precision would otherwise
-        # produce a new key on every call).
-        start_key = (
-            start.isoformat()
-            if isinstance(start, datetime)
-            else (str(start) if start is not None else "None")
-        )
-        end_key = (
-            end.isoformat()
-            if isinstance(end, datetime)
-            else (str(end) if end is not None else "None")
-        )
-        cache_key = f"{symbol}_{timeframe}_{start_key}_{end_key}"
-        if use_cache and cache_key in self._cache:
-            return self._cache[cache_key]
-        bars = self._fetch_bars(symbol, timeframe, start, end)
-        if use_cache:
-            self._cache[cache_key] = bars
+        if timeframe not in _TIMEFRAMES:
+            raise ValueError(f"Unsupported timeframe: {timeframe}")
+        end_at = self._parse_datetime(end) or datetime.now(UTC)
+        start_at = self._parse_datetime(start) or end_at - timedelta(days=180)
+        market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+        response: Any
+        if market == Market.CRYPTO:
+            response = self._crypto_client.get_crypto_bars(
+                CryptoBarsRequest(
+                    symbol_or_symbols=symbol,
+                    timeframe=_TIMEFRAMES[timeframe],
+                    start=start_at,
+                    end=end_at,
+                    limit=10_000,
+                )
+            )
+        else:
+            response = self._stock_client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=symbol,
+                    timeframe=_TIMEFRAMES[timeframe],
+                    start=start_at,
+                    end=end_at,
+                    limit=10_000,
+                    feed=self._stock_feed,
+                    adjustment=Adjustment.ALL,
+                )
+            )
+        frame = response.df
+        if frame.empty:
+            return []
+        bars: list[Bar] = []
+        for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
+            timestamp = row.timestamp
+            if hasattr(timestamp, "to_pydatetime"):
+                timestamp = timestamp.to_pydatetime()
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            bars.append(
+                Bar(
+                    timestamp=timestamp.astimezone(UTC),
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    open=float(row.open),
+                    high=float(row.high),
+                    low=float(row.low),
+                    close=float(row.close),
+                    volume=float(row.volume),
+                    market=market,
+                )
+            )
+        log.info("Fetched %d %s bars for %s", len(bars), timeframe, symbol)
         return bars
 
-    def clear_cache(self) -> None:
-        self._cache.clear()
+    @staticmethod
+    def _parse_datetime(value: datetime | str | None) -> datetime | None:
+        if value is None:
+            return None
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
 
-    def clear_cache_for_symbol(self, symbol: str) -> None:
-        keys_to_remove = [k for k in self._cache if k.startswith(f"{symbol}_")]
-        for k in keys_to_remove:
-            del self._cache[k]
 
-    def iterate_bars(
-        self,
-        symbol: str,
-        timeframe: str,
-        start: datetime | str | None = None,
-        end: datetime | str | None = None,
-    ) -> Iterator[Bar]:
-        yield from self.get_bars(symbol, timeframe, start, end)
-
-    def get_latest_bar(self, symbol: str) -> Bar | None:
-        bars = self._fetch_bars(symbol, "1m", None, None)
-        return bars[-1] if bars else None
+__all__ = ["AlpacaHistoricalData"]

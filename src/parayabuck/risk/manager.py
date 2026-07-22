@@ -1,118 +1,123 @@
 from __future__ import annotations
 
-from parayabuck.config import Config
-from parayabuck.logger import get_logger
-from parayabuck.models import Account, Order, Side
-from parayabuck.utils import is_crypto
+from dataclasses import dataclass
 
-log = get_logger("parayabuck.risk.manager")
+from parayabuck.config import RiskLimits
+from parayabuck.core.models import AccountSnapshot, Market, OrderIntent, Signal
+from parayabuck.markets.sectors import sector_of
+
+
+@dataclass(frozen=True)
+class RiskDecision:
+    approved: bool
+    reason: str
+    order: OrderIntent | None = None
+    risk_amount: float = 0.0
 
 
 class RiskManager:
-    """Checks every order against risk rules before it's sent.
+    def __init__(self, limits: RiskLimits) -> None:
+        self.limits = limits
+        self.consecutive_losses = 0
 
-    Rules enforced:
-      - Max position size (shares per trade). Crypto uses a notional cap
-        interpreted as max units, applied fractionally.
-      - Max daily loss (stop trading if daily PnL <= -max_daily_loss)
-      - Max drawdown (stop trading if drawdown >= max_drawdown)
-      - Position sizing based on risk_per_trade (optional)
-      - Cooldown after halt (N bars before resuming)
-    """
+    def record_realized_pnl(self, pnl: float) -> None:
+        self.consecutive_losses = self.consecutive_losses + 1 if pnl < 0 else 0
 
-    def __init__(self, config: Config) -> None:
-        self.risk_cfg = config.risk
-        self.symbols = config.symbols
-        self._trading_halted = False
-        self._halt_reason: str | None = None
-        self._cooldown_bars = 0
-        self._cooldown_remaining = 0
+    def evaluate(self, signal: Signal, account: AccountSnapshot) -> RiskDecision:
+        if account.equity <= 0:
+            return RiskDecision(False, "non_positive_equity")
+        if signal.risk_reward < self.limits.minimum_risk_reward:
+            return RiskDecision(False, f"risk_reward={signal.risk_reward:.2f}_below_minimum")
+        if account.daily_pnl / account.equity <= -self.limits.daily_loss_limit_pct:
+            return RiskDecision(False, "daily_loss_limit")
+        if account.drawdown_pct >= self.limits.max_drawdown_pct:
+            return RiskDecision(False, "max_drawdown_limit")
 
-    @property
-    def is_halted(self) -> bool:
-        return self._trading_halted
-
-    @property
-    def halt_reason(self) -> str | None:
-        return self._halt_reason
-
-    def set_cooldown(self, bars: int) -> None:
-        """Set a cooldown period (in bars) after a halt or loss."""
-        self._cooldown_bars = bars
-        self._cooldown_remaining = bars
-
-    def tick_cooldown(self) -> None:
-        """Decrement cooldown by one bar. Call once per bar/cycle."""
-        if self._cooldown_remaining > 0:
-            self._cooldown_remaining -= 1
-            if self._cooldown_remaining == 0 and self._trading_halted:
-                log.info("Cooldown ended, resuming trading")
-                self._trading_halted = False
-                self._halt_reason = None
-
-    def check_account(self, account: Account) -> None:
-        """Update halt status based on current account state."""
-        if self._trading_halted:
-            return
-
-        if account.daily_pnl <= -self.risk_cfg.max_daily_loss:
-            self._trading_halted = True
-            self._halt_reason = (
-                f"Daily loss limit reached: ${account.daily_pnl:.2f} "
-                f"<= -${self.risk_cfg.max_daily_loss:.2f}"
+        active = tuple(position for position in account.positions if not position.is_flat)
+        if len(active) >= self.limits.max_positions:
+            return RiskDecision(False, "max_positions")
+        gross_value = sum(position.market_value for position in active)
+        gross_exposure = gross_value / account.equity
+        if gross_exposure >= self.limits.max_gross_exposure_pct:
+            return RiskDecision(False, "max_gross_exposure")
+        if signal.market == Market.CRYPTO:
+            crypto_value = sum(
+                position.market_value for position in active if position.market == Market.CRYPTO
             )
-            self._cooldown_remaining = self._cooldown_bars
-            log.warning(f"TRADING HALTED: {self._halt_reason}")
-            return
+            crypto_exposure = crypto_value / account.equity
+            if crypto_exposure >= self.limits.max_crypto_exposure_pct:
+                return RiskDecision(False, "max_crypto_exposure")
+        else:
+            crypto_value = 0.0
 
-        if account.drawdown >= self.risk_cfg.max_drawdown:
-            self._trading_halted = True
-            self._halt_reason = (
-                f"Max drawdown reached: ${account.drawdown:.2f} "
-                f">= ${self.risk_cfg.max_drawdown:.2f}"
-            )
-            self._cooldown_remaining = self._cooldown_bars
-            log.warning(f"TRADING HALTED: {self._halt_reason}")
-            return
-
-    def check_order(self, order: Order, account: Account) -> Order | None:
-        """Return the order if it passes risk checks, None if rejected."""
-        position = account.get_position(order.symbol)
-        is_exit = (order.side == Side.SELL and position.is_long) or (
-            order.side == Side.BUY and position.is_short
+        signal_sector = sector_of(signal.symbol)
+        sector_value = sum(
+            position.market_value
+            for position in active
+            if sector_of(position.symbol) == signal_sector
         )
-        if is_exit:
-            return order
-        if self._trading_halted and not is_exit:
-            return None
+        if sector_value / account.equity >= self.limits.max_sector_exposure_pct:
+            return RiskDecision(False, "max_sector_exposure")
 
-        # Check max position size. Crypto can be fractional, so don't int-truncate.
-        if order.qty > self.risk_cfg.max_position_size:
-            capped = (
-                float(self.risk_cfg.max_position_size)
-                if is_crypto(order.symbol)
-                else int(self.risk_cfg.max_position_size)
+        stop_distance = abs(signal.entry_price - signal.invalidation_price)
+        if stop_distance <= 0:
+            return RiskDecision(False, "invalid_stop_distance")
+        risk_fraction = self.limits.risk_per_trade_pct
+        if self.consecutive_losses >= self.limits.consecutive_loss_reduction_after:
+            risk_fraction *= 0.5
+        risk_amount = account.equity * risk_fraction
+        qty_by_risk = risk_amount / stop_distance
+        qty_by_position = account.equity * self.limits.max_position_pct / signal.entry_price
+        qty_by_cash = max(0.0, account.cash * 0.95 / signal.entry_price)
+        qty_by_gross = (
+            max(
+                0.0,
+                account.equity * self.limits.max_gross_exposure_pct - gross_value,
             )
-            order = Order(
-                symbol=order.symbol,
-                side=order.side,
-                qty=capped,
-                order_type=order.order_type,
-                limit_price=order.limit_price,
-                stop_price=order.stop_price,
-                tif=order.tif,
+            / signal.entry_price
+        )
+        qty_by_sector = (
+            max(
+                0.0,
+                account.equity * self.limits.max_sector_exposure_pct - sector_value,
             )
+            / signal.entry_price
+        )
+        sizing_caps = [
+            qty_by_risk,
+            qty_by_position,
+            qty_by_cash,
+            qty_by_gross,
+            qty_by_sector,
+        ]
+        if signal.market == Market.CRYPTO:
+            remaining_crypto = max(
+                0.0,
+                account.equity * self.limits.max_crypto_exposure_pct - crypto_value,
+            )
+            sizing_caps.append(remaining_crypto / signal.entry_price)
+        qty = min(sizing_caps)
+        if signal.market == Market.EQUITY:
+            qty = round(qty, 4)
+        else:
+            qty = round(qty, 8)
+        if qty <= 0 or qty * signal.entry_price < 5:
+            return RiskDecision(False, "order_below_minimum_notional")
 
-        # Check account risk
-        self.check_account(account)
-        if self._trading_halted and not is_exit:
-            return None
-
-        return order
-
-    def calc_commission(self, qty: float) -> float:
-        return abs(qty) * self.risk_cfg.commission_per_share
-
-    def can_trade(self) -> bool:
-        """Quick check: is trading currently allowed?"""
-        return not self._trading_halted and self._cooldown_remaining == 0
+        return RiskDecision(
+            True,
+            "approved",
+            OrderIntent(
+                signal_id=signal.signal_id,
+                symbol=signal.symbol,
+                market=signal.market,
+                direction=signal.direction,
+                qty=qty,
+                entry_price=signal.entry_price,
+                stop_price=signal.invalidation_price,
+                target_price=signal.target_price,
+                strategy=signal.strategy,
+                created_at=signal.timestamp,
+            ),
+            risk_amount,
+        )

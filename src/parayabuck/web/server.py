@@ -5,7 +5,6 @@ import logging
 import os
 import stat
 import threading
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -84,51 +83,22 @@ class EngineManager:
                 self.engine_state = "error"
             raise ValueError("Alpaca API key/secret missing. Configure settings first.")
 
-        paper = self.is_paper_mode()
-
         try:
             cfg = load_config(str(self.config_path))
-            if not paper and os.getenv("PARAYABUCK_V2_ENABLE_LIVE") != "YES":
+            if not cfg.alpaca.paper and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise ValueError(
-                    "Live trading is not armed. Set PARAYABUCK_V2_ENABLE_LIVE=YES "
+                    "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
                     "before starting the application."
                 )
-            from parayabuck_v2.config import load_v2_config
-            from parayabuck_v2.runtime import V2Runtime
+            from parayabuck.runtime import EngineRuntime
 
-            market_filter = cfg.raw.get("market_filter", {})
-            vix_proxy = str(market_filter.get("vix_proxy_symbol", "VIXY"))
-            symbols = [symbol for symbol in cfg.symbols if symbol not in {vix_proxy, "BIL"}]
-            v2_path = os.getenv("PARAYABUCK_V2_CONFIG", "config/settings_v2.yaml")
-            v2_config = load_v2_config(v2_path)
-            v2_config = replace(
-                v2_config,
-                risk=replace(
-                    v2_config.risk,
-                    daily_loss_limit_pct=min(
-                        1.0,
-                        cfg.risk.max_daily_loss / cfg.account.starting_balance,
-                    ),
-                    max_drawdown_pct=min(
-                        1.0,
-                        cfg.risk.max_drawdown / cfg.account.starting_balance,
-                    ),
-                ),
-            )
-            runtime = V2Runtime(
-                api_key=key,
-                secret_key=secret,
-                app_config=cfg,
-                v2_config=v2_config,
-                symbols=symbols,
-                paper=paper,
-            )
+            runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
             self.runtime = runtime
             self.engine = runtime.engine
             self.broker = runtime.broker
             runtime.start()
             self.engine_state = "running"
-            log.info("ParayaBuck V2 engine started from Web UI")
+            log.info("ParayaBuck engine started from Web UI")
 
         except Exception:
             self.engine_state = "error"
@@ -137,7 +107,7 @@ class EngineManager:
                 try:
                     runtime.stop()
                 except Exception:
-                    log.exception("V2 cleanup after failed start")
+                    log.exception("Cleanup after failed engine start")
             raise
 
     def stop_engine(self) -> None:
@@ -150,17 +120,17 @@ class EngineManager:
             runtime.stop()
         with self._state_lock:
             self.engine_state = "stopped"
-        log.info("ParayaBuck V2 engine stopped")
+        log.info("ParayaBuck engine stopped")
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         if self.broker is None:
             key, secret = self.get_credentials()
             if key and secret:
                 try:
-                    from parayabuck_v2.execution.alpaca import AlpacaExecutionBroker
+                    from parayabuck.execution.alpaca import AlpacaBroker
 
                     paper = self.is_paper_mode()
-                    self.broker = AlpacaExecutionBroker(key, secret, paper=paper)
+                    self.broker = AlpacaBroker(key, secret, paper=paper)
                 except Exception as e:
                     log.warning(f"Could not connect broker: {e}")
 
@@ -233,7 +203,7 @@ ws_log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(mes
 logging.getLogger("parayabuck").addHandler(ws_log_handler)
 
 # FastAPI App
-app = FastAPI(title="ParayaBuck V2 Trading Terminal")
+app = FastAPI(title="ParayaBuck Trading Terminal")
 
 
 def _trusted_browser_origin(origin: str | None) -> bool:
@@ -262,8 +232,8 @@ class SettingsPayload(BaseModel):
     api_key: str = Field("", description="Alpaca API Key")
     secret_key: str = Field("", description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
-    max_daily_loss: float = Field(300.0, gt=0)
-    max_drawdown: float = Field(1500.0, gt=0)
+    daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
+    max_drawdown_pct: float = Field(10.0, gt=0, le=100)
     timeframe: Literal["1m", "5m", "15m", "30m", "1h", "1d"] = "15m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
@@ -353,9 +323,11 @@ async def get_settings() -> dict[str, Any]:
         "secret_key": "",
         "has_credentials": bool(key and secret),
         "paper_mode": manager.is_paper_mode(),
-        "max_daily_loss": cfg_raw.get("risk", {}).get("max_daily_loss", 300.0),
-        "max_drawdown": cfg_raw.get("risk", {}).get("max_drawdown", 1500.0),
-        "timeframe": cfg_raw.get("app", {}).get("timeframe", "15m"),
+        "daily_loss_limit_pct": 100
+        * cfg_raw.get("engine", {}).get("risk", {}).get("daily_loss_limit_pct", 0.015),
+        "max_drawdown_pct": 100
+        * cfg_raw.get("engine", {}).get("risk", {}).get("max_drawdown_pct", 0.10),
+        "timeframe": cfg_raw.get("engine", {}).get("timeframe", "5m"),
         "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
         "port": cfg_raw.get("app", {}).get("port", 8000),
         "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
@@ -401,14 +373,16 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         old_app = dict(cfg_raw.get("app", {}))
 
         cfg_raw.setdefault("alpaca", {})["paper"] = payload.paper_mode
-        cfg_raw.setdefault("risk", {})["max_daily_loss"] = payload.max_daily_loss
-        cfg_raw.setdefault("risk", {})["max_drawdown"] = payload.max_drawdown
+        engine = cfg_raw.setdefault("engine", {})
+        risk = engine.setdefault("risk", {})
+        risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
+        risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
+        engine["timeframe"] = payload.timeframe
         cfg_raw["app"] = {
             "host": payload.host.strip() or "127.0.0.1",
             "port": payload.port,
             "open_browser": payload.open_browser,
             "log_level": payload.log_level.upper(),
-            "timeframe": payload.timeframe,
         }
 
         with open(manager.config_path, "w") as f:

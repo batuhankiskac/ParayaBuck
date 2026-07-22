@@ -6,8 +6,8 @@ from typing import Any
 
 import yaml
 
+from parayabuck import runtime as runtime_module
 from parayabuck.web import server
-from parayabuck_v2 import runtime as runtime_module
 
 
 class _EngineManagerStub:
@@ -39,13 +39,18 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
         yaml.safe_dump(
             {
                 "alpaca": {"paper": True},
-                "risk": {"max_daily_loss": 300.0, "max_drawdown": 1500.0},
                 "app": {
                     "host": "127.0.0.1",
                     "port": 8000,
                     "open_browser": True,
                     "log_level": "INFO",
+                },
+                "engine": {
                     "timeframe": "15m",
+                    "risk": {
+                        "daily_loss_limit_pct": 0.015,
+                        "max_drawdown_pct": 0.10,
+                    },
                 },
             }
         )
@@ -56,8 +61,8 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
         server.save_settings(
             server.SettingsPayload(
                 paper_mode=True,
-                max_daily_loss=300,
-                max_drawdown=1500,
+                daily_loss_limit_pct=2.0,
+                max_drawdown_pct=12.0,
                 timeframe="5m",
                 host="127.0.0.1",
                 port=8000,
@@ -68,14 +73,16 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     )
 
     saved = yaml.safe_load(manager.config_path.read_text())
-    assert saved["app"]["timeframe"] == "5m"
+    assert saved["engine"]["timeframe"] == "5m"
+    assert saved["engine"]["risk"]["daily_loss_limit_pct"] == 0.02
+    assert saved["engine"]["risk"]["max_drawdown_pct"] == 0.12
     assert manager.stop_calls == 1
     assert manager.start_calls == 1
     assert result["engine_restarted"] is True
     assert result["app_restart_required"] is False
 
 
-def test_web_engine_manager_uses_v2_runtime(monkeypatch: Any) -> None:
+def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     calls: list[str] = []
 
     class FakeRuntime:
@@ -92,7 +99,7 @@ def test_web_engine_manager_uses_v2_runtime(monkeypatch: Any) -> None:
             calls.append("stop")
             self.is_running = False
 
-    monkeypatch.setattr(runtime_module, "V2Runtime", FakeRuntime)
+    monkeypatch.setattr(runtime_module, "EngineRuntime", FakeRuntime)
     manager = server.EngineManager()
     manager.config_path = Path("config/settings.yaml")
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))

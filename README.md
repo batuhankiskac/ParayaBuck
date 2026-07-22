@@ -1,106 +1,73 @@
 # ParayaBuck
 
-Trading bot for **US stocks and crypto** via the **Alpaca** API. Backtest,
-paper trade and live trade are available through the V2 event-driven engine
-and Web terminal.
+ParayaBuck, Alpaca API üzerinden ABD hisseleri ve kripto varlıkları için çalışan olay
+tabanlı bir işlem motoru ve yerel Web terminalidir. Stratejiler puanlanmış ve açıklanabilir
+sinyaller üretir; risk yöneticisi ve broker sınırı onaylanmayan sinyallerin emre dönüşmesini
+engeller.
 
-## ParayaBuck v2
+## Güvenlik
 
-The active engine lives in `src/parayabuck_v2` and is used by the Web UI as
-well as the shadow, paper/live and backtest entry points. Stocks and crypto
-have separate strategies; strategies produce scored, explainable signals and
-never submit orders directly.
+- Varsayılan işlem modu Alpaca paper hesabıdır.
+- Gerçek para modu hem Web UI üzerinden seçilmeli hem de uygulama
+  `PARAYABUCK_ENABLE_LIVE=YES` ile başlatılmalıdır.
+- Hisse girişleri broker üzerinde yaşayan bracket emirleri kullanır.
+- Kripto girişleri koruyucu stop oluşturulamazsa güvenli biçimde kapatılır.
+- Kararlar, reddedilen sinyaller, emir geçişleri ve hesap anlık görüntüleri
+  `data/runtime/parayabuck.sqlite3` içinde tutulur.
+- Web kontrol yüzeyi yalnızca loopback adreslerine bağlanabilir.
 
-Safety defaults:
-
-- `shadow` is the default and never submits an Alpaca order.
-- `paper` requires the explicit `--confirm-paper YES` flag.
-- `live` requires both `--confirm-live YES` and the
-  `PARAYABUCK_V2_ENABLE_LIVE=YES` environment variable.
-- Decisions, rejected signals, order transitions, fills and account snapshots
-  are persisted in `data/runtime/parayabuck_v2.sqlite3`.
-
-Run shadow mode:
+## Kurulum ve Web UI
 
 ```bash
-python -m parayabuck_v2 --mode shadow --symbols AAPL MSFT BTC/USD
-```
-
-Run Alpaca paper mode:
-
-```bash
-python -m parayabuck_v2 --mode paper --confirm-paper YES --symbols AAPL BTC/USD
-```
-
-Run an offline CSV backtest:
-
-```bash
-python scripts/run_v2_backtest.py data/historical/MES_5m_2024.csv \
-  --symbol MES --market equity --timeframe 5m
-```
-
-V2 risk and engine settings are in `config/settings_v2.yaml`. Do not enable
-live mode until out-of-sample, shadow and paper results have been reviewed.
-
----
-
-## Quick Start
-
-```bash
-# 1. Install
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-
-# 2. Launch the Web UI
 parayabuck
 ```
 
-Veya doğrudan python ile:
+Aynı uygulama doğrudan Python ile de başlatılabilir:
+
 ```bash
 python -m parayabuck
 ```
 
-Uygulama çalıştırıldığında Web UI sunucusu başlar. Varsayılan olarak tarayıcınız **`http://127.0.0.1:8000`** adresini açar; bu davranış Ayarlar içindeki gelişmiş program ayarlarından kapatılabilir.
+Varsayılan adres `http://127.0.0.1:8000` olur. Alpaca anahtarları, paper/live modu,
+risk yüzdeleri ve motor periyodu Web UI içindeki Ayarlar penceresinden yönetilir.
 
-V2 motoru güvenlik nedeniyle Web UI içinden **Motoru Başlat** düğmesine basıldığında çalışır. İlk kullanımda Alpaca kimlik bilgilerini Ayarlar sekmesinden (.env ve settings.yaml) girip kaydedebilirsiniz.
-
-Gerçek para modu ayrıca uygulama başlatılmadan önce açıkça etkinleştirilmelidir:
+Gerçek para modu:
 
 ```bash
-PARAYABUCK_V2_ENABLE_LIVE=YES parayabuck
+PARAYABUCK_ENABLE_LIVE=YES parayabuck
 ```
 
-Bu değişken olmadan gerçek para motoru başlamaz. Uygulama güvenlik nedeniyle yalnızca
-`127.0.0.1`, `localhost` veya `::1` adresine bağlanır. Ücretsiz Alpaca hesaplarında
-gerçek zamanlı IEX verisi için `alpaca.stock_feed: iex`; uygun ücretli veri aboneliğinde
-`sip` kullanılabilir.
+## Yapılandırma
 
----
+Tek yapılandırma kaynağı `config/settings.yaml` dosyasıdır:
 
-## Installation
+- `app`: Web sunucusu ve log ayarları
+- `alpaca`: paper modu ve veri feed seçimi
+- `symbols`: motorun takip edeceği semboller
+- `engine`: periyot, sinyal eşiği, warmup, karar günlüğü ve yüzde bazlı risk limitleri
 
-| Step | Command |
-|------|---------|
-| Clone | `git clone <repo> && cd ParayaBuck` |
-| Venv | `python3 -m venv .venv && source .venv/bin/activate` |
-| Install | `pip install -e ".[dev]"` |
-| Run | `parayabuck` |
+Ücretsiz Alpaca hesaplarında gerçek zamanlı hisse verisi için `stock_feed: iex`, uygun
+veri aboneliğinde `stock_feed: sip` kullanılabilir.
 
-Alpaca anahtarlarınızı Web UI açıldıktan sonra **Ayarlar** butonuna basarak girip kaydedin.
+## Offline backtest
 
-`python -m parayabuck` ve `parayabuck` komutları yalnızca Web UI sunucusunu başlatır; emir, strateji veya backtest işlemleri için ayrı bir kullanıcı CLI'sı yoktur.
+```bash
+python scripts/run_backtest.py data/historical/MES_5m_2024.csv \
+  --symbol MES --market equity --timeframe 5m
+```
 
----
+Backtest aynı motor, strateji ve risk katmanını kullanır; yalnızca broker uygulaması
+simülasyon brokerı ile değiştirilir.
 
-## Web UI Terminal Özellikleri
+## Geliştirme
 
-- **Üst Header Bar**: Logo, canlı işlem modu rozeti (`📜 PAPER DEMO` / `⚠️ REAL TRADING`), motor durumu ve hızlı **▶ Başlat / ■ Durdur** kontrolleri.
-- **Bakiye & İstatistik Kartları**: Net Portföy (Equity), Nakit, Günlük PnL, Gerçekleşen PnL, Açık Pozisyon PnL ve Drawdown kartları.
-- **Portföy Grafik Analitiği**: Chart.js ile canlı equity büyüme eğrisi.
-- **Açık Pozisyonlar Tablosu**: LONG/SHORT badge rozetleri ve canlı kâr/zarar durumları.
-- **Terminal Konsol**: Real-time WebSocket üzerinden yayınlanan canlı sistem logları.
-- **Ayarlar Modalı**: Alpaca API anahtarları, risk limitleri ve mod ayarları.
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+```
 
-## Geliştirici araçları
-
-`scripts/generate_sample_data.py`, backtest/test geliştirmesi için sentetik OHLCV verisi üreten geliştirici aracıdır. Web UI'nin çalışma akışının parçası değildir.
+`scripts/generate_sample_data.py`, test ve backtest geliştirmesi için sentetik OHLCV
+verisi üretir.

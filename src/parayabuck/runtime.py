@@ -6,6 +6,8 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 
+from requests.exceptions import RequestException
+
 from parayabuck.config import Config
 from parayabuck.core.models import Bar
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
@@ -84,6 +86,9 @@ class EngineRuntime:
                 log.warning("Stream stop warning: %s", exc)
             for thread in self._threads:
                 thread.join(timeout=5)
+            alive = [thread.name for thread in self._threads if thread.is_alive()]
+            if alive:
+                log.warning("Stream workers did not stop cleanly: %s", ", ".join(alive))
         if not self._journal_closed:
             self.journal.close()
             self._journal_closed = True
@@ -102,9 +107,7 @@ class EngineRuntime:
         next_reconcile = time.monotonic() + 60.0
         while self._running:
             try:
-                first = self._events.get(
-                    timeout=max(0.0, next_reconcile - time.monotonic())
-                )
+                first = self._events.get(timeout=max(0.0, next_reconcile - time.monotonic()))
             except queue.Empty:
                 self._reconcile_safely()
                 next_reconcile = time.monotonic() + 60.0
@@ -135,6 +138,9 @@ class EngineRuntime:
                 try:
                     orders = self.engine.process_cycle(bars)
                     for order in orders:
+                        lifecycle = self.engine.orders.orders[order.client_order_id]
+                        if lifecycle.state.value == "rejected":
+                            continue
                         log.info(
                             "Decision: %s %s qty=%s entry=%.4f stop=%.4f target=%.4f",
                             order.strategy,
@@ -153,6 +159,11 @@ class EngineRuntime:
     def _reconcile_safely(self) -> None:
         try:
             self.broker.reconcile()
+        except RequestException as exc:
+            # Alpaca occasionally times out for a single request. The next
+            # scheduled reconciliation retries it; a full traceback every
+            # minute obscures actionable protection failures.
+            log.warning("Position protection check deferred after Alpaca API error: %s", exc)
         except Exception:
             log.exception("Periodic position protection check failed")
 
@@ -179,9 +190,7 @@ class EngineRuntime:
 
 
 def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
-    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}[
-        timeframe
-    ]
+    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}[timeframe]
     bars_per_day = (1440 if is_crypto(symbol) else 390) / minutes
     trading_days = bars * 1.5 / max(1, bars_per_day)
     calendar_days = trading_days if is_crypto(symbol) else trading_days * 1.5

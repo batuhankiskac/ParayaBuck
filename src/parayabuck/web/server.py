@@ -5,6 +5,7 @@ import logging
 import os
 import stat
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -181,6 +182,17 @@ class EngineManager:
 manager = EngineManager()
 
 
+@asynccontextmanager
+async def app_lifespan(_app: FastAPI) -> Any:
+    try:
+        yield
+    finally:
+        # Uvicorn shutting down must also release Alpaca's stock and crypto
+        # sockets. Daemon threads alone remain active long enough to collide
+        # with a newly launched process and trigger the connection limit.
+        await asyncio.to_thread(manager.stop_engine)
+
+
 # Custom WebSocket Log Handler
 class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
@@ -203,7 +215,7 @@ ws_log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(mes
 logging.getLogger("parayabuck").addHandler(ws_log_handler)
 
 # FastAPI App
-app = FastAPI(title="ParayaBuck Trading Terminal")
+app = FastAPI(title="ParayaBuck Trading Terminal", lifespan=app_lifespan)
 
 
 def _trusted_browser_origin(origin: str | None) -> bool:
@@ -389,8 +401,16 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             yaml.safe_dump(cfg_raw, f, sort_keys=False, default_flow_style=False)
 
         manager.broker = None
+        restart_error: str | None = None
         if restart_engine:
-            manager.start_engine()
+            try:
+                manager.start_engine()
+            except Exception as exc:
+                # The settings are already safely persisted. A transient
+                # Alpaca timeout during the automatic restart must not report
+                # the entire save operation as a 500 failure.
+                restart_error = str(exc)
+                log.warning("Settings saved, but automatic engine restart failed: %s", exc)
 
         # These values belong to the web process itself. Saving them is safe,
         # but they take effect the next time the application is launched.
@@ -405,8 +425,13 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         )
         return {
             "status": "success",
-            "message": "Settings and credentials saved.",
-            "engine_restarted": restart_engine,
+            "message": (
+                "Settings saved, but the bot could not restart automatically."
+                if restart_error
+                else "Settings and credentials saved."
+            ),
+            "engine_restarted": restart_engine and restart_error is None,
+            "restart_error": restart_error,
             "app_restart_required": app_restart_required,
         }
     except Exception as e:

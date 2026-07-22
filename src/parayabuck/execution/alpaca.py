@@ -51,9 +51,11 @@ class AlpacaBroker:
 
     def account(self) -> AccountSnapshot:
         account: Any = self._client.get_account()
-        if bool(getattr(account, "account_blocked", False)) or bool(
-            getattr(account, "trading_blocked", False)
-        ) or bool(getattr(account, "trade_suspended_by_user", False)):
+        if (
+            bool(getattr(account, "account_blocked", False))
+            or bool(getattr(account, "trading_blocked", False))
+            or bool(getattr(account, "trade_suspended_by_user", False))
+        ):
             raise RuntimeError("Alpaca account is blocked from trading")
         equity = float(account.equity or 0)
         previous_equity = float(account.last_equity or equity)
@@ -102,9 +104,7 @@ class AlpacaBroker:
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
             crypto_buying_power=(
-                float(crypto_buying_power_raw)
-                if crypto_buying_power_raw is not None
-                else cash
+                float(crypto_buying_power_raw) if crypto_buying_power_raw is not None else cash
             ),
             crypto_trading_enabled=crypto_status == "ACTIVE",
         )
@@ -144,9 +144,7 @@ class AlpacaBroker:
                 OrderState.PARTIALLY_FILLED,
             }:
                 self._client.cancel_order_by_id(result_id)
-                state, final_fill = self._wait_for_fill(
-                    str(result_id), intent, qty, timeout=2.0
-                )
+                state, final_fill = self._wait_for_fill(str(result_id), intent, qty, timeout=2.0)
                 if final_fill is not None:
                     fill = final_fill
                 if state in {OrderState.ACCEPTED, OrderState.PARTIALLY_FILLED}:
@@ -161,6 +159,11 @@ class AlpacaBroker:
                     self._flatten(intent, fill.qty)
                     return OrderState.REJECTED, fill
             return state, fill
+        except ValueError as exc:
+            # Closed markets, unsupported shorts, and duplicate orders are
+            # expected safety rejections rather than broker failures.
+            log.warning("Order rejected: %s", exc)
+            return OrderState.REJECTED, None
         except Exception as exc:
             log.error("Order rejected: %s", exc)
             return OrderState.REJECTED, None
@@ -174,13 +177,18 @@ class AlpacaBroker:
             stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
             stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
             total_qty = abs(position.qty)
-            if self._has_protective_order(position.symbol, is_long, total_qty):
+            required_qty = total_qty
+            if position.market == Market.CRYPTO and position.qty_available == 0:
+                # Alpaca may deduct the taker fee from the acquired asset. A
+                # stop can therefore reserve every sellable unit while being
+                # up to 0.25% smaller than the raw position quantity. Only use
+                # this tolerance when Alpaca confirms nothing remains
+                # available; otherwise reconcile protects the remaining units.
+                required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
+                required_qty = self._round_qty_down(position.symbol, required_qty)
+            if self._has_protective_order(position.symbol, is_long, required_qty):
                 continue
-            qty = (
-                abs(position.qty_available)
-                if position.qty_available is not None
-                else total_qty
-            )
+            qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             if position.market == Market.CRYPTO:
                 qty = self._available_position_qty(
                     position.symbol,
@@ -188,9 +196,7 @@ class AlpacaBroker:
                     reserve_fee_on_lookup_failure=False,
                 )
                 if qty <= 0:
-                    raise RuntimeError(
-                        f"No available quantity to protect for {position.symbol}"
-                    )
+                    raise RuntimeError(f"No available quantity to protect for {position.symbol}")
             elif qty <= 0:
                 raise RuntimeError(f"No available quantity to protect for {position.symbol}")
             protected = self._submit_stop(

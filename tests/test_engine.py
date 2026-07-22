@@ -170,9 +170,7 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot("AAPL", 10, 100, 101, Market.EQUITY),
-        ),
+        positions=(PositionSnapshot("AAPL", 10, 100, 101, Market.EQUITY),),
     )
     broker._has_protective_order = lambda _symbol, _is_long, _qty: False
 
@@ -194,16 +192,13 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
 
 def test_reconcile_does_not_treat_reserved_crypto_as_unprotected() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {"BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")}
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot(
-                "BTC/USD", 1, 100, 101, Market.CRYPTO, qty_available=0
-            ),
-        ),
+        positions=(PositionSnapshot("BTC/USD", 1, 100, 101, Market.CRYPTO, qty_available=0),),
     )
     broker._has_protective_order = lambda _symbol, _is_long, _qty: True
     broker._available_position_qty = lambda *_args, **_kwargs: pytest.fail(
@@ -211,6 +206,61 @@ def test_reconcile_does_not_treat_reserved_crypto_as_unprotected() -> None:
     )
 
     broker.reconcile()
+
+
+def test_reconcile_accepts_fee_adjusted_crypto_stop_as_full_protection() -> None:
+    checked_required_qty: list[float] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {"ADAUSD": SimpleNamespace(min_trade_increment="0.000000001")}
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot(
+                "ADAUSD", 57371.241146769, 0.1741, 0.175, Market.CRYPTO, qty_available=0
+            ),
+        ),
+    )
+
+    def has_stop(_symbol: str, _is_long: bool, required_qty: float) -> bool:
+        checked_required_qty.append(required_qty)
+        return required_qty == pytest.approx(57227.813043902)
+
+    broker._has_protective_order = has_stop
+    broker._available_position_qty = lambda *_args, **_kwargs: pytest.fail(
+        "all sellable crypto is already reserved by the fee-adjusted stop"
+    )
+
+    broker.reconcile()
+
+    assert checked_required_qty == [pytest.approx(57227.813043902)]
+
+
+def test_reconcile_does_not_apply_fee_tolerance_to_available_crypto() -> None:
+    checked_required_qty: list[float] = []
+    submitted: list[float] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(PositionSnapshot("BTCUSD", 1, 100, 101, Market.CRYPTO, qty_available=0.01),),
+    )
+    broker._has_protective_order = lambda _symbol, _is_long, required_qty: (
+        checked_required_qty.append(required_qty) or False
+    )
+    broker._available_position_qty = lambda *_args, **_kwargs: 0.01
+    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long: (
+        submitted.append(qty) or True
+    )
+
+    broker.reconcile()
+
+    assert checked_required_qty == [1]
+    assert submitted == [0.01]
 
 
 def test_reconcile_protects_only_unreserved_equity_qty() -> None:
@@ -221,13 +271,11 @@ def test_reconcile_protects_only_unreserved_equity_qty() -> None:
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot("AAPL", 1, 100, 101, Market.EQUITY, qty_available=0.5),
-        ),
+        positions=(PositionSnapshot("AAPL", 1, 100, 101, Market.EQUITY, qty_available=0.5),),
     )
     broker._has_protective_order = lambda _symbol, _is_long, _qty: False
-    broker._submit_stop = (
-        lambda _symbol, _market, qty, _stop, _is_long: submitted.append(qty) or True
+    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long: (
+        submitted.append(qty) or True
     )
 
     broker.reconcile()
@@ -307,9 +355,7 @@ def test_pre_submit_rejects_equity_order_while_market_is_closed() -> None:
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._client = FakeClient()
-    intent = OrderIntent(
-        "signal", "AAPL", Market.EQUITY, Direction.LONG, 1, 100, 95, 110, "test"
-    )
+    intent = OrderIntent("signal", "AAPL", Market.EQUITY, Direction.LONG, 1, 100, 95, 110, "test")
 
     with pytest.raises(ValueError, match="market is closed"):
         broker._validate_pre_submit(intent)
@@ -446,9 +492,7 @@ def test_crypto_closing_qty_reserves_max_taker_fee_when_position_lookup_fails() 
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._client = FakeClient()
-    broker._asset_cache = {
-        "BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")
-    }
+    broker._asset_cache = {"BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")}
 
     qty = broker._available_position_qty(
         "BTC/USD",
@@ -469,9 +513,7 @@ def test_only_stop_like_closing_order_counts_as_position_protection() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     client = FakeClient()
     broker._client = client
-    client.orders = [
-        SimpleNamespace(side="sell", type="limit", stop_price=None, legs=None)
-    ]
+    client.orders = [SimpleNamespace(side="sell", type="limit", stop_price=None, legs=None)]
     assert not broker._has_protective_order("BTC/USD", True, 1)
 
     client.orders = [

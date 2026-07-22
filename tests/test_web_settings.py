@@ -17,6 +17,7 @@ class _EngineManagerStub:
         self.env_path = root / ".env"
         self.engine_state = "running"
         self.broker: Any = object()
+        self.log_queues: set[Any] = set()
         self.stop_calls = 0
         self.start_calls = 0
 
@@ -30,6 +31,13 @@ class _EngineManagerStub:
     def start_engine(self) -> None:
         self.start_calls += 1
         self.engine_state = "running"
+
+
+class _RestartFailureManagerStub(_EngineManagerStub):
+    def start_engine(self) -> None:
+        self.start_calls += 1
+        self.engine_state = "error"
+        raise TimeoutError("Alpaca timed out")
 
 
 def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
@@ -81,6 +89,42 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     assert manager.start_calls == 1
     assert result["engine_restarted"] is True
     assert result["app_restart_required"] is False
+
+
+def test_settings_save_succeeds_when_automatic_restart_times_out(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manager = _RestartFailureManagerStub(tmp_path)
+    manager.config_path.write_text(
+        yaml.safe_dump({"alpaca": {"paper": True}, "engine": {"risk": {}}})
+    )
+    monkeypatch.setattr(server, "manager", manager)
+
+    result = asyncio.run(server.save_settings(server.SettingsPayload(timeframe="5m")))
+
+    assert result["status"] == "success"
+    assert result["engine_restarted"] is False
+    assert result["restart_error"] == "Alpaca timed out"
+    assert yaml.safe_load(manager.config_path.read_text())["engine"]["timeframe"] == "5m"
+
+
+def test_application_shutdown_stops_running_engine(monkeypatch: Any) -> None:
+    class ShutdownManager:
+        stop_calls = 0
+
+        def stop_engine(self) -> None:
+            self.stop_calls += 1
+
+    manager = ShutdownManager()
+    monkeypatch.setattr(server, "manager", manager)
+
+    async def run_lifespan() -> None:
+        async with server.app_lifespan(server.app):
+            pass
+
+    asyncio.run(run_lifespan())
+
+    assert manager.stop_calls == 1
 
 
 def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:

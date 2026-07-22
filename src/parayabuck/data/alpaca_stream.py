@@ -15,8 +15,27 @@ class AlpacaBarStream:
         from alpaca.data.enums import DataFeed
         from alpaca.data.live import CryptoDataStream, StockDataStream
 
-        self.stock = StockDataStream(api_key, secret_key, feed=DataFeed(stock_feed))
-        self.crypto = CryptoDataStream(api_key, secret_key)
+        # alpaca-py otherwise inherits websockets' 10 second close timeout.
+        # EngineRuntime only waits a bounded amount of time for these worker
+        # threads, so an unresponsive close handshake could leave the previous
+        # connection alive while a replacement runtime starts.
+        websocket_params = {
+            "ping_interval": 10,
+            "ping_timeout": 180,
+            "max_queue": 1024,
+            "close_timeout": 2,
+        }
+        self.stock = StockDataStream(
+            api_key,
+            secret_key,
+            feed=DataFeed(stock_feed),
+            websocket_params=websocket_params,
+        )
+        self.crypto = CryptoDataStream(
+            api_key,
+            secret_key,
+            websocket_params=websocket_params,
+        )
 
     @staticmethod
     def _convert(raw: Any, market: Market, timeframe: str) -> Bar:

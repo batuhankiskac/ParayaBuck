@@ -431,12 +431,21 @@ async def websocket_stream(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {"type": "update", "account": account_data, "status": status_data}
             )
-            await asyncio.sleep(2.0)
-    except WebSocketDisconnect:
-        manager.stream_connections.remove(websocket)
+            try:
+                # The browser never sends messages; this paces the loop and,
+                # unlike asyncio.sleep, detects a dead peer: writing to a lost
+                # connection only logs "socket.send() raised exception." in
+                # asyncio instead of raising, so receive() is the only way to
+                # notice the disconnect.
+                await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+            except TimeoutError:
+                pass
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        pass
     except Exception:
-        if websocket in manager.stream_connections:
-            manager.stream_connections.remove(websocket)
+        pass
+    finally:
+        manager.stream_connections.discard(websocket)
 
 
 @app.websocket("/ws/logs")
@@ -451,10 +460,25 @@ async def websocket_logs(websocket: WebSocket) -> None:
 
     try:
         while True:
-            log_entry = await queue.get()
-            await websocket.send_json(log_entry)
-    except WebSocketDisconnect:
-        manager.log_queues.remove(queue_ref)
+            # Race the next log entry against a receive so a disconnected
+            # browser is detected instead of writing to a dead socket.
+            get_task = asyncio.ensure_future(queue.get())
+            recv_task = asyncio.ensure_future(websocket.receive_text())
+            try:
+                done, _pending = await asyncio.wait(
+                    {get_task, recv_task}, return_when=asyncio.FIRST_COMPLETED
+                )
+            finally:
+                for task in (get_task, recv_task):
+                    if not task.done():
+                        task.cancel()
+            if recv_task in done:
+                recv_task.result()  # raises WebSocketDisconnect when the peer is gone
+            if get_task in done:
+                await websocket.send_json(get_task.result())
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        pass
     except Exception:
-        if queue_ref in manager.log_queues:
-            manager.log_queues.remove(queue_ref)
+        pass
+    finally:
+        manager.log_queues.discard(queue_ref)

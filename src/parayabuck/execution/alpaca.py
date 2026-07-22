@@ -149,18 +149,36 @@ class AlpacaBroker:
             if not protected:
                 raise RuntimeError(f"Could not restore protection for {position.symbol}")
 
-    def _validated_values(self, intent: OrderIntent) -> tuple[float, float, float]:
-        asset = self._asset_cache.get(intent.symbol)
+    def _asset(self, symbol: str) -> Any:
+        asset = self._asset_cache.get(symbol)
         if asset is None:
-            asset = self._client.get_asset(intent.symbol)
-            self._asset_cache[intent.symbol] = asset
+            asset = self._client.get_asset(symbol)
+            self._asset_cache[symbol] = asset
+        return asset
+
+    def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
+        increment = getattr(self._asset(symbol), "price_increment", None)
+        if increment is not None:
+            return Decimal(str(increment))
+        if market == Market.EQUITY:
+            # Alpaca: stocks >= $1 trade in pennies, sub-dollar stocks in 1/10000.
+            return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
+        return Decimal("0.01") if reference_price >= 1 else Decimal("0.000001")
+
+    @staticmethod
+    def _round_to_step(value: float, step: Decimal) -> float:
+        rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
+        return float(rounded)
+
+    def _validated_values(self, intent: OrderIntent) -> tuple[float, float, float]:
+        asset = self._asset(intent.symbol)
         if not bool(getattr(asset, "tradable", False)):
             raise ValueError(f"Asset is not tradable: {intent.symbol}")
         qty = Decimal(str(intent.qty))
-        if intent.market == Market.EQUITY and not float(intent.qty).is_integer() and not bool(
-            getattr(asset, "fractionable", False)
-        ):
-            raise ValueError(f"Asset is not fractionable: {intent.symbol}")
+        if intent.market == Market.EQUITY:
+            # Bracket orders (take_profit/stop_loss legs) require whole shares;
+            # fractional equity qty is only allowed for simple market orders.
+            qty = qty.to_integral_value(rounding=ROUND_DOWN)
         minimum = getattr(asset, "min_order_size", None)
         increment = getattr(asset, "min_trade_increment", None)
         adjusted = False
@@ -172,18 +190,33 @@ class AlpacaBroker:
             qty = (qty / step).to_integral_value(
                 rounding=ROUND_UP if adjusted else ROUND_DOWN
             ) * step
+        if intent.market == Market.EQUITY:
+            qty = qty.to_integral_value(rounding=ROUND_DOWN)
         if qty <= 0:
             raise ValueError(f"Order rounds to zero for {intent.symbol}")
-        price_increment = getattr(asset, "price_increment", None)
-        if price_increment is None:
-            return float(qty), intent.stop_price, intent.target_price
-        step = Decimal(str(price_increment))
-        def rounded(value: float) -> float:
-            return float(
-                (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
+        stop_price = self._round_to_step(
+            intent.stop_price, self._price_step(intent.symbol, intent.market, intent.stop_price)
+        )
+        target_price = self._round_to_step(
+            intent.target_price,
+            self._price_step(intent.symbol, intent.market, intent.target_price),
+        )
+        if intent.direction == Direction.LONG and not (
+            stop_price < intent.entry_price < target_price
+        ):
+            raise ValueError(
+                f"Bracket legs inverted for {intent.symbol}: "
+                f"stop={stop_price} entry={intent.entry_price} target={target_price}"
             )
-
-        return float(qty), rounded(intent.stop_price), rounded(intent.target_price)
+        if intent.direction == Direction.SHORT and not (
+            target_price < intent.entry_price < stop_price
+        ):
+            raise ValueError(
+                f"Bracket legs inverted for {intent.symbol}: "
+                f"target={target_price} entry={intent.entry_price} stop={stop_price}"
+            )
+        qty_number: float = int(qty) if intent.market == Market.EQUITY else float(qty)
+        return qty_number, stop_price, target_price
 
     def _wait_for_fill(
         self, order_id: str, intent: OrderIntent, qty: float, timeout: float = 5.0
@@ -241,16 +274,32 @@ class AlpacaBroker:
         position_is_long: bool,
     ) -> bool:
         side = OrderSide.SELL if position_is_long else OrderSide.BUY
+        step = self._price_step(symbol, market, stop_price)
+        stop_price = self._round_to_step(stop_price, step)
+        qty_number: float = qty
+        if market == Market.EQUITY:
+            # Stop orders for equities require whole shares, just like brackets.
+            qty_number = int(Decimal(str(qty)).to_integral_value(rounding=ROUND_DOWN))
+        if qty_number <= 0 or stop_price <= 0:
+            log.warning(
+                "Skipping protective stop for %s: qty=%s stop=%s rounds to zero",
+                symbol,
+                qty,
+                stop_price,
+            )
+            return True
         try:
             if market == Market.CRYPTO:
-                precision = 6 if stop_price < 1 else 2
-                stop_price = round(stop_price, precision)
-                limit_price = round(
-                    stop_price * (0.995 if position_is_long else 1.005), precision
+                limit_price = self._round_to_step(
+                    stop_price * (0.995 if position_is_long else 1.005), step
                 )
+                if position_is_long and limit_price >= stop_price:
+                    limit_price = float(Decimal(str(stop_price)) - step)
+                elif not position_is_long and limit_price <= stop_price:
+                    limit_price = float(Decimal(str(stop_price)) + step)
                 request: Any = StopLimitOrderRequest(
                     symbol=symbol,
-                    qty=qty,
+                    qty=qty_number,
                     side=side,
                     time_in_force=TimeInForce.GTC,
                     stop_price=stop_price,
@@ -259,7 +308,7 @@ class AlpacaBroker:
             else:
                 request = StopOrderRequest(
                     symbol=symbol,
-                    qty=qty,
+                    qty=qty_number,
                     side=side,
                     time_in_force=TimeInForce.GTC,
                     stop_price=stop_price,

@@ -98,7 +98,8 @@ class RiskManager:
             sizing_caps.append(remaining_crypto / signal.entry_price)
         qty = min(sizing_caps)
         if signal.market == Market.EQUITY:
-            qty = round(qty, 4)
+            # Alpaca bracket orders require whole shares; size down to an integer.
+            qty = int(qty)
         else:
             qty = round(qty, 8)
         if qty <= 0 or qty * signal.entry_price < 5:

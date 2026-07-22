@@ -3,60 +3,57 @@ app:
   port: 8000
   open_browser: true
   log_level: INFO
-
 alpaca:
   paper: true
   data_delayed: false
   stock_feed: iex
-
 symbols:
-  - AAPL
-  - MSFT
-  - GOOGL
-  - TSLA
-  - NVDA
-  - AMZN
-  - SPY
-  - QQQ
-  - KO
-  - PEP
-  - JNJ
-  - JPM
-  - XOM
-  - XLK
-  - XLF
-  - XLE
-  - XLV
-  - XLY
-  - XLP
-  - XLI
-  - XLB
-  - XLU
-  - XLRE
-  - XLC
-  - BTC/USD
-  - ETH/USD
-  - SOL/USD
-  - ADA/USD
-  - XRP/USD
-  - DOGE/USD
-  - AVAX/USD
-  - LINK/USD
-
+- AAPL
+- MSFT
+- GOOGL
+- TSLA
+- NVDA
+- AMZN
+- SPY
+- QQQ
+- KO
+- PEP
+- JNJ
+- JPM
+- XOM
+- XLK
+- XLF
+- XLE
+- XLV
+- XLY
+- XLP
+- XLI
+- XLB
+- XLU
+- XLRE
+- XLC
+- BTC/USD
+- ETH/USD
+- SOL/USD
+- ADA/USD
+- XRP/USD
+- DOGE/USD
+- AVAX/USD
+- LINK/USD
 engine:
-  timeframe: 5m
+  timeframe: 1m
   higher_timeframe: 1h
   minimum_signal_score: 65.0
   warmup_bars: 250
   decision_db_path: data/runtime/parayabuck.sqlite3
   risk:
     risk_per_trade_pct: 0.005
-    max_position_pct: 0.10
-    max_crypto_exposure_pct: 0.20
+    max_position_pct: 0.1
+    max_crypto_exposure_pct: 0.2
     max_sector_exposure_pct: 0.25
-    max_gross_exposure_pct: 0.60
+    max_gross_exposure_pct: 0.6
     max_positions: 5
-    daily_loss_limit_pct: 0.015
-    max_drawdown_pct: 0.10
+    daily_loss_limit_pct: 0.0151
+    max_drawdown_pct: 0.1001
     minimum_risk_reward: 1.8
     consecutive_loss_reduction_after: 3

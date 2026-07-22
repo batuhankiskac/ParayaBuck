@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from fastapi import WebSocketDisconnect
 
 from parayabuck import runtime as runtime_module
 from parayabuck.web import server
@@ -111,3 +112,56 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     manager.stop_engine()
     assert manager.engine_state == "stopped"
     assert calls == ["init", "start", "stop"]
+
+
+class _DeadWebSocket:
+    """Simulates a browser that vanished without a clean close handshake."""
+
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {}
+        self.sent: list[Any] = []
+
+    async def accept(self) -> None:
+        return
+
+    async def send_json(self, data: Any) -> None:
+        self.sent.append(data)
+
+    async def receive_text(self) -> str:
+        raise WebSocketDisconnect()
+
+
+class _WebSocketManagerStub:
+    def __init__(self) -> None:
+        self.log_queues: set[Any] = set()
+        self.stream_connections: set[Any] = set()
+
+    def fetch_account_snapshot(self) -> dict[str, Any]:
+        return {"equity": 1.0}
+
+    def current_engine_state(self) -> str:
+        return "stopped"
+
+    def is_paper_mode(self) -> bool:
+        return True
+
+
+def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -> None:
+    manager = _WebSocketManagerStub()
+    monkeypatch.setattr(server, "manager", manager)
+    websocket = _DeadWebSocket()
+
+    asyncio.run(server.websocket_stream(websocket))  # must exit quietly, not spin
+
+    assert len(websocket.sent) == 1
+    assert websocket not in manager.stream_connections
+
+
+def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) -> None:
+    manager = _WebSocketManagerStub()
+    monkeypatch.setattr(server, "manager", manager)
+    websocket = _DeadWebSocket()
+
+    asyncio.run(server.websocket_logs(websocket))  # must exit quietly, not spin
+
+    assert manager.log_queues == set()

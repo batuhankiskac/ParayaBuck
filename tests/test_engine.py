@@ -197,3 +197,125 @@ def test_crypto_order_flattens_when_protection_fails() -> None:
     assert returned_fill == fill
     assert len(submitted) == 1
     assert flattened == [("BTC/USD", 0.01)]
+
+
+def test_validated_values_rounds_equity_bracket_to_alpaca_rules() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {
+        "XLU": SimpleNamespace(
+            tradable=True,
+            fractionable=True,
+            min_order_size=None,
+            min_trade_increment=None,
+            price_increment=None,
+        )
+    }
+    intent = OrderIntent(
+        "sig",
+        "XLU",
+        Market.EQUITY,
+        Direction.LONG,
+        217.6323,
+        45.91,
+        45.4509,
+        46.73638,
+        "test",
+    )
+
+    qty, stop, target = broker._validated_values(intent)
+
+    assert qty == 217
+    assert isinstance(qty, int)
+    assert stop == pytest.approx(45.45)
+    assert target == pytest.approx(46.74)
+
+
+def test_validated_values_rejects_equity_order_below_one_share() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {
+        "XLU": SimpleNamespace(
+            tradable=True,
+            fractionable=True,
+            min_order_size=None,
+            min_trade_increment=None,
+            price_increment=None,
+        )
+    }
+    intent = OrderIntent(
+        "sig", "XLU", Market.EQUITY, Direction.LONG, 0.6, 45.91, 45.45, 46.74, "test"
+    )
+
+    with pytest.raises(ValueError, match="rounds to zero"):
+        broker._validated_values(intent)
+
+
+def test_validated_values_rounds_crypto_with_asset_increments() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(
+            tradable=True,
+            fractionable=True,
+            min_order_size="0.001",
+            min_trade_increment="0.0001",
+            price_increment="0.01",
+        )
+    }
+    intent = OrderIntent(
+        "sig",
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        0.012345678,
+        100,
+        95.123456,
+        110.987,
+        "test",
+    )
+
+    qty, stop, target = broker._validated_values(intent)
+
+    assert qty == pytest.approx(0.0123)
+    assert stop == pytest.approx(95.12)
+    assert target == pytest.approx(110.99)
+
+
+def test_submit_stop_rounds_equity_price_and_qty() -> None:
+    submitted: list[Any] = []
+
+    class FakeClient:
+        def submit_order(self, request: Any) -> Any:
+            submitted.append(request)
+            return SimpleNamespace(id="stop-id")
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._asset_cache = {"AAPL": SimpleNamespace(price_increment=None)}
+
+    assert broker._submit_stop("AAPL", Market.EQUITY, 10.7, 96.0345, True)
+    assert len(submitted) == 1
+    assert submitted[0].qty == 10
+    assert float(submitted[0].stop_price) == pytest.approx(96.03)
+
+
+def test_risk_manager_sizes_equity_in_whole_shares() -> None:
+    signal = Signal(
+        "XLU",
+        Market.EQUITY,
+        Direction.LONG,
+        "stock_mean_reversion",
+        80,
+        0.8,
+        45.91,
+        45.4509,
+        46.7364,
+        datetime(2026, 7, 22, 18, 40, tzinfo=UTC),
+    )
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    limits = RiskLimits(risk_per_trade_pct=0.005, max_position_pct=0.5)
+
+    decision = RiskManager(limits).evaluate(signal, account)
+
+    assert decision.approved
+    assert decision.order is not None
+    assert decision.order.qty == 54
+    assert float(decision.order.qty).is_integer()

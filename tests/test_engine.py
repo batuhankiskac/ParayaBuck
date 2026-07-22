@@ -97,6 +97,18 @@ def test_order_state_machine_rejects_invalid_transition() -> None:
         machine.transition(intent.client_order_id, OrderState.FILLED)
 
 
+def test_order_state_machine_accepts_immediate_partial_fill() -> None:
+    intent = OrderIntent("sig", "TEST", Market.EQUITY, Direction.LONG, 2, 100, 98, 104, "test")
+    machine = OrderStateMachine()
+    machine.create(intent)
+    machine.transition(intent.client_order_id, OrderState.VALIDATED)
+    machine.transition(intent.client_order_id, OrderState.SUBMITTED)
+
+    lifecycle = machine.transition(intent.client_order_id, OrderState.PARTIALLY_FILLED)
+
+    assert lifecycle.state == OrderState.PARTIALLY_FILLED
+
+
 def test_shadow_engine_journals_decision(tmp_path) -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     broker = ShadowBroker(account)
@@ -109,6 +121,34 @@ def test_shadow_engine_journals_decision(tmp_path) -> None:
     count = journal.connection.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
     assert count == 1
     journal.close()
+
+
+def test_engine_accepts_broker_partial_fill_response() -> None:
+    class PartialFillBroker(ShadowBroker):
+        def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
+            fill = Fill(
+                order.client_order_id,
+                order.symbol,
+                order.qty / 2,
+                order.entry_price,
+                order.direction,
+                order.created_at,
+            )
+            return OrderState.PARTIALLY_FILLED, fill
+
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    broker = PartialFillBroker(account)
+    engine = TradingEngine(
+        broker,
+        EngineConfig(warmup_bars=50),
+        (_OneShotStrategy(),),
+    )
+
+    orders = engine.process_cycle([_bar(0)])
+
+    assert len(orders) == 1
+    lifecycle = engine.orders.orders[orders[0].client_order_id]
+    assert lifecycle.state == OrderState.PARTIALLY_FILLED
 
 
 def test_backtest_fills_next_bar_and_honors_target() -> None:
@@ -134,7 +174,7 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
             PositionSnapshot("AAPL", 10, 100, 101, Market.EQUITY),
         ),
     )
-    broker._has_open_order = lambda _symbol: False
+    broker._has_protective_order = lambda _symbol, _is_long, _qty: False
 
     def submit_stop(
         symbol: str,
@@ -150,6 +190,49 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
     broker.reconcile()
 
     assert submitted == [("AAPL", pytest.approx(96.0))]
+
+
+def test_reconcile_does_not_treat_reserved_crypto_as_unprotected() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot(
+                "BTC/USD", 1, 100, 101, Market.CRYPTO, qty_available=0
+            ),
+        ),
+    )
+    broker._has_protective_order = lambda _symbol, _is_long, _qty: True
+    broker._available_position_qty = lambda *_args, **_kwargs: pytest.fail(
+        "available quantity should not be queried for an already protected position"
+    )
+
+    broker.reconcile()
+
+
+def test_reconcile_protects_only_unreserved_equity_qty() -> None:
+    submitted: list[float] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot("AAPL", 1, 100, 101, Market.EQUITY, qty_available=0.5),
+        ),
+    )
+    broker._has_protective_order = lambda _symbol, _is_long, _qty: False
+    broker._submit_stop = (
+        lambda _symbol, _market, qty, _stop, _is_long: submitted.append(qty) or True
+    )
+
+    broker.reconcile()
+
+    assert submitted == [pytest.approx(0.5)]
 
 
 def test_crypto_order_flattens_when_protection_fails() -> None:
@@ -197,6 +280,209 @@ def test_crypto_order_flattens_when_protection_fails() -> None:
     assert returned_fill == fill
     assert len(submitted) == 1
     assert flattened == [("BTC/USD", 0.01)]
+
+
+def test_submit_recovers_order_accepted_before_network_timeout() -> None:
+    recovered = SimpleNamespace(id="entry-id", status="new")
+
+    class FakeClient:
+        def submit_order(self, _request: Any) -> Any:
+            raise TimeoutError("response timed out")
+
+        def get_order_by_client_id(self, _client_order_id: str) -> Any:
+            return recovered
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+
+    result = broker._submit_with_recovery(SimpleNamespace(), "parayabuck-test")
+
+    assert result is recovered
+
+
+def test_pre_submit_rejects_equity_order_while_market_is_closed() -> None:
+    class FakeClient:
+        def get_clock(self) -> Any:
+            return SimpleNamespace(is_open=False)
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    intent = OrderIntent(
+        "signal", "AAPL", Market.EQUITY, Direction.LONG, 1, 100, 95, 110, "test"
+    )
+
+    with pytest.raises(ValueError, match="market is closed"):
+        broker._validate_pre_submit(intent)
+
+
+def test_pre_submit_rejects_symbol_with_existing_open_order() -> None:
+    class FakeClient:
+        def get_orders(self, _request: Any) -> list[Any]:
+            return [SimpleNamespace(id="existing-order")]
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    intent = OrderIntent(
+        "signal", "BTC/USD", Market.CRYPTO, Direction.LONG, 0.01, 100, 95, 110, "test"
+    )
+
+    with pytest.raises(ValueError, match="Open order already exists"):
+        broker._validate_pre_submit(intent)
+
+
+def test_crypto_partial_fill_is_cancelled_before_stop_is_submitted() -> None:
+    cancelled: list[str] = []
+    protected: list[float] = []
+
+    class FakeClient:
+        def submit_order(self, _request: Any) -> Any:
+            return SimpleNamespace(id="entry-id")
+
+        def cancel_order_by_id(self, order_id: str) -> None:
+            cancelled.append(order_id)
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._validated_values = lambda intent: (
+        intent.qty,
+        intent.stop_price,
+        intent.target_price,
+    )
+    intent = OrderIntent(
+        "signal", "BTC/USD", Market.CRYPTO, Direction.LONG, 0.02, 100, 95, 110, "test"
+    )
+    partial_fill = Fill(
+        intent.client_order_id,
+        intent.symbol,
+        0.01,
+        100,
+        intent.direction,
+        intent.created_at,
+    )
+    responses = iter(
+        [
+            (OrderState.PARTIALLY_FILLED, partial_fill),
+            (OrderState.CANCELLED, partial_fill),
+        ]
+    )
+    broker._wait_for_fill = lambda *_args, **_kwargs: next(responses)
+    broker._submit_crypto_stop = lambda _intent, qty, _stop: protected.append(qty) or True
+
+    state, fill = broker.submit(intent)
+
+    assert state == OrderState.CANCELLED
+    assert fill == partial_fill
+    assert cancelled == ["entry-id"]
+    assert protected == [0.01]
+
+
+def test_crypto_stop_uses_available_qty_after_fee() -> None:
+    submitted: list[Any] = []
+
+    class FakeClient:
+        def get_open_position(self, _symbol: str) -> Any:
+            return SimpleNamespace(qty="0.15207612", qty_available="0.151695929")
+
+        def submit_order(self, request: Any) -> Any:
+            submitted.append(request)
+            return SimpleNamespace(id="stop-id")
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(
+            min_trade_increment="0.000000001",
+            price_increment="0.01",
+        )
+    }
+    intent = OrderIntent(
+        "signal",
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        0.15207612,
+        100,
+        95,
+        110,
+        "test",
+    )
+
+    assert broker._submit_crypto_stop(intent, intent.qty, intent.stop_price)
+    assert len(submitted) == 1
+    assert float(submitted[0].qty) == pytest.approx(0.151695929)
+
+
+def test_crypto_stop_retries_with_available_qty_from_alpaca_error() -> None:
+    submitted: list[Any] = []
+
+    class FakeClient:
+        def submit_order(self, request: Any) -> Any:
+            submitted.append(request)
+            if len(submitted) == 1:
+                raise RuntimeError(
+                    '{"available":"0.151695929","balance":"0.151695929",'
+                    '"code":40310000,"message":"insufficient balance for BTC",'
+                    '"symbol":"USD"}'
+                )
+            return SimpleNamespace(id="stop-id")
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(
+            min_trade_increment="0.000000001",
+            price_increment="0.01",
+        )
+    }
+
+    assert broker._submit_stop("BTC/USD", Market.CRYPTO, 0.15207612, 95, True)
+    assert len(submitted) == 2
+    assert float(submitted[1].qty) == pytest.approx(0.151695929)
+
+
+def test_crypto_closing_qty_reserves_max_taker_fee_when_position_lookup_fails() -> None:
+    class FakeClient:
+        pass
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")
+    }
+
+    qty = broker._available_position_qty(
+        "BTC/USD",
+        0.15207612,
+        reserve_fee_on_lookup_failure=True,
+    )
+
+    assert qty == pytest.approx(0.151695929)
+
+
+def test_only_stop_like_closing_order_counts_as_position_protection() -> None:
+    class FakeClient:
+        orders: list[Any] = []
+
+        def get_orders(self, _request: Any) -> list[Any]:
+            return self.orders
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    client = FakeClient()
+    broker._client = client
+    client.orders = [
+        SimpleNamespace(side="sell", type="limit", stop_price=None, legs=None)
+    ]
+    assert not broker._has_protective_order("BTC/USD", True, 1)
+
+    client.orders = [
+        SimpleNamespace(side="sell", type="stop_limit", stop_price="95", qty="0.5", legs=None)
+    ]
+    assert not broker._has_protective_order("BTC/USD", True, 1)
+
+    client.orders = [
+        SimpleNamespace(side="sell", type="stop_limit", stop_price="95", qty="1", legs=None)
+    ]
+    assert broker._has_protective_order("BTC/USD", True, 1)
 
 
 def test_validated_values_rounds_equity_bracket_to_alpaca_rules() -> None:
@@ -279,7 +565,44 @@ def test_validated_values_rounds_crypto_with_asset_increments() -> None:
     assert target == pytest.approx(110.99)
 
 
-def test_submit_stop_rounds_equity_price_and_qty() -> None:
+def test_validated_values_does_not_round_crypto_up_past_risk_limit() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(
+            tradable=True,
+            fractionable=True,
+            min_order_size="0.001",
+            min_trade_increment="0.0001",
+            price_increment="0.01",
+        )
+    }
+    intent = OrderIntent(
+        "sig", "BTC/USD", Market.CRYPTO, Direction.LONG, 0.00099, 100, 95, 110, "test"
+    )
+
+    with pytest.raises(ValueError, match="below the minimum"):
+        broker._validated_values(intent)
+
+
+def test_validated_values_rejects_crypto_short() -> None:
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._asset_cache = {
+        "BTC/USD": SimpleNamespace(
+            tradable=True,
+            min_order_size="0.0001",
+            min_trade_increment="0.0001",
+            price_increment="0.01",
+        )
+    }
+    intent = OrderIntent(
+        "sig", "BTC/USD", Market.CRYPTO, Direction.SHORT, 0.01, 100, 105, 90, "test"
+    )
+
+    with pytest.raises(ValueError, match="does not support short"):
+        broker._validated_values(intent)
+
+
+def test_submit_stop_preserves_fractional_equity_qty_with_day_tif() -> None:
     submitted: list[Any] = []
 
     class FakeClient:
@@ -293,7 +616,8 @@ def test_submit_stop_rounds_equity_price_and_qty() -> None:
 
     assert broker._submit_stop("AAPL", Market.EQUITY, 10.7, 96.0345, True)
     assert len(submitted) == 1
-    assert submitted[0].qty == 10
+    assert submitted[0].qty == pytest.approx(10.7)
+    assert str(submitted[0].time_in_force).lower().endswith("day")
     assert float(submitted[0].stop_price) == pytest.approx(96.03)
 
 
@@ -319,3 +643,81 @@ def test_risk_manager_sizes_equity_in_whole_shares() -> None:
     assert decision.order is not None
     assert decision.order.qty == 54
     assert float(decision.order.qty).is_integer()
+
+
+def test_risk_manager_rejects_invalid_long_geometry() -> None:
+    signal = Signal(
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        "test",
+        80,
+        0.8,
+        100,
+        101,
+        110,
+        datetime.now(UTC),
+    )
+
+    decision = RiskManager(RiskLimits()).evaluate(
+        signal, AccountSnapshot(10_000, 10_000, 10_000, 0)
+    )
+
+    assert not decision.approved
+    assert decision.reason == "invalid_long_price_geometry"
+
+
+def test_risk_manager_uses_crypto_buying_power_and_minimum_notional() -> None:
+    signal = Signal(
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        "test",
+        80,
+        0.8,
+        100,
+        99,
+        102,
+        datetime.now(UTC),
+    )
+    account = AccountSnapshot(
+        10_000,
+        10_000,
+        10_000,
+        0,
+        crypto_buying_power=9,
+    )
+
+    decision = RiskManager(RiskLimits()).evaluate(signal, account)
+
+    assert not decision.approved
+    assert decision.reason == "order_below_minimum_notional"
+
+
+def test_risk_manager_caps_crypto_order_at_alpaca_notional_limit() -> None:
+    signal = Signal(
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        "test",
+        80,
+        0.8,
+        100,
+        99,
+        102,
+        datetime.now(UTC),
+    )
+    limits = RiskLimits(
+        risk_per_trade_pct=1,
+        max_position_pct=1,
+        max_crypto_exposure_pct=1,
+        max_sector_exposure_pct=1,
+        max_gross_exposure_pct=1,
+    )
+    account = AccountSnapshot(1_000_000, 1_000_000, 1_000_000, 0)
+
+    decision = RiskManager(limits).evaluate(signal, account)
+
+    assert decision.approved
+    assert decision.order is not None
+    assert decision.order.qty * signal.entry_price <= 200_000

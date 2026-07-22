@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import time
 from datetime import UTC, datetime
-from decimal import ROUND_DOWN, ROUND_HALF_UP, ROUND_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
@@ -33,6 +34,8 @@ from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.execution.alpaca")
 
+_CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
+
 
 class AlpacaBroker:
     """Alpaca execution boundary using the engine's native models."""
@@ -50,14 +53,15 @@ class AlpacaBroker:
         account: Any = self._client.get_account()
         if bool(getattr(account, "account_blocked", False)) or bool(
             getattr(account, "trading_blocked", False)
-        ):
+        ) or bool(getattr(account, "trade_suspended_by_user", False)):
             raise RuntimeError("Alpaca account is blocked from trading")
         equity = float(account.equity or 0)
         previous_equity = float(account.last_equity or equity)
         positions: list[PositionSnapshot] = []
         unrealized = 0.0
         intraday_unrealized = 0.0
-        for raw in self._client.get_all_positions():
+        raw_positions: Any = self._client.get_all_positions()
+        for raw in raw_positions:
             current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
             intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
@@ -74,6 +78,11 @@ class AlpacaBroker:
                     avg_price=float(raw.avg_entry_price),
                     current_price=current_price,
                     market=market,
+                    qty_available=(
+                        float(raw.qty_available)
+                        if getattr(raw, "qty_available", None) is not None
+                        else None
+                    ),
                 )
             )
         old_peak = self._peak_equity
@@ -81,18 +90,28 @@ class AlpacaBroker:
         if self._peak_equity != old_peak:
             self._save_peak_equity()
         daily_pnl = equity - previous_equity
+        cash = float(account.cash or 0)
+        crypto_buying_power_raw = getattr(account, "non_marginable_buying_power", None)
+        crypto_status = str(getattr(account, "crypto_status", "ACTIVE")).upper().split(".")[-1]
         return AccountSnapshot(
-            cash=float(account.cash or 0),
+            cash=cash,
             equity=equity,
             peak_equity=self._peak_equity,
             daily_pnl=daily_pnl,
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
+            crypto_buying_power=(
+                float(crypto_buying_power_raw)
+                if crypto_buying_power_raw is not None
+                else cash
+            ),
+            crypto_trading_enabled=crypto_status == "ACTIVE",
         )
 
     def submit(self, intent: OrderIntent) -> tuple[OrderState, Fill | None]:
         try:
+            self._validate_pre_submit(intent)
             qty, stop_price, target_price = self._validated_values(intent)
             side = OrderSide.BUY if intent.direction == Direction.LONG else OrderSide.SELL
             tif = TimeInForce.GTC if intent.market == Market.CRYPTO else TimeInForce.DAY
@@ -115,10 +134,25 @@ class AlpacaBroker:
                     time_in_force=tif,
                     client_order_id=intent.client_order_id,
                 )
-            result: Any = self._client.submit_order(request)
-            state, fill = self._wait_for_fill(str(result.id), intent, qty)
-            if intent.market == Market.CRYPTO and state == OrderState.ACCEPTED:
-                self._client.cancel_order_by_id(result.id)
+            result = self._submit_with_recovery(request, intent.client_order_id)
+            result_id = self._field(result, "id")
+            if not result_id:
+                raise RuntimeError(f"Alpaca order response has no id for {intent.symbol}")
+            state, fill = self._wait_for_fill(str(result_id), intent, qty)
+            if intent.market == Market.CRYPTO and state in {
+                OrderState.ACCEPTED,
+                OrderState.PARTIALLY_FILLED,
+            }:
+                self._client.cancel_order_by_id(result_id)
+                state, final_fill = self._wait_for_fill(
+                    str(result_id), intent, qty, timeout=2.0
+                )
+                if final_fill is not None:
+                    fill = final_fill
+                if state in {OrderState.ACCEPTED, OrderState.PARTIALLY_FILLED}:
+                    raise RuntimeError(
+                        f"Crypto entry remained open after cancellation: {intent.symbol}"
+                    )
                 if fill is None:
                     return OrderState.CANCELLED, None
             if intent.market == Market.CRYPTO and fill is not None:
@@ -134,15 +168,35 @@ class AlpacaBroker:
     def reconcile(self) -> None:
         account = self.account()
         for position in account.positions:
-            if position.is_flat or self._has_open_order(position.symbol):
-                continue
             is_long = position.qty > 0
+            if position.is_flat:
+                continue
             stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
             stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
+            total_qty = abs(position.qty)
+            if self._has_protective_order(position.symbol, is_long, total_qty):
+                continue
+            qty = (
+                abs(position.qty_available)
+                if position.qty_available is not None
+                else total_qty
+            )
+            if position.market == Market.CRYPTO:
+                qty = self._available_position_qty(
+                    position.symbol,
+                    qty,
+                    reserve_fee_on_lookup_failure=False,
+                )
+                if qty <= 0:
+                    raise RuntimeError(
+                        f"No available quantity to protect for {position.symbol}"
+                    )
+            elif qty <= 0:
+                raise RuntimeError(f"No available quantity to protect for {position.symbol}")
             protected = self._submit_stop(
                 position.symbol,
                 position.market,
-                abs(position.qty),
+                qty,
                 stop_price,
                 is_long,
             )
@@ -174,6 +228,13 @@ class AlpacaBroker:
         asset = self._asset(intent.symbol)
         if not bool(getattr(asset, "tradable", False)):
             raise ValueError(f"Asset is not tradable: {intent.symbol}")
+        if intent.market == Market.CRYPTO and intent.direction == Direction.SHORT:
+            raise ValueError("Alpaca does not support short selling crypto")
+        if intent.market == Market.EQUITY and intent.direction == Direction.SHORT:
+            if not bool(getattr(asset, "shortable", False)) or not bool(
+                getattr(asset, "easy_to_borrow", False)
+            ):
+                raise ValueError(f"Asset is not available to short: {intent.symbol}")
         qty = Decimal(str(intent.qty))
         if intent.market == Market.EQUITY:
             # Bracket orders (take_profit/stop_loss legs) require whole shares;
@@ -181,19 +242,17 @@ class AlpacaBroker:
             qty = qty.to_integral_value(rounding=ROUND_DOWN)
         minimum = getattr(asset, "min_order_size", None)
         increment = getattr(asset, "min_trade_increment", None)
-        adjusted = False
-        if minimum is not None and qty < Decimal(str(minimum)):
-            qty = Decimal(str(minimum))
-            adjusted = True
         if increment is not None:
             step = Decimal(str(increment))
-            qty = (qty / step).to_integral_value(
-                rounding=ROUND_UP if adjusted else ROUND_DOWN
-            ) * step
+            qty = (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
         if intent.market == Market.EQUITY:
             qty = qty.to_integral_value(rounding=ROUND_DOWN)
         if qty <= 0:
             raise ValueError(f"Order rounds to zero for {intent.symbol}")
+        if minimum is not None and qty < Decimal(str(minimum)):
+            raise ValueError(
+                f"Order quantity {qty} is below the minimum {minimum} for {intent.symbol}"
+            )
         stop_price = self._round_to_step(
             intent.stop_price, self._price_step(intent.symbol, intent.market, intent.stop_price)
         )
@@ -226,9 +285,9 @@ class AlpacaBroker:
         while time.monotonic() < deadline:
             try:
                 order: Any = self._client.get_order_by_id(order_id)
-                status = str(order.status).lower().split(".")[-1]
-                filled_qty = float(order.filled_qty or 0)
-                filled_price = float(order.filled_avg_price or 0)
+                status = str(self._field(order, "status", "")).lower().split(".")[-1]
+                filled_qty = float(self._field(order, "filled_qty", 0) or 0)
+                filled_price = float(self._field(order, "filled_avg_price", 0) or 0)
                 if filled_qty > 0 and filled_price > 0:
                     fill = Fill(
                         intent.client_order_id,
@@ -257,13 +316,77 @@ class AlpacaBroker:
         return state, fill
 
     def _submit_crypto_stop(self, intent: OrderIntent, qty: float, stop: float) -> bool:
+        qty = self._available_position_qty(
+            intent.symbol,
+            qty,
+            reserve_fee_on_lookup_failure=intent.direction == Direction.LONG,
+        )
+        if qty <= 0:
+            log.error("Protective stop has no available quantity for %s", intent.symbol)
+            return False
         return self._submit_stop(
             intent.symbol,
             intent.market,
             qty,
             stop,
             intent.direction == Direction.LONG,
+            client_order_id=f"{intent.client_order_id}-stop",
         )
+
+    def _available_position_qty(
+        self,
+        symbol: str,
+        requested_qty: float,
+        *,
+        reserve_fee_on_lookup_failure: bool,
+        attempts: int = 5,
+    ) -> float:
+        """Return an increment-safe quantity Alpaca reports as available to close."""
+        requested = Decimal(str(requested_qty))
+        step_value = getattr(self._asset(symbol), "min_trade_increment", None)
+        step = Decimal(str(step_value)) if step_value is not None else Decimal("0.000000001")
+        saw_position = False
+
+        for attempt in range(attempts):
+            try:
+                position: Any = self._client.get_open_position(symbol)
+                saw_position = True
+                raw_available = (
+                    position.get("qty_available")
+                    if isinstance(position, dict)
+                    else getattr(position, "qty_available", None)
+                )
+                if raw_available is None:
+                    raw_available = (
+                        position.get("qty", 0)
+                        if isinstance(position, dict)
+                        else getattr(position, "qty", 0)
+                    )
+                available = abs(Decimal(str(raw_available or 0)))
+                qty = min(requested, available)
+                qty = (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
+                if qty > 0:
+                    if qty < requested:
+                        log.info(
+                            "Adjusted closing quantity for %s from %s to available %s",
+                            symbol,
+                            requested,
+                            qty,
+                        )
+                    return float(qty)
+            except AttributeError:
+                break
+            except Exception:
+                pass
+            if attempt + 1 < attempts:
+                time.sleep(0.2)
+
+        if saw_position:
+            return 0.0
+        if reserve_fee_on_lookup_failure:
+            requested *= Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE
+        requested = (requested / step).to_integral_value(rounding=ROUND_DOWN) * step
+        return float(requested)
 
     def _submit_stop(
         self,
@@ -272,14 +395,24 @@ class AlpacaBroker:
         qty: float,
         stop_price: float,
         position_is_long: bool,
+        client_order_id: str | None = None,
     ) -> bool:
+        client_order_id = client_order_id or f"parayabuck-stop-{uuid4().hex}"
         side = OrderSide.SELL if position_is_long else OrderSide.BUY
         step = self._price_step(symbol, market, stop_price)
         stop_price = self._round_to_step(stop_price, step)
         qty_number: float = qty
+        equity_tif = TimeInForce.GTC
         if market == Market.EQUITY:
-            # Stop orders for equities require whole shares, just like brackets.
-            qty_number = int(Decimal(str(qty)).to_integral_value(rounding=ROUND_DOWN))
+            qty_decimal = Decimal(str(qty))
+            if qty_decimal == qty_decimal.to_integral_value():
+                qty_number = int(qty_decimal)
+            else:
+                # Alpaca supports fractional equity stops only with DAY time-in-force.
+                qty_number = float(
+                    qty_decimal.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN)
+                )
+                equity_tif = TimeInForce.DAY
         if qty_number <= 0 or stop_price <= 0:
             log.warning(
                 "Skipping protective stop for %s: qty=%s stop=%s rounds to zero",
@@ -287,7 +420,7 @@ class AlpacaBroker:
                 qty,
                 stop_price,
             )
-            return True
+            return False
         try:
             if market == Market.CRYPTO:
                 limit_price = self._round_to_step(
@@ -304,37 +437,167 @@ class AlpacaBroker:
                     time_in_force=TimeInForce.GTC,
                     stop_price=stop_price,
                     limit_price=limit_price,
+                    client_order_id=client_order_id,
                 )
             else:
                 request = StopOrderRequest(
                     symbol=symbol,
                     qty=qty_number,
                     side=side,
-                    time_in_force=TimeInForce.GTC,
+                    time_in_force=equity_tif,
                     stop_price=stop_price,
+                    client_order_id=client_order_id,
                 )
-            self._client.submit_order(request)
+            self._submit_with_recovery(request, client_order_id)
             return True
         except Exception as exc:
+            available = self._available_qty_from_error(exc)
+            if market == Market.CRYPTO and 0 < available < qty_number:
+                available = self._round_qty_down(symbol, available)
+                if available > 0:
+                    log.warning(
+                        "Retrying protective stop for %s with Alpaca available qty %s",
+                        symbol,
+                        available,
+                    )
+                    try:
+                        retry_client_order_id = f"parayabuck-stop-{uuid4().hex}"
+                        retry_request = StopLimitOrderRequest(
+                            symbol=symbol,
+                            qty=available,
+                            side=side,
+                            time_in_force=TimeInForce.GTC,
+                            stop_price=stop_price,
+                            limit_price=limit_price,
+                            client_order_id=retry_client_order_id,
+                        )
+                        self._submit_with_recovery(retry_request, retry_client_order_id)
+                        return True
+                    except Exception as retry_exc:
+                        exc = retry_exc
             log.error("Protective stop failed for %s: %s", symbol, exc)
             return False
 
+    def _round_qty_down(self, symbol: str, qty: float) -> float:
+        increment = getattr(self._asset(symbol), "min_trade_increment", None)
+        step = Decimal(str(increment)) if increment is not None else Decimal("0.000000001")
+        rounded = (Decimal(str(qty)) / step).to_integral_value(rounding=ROUND_DOWN) * step
+        return float(rounded)
+
+    @staticmethod
+    def _available_qty_from_error(exc: Exception) -> float:
+        message = str(exc)
+        start = message.find("{")
+        if start < 0:
+            return 0.0
+        try:
+            payload = json.loads(message[start:])
+            return max(0.0, float(payload.get("available", 0)))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return 0.0
+
     def _flatten(self, intent: OrderIntent, qty: float) -> None:
+        try:
+            self._client.close_position(intent.symbol)
+            return
+        except AttributeError:
+            pass
+        except Exception as exc:
+            log.warning("Position close endpoint failed for %s: %s", intent.symbol, exc)
+
         side = OrderSide.SELL if intent.direction == Direction.LONG else OrderSide.BUY
+        closing_qty = qty
+        if intent.market == Market.CRYPTO:
+            closing_qty = self._available_position_qty(
+                intent.symbol,
+                qty,
+                reserve_fee_on_lookup_failure=intent.direction == Direction.LONG,
+            )
+        if closing_qty <= 0:
+            raise RuntimeError(f"No available quantity to flatten for {intent.symbol}")
         self._client.submit_order(
             MarketOrderRequest(
                 symbol=intent.symbol,
-                qty=qty,
+                qty=closing_qty,
                 side=side,
                 time_in_force=TimeInForce.GTC,
             )
         )
+
+    def _validate_pre_submit(self, intent: OrderIntent) -> None:
+        if intent.market == Market.EQUITY:
+            get_clock = getattr(self._client, "get_clock", None)
+            if get_clock is not None:
+                clock: Any = get_clock()
+                is_open = clock.get("is_open", False) if isinstance(clock, dict) else clock.is_open
+                if not bool(is_open):
+                    raise ValueError(
+                        "Equity market is closed; refusing to queue stale order for "
+                        f"{intent.symbol}"
+                    )
+        if getattr(self._client, "get_orders", None) is not None and self._has_open_order(
+            intent.symbol
+        ):
+            raise ValueError(f"Open order already exists for {intent.symbol}")
+
+    def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
+        try:
+            return self._client.submit_order(request)
+        except Exception as submit_exc:
+            get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
+            if get_by_client_id is not None:
+                try:
+                    recovered: Any = get_by_client_id(client_order_id)
+                    status = str(self._field(recovered, "status", "")).lower().split(".")[-1]
+                    if status in {"rejected", "canceled", "cancelled", "expired"}:
+                        raise submit_exc
+                    log.warning(
+                        "Recovered Alpaca order %s after submit error: %s",
+                        client_order_id,
+                        submit_exc,
+                    )
+                    return recovered
+                except Exception:
+                    pass
+            raise submit_exc
 
     def _has_open_order(self, symbol: str) -> bool:
         orders = self._client.get_orders(
             GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
         )
         return bool(orders)
+
+    def _has_protective_order(
+        self, symbol: str, position_is_long: bool, required_qty: float
+    ) -> bool:
+        orders: Any = self._client.get_orders(
+            GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
+        )
+        if isinstance(orders, dict):
+            return False
+        closing_side = "sell" if position_is_long else "buy"
+
+        def protective_qty(order: Any) -> Decimal:
+            side = str(self._field(order, "side", "")).lower().split(".")[-1]
+            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
+            stop_price = self._field(order, "stop_price")
+            if side == closing_side and (
+                stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+            ):
+                return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+            return sum(
+                (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
+                start=Decimal("0"),
+            )
+
+        protected = sum((protective_qty(order) for order in orders), start=Decimal("0"))
+        return protected >= Decimal(str(required_qty))
+
+    @staticmethod
+    def _field(value: Any, name: str, default: Any = None) -> Any:
+        if isinstance(value, dict):
+            return value.get(name, default)
+        return getattr(value, name, default)
 
     def _load_peak_equity(self) -> float:
         if not self._peak_state_path.exists():

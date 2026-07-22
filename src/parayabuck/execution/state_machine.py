@@ -11,6 +11,7 @@ _ALLOWED: dict[OrderState, frozenset[OrderState]] = {
     OrderState.SUBMITTED: frozenset(
         {
             OrderState.ACCEPTED,
+            OrderState.PARTIALLY_FILLED,
             OrderState.FILLED,
             OrderState.CANCELLED,
             OrderState.EXPIRED,

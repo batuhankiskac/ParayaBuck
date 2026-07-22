@@ -99,8 +99,16 @@ class EngineRuntime:
             self._events.put(("primary", primary))
 
     def _decision_loop(self) -> None:
+        next_reconcile = time.monotonic() + 60.0
         while self._running:
-            first = self._events.get()
+            try:
+                first = self._events.get(
+                    timeout=max(0.0, next_reconcile - time.monotonic())
+                )
+            except queue.Empty:
+                self._reconcile_safely()
+                next_reconcile = time.monotonic() + 60.0
+                continue
             if first is None:
                 break
             batch = [first]
@@ -138,6 +146,15 @@ class EngineRuntime:
                         )
                 except Exception:
                     log.exception("Decision cycle failed")
+            if time.monotonic() >= next_reconcile:
+                self._reconcile_safely()
+                next_reconcile = time.monotonic() + 60.0
+
+    def _reconcile_safely(self) -> None:
+        try:
+            self.broker.reconcile()
+        except Exception:
+            log.exception("Periodic position protection check failed")
 
     def _warmup(self) -> None:
         history = AlpacaHistoricalData(

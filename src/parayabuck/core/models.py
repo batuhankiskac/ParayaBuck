@@ -94,6 +94,7 @@ class PositionSnapshot:
     avg_price: float
     current_price: float
     market: Market
+    qty_available: float | None = None
 
     @property
     def is_flat(self) -> bool:
@@ -117,6 +118,8 @@ class AccountSnapshot:
     positions: tuple[PositionSnapshot, ...] = ()
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
+    crypto_buying_power: float | None = None
+    crypto_trading_enabled: bool = True
 
     @property
     def drawdown_pct(self) -> float:

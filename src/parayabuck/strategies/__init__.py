@@ -1,4 +1,9 @@
-from parayabuck.strategies.base import Strategy, StrategyContext
+from parayabuck.strategies.base import (
+    ConditionEvaluation,
+    Strategy,
+    StrategyContext,
+    StrategyEvaluation,
+)
 from parayabuck.strategies.crypto_range import CryptoRangeReversion
 from parayabuck.strategies.crypto_trend import CryptoTrendBreakout
 from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
@@ -17,9 +22,11 @@ def default_strategies() -> tuple[Strategy, ...]:
 __all__ = [
     "CryptoRangeReversion",
     "CryptoTrendBreakout",
+    "ConditionEvaluation",
     "StockMeanReversion",
     "StockTrendPullback",
     "Strategy",
     "StrategyContext",
+    "StrategyEvaluation",
     "default_strategies",
 ]

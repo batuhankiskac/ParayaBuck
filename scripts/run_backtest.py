@@ -50,6 +50,7 @@ def main() -> None:
     payload = asdict(result)
     payload.pop("equity_curve")
     payload.pop("realized_pnls")
+    payload["ai_log_dir"] = str(engine.ai_journal.root) if engine.ai_journal is not None else None
     print(json.dumps(payload, indent=2, allow_nan=False))
 
 

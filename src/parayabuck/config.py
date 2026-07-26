@@ -44,6 +44,9 @@ class EngineConfig:
     minimum_signal_score: float = 65.0
     warmup_bars: int = 250
     decision_db_path: str = "data/runtime/parayabuck.sqlite3"
+    ai_logging_enabled: bool = True
+    ai_log_path: str = "data/runtime/ai_decisions"
+    prediction_horizon_bars: int = 48
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:
@@ -52,6 +55,8 @@ class EngineConfig:
             raise ValueError("Unsupported timeframe")
         if not 0 <= self.minimum_signal_score <= 100 or self.warmup_bars < 50:
             raise ValueError("Invalid signal score or warmup")
+        if self.prediction_horizon_bars <= 0:
+            raise ValueError("prediction_horizon_bars must be positive")
 
 
 @dataclass(frozen=True)

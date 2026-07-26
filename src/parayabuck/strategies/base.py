@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 from parayabuck.core.models import Bar, Market, PositionSnapshot, Regime, Signal
 from parayabuck.markets.regime import RegimeAssessment
@@ -15,6 +16,29 @@ class StrategyContext:
     benchmark_regime: Regime = Regime.UNKNOWN
 
 
+@dataclass(frozen=True)
+class ConditionEvaluation:
+    """One explainable strategy gate with machine-readable values."""
+
+    code: str
+    passed: bool
+    actual: Any
+    expected: str
+    explanation: str
+
+
+@dataclass(frozen=True)
+class StrategyEvaluation:
+    """A strategy result together with the evidence used to reach it."""
+
+    strategy: str
+    fired: bool
+    summary: str
+    conditions: tuple[ConditionEvaluation, ...] = ()
+    metrics: dict[str, Any] | None = None
+    signal: Signal | None = None
+
+
 class Strategy(ABC):
     name: str
     market: Market
@@ -22,6 +46,27 @@ class Strategy(ABC):
 
     @abstractmethod
     def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None: ...
+
+    def evaluate_with_trace(self, bars: list[Bar], context: StrategyContext) -> StrategyEvaluation:
+        """Compatibility adapter for third-party strategies without native tracing."""
+        signal = self.evaluate(bars, context)
+        supported = self.supports(bars)
+        condition = ConditionEvaluation(
+            "strategy_support",
+            supported,
+            {"bars": len(bars), "market": bars[-1].market.value if bars else None},
+            f"at least {self.minimum_bars} bars and market={self.market.value}",
+            "Strategy has enough compatible history."
+            if supported
+            else "Unsupported market or history.",
+        )
+        return StrategyEvaluation(
+            self.name,
+            signal is not None,
+            "Strategy fired." if signal is not None else "Strategy returned no setup.",
+            (condition,),
+            signal=signal,
+        )
 
     def supports(self, bars: list[Bar]) -> bool:
         return len(bars) >= self.minimum_bars and bars[-1].market == self.market

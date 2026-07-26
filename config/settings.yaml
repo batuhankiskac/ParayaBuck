@@ -46,6 +46,9 @@ engine:
   minimum_signal_score: 65.0
   warmup_bars: 250
   decision_db_path: data/runtime/parayabuck.sqlite3
+  ai_logging_enabled: true
+  ai_log_path: data/runtime/ai_decisions
+  prediction_horizon_bars: 48
   risk:
     risk_per_trade_pct: 0.005
     max_position_pct: 0.1

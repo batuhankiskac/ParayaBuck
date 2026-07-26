@@ -14,7 +14,7 @@ from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggr
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.logger import get_logger
-from parayabuck.monitoring import DecisionJournal
+from parayabuck.monitoring import AIDecisionJournal, DecisionJournal
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -32,7 +32,23 @@ class EngineRuntime:
         self.paper = config.alpaca.paper
         self.broker = AlpacaBroker(api_key, secret_key, paper=self.paper)
         self.journal = DecisionJournal(self.config.decision_db_path)
-        self.engine = TradingEngine(self.broker, self.config, journal=self.journal)
+        self.ai_journal = None
+        if self.config.ai_logging_enabled:
+            try:
+                self.ai_journal = AIDecisionJournal(
+                    self.config.ai_log_path,
+                    "paper" if self.paper else "live",
+                    self.config.timeframe,
+                    self.config.prediction_horizon_bars,
+                )
+            except Exception:
+                log.exception("AI decision journal initialization failed; trading continues")
+        self.engine = TradingEngine(
+            self.broker,
+            self.config,
+            journal=self.journal,
+            ai_journal=self.ai_journal,
+        )
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_feed)
         self.primary_aggregator = TimeframeAggregator(self.config.timeframe)
         self.higher_aggregator = TimeframeAggregator(self.config.higher_timeframe)

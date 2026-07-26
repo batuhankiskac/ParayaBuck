@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from itertools import groupby
+from uuid import uuid4
 
 from parayabuck.backtest.broker import BacktestBroker
 from parayabuck.config import EngineConfig
 from parayabuck.core.models import Bar
 from parayabuck.engine import TradingEngine
+from parayabuck.logger import get_logger
+from parayabuck.monitoring import AIDecisionJournal
 from parayabuck.strategies.base import Strategy
+
+log = get_logger("parayabuck.backtest.engine")
 
 
 @dataclass(frozen=True)
@@ -37,10 +43,29 @@ class BacktestEngine:
         slippage_bps: float = 2.0,
         commission: float = 0.0,
         strategies: tuple[Strategy, ...] | None = None,
+        run_id: str | None = None,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = BacktestBroker(starting_equity, slippage_bps, commission)
-        self.engine = TradingEngine(self.broker, self.config, strategies)
+        self.run_id = run_id or (f"backtest-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}")
+        self.ai_journal = None
+        if self.config.ai_logging_enabled:
+            try:
+                self.ai_journal = AIDecisionJournal(
+                    self.config.ai_log_path,
+                    "backtest",
+                    self.config.timeframe,
+                    self.config.prediction_horizon_bars,
+                    self.run_id,
+                )
+            except Exception:
+                log.exception("AI decision journal initialization failed; backtest continues")
+        self.engine = TradingEngine(
+            self.broker,
+            self.config,
+            strategies,
+            ai_journal=self.ai_journal,
+        )
         self.starting_equity = starting_equity
 
     def run(self, bars: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
@@ -49,10 +74,15 @@ class BacktestEngine:
         ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))
         curve: list[float] = []
         recorded_pnls = 0
+        recorded_fills = 0
         for _, grouped in groupby(ordered, key=lambda bar: bar.timestamp):
             cycle = list(grouped)
             for bar in cycle:
                 self.broker.advance(bar)
+            if self.ai_journal is not None:
+                for fill in self.broker.fills[recorded_fills:]:
+                    self.ai_journal.record_broker_fill(fill)
+            recorded_fills = len(self.broker.fills)
             for pnl in self.broker.realized_pnls[recorded_pnls:]:
                 self.engine.risk.record_realized_pnl(pnl)
             recorded_pnls = len(self.broker.realized_pnls)

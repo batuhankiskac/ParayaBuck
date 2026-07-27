@@ -78,8 +78,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isPaperMode = true;
     let accountSuffix = '';
-    let equityHistory = [];
-    let timeHistory = [];
+    const equityHistoryKey = 'parayabuck-equity-history-v1';
+    const loadEquityHistory = () => {
+        try {
+            const stored = JSON.parse(sessionStorage.getItem(equityHistoryKey) || '{}');
+            const values = Array.isArray(stored.values) ? stored.values.map(Number) : [];
+            const times = Array.isArray(stored.times) ? stored.times.map(String) : [];
+            const snapshots = Array.isArray(stored.snapshots) ? stored.snapshots.map(String) : [];
+            if (
+                values.length === times.length
+                && values.length === snapshots.length
+                && values.every(Number.isFinite)
+            ) {
+                return {
+                    values: values.slice(-30),
+                    times: times.slice(-30),
+                    snapshots: snapshots.slice(-30)
+                };
+            }
+        } catch (_) {
+            // A corrupt browser cache should never prevent the terminal loading.
+        }
+        return { values: [], times: [], snapshots: [] };
+    };
+    const storedEquityHistory = loadEquityHistory();
+    let equityHistory = storedEquityHistory.values;
+    let timeHistory = storedEquityHistory.times;
+    let snapshotHistory = storedEquityHistory.snapshots;
     let dataWs = null;
     let logWs = null;
     let dataReconnectAttempts = 0;
@@ -159,20 +184,28 @@ document.addEventListener('DOMContentLoaded', () => {
             'running': 'Çalışıyor (Canlı)',
             'stopped': 'Durdu',
             'starting': 'Başlatılıyor...',
+            'warming_up': 'Veriler hazırlanıyor...',
+            'degraded': 'Kısıtlı çalışıyor',
+            'halted': 'Güvenlik nedeniyle durdu',
+            'stopping': 'Durduruluyor...',
+            'stop_failed': 'Durdurma hatası',
             'error': 'Hata'
         };
         statusText.textContent = stateLabels[state] || state;
 
         // Buttons state
-        if (state === 'running') {
+        if (['running', 'warming_up', 'degraded', 'halted'].includes(state)) {
             startBtn.disabled = true;
             stopBtn.disabled = false;
         } else if (state === 'stopped' || state === 'error') {
             startBtn.disabled = false;
             stopBtn.disabled = true;
-        } else if (state === 'starting') {
+        } else if (state === 'starting' || state === 'stopping') {
             startBtn.disabled = true;
-            stopBtn.disabled = false;
+            stopBtn.disabled = state === 'stopping';
+        } else if (state === 'stop_failed') {
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
         }
     };
 
@@ -220,15 +253,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Push to Chart
         if (data.equity > 0) {
-            const nowTime = new Date().toLocaleTimeString();
+            const snapshotId = data.snapshot_at || new Date().toISOString();
+            if (snapshotHistory[snapshotHistory.length - 1] === snapshotId) {
+                return;
+            }
+            const snapshotDate = new Date(snapshotId);
+            const nowTime = Number.isNaN(snapshotDate.getTime())
+                ? new Date().toLocaleTimeString()
+                : snapshotDate.toLocaleTimeString();
             timeHistory.push(nowTime);
             equityHistory.push(data.equity);
+            snapshotHistory.push(snapshotId);
 
             if (timeHistory.length > 30) {
                 timeHistory.shift();
                 equityHistory.shift();
+                snapshotHistory.shift();
             }
 
+            sessionStorage.setItem(equityHistoryKey, JSON.stringify({
+                times: timeHistory,
+                values: equityHistory,
+                snapshots: snapshotHistory
+            }));
             equityChart.update();
         }
     };

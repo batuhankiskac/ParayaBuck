@@ -17,6 +17,7 @@ from parayabuck.core.models import (
     OrderIntent,
     OrderState,
     PositionSnapshot,
+    ProtectionState,
     Regime,
     Signal,
 )
@@ -285,6 +286,72 @@ def test_reconcile_protects_only_unreserved_equity_qty() -> None:
     broker.reconcile()
 
     assert submitted == [pytest.approx(0.5)]
+
+
+def test_reconcile_finds_held_stop_on_filled_bracket_parent() -> None:
+    class FakeClient:
+        def get_order_by_id(self, order_id: str, request: Any) -> Any:
+            assert order_id == "entry-order"
+            assert request.nested is True
+            return SimpleNamespace(
+                symbol="XLE",
+                side="buy",
+                type="market",
+                status="filled",
+                legs=(
+                    SimpleNamespace(
+                        symbol="XLE",
+                        side="sell",
+                        type="limit",
+                        status="new",
+                        qty="170",
+                        stop_price=None,
+                        legs=None,
+                    ),
+                    SimpleNamespace(
+                        symbol="XLE",
+                        side="sell",
+                        type="stop",
+                        status="held",
+                        qty="170",
+                        stop_price="57.99",
+                        legs=None,
+                    ),
+                ),
+            )
+
+    ownership = SimpleNamespace(
+        original_stop=57.99,
+        owned_qty=170,
+        broker_order_id="entry-order",
+        entry_client_order_id="parayabuck-entry",
+    )
+    protection_states: list[ProtectionState] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._account_id = "acct"
+    broker.manage_external_positions = False
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {"XLE": ownership},
+        set_protection_state=lambda _account, _entry, state: protection_states.append(state),
+    )
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot("XLE", 170, 58.59, 58.7, Market.EQUITY, qty_available=0),
+        ),
+    )
+    broker._has_protective_order = lambda *_args: False
+    broker._submit_stop = lambda *_args, **_kwargs: pytest.fail(
+        "held bracket stop already protects the position"
+    )
+
+    broker.reconcile()
+
+    assert protection_states == [ProtectionState.ACTIVE]
 
 
 def test_crypto_order_flattens_when_protection_fails() -> None:

@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from enum import StrEnum
-from zoneinfo import ZoneInfo
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
-
-_NEW_YORK = ZoneInfo("America/New_York")
 
 
 class BarRevision(StrEnum):
@@ -64,13 +61,14 @@ class BarStore:
                 "1h": 3600,
                 "1d": 86400,
             }[bar.timeframe]
-            same_equity_session = bar.market != Market.EQUITY or (
-                series[-1].timestamp.astimezone(_NEW_YORK).date()
-                == normalized.timestamp.astimezone(_NEW_YORK).date()
-            )
+            # Alpaca equity bars are trade-based. A quiet IEX/SIP interval is
+            # omitted rather than emitted as a zero-volume candle, so a
+            # timestamp jump alone cannot distinguish normal market silence
+            # from a transport gap. Crypto trades continuously and remains
+            # suitable for this continuity check.
             if (
                 delta.total_seconds() > expected_seconds
-                and same_equity_session
+                and bar.market != Market.EQUITY
                 and bar.timeframe != "1d"
             ):
                 mutation = BarMutation.GAP_DETECTED
@@ -105,10 +103,7 @@ class BarStore:
             "1d": 86400,
         }[timeframe]
         for previous, current in zip(series, series[1:], strict=False):
-            if current.market == Market.EQUITY and (
-                previous.timestamp.astimezone(_NEW_YORK).date()
-                != current.timestamp.astimezone(_NEW_YORK).date()
-            ):
+            if current.market == Market.EQUITY:
                 continue
             if (current.timestamp - previous.timestamp).total_seconds() > expected_seconds:
                 return False

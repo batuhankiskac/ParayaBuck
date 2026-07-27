@@ -109,6 +109,7 @@ class AppConfig:
     host: str = "127.0.0.1"
     port: int = 8000
     open_browser: bool = True
+    auto_start_engine: bool = True
     log_level: str = "INFO"
 
     def __post_init__(self) -> None:

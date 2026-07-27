@@ -150,6 +150,65 @@ def test_application_shutdown_stops_running_engine(monkeypatch: Any) -> None:
     assert manager.stop_calls == 1
 
 
+def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None:
+    class AutoStartManager:
+        start_calls = 0
+        stop_calls = 0
+        log_queues: set[Any] = set()
+
+        def should_auto_start(self) -> bool:
+            return True
+
+        def start_engine(self) -> None:
+            self.start_calls += 1
+
+        def stop_engine(self) -> None:
+            self.stop_calls += 1
+
+    manager = AutoStartManager()
+    monkeypatch.setattr(server, "manager", manager)
+
+    async def run_lifespan() -> None:
+        async with server.app_lifespan(server.app):
+            await asyncio.sleep(0.01)
+
+    asyncio.run(run_lifespan())
+
+    assert manager.start_calls == 1
+    assert manager.stop_calls == 1
+
+
+def test_live_mode_is_never_eligible_for_auto_start(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manager = server.EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.security_warning = None
+    monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+    manager.config_path.write_text(
+        yaml.safe_dump(
+            {
+                "app": {"auto_start_engine": True},
+                "alpaca": {"paper": False},
+                "symbols": ["AAPL"],
+            }
+        )
+    )
+
+    assert manager.should_auto_start() is False
+
+    manager.config_path.write_text(
+        yaml.safe_dump(
+            {
+                "app": {"auto_start_engine": True},
+                "alpaca": {"paper": True},
+                "symbols": ["AAPL"],
+            }
+        )
+    )
+    assert manager.should_auto_start() is True
+
+
 def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     calls: list[str] = []
 

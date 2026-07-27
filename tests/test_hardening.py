@@ -36,6 +36,7 @@ from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.sectors import sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.portfolio.allocator import PortfolioAllocator
+from parayabuck.runtime import EngineRuntime, WorkerHealth, _symbol_batches
 from parayabuck.web import server
 
 
@@ -142,6 +143,105 @@ def test_bar_store_correction_updates_without_retriggering() -> None:
     assert store.upsert(corrected) == BarMutation.STALE_REJECTED
     assert store.upsert(corrected, BarRevision.CORRECTION) == BarMutation.UPDATED
     assert store.get("AAPL", "5m")[-1].close == 100.5
+
+
+def test_sparse_equity_bars_are_not_mistaken_for_transport_gaps() -> None:
+    start = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
+    equities = BarStore()
+    crypto = BarStore()
+
+    assert equities.upsert(_bar(start)) == BarMutation.INSERTED
+    assert equities.upsert(_bar(start + timedelta(minutes=10))) == BarMutation.INSERTED
+
+    assert crypto.upsert(_bar(start, symbol="BTC/USD", market=Market.CRYPTO)) == (
+        BarMutation.INSERTED
+    )
+    assert crypto.upsert(
+        _bar(start + timedelta(minutes=10), symbol="BTC/USD", market=Market.CRYPTO)
+    ) == BarMutation.GAP_DETECTED
+
+
+def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
+    symbols = [f"SYM{index}" for index in range(21)]
+    batches = list(_symbol_batches(symbols))
+
+    assert [len(batch) for batch in batches] == [8, 8, 5]
+    assert [symbol for batch in batches for symbol in batch] == symbols
+
+
+def test_partial_ranking_universe_is_evaluated_after_grace_period() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
+    bar = _bar(timestamp)
+    evaluated: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+
+    class Engine:
+        entry_halt_reason = None
+        has_data_gaps = False
+
+        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            return SimpleNamespace(
+                bars=tuple(bars),
+                mutations=(SimpleNamespace(value="inserted"),),
+            )
+
+        def evaluate_timestamp(
+            self,
+            _timestamp: datetime,
+            symbols: list[str],
+            _account: AccountSnapshot,
+            *,
+            missing_symbols: tuple[str, ...],
+        ) -> Any:
+            evaluated.append((tuple(symbols), missing_symbols))
+            return SimpleNamespace(orders=())
+
+    runtime.engine = Engine()
+    runtime.broker = SimpleNamespace(
+        account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0)
+    )
+    runtime._historical = None
+    runtime._warming_up = False
+    runtime._not_ready_symbols = set()
+    runtime._last_account_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._refresh_readiness = lambda: None
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_readiness_reasons = lambda: ()
+
+    runtime._process_timestamp(timestamp, {"AAPL": bar}, {"AAPL", "MSFT"})
+
+    assert evaluated == [(("AAPL",), ("MSFT",))]
+
+
+def test_blocking_stream_workers_stay_healthy_while_thread_is_alive() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    stale = now - timedelta(minutes=10)
+    runtime.symbols = ["AAPL"]
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15,
+        maximum_account_age_for_entry_seconds=30,
+        maximum_queue_age_seconds=30,
+    )
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(stale, stale, alive=True),
+        "pb-stocks": WorkerHealth(stale, stale, alive=True),
+    }
+    runtime._running = True
+    runtime._state = "running"
+    runtime._last_account_at = now
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._events = SimpleNamespace(qsize=lambda: 0)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.engine = SimpleNamespace(has_data_gaps=False)
+
+    assert runtime.health().healthy is True
+    assert runtime.health().state == "running"
 
 
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:

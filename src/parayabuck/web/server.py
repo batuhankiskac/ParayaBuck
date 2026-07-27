@@ -91,6 +91,23 @@ class EngineManager:
         secret = os.getenv("ALPACA_SECRET_KEY")
         return key, secret
 
+    def should_auto_start(self) -> bool:
+        """Auto-start configured paper engines without weakening live safeguards."""
+        try:
+            raw = yaml.safe_load(self.config_path.read_text()) if self.config_path.exists() else {}
+            app_config = (raw or {}).get("app", {})
+            alpaca_config = (raw or {}).get("alpaca", {})
+            key, secret = self.get_credentials()
+            return bool(
+                app_config.get("auto_start_engine", True)
+                and alpaca_config.get("paper", True)
+                and key
+                and secret
+                and not self.security_warning
+            )
+        except Exception:
+            return False
+
     def current_engine_state(self) -> str:
         with self._state_lock:
             if self.runtime is not None and hasattr(self.runtime, "health"):
@@ -464,11 +481,25 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
 manager = EngineManager()
 
 
+async def _auto_start_paper_engine() -> None:
+    try:
+        await asyncio.to_thread(manager.start_engine)
+    except Exception as exc:
+        log.error("Automatic paper engine start failed: %s", exc)
+
+
 @asynccontextmanager
 async def app_lifespan(_app: FastAPI) -> Any:
+    auto_start_task: asyncio.Task[None] | None = None
+    should_auto_start = getattr(manager, "should_auto_start", lambda: False)
+    if should_auto_start():
+        log.info("Starting configured paper engine automatically")
+        auto_start_task = asyncio.create_task(_auto_start_paper_engine())
     try:
         yield
     finally:
+        if auto_start_task is not None:
+            await auto_start_task
         # Uvicorn shutting down must also release Alpaca's stock and crypto
         # sockets. Daemon threads alone remain active long enough to collide
         # with a newly launched process and trigger the connection limit.
@@ -776,6 +807,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             "host": payload.host.strip() or "127.0.0.1",
             "port": payload.port,
             "open_browser": payload.open_browser,
+            "auto_start_engine": old_app.get("auto_start_engine", True),
             "log_level": payload.log_level.upper(),
         }
 

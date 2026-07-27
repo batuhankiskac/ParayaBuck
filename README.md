@@ -33,6 +33,8 @@ python -m parayabuck
 
 Varsayılan adres `http://127.0.0.1:8000` olur. Alpaca anahtarları, paper/live modu,
 risk yüzdeleri ve motor periyodu Web UI içindeki Ayarlar penceresinden yönetilir.
+API bilgileri mevcutsa paper motoru uygulama açılırken otomatik başlar. Live mod hiçbir
+zaman otomatik başlamaz ve her açılışta Web UI doğrulaması gerektirir.
 
 Gerçek para modu:
 

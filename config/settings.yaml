@@ -2,6 +2,7 @@ app:
   host: 127.0.0.1
   port: 8000
   open_browser: true
+  auto_start_engine: true
   log_level: INFO
 alpaca:
   paper: true

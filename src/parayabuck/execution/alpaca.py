@@ -11,6 +11,7 @@ from uuid import uuid4
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import (
+    GetOrderByIdRequest,
     GetOrdersRequest,
     MarketOrderRequest,
     StopLimitOrderRequest,
@@ -269,6 +270,9 @@ class AlpacaBroker:
                 stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
                 stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
                 total_qty = abs(position.qty)
+            available_qty = (
+                abs(position.qty_available) if position.qty_available is not None else total_qty
+            )
             required_qty = total_qty
             if position.market == Market.CRYPTO and position.qty_available == 0:
                 # Alpaca may deduct the taker fee from the acquired asset. A
@@ -278,7 +282,28 @@ class AlpacaBroker:
                 # available; otherwise reconcile protects the remaining units.
                 required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
-            if self._has_protective_order(position.symbol, is_long, required_qty):
+            has_protection = self._has_protective_order(
+                position.symbol, is_long, required_qty
+            )
+            if (
+                not has_protection
+                and ownership is not None
+                and ownership.broker_order_id
+                and available_qty <= 0
+            ):
+                # Alpaca's open-orders endpoint can return only the active
+                # take-profit leg of a filled bracket. Its paired stop remains
+                # HELD and is visible only when the filled parent is fetched
+                # with nested legs. Treat that held stop as active protection;
+                # otherwise reconciliation tries to submit a second stop while
+                # the bracket has reserved the entire position.
+                has_protection = self._has_nested_bracket_protection(
+                    ownership.broker_order_id,
+                    position.symbol,
+                    is_long,
+                    required_qty,
+                )
+            if has_protection:
                 if (
                     ownership is not None
                     and ledger is not None
@@ -303,9 +328,6 @@ class AlpacaBroker:
                         ProtectionState.REQUESTED,
                     )
                 self._cancel_protective_orders(position.symbol, is_long)
-            available_qty = (
-                abs(position.qty_available) if position.qty_available is not None else total_qty
-            )
             qty = min(total_qty, available_qty)
             if position.market == Market.CRYPTO:
                 qty = self._available_position_qty(
@@ -371,6 +393,50 @@ class AlpacaBroker:
                     ownership.entry_client_order_id,
                     ProtectionState.ACTIVE,
                 )
+
+    def _has_nested_bracket_protection(
+        self,
+        parent_order_id: str,
+        symbol: str,
+        position_is_long: bool,
+        required_qty: float,
+    ) -> bool:
+        parent: Any = self._client.get_order_by_id(
+            parent_order_id,
+            GetOrderByIdRequest(nested=True),
+        )
+        closing_side = "sell" if position_is_long else "buy"
+
+        def protective_qty(order: Any) -> Decimal:
+            side = str(self._field(order, "side", "")).lower().split(".")[-1]
+            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
+            stop_price = self._field(order, "stop_price")
+            status = str(self._field(order, "status", "")).lower().split(".")[-1]
+            if (
+                side == closing_side
+                and status not in {"canceled", "expired", "filled", "rejected"}
+                and (
+                    stop_price is not None
+                    or order_type in {"stop", "stop_limit", "trailing_stop"}
+                )
+            ):
+                return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+            return sum(
+                (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
+                start=Decimal("0"),
+            )
+
+        if not same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
+            return False
+        protected = protective_qty(parent)
+        required = Decimal(str(required_qty))
+        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
+        self._last_protection_mismatch = (
+            "missing"
+            if protected == 0
+            else ("under" if protected < required - tolerance else "over")
+        )
+        return abs(protected - required) <= tolerance
 
     def _asset(self, symbol: str) -> Any:
         identity = normalize_symbol(symbol)

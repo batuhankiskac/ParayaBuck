@@ -26,6 +26,7 @@ from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
 _NEW_YORK = ZoneInfo("America/New_York")
+_WARMUP_SYMBOL_BATCH_SIZE = 8
 
 
 @dataclass
@@ -154,10 +155,14 @@ class EngineRuntime:
         if any(is_crypto(symbol) for symbol in self.symbols):
             required.add("pb-crypto")
         heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        blocking_stream_workers = {"pb-stocks", "pb-crypto", "pb-trade-updates"}
         alive = all(
             self._workers.get(name)
             and self._workers[name].alive
-            and (now - self._workers[name].last_heartbeat).total_seconds() <= heartbeat_ttl
+            and (
+                name in blocking_stream_workers
+                or (now - self._workers[name].last_heartbeat).total_seconds() <= heartbeat_ttl
+            )
             for name in required
         )
         account_fresh = (
@@ -609,10 +614,9 @@ class EngineRuntime:
         missing = tuple(sorted(expected - set(bars_by_symbol)))
         if missing:
             log.warning(
-                "Portfolio entry skipped because ranking universe is incomplete: %s",
+                "Ranking universe is partial; evaluating available symbols: %s",
                 ", ".join(missing),
             )
-            return
         try:
             account = self.broker.account()
             self._last_account_at = datetime.now(UTC)
@@ -786,33 +790,41 @@ class EngineRuntime:
         )
         for timeframe in {self.config.timeframe, self.config.higher_timeframe}:
             for symbols in groups:
-                if not symbols:
-                    continue
-                try:
-                    batched = history.get_bars_batch(
-                        symbols,
-                        timeframe,
-                        start=_warmup_start(symbols[0], timeframe, self.config.warmup_bars),
-                    )
-                    for symbol in symbols:
-                        bars = batched.get(symbol, [])
-                        self.engine.seed(bars[-self.config.warmup_bars :])
-                        if len(bars) < self.config.warmup_bars:
-                            log.warning(
-                                "Warmup not ready %s %s: %d/%d bars",
-                                symbol,
-                                timeframe,
-                                len(bars),
-                                self.config.warmup_bars,
-                            )
-                except Exception as exc:
-                    log.warning(
-                        "Warmup batch skipped %s symbols=%d: %s",
-                        timeframe,
-                        len(symbols),
-                        exc,
-                    )
+                for symbol_batch in _symbol_batches(symbols):
+                    try:
+                        batched = history.get_bars_batch(
+                            symbol_batch,
+                            timeframe,
+                            start=_warmup_start(
+                                symbol_batch[0], timeframe, self.config.warmup_bars
+                            ),
+                        )
+                        for symbol in symbol_batch:
+                            bars = batched.get(symbol, [])
+                            self.engine.seed(bars[-self.config.warmup_bars :])
+                            if len(bars) < self.config.warmup_bars:
+                                log.warning(
+                                    "Warmup not ready %s %s: %d/%d bars",
+                                    symbol,
+                                    timeframe,
+                                    len(bars),
+                                    self.config.warmup_bars,
+                                )
+                    except Exception as exc:
+                        log.warning(
+                            "Warmup batch skipped %s symbols=%d: %s",
+                            timeframe,
+                            len(symbol_batch),
+                            exc,
+                        )
         log.info("Warmup complete")
+
+
+def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
+    return tuple(
+        symbols[offset : offset + _WARMUP_SYMBOL_BATCH_SIZE]
+        for offset in range(0, len(symbols), _WARMUP_SYMBOL_BATCH_SIZE)
+    )
 
 
 def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:

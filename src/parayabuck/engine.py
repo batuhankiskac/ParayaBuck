@@ -65,11 +65,17 @@ class TradingEngine:
     def seed(self, bars: list[Bar]) -> None:
         self.bars.seed(bars)
 
-    def repair_gap(self, bars: list[Bar]) -> None:
+    def repair_gap(self, bars: list[Bar]) -> bool:
         """Merge a validated historical backfill and mark its series ready."""
         self.bars.seed(bars)
+        repaired = True
         for bar in bars:
-            self._not_ready.discard((canonical_symbol(bar.symbol, bar.market), bar.timeframe))
+            key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
+            if self.bars.is_contiguous(*key):
+                self._not_ready.discard(key)
+            else:
+                repaired = False
+        return repaired
 
     @property
     def has_data_gaps(self) -> bool:
@@ -313,7 +319,10 @@ class TradingEngine:
             state, fill = self.broker.submit(order)
             lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
             filled_qty = fill.qty if fill is not None else 0.0
-            if lifecycle.state == OrderState.UNKNOWN:
+            if lifecycle.state in {
+                OrderState.UNKNOWN,
+                OrderState.RECONCILIATION_REQUIRED,
+            }:
                 self.entry_halt_reason = "ambiguous_order_state"
                 self.risk.reserve(order)
             elif lifecycle.state == OrderState.REJECTED and filled_qty > 0:
@@ -321,6 +330,7 @@ class TradingEngine:
             if lifecycle.state in {
                 OrderState.ACCEPTED,
                 OrderState.PARTIALLY_FILLED,
+                OrderState.RECONCILIATION_REQUIRED,
                 OrderState.UNKNOWN,
             }:
                 self.risk.reserve(order, order.qty - filled_qty)

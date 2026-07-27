@@ -11,11 +11,12 @@ from zoneinfo import ZoneInfo
 from requests.exceptions import RequestException
 
 from parayabuck.config import Config
-from parayabuck.core.models import AccountSnapshot, Bar, Fill, OrderState
+from parayabuck.core.models import AccountSnapshot, Bar, ExecutionEvent, Fill
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.engine import TradingEngine
-from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.alpaca import AlpacaBroker, ProtectionReconciliationError
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
+from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -98,16 +99,28 @@ class EngineRuntime:
             enforce_live_safety=True,
             paper_mode=self.paper,
         )
+        self.execution = ExecutionCoordinator(
+            self.engine.orders,
+            self.engine.risk,
+            self.ledger,
+        )
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_feed)
         self.trading_updates = AlpacaTradingUpdateStream(
             api_key, secret_key, self.paper, self._on_trade_update
         )
-        self.primary_aggregator = TimeframeAggregator(self.config.timeframe)
-        self.higher_aggregator = TimeframeAggregator(self.config.higher_timeframe)
+        self.primary_aggregator = TimeframeAggregator(
+            self.config.timeframe,
+            self.config.data_finalization_grace_seconds,
+        )
+        self.higher_aggregator = TimeframeAggregator(
+            self.config.higher_timeframe,
+            self.config.data_finalization_grace_seconds,
+        )
         self._events: queue.Queue[_Event | None] = queue.Queue(
             maxsize=self.config.event_queue_capacity
         )
         self._threads: list[threading.Thread] = []
+        self._stop_event = threading.Event()
         self._running = False
         self._ingestion_lock = threading.Lock()
         self._journal_closed = False
@@ -118,9 +131,11 @@ class EngineRuntime:
         self._oldest_received_at: datetime | None = None
         self._last_account_at: datetime | None = None
         self._circuit_breaker_reason: str | None = None
-        self._last_closed_timestamp: datetime | None = None
+        self._series_watermarks: dict[tuple[str, str], datetime] = {}
+        self._portfolio_watermark: datetime | None = None
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
+        self._historical: AlpacaHistoricalData | None = None
 
     @property
     def is_running(self) -> bool:
@@ -133,16 +148,22 @@ class EngineRuntime:
             if self._oldest_received_at is not None
             else 0.0
         )
-        required = {"pb-decisions", "pb-trade-updates"}
+        required = {"pb-decisions", "pb-trade-updates", "pb-account"}
         if any(not is_crypto(symbol) for symbol in self.symbols):
             required.add("pb-stocks")
         if any(is_crypto(symbol) for symbol in self.symbols):
             required.add("pb-crypto")
-        alive = all(self._workers.get(name) and self._workers[name].alive for name in required)
+        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        alive = all(
+            self._workers.get(name)
+            and self._workers[name].alive
+            and (now - self._workers[name].last_heartbeat).total_seconds() <= heartbeat_ttl
+            for name in required
+        )
         account_fresh = (
             self._last_account_at is not None
             and (now - self._last_account_at).total_seconds()
-            <= self.config.account_snapshot_ttl_seconds
+            <= self.config.maximum_account_age_for_entry_seconds
         )
         healthy = (
             self._running
@@ -170,13 +191,21 @@ class EngineRuntime:
     def start(self) -> None:
         if self._running:
             raise RuntimeError("Engine runtime is already running")
+        if self._state == "stop_failed":
+            raise RuntimeError("Previous runtime workers did not stop; process restart required")
+        self._stop_event.clear()
         self._state = "starting"
         try:
             self.broker.reconcile()
-        except Exception:
-            self._circuit_breaker_reason = "reconciliation_failed"
+        except Exception as exc:
+            self._circuit_breaker_reason = (
+                "protection_failure"
+                if isinstance(exc, ProtectionReconciliationError)
+                else "reconciliation_failed"
+            )
             self._state = "halted"
             raise
+        self._restore_persistent_state()
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
         stocks = [symbol for symbol in self.symbols if not is_crypto(symbol)]
@@ -191,6 +220,7 @@ class EngineRuntime:
         self._warming_up = True
         self._threads = [
             threading.Thread(target=self._decision_loop, name="pb-decisions", daemon=True),
+            threading.Thread(target=self._account_loop, name="pb-account", daemon=True),
             threading.Thread(
                 target=self._run_stream_worker,
                 args=("pb-trade-updates", self.trading_updates.run),
@@ -245,10 +275,12 @@ class EngineRuntime:
             self.config.timeframe,
         )
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
+        alive: list[str] = []
         if self._running:
             self._state = "stopping"
             self._running = False
+            self._stop_event.set()
             try:
                 self._events.put_nowait(None)
             except queue.Full:
@@ -269,7 +301,9 @@ class EngineRuntime:
                 thread.join(timeout=5)
             alive = [thread.name for thread in self._threads if thread.is_alive()]
             if alive:
-                log.warning("Stream workers did not stop cleanly: %s", ", ".join(alive))
+                self._state = "stop_failed"
+                log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
+                return False
         if not self._journal_closed:
             self.journal_writer.close()
             self.journal.close()
@@ -277,64 +311,90 @@ class EngineRuntime:
             self._journal_closed = True
         self._state = "stopped"
         log.info("Engine runtime stopped")
+        return True
+
+    def _account_loop(self) -> None:
+        worker = self._workers["pb-account"]
+        worker.alive = True
+        try:
+            while self._running:
+                worker.last_heartbeat = datetime.now(UTC)
+                try:
+                    account = self.broker.account()
+                    self._last_account_at = datetime.now(UTC)
+                    worker.last_event_at = self._last_account_at
+                    worker.last_error = None
+                    self._persist_risk_state(account)
+                except Exception as exc:
+                    worker.last_error = str(exc)
+                    log.warning("Account refresh failed: %s", exc)
+                self._stop_event.wait(self.config.account_poll_interval_seconds)
+        finally:
+            worker.alive = False
+
+    def _restore_persistent_state(self) -> None:
+        account_id = self.broker.account_id or "unknown"
+        previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
+        persistent_reasons = {
+            "ambiguous_order_state",
+            "protection_failure",
+            "protection_mismatch",
+            "ledger_mismatch",
+            "post_fill_risk_violation",
+            "final_market_event_queue_overflow",
+        }
+        if previous is not None:
+            self.engine.risk.consecutive_losses = previous.consecutive_losses
+            if previous.circuit_breaker_reason in persistent_reasons:
+                self._circuit_breaker_reason = previous.circuit_breaker_reason
+        for order, remaining_qty in self.ledger.pending_entry_orders(account_id):
+            self.engine.orders.create(order)
+            self.engine.risk.reserve(order, remaining_qty)
 
     def _on_critical_journal_failure(self, reason: str) -> None:
         self._circuit_breaker_reason = "critical_journal_failure"
         log.error("Entry circuit breaker opened: %s", reason)
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
-        self.ledger.record_order_update(
-            update.client_order_id,
-            update.broker_order_id,
-            update.event,
-            update.timestamp,
-            update.requested_qty,
-            update.filled_qty,
-            update.average_fill_price,
-            update.state.value
-            if update.state
-            in {
-                OrderState.FILLED,
-                OrderState.CANCELLED,
-                OrderState.REJECTED,
-                OrderState.EXPIRED,
-            }
-            else None,
+        account_id = self.broker.account_id or "unknown"
+        transition = self.execution.apply(
+            ExecutionEvent(
+                account_id=account_id,
+                client_order_id=update.client_order_id,
+                broker_order_id=update.broker_order_id,
+                parent_order_id=update.parent_order_id,
+                role=update.role,
+                symbol=update.symbol,
+                market=update.market,
+                state=update.state,
+                requested_qty=update.requested_qty,
+                cumulative_filled_qty=update.filled_qty,
+                average_fill_price=update.average_fill_price,
+                occurred_at=update.timestamp,
+            )
         )
         lifecycle = self.engine.orders.orders.get(update.client_order_id)
-        if lifecycle is None:
-            return
-        if update.state is not None and lifecycle.state != update.state:
-            try:
-                self.engine.orders.transition(
-                    update.client_order_id, update.state, f"trade_update:{update.event}"
-                )
-            except ValueError:
-                # Duplicate or out-of-order broker updates remain in the event
-                # ledger but cannot move the local state machine backwards.
-                pass
-        if update.state in {OrderState.ACCEPTED, OrderState.PARTIALLY_FILLED}:
-            self.engine.risk.reserve(
-                lifecycle.order,
-                update.requested_qty - update.filled_qty,
-            )
-        elif update.state is not None:
-            self.engine.risk.release(update.client_order_id)
-        if update.filled_qty > 0 and update.average_fill_price is not None:
+        if (
+            lifecycle is not None
+            and transition.fill_delta > 0
+            and update.average_fill_price is not None
+        ):
             fill = Fill(
                 update.client_order_id,
                 update.symbol,
-                update.filled_qty,
+                transition.fill_delta,
                 update.average_fill_price,
                 lifecycle.order.direction,
                 update.timestamp,
             )
-            self.ledger.record_entry_fill(
-                self.broker.account_id or "unknown",
-                lifecycle.order,
-                fill,
-                update.broker_order_id,
+            if self.ai_journal is not None:
+                self.ai_journal.record_broker_fill(fill)
+            actual_risk = abs(fill.price - lifecycle.order.stop_price) * fill.qty + fill.commission
+            approved_risk = (
+                abs(lifecycle.order.entry_price - lifecycle.order.stop_price) * lifecycle.order.qty
             )
+            if approved_risk > 0 and actual_risk > approved_risk * 1.05:
+                self._circuit_breaker_reason = "post_fill_risk_violation"
 
     def _run_stream_worker(self, name: str, target: object) -> None:
         worker = self._workers[name]
@@ -395,15 +455,39 @@ class EngineRuntime:
         try:
             self._events.put_nowait(event)
         except queue.Full:
-            try:
-                self._events.get_nowait()
-                self._dropped_events += 1
-            except queue.Empty:
-                pass
-            try:
-                self._events.put_nowait(event)
-                self._coalesced_events += 1
-            except queue.Full:
+            key = (kind, bar.symbol, bar.timeframe, bar.timestamp)
+            replaced = False
+            with self._events.mutex:
+                queued = self._events.queue
+                for index in range(len(queued) - 1, -1, -1):
+                    candidate = queued[index]
+                    if candidate is None:
+                        continue
+                    candidate_key = (
+                        candidate.kind,
+                        candidate.bar.symbol,
+                        candidate.bar.timeframe,
+                        candidate.bar.timestamp,
+                    )
+                    if candidate_key == key:
+                        queued[index] = event
+                        replaced = True
+                        self._coalesced_events += 1
+                        break
+                if not replaced and kind == "primary":
+                    self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                elif not replaced:
+                    priorities = {"higher": 1, "correction": 2, "primary": 3}
+                    victim = min(
+                        range(len(queued)),
+                        key=lambda index: priorities.get(
+                            queued[index].kind if queued[index] is not None else "", 0
+                        ),
+                    )
+                    queued[victim] = event
+                    replaced = True
+                    self._dropped_events += 1
+            if not replaced:
                 self._dropped_events += 1
         if self._oldest_received_at is None:
             self._oldest_received_at = event.received_at
@@ -433,9 +517,12 @@ class EngineRuntime:
                         self.engine.seed([item.bar])
                     elif item.kind == "correction":
                         self.engine.ingest_corrections([item.bar])
-                    elif (
-                        self._last_closed_timestamp is not None
-                        and item.bar.timestamp <= self._last_closed_timestamp
+                    elif item.bar.timestamp <= max(
+                        self._series_watermarks.get(
+                            (item.bar.symbol, item.bar.timeframe),
+                            datetime.min.replace(tzinfo=UTC),
+                        ),
+                        self._portfolio_watermark or datetime.min.replace(tzinfo=UTC),
                     ):
                         self.engine.ingest_closed_bars([item.bar])
                     else:
@@ -453,7 +540,18 @@ class EngineRuntime:
                     bars_by_symbol = pending.pop(timestamp)
                     first_seen.pop(timestamp, None)
                     self._process_timestamp(timestamp, bars_by_symbol, expected)
-                    self._last_closed_timestamp = timestamp
+                    for bar in bars_by_symbol.values():
+                        self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
+                            timestamp,
+                            self._series_watermarks.get(
+                                (bar.symbol, bar.timeframe),
+                                datetime.min.replace(tzinfo=UTC),
+                            ),
+                        )
+                    self._portfolio_watermark = max(
+                        timestamp,
+                        self._portfolio_watermark or datetime.min.replace(tzinfo=UTC),
+                    )
                 if self._events.empty():
                     self._oldest_received_at = min(
                         (
@@ -490,7 +588,14 @@ class EngineRuntime:
         self, timestamp: datetime, bars_by_symbol: dict[str, Bar], expected: set[str]
     ) -> None:
         bars = list(bars_by_symbol.values())
-        self.engine.ingest_closed_bars(bars)
+        ingestion = self.engine.ingest_closed_bars(bars)
+        gap_bars = [
+            bar
+            for bar, mutation in zip(ingestion.bars, ingestion.mutations, strict=True)
+            if mutation.value == "gap_detected"
+        ]
+        for bar in gap_bars:
+            self._repair_gap(bar)
         if self._warming_up:
             return
         self._refresh_readiness()
@@ -502,6 +607,12 @@ class EngineRuntime:
         if not ready_bars:
             return
         missing = tuple(sorted(expected - set(bars_by_symbol)))
+        if missing:
+            log.warning(
+                "Portfolio entry skipped because ranking universe is incomplete: %s",
+                ", ".join(missing),
+            )
+            return
         try:
             account = self.broker.account()
             self._last_account_at = datetime.now(UTC)
@@ -513,6 +624,10 @@ class EngineRuntime:
         if self._circuit_breaker_reason == "account_snapshot_stale":
             self._circuit_breaker_reason = None
         if self._circuit_breaker_reason is not None:
+            return
+        readiness_reasons = self._entry_readiness_reasons()
+        if readiness_reasons:
+            log.warning("Entry readiness gate rejected cycle: %s", ", ".join(readiness_reasons))
             return
         result = self.engine.evaluate_timestamp(
             timestamp,
@@ -534,6 +649,77 @@ class EngineRuntime:
                 order.entry_price,
                 order.stop_price,
                 order.target_price,
+            )
+
+    def _entry_readiness_reasons(self) -> tuple[str, ...]:
+        health = self.health()
+        reasons: list[str] = []
+        if self._state != "running":
+            reasons.append(f"runtime_state:{self._state}")
+        if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
+            reasons.append("event_queue_stale")
+        if self.engine.has_data_gaps:
+            reasons.append("data_gap")
+        if (
+            self._last_account_at is None
+            or (datetime.now(UTC) - self._last_account_at).total_seconds()
+            > self.config.maximum_account_age_for_entry_seconds
+        ):
+            reasons.append("account_snapshot_stale")
+        if self._circuit_breaker_reason:
+            reasons.append(self._circuit_breaker_reason)
+        dead_workers = [
+            name
+            for name, worker in self._workers.items()
+            if name in {"pb-decisions", "pb-account", "pb-trade-updates", "pb-stocks", "pb-crypto"}
+            and not worker.alive
+        ]
+        if dead_workers:
+            reasons.append("worker_unavailable:" + ",".join(sorted(dead_workers)))
+        return tuple(reasons)
+
+    def _repair_gap(self, bar: Bar) -> None:
+        history = self._historical
+        if history is None:
+            return
+        series = self.engine.bars.get(bar.symbol, bar.timeframe)
+        previous = next(
+            (
+                candidate
+                for candidate in reversed(series[:-1])
+                if candidate.timestamp < bar.timestamp
+            ),
+            None,
+        )
+        if previous is None:
+            return
+        try:
+            backfill = history.get_bars(
+                bar.symbol,
+                bar.timeframe,
+                start=previous.timestamp,
+                end=bar.timestamp,
+            )
+            if backfill and self.engine.repair_gap(backfill):
+                log.info(
+                    "Historical gap repaired: %s %s %s..%s",
+                    bar.symbol,
+                    bar.timeframe,
+                    previous.timestamp,
+                    bar.timestamp,
+                )
+            else:
+                log.warning(
+                    "Historical gap remains unresolved; symbol stays entry-disabled: %s %s",
+                    bar.symbol,
+                    bar.timeframe,
+                )
+        except Exception as exc:
+            log.warning(
+                "Historical gap repair failed; symbol stays entry-disabled: %s %s: %s",
+                bar.symbol,
+                bar.timeframe,
+                exc,
             )
 
     def _refresh_readiness(self) -> None:
@@ -578,6 +764,9 @@ class EngineRuntime:
             # minute obscures actionable protection failures.
             log.warning("Position protection check deferred after Alpaca API error: %s", exc)
             self._circuit_breaker_reason = "reconciliation_failed"
+        except ProtectionReconciliationError:
+            log.exception("Managed position protection reconciliation failed")
+            self._circuit_breaker_reason = "protection_failure"
         except Exception:
             log.exception("Periodic position protection check failed")
             self._circuit_breaker_reason = "reconciliation_failed"
@@ -589,6 +778,7 @@ class EngineRuntime:
             stock_feed=self.app_config.alpaca.stock_feed,
             data_delayed=self.app_config.alpaca.data_delayed,
         )
+        self._historical = history
         log.info("Warmup starting for %d symbols", len(self.symbols))
         groups = (
             [symbol for symbol in self.symbols if not is_crypto(symbol)],

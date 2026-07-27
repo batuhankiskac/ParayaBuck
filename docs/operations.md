@@ -39,7 +39,9 @@ ayrıca engeller.
 5. Ayarı `restart_engine=false` ile kaydet.
 6. Live motor başlangıcını ayrı başlatma işlemiyle yap.
 
-Arming yalnızca mevcut server process belleğinde tutulur ve restart sonrasında geçersizdir.
+Arming yalnızca mevcut server process belleğinde tutulur; doğrulanan account ID,
+credential fingerprint ve config digest'e bağlıdır. Beş dakika sonra, credential/config
+değişiminde, start denemesinde, stop veya restart sonrasında geçersizdir.
 Varsayılan config'te `live_trading_enabled=false` olduğu için bu akış yalnızca live
 readiness incelemesi yapar; entry açmaz.
 
@@ -54,6 +56,7 @@ Aşağıdakiler yeni entry'leri durdurur:
 - belirsiz broker write sonucu
 - post-fill risk ihlali
 - kritik journal persistence hatası
+- final market bar event'inin dolu kuyrukta korunamaması
 
 Circuit breaker açıkken managed pozisyonların exit ve broker-side protection yönetimi
 durdurulmamalıdır. `ambiguous_order_state`, `protection_failure` veya

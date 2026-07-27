@@ -16,6 +16,7 @@ _ALLOWED: dict[OrderState, frozenset[OrderState]] = {
             OrderState.CANCELLED,
             OrderState.EXPIRED,
             OrderState.REJECTED,
+            OrderState.RECONCILIATION_REQUIRED,
             OrderState.UNKNOWN,
         }
     ),
@@ -35,7 +36,31 @@ _ALLOWED: dict[OrderState, frozenset[OrderState]] = {
     OrderState.CANCELLED: frozenset(),
     OrderState.REJECTED: frozenset(),
     OrderState.EXPIRED: frozenset(),
-    OrderState.UNKNOWN: frozenset(),
+    OrderState.RECONCILIATION_REQUIRED: frozenset(
+        {
+            OrderState.ACCEPTED,
+            OrderState.PARTIALLY_FILLED,
+            OrderState.FILLED,
+            OrderState.CANCELLED,
+            OrderState.REJECTED,
+            OrderState.EXPIRED,
+            OrderState.MANUAL_INTERVENTION_REQUIRED,
+        }
+    ),
+    OrderState.MANUAL_INTERVENTION_REQUIRED: frozenset(),
+    # Kept for compatibility with persisted/runtime values created before the
+    # recoverable reconciliation state was introduced.
+    OrderState.UNKNOWN: frozenset(
+        {
+            OrderState.ACCEPTED,
+            OrderState.PARTIALLY_FILLED,
+            OrderState.FILLED,
+            OrderState.CANCELLED,
+            OrderState.REJECTED,
+            OrderState.EXPIRED,
+            OrderState.MANUAL_INTERVENTION_REQUIRED,
+        }
+    ),
 }
 
 

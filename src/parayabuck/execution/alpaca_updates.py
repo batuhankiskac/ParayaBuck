@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from parayabuck.core.models import Market, OrderState
+from parayabuck.core.models import Market, OrderRole, OrderState
 from parayabuck.markets.symbols import canonical_symbol
 
 
@@ -14,6 +14,8 @@ class TradeUpdate:
     event: str
     client_order_id: str
     broker_order_id: str
+    parent_order_id: str | None
+    role: OrderRole
     symbol: str
     market: Market
     requested_qty: float
@@ -63,10 +65,30 @@ class AlpacaTradingUpdateStream:
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=UTC)
         average = _field(order, "filled_avg_price")
+        parent_order_id = _field(order, "parent_order_id")
+        order_type = str(_field(order, "type", "")).lower().split(".")[-1]
+        stop_price = _field(order, "stop_price")
+        client_order_id = str(_field(order, "client_order_id", ""))
+        if parent_order_id:
+            role = (
+                OrderRole.PROTECTIVE_STOP
+                if stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+                else OrderRole.TAKE_PROFIT
+            )
+        elif "-emergency-exit" in client_order_id or client_order_id.startswith("parayabuck-exit-"):
+            role = OrderRole.EMERGENCY_EXIT
+        elif "-stop" in client_order_id or client_order_id.startswith("parayabuck-stop-"):
+            role = OrderRole.PROTECTIVE_STOP
+        elif client_order_id.startswith("parayabuck-"):
+            role = OrderRole.ENTRY
+        else:
+            role = OrderRole.MANUAL_EXIT
         update = TradeUpdate(
             event=str(_field(raw, "event", "")).lower().split(".")[-1],
-            client_order_id=str(_field(order, "client_order_id", "")),
+            client_order_id=client_order_id,
             broker_order_id=str(_field(order, "id", "")),
+            parent_order_id=str(parent_order_id) if parent_order_id else None,
+            role=role,
             symbol=canonical_symbol(raw_symbol, market),
             market=market,
             requested_qty=float(_field(order, "qty", 0) or 0),

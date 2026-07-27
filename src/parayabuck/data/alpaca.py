@@ -122,6 +122,9 @@ class AlpacaHistoricalData:
             raise
         frame = response.df
         if frame.empty:
+            if any(cached.values()):
+                log.warning("Historical API returned no rows; using feed-matched local cache")
+                return cached
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):

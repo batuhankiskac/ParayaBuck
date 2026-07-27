@@ -35,7 +35,17 @@ class OrderState(StrEnum):
     CANCELLED = "cancelled"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+    MANUAL_INTERVENTION_REQUIRED = "manual_intervention_required"
     UNKNOWN = "unknown"
+
+
+class OrderRole(StrEnum):
+    ENTRY = "entry"
+    TAKE_PROFIT = "take_profit"
+    PROTECTIVE_STOP = "protective_stop"
+    MANUAL_EXIT = "manual_exit"
+    EMERGENCY_EXIT = "emergency_exit"
 
 
 class ProtectionState(StrEnum):
@@ -46,6 +56,34 @@ class ProtectionState(StrEnum):
     OVER_PROTECTED = "over_protected"
     TRIGGERED_UNFILLED = "triggered_unfilled"
     FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class ExecutionEvent:
+    account_id: str
+    client_order_id: str
+    broker_order_id: str
+    parent_order_id: str | None
+    role: OrderRole
+    symbol: str
+    market: Market
+    state: OrderState | None
+    requested_qty: float
+    cumulative_filled_qty: float
+    average_fill_price: float | None
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
+class ExecutionTransition:
+    previous_state: OrderState | None
+    current_state: OrderState | None
+    fill_delta: float
+    position_delta: float
+    reservation_delta: float
+    realized_pnl_delta: float
+    protection_state: ProtectionState
+    entry_client_order_id: str | None = None
 
 
 @dataclass(frozen=True)

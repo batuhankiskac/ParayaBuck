@@ -12,11 +12,14 @@ _NEW_YORK = ZoneInfo("America/New_York")
 class TimeframeAggregator:
     """Aggregate closed one-minute stream bars into larger closed candles."""
 
-    def __init__(self, timeframe: str) -> None:
+    def __init__(self, timeframe: str, finalization_grace_seconds: float = 0.0) -> None:
         if timeframe not in _MINUTES:
             raise ValueError(f"Unsupported streaming timeframe: {timeframe}")
         self.timeframe = timeframe
         self.minutes = _MINUTES[timeframe]
+        if finalization_grace_seconds < 0:
+            raise ValueError("finalization_grace_seconds cannot be negative")
+        self.finalization_grace = timedelta(seconds=finalization_grace_seconds)
         self._current: dict[str, Bar] = {}
         self._components: dict[str, dict[datetime, Bar]] = {}
         self._last_components: dict[str, dict[datetime, Bar]] = {}
@@ -73,7 +76,7 @@ class TimeframeAggregator:
         flushed: list[Bar] = []
         duration = timedelta(minutes=self.minutes)
         for symbol, bar in list(self._current.items()):
-            if bar.timestamp + duration <= now:
+            if bar.timestamp + duration + self.finalization_grace <= now:
                 flushed.append(self._current.pop(symbol))
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))

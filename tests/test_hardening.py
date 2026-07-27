@@ -17,9 +17,11 @@ from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
     Direction,
+    ExecutionEvent,
     ExecutionStatus,
     Market,
     OrderIntent,
+    OrderRole,
     OrderState,
     PositionSnapshot,
     Regime,
@@ -29,7 +31,7 @@ from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.ledger import ManagedPosition
+from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.sectors import sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.portfolio.allocator import PortfolioAllocator
@@ -310,3 +312,156 @@ def test_direct_settings_call_cannot_auto_restart_into_live(
             server.save_settings(server.SettingsPayload(paper_mode=False, restart_engine=True))
         )
     assert error.value.status_code == 400
+
+
+def test_execution_ledger_applies_cumulative_entry_and_child_exit_deltas(
+    tmp_path: Path,
+) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
+    created = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
+    order = OrderIntent(
+        "signal",
+        "AAPL",
+        Market.EQUITY,
+        Direction.LONG,
+        10,
+        100,
+        95,
+        110,
+        "test",
+        created_at=created,
+        client_order_id="parayabuck-entry",
+    )
+    ledger.register_entry_order("acct", order, "broker-entry")
+
+    def event(
+        client_id: str,
+        broker_id: str,
+        role: OrderRole,
+        cumulative: float,
+        state: OrderState,
+        *,
+        parent: str | None = None,
+        price: float = 100,
+    ) -> ExecutionEvent:
+        return ExecutionEvent(
+            "acct",
+            client_id,
+            broker_id,
+            parent,
+            role,
+            "AAPL",
+            Market.EQUITY,
+            state,
+            10,
+            cumulative,
+            price,
+            created + timedelta(minutes=cumulative),
+        )
+
+    deltas = [
+        ledger.apply_execution_event(
+            event(
+                "parayabuck-entry",
+                "broker-entry",
+                OrderRole.ENTRY,
+                cumulative,
+                state,
+            )
+        ).fill_delta
+        for cumulative, state in (
+            (2, OrderState.PARTIALLY_FILLED),
+            (5, OrderState.PARTIALLY_FILLED),
+            (10, OrderState.FILLED),
+        )
+    ]
+    assert deltas == [2, 3, 5]
+    assert ledger.managed_for_account("acct")["AAPL"].owned_qty == 10
+
+    exit_deltas = [
+        ledger.apply_execution_event(
+            event(
+                "target-child",
+                "broker-target",
+                OrderRole.TAKE_PROFIT,
+                cumulative,
+                state,
+                parent="broker-entry",
+                price=110,
+            )
+        ).fill_delta
+        for cumulative, state in (
+            (4, OrderState.PARTIALLY_FILLED),
+            (10, OrderState.FILLED),
+        )
+    ]
+    assert exit_deltas == [4, 6]
+    duplicate = ledger.apply_execution_event(
+        event(
+            "target-child",
+            "broker-target",
+            OrderRole.TAKE_PROFIT,
+            10,
+            OrderState.FILLED,
+            parent="broker-entry",
+            price=110,
+        )
+    )
+    out_of_order = ledger.apply_execution_event(
+        event(
+            "target-child",
+            "broker-target",
+            OrderRole.TAKE_PROFIT,
+            4,
+            OrderState.PARTIALLY_FILLED,
+            parent="broker-entry",
+            price=110,
+        )
+    )
+    assert duplicate.fill_delta == 0
+    assert out_of_order.fill_delta == 0
+    assert ledger.managed_for_account("acct") == {}
+    row = ledger.connection.execute(
+        """
+        SELECT entry_filled_qty, exit_filled_qty, remaining_owned_qty, status
+        FROM managed_positions WHERE entry_client_order_id='parayabuck-entry'
+        """
+    ).fetchone()
+    assert row == (10.0, 10.0, 0.0, "closed")
+    ledger.close()
+
+
+def test_aggregator_waits_for_finalization_grace() -> None:
+    aggregator = TimeframeAggregator("5m", finalization_grace_seconds=2)
+    start = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
+    aggregator.update(_bar(start))
+    assert aggregator.flush_until(start + timedelta(minutes=5, seconds=1)) == []
+    assert len(aggregator.flush_until(start + timedelta(minutes=5, seconds=2))) == 1
+
+
+def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manager = server.EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.config_path.write_text(yaml.safe_dump({"alpaca": {"paper": True}, "symbols": ["AAPL"]}))
+    credentials = ["key-a", "secret-a"]
+    monkeypatch.setattr(manager, "get_credentials", lambda: tuple(credentials))
+    now = datetime.now(UTC)
+    manager._pending_live_arm = server.LiveArmToken(
+        "account-a",
+        "1234",
+        manager._credential_fingerprint(*credentials),
+        manager._config_digest(paper=False),
+        now,
+        now + timedelta(minutes=1),
+        "nonce",
+    )
+    manager._live_request_suffix = "1234"
+    manager.confirm_live_arming("LIVE 1234")
+    manager._require_valid_live_arm(*credentials)
+
+    credentials[1] = "secret-b"
+    with pytest.raises(ValueError, match="fresh confirmation"):
+        manager._require_valid_live_arm(*credentials)
+    assert not manager._live_armed

@@ -277,7 +277,11 @@ verisi üretir.
   bloke eder.
 - Live mod için hem process ortamında `PARAYABUCK_ENABLE_LIVE=YES` bulunmalı hem de Web
   UI'da gösterilen maskeli hesap son eki `LIVE <son-ek>` ifadesiyle backend üzerinde
-  doğrulanmalıdır. Arming restart ile kaybolur; ayar kaydı live motoru otomatik başlatmaz.
+  doğrulanmalıdır. Arming doğrulanan account ID, credential fingerprint ve config digest'e
+  bağlıdır; beş dakikada, credential/config değişiminde, start denemesinde, stop veya restart
+  sırasında geçersiz olur. Ayar kaydı live motoru otomatik başlatmaz.
+- Kontrol sayfası üçüncü taraf JavaScript çalıştırmaz. WebSocket bağlantıları control token'ı
+  URL'ye koymak yerine 30 saniyelik, tek kullanımlık kanal ticket'ı alır.
 - Varsayılan rollout yalnızca `5m + 1h`, IEX, equity paper, cycle başına tek yeni pozisyon
   ve `manage_external_positions=false` politikasıdır. Crypto execution test matrisi
   tamamlanana kadar kapalıdır.
@@ -285,3 +289,8 @@ verisi üretir.
 Belirsiz emir sonucu, reconciliation/protection hatası, stale account snapshot veya veri
 kuyruğu gecikmesi yeni entry circuit breaker'ını açar. Açık pozisyonların exit/protection
 yönetimi bu giriş engelinden ayrıdır.
+
+Execution lifecycle broker türünden bağımsız coordinator üzerinden ilerler. TradingStream
+`filled_qty` değerleri kümülatif kabul edilir; ledger yalnızca pozitif delta'yı uygular.
+Entry ve exit miktarları ayrı tutulur, child bracket fill'i parent managed lotu azaltır ve
+kalan sahiplik sıfıra geldiğinde lot kapanır.

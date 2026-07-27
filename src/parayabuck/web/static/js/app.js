@@ -231,9 +231,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return base * (0.8 + Math.random() * 0.4);
         };
 
-        const connectData = () => {
+        const websocketTicket = async (kind) => {
+            const response = await fetch('/api/ws-ticket', {
+                method: 'POST',
+                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind })
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || 'WebSocket ticket alınamadı');
+            return payload.ticket;
+        };
+
+        const connectData = async () => {
             if (dataWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(dataWs.readyState)) return;
-            dataWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/stream?token=${encodeURIComponent(controlToken)}`);
+            let ticket;
+            try {
+                ticket = await websocketTicket('stream');
+            } catch (_error) {
+                schedule('data');
+                return;
+            }
+            dataWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/stream?ticket=${encodeURIComponent(ticket)}`);
             dataWs.onopen = () => { dataReconnectAttempts = 0; };
             dataWs.onmessage = (event) => {
                 try {
@@ -250,9 +268,16 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         };
 
-        const connectLogs = () => {
+        const connectLogs = async () => {
             if (logWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(logWs.readyState)) return;
-            logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs?token=${encodeURIComponent(controlToken)}`);
+            let ticket;
+            try {
+                ticket = await websocketTicket('logs');
+            } catch (_error) {
+                schedule('logs');
+                return;
+            }
+            logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs?ticket=${encodeURIComponent(ticket)}`);
             logWs.onopen = () => { logReconnectAttempts = 0; };
             logWs.onmessage = (event) => {
                 try {
@@ -305,8 +330,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const requestData = await requestRes.json();
                 if (!requestRes.ok) throw new Error(requestData.detail || 'Live doğrulama başlatılamadı');
                 const phrase = window.prompt(
-                    `Hesap …${requestData.account_suffix} için doğrulama ifadesini yazın:`,
-                    requestData.expected_phrase
+                    `Hesap …${requestData.account_suffix} için LIVE ve son dört haneyi yazarak doğrulayın:`,
+                    ''
                 );
                 if (!phrase) return;
                 const confirmRes = await fetch('/api/live/arming/confirm', {

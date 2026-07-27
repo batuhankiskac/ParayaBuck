@@ -7,9 +7,11 @@ from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
     Direction,
+    ExecutionEvent,
     Fill,
     Market,
     OrderIntent,
+    OrderRole,
     OrderState,
     PositionSnapshot,
 )
@@ -61,6 +63,7 @@ class BacktestBroker:
         self.fills: list[Fill] = []
         self.realized_pnls: list[float] = []
         self.order_rejections: dict[str, str] = {}
+        self.execution_events: list[ExecutionEvent] = []
 
     def account(self) -> AccountSnapshot:
         snapshots = tuple(
@@ -93,6 +96,22 @@ class BacktestBroker:
         if any(item.client_order_id == order.client_order_id for item in self.pending):
             return OrderState.ACCEPTED, None
         self.pending.append(order)
+        self.execution_events.append(
+            ExecutionEvent(
+                account_id="backtest",
+                client_order_id=order.client_order_id,
+                broker_order_id=order.client_order_id,
+                parent_order_id=None,
+                role=OrderRole.ENTRY,
+                symbol=order.symbol,
+                market=order.market,
+                state=OrderState.ACCEPTED,
+                requested_qty=order.qty,
+                cumulative_filled_qty=0.0,
+                average_fill_price=None,
+                occurred_at=order.created_at,
+            )
+        )
         return OrderState.ACCEPTED, None
 
     def reconcile(self) -> None:
@@ -111,6 +130,7 @@ class BacktestBroker:
                 continue
             if order.symbol in self.positions:
                 self.order_rejections[order.client_order_id] = "existing_position"
+                self._entry_terminal_event(order, OrderState.REJECTED, bar, 0.0, None)
                 continue
             expected_seconds = {
                 "1m": 60,
@@ -122,6 +142,7 @@ class BacktestBroker:
             }[bar.timeframe]
             if (bar.timestamp - order.created_at).total_seconds() > expected_seconds * 1.5:
                 self.order_rejections[order.client_order_id] = "stale_pending_order"
+                self._entry_terminal_event(order, OrderState.EXPIRED, bar, 0.0, None)
                 continue
             adverse_bps = self.slippage_bps + self.spread_bps / 2
             side_multiplier = 1 if order.direction == Direction.LONG else -1
@@ -134,6 +155,7 @@ class BacktestBroker:
             )
             if order.direction == Direction.LONG and notional + entry_fee > self.cash:
                 self.order_rejections[order.client_order_id] = "insufficient_cash"
+                self._entry_terminal_event(order, OrderState.REJECTED, bar, 0.0, None)
                 continue
             if order.direction == Direction.LONG:
                 self.cash -= notional + entry_fee
@@ -162,6 +184,7 @@ class BacktestBroker:
                     entry_fee,
                 )
             )
+            self._entry_terminal_event(order, OrderState.FILLED, bar, order.qty, fill_price)
         self.pending = remaining
 
         # 2-4. Newly-filled and existing positions see this bar's open and
@@ -231,3 +254,33 @@ class BacktestBroker:
             )
         )
         del self.positions[position.symbol]
+
+    def _entry_terminal_event(
+        self,
+        order: OrderIntent,
+        state: OrderState,
+        bar: Bar,
+        cumulative_qty: float,
+        average_price: float | None,
+    ) -> None:
+        self.execution_events.append(
+            ExecutionEvent(
+                account_id="backtest",
+                client_order_id=order.client_order_id,
+                broker_order_id=order.client_order_id,
+                parent_order_id=None,
+                role=OrderRole.ENTRY,
+                symbol=order.symbol,
+                market=order.market,
+                state=state,
+                requested_qty=order.qty,
+                cumulative_filled_qty=cumulative_qty,
+                average_fill_price=average_price,
+                occurred_at=bar.timestamp,
+            )
+        )
+
+    def drain_execution_events(self) -> list[ExecutionEvent]:
+        events = self.execution_events
+        self.execution_events = []
+        return events

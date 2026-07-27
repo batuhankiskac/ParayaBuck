@@ -22,11 +22,14 @@ from alpaca.trading.requests import (
 from parayabuck.core.models import (
     AccountSnapshot,
     Direction,
+    ExecutionEvent,
     Fill,
     Market,
     OrderIntent,
+    OrderRole,
     OrderState,
     PositionSnapshot,
+    ProtectionState,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
@@ -39,6 +42,10 @@ _CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
 
 
 class AmbiguousOrderState(RuntimeError):
+    pass
+
+
+class ProtectionReconciliationError(RuntimeError):
     pass
 
 
@@ -174,6 +181,13 @@ class AlpacaBroker:
             result_id = self._field(result, "id")
             if not result_id:
                 raise RuntimeError(f"Alpaca order response has no id for {intent.symbol}")
+            ledger = getattr(self, "ledger", None)
+            if ledger is not None:
+                ledger.register_entry_order(
+                    self._account_id or "unknown",
+                    intent,
+                    str(result_id),
+                )
             if intent.market == Market.EQUITY:
                 # Bracket protection is broker-side. TradingStream is the
                 # authoritative source for later partial/fill/terminal state.
@@ -198,13 +212,22 @@ class AlpacaBroker:
                 if not protected:
                     self._flatten(intent, fill.qty)
                     return OrderState.REJECTED, fill
-            ledger = getattr(self, "ledger", None)
             if fill is not None and ledger is not None:
-                ledger.record_entry_fill(
-                    self._account_id or "unknown",
-                    intent,
-                    fill,
-                    str(result_id),
+                ledger.apply_execution_event(
+                    ExecutionEvent(
+                        account_id=self._account_id or "unknown",
+                        client_order_id=intent.client_order_id,
+                        broker_order_id=str(result_id),
+                        parent_order_id=None,
+                        role=OrderRole.ENTRY,
+                        symbol=intent.symbol,
+                        market=intent.market,
+                        state=state,
+                        requested_qty=intent.qty,
+                        cumulative_filled_qty=fill.qty,
+                        average_fill_price=fill.price,
+                        occurred_at=fill.timestamp,
+                    )
                 )
             return state, fill
         except ValueError as exc:
@@ -216,7 +239,7 @@ class AlpacaBroker:
             log.critical(
                 "Order state is ambiguous; entries must halt pending reconciliation: %s", exc
             )
-            return OrderState.UNKNOWN, None
+            return OrderState.RECONCILIATION_REQUIRED, None
         except Exception as exc:
             log.error("Order rejected: %s", exc)
             return OrderState.REJECTED, None
@@ -256,9 +279,29 @@ class AlpacaBroker:
                 required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
             if self._has_protective_order(position.symbol, is_long, required_qty):
+                if (
+                    ownership is not None
+                    and ledger is not None
+                    and hasattr(ledger, "set_protection_state")
+                ):
+                    ledger.set_protection_state(
+                        self._account_id or "unknown",
+                        ownership.entry_client_order_id,
+                        ProtectionState.ACTIVE,
+                    )
                 continue
             mismatch = getattr(self, "_last_protection_mismatch", "missing")
             if mismatch in {"under", "over"}:
+                if (
+                    ownership is not None
+                    and ledger is not None
+                    and hasattr(ledger, "set_protection_state")
+                ):
+                    ledger.set_protection_state(
+                        self._account_id or "unknown",
+                        ownership.entry_client_order_id,
+                        ProtectionState.REQUESTED,
+                    )
                 self._cancel_protective_orders(position.symbol, is_long)
             available_qty = (
                 abs(position.qty_available) if position.qty_available is not None else total_qty
@@ -274,15 +317,60 @@ class AlpacaBroker:
                     raise RuntimeError(f"No available quantity to protect for {position.symbol}")
             elif qty <= 0:
                 raise RuntimeError(f"No available quantity to protect for {position.symbol}")
-            protected = self._submit_stop(
-                position.symbol,
-                position.market,
-                qty,
-                stop_price,
-                is_long,
+            protective_client_id = (
+                f"{ownership.entry_client_order_id}-stop-{uuid4().hex[:8]}"
+                if ownership is not None
+                else None
             )
+            try:
+                protected = self._submit_stop(
+                    position.symbol,
+                    position.market,
+                    qty,
+                    stop_price,
+                    is_long,
+                    client_order_id=protective_client_id,
+                )
+            except TypeError as exc:
+                if "client_order_id" not in str(exc):
+                    raise
+                # Compatibility for injected five-argument test/fake brokers.
+                protected = self._submit_stop(
+                    position.symbol,
+                    position.market,
+                    qty,
+                    stop_price,
+                    is_long,
+                )
             if not protected:
-                raise RuntimeError(f"Could not restore protection for {position.symbol}")
+                if (
+                    ownership is not None
+                    and ledger is not None
+                    and hasattr(ledger, "set_protection_state")
+                ):
+                    ledger.set_protection_state(
+                        self._account_id or "unknown",
+                        ownership.entry_client_order_id,
+                        ProtectionState.FAILED,
+                    )
+                    if hasattr(ledger, "mark_manual_intervention"):
+                        ledger.mark_manual_intervention(
+                            self._account_id or "unknown",
+                            ownership.entry_client_order_id,
+                        )
+                raise ProtectionReconciliationError(
+                    f"Could not restore managed protection for {position.symbol}"
+                )
+            if (
+                ownership is not None
+                and ledger is not None
+                and hasattr(ledger, "set_protection_state")
+            ):
+                ledger.set_protection_state(
+                    self._account_id or "unknown",
+                    ownership.entry_client_order_id,
+                    ProtectionState.ACTIVE,
+                )
 
     def _asset(self, symbol: str) -> Any:
         identity = normalize_symbol(symbol)
@@ -665,8 +753,13 @@ class AlpacaBroker:
             if get_by_client_id is not None:
                 try:
                     recovered: Any = get_by_client_id(client_order_id)
+                except Exception:
+                    recovered = None
+                if recovered is not None:
                     status = str(self._field(recovered, "status", "")).lower().split(".")[-1]
                     if status in {"rejected", "canceled", "cancelled", "expired"}:
+                        # A broker-confirmed terminal response is known, not
+                        # ambiguous. Preserve the original submit failure.
                         raise submit_exc
                     log.warning(
                         "Recovered Alpaca order %s after submit error: %s",
@@ -674,8 +767,6 @@ class AlpacaBroker:
                         submit_exc,
                     )
                     return recovered
-                except Exception:
-                    pass
             raise AmbiguousOrderState(
                 f"Broker write outcome unknown for client_order_id={client_order_id}: {submit_exc}"
             ) from submit_exc
@@ -699,17 +790,47 @@ class AlpacaBroker:
         if isinstance(orders, dict):
             return False
         closing_side = "sell" if position_is_long else "buy"
+        canonical = canonical_symbol(symbol)
+        ledger = getattr(self, "ledger", None)
+        account_id = getattr(self, "_account_id", "") or "unknown"
+        legacy_external_management = ledger is None and bool(
+            getattr(self, "manage_external_positions", True)
+        )
+        managed_order_ids = (
+            ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
+        )
+        managed_client_ids = (
+            ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
+        )
 
-        def protective_qty(order: Any) -> Decimal:
+        def is_owned(order: Any, inherited: bool = False) -> bool:
+            order_id = str(self._field(order, "id", "") or "")
+            client_id = str(self._field(order, "client_order_id", "") or "")
+            parent_id = str(self._field(order, "parent_order_id", "") or "")
+            return (
+                inherited
+                or legacy_external_management
+                or order_id in managed_order_ids
+                or parent_id in managed_order_ids
+                or client_id in managed_client_ids
+                or client_id.startswith("parayabuck-")
+            )
+
+        def protective_qty(order: Any, inherited: bool = False) -> Decimal:
+            owned = is_owned(order, inherited)
             side = str(self._field(order, "side", "")).lower().split(".")[-1]
             order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
             stop_price = self._field(order, "stop_price")
-            if side == closing_side and (
-                stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+            if (
+                owned
+                and side == closing_side
+                and (
+                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+                )
             ):
                 return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
             return sum(
-                (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
+                (protective_qty(leg, owned) for leg in (self._field(order, "legs") or ())),
                 start=Decimal("0"),
             )
 
@@ -728,20 +849,47 @@ class AlpacaBroker:
             GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
         )
         closing_side = "sell" if position_is_long else "buy"
+        canonical = canonical_symbol(symbol)
+        ledger = getattr(self, "ledger", None)
+        account_id = getattr(self, "_account_id", "") or "unknown"
+        legacy_external_management = ledger is None and bool(
+            getattr(self, "manage_external_positions", True)
+        )
+        managed_order_ids = (
+            ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
+        )
+        managed_client_ids = (
+            ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
+        )
 
-        def visit(order: Any) -> None:
+        def visit(order: Any, inherited: bool = False) -> None:
+            order_id = str(self._field(order, "id", "") or "")
+            client_id = str(self._field(order, "client_order_id", "") or "")
+            parent_id = str(self._field(order, "parent_order_id", "") or "")
+            owned = (
+                inherited
+                or legacy_external_management
+                or order_id in managed_order_ids
+                or parent_id in managed_order_ids
+                or client_id in managed_client_ids
+                or client_id.startswith("parayabuck-")
+            )
             side = str(self._field(order, "side", "")).lower().split(".")[-1]
             order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
             stop_price = self._field(order, "stop_price")
-            if side == closing_side and (
-                stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+            if (
+                owned
+                and side == closing_side
+                and (
+                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+                )
             ):
                 order_id = self._field(order, "id")
                 if order_id:
                     self._client.cancel_order_by_id(order_id)
                 return
             for leg in self._field(order, "legs") or ():
-                visit(leg)
+                visit(leg, owned)
 
         for order in orders or ():
             visit(order)

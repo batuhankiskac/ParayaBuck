@@ -58,9 +58,12 @@ class EngineConfig:
     manage_external_positions: bool = False
     reject_stale_signals: bool = True
     event_grace_seconds: float = 5.0
+    data_finalization_grace_seconds: float = 2.0
     maximum_signal_age_seconds: float = 20.0
     maximum_queue_age_seconds: float = 30.0
     account_snapshot_ttl_seconds: float = 15.0
+    account_poll_interval_seconds: float = 15.0
+    maximum_account_age_for_entry_seconds: float = 30.0
     event_queue_capacity: int = 1024
     max_new_positions_per_cycle: int = 1
     strategy_profile: str = "equity_5m_v1"
@@ -91,9 +94,12 @@ class EngineConfig:
     def consecutive_values_invalid(self) -> bool:
         return (
             self.event_grace_seconds <= 0
+            or self.data_finalization_grace_seconds < 0
             or self.maximum_signal_age_seconds <= 0
             or self.maximum_queue_age_seconds <= 0
             or self.account_snapshot_ttl_seconds <= 0
+            or self.account_poll_interval_seconds <= 0
+            or self.maximum_account_age_for_entry_seconds <= 0
             or self.event_queue_capacity <= 0
         )
 

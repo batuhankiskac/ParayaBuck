@@ -93,3 +93,23 @@ class BarStore:
                 sorted(by_timestamp.values(), key=lambda item: item.timestamp)[-self.capacity :],
                 maxlen=self.capacity,
             )
+
+    def is_contiguous(self, symbol: str, timeframe: str) -> bool:
+        series = self.get(symbol, timeframe)
+        expected_seconds = {
+            "1m": 60,
+            "5m": 300,
+            "15m": 900,
+            "30m": 1800,
+            "1h": 3600,
+            "1d": 86400,
+        }[timeframe]
+        for previous, current in zip(series, series[1:], strict=False):
+            if current.market == Market.EQUITY and (
+                previous.timestamp.astimezone(_NEW_YORK).date()
+                != current.timestamp.astimezone(_NEW_YORK).date()
+            ):
+                continue
+            if (current.timestamp - previous.timestamp).total_seconds() > expected_seconds:
+                return False
+        return True

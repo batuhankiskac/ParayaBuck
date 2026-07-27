@@ -89,7 +89,8 @@ class CryptoTrendBreakout(Strategy):
             return StrategyEvaluation(
                 self.name, False, failed.explanation, tuple(conditions), metrics
             )
-        average_volume = sum(bar.volume for bar in bars[-20:]) / 20
+        baseline = bars[-21:-1]
+        average_volume = sum(bar.volume for bar in baseline) / len(baseline)
         relative_volume = current.volume / average_volume if average_volume > 0 else 1.0
         trend_points = min(17, context.regime.trend_strength / 2)
         volume_points = min(10, relative_volume * 4)

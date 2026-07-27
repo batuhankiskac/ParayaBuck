@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import re
@@ -10,6 +12,8 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -27,6 +31,17 @@ from parayabuck.config import load_config
 from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.server")
+
+
+@dataclass(frozen=True)
+class LiveArmToken:
+    account_id: str
+    account_suffix: str
+    credential_fingerprint: str
+    config_digest: str
+    issued_at: datetime
+    expires_at: datetime
+    nonce: str
 
 
 # Global Web Server State
@@ -53,6 +68,9 @@ class EngineManager:
         self.control_token = secrets.token_urlsafe(32)
         self._live_request_suffix: str | None = None
         self._live_armed = False
+        self._pending_live_arm: LiveArmToken | None = None
+        self._live_arm_token: LiveArmToken | None = None
+        self._ws_tickets: dict[str, tuple[str, float]] = {}
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -109,8 +127,8 @@ class EngineManager:
                     "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
                     "before starting the application."
                 )
-            if not cfg.alpaca.paper and not self._live_armed:
-                raise ValueError("Live trading requires a fresh server-side account confirmation.")
+            if not cfg.alpaca.paper:
+                self._require_valid_live_arm(key, secret, consume=True)
             from parayabuck.runtime import EngineRuntime
 
             runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
@@ -119,8 +137,7 @@ class EngineManager:
             self.broker = runtime.broker
             runtime.start()
             if not cfg.alpaca.paper:
-                self._live_armed = False
-                self._live_request_suffix = None
+                self.invalidate_live_arming()
             self.engine_state = "running"
             log.info("ParayaBuck engine started from Web UI")
 
@@ -132,6 +149,7 @@ class EngineManager:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after failed engine start")
+            self.invalidate_live_arming()
             raise
 
     def stop_engine(self) -> None:
@@ -141,9 +159,19 @@ class EngineManager:
             self.engine_state = "stopping"
             runtime = self.runtime
         if runtime is not None:
-            runtime.stop()
+            stopped = runtime.stop()
+            if stopped is False:
+                with self._state_lock:
+                    self.engine_state = "stop_failed"
+                self.invalidate_live_arming()
+                raise RuntimeError("Runtime workers did not stop; process restart required")
         with self._state_lock:
             self.engine_state = "stopped"
+            self.runtime = None
+            self.engine = None
+            self.broker = None
+            self.last_account = None
+        self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
@@ -153,7 +181,13 @@ class EngineManager:
                 and time.monotonic() - self._last_account_monotonic
                 < self._account_cache_ttl_seconds
             ):
-                return self.last_account
+                age = max(0.0, time.monotonic() - self._last_account_monotonic)
+                return {
+                    **self.last_account,
+                    "age_seconds": age,
+                    "stale": False,
+                    "source": "cache",
+                }
             return self._refresh_account_snapshot()
 
     def _refresh_account_snapshot(self) -> dict[str, Any]:
@@ -194,6 +228,10 @@ class EngineManager:
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
                     "positions": positions_list,
                     "account_suffix": getattr(self.broker, "account_suffix", ""),
+                    "snapshot_at": datetime.now(UTC).isoformat(),
+                    "age_seconds": 0.0,
+                    "stale": False,
+                    "source": "broker",
                 }
                 self.last_account = snapshot
                 self._last_account_monotonic = time.monotonic()
@@ -202,7 +240,13 @@ class EngineManager:
                 log.warning(f"Error fetching account snapshot: {e}")
 
         if self.last_account:
-            return self.last_account
+            age = max(0.0, time.monotonic() - self._last_account_monotonic)
+            return {
+                **self.last_account,
+                "age_seconds": age,
+                "stale": True,
+                "source": "cache",
+            }
 
         return {
             "equity": 0.0,
@@ -213,6 +257,10 @@ class EngineManager:
             "drawdown": 0.0,
             "positions": [],
             "account_suffix": "",
+            "snapshot_at": None,
+            "age_seconds": None,
+            "stale": True,
+            "source": "unavailable",
         }
 
     def request_live_arming(self) -> str:
@@ -230,16 +278,101 @@ class EngineManager:
         suffix = live_broker.account_suffix
         if not suffix:
             raise ValueError("Alpaca account identity could not be verified")
+        now = datetime.now(UTC)
+        self._pending_live_arm = LiveArmToken(
+            account_id=live_broker.account_id,
+            account_suffix=suffix,
+            credential_fingerprint=self._credential_fingerprint(key, secret),
+            config_digest=self._config_digest(paper=False),
+            issued_at=now,
+            expires_at=now + timedelta(minutes=2),
+            nonce=secrets.token_urlsafe(24),
+        )
         self._live_request_suffix = suffix
         self._live_armed = False
+        self._live_arm_token = None
         return suffix
 
     def confirm_live_arming(self, phrase: str) -> None:
-        suffix = self._live_request_suffix
-        if suffix is None or not secrets.compare_digest(phrase.strip(), f"LIVE {suffix}"):
-            self._live_armed = False
+        pending = self._pending_live_arm
+        key, secret = self.get_credentials()
+        if (
+            pending is None
+            or key is None
+            or secret is None
+            or datetime.now(UTC) >= pending.expires_at
+            or pending.credential_fingerprint != self._credential_fingerprint(key, secret)
+            or pending.config_digest != self._config_digest(paper=False)
+            or not secrets.compare_digest(phrase.strip(), f"LIVE {pending.account_suffix}")
+        ):
+            self.invalidate_live_arming()
             raise ValueError("Live confirmation phrase does not match the verified account")
+        now = datetime.now(UTC)
+        self._live_arm_token = LiveArmToken(
+            **{
+                **pending.__dict__,
+                "issued_at": now,
+                "expires_at": now + timedelta(minutes=5),
+                "nonce": secrets.token_urlsafe(24),
+            }
+        )
+        self._pending_live_arm = None
         self._live_armed = True
+
+    def invalidate_live_arming(self) -> None:
+        self._live_request_suffix = None
+        self._live_armed = False
+        self._pending_live_arm = None
+        self._live_arm_token = None
+
+    def _require_valid_live_arm(
+        self, key: str, secret: str, *, consume: bool = False
+    ) -> LiveArmToken:
+        token = self._live_arm_token
+        valid = (
+            token is not None
+            and self._live_armed
+            and datetime.now(UTC) < token.expires_at
+            and token.credential_fingerprint == self._credential_fingerprint(key, secret)
+            and token.config_digest == self._config_digest(paper=False)
+        )
+        if not valid:
+            self.invalidate_live_arming()
+            raise ValueError(
+                "Live trading requires a fresh confirmation for these credentials and settings."
+            )
+        assert token is not None
+        if consume:
+            self.invalidate_live_arming()
+        return token
+
+    @staticmethod
+    def _credential_fingerprint(key: str, secret: str) -> str:
+        return hashlib.sha256(f"{key}\0{secret}".encode()).hexdigest()
+
+    def _config_digest(self, *, paper: bool) -> str:
+        raw: dict[str, Any] = {}
+        if self.config_path.exists():
+            raw = yaml.safe_load(self.config_path.read_text()) or {}
+        return self._digest_config(raw, paper=paper)
+
+    @staticmethod
+    def _digest_config(raw: dict[str, Any], *, paper: bool) -> str:
+        raw = json.loads(json.dumps(raw))
+        raw.setdefault("alpaca", {})["paper"] = paper
+        encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    def issue_ws_ticket(self, kind: str) -> str:
+        if kind not in {"stream", "logs"}:
+            raise ValueError("Unknown WebSocket channel")
+        ticket = secrets.token_urlsafe(24)
+        self._ws_tickets[ticket] = (kind, time.monotonic() + 30.0)
+        return ticket
+
+    def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
+        value = self._ws_tickets.pop(ticket, None)
+        return bool(value and value[0] == kind and time.monotonic() < value[1])
 
 
 _PLACEHOLDERS = {
@@ -388,7 +521,8 @@ def _trusted_browser_origin(origin: str | None) -> bool:
 
 @app.middleware("http")
 async def protect_local_control_api(request: Request, call_next: Any) -> Any:
-    host = (request.headers.get("host") or "").split(":", 1)[0].strip("[]")
+    host_header = request.headers.get("host") or ""
+    host = urlparse(f"//{host_header}").hostname or ""
     if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
         return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
     if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin(
@@ -400,7 +534,16 @@ async def protect_local_control_api(request: Request, call_next: Any) -> Any:
         manager.control_token,
     ):
         return JSONResponse(status_code=403, content={"detail": "Invalid local control token"})
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "img-src 'self' data:; connect-src 'self' ws://127.0.0.1:* "
+        "ws://localhost:* ws://[::1]:*; font-src 'self'; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'none'"
+    )
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -413,9 +556,9 @@ class SettingsPayload(BaseModel):
     api_key: str = Field("", description="Alpaca API Key")
     secret_key: str = Field("", description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
-    daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
-    max_drawdown_pct: float = Field(10.0, gt=0, le=100)
-    timeframe: Literal["1m", "5m", "15m", "30m", "1h", "1d"] = "5m"
+    daily_loss_limit_pct: float = Field(1.5, gt=0, le=10)
+    max_drawdown_pct: float = Field(10.0, gt=0, le=30)
+    timeframe: Literal["5m"] = "5m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = Field(True)
@@ -429,6 +572,10 @@ class ModePayload(BaseModel):
 
 class LiveConfirmationPayload(BaseModel):
     phrase: str
+
+
+class WebSocketTicketPayload(BaseModel):
+    kind: Literal["stream", "logs"]
 
 
 # Routes
@@ -484,8 +631,14 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
         )
 
     try:
-        if not payload.paper and not getattr(manager, "_live_armed", False):
-            raise ValueError("Complete server-side live arming before selecting live mode")
+        if not payload.paper:
+            key, secret = manager.get_credentials()
+            if hasattr(manager, "_require_valid_live_arm"):
+                if not key or not secret:
+                    raise ValueError("Alpaca credentials are required")
+                manager._require_valid_live_arm(key, secret, consume=False)
+            elif not getattr(manager, "_live_armed", False):
+                raise ValueError("Complete server-side live arming before selecting live mode")
         raw: dict[str, Any] = {}
         if manager.config_path.exists():
             with open(manager.config_path) as f:
@@ -511,7 +664,6 @@ async def request_live_arming() -> dict[str, str]:
         return {
             "status": "confirmation_required",
             "account_suffix": suffix,
-            "expected_phrase": f"LIVE {suffix}",
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -525,6 +677,14 @@ async def confirm_live_arming(payload: LiveConfirmationPayload) -> dict[str, str
             "status": "armed",
             "message": "Live mode armed for this server process. Start remains a separate action.",
         }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/ws-ticket")
+async def websocket_ticket(payload: WebSocketTicketPayload) -> dict[str, str]:
+    try:
+        return {"ticket": manager.issue_ws_ticket(payload.kind)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -572,16 +732,18 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             raise ValueError(
                 "Saving live mode requires restart_engine=false; start live separately after arming"
             )
-        if entering_live and not getattr(manager, "_live_armed", False):
-            raise ValueError("Complete server-side live arming before saving live mode")
-        restart_engine = manager.engine_state == "running" and payload.restart_engine
-        if restart_engine:
-            manager.stop_engine()
-            if manager.engine_state != "stopped":
-                raise RuntimeError(
-                    "Bot could not stop safely. Use the Durdur button and try again."
+        if entering_live:
+            current_key, current_secret = manager.get_credentials()
+            if hasattr(manager, "_require_valid_live_arm"):
+                if not current_key or not current_secret:
+                    raise ValueError("Alpaca credentials are required")
+                manager._require_valid_live_arm(
+                    current_key,
+                    current_secret,
+                    consume=False,
                 )
-
+            elif not getattr(manager, "_live_armed", False):
+                raise ValueError("Complete server-side live arming before saving live mode")
         current_key, current_secret = manager.get_credentials()
         api_key = payload.api_key.strip() or current_key or ""
         secret_key = payload.secret_key.strip() or current_secret or ""
@@ -619,6 +781,35 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
                 load_config(str(temporary_config))
         finally:
             temporary_config.unlink(missing_ok=True)
+        credentials_changed = (api_key, secret_key) != (
+            current_key or "",
+            current_secret or "",
+        )
+        if entering_live and credentials_changed:
+            if hasattr(manager, "invalidate_live_arming"):
+                manager.invalidate_live_arming()
+            raise ValueError(
+                "Credentials changed; request and type a fresh live confirmation first"
+            )
+        if entering_live and hasattr(manager, "_live_arm_token"):
+            token = manager._live_arm_token
+            candidate_digest = manager._digest_config(cfg_raw, paper=False)
+            if token is None or token.config_digest != candidate_digest:
+                if hasattr(manager, "invalidate_live_arming"):
+                    manager.invalidate_live_arming()
+                raise ValueError(
+                    "Settings changed after live verification; confirm the live account again"
+                )
+
+        # Validation and live-token checks are complete before a healthy
+        # runtime is stopped.
+        restart_engine = manager.engine_state == "running" and payload.restart_engine
+        if restart_engine:
+            manager.stop_engine()
+            if manager.engine_state != "stopped":
+                raise RuntimeError(
+                    "Bot could not stop safely. Use the Durdur button and try again."
+                )
         _atomic_update_credentials(manager.env_path, api_key, secret_key)
         _atomic_write(
             manager.config_path,
@@ -626,6 +817,8 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         )
 
         manager.broker = None
+        if credentials_changed and hasattr(manager, "invalidate_live_arming"):
+            manager.invalidate_live_arming()
         restart_error: str | None = None
         if restart_engine:
             try:
@@ -668,11 +861,13 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
 # WebSockets
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket) -> None:
-    query_token = getattr(websocket, "query_params", {}).get("token", "")
-    expected_token = getattr(manager, "control_token", "")
-    if not _trusted_browser_origin(websocket.headers.get("origin")) or (
-        expected_token and not secrets.compare_digest(query_token, expected_token)
-    ):
+    ticket = getattr(websocket, "query_params", {}).get("ticket", "")
+    ticket_valid = (
+        manager.consume_ws_ticket(ticket, "stream")
+        if hasattr(manager, "consume_ws_ticket")
+        else True
+    )
+    if not _trusted_browser_origin(websocket.headers.get("origin")) or not ticket_valid:
         await websocket.close(code=1008)
         return
     await websocket.accept()
@@ -706,11 +901,11 @@ async def websocket_stream(websocket: WebSocket) -> None:
 
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket) -> None:
-    query_token = getattr(websocket, "query_params", {}).get("token", "")
-    expected_token = getattr(manager, "control_token", "")
-    if not _trusted_browser_origin(websocket.headers.get("origin")) or (
-        expected_token and not secrets.compare_digest(query_token, expected_token)
-    ):
+    ticket = getattr(websocket, "query_params", {}).get("ticket", "")
+    ticket_valid = (
+        manager.consume_ws_ticket(ticket, "logs") if hasattr(manager, "consume_ws_ticket") else True
+    )
+    if not _trusted_browser_origin(websocket.headers.get("origin")) or not ticket_valid:
         await websocket.close(code=1008)
         return
     await websocket.accept()

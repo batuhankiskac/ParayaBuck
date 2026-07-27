@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC
 
 import pandas as pd
@@ -23,7 +23,6 @@ def main() -> None:
     parser.add_argument("--slippage-bps", type=float, default=2.0)
     parser.add_argument("--spread-bps", type=float, default=0.0)
     parser.add_argument("--commission", type=float, default=0.0)
-    parser.add_argument("--crypto-maker-fee-bps", type=float, default=0.0)
     parser.add_argument("--crypto-taker-fee-bps", type=float, default=0.0)
     args = parser.parse_args()
 
@@ -46,8 +45,22 @@ def main() -> None:
         for timestamp, row in zip(timestamps, frame.itertuples(index=False), strict=True)
     ]
     config = load_config()
-    engine = BacktestEngine(
+    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
+    if args.timeframe not in minutes:
+        parser.error(f"unsupported timeframe: {args.timeframe}")
+    if args.timeframe == "1d":
+        parser.error("1d backtests require a configured higher timeframe above 1d")
+    higher_timeframe = config.engine.higher_timeframe
+    if minutes[higher_timeframe] <= minutes[args.timeframe]:
+        higher_timeframe = "1d"
+    backtest_config = replace(
         config.engine,
+        timeframe=args.timeframe,
+        higher_timeframe=higher_timeframe,
+        trading_enabled=False,
+    )
+    engine = BacktestEngine(
+        backtest_config,
         starting_equity=args.starting_equity,
         slippage_bps=args.slippage_bps,
         spread_bps=args.spread_bps,

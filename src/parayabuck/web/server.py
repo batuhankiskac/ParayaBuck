@@ -3,15 +3,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import stat
+import re
+import secrets
+import subprocess
+import tempfile
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
 import yaml
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,22 +33,29 @@ log = get_logger("parayabuck.web.server")
 class EngineManager:
     def __init__(self) -> None:
         self.config_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
-        self.env_path = Path(".env")
+        self.env_path = Path(os.getenv("ENV_PATH") or ".env")
         if not self.config_path.exists() and Path("config/settings.yaml").exists():
             self.config_path = Path("config/settings.yaml")
-        if not self.env_path.exists() and Path(".env.example").exists():
-            self.env_path = Path(".env.example")
 
         self.broker: Any = None
         self.engine: Any = None
         self.runtime: Any = None
         self.engine_state: str = "stopped"
         self.last_account: dict[str, Any] | None = None
+        self._last_account_monotonic = 0.0
+        self._account_cache_ttl_seconds = 5.0
+        self._account_lock = threading.Lock()
         self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = (
             set()
         )
         self.stream_connections: set[WebSocket] = set()
         self._state_lock = threading.Lock()
+        self.control_token = secrets.token_urlsafe(32)
+        self._live_request_suffix: str | None = None
+        self._live_armed = False
+        self.security_warning = _tracked_secret_warning(Path.cwd())
+        if self.security_warning:
+            log.critical("%s", self.security_warning)
 
     def is_paper_mode(self) -> bool:
         try:
@@ -64,6 +75,10 @@ class EngineManager:
 
     def current_engine_state(self) -> str:
         with self._state_lock:
+            if self.runtime is not None and hasattr(self.runtime, "health"):
+                runtime_health = self.runtime.health()
+                self.engine_state = runtime_health.state
+                return self.engine_state
             if (
                 self.engine_state == "running"
                 and self.runtime is not None
@@ -85,12 +100,17 @@ class EngineManager:
             raise ValueError("Alpaca API key/secret missing. Configure settings first.")
 
         try:
+            warning = _tracked_secret_warning(Path.cwd())
+            if warning:
+                raise ValueError(warning)
             cfg = load_config(str(self.config_path))
             if not cfg.alpaca.paper and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise ValueError(
                     "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
                     "before starting the application."
                 )
+            if not cfg.alpaca.paper and not self._live_armed:
+                raise ValueError("Live trading requires a fresh server-side account confirmation.")
             from parayabuck.runtime import EngineRuntime
 
             runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
@@ -98,6 +118,9 @@ class EngineManager:
             self.engine = runtime.engine
             self.broker = runtime.broker
             runtime.start()
+            if not cfg.alpaca.paper:
+                self._live_armed = False
+                self._live_request_suffix = None
             self.engine_state = "running"
             log.info("ParayaBuck engine started from Web UI")
 
@@ -124,6 +147,16 @@ class EngineManager:
         log.info("ParayaBuck engine stopped")
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
+        with self._account_lock:
+            if (
+                self.last_account is not None
+                and time.monotonic() - self._last_account_monotonic
+                < self._account_cache_ttl_seconds
+            ):
+                return self.last_account
+            return self._refresh_account_snapshot()
+
+    def _refresh_account_snapshot(self) -> dict[str, Any]:
         if self.broker is None:
             key, secret = self.get_credentials()
             if key and secret:
@@ -148,6 +181,7 @@ class EngineManager:
                                 "qty": abs(p.qty),
                                 "avg_price": p.avg_price,
                                 "unrealized_pnl": p.unrealized_pnl,
+                                "ownership": p.ownership,
                             }
                         )
 
@@ -159,8 +193,10 @@ class EngineManager:
                     "unrealized_pnl": acct.unrealized_pnl,
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
                     "positions": positions_list,
+                    "account_suffix": getattr(self.broker, "account_suffix", ""),
                 }
                 self.last_account = snapshot
+                self._last_account_monotonic = time.monotonic()
                 return snapshot
             except Exception as e:
                 log.warning(f"Error fetching account snapshot: {e}")
@@ -176,7 +212,120 @@ class EngineManager:
             "unrealized_pnl": 0.0,
             "drawdown": 0.0,
             "positions": [],
+            "account_suffix": "",
         }
+
+    def request_live_arming(self) -> str:
+        if self.engine_state in {"starting", "running", "stopping"}:
+            raise ValueError("Stop the engine before requesting live mode")
+        if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+            raise ValueError("PARAYABUCK_ENABLE_LIVE=YES is required for live mode")
+        key, secret = self.get_credentials()
+        if not key or not secret:
+            raise ValueError("Alpaca credentials are required before live verification")
+        from parayabuck.execution.alpaca import AlpacaBroker
+
+        live_broker = AlpacaBroker(key, secret, paper=False)
+        live_broker.account()
+        suffix = live_broker.account_suffix
+        if not suffix:
+            raise ValueError("Alpaca account identity could not be verified")
+        self._live_request_suffix = suffix
+        self._live_armed = False
+        return suffix
+
+    def confirm_live_arming(self, phrase: str) -> None:
+        suffix = self._live_request_suffix
+        if suffix is None or not secrets.compare_digest(phrase.strip(), f"LIVE {suffix}"):
+            self._live_armed = False
+            raise ValueError("Live confirmation phrase does not match the verified account")
+        self._live_armed = True
+
+
+_PLACEHOLDERS = {
+    "",
+    "your_secret_key_here",
+    "your-secret-key",
+    "replace_me",
+    "changeme",
+    "<secret>",
+}
+
+
+def _tracked_secret_warning(root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for relative in result.stdout.decode(errors="ignore").split("\0"):
+        if not relative:
+            continue
+        path = root / relative
+        try:
+            if path.stat().st_size > 2_000_000:
+                continue
+            text = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        for match in re.finditer(r"(?m)^\s*ALPACA_SECRET_KEY\s*=\s*([^\s#]+)", text):
+            value = match.group(1).strip().strip("'\"").lower()
+            if value not in _PLACEHOLDERS and not any(
+                marker in value for marker in ("your_", "example", "placeholder")
+            ):
+                return (
+                    f"SECURITY BLOCK: tracked file {relative} contains a non-placeholder "
+                    "ALPACA_SECRET_KEY. Rotate the key and remove it from Git history."
+                )
+    return None
+
+
+def _atomic_write(path: Path, content: str, mode: int | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        if mode is not None:
+            os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "w") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        if mode is not None:
+            os.chmod(path, mode)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> None:
+    existing = path.read_text() if path.exists() else ""
+    managed = {"ALPACA_API_KEY": api_key, "ALPACA_SECRET_KEY": secret_key}
+    seen: set[str] = set()
+    lines: list[str] = []
+    for line in existing.splitlines():
+        match = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+        if match and match.group(1) in managed:
+            name = match.group(1)
+            if name not in seen:
+                lines.append(f"{name}={managed[name]}")
+                seen.add(name)
+        else:
+            lines.append(line)
+    for name, value in managed.items():
+        if name not in seen:
+            lines.append(f"{name}={value}")
+    _atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
 
 
 manager = EngineManager()
@@ -205,9 +354,21 @@ class WebSocketLogHandler(logging.Handler):
         }
         for queue, loop in list(manager.log_queues):
             try:
-                loop.call_soon_threadsafe(queue.put_nowait, log_entry)
+                loop.call_soon_threadsafe(_enqueue_log, queue, log_entry)
             except Exception:
                 pass
+
+
+def _enqueue_log(target: asyncio.Queue[dict[str, Any]], entry: dict[str, Any]) -> None:
+    if target.full():
+        try:
+            target.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+    try:
+        target.put_nowait(entry)
+    except asyncio.QueueFull:
+        return
 
 
 ws_log_handler = WebSocketLogHandler()
@@ -227,10 +388,18 @@ def _trusted_browser_origin(origin: str | None) -> bool:
 
 @app.middleware("http")
 async def protect_local_control_api(request: Request, call_next: Any) -> Any:
+    host = (request.headers.get("host") or "").split(":", 1)[0].strip("[]")
+    if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
+        return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
     if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin(
         request.headers.get("origin")
     ):
         return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and not secrets.compare_digest(
+        request.headers.get("x-parayabuck-control-token", ""),
+        manager.control_token,
+    ):
+        return JSONResponse(status_code=403, content={"detail": "Invalid local control token"})
     return await call_next(request)
 
 
@@ -246,15 +415,20 @@ class SettingsPayload(BaseModel):
     paper_mode: bool = Field(True, description="Paper mode toggle")
     daily_loss_limit_pct: float = Field(1.5, gt=0, le=100)
     max_drawdown_pct: float = Field(10.0, gt=0, le=100)
-    timeframe: Literal["1m", "5m", "15m", "30m", "1h", "1d"] = "15m"
+    timeframe: Literal["1m", "5m", "15m", "30m", "1h", "1d"] = "5m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = Field(True)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    restart_engine: bool = True
 
 
 class ModePayload(BaseModel):
     paper: bool
+
+
+class LiveConfirmationPayload(BaseModel):
+    phrase: str
 
 
 # Routes
@@ -263,7 +437,10 @@ async def serve_index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"is_paper": manager.is_paper_mode()},
+        context={
+            "is_paper": manager.is_paper_mode(),
+            "control_token": manager.control_token,
+        },
     )
 
 
@@ -274,6 +451,7 @@ async def get_status() -> dict[str, Any]:
         "state": manager.current_engine_state(),
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
+        "security_warning": getattr(manager, "security_warning", None),
     }
 
 
@@ -306,18 +484,49 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
         )
 
     try:
+        if not payload.paper and not getattr(manager, "_live_armed", False):
+            raise ValueError("Complete server-side live arming before selecting live mode")
         raw: dict[str, Any] = {}
         if manager.config_path.exists():
             with open(manager.config_path) as f:
                 raw = yaml.safe_load(f) or {}
         raw.setdefault("alpaca", {})["paper"] = payload.paper
-        with open(manager.config_path, "w") as f:
-            yaml.safe_dump(raw, f, sort_keys=False, default_flow_style=False)
+        _atomic_write(
+            manager.config_path,
+            yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),
+        )
 
         manager.broker = None  # Force broker reset
         return {"status": "success", "paper": payload.paper}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/live/arming/request")
+async def request_live_arming() -> dict[str, str]:
+    try:
+        suffix = await asyncio.to_thread(manager.request_live_arming)
+        return {
+            "status": "confirmation_required",
+            "account_suffix": suffix,
+            "expected_phrase": f"LIVE {suffix}",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/live/arming/confirm")
+async def confirm_live_arming(payload: LiveConfirmationPayload) -> dict[str, str]:
+    try:
+        manager.confirm_live_arming(payload.phrase)
+        return {
+            "status": "armed",
+            "message": "Live mode armed for this server process. Start remains a separate action.",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/settings")
@@ -357,7 +566,15 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         # settings (timeframe and risk limits) only require the
         # trading engine to restart; shutting down the whole application also
         # removes the UI and is both confusing and unnecessary.
-        restart_engine = manager.engine_state == "running"
+        current_paper = manager.is_paper_mode() if hasattr(manager, "is_paper_mode") else True
+        entering_live = current_paper and not payload.paper_mode
+        if entering_live and payload.restart_engine:
+            raise ValueError(
+                "Saving live mode requires restart_engine=false; start live separately after arming"
+            )
+        if entering_live and not getattr(manager, "_live_armed", False):
+            raise ValueError("Complete server-side live arming before saving live mode")
+        restart_engine = manager.engine_state == "running" and payload.restart_engine
         if restart_engine:
             manager.stop_engine()
             if manager.engine_state != "stopped":
@@ -370,12 +587,6 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         secret_key = payload.secret_key.strip() or current_secret or ""
         if any(char in api_key + secret_key for char in "\r\n"):
             raise ValueError("Credentials may not contain newlines")
-        # Write credentials with owner-only permissions.
-        manager.env_path.touch(mode=0o600, exist_ok=True)
-        set_key(manager.env_path, "ALPACA_API_KEY", api_key, quote_mode="never")
-        set_key(manager.env_path, "ALPACA_SECRET_KEY", secret_key, quote_mode="never")
-        os.chmod(manager.env_path, stat.S_IRUSR | stat.S_IWUSR)
-
         # Write settings.yaml
         cfg_raw: dict[str, Any] = {}
         if manager.config_path.exists():
@@ -397,8 +608,22 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             "log_level": payload.log_level.upper(),
         }
 
-        with open(manager.config_path, "w") as f:
-            yaml.safe_dump(cfg_raw, f, sort_keys=False, default_flow_style=False)
+        # Validate the complete temporary configuration before persistence.
+        temporary_config = manager.config_path.with_name(f".{manager.config_path.name}.validate")
+        _atomic_write(
+            temporary_config,
+            yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
+        )
+        try:
+            if cfg_raw.get("symbols"):
+                load_config(str(temporary_config))
+        finally:
+            temporary_config.unlink(missing_ok=True)
+        _atomic_update_credentials(manager.env_path, api_key, secret_key)
+        _atomic_write(
+            manager.config_path,
+            yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
+        )
 
         manager.broker = None
         restart_error: str | None = None
@@ -434,6 +659,8 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             "restart_error": restart_error,
             "app_restart_required": app_restart_required,
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -441,7 +668,11 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
 # WebSockets
 @app.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket) -> None:
-    if not _trusted_browser_origin(websocket.headers.get("origin")):
+    query_token = getattr(websocket, "query_params", {}).get("token", "")
+    expected_token = getattr(manager, "control_token", "")
+    if not _trusted_browser_origin(websocket.headers.get("origin")) or (
+        expected_token and not secrets.compare_digest(query_token, expected_token)
+    ):
         await websocket.close(code=1008)
         return
     await websocket.accept()
@@ -475,11 +706,15 @@ async def websocket_stream(websocket: WebSocket) -> None:
 
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket) -> None:
-    if not _trusted_browser_origin(websocket.headers.get("origin")):
+    query_token = getattr(websocket, "query_params", {}).get("token", "")
+    expected_token = getattr(manager, "control_token", "")
+    if not _trusted_browser_origin(websocket.headers.get("origin")) or (
+        expected_token and not secrets.compare_digest(query_token, expected_token)
+    ):
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=500)
     queue_ref = (queue, asyncio.get_running_loop())
     manager.log_queues.add(queue_ref)
 

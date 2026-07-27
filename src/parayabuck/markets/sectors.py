@@ -3,30 +3,36 @@ from __future__ import annotations
 _SECTORS = {
     "AAPL": "technology",
     "MSFT": "technology",
-    "GOOGL": "technology",
+    "GOOGL": "communications",
     "NVDA": "technology",
-    "XLK": "technology",
-    "AMZN": "consumer",
-    "TSLA": "consumer",
-    "KO": "consumer",
-    "PEP": "consumer",
-    "XLY": "consumer",
-    "XLP": "consumer",
+    "XLK": "etf_technology",
+    "AMZN": "consumer_discretionary",
+    "TSLA": "consumer_discretionary",
+    "KO": "consumer_staples",
+    "PEP": "consumer_staples",
+    "XLY": "etf_consumer_discretionary",
+    "XLP": "etf_consumer_staples",
     "JPM": "financial",
-    "XLF": "financial",
+    "XLF": "etf_financial",
     "JNJ": "healthcare",
-    "XLV": "healthcare",
+    "XLV": "etf_healthcare",
     "XOM": "energy",
-    "XLE": "energy",
-    "XLI": "industrials",
-    "XLB": "materials",
-    "XLU": "utilities",
-    "XLRE": "real_estate",
-    "XLC": "communications",
-    "SPY": "broad_market",
-    "QQQ": "broad_market",
+    "XLE": "etf_energy",
+    "XLI": "etf_industrials",
+    "XLB": "etf_materials",
+    "XLU": "etf_utilities",
+    "XLRE": "etf_real_estate",
+    "XLC": "etf_communications",
+    "SPY": "broad_market_etf",
+    "QQQ": "growth_market_etf",
 }
 
 
 def sector_of(symbol: str) -> str:
-    return "crypto" if "/" in symbol else _SECTORS.get(symbol, "other")
+    from parayabuck.core.models import Market
+    from parayabuck.markets.symbols import normalize_symbol
+
+    identity = normalize_symbol(symbol)
+    return (
+        "crypto" if identity.market == Market.CRYPTO else _SECTORS.get(identity.canonical, "other")
+    )

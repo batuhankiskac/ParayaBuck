@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from parayabuck.core.models import Signal
+from parayabuck.core.models import Regime, Signal
+from parayabuck.markets.symbols import canonical_symbol
+
+
+def ranking_score(signal: Signal) -> float:
+    normalized_setup_score = signal.score / 100.0
+    rr_modifier = min(max(signal.risk_reward, 0.0), 3.0) / 3.0
+    regime_modifier = {
+        Regime.HIGH_VOLATILITY: 0.9,
+        Regime.UNKNOWN: 0.85,
+    }.get(signal.regime, 1.0)
+    return normalized_setup_score * rr_modifier * regime_modifier
 
 
 class SignalRanker:
@@ -13,17 +24,17 @@ class SignalRanker:
         for signal in signals:
             if signal.score < self.minimum_score:
                 continue
-            current = best_by_symbol.get(signal.symbol)
-            quality = signal.score * signal.confidence * min(signal.risk_reward, 3.0)
-            current_quality = (
-                current.score * current.confidence * min(current.risk_reward, 3.0)
-                if current is not None
-                else -1.0
-            )
+            key = canonical_symbol(signal.symbol, signal.market)
+            current = best_by_symbol.get(key)
+            quality = ranking_score(signal)
+            current_quality = ranking_score(current) if current is not None else -1.0
             if quality > current_quality:
-                best_by_symbol[signal.symbol] = signal
+                best_by_symbol[key] = signal
         return sorted(
             best_by_symbol.values(),
-            key=lambda item: (item.score * item.confidence, item.risk_reward),
+            key=ranking_score,
             reverse=True,
         )
+
+
+__all__ = ["SignalRanker", "ranking_score"]

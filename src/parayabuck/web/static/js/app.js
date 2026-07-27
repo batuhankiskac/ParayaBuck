@@ -1,6 +1,8 @@
 // ParayaBuck Modern Web Trading Terminal JavaScript App
 
 document.addEventListener('DOMContentLoaded', () => {
+    const controlToken = document.querySelector('meta[name="parayabuck-control-token"]').content;
+    const controlHeaders = { 'X-ParayaBuck-Control-Token': controlToken };
     // DOM Elements
     const modeChip = document.getElementById('modeChip');
     const modeIcon = document.getElementById('modeIcon');
@@ -43,8 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const logLevelInput = document.getElementById('logLevel');
 
     let isPaperMode = true;
+    let accountSuffix = '';
     let equityHistory = [];
     let timeHistory = [];
+    let dataWs = null;
+    let logWs = null;
+    let dataReconnectAttempts = 0;
+    let logReconnectAttempts = 0;
 
     // Initialize Chart.js
     const ctx = document.getElementById('equityChart').getContext('2d');
@@ -107,11 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (paper) {
             modeChip.className = 'mode-chip paper';
             modeIcon.textContent = '📜';
-            modeText.textContent = 'PAPER DEMO';
+            modeText.textContent = `PAPER DEMO${accountSuffix ? ` · …${accountSuffix}` : ''}`;
         } else {
             modeChip.className = 'mode-chip real';
             modeIcon.textContent = '⚠️';
-            modeText.textContent = 'REAL GERÇEK PARA';
+            modeText.textContent = `REAL GERÇEK PARA${accountSuffix ? ` · …${accountSuffix}` : ''}`;
         }
 
         // Status Dot & Text
@@ -140,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update Account Snapshot
     const updateAccountUI = (data) => {
         if (!data) return;
+        accountSuffix = data.account_suffix || accountSuffix;
 
         equityValue.textContent = formatCurrency(data.equity);
         cashValue.textContent = formatCurrency(data.cash);
@@ -167,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             positionsTableBody.innerHTML = positions.map(p => `
                 <tr>
-                    <td><strong>${p.symbol}</strong></td>
+                    <td><strong>${p.symbol}</strong>${p.ownership === 'external' ? ' <small>(external)</small>' : ''}</td>
                     <td><span class="${p.direction === 'LONG' ? 'badge-long' : 'badge-short'}">${p.direction}</span></td>
                     <td>${p.qty}</td>
                     <td>$${p.avg_price.toFixed(2)}</td>
@@ -217,35 +225,57 @@ document.addEventListener('DOMContentLoaded', () => {
     const initWebSockets = () => {
         const loc = window.location;
         const wsProtocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-        
-        // Data Stream
-        const dataWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/stream`);
-        dataWs.onmessage = (event) => {
-            try {
-                const payload = JSON.parse(event.data);
-                if (payload.account) updateAccountUI(payload.account);
-                if (payload.status) updateEngineStateUI(payload.status.state, payload.status.paper);
-            } catch (e) {
-                console.error("Data WS error", e);
-            }
+
+        const reconnectDelay = (attempt) => {
+            const base = Math.min(30000, 1000 * (2 ** Math.min(attempt, 5)));
+            return base * (0.8 + Math.random() * 0.4);
         };
 
-        // Log Stream
-        const logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs`);
-        logWs.onmessage = (event) => {
-            try {
-                const logData = JSON.parse(event.data);
-                appendLog(logData.message, logData.level || 'info');
-            } catch (e) {
-                console.error("Log WS error", e);
-            }
+        const connectData = () => {
+            if (dataWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(dataWs.readyState)) return;
+            dataWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/stream?token=${encodeURIComponent(controlToken)}`);
+            dataWs.onopen = () => { dataReconnectAttempts = 0; };
+            dataWs.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.account) updateAccountUI(payload.account);
+                    if (payload.status) updateEngineStateUI(payload.status.state, payload.status.paper);
+                } catch (e) {
+                    console.error("Data WS error", e);
+                }
+            };
+            dataWs.onclose = () => {
+                dataWs = null;
+                setTimeout(connectData, reconnectDelay(dataReconnectAttempts++));
+            };
         };
+
+        const connectLogs = () => {
+            if (logWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(logWs.readyState)) return;
+            logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs?token=${encodeURIComponent(controlToken)}`);
+            logWs.onopen = () => { logReconnectAttempts = 0; };
+            logWs.onmessage = (event) => {
+                try {
+                    const logData = JSON.parse(event.data);
+                    appendLog(logData.message, logData.level || 'info');
+                } catch (e) {
+                    console.error("Log WS error", e);
+                }
+            };
+            logWs.onclose = () => {
+                logWs = null;
+                setTimeout(connectLogs, reconnectDelay(logReconnectAttempts++));
+            };
+        };
+
+        connectData();
+        connectLogs();
     };
 
     // Button Listeners
     startBtn.addEventListener('click', async () => {
         try {
-            const res = await fetch('/api/engine/start', { method: 'POST' });
+            const res = await fetch('/api/engine/start', { method: 'POST', headers: controlHeaders });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Motor başlatılamadı');
             appendLog("Motor başlatma isteği gönderildi.", "info");
@@ -256,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     stopBtn.addEventListener('click', async () => {
         try {
-            const res = await fetch('/api/engine/stop', { method: 'POST' });
+            const res = await fetch('/api/engine/stop', { method: 'POST', headers: controlHeaders });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Motor durdurulamadı');
             appendLog("Motor durduruldu.", "warning");
@@ -268,7 +298,26 @@ document.addEventListener('DOMContentLoaded', () => {
     modeChip.addEventListener('click', async () => {
         const nextMode = !isPaperMode;
         if (!nextMode) {
-            if (!confirm("⚠️ DİKKAT: REAL (Gerçek Para) moduna geçiyorsunuz! Devam etmek istediğinize emin misiniz?")) {
+            try {
+                const requestRes = await fetch('/api/live/arming/request', {
+                    method: 'POST', headers: controlHeaders
+                });
+                const requestData = await requestRes.json();
+                if (!requestRes.ok) throw new Error(requestData.detail || 'Live doğrulama başlatılamadı');
+                const phrase = window.prompt(
+                    `Hesap …${requestData.account_suffix} için doğrulama ifadesini yazın:`,
+                    requestData.expected_phrase
+                );
+                if (!phrase) return;
+                const confirmRes = await fetch('/api/live/arming/confirm', {
+                    method: 'POST',
+                    headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phrase })
+                });
+                const confirmData = await confirmRes.json();
+                if (!confirmRes.ok) throw new Error(confirmData.detail || 'Live doğrulama başarısız');
+            } catch (err) {
+                alert("Hata: " + err.message);
                 return;
             }
         }
@@ -276,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/mode', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ paper: nextMode })
             });
             const data = await res.json();
@@ -302,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
             paperModeCheck.checked = data.paper_mode;
             maxDailyLossInput.value = data.daily_loss_limit_pct || 1.5;
             maxDrawdownInput.value = data.max_drawdown_pct || 10;
-            timeframeInput.value = data.timeframe || '15m';
+            timeframeInput.value = data.timeframe || '5m';
             hostInput.value = data.host || '127.0.0.1';
             portInput.value = data.port || 8000;
             openBrowserInput.checked = data.open_browser !== false;
@@ -338,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.textContent = 'Kaydediliyor...';
             const res = await fetch('/api/settings', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();

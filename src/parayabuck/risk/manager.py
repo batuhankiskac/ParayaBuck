@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 from parayabuck.config import RiskLimits
 from parayabuck.core.models import AccountSnapshot, Direction, Market, OrderIntent, Signal
 from parayabuck.markets.sectors import sector_of
+from parayabuck.markets.symbols import canonical_symbol
 
 
 @dataclass(frozen=True)
@@ -18,10 +20,35 @@ class RiskDecision:
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class RiskState:
+    account_id: str
+    session_date: date
+    day_start_equity: float
+    peak_equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    fees: float
+    consecutive_losses: int
+    circuit_breaker_reason: str | None
+    updated_at: datetime
+
+
 class RiskManager:
     def __init__(self, limits: RiskLimits) -> None:
         self.limits = limits
         self.consecutive_losses = 0
+        self._reservations: dict[str, OrderIntent] = {}
+
+    def reserve(self, order: OrderIntent, remaining_qty: float | None = None) -> None:
+        qty = order.qty if remaining_qty is None else max(0.0, remaining_qty)
+        if qty <= 0:
+            self._reservations.pop(order.client_order_id, None)
+            return
+        self._reservations[order.client_order_id] = OrderIntent(**{**order.__dict__, "qty": qty})
+
+    def release(self, client_order_id: str) -> None:
+        self._reservations.pop(client_order_id, None)
 
     def record_realized_pnl(self, pnl: float) -> None:
         self.consecutive_losses = self.consecutive_losses + 1 if pnl < 0 else 0
@@ -36,6 +63,7 @@ class RiskManager:
             "active_positions": len(
                 tuple(position for position in account.positions if not position.is_flat)
             ),
+            "pending_entry_orders": len(self._reservations),
         }
 
         def reject(reason: str, **details: Any) -> RiskDecision:
@@ -75,9 +103,15 @@ class RiskManager:
             )
 
         active = tuple(position for position in account.positions if not position.is_flat)
-        if len(active) >= self.limits.max_positions:
+        reserved_symbols = {
+            canonical_symbol(order.symbol, order.market) for order in self._reservations.values()
+        }
+        if canonical_symbol(signal.symbol, signal.market) in reserved_symbols:
+            return reject("pending_order_for_symbol")
+        if len(active) + len(reserved_symbols) >= self.limits.max_positions:
             return reject("max_positions", max_positions=self.limits.max_positions)
-        gross_value = sum(position.market_value for position in active)
+        reserved_gross = sum(order.qty * order.entry_price for order in self._reservations.values())
+        gross_value = sum(position.market_value for position in active) + reserved_gross
         gross_exposure = gross_value / account.equity
         if gross_exposure >= self.limits.max_gross_exposure_pct:
             return reject(
@@ -88,6 +122,10 @@ class RiskManager:
         if signal.market == Market.CRYPTO:
             crypto_value = sum(
                 position.market_value for position in active if position.market == Market.CRYPTO
+            ) + sum(
+                order.qty * order.entry_price
+                for order in self._reservations.values()
+                if order.market == Market.CRYPTO
             )
             crypto_exposure = crypto_value / account.equity
             if crypto_exposure >= self.limits.max_crypto_exposure_pct:
@@ -104,6 +142,10 @@ class RiskManager:
             position.market_value
             for position in active
             if sector_of(position.symbol) == signal_sector
+        ) + sum(
+            order.qty * order.entry_price
+            for order in self._reservations.values()
+            if sector_of(order.symbol) == signal_sector
         )
         if sector_value / account.equity >= self.limits.max_sector_exposure_pct:
             return reject(
@@ -168,6 +210,7 @@ class RiskManager:
                 "risk_amount": risk_amount,
                 "stop_distance": stop_distance,
                 "gross_exposure_pct": gross_exposure,
+                "reserved_gross_exposure": reserved_gross,
                 "sector": signal_sector,
                 "sector_exposure_pct": sector_value / account.equity,
                 "sizing_caps_qty": sizing_caps,

@@ -16,6 +16,7 @@ _ALLOWED: dict[OrderState, frozenset[OrderState]] = {
             OrderState.CANCELLED,
             OrderState.EXPIRED,
             OrderState.REJECTED,
+            OrderState.UNKNOWN,
         }
     ),
     OrderState.ACCEPTED: frozenset(
@@ -34,6 +35,7 @@ _ALLOWED: dict[OrderState, frozenset[OrderState]] = {
     OrderState.CANCELLED: frozenset(),
     OrderState.REJECTED: frozenset(),
     OrderState.EXPIRED: frozenset(),
+    OrderState.UNKNOWN: frozenset(),
 }
 
 

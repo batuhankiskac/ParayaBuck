@@ -1,18 +1,36 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import Bar, OrderIntent, OrderState, Regime, Signal
-from parayabuck.data.buffers import BarStore
+from parayabuck.core.models import AccountSnapshot, Bar, OrderIntent, OrderState, Regime, Signal
+from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.base import ExecutionBroker
 from parayabuck.execution.state_machine import OrderStateMachine
 from parayabuck.markets.regime import RegimeDetector
-from parayabuck.monitoring import AIDecisionJournal, DecisionJournal
+from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.portfolio.allocator import PortfolioAllocator
 from parayabuck.risk.manager import RiskManager
-from parayabuck.signals.ranker import SignalRanker
+from parayabuck.signals.ranker import SignalRanker, ranking_score
 from parayabuck.strategies import Strategy, StrategyContext, default_strategies
+
+
+@dataclass(frozen=True)
+class IngestionResult:
+    bars: tuple[Bar, ...]
+    mutations: tuple[BarMutation, ...]
+
+
+@dataclass(frozen=True)
+class CycleResult:
+    timestamp: datetime
+    symbols: tuple[str, ...]
+    orders: tuple[OrderIntent, ...]
+    account_available: bool = True
+    missing_symbols: tuple[str, ...] = ()
 
 
 class TradingEngine:
@@ -23,37 +41,116 @@ class TradingEngine:
         broker: ExecutionBroker,
         config: EngineConfig | None = None,
         strategies: tuple[Strategy, ...] | None = None,
-        journal: DecisionJournal | None = None,
+        journal: DecisionJournal | AsyncDecisionJournal | None = None,
         ai_journal: AIDecisionJournal | None = None,
+        enforce_live_safety: bool = False,
+        paper_mode: bool = True,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = broker
         self.strategies = strategies or default_strategies()
         self.journal = journal
         self.ai_journal = ai_journal
+        self.enforce_live_safety = enforce_live_safety
+        self.paper_mode = paper_mode
         self.bars = BarStore(max(500, self.config.warmup_bars))
         self.regimes = RegimeDetector()
         self.ranker = SignalRanker(self.config.minimum_signal_score)
-        self.allocator = PortfolioAllocator()
+        self.allocator = PortfolioAllocator(self.config.max_new_positions_per_cycle)
         self.risk = RiskManager(self.config.risk)
         self.orders = OrderStateMachine()
+        self.entry_halt_reason: str | None = None
+        self._not_ready: set[tuple[str, str]] = set()
 
     def seed(self, bars: list[Bar]) -> None:
         self.bars.seed(bars)
 
+    def repair_gap(self, bars: list[Bar]) -> None:
+        """Merge a validated historical backfill and mark its series ready."""
+        self.bars.seed(bars)
+        for bar in bars:
+            self._not_ready.discard((canonical_symbol(bar.symbol, bar.market), bar.timeframe))
+
+    @property
+    def has_data_gaps(self) -> bool:
+        return bool(self._not_ready)
+
     def process_cycle(self, closed_bars: list[Bar]) -> list[OrderIntent]:
+        ingestion = self.ingest_closed_bars(closed_bars)
+        tradeable = [
+            bar
+            for bar, mutation in zip(ingestion.bars, ingestion.mutations, strict=True)
+            if mutation == BarMutation.INSERTED
+        ]
+        if not tradeable:
+            return []
+        try:
+            account = self.broker.account()
+        except Exception as exc:
+            # Ingestion is deliberately independent from account availability.
+            # Runtime health/circuit-breaker records the failure; no order can
+            # be created without a fresh snapshot.
+            from parayabuck.logger import get_logger
+
+            get_logger("parayabuck.engine").warning(
+                "Account snapshot unavailable after bar ingestion: %s", exc
+            )
+            return []
+        return self._evaluate_bars(tradeable, account)
+
+    def ingest_closed_bars(self, bars: list[Bar]) -> IngestionResult:
+        ordered = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))
+        mutations: list[BarMutation] = []
+        for bar in ordered:
+            mutation = self.bars.upsert(bar)
+            mutations.append(mutation)
+            key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
+            if mutation == BarMutation.GAP_DETECTED:
+                self._not_ready.add(key)
+            if mutation in {BarMutation.INSERTED, BarMutation.GAP_DETECTED}:
+                self._ai_call("observe_bar", bar)
+        return IngestionResult(ordered, tuple(mutations))
+
+    def ingest_corrections(self, bars: list[Bar]) -> IngestionResult:
+        ordered = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))
+        mutations = tuple(self.bars.upsert(bar, BarRevision.CORRECTION) for bar in ordered)
+        return IngestionResult(ordered, mutations)
+
+    def evaluate_timestamp(
+        self,
+        timestamp: datetime,
+        symbols: list[str],
+        account: AccountSnapshot,
+        *,
+        missing_symbols: tuple[str, ...] = (),
+    ) -> CycleResult:
+        wanted = set(symbols)
+        bars = [
+            series[-1]
+            for symbol in wanted
+            if (series := self.bars.get(symbol, self.config.timeframe))
+            and series[-1].timestamp == timestamp
+            and (canonical_symbol(symbol), self.config.timeframe) not in self._not_ready
+        ]
+        orders = self._evaluate_bars(bars, account)
+        return CycleResult(timestamp, tuple(sorted(wanted)), tuple(orders), True, missing_symbols)
+
+    def _evaluate_bars(self, closed_bars: list[Bar], account: AccountSnapshot) -> list[OrderIntent]:
         signals: list[Signal] = []
         metadata: dict[str, dict[str, Any]] = {}
         trails: dict[str, list[dict[str, Any]]] = {}
-        account = self.broker.account()
         for bar in sorted(closed_bars, key=lambda item: (item.timestamp, item.symbol)):
-            if not self.bars.add(bar):
+            if (canonical_symbol(bar.symbol, bar.market), bar.timeframe) in self._not_ready:
                 continue
-            self._ai_call("observe_bar", bar)
             series = self.bars.get(bar.symbol, bar.timeframe)
             assessment = self.regimes.detect(series)
             position = next(
-                (item for item in account.positions if item.symbol == bar.symbol),
+                (
+                    item
+                    for item in account.positions
+                    if canonical_symbol(item.symbol, item.market)
+                    == canonical_symbol(bar.symbol, bar.market)
+                ),
                 None,
             )
             benchmark_regime = self._benchmark_regime(bar.timeframe)
@@ -119,7 +216,7 @@ class TradingEngine:
                     }
                 )
                 if signal.signal_id in rank_by_id:
-                    quality = signal.score * signal.confidence * min(signal.risk_reward, 3.0)
+                    quality = ranking_score(signal)
                     trails[signal.signal_id].append(
                         {
                             "gate": "ranking",
@@ -140,7 +237,11 @@ class TradingEngine:
                     )
         selected = self.allocator.select(ranked, account)
         selected_ids = {signal.signal_id for signal in selected}
-        held = {position.symbol for position in account.positions if not position.is_flat}
+        held = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if not position.is_flat
+        }
         for signal in signals:
             if signal.signal_id in selected_ids:
                 trails[signal.signal_id].append(
@@ -153,7 +254,7 @@ class TradingEngine:
             elif signal.signal_id in rank_by_id:
                 reason = (
                     "an existing position is already held"
-                    if signal.symbol in held
+                    if canonical_symbol(signal.symbol, signal.market) in held
                     else "cycle capacity was consumed by a higher-ranked candidate"
                 )
                 trails[signal.signal_id].append(
@@ -169,6 +270,14 @@ class TradingEngine:
         accepted: list[OrderIntent] = []
         executions: dict[str, dict[str, Any]] = {}
         for signal in selected:
+            gate_reason = self._execution_gate_reason(signal)
+            if gate_reason is not None:
+                trails[signal.signal_id].append(
+                    {"gate": "execution_policy", "status": "failed", "reason": gate_reason}
+                )
+                if self.journal:
+                    self.journal.record_decision(signal, False, gate_reason)
+                continue
             decision = self.risk.evaluate(signal, account)
             trails[signal.signal_id].append(
                 {
@@ -203,16 +312,39 @@ class TradingEngine:
                 self.journal.record_order(order, lifecycle.state, "broker_submit")
             state, fill = self.broker.submit(order)
             lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
+            filled_qty = fill.qty if fill is not None else 0.0
+            if lifecycle.state == OrderState.UNKNOWN:
+                self.entry_halt_reason = "ambiguous_order_state"
+                self.risk.reserve(order)
+            elif lifecycle.state == OrderState.REJECTED and filled_qty > 0:
+                self.entry_halt_reason = "protection_failure"
+            if lifecycle.state in {
+                OrderState.ACCEPTED,
+                OrderState.PARTIALLY_FILLED,
+                OrderState.UNKNOWN,
+            }:
+                self.risk.reserve(order, order.qty - filled_qty)
+            else:
+                self.risk.release(order.client_order_id)
+            if fill is not None and fill.qty > 0:
+                actual_risk = abs(fill.price - order.stop_price) * fill.qty + fill.commission
+                if actual_risk > decision.risk_amount * 1.05:
+                    self.entry_halt_reason = "post_fill_risk_violation"
+                    trails[signal.signal_id].append(
+                        {
+                            "gate": "post_fill_risk",
+                            "status": "failed",
+                            "reason": (
+                                f"actual_risk={actual_risk:.4f} exceeds "
+                                f"approved={decision.risk_amount:.4f}"
+                            ),
+                        }
+                    )
             executions[signal.signal_id].update(
                 {
                     "state": lifecycle.state,
                     "fill": fill,
-                    "traded": lifecycle.state
-                    in {
-                        OrderState.ACCEPTED,
-                        OrderState.PARTIALLY_FILLED,
-                        OrderState.FILLED,
-                    },
+                    "traded": fill is not None and fill.qty > 0,
                 }
             )
             trails[signal.signal_id].append(
@@ -280,6 +412,33 @@ class TradingEngine:
                 },
             )
         return accepted
+
+    def _execution_gate_reason(self, signal: Signal) -> str | None:
+        if not self.config.trading_enabled:
+            return "trading_disabled"
+        if not self.paper_mode and not self.config.live_trading_enabled:
+            return "live_trading_disabled"
+        if self.entry_halt_reason is not None:
+            return self.entry_halt_reason
+        if signal.market.value == "equity" and not self.config.equity_trading_enabled:
+            return "equity_trading_disabled"
+        if signal.market.value == "crypto" and not self.config.crypto_trading_enabled:
+            return "crypto_trading_disabled"
+        if signal.direction.value == "short" and not self.config.allow_short:
+            return "short_trading_disabled"
+        if self.enforce_live_safety and self.config.reject_stale_signals:
+            duration = {
+                "1m": timedelta(minutes=1),
+                "5m": timedelta(minutes=5),
+                "15m": timedelta(minutes=15),
+                "30m": timedelta(minutes=30),
+                "1h": timedelta(hours=1),
+                "1d": timedelta(days=1),
+            }[self.config.timeframe]
+            age = datetime.now(UTC) - (signal.timestamp + duration)
+            if age.total_seconds() > self.config.maximum_signal_age_seconds:
+                return "stale_signal"
+        return None
 
     def _ai_call(self, method: str, *args: Any) -> Any:
         if self.ai_journal is None:

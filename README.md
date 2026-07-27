@@ -265,3 +265,23 @@ atomik olarak değiştirilir. JSONL ve günlük Markdown dosyaları append-only 
 
 `scripts/generate_sample_data.py`, test ve backtest geliştirmesi için sentetik OHLCV
 verisi üretir.
+
+## Güvenlik ve live geçişi
+
+- Gerçek Alpaca anahtarları yalnızca Git tarafından izlenmeyen `.env` dosyasında
+  tutulmalıdır. `.env.example` sadece placeholder içerir ve uygulama tarafından hiçbir
+  zaman credential hedefi olarak kullanılmaz.
+- Bir anahtar daha önce `.env.example` veya başka bir tracked dosyaya yazıldıysa,
+  dosyadan silmek yeterli değildir: Alpaca panelinden anahtarı hemen rotate edin ve Git
+  geçmişini ayrıca temizleyin. Startup secret taraması böyle bir değer gördüğünde motoru
+  bloke eder.
+- Live mod için hem process ortamında `PARAYABUCK_ENABLE_LIVE=YES` bulunmalı hem de Web
+  UI'da gösterilen maskeli hesap son eki `LIVE <son-ek>` ifadesiyle backend üzerinde
+  doğrulanmalıdır. Arming restart ile kaybolur; ayar kaydı live motoru otomatik başlatmaz.
+- Varsayılan rollout yalnızca `5m + 1h`, IEX, equity paper, cycle başına tek yeni pozisyon
+  ve `manage_external_positions=false` politikasıdır. Crypto execution test matrisi
+  tamamlanana kadar kapalıdır.
+
+Belirsiz emir sonucu, reconciliation/protection hatası, stale account snapshot veya veri
+kuyruğu gecikmesi yeni entry circuit breaker'ını açar. Açık pozisyonların exit/protection
+yönetimi bu giriş engelinden ayrıdır.

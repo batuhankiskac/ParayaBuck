@@ -42,11 +42,20 @@ class BacktestEngine:
         starting_equity: float = 10_000.0,
         slippage_bps: float = 2.0,
         commission: float = 0.0,
+        spread_bps: float = 0.0,
+        crypto_taker_fee_bps: float = 0.0,
         strategies: tuple[Strategy, ...] | None = None,
         run_id: str | None = None,
     ) -> None:
         self.config = config or EngineConfig()
-        self.broker = BacktestBroker(starting_equity, slippage_bps, commission)
+        self.broker = BacktestBroker(
+            starting_equity,
+            slippage_bps,
+            commission,
+            spread_bps=spread_bps,
+            allow_short=self.config.allow_short,
+            crypto_taker_fee_bps=crypto_taker_fee_bps,
+        )
         self.run_id = run_id or (f"backtest-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}")
         self.ai_journal = None
         if self.config.ai_logging_enabled:
@@ -77,7 +86,11 @@ class BacktestEngine:
         recorded_fills = 0
         for _, grouped in groupby(ordered, key=lambda bar: bar.timestamp):
             cycle = list(grouped)
-            for bar in cycle:
+            primary = [bar for bar in cycle if bar.timeframe == self.config.timeframe]
+            context = [bar for bar in cycle if bar.timeframe != self.config.timeframe]
+            if context:
+                self.engine.seed(context)
+            for bar in primary:
                 self.broker.advance(bar)
             if self.ai_journal is not None:
                 for fill in self.broker.fills[recorded_fills:]:
@@ -86,16 +99,25 @@ class BacktestEngine:
             for pnl in self.broker.realized_pnls[recorded_pnls:]:
                 self.engine.risk.record_realized_pnl(pnl)
             recorded_pnls = len(self.broker.realized_pnls)
-            self.engine.process_cycle(cycle)
+            self.engine.process_cycle(primary)
             curve.append(self.broker.account().equity)
+        benchmark = [
+            bar for bar in ordered if bar.symbol == "SPY" and bar.timeframe == self.config.timeframe
+        ]
+        if not benchmark and len({bar.symbol for bar in ordered}) == 1:
+            benchmark = [bar for bar in ordered if bar.timeframe == self.config.timeframe]
         benchmark_return = (
-            ordered[-1].close / ordered[0].close - 1
-            if len({bar.symbol for bar in ordered}) == 1 and ordered[0].close > 0
+            benchmark[-1].close / benchmark[0].close - 1
+            if len(benchmark) > 1 and benchmark[0].close > 0
             else 0.0
         )
-        return self._result(curve, benchmark_return)
+        timestamps = sorted({bar.timestamp for bar in ordered})
+        annualizer = self._annualizer(timestamps)
+        return self._result(curve, benchmark_return, annualizer)
 
-    def _result(self, curve: list[float], benchmark_return: float) -> BacktestResult:
+    def _result(
+        self, curve: list[float], benchmark_return: float, annualizer: float
+    ) -> BacktestResult:
         ending = curve[-1] if curve else self.starting_equity
         peak = self.starting_equity
         max_drawdown = 0.0
@@ -110,7 +132,6 @@ class BacktestEngine:
         mean_return = sum(returns) / len(returns) if returns else 0.0
         std = self._stddev(returns)
         downside_std = self._stddev(downside)
-        annualizer = math.sqrt(252 * 78)  # default 5m equity bars; comparative, not predictive
         gross_profit = sum(wins)
         gross_loss = abs(sum(losses))
         return BacktestResult(
@@ -138,3 +159,21 @@ class BacktestEngine:
             return 0.0
         mean = sum(values) / len(values)
         return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
+
+    @staticmethod
+    def _annualizer(timestamps: list[datetime]) -> float:
+        if len(timestamps) < 2:
+            return 0.0
+        intervals = sorted(
+            (right - left).total_seconds()
+            for left, right in zip(timestamps, timestamps[1:], strict=False)
+            if right > left
+        )
+        if not intervals:
+            return 0.0
+        median_seconds = intervals[len(intervals) // 2]
+        observed_days = {timestamp.date() for timestamp in timestamps}
+        calendar_span = max(1, (timestamps[-1].date() - timestamps[0].date()).days + 1)
+        sessions_per_year = min(365.0, len(observed_days) / calendar_span * 365.25)
+        periods_per_session = 86_400 / median_seconds
+        return math.sqrt(max(1.0, sessions_per_year * periods_per_session))

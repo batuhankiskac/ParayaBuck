@@ -64,14 +64,16 @@ def generate_bars(
         low = round(close - bar_range * np.random.uniform(0.3, 1.0), 2)
         open_p = round(low + (high - low) * np.random.uniform(0.2, 0.8), 2)
 
-        data.append({
-            "timestamp": timestamps[i],
-            "open": open_p,
-            "high": max(high, open_p, close),
-            "low": min(low, open_p, close),
-            "close": close,
-            "volume": int(np.random.uniform(100, 5000)),
-        })
+        data.append(
+            {
+                "timestamp": timestamps[i],
+                "open": open_p,
+                "high": max(high, open_p, close),
+                "low": min(low, open_p, close),
+                "close": close,
+                "volume": int(np.random.uniform(100, 5000)),
+            }
+        )
 
     return pd.DataFrame(data)
 

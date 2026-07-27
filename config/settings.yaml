@@ -7,6 +7,9 @@ alpaca:
   paper: true
   data_delayed: false
   stock_feed: iex
+data:
+  equity_session: regular
+  include_extended_hours: false
 symbols:
 - AAPL
 - MSFT
@@ -41,8 +44,22 @@ symbols:
 - AVAX/USD
 - LINK/USD
 engine:
-  timeframe: 1m
+  timeframe: 5m
   higher_timeframe: 1h
+  trading_enabled: true
+  equity_trading_enabled: true
+  crypto_trading_enabled: false
+  live_trading_enabled: false
+  manage_external_positions: false
+  reject_stale_signals: true
+  event_grace_seconds: 5
+  maximum_signal_age_seconds: 20
+  maximum_queue_age_seconds: 30
+  account_snapshot_ttl_seconds: 15
+  event_queue_capacity: 1024
+  max_new_positions_per_cycle: 1
+  strategy_profile: equity_5m_v1
+  allow_short: false
   minimum_signal_score: 65.0
   warmup_bars: 250
   decision_db_path: data/runtime/parayabuck.sqlite3

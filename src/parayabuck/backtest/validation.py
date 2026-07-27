@@ -29,14 +29,32 @@ def walk_forward(
     train_size: int,
     test_size: int,
 ) -> tuple[WalkForwardFold, ...]:
-    """Run strictly out-of-sample rolling folds; training bars only warm indicators."""
+    """Backward-compatible alias for rolling_out_of_sample.
+
+    No parameter optimization occurs, so this is intentionally not represented
+    as trained walk-forward optimization in reports.
+    """
+    return rolling_out_of_sample(bars, engine_factory, train_size, test_size)
+
+
+def rolling_out_of_sample(
+    bars: list[Bar],
+    engine_factory: Callable[[], BacktestEngine],
+    train_size: int,
+    test_size: int,
+) -> tuple[WalkForwardFold, ...]:
+    """Run timestamp-aligned rolling OOS folds; training only warms indicators."""
     if train_size <= 0 or test_size <= 0:
         raise ValueError("Walk-forward sizes must be positive")
+    ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol, bar.timeframe))
+    timestamps = sorted({bar.timestamp for bar in ordered})
     folds: list[WalkForwardFold] = []
     offset = train_size
-    while offset + test_size <= len(bars):
-        warmup = bars[offset - train_size : offset]
-        test = bars[offset : offset + test_size]
+    while offset + test_size <= len(timestamps):
+        warmup_times = set(timestamps[offset - train_size : offset])
+        test_times = set(timestamps[offset : offset + test_size])
+        warmup = [bar for bar in ordered if bar.timestamp in warmup_times]
+        test = [bar for bar in ordered if bar.timestamp in test_times]
         result = engine_factory().run(test, warmup=warmup)
         folds.append(WalkForwardFold(len(warmup), len(test), result))
         offset += test_size

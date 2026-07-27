@@ -35,6 +35,50 @@ class OrderState(StrEnum):
     CANCELLED = "cancelled"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+
+class ProtectionState(StrEnum):
+    UNPROTECTED = "unprotected"
+    REQUESTED = "requested"
+    ACTIVE = "active"
+    PARTIALLY_PROTECTED = "partially_protected"
+    OVER_PROTECTED = "over_protected"
+    TRIGGERED_UNFILLED = "triggered_unfilled"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class ExecutionStatus:
+    requested_qty: float
+    filled_qty: float
+    remaining_qty: float
+    average_fill_price: float | None
+    terminal_order_state: OrderState | None
+    has_any_fill: bool
+    position_opened: bool
+    protection_state: ProtectionState = ProtectionState.UNPROTECTED
+
+    @classmethod
+    def from_values(
+        cls,
+        requested_qty: float,
+        filled_qty: float,
+        average_fill_price: float | None,
+        terminal_order_state: OrderState | None,
+        protection_state: ProtectionState = ProtectionState.UNPROTECTED,
+    ) -> ExecutionStatus:
+        filled = max(0.0, filled_qty)
+        return cls(
+            requested_qty=requested_qty,
+            filled_qty=filled,
+            remaining_qty=max(0.0, requested_qty - filled),
+            average_fill_price=average_fill_price,
+            terminal_order_state=terminal_order_state,
+            has_any_fill=filled > 0,
+            position_opened=filled > 0,
+            protection_state=protection_state,
+        )
 
 
 @dataclass(frozen=True)
@@ -95,6 +139,7 @@ class PositionSnapshot:
     current_price: float
     market: Market
     qty_available: float | None = None
+    ownership: str = "external"
 
     @property
     def is_flat(self) -> bool:

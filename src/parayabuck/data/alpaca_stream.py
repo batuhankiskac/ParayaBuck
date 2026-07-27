@@ -57,6 +57,7 @@ class AlpacaBarStream:
         crypto_symbols: list[str],
         handler: BarHandler,
         timeframe: str = "1m",
+        updated_handler: BarHandler | None = None,
     ) -> None:
         async def stock_handler(raw: Any) -> None:
             await handler(self._convert(raw, Market.EQUITY, timeframe))
@@ -64,13 +65,27 @@ class AlpacaBarStream:
         async def crypto_handler(raw: Any) -> None:
             await handler(self._convert(raw, Market.CRYPTO, timeframe))
 
+        async def stock_updated_handler(raw: Any) -> None:
+            target = updated_handler or handler
+            await target(self._convert(raw, Market.EQUITY, timeframe))
+
+        async def crypto_updated_handler(raw: Any) -> None:
+            target = updated_handler or handler
+            await target(self._convert(raw, Market.CRYPTO, timeframe))
+
         if stock_symbols:
             self.stock.subscribe_bars(stock_handler, *stock_symbols)
+            subscribe_updated = getattr(self.stock, "subscribe_updated_bars", None)
+            if subscribe_updated is not None:
+                subscribe_updated(stock_updated_handler, *stock_symbols)
         if crypto_symbols:
             # Alpaca's crypto WebSocket uses pair symbols (for example
             # ``BTC/USD``).  Removing the slash produces an invalid subscribe
             # payload and the server replies with ``invalid syntax (400)``.
             self.crypto.subscribe_bars(crypto_handler, *crypto_symbols)
+            subscribe_updated = getattr(self.crypto, "subscribe_updated_bars", None)
+            if subscribe_updated is not None:
+                subscribe_updated(crypto_updated_handler, *crypto_symbols)
 
     def run_stock(self) -> None:
         self.stock.run()

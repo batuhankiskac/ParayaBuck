@@ -29,6 +29,7 @@ from parayabuck.core.models import (
     PositionSnapshot,
 )
 from parayabuck.logger import get_logger
+from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
@@ -37,10 +38,22 @@ log = get_logger("parayabuck.execution.alpaca")
 _CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
 
 
+class AmbiguousOrderState(RuntimeError):
+    pass
+
+
 class AlpacaBroker:
     """Alpaca execution boundary using the engine's native models."""
 
-    def __init__(self, api_key: str, secret_key: str, paper: bool = True) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        paper: bool = True,
+        *,
+        manage_external_positions: bool = False,
+        ledger: Any = None,
+    ) -> None:
         self._client = TradingClient(api_key, secret_key, paper=paper)
         patch_session_timeout(self._client._session, timeout=15.0)
         self._peak_state_path = Path("data/runtime") / (
@@ -48,9 +61,21 @@ class AlpacaBroker:
         )
         self._peak_equity = self._load_peak_equity()
         self._asset_cache: dict[str, Any] = {}
+        self.manage_external_positions = manage_external_positions
+        self.ledger = ledger
+        self._account_id = ""
+
+    @property
+    def account_suffix(self) -> str:
+        return self._account_id[-4:] if self._account_id else ""
+
+    @property
+    def account_id(self) -> str:
+        return self._account_id
 
     def account(self) -> AccountSnapshot:
         account: Any = self._client.get_account()
+        self._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
         if (
             bool(getattr(account, "account_blocked", False))
             or bool(getattr(account, "trading_blocked", False))
@@ -60,6 +85,12 @@ class AlpacaBroker:
         equity = float(account.equity or 0)
         previous_equity = float(account.last_equity or equity)
         positions: list[PositionSnapshot] = []
+        ledger = getattr(self, "ledger", None)
+        managed_symbols = (
+            set(ledger.managed_for_account(self._account_id or "unknown"))
+            if ledger is not None
+            else set()
+        )
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
@@ -75,7 +106,7 @@ class AlpacaBroker:
             )
             positions.append(
                 PositionSnapshot(
-                    symbol=str(raw.symbol),
+                    symbol=canonical_symbol(str(raw.symbol), market),
                     qty=float(raw.qty),
                     avg_price=float(raw.avg_entry_price),
                     current_price=current_price,
@@ -84,6 +115,11 @@ class AlpacaBroker:
                         float(raw.qty_available)
                         if getattr(raw, "qty_available", None) is not None
                         else None
+                    ),
+                    ownership=(
+                        "managed"
+                        if canonical_symbol(str(raw.symbol), market) in managed_symbols
+                        else "external"
                     ),
                 )
             )
@@ -138,6 +174,10 @@ class AlpacaBroker:
             result_id = self._field(result, "id")
             if not result_id:
                 raise RuntimeError(f"Alpaca order response has no id for {intent.symbol}")
+            if intent.market == Market.EQUITY:
+                # Bracket protection is broker-side. TradingStream is the
+                # authoritative source for later partial/fill/terminal state.
+                return OrderState.ACCEPTED, None
             state, fill = self._wait_for_fill(str(result_id), intent, qty)
             if intent.market == Market.CRYPTO and state in {
                 OrderState.ACCEPTED,
@@ -158,25 +198,54 @@ class AlpacaBroker:
                 if not protected:
                     self._flatten(intent, fill.qty)
                     return OrderState.REJECTED, fill
+            ledger = getattr(self, "ledger", None)
+            if fill is not None and ledger is not None:
+                ledger.record_entry_fill(
+                    self._account_id or "unknown",
+                    intent,
+                    fill,
+                    str(result_id),
+                )
             return state, fill
         except ValueError as exc:
             # Closed markets, unsupported shorts, and duplicate orders are
             # expected safety rejections rather than broker failures.
             log.warning("Order rejected: %s", exc)
             return OrderState.REJECTED, None
+        except AmbiguousOrderState as exc:
+            log.critical(
+                "Order state is ambiguous; entries must halt pending reconciliation: %s", exc
+            )
+            return OrderState.UNKNOWN, None
         except Exception as exc:
             log.error("Order rejected: %s", exc)
             return OrderState.REJECTED, None
 
     def reconcile(self) -> None:
         account = self.account()
+        manage_external = bool(getattr(self, "manage_external_positions", True))
+        ledger = getattr(self, "ledger", None)
+        managed = (
+            ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
+        )
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
                 continue
-            stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
-            stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
-            total_qty = abs(position.qty)
+            symbol = canonical_symbol(position.symbol, position.market)
+            ownership = managed.get(symbol)
+            if ownership is None and not manage_external:
+                log.info("External position left unchanged during reconciliation: %s", symbol)
+                continue
+            if ownership is not None:
+                stop_price = ownership.original_stop
+                total_qty = min(abs(position.qty), ownership.owned_qty)
+            else:
+                # Backwards-compatible opt-in policy for explicitly managed
+                # external positions. Runtime defaults this off.
+                stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
+                stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
+                total_qty = abs(position.qty)
             required_qty = total_qty
             if position.market == Market.CRYPTO and position.qty_available == 0:
                 # Alpaca may deduct the taker fee from the acquired asset. A
@@ -188,7 +257,13 @@ class AlpacaBroker:
                 required_qty = self._round_qty_down(position.symbol, required_qty)
             if self._has_protective_order(position.symbol, is_long, required_qty):
                 continue
-            qty = abs(position.qty_available) if position.qty_available is not None else total_qty
+            mismatch = getattr(self, "_last_protection_mismatch", "missing")
+            if mismatch in {"under", "over"}:
+                self._cancel_protective_orders(position.symbol, is_long)
+            available_qty = (
+                abs(position.qty_available) if position.qty_available is not None else total_qty
+            )
+            qty = min(total_qty, available_qty)
             if position.market == Market.CRYPTO:
                 qty = self._available_position_qty(
                     position.symbol,
@@ -210,10 +285,16 @@ class AlpacaBroker:
                 raise RuntimeError(f"Could not restore protection for {position.symbol}")
 
     def _asset(self, symbol: str) -> Any:
-        asset = self._asset_cache.get(symbol)
+        identity = normalize_symbol(symbol)
+        cache_key = identity.canonical
+        asset = (
+            self._asset_cache.get(cache_key)
+            or self._asset_cache.get(symbol)
+            or self._asset_cache.get(identity.asset_lookup_symbol)
+        )
         if asset is None:
-            asset = self._client.get_asset(symbol)
-            self._asset_cache[symbol] = asset
+            asset = self._client.get_asset(identity.asset_lookup_symbol)
+            self._asset_cache[cache_key] = asset
         return asset
 
     def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
@@ -503,14 +584,8 @@ class AlpacaBroker:
             return 0.0
 
     def _flatten(self, intent: OrderIntent, qty: float) -> None:
-        try:
-            self._client.close_position(intent.symbol)
-            return
-        except AttributeError:
-            pass
-        except Exception as exc:
-            log.warning("Position close endpoint failed for %s: %s", intent.symbol, exc)
-
+        # Never call close_position(symbol): it closes the account's full
+        # quantity and can consume manually-owned units of the same asset.
         side = OrderSide.SELL if intent.direction == Direction.LONG else OrderSide.BUY
         closing_qty = qty
         if intent.market == Market.CRYPTO:
@@ -521,14 +596,50 @@ class AlpacaBroker:
             )
         if closing_qty <= 0:
             raise RuntimeError(f"No available quantity to flatten for {intent.symbol}")
-        self._client.submit_order(
+        before_qty = self._position_qty(intent.symbol)
+        exit_client_order_id = f"{intent.client_order_id}-emergency-exit"
+        result = self._submit_with_recovery(
             MarketOrderRequest(
-                symbol=intent.symbol,
+                symbol=normalize_symbol(intent.symbol, intent.market).trading_symbol,
                 qty=closing_qty,
                 side=side,
                 time_in_force=TimeInForce.GTC,
-            )
+                client_order_id=exit_client_order_id,
+            ),
+            exit_client_order_id,
         )
+        order_id = self._field(result, "id")
+        if not order_id:
+            raise AmbiguousOrderState(f"Emergency exit has no broker id for {intent.symbol}")
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            order = self._client.get_order_by_id(order_id)
+            status = str(self._field(order, "status", "")).lower().split(".")[-1]
+            if status == "filled":
+                expected = max(0.0, before_qty - closing_qty)
+                after_qty = self._position_qty(intent.symbol)
+                tolerance = max(1e-9, closing_qty * 1e-8)
+                if after_qty <= expected + tolerance:
+                    return
+                raise AmbiguousOrderState(
+                    f"Emergency exit filled but position quantity is unverified for {intent.symbol}"
+                )
+            if status in {"rejected", "canceled", "cancelled", "expired"}:
+                raise RuntimeError(
+                    f"Emergency exit {status} for exact managed quantity {intent.symbol}"
+                )
+            time.sleep(0.25)
+        raise AmbiguousOrderState(f"Emergency exit timed out for {intent.symbol}")
+
+    def _position_qty(self, symbol: str) -> float:
+        try:
+            position = self._client.get_open_position(normalize_symbol(symbol).trading_symbol)
+        except Exception as exc:
+            message = str(exc).lower()
+            if "position does not exist" in message or "404" in message:
+                return 0.0
+            raise
+        return abs(float(self._field(position, "qty", 0) or 0))
 
     def _validate_pre_submit(self, intent: OrderIntent) -> None:
         if intent.market == Market.EQUITY:
@@ -565,13 +676,19 @@ class AlpacaBroker:
                     return recovered
                 except Exception:
                     pass
-            raise submit_exc
+            raise AmbiguousOrderState(
+                f"Broker write outcome unknown for client_order_id={client_order_id}: {submit_exc}"
+            ) from submit_exc
 
     def _has_open_order(self, symbol: str) -> bool:
         orders = self._client.get_orders(
             GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
         )
-        return bool(orders)
+        if not orders:
+            return False
+        return any(
+            same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders
+        )
 
     def _has_protective_order(
         self, symbol: str, position_is_long: bool, required_qty: float
@@ -597,7 +714,37 @@ class AlpacaBroker:
             )
 
         protected = sum((protective_qty(order) for order in orders), start=Decimal("0"))
-        return protected >= Decimal(str(required_qty))
+        required = Decimal(str(required_qty))
+        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
+        self._last_protection_mismatch = (
+            "missing"
+            if protected == 0
+            else ("under" if protected < required - tolerance else "over")
+        )
+        return abs(protected - required) <= tolerance
+
+    def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
+        orders: Any = self._client.get_orders(
+            GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
+        )
+        closing_side = "sell" if position_is_long else "buy"
+
+        def visit(order: Any) -> None:
+            side = str(self._field(order, "side", "")).lower().split(".")[-1]
+            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
+            stop_price = self._field(order, "stop_price")
+            if side == closing_side and (
+                stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+            ):
+                order_id = self._field(order, "id")
+                if order_id:
+                    self._client.cancel_order_by_id(order_id)
+                return
+            for leg in self._field(order, "legs") or ():
+                visit(leg)
+
+        for order in orders or ():
+            visit(order)
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:

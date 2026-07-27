@@ -22,4 +22,4 @@ def patch_session_timeout(session: Session, timeout: float) -> None:
             kwargs["timeout"] = timeout
         return original_request(method, url, **kwargs)
 
-    session.request = patched  # type: ignore[assignment]
+    session.request = patched

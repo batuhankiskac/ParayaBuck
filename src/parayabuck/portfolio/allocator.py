@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from parayabuck.core.models import AccountSnapshot, Signal
+from parayabuck.markets.symbols import canonical_symbol
 
 
 class PortfolioAllocator:
@@ -10,7 +11,15 @@ class PortfolioAllocator:
         self.max_new_positions_per_cycle = max_new_positions_per_cycle
 
     def select(self, ranked: list[Signal], account: AccountSnapshot) -> list[Signal]:
-        held = {position.symbol for position in account.positions if not position.is_flat}
-        available = [signal for signal in ranked if signal.symbol not in held]
+        held = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if not position.is_flat
+        }
+        available = [
+            signal
+            for signal in ranked
+            if canonical_symbol(signal.symbol, signal.market) not in held
+        ]
         capacity = max(0, self.max_new_positions_per_cycle)
         return available[:capacity]

@@ -59,6 +59,7 @@ class ExecutionLedger:
 
     def _migrate(self) -> None:
         with self._lock:
+            self._migrate_legacy_orders_table()
             self.connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -192,6 +193,41 @@ class ExecutionLedger:
                 """
             )
             self.connection.commit()
+
+    def _migrate_legacy_orders_table(self) -> None:
+        """Preserve the former decision journal table before creating ledger orders."""
+        columns = {
+            str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")
+        }
+        legacy_columns = {
+            "client_order_id",
+            "timestamp",
+            "symbol",
+            "state",
+            "reason",
+            "payload",
+        }
+        if not legacy_columns.issubset(columns) or "broker_order_id" in columns:
+            return
+        self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS decision_orders (
+                client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
+                state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
+                PRIMARY KEY (client_order_id, timestamp, state)
+            )
+            """
+        )
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO decision_orders(
+                client_order_id, timestamp, symbol, state, reason, payload
+            )
+            SELECT client_order_id, timestamp, symbol, state, reason, payload
+            FROM orders
+            """
+        )
+        self.connection.execute("DROP TABLE orders")
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {str(row[1]) for row in self.connection.execute(f"PRAGMA table_info({table})")}

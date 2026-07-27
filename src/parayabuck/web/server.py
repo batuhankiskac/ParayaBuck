@@ -581,7 +581,7 @@ class WebSocketTicketPayload(BaseModel):
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
@@ -589,6 +589,15 @@ async def serve_index(request: Request) -> HTMLResponse:
             "control_token": manager.control_token,
         },
     )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/api/control-token")
+async def get_control_token() -> JSONResponse:
+    response = JSONResponse({"control_token": manager.control_token})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/api/status")

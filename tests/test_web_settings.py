@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import WebSocketDisconnect
+from starlette.requests import Request
 
 from parayabuck import runtime as runtime_module
 from parayabuck.web import server
@@ -31,6 +33,27 @@ class _EngineManagerStub:
     def start_engine(self) -> None:
         self.start_calls += 1
         self.engine_state = "running"
+
+
+def test_control_token_and_index_are_not_cached() -> None:
+    token_response = asyncio.run(server.get_control_token())
+    assert token_response.headers["cache-control"] == "no-store"
+    assert json.loads(token_response.body)["control_token"] == server.manager.control_token
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1),
+            "scheme": "http",
+        }
+    )
+    index_response = asyncio.run(server.serve_index(request))
+    assert index_response.headers["cache-control"] == "no-store"
 
 
 class _RestartFailureManagerStub(_EngineManagerStub):

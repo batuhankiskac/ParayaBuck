@@ -120,6 +120,10 @@ def test_shadow_engine_journals_decision(tmp_path) -> None:
     assert broker.observed == orders
     count = journal.connection.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
     assert count == 1
+    order_count = journal.connection.execute(
+        "SELECT COUNT(*) FROM decision_orders"
+    ).fetchone()[0]
+    assert order_count == 3
     journal.close()
 
 

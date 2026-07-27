@@ -1,8 +1,40 @@
 // ParayaBuck Modern Web Trading Terminal JavaScript App
 
 document.addEventListener('DOMContentLoaded', () => {
-    const controlToken = document.querySelector('meta[name="parayabuck-control-token"]').content;
-    const controlHeaders = { 'X-ParayaBuck-Control-Token': controlToken };
+    let controlToken = document.querySelector('meta[name="parayabuck-control-token"]').content;
+    let controlHeaders = { 'X-ParayaBuck-Control-Token': controlToken };
+
+    const refreshControlToken = async () => {
+        const response = await fetch('/api/control-token', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Yerel kontrol oturumu yenilenemedi');
+        const data = await response.json();
+        controlToken = data.control_token;
+        controlHeaders = { 'X-ParayaBuck-Control-Token': controlToken };
+    };
+
+    const controlFetch = async (url, options = {}) => {
+        const request = {
+            ...options,
+            headers: { ...(options.headers || {}), ...controlHeaders }
+        };
+        let response = await fetch(url, request);
+        if (response.status !== 403) return response;
+
+        let detail = '';
+        try {
+            detail = (await response.clone().json()).detail || '';
+        } catch (_) {
+            return response;
+        }
+        if (detail !== 'Invalid local control token') return response;
+
+        await refreshControlToken();
+        response = await fetch(url, {
+            ...options,
+            headers: { ...(options.headers || {}), ...controlHeaders }
+        });
+        return response;
+    };
     // DOM Elements
     const modeChip = document.getElementById('modeChip');
     const modeIcon = document.getElementById('modeIcon');
@@ -232,9 +264,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const websocketTicket = async (kind) => {
-            const response = await fetch('/api/ws-ticket', {
+            const response = await controlFetch('/api/ws-ticket', {
                 method: 'POST',
-                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ kind })
             });
             const payload = await response.json();
@@ -248,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 ticket = await websocketTicket('stream');
             } catch (_error) {
-                schedule('data');
+                setTimeout(connectData, reconnectDelay(dataReconnectAttempts++));
                 return;
             }
             dataWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/stream?ticket=${encodeURIComponent(ticket)}`);
@@ -274,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 ticket = await websocketTicket('logs');
             } catch (_error) {
-                schedule('logs');
+                setTimeout(connectLogs, reconnectDelay(logReconnectAttempts++));
                 return;
             }
             logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs?ticket=${encodeURIComponent(ticket)}`);
@@ -300,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Button Listeners
     startBtn.addEventListener('click', async () => {
         try {
-            const res = await fetch('/api/engine/start', { method: 'POST', headers: controlHeaders });
+            const res = await controlFetch('/api/engine/start', { method: 'POST' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Motor başlatılamadı');
             appendLog("Motor başlatma isteği gönderildi.", "info");
@@ -311,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     stopBtn.addEventListener('click', async () => {
         try {
-            const res = await fetch('/api/engine/stop', { method: 'POST', headers: controlHeaders });
+            const res = await controlFetch('/api/engine/stop', { method: 'POST' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Motor durdurulamadı');
             appendLog("Motor durduruldu.", "warning");
@@ -324,8 +356,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const nextMode = !isPaperMode;
         if (!nextMode) {
             try {
-                const requestRes = await fetch('/api/live/arming/request', {
-                    method: 'POST', headers: controlHeaders
+                const requestRes = await controlFetch('/api/live/arming/request', {
+                    method: 'POST'
                 });
                 const requestData = await requestRes.json();
                 if (!requestRes.ok) throw new Error(requestData.detail || 'Live doğrulama başlatılamadı');
@@ -334,9 +366,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     ''
                 );
                 if (!phrase) return;
-                const confirmRes = await fetch('/api/live/arming/confirm', {
+                const confirmRes = await controlFetch('/api/live/arming/confirm', {
                     method: 'POST',
-                    headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phrase })
                 });
                 const confirmData = await confirmRes.json();
@@ -348,9 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const res = await fetch('/api/mode', {
+            const res = await controlFetch('/api/mode', {
                 method: 'POST',
-                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ paper: nextMode })
             });
             const data = await res.json();
@@ -410,9 +442,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             submitBtn.disabled = true;
             submitBtn.textContent = 'Kaydediliyor...';
-            const res = await fetch('/api/settings', {
+            const res = await controlFetch('/api/settings', {
                 method: 'POST',
-                headers: { ...controlHeaders, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();

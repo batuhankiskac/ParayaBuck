@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,6 +37,43 @@ from parayabuck.markets.sectors import sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.portfolio.allocator import PortfolioAllocator
 from parayabuck.web import server
+
+
+def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "legacy.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE orders (
+            client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
+            state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
+            PRIMARY KEY (client_order_id, timestamp, state)
+        );
+        INSERT INTO orders VALUES (
+            'legacy-order', '2026-07-27T12:00:00+00:00', 'AAPL',
+            'submitted', 'broker_submit', '{}'
+        );
+        """
+    )
+    connection.close()
+
+    ledger = ExecutionLedger(str(path))
+
+    order_columns = {
+        str(row[1]) for row in ledger.connection.execute("PRAGMA table_info(orders)")
+    }
+    assert "broker_order_id" in order_columns
+    assert "parent_broker_order_id" in order_columns
+    preserved = ledger.connection.execute(
+        """
+        SELECT client_order_id, state, reason
+        FROM decision_orders
+        """
+    ).fetchall()
+    assert preserved == [("legacy-order", "submitted", "broker_submit")]
+    ledger.close()
 
 
 def _bar(

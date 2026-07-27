@@ -21,6 +21,7 @@ class DecisionJournal:
         self._migrate()
 
     def _migrate(self) -> None:
+        self._migrate_legacy_orders_table()
         self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS decisions (
@@ -28,7 +29,7 @@ class DecisionJournal:
                 strategy TEXT NOT NULL, score REAL NOT NULL, regime TEXT NOT NULL,
                 accepted INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS orders (
+            CREATE TABLE IF NOT EXISTS decision_orders (
                 client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
                 state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
                 PRIMARY KEY (client_order_id, timestamp, state)
@@ -49,6 +50,41 @@ class DecisionJournal:
             """
         )
         self.connection.commit()
+
+    def _migrate_legacy_orders_table(self) -> None:
+        """Move the old audit table out of the execution ledger's namespace."""
+        columns = {
+            str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")
+        }
+        legacy_columns = {
+            "client_order_id",
+            "timestamp",
+            "symbol",
+            "state",
+            "reason",
+            "payload",
+        }
+        if not legacy_columns.issubset(columns) or "broker_order_id" in columns:
+            return
+        self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS decision_orders (
+                client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
+                state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
+                PRIMARY KEY (client_order_id, timestamp, state)
+            )
+            """
+        )
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO decision_orders(
+                client_order_id, timestamp, symbol, state, reason, payload
+            )
+            SELECT client_order_id, timestamp, symbol, state, reason, payload
+            FROM orders
+            """
+        )
+        self.connection.execute("DROP TABLE orders")
 
     def record_scan(self, bar: Bar, assessment: RegimeAssessment, reason: str) -> None:
         payload = json.dumps(
@@ -103,7 +139,10 @@ class DecisionJournal:
         )
         with self._lock:
             self.connection.execute(
-                "INSERT OR REPLACE INTO orders VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?)",
+                """
+                INSERT OR REPLACE INTO decision_orders
+                VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+                """,
                 (order.client_order_id, order.symbol, state.value, reason, payload),
             )
             self.connection.commit()

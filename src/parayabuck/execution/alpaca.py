@@ -187,8 +187,18 @@ class AlpacaBroker:
         )
 
     def submit(self, intent: OrderIntent) -> tuple[OrderState, Fill | None]:
+        entry_registered = False
+        broker_write_attempted = False
+        broker_order_id = ""
         try:
             self._validate_pre_submit(intent)
+            ledger = getattr(self, "ledger", None)
+            if ledger is not None:
+                # Reserve the symbol in the durable ledger before the broker
+                # write.  Previously this happened after submit(), leaving a
+                # window in which a second cycle could buy the same symbol.
+                ledger.register_entry_order(self._account_id or "unknown", intent)
+                entry_registered = True
             qty, stop_price, target_price = self._validated_values(intent)
             side = OrderSide.BUY if intent.direction == Direction.LONG else OrderSide.SELL
             tif = TimeInForce.GTC if intent.market == Market.CRYPTO else TimeInForce.DAY
@@ -211,11 +221,14 @@ class AlpacaBroker:
                     time_in_force=tif,
                     client_order_id=intent.client_order_id,
                 )
+            broker_write_attempted = True
             result = self._submit_with_recovery(request, intent.client_order_id)
             result_id = self._field(result, "id")
             if not result_id:
-                raise RuntimeError(f"Alpaca order response has no id for {intent.symbol}")
-            ledger = getattr(self, "ledger", None)
+                raise AmbiguousOrderState(
+                    f"Alpaca order response has no id for {intent.symbol}"
+                )
+            broker_order_id = str(result_id)
             if ledger is not None:
                 ledger.register_entry_order(
                     self._account_id or "unknown",
@@ -265,7 +278,8 @@ class AlpacaBroker:
                         f"client_order_id={intent.client_order_id}"
                     )
                 if fill is None:
-                    return OrderState.CANCELLED, None
+                    self._record_entry_terminal(intent, state, str(result_id))
+                    return state, None
             if intent.market == Market.CRYPTO and fill is not None:
                 if ledger is not None:
                     ledger.apply_execution_event(
@@ -323,10 +337,30 @@ class AlpacaBroker:
                         occurred_at=fill.timestamp,
                     )
                 )
+            if fill is None and state in {
+                OrderState.CANCELLED,
+                OrderState.REJECTED,
+                OrderState.EXPIRED,
+            }:
+                self._record_entry_terminal(intent, state, str(result_id))
             return state, fill
         except ValueError as exc:
             # Closed markets, unsupported shorts, and duplicate orders are
             # expected safety rejections rather than broker failures.
+            if broker_order_id:
+                ledger = getattr(self, "ledger", None)
+                if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
+                    ledger.mark_manual_intervention(
+                        self._account_id or "unknown", intent.client_order_id
+                )
+                log.critical(
+                    "Order processing failed after broker acceptance; "
+                    "reconciliation is required: %s",
+                    exc,
+                )
+                return OrderState.RECONCILIATION_REQUIRED, None
+            if entry_registered:
+                self._record_entry_terminal(intent, OrderState.REJECTED)
             log.warning("Order rejected: %s", exc)
             return OrderState.REJECTED, None
         except AmbiguousOrderState as exc:
@@ -340,8 +374,48 @@ class AlpacaBroker:
             )
             return OrderState.RECONCILIATION_REQUIRED, None
         except Exception as exc:
+            if entry_registered and not broker_write_attempted:
+                self._record_entry_terminal(intent, OrderState.REJECTED)
+            if broker_write_attempted:
+                ledger = getattr(self, "ledger", None)
+                if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
+                    ledger.mark_manual_intervention(
+                        self._account_id or "unknown", intent.client_order_id
+                    )
+                log.critical(
+                    "Order processing failed after broker write; reconciliation is required: %s",
+                    exc,
+                )
+                return OrderState.RECONCILIATION_REQUIRED, None
             log.error("Order rejected: %s", exc)
             return OrderState.REJECTED, None
+
+    def _record_entry_terminal(
+        self,
+        intent: OrderIntent,
+        state: OrderState,
+        broker_order_id: str = "",
+    ) -> None:
+        """Persist a confirmed terminal entry state and release its reservation."""
+        ledger = getattr(self, "ledger", None)
+        if ledger is None or not hasattr(ledger, "apply_execution_event"):
+            return
+        ledger.apply_execution_event(
+            ExecutionEvent(
+                account_id=self._account_id or "unknown",
+                client_order_id=intent.client_order_id,
+                broker_order_id=broker_order_id,
+                parent_order_id=None,
+                role=OrderRole.ENTRY,
+                symbol=intent.symbol,
+                market=intent.market,
+                state=state,
+                requested_qty=intent.qty,
+                cumulative_filled_qty=0,
+                average_fill_price=None,
+                occurred_at=datetime.now(UTC),
+            )
+        )
 
     def reconcile(self) -> None:
         account = self.account()
@@ -377,20 +451,23 @@ class AlpacaBroker:
                 if entry.exit_client_order_id:
                     self._reconcile_crypto_exit(entry)
                     continue
-                ledger.mark_manual_intervention(
+                # ``account()`` has successfully returned Alpaca's complete
+                # position snapshot.  A managed symbol absent from that
+                # snapshot is flat at the broker (for example, after a
+                # bracket leg filled while the trading stream was offline).
+                # Keep the durable ownership ledger in sync instead of
+                # repeatedly halting all reconciliation on a stale entry.
+                ledger.mark_position_closed(
                     self._account_id or "unknown", entry.entry_client_order_id
                 )
-                log.critical(
-                    "Orphan ledger entry detected: market=%s symbol=%s "
+                log.warning(
+                    "Stale managed ledger entry closed: market=%s symbol=%s "
                     "entry_client_order_id=%s managed_qty=%s "
-                    "recovery_action=recent_order_reconciliation_required",
+                    "recovery_action=broker_position_snapshot_confirmed_flat",
                     entry.market.value,
                     entry.canonical_symbol,
                     entry.entry_client_order_id,
                     entry.owned_qty,
-                )
-                raise ProtectionReconciliationError(
-                    f"Managed ledger position has no broker position: {entry.canonical_symbol}"
                 )
         for position in account.positions:
             is_long = position.qty > 0

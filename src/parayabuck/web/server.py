@@ -58,6 +58,7 @@ class EngineManager:
         self.engine: Any = None
         self.runtime: Any = None
         self.engine_state: str = "stopped"
+        self.last_engine_error: str | None = None
         self.last_account: dict[str, Any] | None = None
         self._last_account_monotonic = 0.0
         self._account_cache_ttl_seconds = 5.0
@@ -129,13 +130,16 @@ class EngineManager:
             if self.engine_state in {"starting", "running", "stopping"}:
                 raise ValueError(f"Engine is already {self.engine_state}")
             self.engine_state = "starting"
+            self.last_engine_error = None
 
         key, secret = self.get_credentials()
         if not key or not secret:
             with self._state_lock:
                 self.engine_state = "error"
+                self.last_engine_error = "Alpaca API key/secret missing. Configure settings first."
             raise ValueError("Alpaca API key/secret missing. Configure settings first.")
 
+        runtime: Any = None
         try:
             warning = _tracked_secret_warning(Path.cwd())
             if warning:
@@ -151,23 +155,33 @@ class EngineManager:
             from parayabuck.runtime import EngineRuntime
 
             runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
-            self.runtime = runtime
-            self.engine = runtime.engine
-            self.broker = runtime.broker
             runtime.start()
+            with self._state_lock:
+                self.runtime = runtime
+                self.engine = runtime.engine
+                self.broker = runtime.broker
+                self.engine_state = "running"
             if not cfg.alpaca.paper:
                 self.invalidate_live_arming()
-            self.engine_state = "running"
             log.info("ParayaBuck engine started from Web UI")
 
-        except Exception:
-            self.engine_state = "error"
-            runtime = self.runtime
+        except Exception as exc:
             if runtime is not None:
                 try:
                     runtime.stop()
                 except Exception:
                     log.exception("Cleanup after failed engine start")
+            with self._state_lock:
+                self.engine_state = "error"
+                self.last_engine_error = str(exc)
+                # A failed runtime closes its ledger during cleanup. Never
+                # expose that stopped runtime (or its broker) to account/status
+                # polling, otherwise the UI repeatedly queries a closed SQLite
+                # connection and reports a misleading "stopped (degraded)".
+                if self.runtime is runtime:
+                    self.runtime = None
+                    self.engine = None
+                    self.broker = None
             self.invalidate_live_arming()
             raise
 
@@ -177,25 +191,29 @@ class EngineManager:
                 return
             self.engine_state = "stopping"
             runtime = self.runtime
-        if runtime is not None:
-            try:
-                stopped = runtime.stop()
-            except Exception as exc:
-                with self._state_lock:
-                    self.engine_state = "stop_failed"
-                self.invalidate_live_arming()
-                raise RuntimeError(f"Engine could not stop cleanly: {exc}") from exc
-            if stopped is False:
-                with self._state_lock:
-                    self.engine_state = "stop_failed"
-                self.invalidate_live_arming()
-                raise RuntimeError("Runtime workers did not stop; process restart required")
-        with self._state_lock:
-            self.engine_state = "stopped"
-            self.runtime = None
-            self.engine = None
-            self.broker = None
-            self.last_account = None
+        # Account polling uses the runtime broker and ledger. Serialize it with
+        # shutdown so no request can enter while those SQLite handles close.
+        with self._account_lock:
+            if runtime is not None:
+                try:
+                    stopped = runtime.stop()
+                except Exception as exc:
+                    with self._state_lock:
+                        self.engine_state = "stop_failed"
+                    self.invalidate_live_arming()
+                    raise RuntimeError(f"Engine could not stop cleanly: {exc}") from exc
+                if stopped is False:
+                    with self._state_lock:
+                        self.engine_state = "stop_failed"
+                    self.invalidate_live_arming()
+                    raise RuntimeError("Runtime workers did not stop; process restart required")
+            with self._state_lock:
+                self.engine_state = "stopped"
+                self.last_engine_error = None
+                self.runtime = None
+                self.engine = None
+                self.broker = None
+                self.last_account = None
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
 
@@ -673,6 +691,7 @@ async def get_status() -> dict[str, Any]:
     key, _ = manager.get_credentials()
     result: dict[str, Any] = {
         "state": manager.current_engine_state(),
+        "engine_error": getattr(manager, "last_engine_error", None),
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),

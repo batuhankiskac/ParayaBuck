@@ -129,6 +129,56 @@ def test_scanner_is_deterministic_and_atomic(tmp_path: Path) -> None:
     assert not active.with_suffix(".json.tmp").exists()
 
 
+def test_scanner_reserves_approved_inverse_etf_and_rejects_leveraged_inverse(
+    tmp_path: Path,
+) -> None:
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=4,
+        reference_symbols=("SPY",),
+        fallback_trade_symbols=("AAPL", "SH"),
+        inverse_trade_symbols=("SH",),
+        active_universe_path=str(tmp_path / "active.json"),
+    )
+    scanner = EquityUniverseScanner(config)
+    candidates = [
+        EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology"),
+        EquityCandidate(
+            "SH",
+            40,
+            100_000_000,
+            0.02,
+            1.0,
+            3,
+            "inverse_market",
+            leveraged_or_inverse=True,
+        ),
+        EquityCandidate(
+            "SQQQ",
+            10,
+            500_000_000,
+            0.05,
+            1.0,
+            3,
+            "inverse_market",
+            leveraged_or_inverse=True,
+        ),
+    ]
+
+    result = scanner.scan(candidates, data_timestamp=datetime.now(UTC))
+
+    assert result.selected_symbols[:2] == ("SPY", "SH")
+    assert result.score_breakdown["SH"]["selection_role"] == "inverse_hedge"
+    assert result.eliminated["SQQQ"] == "leveraged_or_inverse"
+
+
+def test_inverse_universe_only_accepts_approved_minus_one_etfs() -> None:
+    with pytest.raises(ValueError, match="approved -1x"):
+        EquityUniverseConfig(
+            fallback_trade_symbols=("SQQQ",),
+            inverse_trade_symbols=("SQQQ",),
+        )
+
+
 def _managed_crypto_ledger(tmp_path: Path) -> tuple[ExecutionLedger, OrderIntent]:
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     order = OrderIntent(

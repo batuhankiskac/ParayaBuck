@@ -222,6 +222,17 @@ class ExecutionLedger:
                 SET updated_at=COALESCE(updated_at, opened_at)
                 """
             )
+            # A symbol may have historical rows, but never two positions that
+            # still claim ownership.  The table primary key intentionally
+            # includes the entry id for audit history, so enforce the runtime
+            # ownership rule separately with a partial unique index.
+            self.connection.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_managed_position
+                ON managed_positions(account_id, canonical_symbol)
+                WHERE status IN ('open', 'manual_intervention_required')
+                """
+            )
             self.connection.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
@@ -291,6 +302,22 @@ class ExecutionLedger:
                 raise ValueError(
                     "Single-managed-entry invariant violated for "
                     f"{symbol}: existing={existing_open[0]}"
+                )
+            existing_pending = self.connection.execute(
+                """
+                SELECT client_order_id FROM orders
+                WHERE account_id=? AND canonical_symbol=? AND order_role='entry'
+                  AND client_order_id<>?
+                  AND (terminal_state IS NULL OR terminal_state NOT IN
+                       ('filled', 'cancelled', 'canceled', 'expired', 'rejected'))
+                LIMIT 1
+                """,
+                (account_id, symbol, order.client_order_id),
+            ).fetchone()
+            if existing_pending is not None:
+                raise ValueError(
+                    "Single-managed-entry invariant violated for "
+                    f"{symbol}: pending={existing_pending[0]}"
                 )
             self.connection.execute(
                 """

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.features.indicators import atr, bollinger, rsi
+from parayabuck.markets.sectors import is_inverse_equity
 from parayabuck.strategies.base import (
     ConditionEvaluation,
     Strategy,
@@ -21,6 +22,11 @@ class StockMeanReversion(Strategy):
     def evaluate_with_trace(self, bars: list[Bar], context: StrategyContext) -> StrategyEvaluation:
         supported = self.supports(bars)
         regime_ok = context.regime.regime == Regime.RANGE
+        inverse = bool(bars and is_inverse_equity(bars[-1].symbol))
+        benchmark_ok = (
+            not inverse
+            or context.benchmark_regime in {Regime.TREND_DOWN, Regime.UNKNOWN}
+        )
         conditions = [
             ConditionEvaluation(
                 "strategy_support",
@@ -36,8 +42,19 @@ class StockMeanReversion(Strategy):
                 "range",
                 "Mean reversion is only allowed in a range regime.",
             ),
+            ConditionEvaluation(
+                "benchmark_regime",
+                benchmark_ok,
+                context.benchmark_regime.value,
+                "trend_down or unknown" if inverse else "any",
+                (
+                    "An inverse ETF is only bought while the benchmark is bearish."
+                    if inverse
+                    else "Regular equity mean reversion keeps its existing benchmark policy."
+                ),
+            ),
         ]
-        if not (supported and regime_ok):
+        if not (supported and regime_ok and benchmark_ok):
             failed = next(item for item in conditions if not item.passed)
             return StrategyEvaluation(self.name, False, failed.explanation, tuple(conditions))
         closes = [bar.close for bar in bars]

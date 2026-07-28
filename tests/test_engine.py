@@ -30,6 +30,8 @@ from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring import DecisionJournal
 from parayabuck.risk import RiskManager
 from parayabuck.strategies.base import Strategy, StrategyContext
+from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
+from parayabuck.strategies.stock_trend import StockTrendPullback
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -77,6 +79,35 @@ class _OneShotStrategy(Strategy):
 def test_ema_is_exponential_not_sma() -> None:
     assert ema([1.0, 2.0, 3.0, 10.0], 3) == pytest.approx(6.0)
     assert ema([1.0, 2.0, 3.0, 10.0], 3) != pytest.approx(sum([2.0, 3.0, 10.0]) / 3)
+
+
+@pytest.mark.parametrize("strategy", [StockTrendPullback(), StockMeanReversion()])
+def test_inverse_equity_entries_require_non_bullish_benchmark(strategy: Strategy) -> None:
+    bars = [
+        Bar(
+            datetime(2025, 1, 1, 14, 30, tzinfo=UTC) + timedelta(minutes=5 * index),
+            "SH",
+            "5m",
+            40,
+            40.5,
+            39.5,
+            40,
+            1000,
+            Market.EQUITY,
+        )
+        for index in range(strategy.minimum_bars)
+    ]
+    regime = Regime.TREND_UP if isinstance(strategy, StockTrendPullback) else Regime.RANGE
+    context = StrategyContext(
+        RegimeAssessment(regime, 20, 0, 0, ()),
+        benchmark_regime=Regime.TREND_UP,
+    )
+
+    evaluation = strategy.evaluate_with_trace(bars, context)
+    benchmark = next(item for item in evaluation.conditions if item.code == "benchmark_regime")
+
+    assert benchmark.passed is False
+    assert evaluation.signal is None
 
 
 def test_risk_manager_sizes_from_stop_distance() -> None:

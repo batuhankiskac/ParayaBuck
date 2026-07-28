@@ -61,6 +61,12 @@ Deterministik scanner sonucu `data/runtime/active_equity_universe.json` altında
 olarak saklanır ve yalnız bu sınırlı aktif evren stream edilir. `SPY` varsayılan olarak
 benchmark/reference'tır ve `trade_reference_symbols: false` iken işlem dışıdır.
 
+`inverse_trade_symbols`, short satış açmadan düşüş yönlü pozisyon alınabilen onaylı
+kaldıraçsız (`-1x`) ters ETF listesidir. Varsayılan liste `SH`, `PSQ` ve `DOG` ile
+sınırlıdır; kaldıraçlı ters ETF'ler scanner tarafından reddedilir. Bu fonlar günlük ters
+getiri hedeflediğinden uzun süreli benchmark takibi sapabilir; motor yalnız fonun kendi
+yükseliş/range kurulumu ile benchmark düşüş rejimi aynı anda uygun olduğunda giriş arar.
+
 Kripto paper desteği live trading'i açmaz. Güvenli varsayılanlar:
 
 ```yaml

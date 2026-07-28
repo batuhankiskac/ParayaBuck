@@ -27,10 +27,14 @@ _ECONOMIC_SECTORS = {
     "XLC": "communications",
     "SPY": "broad_market",
     "QQQ": "broad_market",
+    "SH": "inverse_market",
+    "PSQ": "inverse_market",
+    "DOG": "inverse_market",
 }
 
 _SECTOR_ETFS = {"XLK", "XLY", "XLP", "XLF", "XLV", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 _BROAD_MARKET_ETFS = {"SPY", "QQQ"}
+_INVERSE_EQUITY_ETFS = {"SH", "PSQ", "DOG"}
 
 
 @dataclass(frozen=True)
@@ -46,7 +50,9 @@ def classify_instrument(symbol: str) -> InstrumentClassification:
     identity = normalize_symbol(symbol)
     if identity.market == Market.CRYPTO:
         return InstrumentClassification("crypto", "crypto")
-    if identity.canonical in _SECTOR_ETFS:
+    if identity.canonical in _INVERSE_EQUITY_ETFS:
+        category = "inverse_equity_etf"
+    elif identity.canonical in _SECTOR_ETFS:
         category = "sector_etf"
     elif identity.canonical in _BROAD_MARKET_ETFS:
         category = "broad_market_etf"
@@ -63,4 +69,13 @@ def sector_of(symbol: str) -> str:
     return classify_instrument(symbol).economic_sector
 
 
-__all__ = ["InstrumentClassification", "classify_instrument", "sector_of"]
+def is_inverse_equity(symbol: str) -> bool:
+    return classify_instrument(symbol).instrument_category == "inverse_equity_etf"
+
+
+__all__ = [
+    "InstrumentClassification",
+    "classify_instrument",
+    "is_inverse_equity",
+    "sector_of",
+]

@@ -33,7 +33,7 @@ from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
-from parayabuck.markets.sectors import sector_of
+from parayabuck.markets.sectors import classify_instrument, is_inverse_equity, sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.portfolio.allocator import PortfolioAllocator
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _symbol_batches
@@ -74,6 +74,45 @@ def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
         """
     ).fetchall()
     assert preserved == [("legacy-order", "submitted", "broker_submit")]
+    ledger.close()
+
+
+def test_ledger_rejects_a_second_active_entry_for_the_same_symbol(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    first = OrderIntent(
+        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
+        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="one",
+    )
+    second = OrderIntent(
+        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
+        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="two",
+    )
+    ledger.register_entry_order("acct", first)
+
+    with pytest.raises(ValueError, match="Single-managed-entry invariant"):
+        ledger.register_entry_order("acct", second)
+
+    ledger.close()
+
+
+def test_rejected_broker_entry_releases_its_ledger_reservation(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    intent = OrderIntent(
+        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
+        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="one",
+    )
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = ledger
+    broker._validated_values = lambda _intent: (1.0, 95.0, 110.0)
+    broker._validate_pre_submit = lambda _intent: None
+    broker._submit_with_recovery = lambda *_args: (_ for _ in ()).throw(ValueError("rejected"))
+
+    state, fill = broker.submit(intent)
+
+    assert (state, fill) == (OrderState.REJECTED, None)
+    assert ledger.pending_entry_orders("acct") == []
+    ledger.register_entry_order("acct", intent)
     ledger.close()
 
 
@@ -121,6 +160,9 @@ def test_legacy_crypto_position_blocks_canonical_signal_and_counts_as_crypto() -
     assert PortfolioAllocator().select([signal], account) == []
     assert sector_of("BTCUSD") == "crypto"
     assert sector_of("AAPL") == "technology"
+    assert sector_of("SH") == "inverse_market"
+    assert classify_instrument("PSQ").instrument_category == "inverse_equity_etf"
+    assert is_inverse_equity("DOG")
 
 
 def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
@@ -284,6 +326,42 @@ def test_external_position_is_not_modified_by_default() -> None:
         "external position must remain untouched"
     )
     broker.reconcile()
+
+
+def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> None:
+    owned = ManagedPosition(
+        "acct",
+        "XLE",
+        Market.EQUITY,
+        "test",
+        "signal",
+        "parayabuck-entry",
+        "broker-order",
+        170,
+        58.59,
+        56.0,
+        64.0,
+        "open",
+    )
+    closed: list[str] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {"XLE": owned},
+        managed_entries_for_account=lambda _account: [owned],
+        mark_position_closed=lambda _account, entry: closed.append(entry),
+    )
+    broker.account = lambda: AccountSnapshot(
+        1_000,
+        10_000,
+        10_000,
+        0,
+        positions=(),
+    )
+
+    broker.reconcile()
+
+    assert closed == ["parayabuck-entry"]
 
 
 def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists() -> None:

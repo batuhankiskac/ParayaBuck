@@ -46,7 +46,8 @@ def _candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandidate:
     price = recent[-1].close
     name = str(getattr(asset, "name", "")).lower()
     leveraged = any(
-        marker in name for marker in ("2x", "3x", "-2x", "-3x", "ultra", "inverse", "bear")
+        marker in name
+        for marker in ("2x", "3x", "-2x", "-3x", "ultra", "inverse", "bear", "short")
     )
     return EquityCandidate(
         symbol=symbol,

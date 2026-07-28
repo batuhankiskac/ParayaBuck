@@ -82,9 +82,11 @@ class EquityUniverseScanner:
         pinned = tuple(
             symbol
             for symbol in dict.fromkeys(canonical_symbol(item) for item in pinned_symbols)
-            if symbol not in references
+            if symbol not in references and symbol not in self.config.inverse_trade_symbols
         )
-        reserved = tuple(dict.fromkeys((*references, *pinned)))
+        reserved = tuple(
+            dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned))
+        )
         if len(reserved) > self.config.maximum_stream_symbols:
             raise ValueError("Reference and pinned symbols exceed the equity stream limit")
         eliminated: dict[str, str] = {}
@@ -136,7 +138,13 @@ class EquityUniverseScanner:
             symbol: {
                 "total": 0.0,
                 "selection_role": (
-                    "reference" if symbol in references else "pinned_managed_position"
+                    "reference"
+                    if symbol in references
+                    else (
+                        "inverse_hedge"
+                        if symbol in self.config.inverse_trade_symbols
+                        else "pinned_managed_position"
+                    )
                 ),
                 "economic_sector": candidate_sector.get(symbol, sector_of(symbol)),
             }
@@ -189,7 +197,10 @@ class EquityUniverseScanner:
             return "not_active_tradable"
         if item.exchange.upper() in {"OTC", "OTCQX", "OTCQB", "PINK"}:
             return "otc"
-        if item.leveraged_or_inverse:
+        if (
+            item.leveraged_or_inverse
+            and canonical_symbol(item.symbol) not in self.config.inverse_trade_symbols
+        ):
             return "leveraged_or_inverse"
         if not math.isfinite(item.price) or item.price < self.minimum_price:
             return "minimum_price"
@@ -247,7 +258,8 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
         selected = tuple(canonical_symbol(str(item)) for item in raw)
         if len(selected) != len(set(selected)):
             return (), "invalid"
-        if not set(config.reference_symbols).issubset(selected):
+        required = {*config.reference_symbols, *config.inverse_trade_symbols}
+        if not required.issubset(selected):
             return (), "invalid"
         if len(selected) > config.maximum_stream_symbols:
             return (), "invalid"

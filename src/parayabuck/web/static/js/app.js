@@ -562,7 +562,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 `${marketLabel(equity)} | ` +
                 `Crypto ${statusData.active_crypto_symbol_count || 0} · ` +
                 `${marketLabel(crypto)} | ` +
-                `Aday ${statusData.candidate_universe_size || 0} · Scanner ${(statusData.scanner && statusData.scanner.status) || 'not_run'}`;
+                `Aday ${statusData.candidate_universe_size || 0} · Scanner ${(statusData.scanner && statusData.scanner.status) || 'not_run'}` +
+                (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
 
             const accountRes = await fetch('/api/account');
             const accountData = await accountRes.json();

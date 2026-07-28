@@ -43,6 +43,13 @@ universe:
     - XLU
     - XLRE
     - XLC
+    - SH
+    - PSQ
+    - DOG
+    inverse_trade_symbols:
+    - SH
+    - PSQ
+    - DOG
     candidate_universe_path: data/universe/equity_candidates.json
     active_universe_path: data/runtime/active_equity_universe.json
     active_universe_max_age_hours: 36

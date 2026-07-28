@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.features.indicators import atr, ema, rsi
+from parayabuck.markets.sectors import is_inverse_equity
 from parayabuck.strategies.base import (
     ConditionEvaluation,
     Strategy,
@@ -42,14 +43,24 @@ class StockTrendPullback(Strategy):
                 "The strategy only buys pullbacks inside an established uptrend.",
             )
         )
-        benchmark_ok = context.benchmark_regime in {Regime.TREND_UP, Regime.UNKNOWN}
+        inverse = bool(bars and is_inverse_equity(bars[-1].symbol))
+        allowed_benchmark_regimes = (
+            {Regime.TREND_DOWN, Regime.UNKNOWN}
+            if inverse
+            else {Regime.TREND_UP, Regime.UNKNOWN}
+        )
+        benchmark_ok = context.benchmark_regime in allowed_benchmark_regimes
         conditions.append(
             ConditionEvaluation(
                 "benchmark_regime",
                 benchmark_ok,
                 context.benchmark_regime.value,
-                "trend_up or unknown",
-                "A bearish benchmark blocks new long equity exposure.",
+                "trend_down or unknown" if inverse else "trend_up or unknown",
+                (
+                    "An inverse ETF is only bought while the benchmark is bearish."
+                    if inverse
+                    else "A bearish benchmark blocks new long equity exposure."
+                ),
             )
         )
         if not (supported and regime_ok and benchmark_ok):

@@ -170,6 +170,7 @@ class EquityUniverseConfig:
     maximum_stream_symbols: int = 30
     reference_symbols: tuple[str, ...] = ("SPY",)
     fallback_trade_symbols: tuple[str, ...] = ()
+    inverse_trade_symbols: tuple[str, ...] = ()
     candidate_universe_path: str = "data/universe/equity_candidates.json"
     active_universe_path: str = "data/runtime/active_equity_universe.json"
     trade_reference_symbols: bool = False
@@ -183,10 +184,24 @@ class EquityUniverseConfig:
         fallback = tuple(
             canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols
         )
+        inverse = tuple(
+            canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols
+        )
         if len(set(references)) != len(references):
             raise ValueError("universe.equity.reference_symbols must be unique")
         if len(set(fallback)) != len(fallback):
             raise ValueError("universe.equity.fallback_trade_symbols must be unique")
+        if len(set(inverse)) != len(inverse):
+            raise ValueError("universe.equity.inverse_trade_symbols must be unique")
+        if not set(inverse).issubset(fallback):
+            raise ValueError(
+                "universe.equity.inverse_trade_symbols must be included in "
+                "fallback_trade_symbols"
+            )
+        from parayabuck.markets.sectors import is_inverse_equity
+
+        if any(not is_inverse_equity(symbol) for symbol in inverse):
+            raise ValueError("Only approved -1x inverse equity ETFs may be configured")
         if set(references) & set(fallback):
             raise ValueError(
                 "Reference and fallback trade symbols must be unique; use "
@@ -200,6 +215,7 @@ class EquityUniverseConfig:
             raise ValueError("Equity reference symbols exceed maximum_stream_symbols")
         object.__setattr__(self, "reference_symbols", references)
         object.__setattr__(self, "fallback_trade_symbols", fallback)
+        object.__setattr__(self, "inverse_trade_symbols", inverse)
 
     @property
     def configured_stream_symbols(self) -> tuple[str, ...]:

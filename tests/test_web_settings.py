@@ -239,6 +239,41 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     assert calls == ["init", "start", "stop"]
 
 
+def test_failed_runtime_start_does_not_leave_closed_runtime_exposed(
+    monkeypatch: Any,
+) -> None:
+    class FailedRuntime:
+        def __init__(self, **kwargs: Any) -> None:
+            self.engine = object()
+            self.broker = object()
+            self.stopped = False
+
+        def start(self) -> None:
+            raise RuntimeError("stream startup failed")
+
+        def stop(self) -> bool:
+            self.stopped = True
+            return True
+
+        def health(self) -> Any:
+            return type("Health", (), {"state": "stopped"})()
+
+    monkeypatch.setattr(runtime_module, "EngineRuntime", FailedRuntime)
+    manager = server.EngineManager()
+    manager.config_path = Path("config/settings.yaml")
+    monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+
+    with pytest.raises(RuntimeError, match="stream startup failed"):
+        manager.start_engine()
+
+    assert manager.engine_state == "error"
+    assert manager.last_engine_error == "stream startup failed"
+    assert manager.current_engine_state() == "error"
+    assert manager.runtime is None
+    assert manager.engine is None
+    assert manager.broker is None
+
+
 def test_stop_failure_returns_json_http_error_and_marks_manager_failed(
     monkeypatch: Any,
 ) -> None:

@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 import parayabuck.runtime as runtime_module
+import parayabuck.universe.preflight as preflight_module
 from parayabuck.config import (
     Config,
     CryptoScannerConfig,
@@ -27,7 +28,6 @@ from parayabuck.universe import (
     load_active_crypto_symbols,
     validate_active_crypto_universe,
 )
-from scripts import run_crypto_universe_scan as scan_command
 
 
 def _config(tmp_path: Path, **changes: object) -> CryptoUniverseConfig:
@@ -344,9 +344,16 @@ def test_asset_api_failure_preserves_previous_success(tmp_path: Path, monkeypatc
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     active = Path(crypto.active_universe_path)
     active.write_text('{"old":"success"}')
-    config = SimpleNamespace(
-        universe=SimpleNamespace(crypto=crypto),
-        alpaca=SimpleNamespace(paper=True, stock_feed="iex", data_delayed=False),
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(
+                enabled=False,
+                dynamic_selection_enabled=False,
+                reference_symbols=(),
+            ),
+            crypto=crypto,
+        ),
+        engine=EngineConfig(equity_trading_enabled=False),
     )
 
     class FailingTradingClient:
@@ -356,13 +363,10 @@ def test_asset_api_failure_preserves_previous_success(tmp_path: Path, monkeypatc
         def get_all_assets(self, _request: object) -> list[object]:
             raise RuntimeError("asset API unavailable")
 
-    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
-    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
-    monkeypatch.setattr(scan_command, "load_config", lambda: config)
-    monkeypatch.setattr(scan_command, "TradingClient", FailingTradingClient)
+    monkeypatch.setattr(preflight_module, "TradingClient", FailingTradingClient)
 
-    with pytest.raises(SystemExit, match="asset lookup failed"):
-        scan_command.main()
+    with pytest.raises(RuntimeError, match="asset API unavailable"):
+        preflight_module.refresh_crypto_universe(config, "test-key", "test-secret")
     assert active.read_text() == '{"old":"success"}'
 
 
@@ -376,9 +380,16 @@ def test_historical_api_failure_preserves_previous_success(
     )
     active = Path(crypto.active_universe_path)
     active.write_text('{"old":"success"}')
-    config = SimpleNamespace(
-        universe=SimpleNamespace(crypto=crypto),
-        alpaca=SimpleNamespace(paper=True, stock_feed="iex", data_delayed=False),
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(
+                enabled=False,
+                dynamic_selection_enabled=False,
+                reference_symbols=(),
+            ),
+            crypto=crypto,
+        ),
+        engine=EngineConfig(equity_trading_enabled=False),
     )
 
     class TradingClient:
@@ -398,12 +409,108 @@ def test_historical_api_failure_preserves_previous_success(
         def get_bars_batch(self, *_args: object, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("historical API unavailable")
 
-    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
-    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
-    monkeypatch.setattr(scan_command, "load_config", lambda: config)
-    monkeypatch.setattr(scan_command, "TradingClient", TradingClient)
-    monkeypatch.setattr(scan_command, "AlpacaHistoricalData", FailingHistory)
+    monkeypatch.setattr(preflight_module, "TradingClient", TradingClient)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FailingHistory)
 
-    with pytest.raises(SystemExit, match="historical lookup failed"):
-        scan_command.main()
+    with pytest.raises(RuntimeError, match="historical API unavailable"):
+        preflight_module.refresh_crypto_universe(config, "test-key", "test-secret")
     assert active.read_text() == '{"old":"success"}'
+
+
+def test_startup_preflight_refreshes_both_missing_dynamic_universes(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    crypto = _config(tmp_path, maximum_stream_symbols=3)
+    equity = EquityUniverseConfig(
+        dynamic_selection_enabled=True,
+        reference_symbols=("SPY",),
+        fallback_trade_symbols=("AAPL",),
+        active_universe_path=str(tmp_path / "active-equity.json"),
+        candidate_universe_path=str(tmp_path / "candidates.json"),
+    )
+    config = Config(universe=UniverseConfig(equity=equity, crypto=crypto))
+    calls: list[str] = []
+
+    def refresh_equity(*_args: object) -> SimpleNamespace:
+        calls.append("equity")
+        return SimpleNamespace(selected_symbols=("SPY", "AAPL"))
+
+    def refresh_crypto(*_args: object) -> SimpleNamespace:
+        calls.append("crypto")
+        return SimpleNamespace(
+            selected_symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+            eliminated={},
+        )
+
+    monkeypatch.setattr(preflight_module, "refresh_equity_universe", refresh_equity)
+    monkeypatch.setattr(preflight_module, "refresh_crypto_universe", refresh_crypto)
+
+    result = preflight_module.ensure_active_universes(config, "key", "secret")
+
+    assert calls == ["equity", "crypto"]
+    assert result.equity_status == "success"
+    assert result.crypto_status == "success"
+    assert result.equity_refreshed
+    assert result.crypto_refreshed
+
+
+def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    crypto = _config(tmp_path, maximum_stream_symbols=3)
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(
+                enabled=False,
+                dynamic_selection_enabled=False,
+                reference_symbols=(),
+            ),
+            crypto=crypto,
+        ),
+        engine=EngineConfig(equity_trading_enabled=False),
+    )
+
+    def fail(*_args: object) -> None:
+        raise RuntimeError("temporary API failure")
+
+    monkeypatch.setattr(preflight_module, "refresh_crypto_universe", fail)
+
+    result = preflight_module.ensure_active_universes(config, "key", "secret")
+
+    assert result.crypto_status == "missing"
+    assert not result.crypto_refreshed
+    assert load_active_crypto_symbols(crypto, log_rejection=False) == (
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD",
+    )
+
+
+def test_startup_preflight_skips_api_when_active_file_is_valid(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    crypto = _config(tmp_path, maximum_stream_symbols=3)
+    now = datetime.now(UTC)
+    scanner = CryptoUniverseScanner(crypto)
+    scanner.persist(scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now))
+    config = Config(
+        universe=UniverseConfig(
+            equity=EquityUniverseConfig(
+                enabled=False,
+                dynamic_selection_enabled=False,
+                reference_symbols=(),
+            ),
+            crypto=crypto,
+        ),
+        engine=EngineConfig(equity_trading_enabled=False),
+    )
+
+    def unexpected(*_args: object) -> None:
+        raise AssertionError("valid active universe must not call Alpaca")
+
+    monkeypatch.setattr(preflight_module, "refresh_crypto_universe", unexpected)
+
+    result = preflight_module.ensure_active_universes(config, "key", "secret")
+
+    assert result.crypto_status == "success"
+    assert not result.crypto_refreshed

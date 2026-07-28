@@ -35,7 +35,11 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskState
-from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+from parayabuck.universe import (
+    ensure_active_universes,
+    load_active_crypto_symbols,
+    load_active_symbols,
+)
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -81,14 +85,18 @@ class EngineRuntime:
         self.secret_key = secret_key
         self.app_config = config
         self.config = config.engine
+        self.universe_preflight = ensure_active_universes(config, api_key, secret_key)
         active_equities = (
-            load_active_symbols(config.universe.equity) if config.universe.equity.enabled else ()
+            load_active_symbols(config.universe.equity, log_rejection=False)
+            if config.universe.equity.enabled
+            else ()
         )
         active_crypto = (
-            load_active_crypto_symbols(config.universe.crypto)
+            load_active_crypto_symbols(config.universe.crypto, log_rejection=False)
             if config.universe.crypto.enabled
             else ()
         )
+        self._active_crypto_symbols = active_crypto
         self.symbols = [canonical_symbol(symbol) for symbol in (*active_equities, *active_crypto)]
         self._symbols_by_market = {
             Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
@@ -395,10 +403,24 @@ class EngineRuntime:
                 "Managed crypto positions pinned to active universe: %s",
                 ",".join(crypto_pins),
             )
-        active_crypto = load_active_crypto_symbols(
-            self.app_config.universe.crypto,
-            pinned_symbols=crypto_pins,
+        crypto_config = self.app_config.universe.crypto
+        current_crypto = getattr(
+            self,
+            "_active_crypto_symbols",
+            tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
         )
+        if crypto_config.dynamic_selection_enabled:
+            reserved = tuple(dict.fromkeys((*crypto_config.pinned_symbols, *crypto_pins)))
+            if len(reserved) > crypto_config.maximum_stream_symbols:
+                raise RuntimeError(
+                    "Configured and managed crypto pins exceed maximum_stream_symbols"
+                )
+            active_crypto = tuple(dict.fromkeys((*reserved, *current_crypto)))[
+                : crypto_config.maximum_stream_symbols
+            ]
+        else:
+            active_crypto = tuple(dict.fromkeys((*current_crypto, *crypto_pins)))
+        self._active_crypto_symbols = active_crypto
         self._symbols_by_market[Market.CRYPTO] = set(active_crypto)
         if self.engine.allowed_trade_symbols is not None:
             self.engine.allowed_trade_symbols = {

@@ -82,14 +82,20 @@ iken yönetilmez. Stablecoin bazlı USD pariteleri aday olamaz. Aktif sonuç
 yanlış sürümlü veya config digest'i uyuşmayan dosya açılışı engellemez; pinned semboller
 ve config sırasındaki adaylardan deterministik fallback kurulur.
 
-Scanner motor kapalıyken veya kontrollü restart öncesinde çalıştırılır:
+Bot başlangıcındaki preflight, aktif dosyayı iki piyasa için de doğrular. Dosya geçerli
+ve güncelse Alpaca çağrısı yapmadan kullanır; eksik, stale veya config ile uyumsuzsa
+ilgili scanner'ı stream ve işlem motoru başlamadan otomatik çalıştırır. Geçici API
+hatasında startup kapanmaz ve deterministik fallback kullanılır.
+
+Manuel komut yalnız zorla yenileme ve operasyonel bakım içindir:
 
 ```bash
 .venv/bin/python scripts/run_crypto_universe_scan.py
 ```
 
 Scanner yalnız asset, historical bar ve latest quote okur; WebSocket açmaz ve emir
-oluşturmaz. Sonuç çalışan runtime'a hot-swap edilmez, bir sonraki başlangıçta uygulanır.
+oluşturmaz. Başlangıç preflight'ında üretilen sonuç aynı başlangıçta uygulanır. Çalışan
+runtime'a hot-swap yapılmaz.
 Kripto evreninin büyümesi `max_crypto_exposure_pct`, `max_crypto_position_pct`,
 `max_crypto_positions` veya cycle başına tek yeni pozisyon limitini değiştirmez.
 

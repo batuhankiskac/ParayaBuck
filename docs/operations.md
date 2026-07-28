@@ -73,9 +73,16 @@ davranışla doğrudan stream ve işlem izin listesi olur. Dinamik seçim açık
 5. BTC korelasyonu ve deterministik kategori limitleri çeşitliliği korur.
 6. En fazla `maximum_stream_symbols` (varsayılan 12) seçilir.
 
-Çalıştırma:
+Normal başlangıçta manuel işlem gerekmez. Preflight önce equity ve crypto aktif
+dosyalarını doğrular; yalnız `missing`, `stale`, sürüm veya digest uyumsuzluğu olduğunda
+ilgili scanner'ı otomatik çalıştırır. Geçerli dosya varsa Alpaca tarama çağrıları
+atlanır. Otomatik scan başarısız olursa hata loglanır ve bot configured fallback ile
+çalışmaya devam eder.
+
+Zorla yenileme/operasyon komutları:
 
 ```bash
+.venv/bin/python scripts/scan_equity_universe.py
 .venv/bin/python scripts/run_crypto_universe_scan.py
 ```
 
@@ -86,8 +93,9 @@ timestamp, sürüm/digest uyuşmazlığı, eksik pin, duplicate, stablecoin veya
 dışı sembol gördüğünde ret sebebini loglar ve config sırasındaki deterministik fallback'i
 kullanır.
 
-Universe değişikliği çalışan WebSocket'e hot-swap edilmez. Scanner sonrasında motoru
-kontrollü durdurup yeniden başlatın. Startup reconciliation ledger'daki managed
+Universe değişikliği çalışan WebSocket'e hot-swap edilmez. Manuel scanner sonrasında
+motoru kontrollü durdurup yeniden başlatın. Otomatik preflight sonucu ise o başlangıçta
+doğrudan kullanılır. Startup reconciliation ledger'daki managed
 pozisyonları aktif crypto evrenine pinler; scanner pozisyon kapatmaz, emir göndermez ve
 unmanaged external pozisyon sahipliğini değiştirmez. Kripto sembolleri equity IEX 30
 kapasitesinden sayılmaz.

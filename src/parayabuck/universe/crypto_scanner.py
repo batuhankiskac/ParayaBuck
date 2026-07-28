@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import statistics
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,12 +42,12 @@ CRYPTO_CATEGORIES = {
 
 def crypto_candidate_from_bars(
     symbol: str,
-    bars: list[object],
+    bars: Sequence[object],
     *,
     expected_bar_count: int,
     tradable: bool,
     status: str,
-    btc_bars: list[object] | None = None,
+    btc_bars: Sequence[object] | None = None,
     spread_bps: float | None = None,
 ) -> CryptoCandidate:
     """Calculate scanner metrics without network or DataFrame dependencies."""
@@ -94,8 +95,8 @@ def crypto_candidate_from_bars(
     )
 
 
-def _return_correlation(left_bars: list[object], right_bars: list[object]) -> float | None:
-    def returns(items: list[object]) -> dict[datetime, float]:
+def _return_correlation(left_bars: Sequence[object], right_bars: Sequence[object]) -> float | None:
+    def returns(items: Sequence[object]) -> dict[datetime, float]:
         ordered = sorted(items, key=lambda item: getattr(item, "timestamp"))
         result: dict[datetime, float] = {}
         for previous, current in zip(ordered, ordered[1:], strict=False):
@@ -387,8 +388,11 @@ def crypto_scanner_config_digest(config: CryptoUniverseConfig) -> str:
 def validate_active_crypto_universe(
     config: CryptoUniverseConfig,
 ) -> tuple[tuple[str, ...], str]:
+    path = Path(config.active_universe_path)
+    if not path.exists():
+        return (), "missing"
     try:
-        payload = json.loads(Path(config.active_universe_path).read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
         if payload.get("status") != "success":
             return (), "invalid"
         if payload.get("scanner_version") != CryptoUniverseScanner.version:
@@ -430,6 +434,7 @@ def load_active_crypto_symbols(
     config: CryptoUniverseConfig,
     *,
     pinned_symbols: tuple[str, ...] = (),
+    log_rejection: bool = True,
 ) -> tuple[str, ...]:
     """Load a validated scan or use the deterministic configured fallback."""
     managed = tuple(dict.fromkeys(canonical_symbol(item, Market.CRYPTO) for item in pinned_symbols))
@@ -437,7 +442,7 @@ def load_active_crypto_symbols(
         return tuple(dict.fromkeys((*config.trade_symbols, *managed)))
 
     selected, status = validate_active_crypto_universe(config)
-    if status != "success":
+    if status != "success" and log_rejection:
         logging.getLogger("parayabuck.universe").warning(
             "Active crypto universe rejected; status=%s fallback=configured", status
         )

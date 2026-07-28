@@ -84,9 +84,7 @@ class EquityUniverseScanner:
             for symbol in dict.fromkeys(canonical_symbol(item) for item in pinned_symbols)
             if symbol not in references and symbol not in self.config.inverse_trade_symbols
         )
-        reserved = tuple(
-            dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned))
-        )
+        reserved = tuple(dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned)))
         if len(reserved) > self.config.maximum_stream_symbols:
             raise ValueError("Reference and pinned symbols exceed the equity stream limit")
         eliminated: dict[str, str] = {}
@@ -235,8 +233,11 @@ def scanner_config_digest(config: EquityUniverseConfig) -> str:
 
 
 def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, ...], str]:
+    path = Path(config.active_universe_path)
+    if not path.exists():
+        return (), "missing"
     try:
-        payload = json.loads(Path(config.active_universe_path).read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
         if payload.get("status") != "success":
             return (), "invalid"
         if payload.get("scanner_version") != EquityUniverseScanner.version:
@@ -272,13 +273,14 @@ def load_active_symbols(
     config: EquityUniverseConfig,
     *,
     pinned_symbols: tuple[str, ...] = (),
+    log_rejection: bool = True,
 ) -> tuple[str, ...]:
     """Load the last complete scanner output or return the configured fallback."""
     references = config.reference_symbols
     selected: tuple[str, ...] = ()
     if config.dynamic_selection_enabled:
         selected, status = validate_active_universe(config)
-        if status != "success":
+        if status != "success" and log_rejection:
             logging.getLogger("parayabuck.universe").warning(
                 "Active equity universe rejected; status=%s fallback=configured", status
             )

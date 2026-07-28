@@ -120,6 +120,15 @@ class RiskManager:
                 max_gross_exposure_pct=self.limits.max_gross_exposure_pct,
             )
         if signal.market == Market.CRYPTO:
+            crypto_positions = sum(
+                1 for position in active if position.market == Market.CRYPTO
+            ) + sum(1 for order in self._reservations.values() if order.market == Market.CRYPTO)
+            if crypto_positions >= self.limits.max_crypto_positions:
+                return reject(
+                    "max_crypto_positions",
+                    crypto_positions=crypto_positions,
+                    max_crypto_positions=self.limits.max_crypto_positions,
+                )
             crypto_value = sum(
                 position.market_value for position in active if position.market == Market.CRYPTO
             ) + sum(
@@ -164,6 +173,11 @@ class RiskManager:
         risk_amount = account.equity * risk_fraction
         qty_by_risk = risk_amount / stop_distance
         qty_by_position = account.equity * self.limits.max_position_pct / signal.entry_price
+        if signal.market == Market.CRYPTO:
+            qty_by_position = min(
+                qty_by_position,
+                account.equity * self.limits.max_crypto_position_pct / signal.entry_price,
+            )
         available_cash = account.cash
         if signal.market == Market.CRYPTO and account.crypto_buying_power is not None:
             available_cash = min(available_cash, account.crypto_buying_power)
@@ -203,7 +217,9 @@ class RiskManager:
             qty = int(qty)
         else:
             qty = float(Decimal(str(qty)).quantize(Decimal("0.000000001"), rounding=ROUND_DOWN))
-        minimum_notional = 10 if signal.market == Market.CRYPTO else 0
+        minimum_notional = (
+            self.limits.minimum_crypto_order_notional if signal.market == Market.CRYPTO else 0
+        )
         diagnostics.update(
             {
                 "risk_fraction": risk_fraction,

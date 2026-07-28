@@ -42,6 +42,13 @@ class ManagedPosition:
     entry_fees: float = 0.0
     exit_fees: float = 0.0
     protection_state: ProtectionState = ProtectionState.UNPROTECTED
+    protective_stop_client_order_id: str | None = None
+    protective_stop_broker_order_id: str | None = None
+    stop_state: str = "pending"
+    target_state: str = "watching"
+    exit_client_order_id: str | None = None
+    exit_broker_order_id: str | None = None
+    updated_at: datetime | None = None
 
 
 class ExecutionLedger:
@@ -179,6 +186,17 @@ class ExecutionLedger:
                 "protection_state",
                 "TEXT NOT NULL DEFAULT 'unprotected'",
             )
+            self._ensure_column("managed_positions", "protective_stop_client_order_id", "TEXT")
+            self._ensure_column("managed_positions", "protective_stop_broker_order_id", "TEXT")
+            self._ensure_column(
+                "managed_positions", "stop_state", "TEXT NOT NULL DEFAULT 'pending'"
+            )
+            self._ensure_column(
+                "managed_positions", "target_state", "TEXT NOT NULL DEFAULT 'watching'"
+            )
+            self._ensure_column("managed_positions", "exit_client_order_id", "TEXT")
+            self._ensure_column("managed_positions", "exit_broker_order_id", "TEXT")
+            self._ensure_column("managed_positions", "updated_at", "TEXT")
             self.connection.execute(
                 """
                 UPDATE managed_positions
@@ -192,13 +210,23 @@ class ExecutionLedger:
                 VALUES (2, CURRENT_TIMESTAMP)
                 """
             )
+            self.connection.execute(
+                """
+                UPDATE managed_positions
+                SET updated_at=COALESCE(updated_at, opened_at)
+                """
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (3, CURRENT_TIMESTAMP)
+                """
+            )
             self.connection.commit()
 
     def _migrate_legacy_orders_table(self) -> None:
         """Preserve the former decision journal table before creating ledger orders."""
-        columns = {
-            str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")
-        }
+        columns = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")}
         legacy_columns = {
             "client_order_id",
             "timestamp",
@@ -386,9 +414,9 @@ class ExecutionLedger:
                 entry_client_order_id, broker_order_id, owned_qty, entry_filled_qty,
                 exit_filled_qty, remaining_owned_qty, filled_avg_price,
                 original_stop, original_target, realized_pnl, entry_fees, exit_fees,
-                protection_state, status, opened_at, closed_at
+                protection_state, status, opened_at, closed_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, ?, 0,
-                      'unprotected', 'open', ?, NULL)
+                      'unprotected', 'open', ?, NULL, ?)
             ON CONFLICT(account_id, canonical_symbol, entry_client_order_id) DO UPDATE SET
                 broker_order_id=COALESCE(
                     excluded.broker_order_id, managed_positions.broker_order_id
@@ -401,7 +429,8 @@ class ExecutionLedger:
                 filled_avg_price=excluded.filled_avg_price,
                 entry_fees=managed_positions.entry_fees + excluded.entry_fees,
                 status='open',
-                closed_at=NULL
+                closed_at=NULL,
+                updated_at=excluded.updated_at
             """,
             (
                 account_id,
@@ -418,6 +447,7 @@ class ExecutionLedger:
                 order.stop_price,
                 order.target_price,
                 fee_delta,
+                now,
                 now,
             ),
         )
@@ -495,7 +525,8 @@ class ExecutionLedger:
                 realized_pnl=realized_pnl+?,
                 exit_fees=exit_fees+?,
                 status=?,
-                closed_at=CASE WHEN ?='closed' THEN ? ELSE NULL END
+                closed_at=CASE WHEN ?='closed' THEN ? ELSE NULL END,
+                updated_at=?
             WHERE account_id=? AND entry_client_order_id=?
             """,
             (
@@ -506,6 +537,7 @@ class ExecutionLedger:
                 fee_delta,
                 status,
                 status,
+                now,
                 now,
                 account_id,
                 entry_client_order_id,
@@ -520,10 +552,16 @@ class ExecutionLedger:
             self.connection.execute(
                 """
                 UPDATE managed_positions
-                SET owned_qty=0, remaining_owned_qty=0, status='closed', closed_at=?
+                SET owned_qty=0, remaining_owned_qty=0, status='closed',
+                    closed_at=?, updated_at=?
                 WHERE account_id=? AND entry_client_order_id=?
                 """,
-                ((closed_at or datetime.now(UTC)).isoformat(), account_id, entry_client_order_id),
+                (
+                    (closed_at or datetime.now(UTC)).isoformat(),
+                    datetime.now(UTC).isoformat(),
+                    account_id,
+                    entry_client_order_id,
+                ),
             )
             self.connection.commit()
 
@@ -531,10 +569,11 @@ class ExecutionLedger:
         with self._lock:
             self.connection.execute(
                 """
-                UPDATE managed_positions SET status='manual_intervention_required'
+                UPDATE managed_positions
+                SET status='manual_intervention_required', updated_at=?
                 WHERE account_id=? AND entry_client_order_id=? AND status='open'
                 """,
-                (account_id, entry_client_order_id),
+                (datetime.now(UTC).isoformat(), account_id, entry_client_order_id),
             )
             self.connection.commit()
 
@@ -547,14 +586,125 @@ class ExecutionLedger:
         with self._lock:
             self.connection.execute(
                 """
-                UPDATE managed_positions SET protection_state=?
+                UPDATE managed_positions SET protection_state=?, updated_at=?
                 WHERE account_id=? AND entry_client_order_id=?
                 """,
-                (state.value, account_id, entry_client_order_id),
+                (
+                    state.value,
+                    datetime.now(UTC).isoformat(),
+                    account_id,
+                    entry_client_order_id,
+                ),
             )
             self.connection.commit()
 
-    def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
+    def register_protective_stop(
+        self,
+        account_id: str,
+        entry_client_order_id: str,
+        client_order_id: str,
+        broker_order_id: str,
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        with self._lock:
+            self.connection.execute(
+                """
+                UPDATE managed_positions
+                SET protective_stop_client_order_id=?,
+                    protective_stop_broker_order_id=?,
+                    stop_state='open', protection_state='active', updated_at=?
+                WHERE account_id=? AND entry_client_order_id=?
+                  AND status IN ('open', 'manual_intervention_required')
+                """,
+                (
+                    client_order_id,
+                    broker_order_id,
+                    now,
+                    account_id,
+                    entry_client_order_id,
+                ),
+            )
+            self.connection.commit()
+
+    def claim_symbol_exit(
+        self,
+        account_id: str,
+        entry_client_order_id: str,
+        *,
+        reason: str,
+    ) -> ManagedPosition | None:
+        """Atomically win the stop/target race for one managed entry."""
+        target_state = "target_triggered" if reason == "target" else "stop_failover_triggered"
+        now = datetime.now(UTC).isoformat()
+        with self._lock:
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                updated = self.connection.execute(
+                    """
+                    UPDATE managed_positions
+                    SET target_state=?, stop_state='cancel_requested', updated_at=?
+                    WHERE account_id=? AND entry_client_order_id=?
+                      AND market='crypto' AND status='open'
+                      AND remaining_owned_qty > 0
+                      AND target_state IN ('watching', 'protected')
+                      AND stop_state IN ('open', 'triggered_unfilled')
+                      AND exit_client_order_id IS NULL
+                    """,
+                    (
+                        target_state,
+                        now,
+                        account_id,
+                        entry_client_order_id,
+                    ),
+                )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
+        if not updated.rowcount:
+            return None
+        return next(
+            (
+                item
+                for item in self.managed_entries_for_account(account_id)
+                if item.entry_client_order_id == entry_client_order_id
+            ),
+            None,
+        )
+
+    def set_exit_state(
+        self,
+        account_id: str,
+        entry_client_order_id: str,
+        *,
+        stop_state: str | None = None,
+        target_state: str | None = None,
+        exit_client_order_id: str | None = None,
+        exit_broker_order_id: str | None = None,
+    ) -> None:
+        assignments = ["updated_at=?"]
+        values: list[object] = [datetime.now(UTC).isoformat()]
+        for column, value in (
+            ("stop_state", stop_state),
+            ("target_state", target_state),
+            ("exit_client_order_id", exit_client_order_id),
+            ("exit_broker_order_id", exit_broker_order_id),
+        ):
+            if value is not None:
+                assignments.append(f"{column}=?")
+                values.append(value)
+        values.extend((account_id, entry_client_order_id))
+        with self._lock:
+            self.connection.execute(
+                f"""
+                UPDATE managed_positions SET {", ".join(assignments)}
+                WHERE account_id=? AND entry_client_order_id=?
+                """,
+                values,
+            )
+            self.connection.commit()
+
+    def managed_entries_for_account(self, account_id: str) -> list[ManagedPosition]:
         with self._lock:
             rows = self.connection.execute(
                 """
@@ -562,7 +712,10 @@ class ExecutionLedger:
                        entry_client_order_id, broker_order_id, remaining_owned_qty,
                        entry_filled_qty, exit_filled_qty, filled_avg_price,
                        original_stop, original_target, realized_pnl, entry_fees,
-                       exit_fees, protection_state, status
+                       exit_fees, protection_state, status,
+                       protective_stop_client_order_id, protective_stop_broker_order_id,
+                       stop_state, target_state, exit_client_order_id, exit_broker_order_id,
+                       updated_at
                 FROM managed_positions
                 WHERE account_id=? AND status IN ('open', 'manual_intervention_required')
                   AND remaining_owned_qty > 0
@@ -570,28 +723,42 @@ class ExecutionLedger:
                 """,
                 (account_id,),
             ).fetchall()
+        return [self._managed_from_row(row) for row in rows]
+
+    @staticmethod
+    def _managed_from_row(row: tuple[object, ...]) -> ManagedPosition:
+        return ManagedPosition(
+            account_id=str(row[0]),
+            canonical_symbol=str(row[1]),
+            market=Market(str(row[2])),
+            strategy=str(row[3]),
+            source_signal_id=str(row[4]),
+            entry_client_order_id=str(row[5]),
+            broker_order_id=str(row[6]) if row[6] else None,
+            owned_qty=float(str(row[7])),
+            entry_filled_qty=float(str(row[8])),
+            exit_filled_qty=float(str(row[9])),
+            filled_avg_price=float(str(row[10])),
+            original_stop=float(str(row[11])),
+            original_target=float(str(row[12])),
+            realized_pnl=float(str(row[13])),
+            entry_fees=float(str(row[14])),
+            exit_fees=float(str(row[15])),
+            protection_state=ProtectionState(str(row[16])),
+            status=str(row[17]),
+            protective_stop_client_order_id=str(row[18]) if row[18] else None,
+            protective_stop_broker_order_id=str(row[19]) if row[19] else None,
+            stop_state=str(row[20]),
+            target_state=str(row[21]),
+            exit_client_order_id=str(row[22]) if row[22] else None,
+            exit_broker_order_id=str(row[23]) if row[23] else None,
+            updated_at=datetime.fromisoformat(str(row[24])) if row[24] else None,
+        )
+
+    def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
+        rows = self.managed_entries_for_account(account_id)
         result: dict[str, ManagedPosition] = {}
-        for row in rows:
-            item = ManagedPosition(
-                account_id=row[0],
-                canonical_symbol=row[1],
-                market=Market(row[2]),
-                strategy=row[3],
-                source_signal_id=row[4],
-                entry_client_order_id=row[5],
-                broker_order_id=row[6],
-                owned_qty=float(row[7]),
-                entry_filled_qty=float(row[8]),
-                exit_filled_qty=float(row[9]),
-                filled_avg_price=float(row[10]),
-                original_stop=float(row[11]),
-                original_target=float(row[12]),
-                realized_pnl=float(row[13]),
-                entry_fees=float(row[14]),
-                exit_fees=float(row[15]),
-                protection_state=ProtectionState(row[16]),
-                status=row[17],
-            )
+        for item in rows:
             previous = result.get(item.canonical_symbol)
             if previous is None:
                 result[item.canonical_symbol] = item

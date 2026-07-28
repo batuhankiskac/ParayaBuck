@@ -179,9 +179,7 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
     assert manager.stop_calls == 1
 
 
-def test_live_mode_is_never_eligible_for_auto_start(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_live_mode_is_never_eligible_for_auto_start(tmp_path: Path, monkeypatch: Any) -> None:
     manager = server.EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.security_warning = None

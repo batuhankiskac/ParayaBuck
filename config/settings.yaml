@@ -11,39 +11,51 @@ alpaca:
 data:
   equity_session: regular
   include_extended_hours: false
-symbols:
-- AAPL
-- MSFT
-- GOOGL
-- TSLA
-- NVDA
-- AMZN
-- SPY
-- QQQ
-- KO
-- PEP
-- JNJ
-- JPM
-- XOM
-- XLK
-- XLF
-- XLE
-- XLV
-- XLY
-- XLP
-- XLI
-- XLB
-- XLU
-- XLRE
-- XLC
-- BTC/USD
-- ETH/USD
-- SOL/USD
-- ADA/USD
-- XRP/USD
-- DOGE/USD
-- AVAX/USD
-- LINK/USD
+universe:
+  equity:
+    enabled: true
+    dynamic_selection_enabled: true
+    maximum_stream_symbols: 30
+    reference_symbols:
+    - SPY
+    trade_reference_symbols: false
+    fallback_trade_symbols:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - TSLA
+    - NVDA
+    - AMZN
+    - QQQ
+    - KO
+    - PEP
+    - JNJ
+    - JPM
+    - XOM
+    - XLK
+    - XLF
+    - XLE
+    - XLV
+    - XLY
+    - XLP
+    - XLI
+    - XLB
+    - XLU
+    - XLRE
+    - XLC
+    candidate_universe_path: data/universe/equity_candidates.json
+    active_universe_path: data/runtime/active_equity_universe.json
+  crypto:
+    enabled: true
+    trade_symbols:
+    - BTC/USD
+    - ETH/USD
+    - SOL/USD
+    - ADA/USD
+    - XRP/USD
+    - DOGE/USD
+    - AVAX/USD
+    - LINK/USD
 engine:
   timeframe: 5m
   higher_timeframe: 1h
@@ -62,6 +74,8 @@ engine:
   maximum_account_age_for_entry_seconds: 30
   event_queue_capacity: 1024
   max_new_positions_per_cycle: 1
+  crypto_stop_limit_offset_bps: 25
+  crypto_emergency_exit_bps: 75
   strategy_profile: equity_5m_v1
   allow_short: false
   minimum_signal_score: 65.0
@@ -73,7 +87,10 @@ engine:
   risk:
     risk_per_trade_pct: 0.005
     max_position_pct: 0.1
-    max_crypto_exposure_pct: 0.2
+    max_crypto_exposure_pct: 0.1
+    max_crypto_position_pct: 0.05
+    max_crypto_positions: 2
+    minimum_crypto_order_notional: 12
     max_sector_exposure_pct: 0.25
     max_gross_exposure_pct: 0.6
     max_positions: 5

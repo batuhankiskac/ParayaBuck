@@ -11,7 +11,8 @@ engeller.
 - Gerçek para modu hem Web UI üzerinden seçilmeli hem de uygulama
   `PARAYABUCK_ENABLE_LIVE=YES` ile başlatılmalıdır.
 - Hisse girişleri broker üzerinde yaşayan bracket emirleri kullanır.
-- Kripto girişleri koruyucu stop oluşturulamazsa güvenli biçimde kapatılır.
+- Kripto girişleri broker-side stop-limit ve application-side synthetic OCO ile korunur;
+  protection kurulamazsa yalnız botun managed miktarı kapatılır.
 - Kararlar, reddedilen sinyaller, emir geçişleri ve hesap anlık görüntüleri
   `data/runtime/parayabuck.sqlite3` içinde tutulur.
 - Web kontrol yüzeyi yalnızca loopback adreslerine bağlanabilir.
@@ -48,11 +49,31 @@ Tek yapılandırma kaynağı `config/settings.yaml` dosyasıdır:
 
 - `app`: Web sunucusu ve log ayarları
 - `alpaca`: paper modu ve veri feed seçimi
-- `symbols`: motorun takip edeceği semboller
+- `universe`: equity reference/fallback/active evreni ile ayrı crypto trade sembolleri
 - `engine`: periyot, sinyal eşiği, warmup, karar günlüğü ve yüzde bazlı risk limitleri
 
 Ücretsiz Alpaca hesaplarında gerçek zamanlı hisse verisi için `stock_feed: iex`, uygun
 veri aboneliğinde `stock_feed: sip` kullanılabilir.
+
+IEX stream toplamı reference semboller dahil 30 equity ile sınırlıdır; crypto bu limite
+dahil değildir. `data/universe/equity_candidates.json` geniş fallback aday kaynağıdır.
+Deterministik scanner sonucu `data/runtime/active_equity_universe.json` altında atomik
+olarak saklanır ve yalnız bu sınırlı aktif evren stream edilir. `SPY` varsayılan olarak
+benchmark/reference'tır ve `trade_reference_symbols: false` iken işlem dışıdır.
+
+Kripto paper desteği live trading'i açmaz. Güvenli varsayılanlar:
+
+```yaml
+alpaca:
+  paper: true
+engine:
+  crypto_trading_enabled: false
+  live_trading_enabled: false
+  manage_external_positions: false
+```
+
+Paper chaos kapısı `python scripts/run_paper_chaos.py` ile çalıştırılır. Ayrıntılı
+rollout ve müdahale adımları [operations runbook](docs/operations.md) içindedir.
 
 ## Offline backtest
 

@@ -5,7 +5,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import AccountSnapshot, Bar, OrderIntent, OrderState, Regime, Signal
+from parayabuck.core.models import (
+    AccountSnapshot,
+    Bar,
+    Market,
+    OrderIntent,
+    OrderState,
+    Regime,
+    Signal,
+)
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.base import ExecutionBroker
 from parayabuck.execution.state_machine import OrderStateMachine
@@ -45,6 +53,7 @@ class TradingEngine:
         ai_journal: AIDecisionJournal | None = None,
         enforce_live_safety: bool = False,
         paper_mode: bool = True,
+        allowed_trade_symbols: set[str] | None = None,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = broker
@@ -53,6 +62,11 @@ class TradingEngine:
         self.ai_journal = ai_journal
         self.enforce_live_safety = enforce_live_safety
         self.paper_mode = paper_mode
+        self.allowed_trade_symbols = (
+            {canonical_symbol(symbol) for symbol in allowed_trade_symbols}
+            if allowed_trade_symbols is not None
+            else None
+        )
         self.bars = BarStore(max(500, self.config.warmup_bars))
         self.regimes = RegimeDetector()
         self.ranker = SignalRanker(self.config.minimum_signal_score)
@@ -80,6 +94,11 @@ class TradingEngine:
     @property
     def has_data_gaps(self) -> bool:
         return bool(self._not_ready)
+
+    def has_data_gaps_for_market(self, market: Market) -> bool:
+        return any(
+            ("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready
+        )
 
     def process_cycle(self, closed_bars: list[Bar]) -> list[OrderIntent]:
         ingestion = self.ingest_closed_bars(closed_bars)
@@ -430,6 +449,11 @@ class TradingEngine:
             return "live_trading_disabled"
         if self.entry_halt_reason is not None:
             return self.entry_halt_reason
+        if (
+            self.allowed_trade_symbols is not None
+            and canonical_symbol(signal.symbol, signal.market) not in self.allowed_trade_symbols
+        ):
+            return "reference_symbol_not_tradeable"
         if signal.market.value == "equity" and not self.config.equity_trading_enabled:
             return "equity_trading_disabled"
         if signal.market.value == "crypto" and not self.config.crypto_trading_enabled:

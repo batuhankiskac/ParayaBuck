@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.features.indicators import atr, ema
 from parayabuck.strategies.base import (
@@ -44,7 +46,14 @@ class CryptoTrendBreakout(Strategy):
         fast = ema(closes, 20)
         slow = ema(closes, 100)
         atr_value = atr(bars, 14)
-        indicators_ok = fast is not None and slow is not None and atr_value is not None
+        indicators_ok = (
+            fast is not None
+            and slow is not None
+            and atr_value is not None
+            and math.isfinite(atr_value)
+            and atr_value > 0
+            and all(math.isfinite(bar.volume) and bar.volume > 0 for bar in bars[-21:])
+        )
         conditions.append(
             ConditionEvaluation(
                 "indicators_available",

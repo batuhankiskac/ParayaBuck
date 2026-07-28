@@ -121,9 +121,7 @@ def test_shadow_engine_journals_decision(tmp_path) -> None:
     assert broker.observed == orders
     count = journal.connection.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
     assert count == 1
-    order_count = journal.connection.execute(
-        "SELECT COUNT(*) FROM decision_orders"
-    ).fetchone()[0]
+    order_count = journal.connection.execute("SELECT COUNT(*) FROM decision_orders").fetchone()[0]
     assert order_count == 3
     journal.close()
 
@@ -340,9 +338,7 @@ def test_reconcile_finds_held_stop_on_filled_bracket_parent() -> None:
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot("XLE", 170, 58.59, 58.7, Market.EQUITY, qty_available=0),
-        ),
+        positions=(PositionSnapshot("XLE", 170, 58.59, 58.7, Market.EQUITY, qty_available=0),),
     )
     broker._has_protective_order = lambda *_args: False
     broker._submit_stop = lambda *_args, **_kwargs: pytest.fail(
@@ -397,9 +393,7 @@ def test_reconcile_finds_held_stop_across_multiple_managed_entries() -> None:
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot("MSFT", 25, 400, 401, Market.EQUITY, qty_available=0),
-        ),
+        positions=(PositionSnapshot("MSFT", 25, 400, 401, Market.EQUITY, qty_available=0),),
     )
     broker._has_protective_order = lambda *_args: False
     broker._submit_stop = lambda *_args, **_kwargs: pytest.fail(

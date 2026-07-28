@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from starlette.requests import Request
 
 from parayabuck.config import load_config
+from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.server")
@@ -228,17 +229,42 @@ class EngineManager:
         if self.broker is not None:
             try:
                 acct = self.broker.account()
+                managed: dict[str, Any] = {}
+                runtime = self.runtime
+                if (
+                    runtime is not None
+                    and hasattr(runtime, "ledger")
+                    and bool(self.broker.account_id)
+                ):
+                    managed = runtime.ledger.managed_for_account(self.broker.account_id)
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
+                        owned = managed.get(p.symbol)
                         positions_list.append(
                             {
                                 "symbol": p.symbol,
+                                "market": p.market.value,
                                 "direction": "LONG" if p.qty > 0 else "SHORT",
                                 "qty": abs(p.qty),
                                 "avg_price": p.avg_price,
                                 "unrealized_pnl": p.unrealized_pnl,
                                 "ownership": p.ownership,
+                                "protection_state": (
+                                    owned.protection_state.value if owned is not None else None
+                                ),
+                                "stop_price": owned.original_stop if owned is not None else None,
+                                "target_price": owned.original_target
+                                if owned is not None
+                                else None,
+                                "stop_order_state": owned.stop_state if owned is not None else None,
+                                "target_exit_state": (
+                                    owned.target_state if owned is not None else None
+                                ),
+                                "manual_intervention_required": bool(
+                                    owned is not None
+                                    and owned.status == "manual_intervention_required"
+                                ),
                             }
                         )
 
@@ -601,6 +627,9 @@ class SettingsPayload(BaseModel):
     open_browser: bool = Field(True)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     restart_engine: bool = True
+    equity_trading_enabled: bool = True
+    crypto_trading_enabled: bool = False
+    live_trading_enabled: bool = False
 
 
 class ModePayload(BaseModel):
@@ -640,12 +669,49 @@ async def get_control_token() -> JSONResponse:
 @app.get("/api/status")
 async def get_status() -> dict[str, Any]:
     key, _ = manager.get_credentials()
-    return {
+    result: dict[str, Any] = {
         "state": manager.current_engine_state(),
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),
     }
+    runtime = getattr(manager, "runtime", None)
+    if runtime is not None and hasattr(runtime, "health"):
+        health = runtime.health()
+        result["runtime"] = asdict(health)
+        result["active_equity_symbol_count"] = len(
+            getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
+        )
+        result["active_crypto_symbol_count"] = len(
+            getattr(runtime, "_symbols_by_market", {}).get(Market.CRYPTO, ())
+        )
+    try:
+        cfg = load_config(str(manager.config_path))
+        candidate_path = Path(cfg.universe.equity.candidate_universe_path)
+        active_path = Path(cfg.universe.equity.active_universe_path)
+        candidate_payload = (
+            json.loads(candidate_path.read_text()) if candidate_path.exists() else []
+        )
+        active_payload = json.loads(active_path.read_text()) if active_path.exists() else {}
+        candidate_items = (
+            candidate_payload.get(
+                "candidates",
+                candidate_payload.get("symbols", candidate_payload),
+            )
+            if isinstance(candidate_payload, dict)
+            else candidate_payload
+        )
+        result["candidate_universe_size"] = (
+            len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
+        )
+        result["scanner"] = {
+            "last_run_at": active_payload.get("selection_timestamp"),
+            "status": active_payload.get("status", "not_run"),
+            "scanner_version": active_payload.get("scanner_version"),
+        }
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        result["scanner"] = {"last_run_at": None, "status": "error"}
+    return result
 
 
 @app.get("/api/account")
@@ -762,6 +828,9 @@ async def get_settings() -> dict[str, Any]:
         "port": cfg_raw.get("app", {}).get("port", 8000),
         "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
         "log_level": cfg_raw.get("app", {}).get("log_level", "INFO"),
+        "equity_trading_enabled": cfg_raw.get("engine", {}).get("equity_trading_enabled", True),
+        "crypto_trading_enabled": cfg_raw.get("engine", {}).get("crypto_trading_enabled", False),
+        "live_trading_enabled": cfg_raw.get("engine", {}).get("live_trading_enabled", False),
     }
 
 
@@ -812,6 +881,9 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
         risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         engine["timeframe"] = payload.timeframe
+        engine["equity_trading_enabled"] = payload.equity_trading_enabled
+        engine["crypto_trading_enabled"] = payload.crypto_trading_enabled
+        engine["live_trading_enabled"] = payload.live_trading_enabled
         cfg_raw["app"] = {
             "host": payload.host.strip() or "127.0.0.1",
             "port": payload.port,
@@ -827,7 +899,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
         )
         try:
-            if cfg_raw.get("symbols"):
+            if cfg_raw.get("symbols") or cfg_raw.get("universe"):
                 load_config(str(temporary_config))
         finally:
             temporary_config.unlink(missing_ok=True)

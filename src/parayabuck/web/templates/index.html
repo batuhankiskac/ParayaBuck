@@ -32,6 +32,7 @@
                     <span id="statusDot" class="status-dot stopped"></span>
                     <span id="statusText" class="status-text">Durdu</span>
                 </div>
+                <div id="marketStatusText" class="status-text">Equity / Crypto bekleniyor</div>
             </div>
 
             <div class="nav-actions">
@@ -136,15 +137,19 @@
                             <thead>
                                 <tr>
                                     <th>Sembol</th>
+                                    <th>Piyasa</th>
                                     <th>Yön</th>
                                     <th>Miktar</th>
                                     <th>Giriş Fiyatı</th>
                                     <th>Açık PnL</th>
+                                    <th>Koruma</th>
+                                    <th>Stop / Target</th>
+                                    <th>Exit State</th>
                                 </tr>
                             </thead>
                             <tbody id="positionsTableBody">
                                 <tr>
-                                    <td colspan="5" class="empty-state">Henüz açık pozisyon bulunmuyor</td>
+                                    <td colspan="9" class="empty-state">Henüz açık pozisyon bulunmuyor</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -197,6 +202,19 @@
                     <input type="checkbox" id="paperModeCheck">
                     <label for="paperModeCheck">Paper Trading (Demo Modu)</label>
                 </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="equityTradingCheck">
+                    <label for="equityTradingCheck">Hisse işlemleri açık</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="cryptoTradingCheck">
+                    <label for="cryptoTradingCheck">Kripto işlemleri açık</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="liveTradingCheck">
+                    <label for="liveTradingCheck">Live trading izni</label>
+                </div>
+                <p class="settings-note">Kripto 7/24 çalışır. Broker-native bracket/OCO kullanılmaz; stop-limit tetiklenmesi fill garantisi değildir. Paper testleri tamamlanmadan live trading açılmamalıdır.</p>
 
                 <div class="settings-section-title">Risk sınırları</div>
                 <div class="form-row">

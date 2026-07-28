@@ -53,9 +53,7 @@ class DecisionJournal:
 
     def _migrate_legacy_orders_table(self) -> None:
         """Move the old audit table out of the execution ledger's namespace."""
-        columns = {
-            str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")
-        }
+        columns = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")}
         legacy_columns = {
             "client_order_id",
             "timestamp",

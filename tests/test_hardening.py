@@ -62,9 +62,7 @@ def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
 
     ledger = ExecutionLedger(str(path))
 
-    order_columns = {
-        str(row[1]) for row in ledger.connection.execute("PRAGMA table_info(orders)")
-    }
+    order_columns = {str(row[1]) for row in ledger.connection.execute("PRAGMA table_info(orders)")}
     assert "broker_order_id" in order_columns
     assert "parent_broker_order_id" in order_columns
     preserved = ledger.connection.execute(
@@ -156,9 +154,10 @@ def test_sparse_equity_bars_are_not_mistaken_for_transport_gaps() -> None:
     assert crypto.upsert(_bar(start, symbol="BTC/USD", market=Market.CRYPTO)) == (
         BarMutation.INSERTED
     )
-    assert crypto.upsert(
-        _bar(start + timedelta(minutes=10), symbol="BTC/USD", market=Market.CRYPTO)
-    ) == BarMutation.GAP_DETECTED
+    assert (
+        crypto.upsert(_bar(start + timedelta(minutes=10), symbol="BTC/USD", market=Market.CRYPTO))
+        == BarMutation.GAP_DETECTED
+    )
 
 
 def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
@@ -197,9 +196,7 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period() -> None:
             return SimpleNamespace(orders=())
 
     runtime.engine = Engine()
-    runtime.broker = SimpleNamespace(
-        account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0)
-    )
+    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
     runtime._historical = None
     runtime._warming_up = False
     runtime._not_ready_symbols = set()

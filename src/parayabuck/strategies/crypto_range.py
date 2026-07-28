@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.features.indicators import atr, bollinger, rsi
 from parayabuck.strategies.base import (
@@ -44,7 +46,14 @@ class CryptoRangeReversion(Strategy):
         bands = bollinger(closes, 20, 2.2)
         rsi_value = rsi(closes, 14)
         atr_value = atr(bars, 14)
-        indicators_ok = bands is not None and rsi_value is not None and atr_value is not None
+        indicators_ok = (
+            bands is not None
+            and rsi_value is not None
+            and atr_value is not None
+            and math.isfinite(atr_value)
+            and atr_value > 0
+            and all(math.isfinite(bar.volume) and bar.volume > 0 for bar in bars[-20:])
+        )
         conditions.append(
             ConditionEvaluation(
                 "indicators_available",

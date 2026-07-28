@@ -11,10 +11,23 @@ from zoneinfo import ZoneInfo
 from requests.exceptions import RequestException
 
 from parayabuck.config import Config
-from parayabuck.core.models import AccountSnapshot, Bar, ExecutionEvent, Fill
+from parayabuck.core.models import (
+    AccountSnapshot,
+    Bar,
+    ExecutionEvent,
+    Fill,
+    Market,
+    OrderRole,
+    OrderState,
+)
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.engine import TradingEngine
-from parayabuck.execution.alpaca import AlpacaBroker, ProtectionReconciliationError
+from parayabuck.execution.alpaca import (
+    AlpacaBroker,
+    AmbiguousOrderState,
+    CryptoPriceObservation,
+    ProtectionReconciliationError,
+)
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.execution.ledger import ExecutionLedger
@@ -22,6 +35,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskState
+from parayabuck.universe import load_active_symbols
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -49,6 +63,7 @@ class RuntimeHealth:
     dropped_events: int
     coalesced_events: int
     workers: dict[str, dict[str, object]]
+    markets: dict[str, dict[str, object]]
 
 
 @dataclass(frozen=True)
@@ -66,7 +81,25 @@ class EngineRuntime:
         self.secret_key = secret_key
         self.app_config = config
         self.config = config.engine
-        self.symbols = [canonical_symbol(symbol) for symbol in config.symbols]
+        active_equities = (
+            load_active_symbols(config.universe.equity) if config.universe.equity.enabled else ()
+        )
+        active_crypto = (
+            config.universe.crypto.trade_symbols if config.universe.crypto.enabled else ()
+        )
+        self.symbols = [canonical_symbol(symbol) for symbol in (*active_equities, *active_crypto)]
+        self._symbols_by_market = {
+            Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
+            Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
+        }
+        self._market_enabled = {
+            Market.EQUITY: config.universe.equity.enabled,
+            Market.CRYPTO: config.universe.crypto.enabled,
+        }
+        self._market_entry_halts: dict[Market, str | None] = {
+            Market.EQUITY: None,
+            Market.CRYPTO: None,
+        }
         self.paper = config.alpaca.paper
         self.journal = DecisionJournal(self.config.decision_db_path)
         self.journal_writer = AsyncDecisionJournal(
@@ -80,6 +113,8 @@ class EngineRuntime:
             paper=self.paper,
             manage_external_positions=self.config.manage_external_positions,
             ledger=self.ledger,
+            crypto_stop_limit_offset_bps=self.config.crypto_stop_limit_offset_bps,
+            crypto_emergency_exit_bps=self.config.crypto_emergency_exit_bps,
         )
         self.ai_journal = None
         if self.config.ai_logging_enabled:
@@ -99,6 +134,15 @@ class EngineRuntime:
             ai_journal=self.ai_journal,
             enforce_live_safety=True,
             paper_mode=self.paper,
+            allowed_trade_symbols={
+                *(
+                    symbol
+                    for symbol in active_equities
+                    if config.universe.equity.trade_reference_symbols
+                    or symbol not in config.universe.equity.reference_symbols
+                ),
+                *config.universe.crypto.trade_symbols,
+            },
         )
         self.execution = ExecutionCoordinator(
             self.engine.orders,
@@ -133,8 +177,9 @@ class EngineRuntime:
         self._last_account_at: datetime | None = None
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
-        self._portfolio_watermark: datetime | None = None
+        self._portfolio_watermarks: dict[Market, datetime] = {}
         self._warming_up = False
+        self._last_entry_cycle_timestamp: datetime | None = None
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
 
@@ -150,9 +195,25 @@ class EngineRuntime:
             else 0.0
         )
         required = {"pb-decisions", "pb-trade-updates", "pb-account"}
-        if any(not is_crypto(symbol) for symbol in self.symbols):
+        market_enabled = getattr(
+            self,
+            "_market_enabled",
+            {
+                Market.EQUITY: any(not is_crypto(symbol) for symbol in self.symbols),
+                Market.CRYPTO: any(is_crypto(symbol) for symbol in self.symbols),
+            },
+        )
+        symbols_by_market = getattr(
+            self,
+            "_symbols_by_market",
+            {
+                Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
+                Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
+            },
+        )
+        if market_enabled.get(Market.EQUITY, False) and symbols_by_market.get(Market.EQUITY):
             required.add("pb-stocks")
-        if any(is_crypto(symbol) for symbol in self.symbols):
+        if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
             required.add("pb-crypto")
         heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
         blocking_stream_workers = {"pb-stocks", "pb-crypto", "pb-trade-updates"}
@@ -176,12 +237,30 @@ class EngineRuntime:
             and alive
             and queue_age <= self.config.maximum_queue_age_seconds
             and account_fresh
-            and not self.engine.has_data_gaps
             and self._circuit_breaker_reason is None
         )
         state = self._state
         if self._running and not healthy and state == "running":
             state = "degraded"
+        market_health: dict[str, dict[str, object]] = {}
+        for market, worker_name in (
+            (Market.EQUITY, "pb-stocks"),
+            (Market.CRYPTO, "pb-crypto"),
+        ):
+            enabled = market_enabled.get(market, False)
+            symbols = symbols_by_market.get(market, set())
+            worker = self._workers.get(worker_name)
+            not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
+            ready = not any(symbol in not_ready_symbols for symbol in symbols)
+            stream_healthy = not enabled or not symbols or bool(worker and worker.alive)
+            market_health[market.value] = {
+                "enabled": enabled,
+                "symbol_count": len(symbols),
+                "ready": not enabled or ready,
+                "stream_healthy": stream_healthy,
+                "data_gap": (enabled and self._engine_has_market_gap(market)),
+                "entry_halt_reason": getattr(self, "_market_entry_halts", {}).get(market),
+            }
         return RuntimeHealth(
             state=state,
             healthy=healthy,
@@ -191,6 +270,7 @@ class EngineRuntime:
             dropped_events=self._dropped_events,
             coalesced_events=self._coalesced_events,
             workers={name: asdict(item) for name, item in self._workers.items()},
+            markets=market_health,
         )
 
     def start(self) -> None:
@@ -210,11 +290,12 @@ class EngineRuntime:
             )
             self._state = "halted"
             raise
+        self._pin_managed_symbols()
         self._restore_persistent_state()
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
-        stocks = [symbol for symbol in self.symbols if not is_crypto(symbol)]
-        crypto = [symbol for symbol in self.symbols if is_crypto(symbol)]
+        stocks = sorted(self._symbols_by_market[Market.EQUITY])
+        crypto = sorted(self._symbols_by_market[Market.CRYPTO])
         self.stream.subscribe(
             stocks,
             crypto,
@@ -279,6 +360,36 @@ class EngineRuntime:
             len(self.symbols),
             self.config.timeframe,
         )
+
+    def _pin_managed_symbols(self) -> None:
+        """Keep managed positions observable even after scanner/config removal."""
+        account_id = self.broker.account_id or "unknown"
+        entries = self.ledger.managed_entries_for_account(account_id)
+        equity_pins = tuple(
+            dict.fromkeys(item.canonical_symbol for item in entries if item.market == Market.EQUITY)
+        )
+        crypto_pins = tuple(
+            dict.fromkeys(item.canonical_symbol for item in entries if item.market == Market.CRYPTO)
+        )
+        if equity_pins:
+            maximum = self.app_config.universe.equity.maximum_stream_symbols
+            references = self.app_config.universe.equity.reference_symbols
+            ordered = tuple(
+                dict.fromkeys(
+                    (*references, *equity_pins, *sorted(self._symbols_by_market[Market.EQUITY]))
+                )
+            )
+            if len(set((*references, *equity_pins))) > maximum:
+                raise RuntimeError(
+                    "Managed equity pins and references exceed the configured IEX stream limit"
+                )
+            self._symbols_by_market[Market.EQUITY] = set(ordered[:maximum])
+        self._symbols_by_market[Market.CRYPTO].update(crypto_pins)
+        self.symbols = sorted(
+            self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
+        )
+        self._not_ready_symbols.update(equity_pins)
+        self._not_ready_symbols.update(crypto_pins)
 
     def stop(self) -> bool:
         alive: list[str] = []
@@ -378,6 +489,29 @@ class EngineRuntime:
                 occurred_at=update.timestamp,
             )
         )
+        if (
+            update.market == Market.CRYPTO
+            and transition.entry_client_order_id
+            and update.state is not None
+        ):
+            if update.role == OrderRole.PROTECTIVE_STOP and update.state == OrderState.FILLED:
+                self.ledger.set_exit_state(
+                    account_id,
+                    transition.entry_client_order_id,
+                    stop_state="filled",
+                    target_state="cancelled_by_stop_fill",
+                )
+            elif update.role == update.role.TAKE_PROFIT:
+                target_state = {
+                    OrderState.PARTIALLY_FILLED: "target_exit_partially_filled",
+                    OrderState.FILLED: "target_exit_filled",
+                }.get(update.state)
+                if target_state:
+                    self.ledger.set_exit_state(
+                        account_id,
+                        transition.entry_client_order_id,
+                        target_state=target_state,
+                    )
         lifecycle = self.engine.orders.orders.get(update.client_order_id)
         if (
             lifecycle is not None
@@ -418,7 +552,14 @@ class EngineRuntime:
                     self._state = "degraded"
                     if worker.restart_count > 5:
                         self._state = "halted"
-                        self._circuit_breaker_reason = f"{name}_restart_limit"
+                        market = {
+                            "pb-stocks": Market.EQUITY,
+                            "pb-crypto": Market.CRYPTO,
+                        }.get(name)
+                        if market is None:
+                            self._circuit_breaker_reason = f"{name}_restart_limit"
+                        else:
+                            self._market_entry_halts[market] = f"{name}_restart_limit"
                         log.exception("%s stream worker restart limit reached", name)
                         return
                     delay = min(16.0, 2 ** (worker.restart_count - 1))
@@ -436,6 +577,24 @@ class EngineRuntime:
     async def _on_minute_bar(self, bar: Bar) -> None:
         if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
             return
+        if bar.market == Market.CRYPTO:
+            try:
+                self.broker.process_crypto_price(
+                    CryptoPriceObservation(
+                        symbol=bar.symbol,
+                        high=bar.high,
+                        low=bar.low,
+                        close=bar.close,
+                        source="one_minute_bar",
+                        timestamp=bar.timestamp,
+                    )
+                )
+            except AmbiguousOrderState as exc:
+                self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
+                log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
+            except Exception as exc:
+                self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
+                log.exception("Crypto protection watcher failed: %s", exc)
         with self._ingestion_lock:
             primary = self.primary_aggregator.update(bar)
             higher = self.higher_aggregator.update(bar)
@@ -501,9 +660,8 @@ class EngineRuntime:
         worker = self._workers["pb-decisions"]
         worker.alive = True
         next_reconcile = time.monotonic() + 60.0
-        pending: dict[datetime, dict[str, Bar]] = {}
-        first_seen: dict[datetime, float] = {}
-        expected = {symbol for symbol in self.symbols}
+        pending: dict[tuple[Market, datetime], dict[str, Bar]] = {}
+        first_seen: dict[tuple[Market, datetime], float] = {}
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
@@ -527,24 +685,35 @@ class EngineRuntime:
                             (item.bar.symbol, item.bar.timeframe),
                             datetime.min.replace(tzinfo=UTC),
                         ),
-                        self._portfolio_watermark or datetime.min.replace(tzinfo=UTC),
+                        self._portfolio_watermarks.get(
+                            item.bar.market, datetime.min.replace(tzinfo=UTC)
+                        ),
                     ):
                         self.engine.ingest_closed_bars([item.bar])
                     else:
-                        pending.setdefault(item.bar.timestamp, {})[item.bar.symbol] = item.bar
-                        first_seen.setdefault(item.bar.timestamp, time.monotonic())
+                        key = (item.bar.market, item.bar.timestamp)
+                        pending.setdefault(key, {})[item.bar.symbol] = item.bar
+                        first_seen.setdefault(key, time.monotonic())
                 self._flush_aggregators()
                 now_mono = time.monotonic()
                 closable = [
-                    timestamp
-                    for timestamp, bars in pending.items()
-                    if expected.issubset(bars)
-                    or now_mono - first_seen[timestamp] >= self.config.event_grace_seconds
+                    key
+                    for key, bars in pending.items()
+                    if self._symbols_by_market[key[0]].issubset(bars)
+                    or now_mono - first_seen[key] >= self.config.event_grace_seconds
                 ]
-                for timestamp in sorted(closable):
-                    bars_by_symbol = pending.pop(timestamp)
-                    first_seen.pop(timestamp, None)
-                    self._process_timestamp(timestamp, bars_by_symbol, expected)
+                for market, timestamp in sorted(
+                    closable, key=lambda item: (item[1], item[0].value)
+                ):
+                    key = (market, timestamp)
+                    bars_by_symbol = pending.pop(key)
+                    first_seen.pop(key, None)
+                    self._process_timestamp(
+                        timestamp,
+                        bars_by_symbol,
+                        self._symbols_by_market[market],
+                        market=market,
+                    )
                     for bar in bars_by_symbol.values():
                         self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
                             timestamp,
@@ -553,9 +722,9 @@ class EngineRuntime:
                                 datetime.min.replace(tzinfo=UTC),
                             ),
                         )
-                    self._portfolio_watermark = max(
+                    self._portfolio_watermarks[market] = max(
                         timestamp,
-                        self._portfolio_watermark or datetime.min.replace(tzinfo=UTC),
+                        self._portfolio_watermarks.get(market, datetime.min.replace(tzinfo=UTC)),
                     )
                 if self._events.empty():
                     self._oldest_received_at = min(
@@ -590,8 +759,15 @@ class EngineRuntime:
             self._put_event("primary", bar)
 
     def _process_timestamp(
-        self, timestamp: datetime, bars_by_symbol: dict[str, Bar], expected: set[str]
+        self,
+        timestamp: datetime,
+        bars_by_symbol: dict[str, Bar],
+        expected: set[str],
+        *,
+        market: Market | None = None,
     ) -> None:
+        if market is None:
+            market = next(iter(bars_by_symbol.values())).market if bars_by_symbol else Market.EQUITY
         bars = list(bars_by_symbol.values())
         ingestion = self.engine.ingest_closed_bars(bars)
         gap_bars = [
@@ -629,9 +805,23 @@ class EngineRuntime:
             self._circuit_breaker_reason = None
         if self._circuit_breaker_reason is not None:
             return
-        readiness_reasons = self._entry_readiness_reasons()
+        try:
+            readiness_reasons = self._entry_readiness_reasons(market)
+        except TypeError:
+            # Compatibility for small injected test runtimes.
+            readiness_reasons = self._entry_readiness_reasons()
         if readiness_reasons:
             log.warning("Entry readiness gate rejected cycle: %s", ", ".join(readiness_reasons))
+            return
+        if (
+            getattr(self, "_last_entry_cycle_timestamp", None) == timestamp
+            and self.config.max_new_positions_per_cycle == 1
+        ):
+            log.info(
+                "Global cycle entry capacity already consumed: market=%s timestamp=%s",
+                market.value,
+                timestamp.isoformat(),
+            )
             return
         result = self.engine.evaluate_timestamp(
             timestamp,
@@ -641,6 +831,8 @@ class EngineRuntime:
         )
         if self.engine.entry_halt_reason is not None:
             self._circuit_breaker_reason = self.engine.entry_halt_reason
+        if result.orders:
+            self._last_entry_cycle_timestamp = timestamp
         for order in result.orders:
             lifecycle = self.engine.orders.orders[order.client_order_id]
             if lifecycle.state.value == "rejected":
@@ -655,15 +847,17 @@ class EngineRuntime:
                 order.target_price,
             )
 
-    def _entry_readiness_reasons(self) -> tuple[str, ...]:
+    def _entry_readiness_reasons(self, market: Market | None = None) -> tuple[str, ...]:
         health = self.health()
         reasons: list[str] = []
         if self._state != "running":
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
-        if self.engine.has_data_gaps:
+        if market is None and self.engine.has_data_gaps:
             reasons.append("data_gap")
+        elif market is not None and self._engine_has_market_gap(market):
+            reasons.append(f"{market.value}_data_gap")
         if (
             self._last_account_at is None
             or (datetime.now(UTC) - self._last_account_at).total_seconds()
@@ -672,15 +866,34 @@ class EngineRuntime:
             reasons.append("account_snapshot_stale")
         if self._circuit_breaker_reason:
             reasons.append(self._circuit_breaker_reason)
+        relevant_stream = (
+            {
+                Market.EQUITY: "pb-stocks",
+                Market.CRYPTO: "pb-crypto",
+            }.get(market)
+            if market is not None
+            else None
+        )
+        shared_workers = {"pb-decisions", "pb-account", "pb-trade-updates"}
+        if relevant_stream:
+            shared_workers.add(relevant_stream)
+        else:
+            shared_workers.update({"pb-stocks", "pb-crypto"})
         dead_workers = [
             name
             for name, worker in self._workers.items()
-            if name in {"pb-decisions", "pb-account", "pb-trade-updates", "pb-stocks", "pb-crypto"}
-            and not worker.alive
+            if name in shared_workers and not worker.alive
         ]
         if dead_workers:
             reasons.append("worker_unavailable:" + ",".join(sorted(dead_workers)))
+        market_halts = getattr(self, "_market_entry_halts", {})
+        if market is not None and market_halts.get(market):
+            reasons.append(str(market_halts[market]))
         return tuple(reasons)
+
+    def _engine_has_market_gap(self, market: Market) -> bool:
+        checker = getattr(self.engine, "has_data_gaps_for_market", None)
+        return bool(checker(market)) if checker is not None else bool(self.engine.has_data_gaps)
 
     def _repair_gap(self, bar: Bar) -> None:
         history = self._historical

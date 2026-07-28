@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -50,6 +52,16 @@ class ProtectionReconciliationError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class CryptoPriceObservation:
+    symbol: str
+    high: float
+    low: float
+    close: float
+    source: str
+    timestamp: datetime
+
+
 class AlpacaBroker:
     """Alpaca execution boundary using the engine's native models."""
 
@@ -61,6 +73,8 @@ class AlpacaBroker:
         *,
         manage_external_positions: bool = False,
         ledger: Any = None,
+        crypto_stop_limit_offset_bps: float = 25.0,
+        crypto_emergency_exit_bps: float = 75.0,
     ) -> None:
         self._client = TradingClient(api_key, secret_key, paper=paper)
         patch_session_timeout(self._client._session, timeout=15.0)
@@ -72,6 +86,9 @@ class AlpacaBroker:
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
         self._account_id = ""
+        self.crypto_stop_limit_offset_bps = crypto_stop_limit_offset_bps
+        self.crypto_emergency_exit_bps = crypto_emergency_exit_bps
+        self._symbol_exit_locks: dict[str, threading.Lock] = {}
 
     @property
     def account_suffix(self) -> str:
@@ -138,7 +155,7 @@ class AlpacaBroker:
         daily_pnl = equity - previous_equity
         cash = float(account.cash or 0)
         crypto_buying_power_raw = getattr(account, "non_marginable_buying_power", None)
-        crypto_status = str(getattr(account, "crypto_status", "ACTIVE")).upper().split(".")[-1]
+        crypto_status = str(getattr(account, "crypto_status", "")).upper().split(".")[-1]
         return AccountSnapshot(
             cash=cash,
             equity=equity,
@@ -209,11 +226,46 @@ class AlpacaBroker:
                 if fill is None:
                     return OrderState.CANCELLED, None
             if intent.market == Market.CRYPTO and fill is not None:
+                if ledger is not None:
+                    ledger.apply_execution_event(
+                        ExecutionEvent(
+                            account_id=self._account_id or "unknown",
+                            client_order_id=intent.client_order_id,
+                            broker_order_id=str(result_id),
+                            parent_order_id=None,
+                            role=OrderRole.ENTRY,
+                            symbol=intent.symbol,
+                            market=intent.market,
+                            state=state,
+                            requested_qty=intent.qty,
+                            cumulative_filled_qty=fill.qty,
+                            average_fill_price=fill.price,
+                            occurred_at=fill.timestamp,
+                        )
+                    )
                 protected = self._submit_crypto_stop(intent, fill.qty, stop_price)
                 if not protected:
-                    self._flatten(intent, fill.qty)
+                    flatten_result = self._flatten(intent, fill.qty)
+                    if ledger is not None and flatten_result is not None:
+                        exit_fill, exit_broker_id = flatten_result
+                        ledger.apply_execution_event(
+                            ExecutionEvent(
+                                account_id=self._account_id or "unknown",
+                                client_order_id=exit_fill.client_order_id,
+                                broker_order_id=exit_broker_id,
+                                parent_order_id=None,
+                                role=OrderRole.EMERGENCY_EXIT,
+                                symbol=intent.symbol,
+                                market=intent.market,
+                                state=OrderState.FILLED,
+                                requested_qty=exit_fill.qty,
+                                cumulative_filled_qty=exit_fill.qty,
+                                average_fill_price=exit_fill.price,
+                                occurred_at=exit_fill.timestamp,
+                            )
+                        )
                     return OrderState.REJECTED, fill
-            if fill is not None and ledger is not None:
+            if fill is not None and ledger is not None and intent.market != Market.CRYPTO:
                 ledger.apply_execution_event(
                     ExecutionEvent(
                         account_id=self._account_id or "unknown",
@@ -237,6 +289,11 @@ class AlpacaBroker:
             log.warning("Order rejected: %s", exc)
             return OrderState.REJECTED, None
         except AmbiguousOrderState as exc:
+            ledger = getattr(self, "ledger", None)
+            if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
+                ledger.mark_manual_intervention(
+                    self._account_id or "unknown", intent.client_order_id
+                )
             log.critical(
                 "Order state is ambiguous; entries must halt pending reconciliation: %s", exc
             )
@@ -252,6 +309,20 @@ class AlpacaBroker:
         managed = (
             ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         )
+        if ledger is not None and hasattr(ledger, "managed_entries_for_account"):
+            for entry in ledger.managed_entries_for_account(self._account_id or "unknown"):
+                if entry.market != Market.CRYPTO:
+                    continue
+                if entry.exit_client_order_id:
+                    self._reconcile_crypto_exit(entry)
+                elif entry.stop_state == "cancel_requested" and entry.target_state in {
+                    "target_triggered",
+                    "stop_failover_triggered",
+                }:
+                    self._cancel_stop_then_exit(
+                        entry,
+                        "target" if entry.target_state == "target_triggered" else "stop_failover",
+                    )
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
@@ -262,6 +333,19 @@ class AlpacaBroker:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
             if ownership is not None:
+                tolerance = max(1e-9, ownership.owned_qty * 1e-8)
+                if (
+                    position.market == Market.CRYPTO
+                    and abs(position.qty) + tolerance < ownership.owned_qty
+                ):
+                    if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
+                        ledger.mark_manual_intervention(
+                            self._account_id or "unknown",
+                            ownership.entry_client_order_id,
+                        )
+                    raise ProtectionReconciliationError(
+                        f"Broker quantity is below managed ledger quantity for {symbol}"
+                    )
                 stop_price = ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
@@ -282,9 +366,7 @@ class AlpacaBroker:
                 # available; otherwise reconcile protects the remaining units.
                 required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
-            has_protection = self._has_protective_order(
-                position.symbol, is_long, required_qty
-            )
+            has_protection = self._has_protective_order(position.symbol, is_long, required_qty)
             if (
                 not has_protection
                 and ownership is not None
@@ -400,6 +482,70 @@ class AlpacaBroker:
                     ProtectionState.ACTIVE,
                 )
 
+    def _reconcile_crypto_exit(self, position: Any) -> None:
+        get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
+        if get_by_client_id is None or not position.exit_client_order_id:
+            self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise ProtectionReconciliationError(
+                f"Cannot recover crypto exit for {position.canonical_symbol}"
+            )
+        try:
+            order = get_by_client_id(position.exit_client_order_id)
+        except Exception as exc:
+            self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise ProtectionReconciliationError(
+                f"Crypto exit lookup is ambiguous for {position.canonical_symbol}"
+            ) from exc
+        status_name = str(self._field(order, "status", "")).lower().split(".")[-1]
+        state = {
+            "filled": OrderState.FILLED,
+            "partially_filled": OrderState.PARTIALLY_FILLED,
+            "canceled": OrderState.CANCELLED,
+            "cancelled": OrderState.CANCELLED,
+            "rejected": OrderState.REJECTED,
+            "expired": OrderState.EXPIRED,
+        }.get(status_name, OrderState.ACCEPTED)
+        qty = float(self._field(order, "qty", position.owned_qty) or position.owned_qty)
+        filled_qty = float(self._field(order, "filled_qty", 0) or 0)
+        average = self._field(order, "filled_avg_price")
+        role = (
+            OrderRole.TAKE_PROFIT
+            if "-target-exit" in position.exit_client_order_id
+            else OrderRole.EMERGENCY_EXIT
+        )
+        if filled_qty > 0 and average is not None:
+            self.ledger.apply_execution_event(
+                ExecutionEvent(
+                    self._account_id,
+                    position.exit_client_order_id,
+                    str(self._field(order, "id", "") or ""),
+                    None,
+                    role,
+                    position.canonical_symbol,
+                    Market.CRYPTO,
+                    state,
+                    qty,
+                    filled_qty,
+                    float(average),
+                    datetime.now(UTC),
+                )
+            )
+        if state == OrderState.FILLED:
+            self.ledger.set_exit_state(
+                self._account_id,
+                position.entry_client_order_id,
+                target_state=(
+                    "target_exit_filled"
+                    if role == OrderRole.TAKE_PROFIT
+                    else "emergency_exit_filled"
+                ),
+            )
+            return
+        self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+        raise ProtectionReconciliationError(
+            f"Crypto exit remains {state.value} for {position.canonical_symbol}"
+        )
+
     def _has_nested_bracket_protection(
         self,
         parent_order_ids: str | set[str],
@@ -418,8 +564,7 @@ class AlpacaBroker:
                 side == closing_side
                 and status not in {"canceled", "expired", "filled", "rejected"}
                 and (
-                    stop_price is not None
-                    or order_type in {"stop", "stop_limit", "trailing_stop"}
+                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
                 )
             ):
                 return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
@@ -672,8 +817,9 @@ class AlpacaBroker:
             return False
         try:
             if market == Market.CRYPTO:
+                offset = getattr(self, "crypto_stop_limit_offset_bps", 25.0) / 10_000
                 limit_price = self._round_to_step(
-                    stop_price * (0.995 if position_is_long else 1.005), step
+                    stop_price * (1 - offset if position_is_long else 1 + offset), step
                 )
                 if position_is_long and limit_price >= stop_price:
                     limit_price = float(Decimal(str(stop_price)) - step)
@@ -697,7 +843,18 @@ class AlpacaBroker:
                     stop_price=stop_price,
                     client_order_id=client_order_id,
                 )
-            self._submit_with_recovery(request, client_order_id)
+            result = self._submit_with_recovery(request, client_order_id)
+            if market == Market.CRYPTO:
+                broker_id = str(self._field(result, "id", "") or "")
+                ledger = getattr(self, "ledger", None)
+                if broker_id and ledger is not None and "-stop" in client_order_id:
+                    entry_client_order_id = client_order_id.rsplit("-stop", 1)[0]
+                    ledger.register_protective_stop(
+                        self._account_id or "unknown",
+                        entry_client_order_id,
+                        client_order_id,
+                        broker_id,
+                    )
             return True
         except Exception as exc:
             available = self._available_qty_from_error(exc)
@@ -720,7 +877,16 @@ class AlpacaBroker:
                             limit_price=limit_price,
                             client_order_id=retry_client_order_id,
                         )
-                        self._submit_with_recovery(retry_request, retry_client_order_id)
+                        result = self._submit_with_recovery(retry_request, retry_client_order_id)
+                        ledger = getattr(self, "ledger", None)
+                        broker_id = str(self._field(result, "id", "") or "")
+                        if ledger is not None and broker_id and "-stop" in client_order_id:
+                            ledger.register_protective_stop(
+                                self._account_id or "unknown",
+                                client_order_id.rsplit("-stop", 1)[0],
+                                retry_client_order_id,
+                                broker_id,
+                            )
                         return True
                     except Exception as retry_exc:
                         exc = retry_exc
@@ -745,7 +911,7 @@ class AlpacaBroker:
         except (TypeError, ValueError, json.JSONDecodeError):
             return 0.0
 
-    def _flatten(self, intent: OrderIntent, qty: float) -> None:
+    def _flatten(self, intent: OrderIntent, qty: float) -> tuple[Fill, str]:
         # Never call close_position(symbol): it closes the account's full
         # quantity and can consume manually-owned units of the same asset.
         side = OrderSide.SELL if intent.direction == Direction.LONG else OrderSide.BUY
@@ -782,7 +948,22 @@ class AlpacaBroker:
                 after_qty = self._position_qty(intent.symbol)
                 tolerance = max(1e-9, closing_qty * 1e-8)
                 if after_qty <= expected + tolerance:
-                    return
+                    price = float(self._field(order, "filled_avg_price", 0) or 0)
+                    if price <= 0:
+                        raise AmbiguousOrderState(
+                            f"Emergency exit fill price is unverified for {intent.symbol}"
+                        )
+                    return (
+                        Fill(
+                            exit_client_order_id,
+                            intent.symbol,
+                            closing_qty,
+                            price,
+                            intent.direction,
+                            datetime.now(UTC),
+                        ),
+                        str(order_id),
+                    )
                 raise AmbiguousOrderState(
                     f"Emergency exit filled but position quantity is unverified for {intent.symbol}"
                 )
@@ -802,6 +983,208 @@ class AlpacaBroker:
                 return 0.0
             raise
         return abs(float(self._field(position, "qty", 0) or 0))
+
+    def process_crypto_price(self, observation: CryptoPriceObservation) -> str | None:
+        """Drive synthetic crypto OCO using an idempotent ledger claim.
+
+        The broker-side stop always remains active until a target or failover
+        path has atomically won the exit claim and its cancellation is confirmed.
+        """
+        ledger = getattr(self, "ledger", None)
+        if ledger is None or not self._account_id:
+            return None
+        symbol = canonical_symbol(observation.symbol, Market.CRYPTO)
+        lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
+        if not lock.acquire(blocking=False):
+            return None
+        try:
+            entries = [
+                item
+                for item in ledger.managed_entries_for_account(self._account_id)
+                if item.market == Market.CRYPTO and item.canonical_symbol == symbol
+            ]
+            for item in entries:
+                reason: str | None = None
+                if observation.high >= item.original_target:
+                    reason = "target"
+                else:
+                    emergency_price = item.original_stop * (
+                        1 - self.crypto_emergency_exit_bps / 10_000
+                    )
+                    if observation.low <= emergency_price:
+                        reason = "stop_failover"
+                    elif observation.low <= item.original_stop and item.stop_state == "open":
+                        ledger.set_exit_state(
+                            self._account_id,
+                            item.entry_client_order_id,
+                            stop_state="triggered_unfilled",
+                        )
+                        log.warning(
+                            "Crypto stop triggered but remains unfilled: market=crypto "
+                            "symbol=%s source=%s",
+                            symbol,
+                            observation.source,
+                        )
+                if reason is None:
+                    continue
+                claimed = ledger.claim_symbol_exit(
+                    self._account_id,
+                    item.entry_client_order_id,
+                    reason=reason,
+                )
+                if claimed is None:
+                    continue
+                log.warning(
+                    "Crypto %s triggered: market=crypto symbol=%s managed_qty=%s source=%s",
+                    reason,
+                    symbol,
+                    claimed.owned_qty,
+                    observation.source,
+                )
+                self._cancel_stop_then_exit(claimed, reason)
+                return reason
+            return None
+        finally:
+            lock.release()
+
+    def _cancel_stop_then_exit(self, position: Any, reason: str) -> None:
+        ledger = self.ledger
+        stop_id = position.protective_stop_broker_order_id
+        if not stop_id:
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise AmbiguousOrderState(
+                f"Protective stop id is unknown for {position.canonical_symbol}"
+            )
+        try:
+            self._client.cancel_order_by_id(stop_id)
+        except Exception:
+            # A timeout can mean either cancel succeeded or the stop filled.
+            pass
+        stop = self._client.get_order_by_id(stop_id)
+        stop_status = str(self._field(stop, "status", "")).lower().split(".")[-1]
+        if stop_status == "filled":
+            filled_qty = float(self._field(stop, "filled_qty", 0) or 0)
+            filled_price = float(self._field(stop, "filled_avg_price", 0) or 0)
+            if filled_qty > 0 and filled_price > 0:
+                ledger.apply_execution_event(
+                    ExecutionEvent(
+                        self._account_id,
+                        position.protective_stop_client_order_id
+                        or f"{position.entry_client_order_id}-stop",
+                        stop_id,
+                        None,
+                        OrderRole.PROTECTIVE_STOP,
+                        position.canonical_symbol,
+                        Market.CRYPTO,
+                        OrderState.FILLED,
+                        position.owned_qty,
+                        filled_qty,
+                        filled_price,
+                        datetime.now(UTC),
+                    )
+                )
+            ledger.set_exit_state(
+                self._account_id,
+                position.entry_client_order_id,
+                stop_state="filled",
+                target_state="cancelled_by_stop_fill",
+            )
+            return
+        if stop_status not in {"canceled", "cancelled", "expired"}:
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise AmbiguousOrderState(
+                f"Stop cancellation is unconfirmed for {position.canonical_symbol}: "
+                f"{stop_status or 'unknown'}"
+            )
+        ledger.set_exit_state(
+            self._account_id,
+            position.entry_client_order_id,
+            stop_state="cancelled",
+        )
+        qty = self._available_position_qty(
+            position.canonical_symbol,
+            position.owned_qty,
+            reserve_fee_on_lookup_failure=False,
+        )
+        if qty <= 0:
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise AmbiguousOrderState(
+                f"No verified managed quantity available for {position.canonical_symbol}"
+            )
+        suffix = "target-exit" if reason == "target" else "emergency-exit"
+        client_id = f"{position.entry_client_order_id}-{suffix}"
+        result = self._submit_with_recovery(
+            MarketOrderRequest(
+                symbol=normalize_symbol(position.canonical_symbol, Market.CRYPTO).trading_symbol,
+                qty=qty,
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC,
+                client_order_id=client_id,
+            ),
+            client_id,
+        )
+        broker_id = str(self._field(result, "id", "") or "")
+        if not broker_id:
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            raise AmbiguousOrderState(f"Exit broker id is unknown for {position.canonical_symbol}")
+        ledger.set_exit_state(
+            self._account_id,
+            position.entry_client_order_id,
+            target_state="target_exit_submitted"
+            if reason == "target"
+            else "emergency_exit_submitted",
+            exit_client_order_id=client_id,
+            exit_broker_order_id=broker_id,
+        )
+        intent = OrderIntent(
+            position.source_signal_id,
+            position.canonical_symbol,
+            Market.CRYPTO,
+            Direction.LONG,
+            qty,
+            position.filled_avg_price,
+            position.original_stop,
+            position.original_target,
+            position.strategy,
+            client_order_id=client_id,
+        )
+        state, fill = self._wait_for_fill(broker_id, intent, qty, timeout=5.0)
+        if fill is not None:
+            ledger.apply_execution_event(
+                ExecutionEvent(
+                    self._account_id,
+                    client_id,
+                    broker_id,
+                    None,
+                    OrderRole.TAKE_PROFIT if reason == "target" else OrderRole.EMERGENCY_EXIT,
+                    position.canonical_symbol,
+                    Market.CRYPTO,
+                    state,
+                    qty,
+                    fill.qty,
+                    fill.price,
+                    fill.timestamp,
+                )
+            )
+        if state == OrderState.FILLED:
+            ledger.set_exit_state(
+                self._account_id,
+                position.entry_client_order_id,
+                target_state="target_exit_filled"
+                if reason == "target"
+                else "emergency_exit_filled",
+            )
+            return
+        if state == OrderState.PARTIALLY_FILLED:
+            ledger.set_exit_state(
+                self._account_id,
+                position.entry_client_order_id,
+                target_state="target_exit_partially_filled",
+            )
+        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+        raise AmbiguousOrderState(
+            f"Crypto {reason} exit is not terminal for {position.canonical_symbol}: {state.value}"
+        )
 
     def _validate_pre_submit(self, intent: OrderIntent) -> None:
         if intent.market == Market.EQUITY:
@@ -990,4 +1373,4 @@ class AlpacaBroker:
         temporary.replace(self._peak_state_path)
 
 
-__all__ = ["AlpacaBroker"]
+__all__ = ["AlpacaBroker", "CryptoPriceObservation"]

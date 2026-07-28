@@ -75,6 +75,8 @@ class AlpacaTradingUpdateStream:
                 if stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
                 else OrderRole.TAKE_PROFIT
             )
+        elif "-target-exit" in client_order_id:
+            role = OrderRole.TAKE_PROFIT
         elif "-emergency-exit" in client_order_id or client_order_id.startswith("parayabuck-exit-"):
             role = OrderRole.EMERGENCY_EXIT
         elif "-stop" in client_order_id or client_order_id.startswith("parayabuck-stop-"):

@@ -6,6 +6,7 @@ from typing import Any
 
 from parayabuck.core.models import Bar, Market, PositionSnapshot, Regime, Signal
 from parayabuck.markets.regime import RegimeAssessment
+from parayabuck.markets.symbols import canonical_symbol
 
 
 @dataclass(frozen=True)
@@ -69,4 +70,10 @@ class Strategy(ABC):
         )
 
     def supports(self, bars: list[Bar]) -> bool:
-        return len(bars) >= self.minimum_bars and bars[-1].market == self.market
+        if len(bars) < self.minimum_bars:
+            return False
+        symbol = canonical_symbol(bars[-1].symbol, self.market)
+        return all(
+            bar.market == self.market and canonical_symbol(bar.symbol, bar.market) == symbol
+            for bar in bars
+        )

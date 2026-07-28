@@ -7,12 +7,17 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from parayabuck.core.models import Market
+
 
 @dataclass(frozen=True)
 class RiskLimits:
     risk_per_trade_pct: float = 0.005
     max_position_pct: float = 0.10
-    max_crypto_exposure_pct: float = 0.20
+    max_crypto_exposure_pct: float = 0.10
+    max_crypto_position_pct: float = 0.05
+    max_crypto_positions: int = 2
+    minimum_crypto_order_notional: float = 12.0
     max_sector_exposure_pct: float = 0.25
     max_gross_exposure_pct: float = 0.60
     max_positions: int = 5
@@ -26,6 +31,7 @@ class RiskLimits:
             self.risk_per_trade_pct,
             self.max_position_pct,
             self.max_crypto_exposure_pct,
+            self.max_crypto_position_pct,
             self.max_sector_exposure_pct,
             self.max_gross_exposure_pct,
             self.daily_loss_limit_pct,
@@ -35,6 +41,9 @@ class RiskLimits:
             raise ValueError("Risk ratios must be in (0, 1]")
         if (
             self.max_positions <= 0
+            or self.max_crypto_positions <= 0
+            or self.max_crypto_positions > self.max_positions
+            or self.minimum_crypto_order_notional <= 0
             or self.minimum_risk_reward <= 0
             or self.consecutive_loss_reduction_after <= 0
         ):
@@ -66,6 +75,8 @@ class EngineConfig:
     maximum_account_age_for_entry_seconds: float = 30.0
     event_queue_capacity: int = 1024
     max_new_positions_per_cycle: int = 1
+    crypto_stop_limit_offset_bps: float = 25.0
+    crypto_emergency_exit_bps: float = 75.0
     strategy_profile: str = "equity_5m_v1"
     allow_short: bool = False
     risk: RiskLimits = field(default_factory=RiskLimits)
@@ -101,6 +112,8 @@ class EngineConfig:
             or self.account_poll_interval_seconds <= 0
             or self.maximum_account_age_for_entry_seconds <= 0
             or self.event_queue_capacity <= 0
+            or self.crypto_stop_limit_offset_bps <= 0
+            or self.crypto_emergency_exit_bps <= self.crypto_stop_limit_offset_bps
         )
 
 
@@ -145,24 +158,109 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
+class EquityUniverseConfig:
+    enabled: bool = True
+    dynamic_selection_enabled: bool = True
+    maximum_stream_symbols: int = 30
+    reference_symbols: tuple[str, ...] = ("SPY",)
+    fallback_trade_symbols: tuple[str, ...] = ()
+    candidate_universe_path: str = "data/universe/equity_candidates.json"
+    active_universe_path: str = "data/runtime/active_equity_universe.json"
+    trade_reference_symbols: bool = False
+
+    def __post_init__(self) -> None:
+        from parayabuck.markets.symbols import canonical_symbol
+
+        references = tuple(canonical_symbol(item, Market.EQUITY) for item in self.reference_symbols)
+        fallback = tuple(
+            canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols
+        )
+        if len(set(references)) != len(references):
+            raise ValueError("universe.equity.reference_symbols must be unique")
+        if len(set(fallback)) != len(fallback):
+            raise ValueError("universe.equity.fallback_trade_symbols must be unique")
+        if set(references) & set(fallback):
+            raise ValueError(
+                "Reference and fallback trade symbols must be unique; use "
+                "trade_reference_symbols to make references tradeable"
+            )
+        if self.maximum_stream_symbols <= 0:
+            raise ValueError("universe.equity.maximum_stream_symbols must be positive")
+        if len(references) > self.maximum_stream_symbols:
+            raise ValueError("Equity reference symbols exceed maximum_stream_symbols")
+        object.__setattr__(self, "reference_symbols", references)
+        object.__setattr__(self, "fallback_trade_symbols", fallback)
+
+    @property
+    def configured_stream_symbols(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*self.reference_symbols, *self.fallback_trade_symbols)))
+
+    @property
+    def trade_symbols(self) -> tuple[str, ...]:
+        if self.trade_reference_symbols:
+            return self.configured_stream_symbols
+        references = set(self.reference_symbols)
+        return tuple(item for item in self.fallback_trade_symbols if item not in references)
+
+
+@dataclass(frozen=True)
+class CryptoUniverseConfig:
+    enabled: bool = False
+    trade_symbols: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        from parayabuck.markets.symbols import canonical_symbol
+
+        symbols = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.trade_symbols)
+        if len(set(symbols)) != len(symbols):
+            raise ValueError("universe.crypto.trade_symbols must be canonical and unique")
+        object.__setattr__(self, "trade_symbols", symbols)
+
+
+@dataclass(frozen=True)
+class UniverseConfig:
+    equity: EquityUniverseConfig = field(default_factory=EquityUniverseConfig)
+    crypto: CryptoUniverseConfig = field(default_factory=CryptoUniverseConfig)
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
     alpaca: AlpacaConfig = field(default_factory=AlpacaConfig)
     data: DataConfig = field(default_factory=DataConfig)
-    symbols: tuple[str, ...] = ()
+    universe: UniverseConfig = field(default_factory=UniverseConfig)
     engine: EngineConfig = field(default_factory=EngineConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
-            raise ValueError("At least one symbol must be configured")
-        from parayabuck.markets.symbols import canonical_symbol
+            raise ValueError("At least one enabled market symbol must be configured")
+        if self.alpaca.stock_feed == "iex" and (
+            self.universe.equity.maximum_stream_symbols > 30
+            or len(self.universe.equity.configured_stream_symbols) > 30
+        ):
+            raise ValueError(
+                "Alpaca Basic IEX equity stream symbols, including references, must not exceed 30"
+            )
+        if (
+            len(self.universe.equity.configured_stream_symbols)
+            > self.universe.equity.maximum_stream_symbols
+        ):
+            raise ValueError(
+                "Configured equity reference and fallback symbols exceed "
+                "universe.equity.maximum_stream_symbols"
+            )
+        if self.engine.equity_trading_enabled and not self.universe.equity.enabled:
+            raise ValueError("equity_trading_enabled requires universe.equity.enabled")
+        if self.engine.crypto_trading_enabled and not self.universe.crypto.enabled:
+            raise ValueError("crypto_trading_enabled requires universe.crypto.enabled")
 
-        canonical = tuple(canonical_symbol(symbol) for symbol in self.symbols)
-        if len(set(canonical)) != len(canonical):
-            raise ValueError("Configured symbols must be canonical and unique")
-        equity_count = sum("/" not in symbol for symbol in canonical)
-        if self.alpaca.stock_feed == "iex" and equity_count > 30:
-            raise ValueError("Alpaca Basic IEX supports at most 30 equity stream symbols")
+    @property
+    def symbols(self) -> tuple[str, ...]:
+        equity = (
+            self.universe.equity.configured_stream_symbols if self.universe.equity.enabled else ()
+        )
+        crypto = self.universe.crypto.trade_symbols if self.universe.crypto.enabled else ()
+        return (*equity, *crypto)
 
 
 def load_config(config_path: str | None = None) -> Config:
@@ -173,11 +271,37 @@ def load_config(config_path: str | None = None) -> Config:
     raw = yaml.safe_load(path.read_text()) or {}
     engine_raw = dict(raw.get("engine", {}))
     risk = RiskLimits(**engine_raw.pop("risk", {}))
+    universe_raw = raw.get("universe")
+    if universe_raw is None:
+        legacy = tuple(raw.get("symbols", ()))
+        from parayabuck.markets.symbols import normalize_symbol
+
+        equities: list[str] = []
+        crypto: list[str] = []
+        for symbol in legacy:
+            identity = normalize_symbol(str(symbol))
+            (crypto if identity.market == Market.CRYPTO else equities).append(identity.canonical)
+        # Legacy symbols were all tradeable. Avoid silently changing SPY ownership semantics.
+        equity = EquityUniverseConfig(
+            enabled=bool(equities),
+            dynamic_selection_enabled=False,
+            reference_symbols=(),
+            fallback_trade_symbols=tuple(equities),
+        )
+        crypto_universe = CryptoUniverseConfig(
+            enabled=bool(crypto),
+            trade_symbols=tuple(crypto),
+        )
+        engine_raw.setdefault("equity_trading_enabled", bool(equities))
+    else:
+        universe_dict = dict(universe_raw)
+        equity = EquityUniverseConfig(**dict(universe_dict.get("equity", {})))
+        crypto_universe = CryptoUniverseConfig(**dict(universe_dict.get("crypto", {})))
     return Config(
         app=AppConfig(**raw.get("app", {})),
         alpaca=AlpacaConfig(**raw.get("alpaca", {})),
         data=DataConfig(**raw.get("data", {})),
-        symbols=tuple(raw.get("symbols", ())),
+        universe=UniverseConfig(equity=equity, crypto=crypto_universe),
         engine=EngineConfig(risk=risk, **engine_raw),
     )
 
@@ -186,8 +310,11 @@ __all__ = [
     "AlpacaConfig",
     "AppConfig",
     "Config",
+    "CryptoUniverseConfig",
     "DataConfig",
     "EngineConfig",
+    "EquityUniverseConfig",
     "RiskLimits",
+    "UniverseConfig",
     "load_config",
 ]

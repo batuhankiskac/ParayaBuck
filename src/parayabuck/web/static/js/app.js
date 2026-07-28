@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
+    const marketStatusText = document.getElementById('marketStatusText');
 
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -75,6 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyInput = document.getElementById('apiKey');
     const secretKeyInput = document.getElementById('secretKey');
     const paperModeCheck = document.getElementById('paperModeCheck');
+    const equityTradingCheck = document.getElementById('equityTradingCheck');
+    const cryptoTradingCheck = document.getElementById('cryptoTradingCheck');
+    const liveTradingCheck = document.getElementById('liveTradingCheck');
     const maxDailyLossInput = document.getElementById('maxDailyLoss');
     const maxDrawdownInput = document.getElementById('maxDrawdown');
     const timeframeInput = document.getElementById('timeframe');
@@ -243,17 +247,23 @@ document.addEventListener('DOMContentLoaded', () => {
         activePositionsBadge.textContent = `${positions.length} Açık`;
 
         if (positions.length === 0) {
-            positionsTableBody.innerHTML = `<tr><td colspan="5" class="empty-state">Henüz açık pozisyon bulunmuyor</td></tr>`;
+            positionsTableBody.innerHTML = `<tr><td colspan="9" class="empty-state">Henüz açık pozisyon bulunmuyor</td></tr>`;
         } else {
             positionsTableBody.innerHTML = positions.map(p => `
                 <tr>
                     <td><strong>${p.symbol}</strong>${p.ownership === 'external' ? ' <small>(external)</small>' : ''}</td>
+                    <td>${p.market || '-'}</td>
                     <td><span class="${p.direction === 'LONG' ? 'badge-long' : 'badge-short'}">${p.direction}</span></td>
                     <td>${p.qty}</td>
                     <td>$${p.avg_price.toFixed(2)}</td>
                     <td class="${p.unrealized_pnl > 0 ? 'positive' : (p.unrealized_pnl < 0 ? 'negative' : '')}">
                         ${formatPnl(p.unrealized_pnl)}
                     </td>
+                    <td class="${p.manual_intervention_required ? 'negative' : ''}">
+                        ${p.manual_intervention_required ? 'MANUAL' : (p.protection_state || '-')}
+                    </td>
+                    <td>${p.stop_price ? '$' + p.stop_price.toFixed(4) : '-'} / ${p.target_price ? '$' + p.target_price.toFixed(4) : '-'}</td>
+                    <td>${p.stop_order_state || '-'} / ${p.target_exit_state || '-'}</td>
                 </tr>
             `).join('');
         }
@@ -460,6 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 secretKeyInput.placeholder = 'Mevcut secret korunacak';
             }
             paperModeCheck.checked = data.paper_mode;
+            equityTradingCheck.checked = data.equity_trading_enabled !== false;
+            cryptoTradingCheck.checked = data.crypto_trading_enabled === true;
+            liveTradingCheck.checked = data.live_trading_enabled === true;
             maxDailyLossInput.value = data.daily_loss_limit_pct || 1.5;
             maxDrawdownInput.value = data.max_drawdown_pct || 10;
             timeframeInput.value = data.timeframe || '5m';
@@ -484,6 +497,9 @@ document.addEventListener('DOMContentLoaded', () => {
             api_key: apiKeyInput.value.trim(),
             secret_key: secretKeyInput.value.trim(),
             paper_mode: paperModeCheck.checked,
+            equity_trading_enabled: equityTradingCheck.checked,
+            crypto_trading_enabled: cryptoTradingCheck.checked,
+            live_trading_enabled: liveTradingCheck.checked,
             daily_loss_limit_pct: parseFloat(maxDailyLossInput.value),
             max_drawdown_pct: parseFloat(maxDrawdownInput.value),
             timeframe: timeframeInput.value,
@@ -526,6 +542,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusRes = await fetch('/api/status');
             const statusData = await statusRes.json();
             updateEngineStateUI(statusData.state, statusData.paper);
+            const markets = (statusData.runtime && statusData.runtime.markets) || {};
+            const equity = markets.equity || {};
+            const crypto = markets.crypto || {};
+            marketStatusText.textContent =
+                `Equity ${statusData.active_equity_symbol_count || 0} · ` +
+                `${equity.ready === false ? 'hazır değil' : (equity.stream_healthy === false ? 'stream hatası' : 'hazır')} | ` +
+                `Crypto ${statusData.active_crypto_symbol_count || 0} · ` +
+                `${crypto.ready === false ? 'hazır değil' : (crypto.stream_healthy === false ? 'stream hatası' : 'hazır')} | ` +
+                `Aday ${statusData.candidate_universe_size || 0} · Scanner ${(statusData.scanner && statusData.scanner.status) || 'not_run'}`;
 
             const accountRes = await fetch('/api/account');
             const accountData = await accountRes.json();

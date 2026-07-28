@@ -115,6 +115,10 @@ class EngineRuntime:
             ledger=self.ledger,
             crypto_stop_limit_offset_bps=self.config.crypto_stop_limit_offset_bps,
             crypto_emergency_exit_bps=self.config.crypto_emergency_exit_bps,
+            crypto_stop_cancel_timeout_seconds=self.config.crypto_stop_cancel_timeout_seconds,
+            crypto_stop_cancel_poll_interval_seconds=(
+                self.config.crypto_stop_cancel_poll_interval_seconds
+            ),
         )
         self.ai_journal = None
         if self.config.ai_logging_enabled:
@@ -487,6 +491,8 @@ class EngineRuntime:
                 cumulative_filled_qty=update.filled_qty,
                 average_fill_price=update.average_fill_price,
                 occurred_at=update.timestamp,
+                fee=update.fee,
+                activity_id=update.activity_id,
             )
         )
         if (
@@ -501,7 +507,7 @@ class EngineRuntime:
                     stop_state="filled",
                     target_state="cancelled_by_stop_fill",
                 )
-            elif update.role == update.role.TAKE_PROFIT:
+            elif update.role == OrderRole.TAKE_PROFIT:
                 target_state = {
                     OrderState.PARTIALLY_FILLED: "target_exit_partially_filled",
                     OrderState.FILLED: "target_exit_filled",
@@ -534,6 +540,15 @@ class EngineRuntime:
             )
             if approved_risk > 0 and actual_risk > approved_risk * 1.05:
                 self._circuit_breaker_reason = "post_fill_risk_violation"
+            if update.market == Market.CRYPTO and update.role == OrderRole.ENTRY:
+                try:
+                    if not self.broker.protect_recovered_crypto_entry(lifecycle.order):
+                        self._market_entry_halts[Market.CRYPTO] = (
+                            "protection_reconciliation_required"
+                        )
+                except AmbiguousOrderState:
+                    self._market_entry_halts[Market.CRYPTO] = "protection_reconciliation_required"
+                    raise
 
     def _run_stream_worker(self, name: str, target: object) -> None:
         worker = self._workers[name]
@@ -549,19 +564,21 @@ class EngineRuntime:
                 except Exception as exc:
                     worker.last_error = str(exc)
                     worker.restart_count += 1
-                    self._state = "degraded"
+                    market = {
+                        "pb-stocks": Market.EQUITY,
+                        "pb-crypto": Market.CRYPTO,
+                    }.get(name)
+                    if market is None:
+                        self._state = "degraded"
                     if worker.restart_count > 5:
-                        self._state = "halted"
-                        market = {
-                            "pb-stocks": Market.EQUITY,
-                            "pb-crypto": Market.CRYPTO,
-                        }.get(name)
                         if market is None:
+                            self._state = "halted"
                             self._circuit_breaker_reason = f"{name}_restart_limit"
+                            log.exception("%s shared worker restart limit reached", name)
+                            return
                         else:
                             self._market_entry_halts[market] = f"{name}_restart_limit"
                         log.exception("%s stream worker restart limit reached", name)
-                        return
                     delay = min(16.0, 2 ** (worker.restart_count - 1))
                     log.warning(
                         "%s stream worker failed; retrying in %.1fs: %s",
@@ -574,9 +591,37 @@ class EngineRuntime:
         finally:
             worker.alive = False
 
+    def _mark_market_stream_recovered(self, market: Market) -> None:
+        """Clear a market-only failure after a real event proves reconnect health."""
+        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[market]
+        worker = self._workers.get(worker_name)
+        if worker is None or worker.last_error is None:
+            return
+        previous_error = worker.last_error
+        previous_restarts = worker.restart_count
+        worker.last_error = None
+        worker.restart_count = 0
+        worker.last_event_at = datetime.now(UTC)
+        if self._market_entry_halts.get(market) == f"{worker_name}_restart_limit":
+            self._market_entry_halts[market] = None
+            log.warning(
+                "Market halt cleared after verified reconnect: market=%s "
+                "worker_restart_count=%d recovery_action=market_halt_cleared",
+                market.value,
+                previous_restarts,
+            )
+        log.info(
+            "Market worker recovered: market=%s worker_restart_count=%d "
+            "recovery_action=stream_event_verified previous_error=%s",
+            market.value,
+            previous_restarts,
+            previous_error,
+        )
+
     async def _on_minute_bar(self, bar: Bar) -> None:
         if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
             return
+        self._mark_market_stream_recovered(bar.market)
         if bar.market == Market.CRYPTO:
             try:
                 self.broker.process_crypto_price(
@@ -660,8 +705,8 @@ class EngineRuntime:
         worker = self._workers["pb-decisions"]
         worker.alive = True
         next_reconcile = time.monotonic() + 60.0
-        pending: dict[tuple[Market, datetime], dict[str, Bar]] = {}
-        first_seen: dict[tuple[Market, datetime], float] = {}
+        pending: dict[datetime, dict[str, Bar]] = {}
+        first_seen: dict[datetime, float] = {}
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
@@ -691,28 +736,32 @@ class EngineRuntime:
                     ):
                         self.engine.ingest_closed_bars([item.bar])
                     else:
-                        key = (item.bar.market, item.bar.timestamp)
+                        key = item.bar.timestamp
                         pending.setdefault(key, {})[item.bar.symbol] = item.bar
                         first_seen.setdefault(key, time.monotonic())
                 self._flush_aggregators()
                 now_mono = time.monotonic()
+                expected_all = set().union(
+                    *(
+                        symbols
+                        for candidate_market, symbols in self._symbols_by_market.items()
+                        if self._market_enabled.get(candidate_market, False)
+                    )
+                )
                 closable = [
-                    key
-                    for key, bars in pending.items()
-                    if self._symbols_by_market[key[0]].issubset(bars)
-                    or now_mono - first_seen[key] >= self.config.event_grace_seconds
+                    timestamp
+                    for timestamp, bars in pending.items()
+                    if expected_all.issubset(bars)
+                    or now_mono - first_seen[timestamp] >= self.config.event_grace_seconds
                 ]
-                for market, timestamp in sorted(
-                    closable, key=lambda item: (item[1], item[0].value)
-                ):
-                    key = (market, timestamp)
-                    bars_by_symbol = pending.pop(key)
-                    first_seen.pop(key, None)
+                for timestamp in sorted(closable):
+                    bars_by_symbol = pending.pop(timestamp)
+                    first_seen.pop(timestamp, None)
                     self._process_timestamp(
                         timestamp,
                         bars_by_symbol,
-                        self._symbols_by_market[market],
-                        market=market,
+                        expected_all,
+                        market=None,
                     )
                     for bar in bars_by_symbol.values():
                         self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
@@ -722,10 +771,14 @@ class EngineRuntime:
                                 datetime.min.replace(tzinfo=UTC),
                             ),
                         )
-                    self._portfolio_watermarks[market] = max(
-                        timestamp,
-                        self._portfolio_watermarks.get(market, datetime.min.replace(tzinfo=UTC)),
-                    )
+                    for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
+                        self._portfolio_watermarks[candidate_market] = max(
+                            timestamp,
+                            self._portfolio_watermarks.get(
+                                candidate_market,
+                                datetime.min.replace(tzinfo=UTC),
+                            ),
+                        )
                 if self._events.empty():
                     self._oldest_received_at = min(
                         (
@@ -766,8 +819,6 @@ class EngineRuntime:
         *,
         market: Market | None = None,
     ) -> None:
-        if market is None:
-            market = next(iter(bars_by_symbol.values())).market if bars_by_symbol else Market.EQUITY
         bars = list(bars_by_symbol.values())
         ingestion = self.engine.ingest_closed_bars(bars)
         gap_bars = [
@@ -780,10 +831,17 @@ class EngineRuntime:
         if self._warming_up:
             return
         self._refresh_readiness()
+        market_reasons: dict[Market, tuple[str, ...]] = {}
+        for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
+            try:
+                market_reasons[candidate_market] = self._entry_readiness_reasons(candidate_market)
+            except TypeError:
+                # Compatibility for injected test runtimes and older adapters.
+                market_reasons[candidate_market] = self._entry_readiness_reasons()
         ready_bars = {
             symbol: bar
             for symbol, bar in bars_by_symbol.items()
-            if symbol not in self._not_ready_symbols
+            if symbol not in self._not_ready_symbols and not market_reasons[bar.market]
         }
         if not ready_bars:
             return
@@ -805,24 +863,6 @@ class EngineRuntime:
             self._circuit_breaker_reason = None
         if self._circuit_breaker_reason is not None:
             return
-        try:
-            readiness_reasons = self._entry_readiness_reasons(market)
-        except TypeError:
-            # Compatibility for small injected test runtimes.
-            readiness_reasons = self._entry_readiness_reasons()
-        if readiness_reasons:
-            log.warning("Entry readiness gate rejected cycle: %s", ", ".join(readiness_reasons))
-            return
-        if (
-            getattr(self, "_last_entry_cycle_timestamp", None) == timestamp
-            and self.config.max_new_positions_per_cycle == 1
-        ):
-            log.info(
-                "Global cycle entry capacity already consumed: market=%s timestamp=%s",
-                market.value,
-                timestamp.isoformat(),
-            )
-            return
         result = self.engine.evaluate_timestamp(
             timestamp,
             list(ready_bars),
@@ -831,7 +871,17 @@ class EngineRuntime:
         )
         if self.engine.entry_halt_reason is not None:
             self._circuit_breaker_reason = self.engine.entry_halt_reason
-        if result.orders:
+        capacity_states = {
+            OrderState.ACCEPTED,
+            OrderState.PARTIALLY_FILLED,
+            OrderState.FILLED,
+            OrderState.RECONCILIATION_REQUIRED,
+            OrderState.UNKNOWN,
+        }
+        if any(
+            self.engine.orders.orders[order.client_order_id].state in capacity_states
+            for order in result.orders
+        ):
             self._last_entry_cycle_timestamp = timestamp
         for order in result.orders:
             lifecycle = self.engine.orders.orders[order.client_order_id]
@@ -850,7 +900,7 @@ class EngineRuntime:
     def _entry_readiness_reasons(self, market: Market | None = None) -> tuple[str, ...]:
         health = self.health()
         reasons: list[str] = []
-        if self._state != "running":
+        if self._state in {"halted", "error", "stop_failed", "stopping", "stopped"}:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
@@ -962,7 +1012,7 @@ class EngineRuntime:
                 peak_equity=float(account.peak_equity),
                 realized_pnl=float(account.realized_pnl),
                 unrealized_pnl=float(account.unrealized_pnl),
-                fees=previous.fees if previous is not None else 0.0,
+                fees=self.ledger.total_fees_for_account(account_id),
                 consecutive_losses=self.engine.risk.consecutive_losses,
                 circuit_breaker_reason=self._circuit_breaker_reason,
                 updated_at=datetime.now(UTC),

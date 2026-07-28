@@ -50,8 +50,8 @@ class Strategy(ABC):
 
     def evaluate_with_trace(self, bars: list[Bar], context: StrategyContext) -> StrategyEvaluation:
         """Compatibility adapter for third-party strategies without native tracing."""
-        signal = self.evaluate(bars, context)
         supported = self.supports(bars)
+        signal = self.evaluate(bars, context) if supported else None
         condition = ConditionEvaluation(
             "strategy_support",
             supported,
@@ -70,7 +70,7 @@ class Strategy(ABC):
         )
 
     def supports(self, bars: list[Bar]) -> bool:
-        if len(bars) < self.minimum_bars:
+        if len(bars) < self.minimum_bars or bars[-1].market != self.market:
             return False
         symbol = canonical_symbol(bars[-1].symbol, self.market)
         return all(

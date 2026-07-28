@@ -39,6 +39,8 @@ from parayabuck.portfolio.allocator import PortfolioAllocator
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _symbol_batches
 from parayabuck.web import server
 
+pytestmark = pytest.mark.paper_chaos
+
 
 def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
     tmp_path: Path,

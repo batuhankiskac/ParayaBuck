@@ -72,6 +72,8 @@ class ExecutionEvent:
     cumulative_filled_qty: float
     average_fill_price: float | None
     occurred_at: datetime
+    fee: float = 0.0
+    activity_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,7 @@ class AccountSnapshot:
     unrealized_pnl: float = 0.0
     crypto_buying_power: float | None = None
     crypto_trading_enabled: bool = True
+    fees: float = 0.0
 
     @property
     def drawdown_pct(self) -> float:

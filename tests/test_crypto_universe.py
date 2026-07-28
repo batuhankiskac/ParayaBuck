@@ -24,6 +24,8 @@ from parayabuck.execution.alpaca import (
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner, load_active_symbols
 
+pytestmark = pytest.mark.paper_chaos
+
 
 def _write_config(path: Path, raw: dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")

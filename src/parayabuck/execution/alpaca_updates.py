@@ -22,6 +22,8 @@ class TradeUpdate:
     filled_qty: float
     average_fill_price: float | None
     timestamp: datetime
+    fee: float = 0.0
+    activity_id: str | None = None
 
     @property
     def state(self) -> OrderState | None:
@@ -97,6 +99,16 @@ class AlpacaTradingUpdateStream:
             filled_qty=float(_field(order, "filled_qty", 0) or 0),
             average_fill_price=float(average) if average is not None else None,
             timestamp=timestamp.astimezone(UTC),
+            fee=float(
+                _field(raw, "commission", _field(raw, "fee", _field(order, "commission", 0))) or 0
+            ),
+            activity_id=str(
+                _field(raw, "execution_id", _field(raw, "id", ""))
+                or (
+                    f"{client_order_id}:{_field(raw, 'event', '')}:"
+                    f"{timestamp.isoformat()}:{_field(order, 'filled_qty', 0)}"
+                )
+            ),
         )
         await self._handler(update)
 

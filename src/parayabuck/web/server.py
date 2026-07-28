@@ -30,6 +30,7 @@ from starlette.requests import Request
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
+from parayabuck.universe import validate_active_universe
 
 log = get_logger("parayabuck.web.server")
 
@@ -274,6 +275,7 @@ class EngineManager:
                     "daily_pnl": acct.daily_pnl,
                     "realized_pnl": acct.realized_pnl,
                     "unrealized_pnl": acct.unrealized_pnl,
+                    "fees": acct.fees,
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
                     "positions": positions_list,
                     "account_suffix": getattr(self.broker, "account_suffix", ""),
@@ -704,9 +706,10 @@ async def get_status() -> dict[str, Any]:
         result["candidate_universe_size"] = (
             len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
         )
+        _, validated_scanner_status = validate_active_universe(cfg.universe.equity)
         result["scanner"] = {
             "last_run_at": active_payload.get("selection_timestamp"),
-            "status": active_payload.get("status", "not_run"),
+            "status": validated_scanner_status,
             "scanner_version": active_payload.get("scanner_version"),
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):

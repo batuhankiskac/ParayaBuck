@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cashValue = document.getElementById('cashValue');
     const dailyPnlValue = document.getElementById('dailyPnlValue');
     const realizedPnlValue = document.getElementById('realizedPnlValue');
+    const feesValue = document.getElementById('feesValue');
     const unrealizedPnlValue = document.getElementById('unrealizedPnlValue');
     const drawdownValue = document.getElementById('drawdownValue');
 
@@ -238,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Unrealized PnL
         unrealizedPnlValue.textContent = formatPnl(data.unrealized_pnl);
+        feesValue.textContent = formatPnl(-(data.fees || 0));
         unrealizedPnlValue.className = 'card-value ' + (data.unrealized_pnl > 0 ? 'positive' : (data.unrealized_pnl < 0 ? 'negative' : ''));
 
         drawdownValue.textContent = formatCurrency(data.drawdown);
@@ -545,11 +547,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const markets = (statusData.runtime && statusData.runtime.markets) || {};
             const equity = markets.equity || {};
             const crypto = markets.crypto || {};
+            const marketLabel = (market) => {
+                if (market.entry_halt_reason) return `halt: ${market.entry_halt_reason}`;
+                if (market.stream_healthy === false) return 'stream hatası';
+                if (market.ready === false) return 'hazır değil';
+                return 'hazır';
+            };
+            const globalHealth = statusData.runtime
+                ? `${statusData.runtime.state}${statusData.runtime.healthy ? '' : ' (degraded)'}`
+                : statusData.state;
             marketStatusText.textContent =
+                `Global ${globalHealth} | ` +
                 `Equity ${statusData.active_equity_symbol_count || 0} · ` +
-                `${equity.ready === false ? 'hazır değil' : (equity.stream_healthy === false ? 'stream hatası' : 'hazır')} | ` +
+                `${marketLabel(equity)} | ` +
                 `Crypto ${statusData.active_crypto_symbol_count || 0} · ` +
-                `${crypto.ready === false ? 'hazır değil' : (crypto.stream_healthy === false ? 'stream hatası' : 'hazır')} | ` +
+                `${marketLabel(crypto)} | ` +
                 `Aday ${statusData.candidate_universe_size || 0} · Scanner ${(statusData.scanner && statusData.scanner.status) || 'not_run'}`;
 
             const accountRes = await fetch('/api/account');

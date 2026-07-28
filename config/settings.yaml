@@ -61,7 +61,7 @@ engine:
   higher_timeframe: 1h
   trading_enabled: true
   equity_trading_enabled: true
-  crypto_trading_enabled: false
+  crypto_trading_enabled: true
   live_trading_enabled: false
   manage_external_positions: false
   reject_stale_signals: true

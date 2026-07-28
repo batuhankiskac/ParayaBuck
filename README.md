@@ -49,7 +49,7 @@ Tek yapılandırma kaynağı `config/settings.yaml` dosyasıdır:
 
 - `app`: Web sunucusu ve log ayarları
 - `alpaca`: paper modu ve veri feed seçimi
-- `universe`: equity reference/fallback/active evreni ile ayrı crypto trade sembolleri
+- `universe`: equity ve crypto için ayrı aday, fallback, pin ve aktif evren ayarları
 - `engine`: periyot, sinyal eşiği, warmup, karar günlüğü ve yüzde bazlı risk limitleri
 
 Ücretsiz Alpaca hesaplarında gerçek zamanlı hisse verisi için `stock_feed: iex`, uygun
@@ -67,6 +67,32 @@ sınırlıdır; kaldıraçlı ters ETF'ler scanner tarafından reddedilir. Bu fo
 getiri hedeflediğinden uzun süreli benchmark takibi sapabilir; motor yalnız fonun kendi
 yükseliş/range kurulumu ile benchmark düşüş rejimi aynı anda uygun olduğunda giriş arar.
 
+Kripto evreni iki modda çalışır:
+
+- `dynamic_selection_enabled: false`: `trade_symbols` listesi geriye uyumlu biçimde
+  doğrudan warmup, stream ve işlem izin listesi olur.
+- `dynamic_selection_enabled: true`: aynı liste güvenli aday havuzu ve fallback'tir.
+  Saatlik 14 günlük veri üzerinden likidite, veri bütünlüğü, ATR, spread ve BTC
+  korelasyonu puanlanır; kategori yoğunluğu uygulanarak en fazla 12 sembol seçilir.
+
+`BTC/USD` ve `ETH/USD` pinned'dır. Managed açık pozisyonlar da restart sırasında
+ledger'dan pinlenir; unmanaged external pozisyonlar `manage_external_positions: false`
+iken yönetilmez. Stablecoin bazlı USD pariteleri aday olamaz. Aktif sonuç
+`data/runtime/active_crypto_universe.json` dosyasına atomik yazılır. Bozuk, stale,
+yanlış sürümlü veya config digest'i uyuşmayan dosya açılışı engellemez; pinned semboller
+ve config sırasındaki adaylardan deterministik fallback kurulur.
+
+Scanner motor kapalıyken veya kontrollü restart öncesinde çalıştırılır:
+
+```bash
+.venv/bin/python scripts/run_crypto_universe_scan.py
+```
+
+Scanner yalnız asset, historical bar ve latest quote okur; WebSocket açmaz ve emir
+oluşturmaz. Sonuç çalışan runtime'a hot-swap edilmez, bir sonraki başlangıçta uygulanır.
+Kripto evreninin büyümesi `max_crypto_exposure_pct`, `max_crypto_position_pct`,
+`max_crypto_positions` veya cycle başına tek yeni pozisyon limitini değiştirmez.
+
 Kripto paper desteği live trading'i açmaz. Güvenli varsayılanlar:
 
 ```yaml
@@ -80,6 +106,9 @@ engine:
 
 Paper chaos kapısı `python scripts/run_paper_chaos.py` ile çalıştırılır. Ayrıntılı
 rollout ve müdahale adımları [operations runbook](docs/operations.md) içindedir.
+Paper doğrulamasında önce scanner'ı çalıştırın, JSON'daki seçimi inceleyin, motoru
+yeniden başlatın ve health ekranındaki crypto `symbol_count` ile stream aboneliklerini
+karşılaştırın. Bu işlem `live_trading_enabled` değerini değiştirmez.
 
 ## Offline backtest
 

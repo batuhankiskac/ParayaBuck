@@ -5,7 +5,7 @@ from typing import Any
 
 from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
-from alpaca.data.requests import CryptoBarsRequest, StockBarsRequest
+from alpaca.data.requests import CryptoBarsRequest, CryptoLatestQuoteRequest, StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from parayabuck.core.models import Bar, Market
@@ -155,6 +155,16 @@ class AlpacaHistoricalData:
             bars[symbol] = [merged[key] for key in sorted(merged)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         return bars
+
+    def get_latest_crypto_quotes(self, symbols: list[str]) -> dict[str, Any]:
+        canonical = [canonical_symbol(symbol, Market.CRYPTO) for symbol in symbols]
+        if not canonical:
+            return {}
+        return dict(
+            self._crypto_client.get_crypto_latest_quote(
+                CryptoLatestQuoteRequest(symbol_or_symbols=canonical)
+            )
+        )
 
     @staticmethod
     def _parse_datetime(value: datetime | str | None) -> datetime | None:

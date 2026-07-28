@@ -59,6 +59,50 @@ Komut Alpaca'da yalnız asset ve historical-data okuması yapar. Başarılı old
 candidate metriklerini ve sınırlı active evreni atomik yazar. Running motor bu dosyayı
 hot-swap etmez; yeni seçim bir sonraki motor başlangıcında yüklenir.
 
+### Dinamik crypto universe
+
+Crypto aday havuzu yalnız `universe.crypto.trade_symbols` listesidir; scanner Alpaca'daki
+tüm kriptoları otomatik olarak işleme açmaz. Dinamik seçim kapalıysa bu liste eski
+davranışla doğrudan stream ve işlem izin listesi olur. Dinamik seçim açıksa:
+
+1. `pinned_symbols` (`BTC/USD`, `ETH/USD`) için kapasite ayrılır.
+2. Aktif/tradable, USD quote, stablecoin olmayan adaylar 14 günlük saatlik barlarla
+   değerlendirilir.
+3. Veri bütünlüğü, medyan dolar hacmi ve ATR eşikleri uygulanır.
+4. Latest quote varsa spread puanlanır; quote yoksa nötr puan kullanılır.
+5. BTC korelasyonu ve deterministik kategori limitleri çeşitliliği korur.
+6. En fazla `maximum_stream_symbols` (varsayılan 12) seçilir.
+
+Çalıştırma:
+
+```bash
+.venv/bin/python scripts/run_crypto_universe_scan.py
+```
+
+Başarılı sonuç `data/runtime/active_crypto_universe.json` dosyasına atomik yazılır.
+Komut asset veya historical API hatasında non-zero çıkar ve önceki başarılı dosyanın
+üzerine yazmaz. Quote hatası tek başına scan'i durdurmaz. Runtime; bozuk JSON, stale
+timestamp, sürüm/digest uyuşmazlığı, eksik pin, duplicate, stablecoin veya aday havuzu
+dışı sembol gördüğünde ret sebebini loglar ve config sırasındaki deterministik fallback'i
+kullanır.
+
+Universe değişikliği çalışan WebSocket'e hot-swap edilmez. Scanner sonrasında motoru
+kontrollü durdurup yeniden başlatın. Startup reconciliation ledger'daki managed
+pozisyonları aktif crypto evrenine pinler; scanner pozisyon kapatmaz, emir göndermez ve
+unmanaged external pozisyon sahipliğini değiştirmez. Kripto sembolleri equity IEX 30
+kapasitesinden sayılmaz.
+
+Paper kontrolü:
+
+1. `paper: true`, `live_trading_enabled: false` ve
+   `manage_external_positions: false` değerlerini doğrula.
+2. Scanner komutunu çalıştır; seçilen sembolleri ve reason-code özetini incele.
+3. Motoru yeniden başlat; health crypto `symbol_count`, warmup ve stream readiness'i
+   aktif JSON ile karşılaştır.
+4. Aday havuzunda olup aktif JSON'da olmayan bir sembolün işlem izni almadığını doğrula.
+5. `max_crypto_exposure_pct: 0.10`, `max_crypto_position_pct: 0.05`,
+   `max_crypto_positions: 2` ve `max_new_positions_per_cycle: 1` değerlerini değiştirme.
+
 ## Crypto synthetic OCO
 
 Alpaca crypto için yalnız simple market, limit ve stop-limit emirleri destekler; bracket

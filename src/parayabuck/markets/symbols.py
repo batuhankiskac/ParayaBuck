@@ -30,6 +30,22 @@ _KNOWN_CRYPTO_BASES = {
     "XRP",
 }
 
+STABLECOIN_BASES = frozenset(
+    {
+        "USD",
+        "USDT",
+        "USDC",
+        "DAI",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "GUSD",
+        "BUSD",
+        "EURC",
+    }
+)
+
 
 @dataclass(frozen=True)
 class SymbolIdentity:
@@ -80,6 +96,17 @@ def canonical_symbol(symbol: str, market: Market | None = None) -> str:
     return normalize_symbol(symbol, market).canonical
 
 
+def split_crypto_pair(symbol: str) -> tuple[str, str]:
+    canonical = canonical_symbol(symbol, Market.CRYPTO)
+    base, quote = canonical.split("/", 1)
+    return base, quote
+
+
+def is_stablecoin_pair(symbol: str) -> bool:
+    base, _quote = split_crypto_pair(symbol)
+    return base in STABLECOIN_BASES
+
+
 def same_symbol(left: str, right: str, market: Market | None = None) -> bool:
     try:
         if market is not None:
@@ -103,8 +130,11 @@ def _split_legacy_pair(value: str) -> tuple[str, str] | None:
 
 
 __all__ = [
+    "STABLECOIN_BASES",
     "SymbolIdentity",
     "canonical_symbol",
+    "is_stablecoin_pair",
     "normalize_symbol",
     "same_symbol",
+    "split_crypto_pair",
 ]

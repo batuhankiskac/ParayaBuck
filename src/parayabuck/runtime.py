@@ -35,7 +35,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskState
-from parayabuck.universe import load_active_symbols
+from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -85,7 +85,9 @@ class EngineRuntime:
             load_active_symbols(config.universe.equity) if config.universe.equity.enabled else ()
         )
         active_crypto = (
-            config.universe.crypto.trade_symbols if config.universe.crypto.enabled else ()
+            load_active_crypto_symbols(config.universe.crypto)
+            if config.universe.crypto.enabled
+            else ()
         )
         self.symbols = [canonical_symbol(symbol) for symbol in (*active_equities, *active_crypto)]
         self._symbols_by_market = {
@@ -145,7 +147,7 @@ class EngineRuntime:
                     if config.universe.equity.trade_reference_symbols
                     or symbol not in config.universe.equity.reference_symbols
                 ),
-                *config.universe.crypto.trade_symbols,
+                *active_crypto,
             },
         )
         self.execution = ExecutionCoordinator(
@@ -388,7 +390,21 @@ class EngineRuntime:
                     "Managed equity pins and references exceed the configured IEX stream limit"
                 )
             self._symbols_by_market[Market.EQUITY] = set(ordered[:maximum])
-        self._symbols_by_market[Market.CRYPTO].update(crypto_pins)
+        if crypto_pins:
+            log.info(
+                "Managed crypto positions pinned to active universe: %s",
+                ",".join(crypto_pins),
+            )
+        active_crypto = load_active_crypto_symbols(
+            self.app_config.universe.crypto,
+            pinned_symbols=crypto_pins,
+        )
+        self._symbols_by_market[Market.CRYPTO] = set(active_crypto)
+        if self.engine.allowed_trade_symbols is not None:
+            self.engine.allowed_trade_symbols = {
+                symbol for symbol in self.engine.allowed_trade_symbols if not is_crypto(symbol)
+            }
+            self.engine.allowed_trade_symbols.update(active_crypto)
         self.symbols = sorted(
             self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
         )

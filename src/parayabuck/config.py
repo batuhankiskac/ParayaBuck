@@ -195,8 +195,7 @@ class EquityUniverseConfig:
             raise ValueError("universe.equity.inverse_trade_symbols must be unique")
         if not set(inverse).issubset(fallback):
             raise ValueError(
-                "universe.equity.inverse_trade_symbols must be included in "
-                "fallback_trade_symbols"
+                "universe.equity.inverse_trade_symbols must be included in fallback_trade_symbols"
             )
         from parayabuck.markets.sectors import is_inverse_equity
 
@@ -230,17 +229,87 @@ class EquityUniverseConfig:
 
 
 @dataclass(frozen=True)
-class CryptoUniverseConfig:
-    enabled: bool = False
-    trade_symbols: tuple[str, ...] = ()
+class CryptoScannerConfig:
+    historical_timeframe: str = "1h"
+    lookback_days: int = 14
+    minimum_data_completeness: float = 0.90
+    minimum_median_dollar_volume: float = 100_000.0
+    minimum_atr_pct: float = 0.004
+    maximum_atr_pct: float = 0.20
+    maximum_spread_bps: float = 200.0
+    maximum_btc_correlation: float = 0.97
+    maximum_per_category: int = 3
+    maximum_meme_symbols: int = 1
+    maximum_high_beta_symbols: int = 2
+    volatility_optimum_pct: float = 0.045
+    unknown_category_penalty: float = 2.0
+    high_correlation_penalty: float = 8.0
 
     def __post_init__(self) -> None:
-        from parayabuck.markets.symbols import canonical_symbol
+        if self.historical_timeframe != "1h":
+            raise ValueError("universe.crypto.scanner.historical_timeframe must be 1h")
+        if self.lookback_days <= 0:
+            raise ValueError("universe.crypto.scanner.lookback_days must be positive")
+        ratios = (
+            self.minimum_data_completeness,
+            self.minimum_atr_pct,
+            self.maximum_atr_pct,
+            self.maximum_btc_correlation,
+            self.volatility_optimum_pct,
+        )
+        if any(not 0 < value <= 1 for value in ratios):
+            raise ValueError("Crypto scanner ratios must be in (0, 1]")
+        if self.minimum_atr_pct >= self.maximum_atr_pct:
+            raise ValueError("Crypto scanner ATR range is invalid")
+        if not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct:
+            raise ValueError("Crypto scanner volatility optimum must be inside the ATR range")
+        if self.minimum_median_dollar_volume <= 0 or self.maximum_spread_bps <= 0:
+            raise ValueError("Crypto scanner liquidity and spread thresholds must be positive")
+        if (
+            self.maximum_per_category <= 0
+            or self.maximum_meme_symbols < 0
+            or self.maximum_high_beta_symbols < 0
+        ):
+            raise ValueError("Crypto scanner category limits are invalid")
+        if self.unknown_category_penalty < 0 or self.high_correlation_penalty < 0:
+            raise ValueError("Crypto scanner score penalties must not be negative")
+
+
+@dataclass(frozen=True)
+class CryptoUniverseConfig:
+    enabled: bool = False
+    dynamic_selection_enabled: bool = False
+    maximum_stream_symbols: int = 12
+    pinned_symbols: tuple[str, ...] = ()
+    trade_symbols: tuple[str, ...] = ()
+    active_universe_path: str = "data/runtime/active_crypto_universe.json"
+    active_universe_max_age_hours: float = 12.0
+    require_scanner_config_digest_match: bool = True
+    scanner: CryptoScannerConfig = field(default_factory=CryptoScannerConfig)
+
+    def __post_init__(self) -> None:
+        from parayabuck.markets.symbols import canonical_symbol, is_stablecoin_pair
 
         symbols = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.trade_symbols)
+        pinned = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.pinned_symbols)
         if len(set(symbols)) != len(symbols):
             raise ValueError("universe.crypto.trade_symbols must be canonical and unique")
+        if len(set(pinned)) != len(pinned):
+            raise ValueError("universe.crypto.pinned_symbols must be canonical and unique")
+        if any(symbol.split("/", 1)[1] != "USD" for symbol in (*symbols, *pinned)):
+            raise ValueError("Crypto universe symbols must use USD quote pairs")
+        if any(is_stablecoin_pair(symbol) for symbol in (*symbols, *pinned)):
+            raise ValueError("Stablecoin base pairs are not allowed in the crypto universe")
+        if not set(pinned).issubset(symbols):
+            raise ValueError("universe.crypto.pinned_symbols must be included in trade_symbols")
+        if self.maximum_stream_symbols <= 0:
+            raise ValueError("universe.crypto.maximum_stream_symbols must be positive")
+        if len(pinned) > self.maximum_stream_symbols:
+            raise ValueError("Pinned crypto symbols exceed maximum_stream_symbols")
+        if self.active_universe_max_age_hours <= 0:
+            raise ValueError("universe.crypto.active_universe_max_age_hours must be positive")
         object.__setattr__(self, "trade_symbols", symbols)
+        object.__setattr__(self, "pinned_symbols", pinned)
 
 
 @dataclass(frozen=True)
@@ -322,7 +391,9 @@ def load_config(config_path: str | None = None) -> Config:
     else:
         universe_dict = dict(universe_raw)
         equity = EquityUniverseConfig(**dict(universe_dict.get("equity", {})))
-        crypto_universe = CryptoUniverseConfig(**dict(universe_dict.get("crypto", {})))
+        crypto_raw = dict(universe_dict.get("crypto", {}))
+        scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
+        crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
     return Config(
         app=AppConfig(**raw.get("app", {})),
         alpaca=AlpacaConfig(**raw.get("alpaca", {})),
@@ -336,6 +407,7 @@ __all__ = [
     "AlpacaConfig",
     "AppConfig",
     "Config",
+    "CryptoScannerConfig",
     "CryptoUniverseConfig",
     "DataConfig",
     "EngineConfig",

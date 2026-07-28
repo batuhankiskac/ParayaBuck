@@ -56,15 +56,45 @@ universe:
     require_scanner_config_digest_match: true
   crypto:
     enabled: true
+    dynamic_selection_enabled: true
+    maximum_stream_symbols: 12
+    pinned_symbols:
+    - BTC/USD
+    - ETH/USD
     trade_symbols:
     - BTC/USD
     - ETH/USD
     - SOL/USD
-    - ADA/USD
     - XRP/USD
+    - ADA/USD
     - DOGE/USD
     - AVAX/USD
     - LINK/USD
+    - LTC/USD
+    - BCH/USD
+    - DOT/USD
+    - UNI/USD
+    - AAVE/USD
+    - ARB/USD
+    - FIL/USD
+    - RENDER/USD
+    - ONDO/USD
+    - HYPE/USD
+    active_universe_path: data/runtime/active_crypto_universe.json
+    active_universe_max_age_hours: 12
+    require_scanner_config_digest_match: true
+    scanner:
+      historical_timeframe: 1h
+      lookback_days: 14
+      minimum_data_completeness: 0.90
+      minimum_median_dollar_volume: 100000
+      minimum_atr_pct: 0.004
+      maximum_atr_pct: 0.20
+      maximum_spread_bps: 200
+      maximum_btc_correlation: 0.97
+      maximum_per_category: 3
+      maximum_meme_symbols: 1
+      maximum_high_beta_symbols: 2
 engine:
   timeframe: 5m
   higher_timeframe: 1h

@@ -637,7 +637,7 @@ class AlpacaBroker:
         try:
             payload = request(
                 "GET",
-                "/v2/account/activities/FILL",
+                "/account/activities/FILL",
                 data={"direction": "desc", "page_size": 100},
             )
         except Exception as exc:

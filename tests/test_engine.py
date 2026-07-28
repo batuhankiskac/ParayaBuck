@@ -918,3 +918,25 @@ def test_risk_manager_caps_crypto_order_at_alpaca_notional_limit() -> None:
     assert decision.approved
     assert decision.order is not None
     assert decision.order.qty * signal.entry_price <= 200_000
+
+
+def test_fill_fee_reconciliation_uses_client_relative_activity_path() -> None:
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    class FakeClient:
+        def _request(self, method: str, path: str, data: dict[str, object]) -> list[object]:
+            calls.append((method, path, data))
+            return []
+
+    class FakeLedger:
+        def apply_fee_activity(self, *_args: object, **_kwargs: object) -> bool:
+            return False
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker.ledger = FakeLedger()
+    broker._account_id = "account-id"
+
+    broker._reconcile_fill_activity_fees()
+
+    assert calls == [("GET", "/account/activities/FILL", {"direction": "desc", "page_size": 100})]

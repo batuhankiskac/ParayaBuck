@@ -911,6 +911,22 @@ class ExecutionLedger:
             ).fetchall()
         return {str(row[0]) for row in rows}
 
+    def managed_entry_broker_order_ids(self, account_id: str, canonical: str) -> set[str]:
+        """Return every still-open entry parent for an aggregated symbol position."""
+        with self._lock:
+            rows = self.connection.execute(
+                """
+                SELECT broker_order_id
+                FROM managed_positions
+                WHERE account_id=? AND canonical_symbol=?
+                  AND status IN ('open', 'manual_intervention_required')
+                  AND remaining_owned_qty > 0
+                  AND broker_order_id IS NOT NULL
+                """,
+                (account_id, canonical),
+            ).fetchall()
+        return {str(row[0]) for row in rows}
+
     def managed_client_order_ids(self, account_id: str, canonical: str) -> set[str]:
         with self._lock:
             rows = self.connection.execute(

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from fastapi import WebSocketDisconnect
 from starlette.requests import Request
@@ -238,6 +239,26 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     manager.stop_engine()
     assert manager.engine_state == "stopped"
     assert calls == ["init", "start", "stop"]
+
+
+def test_stop_failure_returns_json_http_error_and_marks_manager_failed(
+    monkeypatch: Any,
+) -> None:
+    class FailingRuntime:
+        def stop(self) -> bool:
+            raise RuntimeError("worker shutdown failed")
+
+    manager = server.EngineManager()
+    manager.engine_state = "running"
+    manager.runtime = FailingRuntime()
+    monkeypatch.setattr(server, "manager", manager)
+
+    with pytest.raises(server.HTTPException) as raised:
+        asyncio.run(server.stop_engine())
+
+    assert raised.value.status_code == 500
+    assert raised.value.detail == "Engine could not stop cleanly: worker shutdown failed"
+    assert manager.engine_state == "stop_failed"
 
 
 class _DeadWebSocket:

@@ -176,7 +176,13 @@ class EngineManager:
             self.engine_state = "stopping"
             runtime = self.runtime
         if runtime is not None:
-            stopped = runtime.stop()
+            try:
+                stopped = runtime.stop()
+            except Exception as exc:
+                with self._state_lock:
+                    self.engine_state = "stop_failed"
+                self.invalidate_live_arming()
+                raise RuntimeError(f"Engine could not stop cleanly: {exc}") from exc
             if stopped is False:
                 with self._state_lock:
                     self.engine_state = "stop_failed"
@@ -658,7 +664,10 @@ async def start_engine() -> dict[str, str]:
 
 @app.post("/api/engine/stop")
 async def stop_engine() -> dict[str, str]:
-    await asyncio.to_thread(manager.stop_engine)
+    try:
+        await asyncio.to_thread(manager.stop_engine)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "stopped", "message": "Bot engine stopped."}
 
 

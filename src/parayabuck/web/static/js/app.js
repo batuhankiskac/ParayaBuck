@@ -35,6 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         return response;
     };
+
+    const responsePayload = async (response) => {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) return response.json();
+        const message = (await response.text()).trim();
+        return { detail: message || `Sunucu hatası (${response.status})` };
+    };
     // DOM Elements
     const modeChip = document.getElementById('modeChip');
     const modeIcon = document.getElementById('modeIcon');
@@ -391,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopBtn.addEventListener('click', async () => {
         try {
             const res = await controlFetch('/api/engine/stop', { method: 'POST' });
-            const data = await res.json();
+            const data = await responsePayload(res);
             if (!res.ok) throw new Error(data.detail || 'Motor durdurulamadı');
             appendLog("Motor durduruldu.", "warning");
         } catch (err) {

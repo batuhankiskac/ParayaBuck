@@ -297,8 +297,14 @@ class AlpacaBroker:
                 # with nested legs. Treat that held stop as active protection;
                 # otherwise reconciliation tries to submit a second stop while
                 # the bracket has reserved the entire position.
+                parent_order_ids: str | set[str] = ownership.broker_order_id
+                if ledger is not None and hasattr(ledger, "managed_entry_broker_order_ids"):
+                    parent_order_ids = ledger.managed_entry_broker_order_ids(
+                        self._account_id or "unknown",
+                        symbol,
+                    )
                 has_protection = self._has_nested_bracket_protection(
-                    ownership.broker_order_id,
+                    parent_order_ids,
                     position.symbol,
                     is_long,
                     required_qty,
@@ -396,15 +402,11 @@ class AlpacaBroker:
 
     def _has_nested_bracket_protection(
         self,
-        parent_order_id: str,
+        parent_order_ids: str | set[str],
         symbol: str,
         position_is_long: bool,
         required_qty: float,
     ) -> bool:
-        parent: Any = self._client.get_order_by_id(
-            parent_order_id,
-            GetOrderByIdRequest(nested=True),
-        )
         closing_side = "sell" if position_is_long else "buy"
 
         def protective_qty(order: Any) -> Decimal:
@@ -426,9 +428,15 @@ class AlpacaBroker:
                 start=Decimal("0"),
             )
 
-        if not same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
-            return False
-        protected = protective_qty(parent)
+        ids = {parent_order_ids} if isinstance(parent_order_ids, str) else parent_order_ids
+        protected = Decimal("0")
+        for parent_order_id in ids:
+            parent: Any = self._client.get_order_by_id(
+                parent_order_id,
+                GetOrderByIdRequest(nested=True),
+            )
+            if same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
+                protected += protective_qty(parent)
         required = Decimal(str(required_qty))
         tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
         self._last_protection_mismatch = (

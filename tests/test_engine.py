@@ -354,6 +354,63 @@ def test_reconcile_finds_held_stop_on_filled_bracket_parent() -> None:
     assert protection_states == [ProtectionState.ACTIVE]
 
 
+def test_reconcile_finds_held_stop_across_multiple_managed_entries() -> None:
+    class FakeClient:
+        def get_order_by_id(self, order_id: str, request: Any) -> Any:
+            assert request.nested is True
+            legs = ()
+            if order_id == "new-entry":
+                legs = (
+                    SimpleNamespace(
+                        symbol="MSFT",
+                        side="sell",
+                        type="stop",
+                        status="held",
+                        qty="25",
+                        stop_price="392.87",
+                        legs=None,
+                    ),
+                )
+            return SimpleNamespace(symbol="MSFT", legs=legs)
+
+    ownership = SimpleNamespace(
+        original_stop=387.34,
+        owned_qty=50,
+        broker_order_id="old-entry",
+        entry_client_order_id="parayabuck-old-entry",
+    )
+    protection_states: list[ProtectionState] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = FakeClient()
+    broker._account_id = "acct"
+    broker.manage_external_positions = False
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {"MSFT": ownership},
+        managed_entry_broker_order_ids=lambda _account, _symbol: {
+            "old-entry",
+            "new-entry",
+        },
+        set_protection_state=lambda _account, _entry, state: protection_states.append(state),
+    )
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot("MSFT", 25, 400, 401, Market.EQUITY, qty_available=0),
+        ),
+    )
+    broker._has_protective_order = lambda *_args: False
+    broker._submit_stop = lambda *_args, **_kwargs: pytest.fail(
+        "the held stop on the newer bracket protects the broker position"
+    )
+
+    broker.reconcile()
+
+    assert protection_states == [ProtectionState.ACTIVE]
+
+
 def test_crypto_order_flattens_when_protection_fails() -> None:
     submitted: list[Any] = []
     flattened: list[tuple[str, float]] = []

@@ -77,6 +77,8 @@ class EngineConfig:
     max_new_positions_per_cycle: int = 1
     crypto_stop_limit_offset_bps: float = 25.0
     crypto_emergency_exit_bps: float = 75.0
+    crypto_stop_cancel_timeout_seconds: float = 5.0
+    crypto_stop_cancel_poll_interval_seconds: float = 0.25
     strategy_profile: str = "equity_5m_v1"
     allow_short: bool = False
     risk: RiskLimits = field(default_factory=RiskLimits)
@@ -114,6 +116,10 @@ class EngineConfig:
             or self.event_queue_capacity <= 0
             or self.crypto_stop_limit_offset_bps <= 0
             or self.crypto_emergency_exit_bps <= self.crypto_stop_limit_offset_bps
+            or self.crypto_stop_cancel_timeout_seconds <= 0
+            or self.crypto_stop_cancel_poll_interval_seconds <= 0
+            or self.crypto_stop_cancel_poll_interval_seconds
+            > self.crypto_stop_cancel_timeout_seconds
         )
 
 
@@ -167,6 +173,8 @@ class EquityUniverseConfig:
     candidate_universe_path: str = "data/universe/equity_candidates.json"
     active_universe_path: str = "data/runtime/active_equity_universe.json"
     trade_reference_symbols: bool = False
+    active_universe_max_age_hours: float = 36.0
+    require_scanner_config_digest_match: bool = True
 
     def __post_init__(self) -> None:
         from parayabuck.markets.symbols import canonical_symbol
@@ -186,6 +194,8 @@ class EquityUniverseConfig:
             )
         if self.maximum_stream_symbols <= 0:
             raise ValueError("universe.equity.maximum_stream_symbols must be positive")
+        if self.active_universe_max_age_hours <= 0:
+            raise ValueError("universe.equity.active_universe_max_age_hours must be positive")
         if len(references) > self.maximum_stream_symbols:
             raise ValueError("Equity reference symbols exceed maximum_stream_symbols")
         object.__setattr__(self, "reference_symbols", references)

@@ -54,6 +54,10 @@ def _candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandidate:
         median_dollar_volume_20d=statistics.median(dollar_volumes),
         atr_pct=(statistics.mean(true_ranges) / price if true_ranges and price > 0 else 0),
         data_completeness=min(1.0, len(recent) / 20),
+        economic_sector=(
+            str(getattr(asset, "sector", "") or getattr(asset, "economic_sector", "")).strip()
+            or None
+        ),
         exchange=str(getattr(asset, "exchange", "")).split(".")[-1],
         tradable=bool(getattr(asset, "tradable", False)),
         status=str(getattr(asset, "status", "")).lower().split(".")[-1],

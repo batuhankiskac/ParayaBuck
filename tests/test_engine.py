@@ -31,6 +31,8 @@ from parayabuck.monitoring import DecisionJournal
 from parayabuck.risk import RiskManager
 from parayabuck.strategies.base import Strategy, StrategyContext
 
+pytestmark = pytest.mark.paper_chaos
+
 
 def _bar(index: int, close: float = 100.0, high: float | None = None) -> Bar:
     timestamp = datetime(2025, 1, 1, 14, 30, tzinfo=UTC) + timedelta(minutes=5 * index)

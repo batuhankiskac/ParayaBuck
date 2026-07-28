@@ -47,3 +47,6 @@ exclude = [".venv/", "build/", "tests/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "paper_chaos: deterministic paper-trading fault injection and recovery scenario",
+]

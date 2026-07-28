@@ -45,6 +45,8 @@ universe:
     - XLC
     candidate_universe_path: data/universe/equity_candidates.json
     active_universe_path: data/runtime/active_equity_universe.json
+    active_universe_max_age_hours: 36
+    require_scanner_config_digest_match: true
   crypto:
     enabled: true
     trade_symbols:
@@ -76,6 +78,8 @@ engine:
   max_new_positions_per_cycle: 1
   crypto_stop_limit_offset_bps: 25
   crypto_emergency_exit_bps: 75
+  crypto_stop_cancel_timeout_seconds: 5
+  crypto_stop_cancel_poll_interval_seconds: 0.25
   strategy_profile: equity_5m_v1
   allow_short: false
   minimum_signal_score: 65.0

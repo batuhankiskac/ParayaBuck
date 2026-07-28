@@ -3,6 +3,7 @@ from parayabuck.universe.scanner import (
     EquityUniverseScanner,
     ScannerResult,
     load_active_symbols,
+    validate_active_universe,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "EquityUniverseScanner",
     "ScannerResult",
     "load_active_symbols",
+    "validate_active_universe",
 ]

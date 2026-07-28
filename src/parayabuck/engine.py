@@ -260,41 +260,42 @@ class TradingEngine:
                             "reason": "a higher-quality signal for the same symbol won",
                         }
                     )
-        selected = self.allocator.select(ranked, account)
-        selected_ids = {signal.signal_id for signal in selected}
         held = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
             if not position.is_flat
         }
-        for signal in signals:
-            if signal.signal_id in selected_ids:
+        accepted: list[OrderIntent] = []
+        attempted_ids: set[str] = set()
+        capacity_consumed = 0
+        executions: dict[str, dict[str, Any]] = {}
+        for signal in ranked:
+            if canonical_symbol(signal.symbol, signal.market) in held:
                 trails[signal.signal_id].append(
                     {
                         "gate": "allocation",
-                        "status": "passed",
-                        "reason": "portfolio capacity was available and no position was held",
+                        "status": "failed",
+                        "reason": "an existing position is already held",
                     }
                 )
-            elif signal.signal_id in rank_by_id:
-                reason = (
-                    "an existing position is already held"
-                    if canonical_symbol(signal.symbol, signal.market) in held
-                    else "cycle capacity was consumed by a higher-ranked candidate"
-                )
+                continue
+            if capacity_consumed >= self.config.max_new_positions_per_cycle:
                 trails[signal.signal_id].append(
-                    {"gate": "allocation", "status": "failed", "reason": reason}
+                    {
+                        "gate": "allocation",
+                        "status": "failed",
+                        "reason": "cycle capacity was consumed by a higher-ranked candidate",
+                    }
                 )
-            if (
-                signal.signal_id not in selected_ids
-                and signal.score >= self.config.minimum_signal_score
-                and self.journal
-            ):
-                self.journal.record_decision(signal, False, "lower_ranked_or_existing_position")
-
-        accepted: list[OrderIntent] = []
-        executions: dict[str, dict[str, Any]] = {}
-        for signal in selected:
+                continue
+            attempted_ids.add(signal.signal_id)
+            trails[signal.signal_id].append(
+                {
+                    "gate": "allocation",
+                    "status": "passed",
+                    "reason": "candidate may consume capacity only after a broker-effective result",
+                }
+            )
             gate_reason = self._execution_gate_reason(signal)
             if gate_reason is not None:
                 trails[signal.signal_id].append(
@@ -338,6 +339,15 @@ class TradingEngine:
             state, fill = self.broker.submit(order)
             lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
             filled_qty = fill.qty if fill is not None else 0.0
+            broker_effective = filled_qty > 0 or lifecycle.state in {
+                OrderState.ACCEPTED,
+                OrderState.PARTIALLY_FILLED,
+                OrderState.FILLED,
+                OrderState.RECONCILIATION_REQUIRED,
+                OrderState.UNKNOWN,
+            }
+            if broker_effective:
+                capacity_consumed += 1
             if lifecycle.state in {
                 OrderState.UNKNOWN,
                 OrderState.RECONCILIATION_REQUIRED,
@@ -388,6 +398,19 @@ class TradingEngine:
                 if fill is not None:
                     self.journal.record_fill(fill)
         for signal in signals:
+            if (
+                signal.signal_id not in attempted_ids
+                and signal.signal_id in rank_by_id
+                and signal.score >= self.config.minimum_signal_score
+                and self.journal
+            ):
+                reason = (
+                    "existing_position"
+                    if canonical_symbol(signal.symbol, signal.market) in held
+                    else "cycle_capacity_consumed"
+                )
+                self.journal.record_decision(signal, False, reason)
+        for signal in signals:
             meta = metadata[signal.signal_id]
             execution = executions.get(
                 signal.signal_id,
@@ -427,6 +450,7 @@ class TradingEngine:
                     "daily_pnl": account.daily_pnl,
                     "realized_pnl": account.realized_pnl,
                     "unrealized_pnl": account.unrealized_pnl,
+                    "fees": account.fees,
                     "drawdown_pct": account.drawdown_pct,
                     "positions": [
                         {

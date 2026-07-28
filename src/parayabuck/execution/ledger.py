@@ -117,6 +117,12 @@ class ExecutionLedger:
                     timestamp TEXT NOT NULL,
                     UNIQUE(client_order_id, qty, price, timestamp)
                 );
+                CREATE TABLE IF NOT EXISTS fee_activities (
+                    activity_id TEXT PRIMARY KEY,
+                    client_order_id TEXT NOT NULL,
+                    fee REAL NOT NULL,
+                    occurred_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS protective_orders (
                     client_order_id TEXT PRIMARY KEY,
                     entry_client_order_id TEXT NOT NULL,
@@ -271,6 +277,21 @@ class ExecutionLedger:
         now = datetime.now(UTC).isoformat()
         symbol = canonical_symbol(order.symbol, order.market)
         with self._lock:
+            existing_open = self.connection.execute(
+                """
+                SELECT entry_client_order_id FROM managed_positions
+                WHERE account_id=? AND canonical_symbol=?
+                  AND status IN ('open', 'manual_intervention_required')
+                  AND entry_client_order_id<>?
+                LIMIT 1
+                """,
+                (account_id, symbol, order.client_order_id),
+            ).fetchone()
+            if existing_open is not None:
+                raise ValueError(
+                    "Single-managed-entry invariant violated for "
+                    f"{symbol}: existing={existing_open[0]}"
+                )
             self.connection.execute(
                 """
                 INSERT INTO orders(
@@ -493,7 +514,7 @@ class ExecutionLedger:
         row = self.connection.execute(
             """
             SELECT entry_filled_qty, exit_filled_qty, remaining_owned_qty,
-                   filled_avg_price, market
+                   filled_avg_price, market, entry_fees
             FROM managed_positions
             WHERE account_id=? AND entry_client_order_id=?
               AND status IN ('open', 'manual_intervention_required')
@@ -514,6 +535,8 @@ class ExecutionLedger:
         ).fetchone()
         is_short = bool(order_row and str(order_row[0]) == Direction.SHORT.value)
         gross_pnl = (entry_price - price) * applied if is_short else (price - entry_price) * applied
+        entry_fee_allocation = float(row[5]) * applied / float(row[0]) if float(row[0]) > 0 else 0.0
+        net_pnl = gross_pnl - fee_delta - entry_fee_allocation
         remaining_after = max(0.0, remaining - applied)
         status = "closed" if remaining_after <= 1e-12 else "open"
         self.connection.execute(
@@ -533,7 +556,7 @@ class ExecutionLedger:
                 applied,
                 remaining_after,
                 remaining_after,
-                gross_pnl - fee_delta,
+                net_pnl,
                 fee_delta,
                 status,
                 status,
@@ -543,7 +566,7 @@ class ExecutionLedger:
                 entry_client_order_id,
             ),
         )
-        return gross_pnl - fee_delta
+        return net_pnl
 
     def mark_position_closed(
         self, account_id: str, entry_client_order_id: str, *, closed_at: datetime | None = None
@@ -681,6 +704,7 @@ class ExecutionLedger:
         target_state: str | None = None,
         exit_client_order_id: str | None = None,
         exit_broker_order_id: str | None = None,
+        clear_exit_order: bool = False,
     ) -> None:
         assignments = ["updated_at=?"]
         values: list[object] = [datetime.now(UTC).isoformat()]
@@ -693,6 +717,8 @@ class ExecutionLedger:
             if value is not None:
                 assignments.append(f"{column}=?")
                 values.append(value)
+        if clear_exit_order:
+            assignments.extend(("exit_client_order_id=NULL", "exit_broker_order_id=NULL"))
         values.extend((account_id, entry_client_order_id))
         with self._lock:
             self.connection.execute(
@@ -763,13 +789,84 @@ class ExecutionLedger:
             if previous is None:
                 result[item.canonical_symbol] = item
             else:
-                result[item.canonical_symbol] = ManagedPosition(
-                    **{
-                        **previous.__dict__,
-                        "owned_qty": previous.owned_qty + item.owned_qty,
-                    }
+                raise ValueError(
+                    "Single-managed-entry invariant violated for "
+                    f"{item.canonical_symbol}: {previous.entry_client_order_id}, "
+                    f"{item.entry_client_order_id}"
                 )
         return result
+
+    def total_fees_for_account(self, account_id: str) -> float:
+        with self._lock:
+            row = self.connection.execute(
+                """
+                SELECT COALESCE(SUM(entry_fees + exit_fees), 0)
+                FROM managed_positions WHERE account_id=?
+                """,
+                (account_id,),
+            ).fetchone()
+        return float(row[0] if row else 0.0)
+
+    def apply_fee_activity(
+        self,
+        account_id: str,
+        *,
+        activity_id: str,
+        broker_order_id: str,
+        fee: float,
+        occurred_at: datetime,
+    ) -> bool:
+        """Apply one Alpaca fill-activity fee exactly once."""
+        if fee <= 0 or not activity_id or not broker_order_id:
+            return False
+        now = occurred_at.isoformat()
+        with self._lock:
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                order = self.connection.execute(
+                    """
+                    SELECT entry_client_order_id, order_role
+                    FROM orders WHERE broker_order_id=?
+                    """,
+                    (broker_order_id,),
+                ).fetchone()
+                if order is None or order[0] is None:
+                    self.connection.rollback()
+                    return False
+                inserted = self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO fee_activities(
+                        activity_id, client_order_id, fee, occurred_at
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (activity_id, str(order[0]), fee, now),
+                )
+                if not inserted.rowcount:
+                    self.connection.commit()
+                    return False
+                if OrderRole(str(order[1])) == OrderRole.ENTRY:
+                    self.connection.execute(
+                        """
+                        UPDATE managed_positions
+                        SET entry_fees=entry_fees+?, updated_at=?
+                        WHERE account_id=? AND entry_client_order_id=?
+                        """,
+                        (fee, now, account_id, str(order[0])),
+                    )
+                else:
+                    self.connection.execute(
+                        """
+                        UPDATE managed_positions
+                        SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
+                        WHERE account_id=? AND entry_client_order_id=?
+                        """,
+                        (fee, fee, now, account_id, str(order[0])),
+                    )
+                self.connection.commit()
+                return True
+            except Exception:
+                self.connection.rollback()
+                raise
 
     def record_order_update(
         self,
@@ -926,6 +1023,22 @@ class ExecutionLedger:
                     else (previous_state.value if previous_state in terminal_states else None)
                 )
                 now = event.occurred_at.isoformat()
+                fee_delta = 0.0
+                if event.fee > 0:
+                    activity_id = event.activity_id or (
+                        f"{event.client_order_id}:{event.occurred_at.isoformat()}:"
+                        f"{event.cumulative_filled_qty}:{event.fee}"
+                    )
+                    inserted_fee = self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO fee_activities(
+                            activity_id, client_order_id, fee, occurred_at
+                        ) VALUES (?, ?, ?, ?)
+                        """,
+                        (activity_id, event.client_order_id, event.fee, now),
+                    )
+                    if inserted_fee.rowcount:
+                        fee_delta = event.fee
                 self.connection.execute(
                     """
                     INSERT INTO orders(
@@ -1008,7 +1121,7 @@ class ExecutionLedger:
                                 order,
                                 fill_delta,
                                 fill_price,
-                                0.0,
+                                fee_delta,
                                 event.broker_order_id,
                                 now,
                             )
@@ -1019,10 +1132,36 @@ class ExecutionLedger:
                             entry_client_order_id,
                             fill_delta,
                             fill_price,
-                            0.0,
+                            fee_delta,
                             now,
                         )
                         position_delta = -fill_delta
+                elif fee_delta > 0 and entry_client_order_id:
+                    if role == OrderRole.ENTRY:
+                        self.connection.execute(
+                            """
+                            UPDATE managed_positions
+                            SET entry_fees=entry_fees+?, updated_at=?
+                            WHERE account_id=? AND entry_client_order_id=?
+                            """,
+                            (fee_delta, now, event.account_id, entry_client_order_id),
+                        )
+                    else:
+                        self.connection.execute(
+                            """
+                            UPDATE managed_positions
+                            SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
+                            WHERE account_id=? AND entry_client_order_id=?
+                            """,
+                            (
+                                fee_delta,
+                                fee_delta,
+                                now,
+                                event.account_id,
+                                entry_client_order_id,
+                            ),
+                        )
+                        realized_pnl_delta = -fee_delta
                 self.connection.commit()
                 return ExecutionTransition(
                     previous_state=previous_state,

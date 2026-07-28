@@ -24,6 +24,7 @@ from parayabuck.runtime import EngineRuntime
 from parayabuck.universe import (
     CryptoCandidate,
     CryptoUniverseScanner,
+    crypto_candidate_from_bars,
     crypto_scanner_config_digest,
     load_active_crypto_symbols,
     validate_active_crypto_universe,
@@ -97,6 +98,34 @@ def _candidates() -> list[CryptoCandidate]:
         _candidate("AVAX/USD"),
         _candidate("DOT/USD"),
     ]
+
+
+def test_crypto_liquidity_uses_daily_not_hourly_notional() -> None:
+    bars = []
+    start = datetime(2026, 7, 27, tzinfo=UTC)
+    for day in range(2):
+        for hour in range(4):
+            bars.append(
+                SimpleNamespace(
+                    timestamp=start + timedelta(days=day, hours=hour),
+                    open=100.0,
+                    high=101.0,
+                    low=99.0,
+                    close=100.0,
+                    volume=4.0,
+                )
+            )
+
+    candidate = crypto_candidate_from_bars(
+        "SOL/USD",
+        bars,
+        expected_bar_count=8,
+        tradable=True,
+        status="active",
+    )
+
+    assert candidate.median_dollar_volume == pytest.approx(1_600.0)
+    assert candidate.data_completeness == 1.0
 
 
 def test_config_canonicalizes_and_validates_crypto_symbols(tmp_path: Path) -> None:

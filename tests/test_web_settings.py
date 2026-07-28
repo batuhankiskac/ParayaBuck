@@ -345,3 +345,72 @@ def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) 
     asyncio.run(server.websocket_logs(websocket))  # must exit quietly, not spin
 
     assert manager.log_queues == set()
+
+
+def test_status_reports_validated_universe_counts_while_runtime_is_starting(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    candidate_path = tmp_path / "candidates.json"
+    equity_path = tmp_path / "active-equity.json"
+    crypto_path = tmp_path / "active-crypto.json"
+    candidate_path.write_text(json.dumps(["AAPL", "MSFT", "NVDA"]))
+    equity_path.write_text(json.dumps({"selection_timestamp": "equity-time"}))
+    crypto_path.write_text(json.dumps({"selection_timestamp": "crypto-time"}))
+
+    class StartingManager:
+        config_path = tmp_path / "settings.yaml"
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "key", "secret"
+
+        def current_engine_state(self) -> str:
+            return "starting"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    equity_config = type(
+        "EquityConfig",
+        (),
+        {
+            "candidate_universe_path": str(candidate_path),
+            "active_universe_path": str(equity_path),
+        },
+    )()
+    crypto_config = type(
+        "CryptoConfig", (), {"active_universe_path": str(crypto_path)}
+    )()
+    config = type(
+        "Config",
+        (),
+        {
+            "universe": type(
+                "Universe",
+                (),
+                {"equity": equity_config, "crypto": crypto_config},
+            )()
+        },
+    )()
+
+    monkeypatch.setattr(server, "manager", StartingManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: config)
+    monkeypatch.setattr(
+        server, "validate_active_universe", lambda _config: (("AAPL", "MSFT"), "success")
+    )
+    monkeypatch.setattr(
+        server,
+        "validate_active_crypto_universe",
+        lambda _config: (("BTC/USD", "ETH/USD"), "success"),
+    )
+
+    status = asyncio.run(server.get_status())
+
+    assert status["state"] == "starting"
+    assert status["active_equity_symbol_count"] == 2
+    assert status["active_crypto_symbol_count"] == 2
+    assert status["candidate_universe_size"] == 3
+    assert status["scanner"]["equity_status"] == "success"
+    assert status["scanner"]["crypto_status"] == "success"

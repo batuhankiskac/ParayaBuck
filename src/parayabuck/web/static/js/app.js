@@ -221,6 +221,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const renderSystemStatus = (statusData) => {
+        updateEngineStateUI(statusData.state, statusData.paper);
+        const hasRuntime = Boolean(statusData.runtime);
+        const markets = (statusData.runtime && statusData.runtime.markets) || {};
+        const equity = markets.equity || {};
+        const crypto = markets.crypto || {};
+        const marketLabel = (market) => {
+            if (!hasRuntime) {
+                if (statusData.state === 'starting') return 'başlatılıyor';
+                if (statusData.state === 'error') return 'hata';
+                if (statusData.state === 'stopped') return 'kapalı';
+                return 'durum bekleniyor';
+            }
+            if (market.entry_halt_reason) return `halt: ${market.entry_halt_reason}`;
+            if (market.stream_healthy === false) return 'stream hatası';
+            if (market.ready === false) return 'hazır değil';
+            return 'hazır';
+        };
+        const globalHealth = hasRuntime
+            ? `${statusData.runtime.state}${statusData.runtime.healthy ? '' : ' (degraded)'}`
+            : statusData.state;
+        const scanner = statusData.scanner || {};
+        const equityScanner = scanner.equity_status || scanner.status || 'not_run';
+        const cryptoScanner = scanner.crypto_status || 'not_run';
+        marketStatusText.textContent =
+            `Global ${globalHealth} | ` +
+            `Equity ${statusData.active_equity_symbol_count ?? 0} · ` +
+            `${marketLabel(equity)} | ` +
+            `Crypto ${statusData.active_crypto_symbol_count ?? 0} · ` +
+            `${marketLabel(crypto)} | ` +
+            `Aday ${statusData.candidate_universe_size ?? 0} · ` +
+            `Scanner E ${equityScanner} · C ${cryptoScanner}` +
+            (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
+    };
+
+    let statusRefreshInFlight = false;
+    const refreshSystemStatus = async () => {
+        if (statusRefreshInFlight) return;
+        statusRefreshInFlight = true;
+        try {
+            const statusRes = await fetch('/api/status');
+            if (!statusRes.ok) throw new Error(`Durum alınamadı (${statusRes.status})`);
+            renderSystemStatus(await statusRes.json());
+        } catch (err) {
+            console.error("Status refresh error:", err);
+        } finally {
+            statusRefreshInFlight = false;
+        }
+    };
+
     // Update Account Snapshot
     const updateAccountUI = (data) => {
         if (!data) return;
@@ -567,29 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial Fetch & Start WebSockets
     const init = async () => {
         try {
-            const statusRes = await fetch('/api/status');
-            const statusData = await statusRes.json();
-            updateEngineStateUI(statusData.state, statusData.paper);
-            const markets = (statusData.runtime && statusData.runtime.markets) || {};
-            const equity = markets.equity || {};
-            const crypto = markets.crypto || {};
-            const marketLabel = (market) => {
-                if (market.entry_halt_reason) return `halt: ${market.entry_halt_reason}`;
-                if (market.stream_healthy === false) return 'stream hatası';
-                if (market.ready === false) return 'hazır değil';
-                return 'hazır';
-            };
-            const globalHealth = statusData.runtime
-                ? `${statusData.runtime.state}${statusData.runtime.healthy ? '' : ' (degraded)'}`
-                : statusData.state;
-            marketStatusText.textContent =
-                `Global ${globalHealth} | ` +
-                `Equity ${statusData.active_equity_symbol_count || 0} · ` +
-                `${marketLabel(equity)} | ` +
-                `Crypto ${statusData.active_crypto_symbol_count || 0} · ` +
-                `${marketLabel(crypto)} | ` +
-                `Aday ${statusData.candidate_universe_size || 0} · Scanner ${(statusData.scanner && statusData.scanner.status) || 'not_run'}` +
-                (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
+            await refreshSystemStatus();
+            window.setInterval(refreshSystemStatus, 2000);
 
             const accountRes = await fetch('/api/account');
             const accountData = await accountRes.json();

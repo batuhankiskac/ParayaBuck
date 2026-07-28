@@ -87,7 +87,7 @@ universe:
       historical_timeframe: 1h
       lookback_days: 14
       minimum_data_completeness: 0.90
-      minimum_median_dollar_volume: 100000
+      minimum_median_dollar_volume: 1000
       minimum_atr_pct: 0.004
       maximum_atr_pct: 0.20
       maximum_spread_bps: 200

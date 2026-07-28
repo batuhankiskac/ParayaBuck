@@ -50,7 +50,12 @@ def crypto_candidate_from_bars(
     btc_bars: Sequence[object] | None = None,
     spread_bps: float | None = None,
 ) -> CryptoCandidate:
-    """Calculate scanner metrics without network or DataFrame dependencies."""
+    """Calculate scanner metrics without network or DataFrame dependencies.
+
+    Alpaca crypto bar volume reflects activity visible on its own feed and can
+    contain many zero-volume hours. Liquidity is therefore measured as median
+    UTC daily notional instead of median hourly notional.
+    """
     canonical = canonical_symbol(symbol, Market.CRYPTO)
     by_timestamp = {
         getattr(bar, "timestamp"): bar
@@ -62,9 +67,13 @@ def crypto_candidate_from_bars(
     }
     ordered = [by_timestamp[key] for key in sorted(by_timestamp)]
     completeness = min(1.0, len(ordered) / max(1, expected_bar_count))
-    dollar_volumes = [
-        float(getattr(bar, "close")) * float(getattr(bar, "volume")) for bar in ordered
-    ]
+    daily_dollar_volumes: dict[object, float] = {}
+    for bar in ordered:
+        timestamp = getattr(bar, "timestamp")
+        day = timestamp.astimezone(UTC).date() if isinstance(timestamp, datetime) else timestamp
+        daily_dollar_volumes[day] = daily_dollar_volumes.get(day, 0.0) + (
+            float(getattr(bar, "close")) * float(getattr(bar, "volume"))
+        )
     true_ranges: list[float] = []
     for previous, current in zip(ordered, ordered[1:], strict=False):
         high = float(getattr(current, "high"))
@@ -82,7 +91,9 @@ def crypto_candidate_from_bars(
         correlation = _return_correlation(ordered, btc_bars)
     return CryptoCandidate(
         symbol=canonical,
-        median_dollar_volume=statistics.median(dollar_volumes) if dollar_volumes else 0.0,
+        median_dollar_volume=(
+            statistics.median(daily_dollar_volumes.values()) if daily_dollar_volumes else 0.0
+        ),
         atr_pct=atr_pct,
         data_completeness=completeness,
         btc_correlation=correlation,

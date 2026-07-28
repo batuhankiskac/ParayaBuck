@@ -233,7 +233,7 @@ class CryptoScannerConfig:
     historical_timeframe: str = "1h"
     lookback_days: int = 14
     minimum_data_completeness: float = 0.90
-    minimum_median_dollar_volume: float = 100_000.0
+    minimum_median_dollar_volume: float = 1_000.0
     minimum_atr_pct: float = 0.004
     maximum_atr_pct: float = 0.20
     maximum_spread_bps: float = 200.0

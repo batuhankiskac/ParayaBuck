@@ -30,7 +30,7 @@ from starlette.requests import Request
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
-from parayabuck.universe import validate_active_universe
+from parayabuck.universe import validate_active_crypto_universe, validate_active_universe
 
 log = get_logger("parayabuck.web.server")
 
@@ -697,6 +697,8 @@ async def get_status() -> dict[str, Any]:
         "paper": manager.is_paper_mode(),
         "has_credentials": bool(key),
         "security_warning": getattr(manager, "security_warning", None),
+        "active_equity_symbol_count": 0,
+        "active_crypto_symbol_count": 0,
     }
     runtime = getattr(manager, "runtime", None)
     if runtime is not None and hasattr(runtime, "health"):
@@ -712,10 +714,14 @@ async def get_status() -> dict[str, Any]:
         cfg = load_config(str(manager.config_path))
         candidate_path = Path(cfg.universe.equity.candidate_universe_path)
         active_path = Path(cfg.universe.equity.active_universe_path)
+        active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
         candidate_payload = (
             json.loads(candidate_path.read_text()) if candidate_path.exists() else []
         )
         active_payload = json.loads(active_path.read_text()) if active_path.exists() else {}
+        active_crypto_payload = (
+            json.loads(active_crypto_path.read_text()) if active_crypto_path.exists() else {}
+        )
         candidate_items = (
             candidate_payload.get(
                 "candidates",
@@ -727,11 +733,21 @@ async def get_status() -> dict[str, Any]:
         result["candidate_universe_size"] = (
             len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
         )
-        _, validated_scanner_status = validate_active_universe(cfg.universe.equity)
+        equity_symbols, validated_scanner_status = validate_active_universe(cfg.universe.equity)
+        crypto_symbols, validated_crypto_scanner_status = validate_active_crypto_universe(
+            cfg.universe.crypto
+        )
+        if runtime is None:
+            result["active_equity_symbol_count"] = len(equity_symbols)
+            result["active_crypto_symbol_count"] = len(crypto_symbols)
         result["scanner"] = {
             "last_run_at": active_payload.get("selection_timestamp"),
             "status": validated_scanner_status,
+            "equity_status": validated_scanner_status,
+            "crypto_status": validated_crypto_scanner_status,
             "scanner_version": active_payload.get("scanner_version"),
+            "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
+            "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         result["scanner"] = {"last_run_at": None, "status": "error"}

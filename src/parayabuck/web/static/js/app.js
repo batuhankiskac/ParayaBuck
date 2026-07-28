@@ -182,12 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mode Chip
         if (paper) {
             modeChip.className = 'mode-chip paper';
-            modeIcon.textContent = '📜';
-            modeText.textContent = `PAPER DEMO${accountSuffix ? ` · …${accountSuffix}` : ''}`;
+            modeIcon.textContent = '⌄';
+            modeText.textContent = `Paper demo${accountSuffix ? ` · …${accountSuffix}` : ''}`;
         } else {
             modeChip.className = 'mode-chip real';
-            modeIcon.textContent = '⚠️';
-            modeText.textContent = `REAL GERÇEK PARA${accountSuffix ? ` · …${accountSuffix}` : ''}`;
+            modeIcon.textContent = '⌄';
+            modeText.textContent = `Gerçek para${accountSuffix ? ` · …${accountSuffix}` : ''}`;
         }
 
         // Status Dot & Text
@@ -231,25 +231,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Daily PnL
         dailyPnlValue.textContent = formatPnl(data.daily_pnl);
-        dailyPnlValue.className = 'card-value ' + (data.daily_pnl > 0 ? 'positive' : (data.daily_pnl < 0 ? 'negative' : ''));
+        dailyPnlValue.className = 'metric-value ' + (data.daily_pnl > 0 ? 'positive' : (data.daily_pnl < 0 ? 'negative' : ''));
 
         // Realized PnL
         realizedPnlValue.textContent = formatPnl(data.realized_pnl);
-        realizedPnlValue.className = 'card-value ' + (data.realized_pnl > 0 ? 'positive' : (data.realized_pnl < 0 ? 'negative' : ''));
+        realizedPnlValue.className = 'metric-value ' + (data.realized_pnl > 0 ? 'positive' : (data.realized_pnl < 0 ? 'negative' : ''));
 
         // Unrealized PnL
         unrealizedPnlValue.textContent = formatPnl(data.unrealized_pnl);
         feesValue.textContent = formatPnl(-(data.fees || 0));
-        unrealizedPnlValue.className = 'card-value ' + (data.unrealized_pnl > 0 ? 'positive' : (data.unrealized_pnl < 0 ? 'negative' : ''));
+        unrealizedPnlValue.className = 'metric-value ' + (data.unrealized_pnl > 0 ? 'positive' : (data.unrealized_pnl < 0 ? 'negative' : ''));
 
         drawdownValue.textContent = formatCurrency(data.drawdown);
 
         // Update Positions Table
         const positions = data.positions || [];
-        activePositionsBadge.textContent = `${positions.length} Açık`;
+        activePositionsBadge.textContent = `${positions.length} açık`;
 
         if (positions.length === 0) {
-            positionsTableBody.innerHTML = `<tr><td colspan="9" class="empty-state">Henüz açık pozisyon bulunmuyor</td></tr>`;
+            positionsTableBody.innerHTML = `<tr><td colspan="9" class="empty-state"><span class="empty-icon">—</span>Henüz açık pozisyon bulunmuyor</td></tr>`;
         } else {
             positionsTableBody.innerHTML = positions.map(p => `
                 <tr>
@@ -459,8 +459,26 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Hata: " + err.message);
         }
     });
+    modeChip.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            modeChip.click();
+        }
+    });
 
     // Settings Modal
+    const setSettingsOpen = (open) => {
+        settingsModal.classList.toggle('active', open);
+        settingsModal.setAttribute('aria-hidden', String(!open));
+        document.body.classList.toggle('modal-open', open);
+        settingsBtn.setAttribute('aria-expanded', String(open));
+        if (open) {
+            window.setTimeout(() => closeSettingsBtn.focus(), 180);
+        } else {
+            settingsBtn.focus();
+        }
+    };
+
     const openSettings = async () => {
         try {
             const res = await fetch('/api/settings');
@@ -482,15 +500,23 @@ document.addEventListener('DOMContentLoaded', () => {
             portInput.value = data.port || 8000;
             openBrowserInput.checked = data.open_browser !== false;
             logLevelInput.value = data.log_level || 'INFO';
-            settingsModal.classList.add('active');
+            setSettingsOpen(true);
         } catch (err) {
             alert("Ayarlar yüklenemedi: " + err.message);
         }
     };
 
     settingsBtn.addEventListener('click', openSettings);
-    closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
-    cancelSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+    closeSettingsBtn.addEventListener('click', () => setSettingsOpen(false));
+    cancelSettingsBtn.addEventListener('click', () => setSettingsOpen(false));
+    settingsModal.addEventListener('click', (event) => {
+        if (event.target === settingsModal) setSettingsOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && settingsModal.classList.contains('active')) {
+            setSettingsOpen(false);
+        }
+    });
 
     settingsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -521,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Ayarlar kaydedilemedi');
-            settingsModal.classList.remove('active');
+            setSettingsOpen(false);
             if (data.engine_restarted) {
                 appendLog("Ayarlar uygulandı; işlem motoru yeni ayarlarla yeniden başlatıldı.", "info");
             } else {
@@ -534,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Ayarlar kaydedilemedi: " + err.message);
         } finally {
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Kaydet & Uygula';
+            submitBtn.textContent = 'Kaydet ve uygula';
         }
     });
 

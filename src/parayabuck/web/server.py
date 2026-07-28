@@ -626,6 +626,8 @@ async def protect_local_control_api(request: Request, call_next: Any) -> Any:
     )
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 

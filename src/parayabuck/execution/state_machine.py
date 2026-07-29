@@ -89,6 +89,11 @@ class OrderStateMachine:
         self, client_order_id: str, state: OrderState, reason: str = ""
     ) -> OrderLifecycle:
         lifecycle = self.orders[client_order_id]
+        # Broker acknowledgements can arrive through both the synchronous
+        # submit response and the asynchronous trade-update stream. Treat the
+        # second observation as an idempotent no-op.
+        if state == lifecycle.state:
+            return lifecycle
         if state not in _ALLOWED[lifecycle.state]:
             raise ValueError(f"Invalid order transition {lifecycle.state} -> {state}")
         lifecycle.state = state

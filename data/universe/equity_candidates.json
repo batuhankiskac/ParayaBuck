@@ -2307,7 +2307,7 @@
       "economic_sector": null,
       "exchange": "NASDAQ",
       "leveraged_or_inverse": false,
-      "median_dollar_volume_20d": 335538540.64,
+      "median_dollar_volume_20d": 335552225.62,
       "price": 333.78,
       "spread_bps": null,
       "status": "active",
@@ -5721,13 +5721,13 @@
       "tradable": true
     },
     {
-      "atr_pct": 0.028087194668765202,
+      "atr_pct": 0.02808600793082868,
       "data_completeness": 1.0,
       "economic_sector": null,
       "exchange": "NYSE",
       "leveraged_or_inverse": false,
-      "median_dollar_volume_20d": 17580590.560000002,
-      "price": 337.08,
+      "median_dollar_volume_20d": 17569256.85,
+      "price": 336.86,
       "spread_bps": null,
       "status": "active",
       "symbol": "WST",
@@ -5864,7 +5864,7 @@
       "tradable": true
     }
   ],
-  "generated_at": "2026-07-28T20:50:53.221941+00:00",
+  "generated_at": "2026-07-29T11:40:24.683674+00:00",
   "source": "Alpaca active tradable US equity assets + repository fallback",
   "symbols": [
     "AAPL",

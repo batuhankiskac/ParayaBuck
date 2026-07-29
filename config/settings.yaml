@@ -86,10 +86,10 @@ universe:
     scanner:
       historical_timeframe: 1h
       lookback_days: 14
-      minimum_data_completeness: 0.90
+      minimum_data_completeness: 0.9
       minimum_median_dollar_volume: 1000
       minimum_atr_pct: 0.004
-      maximum_atr_pct: 0.20
+      maximum_atr_pct: 0.2
       maximum_spread_bps: 200
       maximum_btc_correlation: 0.97
       maximum_per_category: 3
@@ -100,7 +100,7 @@ engine:
   higher_timeframe: 1h
   trading_enabled: true
   equity_trading_enabled: true
-  crypto_trading_enabled: true
+  crypto_trading_enabled: false
   live_trading_enabled: false
   manage_external_positions: false
   reject_stale_signals: true

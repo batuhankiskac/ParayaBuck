@@ -274,7 +274,12 @@ class EngineRuntime:
             symbols = symbols_by_market.get(market, set())
             worker = self._workers.get(worker_name)
             not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
-            ready = not any(symbol in not_ready_symbols for symbol in symbols)
+            market_not_ready = symbols & not_ready_symbols
+            ready_symbol_count = len(symbols) - len(market_not_ready)
+            # A sparse symbol (for example a low-volume IEX instrument) must
+            # not keep an otherwise usable market in warmup forever. The
+            # decision loop already excludes not-ready symbols individually.
+            ready = not enabled or not symbols or ready_symbol_count > 0
             event_required = market == Market.CRYPTO or _is_regular_equity_time(now)
             stream_healthy = (
                 not enabled
@@ -295,7 +300,9 @@ class EngineRuntime:
             market_health[market.value] = {
                 "enabled": enabled,
                 "symbol_count": len(symbols),
-                "ready": not enabled or ready,
+                "ready": ready,
+                "ready_symbol_count": ready_symbol_count,
+                "not_ready_symbol_count": len(market_not_ready),
                 "stream_healthy": stream_healthy,
                 "data_gap": (enabled and self._engine_has_market_gap(market)),
                 "entry_halt_reason": getattr(self, "_market_entry_halts", {}).get(market),
@@ -392,7 +399,7 @@ class EngineRuntime:
             self.stop()
             raise
         self._refresh_readiness()
-        self._state = "running" if not self._not_ready_symbols else "warming_up"
+        self._state = "running" if self._has_ready_symbols() else "warming_up"
         log.info(
             "Engine runtime started: mode=%s symbols=%d timeframe=%s",
             "paper" if self.paper else "live",
@@ -1068,8 +1075,11 @@ class EngineRuntime:
             higher = self.engine.bars.get(symbol, self.config.higher_timeframe)
             if len(primary) >= self.config.warmup_bars and len(higher) >= self.config.warmup_bars:
                 self._not_ready_symbols.discard(symbol)
-        if self._running and not self._not_ready_symbols and self._state == "warming_up":
+        if self._running and self._has_ready_symbols() and self._state == "warming_up":
             self._state = "running"
+
+    def _has_ready_symbols(self) -> bool:
+        return any(symbol not in self._not_ready_symbols for symbol in self.symbols)
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
         account_id = self.broker.account_id or "unknown"

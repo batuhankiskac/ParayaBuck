@@ -143,6 +143,22 @@ def test_order_state_machine_accepts_immediate_partial_fill() -> None:
     assert lifecycle.state == OrderState.PARTIALLY_FILLED
 
 
+def test_order_state_machine_ignores_duplicate_state_observation() -> None:
+    intent = OrderIntent("sig", "TEST", Market.EQUITY, Direction.LONG, 1, 100, 98, 104, "test")
+    machine = OrderStateMachine()
+    lifecycle = machine.create(intent)
+    machine.transition(intent.client_order_id, OrderState.VALIDATED)
+    machine.transition(intent.client_order_id, OrderState.SUBMITTED)
+    machine.transition(intent.client_order_id, OrderState.ACCEPTED, "trade_update")
+    history_length = len(lifecycle.history)
+
+    duplicate = machine.transition(intent.client_order_id, OrderState.ACCEPTED, "broker_response")
+
+    assert duplicate is lifecycle
+    assert duplicate.state == OrderState.ACCEPTED
+    assert len(duplicate.history) == history_length
+
+
 def test_shadow_engine_journals_decision(tmp_path) -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     broker = ShadowBroker(account)

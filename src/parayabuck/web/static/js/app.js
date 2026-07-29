@@ -238,6 +238,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (market.entry_halt_reason) return `halt: ${market.entry_halt_reason}`;
             if (market.stream_healthy === false) return 'stream hatası';
             if (market.ready === false) return 'hazır değil';
+            if (
+                Number.isFinite(market.ready_symbol_count)
+                && Number.isFinite(market.symbol_count)
+                && market.ready_symbol_count < market.symbol_count
+            ) {
+                return `${market.ready_symbol_count}/${market.symbol_count} hazır`;
+            }
             return 'hazır';
         };
         const globalHealth = hasRuntime

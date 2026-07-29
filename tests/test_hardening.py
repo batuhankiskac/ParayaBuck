@@ -313,6 +313,44 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period(
     assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
 
 
+def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.symbols = ["AAPL", "DOG"]
+    runtime._not_ready_symbols = {"AAPL", "DOG"}
+    runtime._running = True
+    runtime._state = "warming_up"
+    runtime.config = SimpleNamespace(timeframe="5m", higher_timeframe="1h", warmup_bars=250)
+
+    class Bars:
+        @staticmethod
+        def get(symbol: str, _timeframe: str) -> list[object]:
+            return [object()] * (250 if symbol == "AAPL" else 241)
+
+    runtime.engine = SimpleNamespace(bars=Bars())
+
+    runtime._refresh_readiness()
+
+    assert runtime._not_ready_symbols == {"DOG"}
+    assert runtime._state == "running"
+
+
+def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.symbols = ["DOG"]
+    runtime._not_ready_symbols = {"DOG"}
+    runtime._running = True
+    runtime._state = "warming_up"
+    runtime.config = SimpleNamespace(timeframe="5m", higher_timeframe="1h", warmup_bars=250)
+    runtime.engine = SimpleNamespace(
+        bars=SimpleNamespace(get=lambda _symbol, _timeframe: [object()] * 241)
+    )
+
+    runtime._refresh_readiness()
+
+    assert runtime._not_ready_symbols == {"DOG"}
+    assert runtime._state == "warming_up"
+
+
 def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     timestamp = datetime(2025, 1, 2, 6, 0, tzinfo=UTC)

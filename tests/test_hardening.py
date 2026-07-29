@@ -212,7 +212,9 @@ def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
     assert [symbol for batch in batches for symbol in batch] == symbols
 
 
-def test_partial_ranking_universe_is_evaluated_after_grace_period() -> None:
+def test_partial_ranking_universe_is_evaluated_after_grace_period(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
     bar = _bar(timestamp)
@@ -253,6 +255,103 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period() -> None:
     runtime._process_timestamp(timestamp, {"AAPL": bar}, {"AAPL", "MSFT"})
 
     assert evaluated == [(("AAPL",), ("MSFT",))]
+    assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
+
+
+def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    timestamp = datetime(2025, 1, 2, 6, 0, tzinfo=UTC)
+    btc = Bar(timestamp, "BTC/USD", "5m", 100, 101, 99, 100, 10, Market.CRYPTO)
+    avax = Bar(timestamp, "AVAX/USD", "5m", 40, 41, 39, 40, 10, Market.CRYPTO)
+    evaluated: list[tuple[str, ...]] = []
+    created_orders: list[OrderIntent] = []
+
+    class Engine:
+        entry_halt_reason = None
+        has_data_gaps = True
+
+        def __init__(self) -> None:
+            self._not_ready = {("AVAX/USD", "5m"), ("AVAX/USD", "1h")}
+            self.orders = SimpleNamespace(orders={})
+
+        def has_data_gaps_for_market(self, market: Market) -> bool:
+            return market == Market.CRYPTO
+
+        def has_data_gaps_for_symbol(self, symbol: str) -> bool:
+            return any(candidate == symbol for candidate, _timeframe in self._not_ready)
+
+        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            return SimpleNamespace(
+                bars=tuple(sorted(bars, key=lambda bar: bar.symbol)),
+                mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
+            )
+
+        def evaluate_timestamp(
+            self,
+            _timestamp: datetime,
+            symbols: list[str],
+            _account: AccountSnapshot,
+            *,
+            missing_symbols: tuple[str, ...],
+        ) -> Any:
+            del missing_symbols
+            evaluated.append(tuple(symbols))
+            order = OrderIntent(
+                signal_id="btc-signal",
+                symbol="BTC/USD",
+                market=Market.CRYPTO,
+                direction=Direction.LONG,
+                qty=0.1,
+                entry_price=100,
+                stop_price=95,
+                target_price=110,
+                strategy="test",
+            )
+            created_orders.append(order)
+            self.orders.orders[order.client_order_id] = SimpleNamespace(state=OrderState.ACCEPTED)
+            return SimpleNamespace(orders=(order,))
+
+    runtime.engine = Engine()
+    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
+    runtime.config = SimpleNamespace(
+        maximum_queue_age_seconds=30,
+        maximum_account_age_for_entry_seconds=300,
+    )
+    runtime._historical = None
+    runtime._warming_up = False
+    runtime._not_ready_symbols = set()
+    runtime._last_account_at = datetime.now(UTC)
+    runtime._last_entry_cycle_timestamp = None
+    runtime._circuit_breaker_reason = None
+    runtime._state = "running"
+    runtime._workers = {}
+    runtime._market_entry_halts = {Market.CRYPTO: None}
+    runtime._running = True
+    runtime._refresh_readiness = lambda: None
+    runtime._persist_risk_state = lambda _account: None
+    runtime.health = lambda: SimpleNamespace(queue_age_seconds=0)
+
+    runtime._process_timestamp(
+        timestamp,
+        {"BTC/USD": btc, "AVAX/USD": avax},
+        {"BTC/USD", "AVAX/USD"},
+        market=Market.CRYPTO,
+    )
+
+    assert runtime._entry_readiness_reasons(Market.CRYPTO) == ()
+    assert evaluated == [("BTC/USD",)]
+    assert [order.symbol for order in created_orders] == ["BTC/USD"]
+
+
+def test_symbol_gap_check_covers_primary_and_higher_timeframes() -> None:
+    engine = TradingEngine(
+        SimpleNamespace(),
+        EngineConfig(),
+    )
+    engine._not_ready.update({("AVAX/USD", "5m"), ("AVAX/USD", "1h")})
+
+    assert engine.has_data_gaps_for_symbol("AVAX/USD")
+    assert not engine.has_data_gaps_for_symbol("BTC/USD")
 
 
 def test_blocking_stream_workers_stay_healthy_while_thread_is_alive() -> None:

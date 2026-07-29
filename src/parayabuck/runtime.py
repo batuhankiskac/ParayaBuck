@@ -879,14 +879,16 @@ class EngineRuntime:
         ready_bars = {
             symbol: bar
             for symbol, bar in bars_by_symbol.items()
-            if symbol not in self._not_ready_symbols and not market_reasons[bar.market]
+            if symbol not in self._not_ready_symbols
+            and not self._engine_has_symbol_gap(symbol)
+            and not market_reasons[bar.market]
         }
         if not ready_bars:
             return
         missing = tuple(sorted(expected - set(bars_by_symbol)))
         if missing:
             log.warning(
-                "Ranking universe is partial; evaluating available symbols: %s",
+                "Ranking universe is partial; missing symbols: %s",
                 ", ".join(missing),
             )
         try:
@@ -942,10 +944,6 @@ class EngineRuntime:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
-        if market is None and self.engine.has_data_gaps:
-            reasons.append("data_gap")
-        elif market is not None and self._engine_has_market_gap(market):
-            reasons.append(f"{market.value}_data_gap")
         if (
             self._last_account_at is None
             or (datetime.now(UTC) - self._last_account_at).total_seconds()
@@ -982,6 +980,10 @@ class EngineRuntime:
     def _engine_has_market_gap(self, market: Market) -> bool:
         checker = getattr(self.engine, "has_data_gaps_for_market", None)
         return bool(checker(market)) if checker is not None else bool(self.engine.has_data_gaps)
+
+    def _engine_has_symbol_gap(self, symbol: str) -> bool:
+        checker = getattr(self.engine, "has_data_gaps_for_symbol", None)
+        return bool(checker(symbol)) if checker is not None else False
 
     def _repair_gap(self, bar: Bar) -> None:
         history = self._historical

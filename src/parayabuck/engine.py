@@ -100,6 +100,11 @@ class TradingEngine:
             ("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready
         )
 
+    def has_data_gaps_for_symbol(self, symbol: str) -> bool:
+        """Return whether any tracked timeframe for a symbol is quarantined."""
+        wanted = canonical_symbol(symbol)
+        return any(candidate == wanted for candidate, _timeframe in self._not_ready)
+
     def process_cycle(self, closed_bars: list[Bar]) -> list[OrderIntent]:
         ingestion = self.ingest_closed_bars(closed_bars)
         tradeable = [

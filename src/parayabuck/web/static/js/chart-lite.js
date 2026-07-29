@@ -34,8 +34,14 @@
             ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
             ctx.clearRect(0, 0, width, height);
             const dataset = (this.data.datasets || [])[0];
-            const values = dataset ? dataset.data.map(Number).filter(Number.isFinite) : [];
-            const labels = this.data.labels || [];
+            const rawLabels = this.data.labels || [];
+            const points = dataset
+                ? dataset.data
+                    .map((value, index) => ({ value: Number(value), label: rawLabels[index] }))
+                    .filter((point) => Number.isFinite(point.value))
+                : [];
+            const values = points.map((point) => point.value);
+            const labels = points.map((point) => point.label);
 
             if (values.length === 0) {
                 ctx.fillStyle = '#64748B';

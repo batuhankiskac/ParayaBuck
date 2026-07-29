@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
@@ -16,6 +17,7 @@ from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.data.alpaca")
+_NEW_YORK = ZoneInfo("America/New_York")
 
 _TIMEFRAMES = {
     "1m": TimeFrame(1, TimeFrameUnit.Minute),
@@ -82,14 +84,27 @@ class AlpacaHistoricalData:
             "crypto" if market == Market.CRYPTO else str(self._stock_feed).lower().split(".")[-1]
         )
         cached = {
-            symbol: self._cache.get(
-                symbol,
-                timeframe,
-                feed=feed_name,
-                start=start_at,
-                end=end_at,
-            )
+            symbol: [
+                bar
+                for bar in self._cache.get(
+                    symbol,
+                    timeframe,
+                    feed=feed_name,
+                    start=start_at,
+                    end=end_at,
+                )
+                if (
+                    market != Market.EQUITY
+                    or timeframe == "1d"
+                    or self._is_regular_equity_timestamp(bar.timestamp)
+                )
+            ]
             for symbol in symbols
+        }
+        fresh_cached = {
+            symbol: bars
+            for symbol, bars in cached.items()
+            if self._cache_is_fresh(bars, market, timeframe, end_at)
         }
         response: Any
         try:
@@ -116,15 +131,15 @@ class AlpacaHistoricalData:
                     )
                 )
         except Exception:
-            if any(cached.values()):
+            if len(fresh_cached) == len(symbols):
                 log.warning("Historical API failed; using feed-matched local warmup cache")
-                return cached
+                return fresh_cached
             raise
         frame = response.df
         if frame.empty:
-            if any(cached.values()):
+            if len(fresh_cached) == len(symbols):
                 log.warning("Historical API returned no rows; using feed-matched local cache")
-                return cached
+                return fresh_cached
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
@@ -133,9 +148,16 @@ class AlpacaHistoricalData:
                 timestamp = timestamp.to_pydatetime()
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
+            timestamp = timestamp.astimezone(UTC)
+            if (
+                market == Market.EQUITY
+                and timeframe != "1d"
+                and not self._is_regular_equity_timestamp(timestamp)
+            ):
+                continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             item = Bar(
-                timestamp=timestamp.astimezone(UTC),
+                timestamp=timestamp,
                 symbol=row_symbol,
                 timeframe=timeframe,
                 open=float(row.open),
@@ -155,6 +177,39 @@ class AlpacaHistoricalData:
             bars[symbol] = [merged[key] for key in sorted(merged)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         return bars
+
+    @staticmethod
+    def _is_regular_equity_timestamp(timestamp: datetime) -> bool:
+        local = timestamp.astimezone(_NEW_YORK)
+        minute = local.hour * 60 + local.minute
+        return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
+
+    @staticmethod
+    def _cache_is_fresh(
+        bars: list[Bar],
+        market: Market,
+        timeframe: str,
+        end_at: datetime,
+    ) -> bool:
+        if not bars:
+            return False
+        latest = max(bar.timestamp for bar in bars)
+        age = end_at - latest
+        if age.total_seconds() < 0:
+            return False
+        if market == Market.EQUITY:
+            maximum_age = timedelta(days=4 if timeframe != "1d" else 8)
+        else:
+            minutes = {
+                "1m": 1,
+                "5m": 5,
+                "15m": 15,
+                "30m": 30,
+                "1h": 60,
+                "1d": 1440,
+            }[timeframe]
+            maximum_age = timedelta(minutes=max(180, minutes * 3))
+        return age <= maximum_age
 
     def get_latest_crypto_quotes(self, symbols: list[str]) -> dict[str, Any]:
         canonical = [canonical_symbol(symbol, Market.CRYPTO) for symbol in symbols]

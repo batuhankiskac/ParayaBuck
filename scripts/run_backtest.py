@@ -57,7 +57,7 @@ def main() -> None:
         config.engine,
         timeframe=args.timeframe,
         higher_timeframe=higher_timeframe,
-        trading_enabled=False,
+        trading_enabled=True,
     )
     engine = BacktestEngine(
         backtest_config,

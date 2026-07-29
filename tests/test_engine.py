@@ -681,6 +681,26 @@ def test_only_stop_like_closing_order_counts_as_position_protection() -> None:
     ]
     assert broker._has_protective_order("BTC/USD", True, 1)
 
+    client.orders = [
+        SimpleNamespace(
+            side="sell",
+            type="limit",
+            status="new",
+            client_order_id="parayabuck-parent",
+            legs=[
+                SimpleNamespace(
+                    side="sell",
+                    type="stop_limit",
+                    status="canceled",
+                    stop_price="95",
+                    qty="1",
+                    legs=None,
+                )
+            ],
+        )
+    ]
+    assert not broker._has_protective_order("BTC/USD", True, 1)
+
 
 def test_validated_values_rounds_equity_bracket_to_alpaca_rules() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)

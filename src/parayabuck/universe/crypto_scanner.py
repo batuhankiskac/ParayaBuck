@@ -416,8 +416,15 @@ def validate_active_crypto_universe(
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:
             return (), "invalid"
-        age_hours = (datetime.now(UTC) - selection_at.astimezone(UTC)).total_seconds() / 3600
-        if age_hours < 0 or age_hours > config.active_universe_max_age_hours:
+        now = datetime.now(UTC)
+        selection_age_hours = (now - selection_at.astimezone(UTC)).total_seconds() / 3600
+        data_age_hours = (now - data_at.astimezone(UTC)).total_seconds() / 3600
+        if (
+            selection_age_hours < 0
+            or data_age_hours < 0
+            or selection_age_hours > config.active_universe_max_age_hours
+            or data_age_hours > config.active_universe_max_age_hours
+        ):
             return (), "stale"
         raw = payload["selected_symbols"]
         if not isinstance(raw, list):

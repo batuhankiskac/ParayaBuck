@@ -230,16 +230,25 @@ class EngineRuntime:
         if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
             required.add("pb-crypto")
         heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
-        blocking_stream_workers = {"pb-stocks", "pb-crypto", "pb-trade-updates"}
-        alive = all(
-            self._workers.get(name)
-            and self._workers[name].alive
-            and (
-                name in blocking_stream_workers
-                or (now - self._workers[name].last_heartbeat).total_seconds() <= heartbeat_ttl
-            )
-            for name in required
-        )
+
+        def worker_healthy(name: str) -> bool:
+            worker = self._workers.get(name)
+            if worker is None or not worker.alive:
+                return False
+            if name == "pb-trade-updates":
+                return True
+            if name in {"pb-stocks", "pb-crypto"}:
+                market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
+                event_required = market == Market.CRYPTO or _is_regular_equity_time(now)
+                if not event_required:
+                    return True
+                return bool(
+                    worker.last_event_at
+                    and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
+                )
+            return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
+
+        alive = all(worker_healthy(name) for name in required)
         account_fresh = (
             self._last_account_at is not None
             and (now - self._last_account_at).total_seconds()
@@ -266,7 +275,23 @@ class EngineRuntime:
             worker = self._workers.get(worker_name)
             not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
             ready = not any(symbol in not_ready_symbols for symbol in symbols)
-            stream_healthy = not enabled or not symbols or bool(worker and worker.alive)
+            event_required = market == Market.CRYPTO or _is_regular_equity_time(now)
+            stream_healthy = (
+                not enabled
+                or not symbols
+                or bool(
+                    worker
+                    and worker.alive
+                    and (
+                        not event_required
+                        or (
+                            worker.last_event_at is not None
+                            and (now - worker.last_event_at).total_seconds()
+                            <= max(180.0, heartbeat_ttl)
+                        )
+                    )
+                )
+            )
             market_health[market.value] = {
                 "enabled": enabled,
                 "symbol_count": len(symbols),
@@ -659,6 +684,10 @@ class EngineRuntime:
     async def _on_minute_bar(self, bar: Bar) -> None:
         if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
             return
+        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
+        if worker := self._workers.get(worker_name):
+            worker.last_heartbeat = datetime.now(UTC)
+            worker.last_event_at = datetime.now(UTC)
         self._mark_market_stream_recovered(bar.market)
         if bar.market == Market.CRYPTO:
             try:
@@ -689,6 +718,10 @@ class EngineRuntime:
     async def _on_updated_minute_bar(self, bar: Bar) -> None:
         if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
             return
+        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
+        if worker := self._workers.get(worker_name):
+            worker.last_heartbeat = datetime.now(UTC)
+            worker.last_event_at = datetime.now(UTC)
         with self._ingestion_lock:
             primary = self.primary_aggregator.update_correction(bar)
             higher = self.higher_aggregator.update_correction(bar)
@@ -1140,7 +1173,11 @@ def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
 
 
 def _is_regular_equity_bar(bar: Bar) -> bool:
-    local = bar.timestamp.astimezone(_NEW_YORK)
+    return _is_regular_equity_time(bar.timestamp)
+
+
+def _is_regular_equity_time(timestamp: datetime) -> bool:
+    local = timestamp.astimezone(_NEW_YORK)
     minute = local.hour * 60 + local.minute
     return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
 

@@ -257,6 +257,12 @@ class AIDecisionJournal:
             )
             if record is not None:
                 label = "EXIT" if fill.direction == Direction.FLAT else "ENTRY"
+                if label == "ENTRY":
+                    record.traded = True
+                    self._atomic_json(
+                        self._open_path,
+                        [asdict(item) for item in self._open.values()],
+                    )
                 self._append(
                     self.root / record.decision_file,
                     (

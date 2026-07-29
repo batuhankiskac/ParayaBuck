@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -136,6 +137,11 @@ class Bar:
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
             raise ValueError("Bar timestamps must be timezone-aware")
+        if not all(
+            math.isfinite(value)
+            for value in (self.open, self.high, self.low, self.close, self.volume)
+        ):
+            raise ValueError("Bar values must be finite")
         if self.high < self.low or not self.low <= self.open <= self.high:
             raise ValueError("Invalid OHLC values")
         if not self.low <= self.close <= self.high or self.volume < 0:
@@ -165,9 +171,17 @@ class Signal:
         return reward / risk if risk > 0 else 0.0
 
     def __post_init__(self) -> None:
-        if not 0 <= self.score <= 100 or not 0 <= self.confidence <= 1:
+        if self.timestamp.tzinfo is None:
+            raise ValueError("Signal timestamps must be timezone-aware")
+        if (
+            not math.isfinite(self.score)
+            or not math.isfinite(self.confidence)
+            or not 0 <= self.score <= 100
+            or not 0 <= self.confidence <= 1
+        ):
             raise ValueError("Signal score/confidence out of range")
-        if min(self.entry_price, self.invalidation_price, self.target_price) <= 0:
+        prices = (self.entry_price, self.invalidation_price, self.target_price)
+        if any(not math.isfinite(value) for value in prices) or min(prices) <= 0:
             raise ValueError("Signal prices must be positive")
 
 

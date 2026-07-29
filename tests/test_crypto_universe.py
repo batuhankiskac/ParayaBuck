@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -22,7 +23,12 @@ from parayabuck.execution.alpaca import (
     CryptoPriceObservation,
 )
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.universe import EquityCandidate, EquityUniverseScanner, load_active_symbols
+from parayabuck.universe import (
+    EquityCandidate,
+    EquityUniverseScanner,
+    load_active_symbols,
+    validate_active_universe,
+)
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -127,6 +133,34 @@ def test_scanner_is_deterministic_and_atomic(tmp_path: Path) -> None:
     scanner.persist(first)
     assert load_active_symbols(config) == first.selected_symbols
     assert not active.with_suffix(".json.tmp").exists()
+
+
+def test_equity_universe_rejects_stale_data_and_non_equity_symbols(tmp_path: Path) -> None:
+    active = tmp_path / "active.json"
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=3,
+        reference_symbols=("SPY",),
+        active_universe_path=str(active),
+        active_universe_max_age_hours=1,
+    )
+    scanner = EquityUniverseScanner(config)
+    now = datetime.now(UTC)
+    scanner.persist(
+        scanner.scan(
+            [EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0)],
+            data_timestamp=now - timedelta(hours=2),
+            selection_timestamp=now,
+        )
+    )
+    assert validate_active_universe(config)[1] == "stale"
+
+    payload = json.loads(active.read_text())
+    payload["data_timestamp"] = now.isoformat()
+    payload["selected_symbols"].append("BTC/USD")
+    payload["candidate_symbols"].append("BTC/USD")
+    payload["score_breakdown"]["BTC/USD"] = {}
+    active.write_text(json.dumps(payload))
+    assert validate_active_universe(config)[1] == "invalid"
 
 
 def test_scanner_reserves_approved_inverse_etf_and_rejects_leveraged_inverse(

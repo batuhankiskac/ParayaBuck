@@ -125,9 +125,29 @@ class EngineManager:
                 self.engine_state = "error"
             return self.engine_state
 
+    def has_active_runtime(self) -> bool:
+        with self._state_lock:
+            return self.runtime is not None or self.engine_state in {
+                "starting",
+                "running",
+                "warming_up",
+                "degraded",
+                "halted",
+                "stopping",
+                "stop_failed",
+            }
+
     def start_engine(self) -> None:
         with self._state_lock:
-            if self.engine_state in {"starting", "running", "stopping"}:
+            if self.runtime is not None or self.engine_state in {
+                "starting",
+                "running",
+                "warming_up",
+                "degraded",
+                "halted",
+                "stopping",
+                "stop_failed",
+            }:
                 raise ValueError(f"Engine is already {self.engine_state}")
             self.engine_state = "starting"
             self.last_engine_error = None
@@ -187,7 +207,7 @@ class EngineManager:
 
     def stop_engine(self) -> None:
         with self._state_lock:
-            if self.engine_state == "stopped":
+            if self.engine_state == "stopped" and self.runtime is None:
                 return
             self.engine_state = "stopping"
             runtime = self.runtime
@@ -333,7 +353,7 @@ class EngineManager:
         }
 
     def request_live_arming(self) -> str:
-        if self.engine_state in {"starting", "running", "stopping"}:
+        if self.has_active_runtime():
             raise ValueError("Stop the engine before requesting live mode")
         if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
             raise ValueError("PARAYABUCK_ENABLE_LIVE=YES is required for live mode")
@@ -531,6 +551,23 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
 
 
 manager = EngineManager()
+
+
+def _manager_has_active_runtime(value: Any) -> bool:
+    check = getattr(value, "has_active_runtime", None)
+    if callable(check):
+        return bool(check())
+    return getattr(value, "runtime", None) is not None or getattr(
+        value, "engine_state", "stopped"
+    ) in {
+        "starting",
+        "running",
+        "warming_up",
+        "degraded",
+        "halted",
+        "stopping",
+        "stop_failed",
+    }
 
 
 async def _auto_start_paper_engine() -> None:
@@ -779,7 +816,7 @@ async def stop_engine() -> dict[str, str]:
 
 @app.post("/api/mode")
 async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
-    if manager.engine_state in {"starting", "running", "stopping"}:
+    if _manager_has_active_runtime(manager):
         raise HTTPException(
             status_code=400,
             detail="Cannot toggle trading mode while engine is running. Stop the bot first.",
@@ -965,7 +1002,10 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
 
         # Validation and live-token checks are complete before a healthy
         # runtime is stopped.
-        restart_engine = manager.engine_state == "running" and payload.restart_engine
+        active_runtime = _manager_has_active_runtime(manager)
+        restart_engine = active_runtime and payload.restart_engine
+        if active_runtime and not payload.restart_engine:
+            raise ValueError("Stop the bot before saving settings without a restart")
         if restart_engine:
             manager.stop_engine()
             if manager.engine_state != "stopped":

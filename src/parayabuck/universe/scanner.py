@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import EquityUniverseConfig
+from parayabuck.core.models import Market
 from parayabuck.markets.sectors import sector_of
 from parayabuck.markets.symbols import canonical_symbol
 
@@ -38,6 +39,7 @@ class ScannerResult:
     selection_timestamp: str
     data_timestamp: str
     selected_symbols: tuple[str, ...]
+    candidate_symbols: tuple[str, ...]
     score_breakdown: dict[str, dict[str, float | str]]
     eliminated: dict[str, str]
     scanner_version: str
@@ -49,7 +51,7 @@ class ScannerResult:
 class EquityUniverseScanner:
     """Deterministic pre-session selector; it never opens a market-data stream."""
 
-    version = "equity-scanner-v1"
+    version = "equity-scanner-v2"
 
     def __init__(
         self,
@@ -81,7 +83,9 @@ class EquityUniverseScanner:
         references = self.config.reference_symbols
         pinned = tuple(
             symbol
-            for symbol in dict.fromkeys(canonical_symbol(item) for item in pinned_symbols)
+            for symbol in dict.fromkeys(
+                canonical_symbol(item, Market.EQUITY) for item in pinned_symbols
+            )
             if symbol not in references and symbol not in self.config.inverse_trade_symbols
         )
         reserved = tuple(dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned)))
@@ -92,7 +96,7 @@ class EquityUniverseScanner:
         seen: set[str] = set()
         candidate_sector: dict[str, str] = {}
         for candidate in candidates:
-            symbol = canonical_symbol(candidate.symbol)
+            symbol = canonical_symbol(candidate.symbol, Market.EQUITY)
             if symbol in seen:
                 raise ValueError(f"Duplicate canonical scanner candidate: {symbol}")
             seen.add(symbol)
@@ -173,6 +177,7 @@ class EquityUniverseScanner:
             selection_timestamp=timestamp.isoformat(),
             data_timestamp=data_timestamp.astimezone(UTC).isoformat(),
             selected_symbols=tuple(selected),
+            candidate_symbols=tuple(sorted(seen)),
             score_breakdown=breakdowns,
             eliminated=dict(sorted(eliminated.items())),
             scanner_version=self.version,
@@ -250,15 +255,43 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:
             return (), "invalid"
-        age_hours = (datetime.now(UTC) - selection_at.astimezone(UTC)).total_seconds() / 3600
-        if age_hours < 0 or age_hours > config.active_universe_max_age_hours:
+        now = datetime.now(UTC)
+        selection_age_hours = (now - selection_at.astimezone(UTC)).total_seconds() / 3600
+        data_age_hours = (now - data_at.astimezone(UTC)).total_seconds() / 3600
+        if (
+            selection_age_hours < 0
+            or data_age_hours < 0
+            or selection_age_hours > config.active_universe_max_age_hours
+            or data_age_hours > config.active_universe_max_age_hours
+        ):
             return (), "stale"
         raw = payload["selected_symbols"]
         if not isinstance(raw, list):
             return (), "invalid"
-        selected = tuple(canonical_symbol(str(item)) for item in raw)
+        selected = tuple(canonical_symbol(str(item), Market.EQUITY) for item in raw)
         if len(selected) != len(set(selected)):
             return (), "invalid"
+        raw_candidates = payload["candidate_symbols"]
+        if not isinstance(raw_candidates, list):
+            return (), "invalid"
+        candidates = {canonical_symbol(str(item), Market.EQUITY) for item in raw_candidates}
+        breakdown = payload["score_breakdown"]
+        if not isinstance(breakdown, dict) or not set(selected).issubset(breakdown):
+            return (), "invalid"
+        managed_pins = {
+            symbol
+            for symbol in selected
+            if isinstance(breakdown.get(symbol), dict)
+            and breakdown[symbol].get("selection_role") == "pinned_managed_position"
+        }
+        allowed = {
+            *candidates,
+            *config.reference_symbols,
+            *config.inverse_trade_symbols,
+            *managed_pins,
+        }
+        if not set(selected).issubset(allowed):
+            return (), "outside_candidate_pool"
         required = {*config.reference_symbols, *config.inverse_trade_symbols}
         if not required.issubset(selected):
             return (), "invalid"

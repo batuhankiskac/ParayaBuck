@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,7 +38,7 @@ class RiskLimits:
             self.daily_loss_limit_pct,
             self.max_drawdown_pct,
         )
-        if any(value <= 0 or value > 1 for value in ratios):
+        if any(not math.isfinite(value) or value <= 0 or value > 1 for value in ratios):
             raise ValueError("Risk ratios must be in (0, 1]")
         if (
             self.max_positions <= 0
@@ -87,7 +88,11 @@ class EngineConfig:
         supported = {"1m", "5m", "15m", "30m", "1h", "1d"}
         if self.timeframe not in supported or self.higher_timeframe not in supported:
             raise ValueError("Unsupported timeframe")
-        if not 0 <= self.minimum_signal_score <= 100 or self.warmup_bars < 50:
+        if (
+            not math.isfinite(self.minimum_signal_score)
+            or not 0 <= self.minimum_signal_score <= 100
+            or self.warmup_bars < 50
+        ):
             raise ValueError("Invalid signal score or warmup")
         if self.prediction_horizon_bars <= 0:
             raise ValueError("prediction_horizon_bars must be positive")
@@ -105,8 +110,22 @@ class EngineConfig:
 
     @property
     def consecutive_values_invalid(self) -> bool:
+        float_values = (
+            self.event_grace_seconds,
+            self.data_finalization_grace_seconds,
+            self.maximum_signal_age_seconds,
+            self.maximum_queue_age_seconds,
+            self.account_snapshot_ttl_seconds,
+            self.account_poll_interval_seconds,
+            self.maximum_account_age_for_entry_seconds,
+            self.crypto_stop_limit_offset_bps,
+            self.crypto_emergency_exit_bps,
+            self.crypto_stop_cancel_timeout_seconds,
+            self.crypto_stop_cancel_poll_interval_seconds,
+        )
         return (
-            self.event_grace_seconds <= 0
+            any(not math.isfinite(value) for value in float_values)
+            or self.event_grace_seconds <= 0
             or self.data_finalization_grace_seconds < 0
             or self.maximum_signal_age_seconds <= 0
             or self.maximum_queue_age_seconds <= 0

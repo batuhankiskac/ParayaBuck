@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
@@ -20,6 +21,7 @@ from parayabuck.core.models import (
     Direction,
     ExecutionEvent,
     ExecutionStatus,
+    Fill,
     Market,
     OrderIntent,
     OrderRole,
@@ -40,6 +42,38 @@ from parayabuck.runtime import EngineRuntime, WorkerHealth, _symbol_batches
 from parayabuck.web import server
 
 pytestmark = pytest.mark.paper_chaos
+
+
+def test_market_models_reject_non_finite_values_and_naive_signal_time() -> None:
+    aware = datetime.now(UTC)
+    with pytest.raises(ValueError, match="finite"):
+        Bar(aware, "AAPL", "5m", 100, 101, 99, 100, math.nan, Market.EQUITY)
+    with pytest.raises(ValueError, match="positive"):
+        Signal(
+            "AAPL",
+            Market.EQUITY,
+            Direction.LONG,
+            "test",
+            80,
+            0.8,
+            math.nan,
+            95,
+            110,
+            aware,
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        Signal(
+            "AAPL",
+            Market.EQUITY,
+            Direction.LONG,
+            "test",
+            80,
+            0.8,
+            100,
+            95,
+            110,
+            datetime.now(),
+        )
 
 
 def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
@@ -80,12 +114,26 @@ def test_execution_ledger_preserves_and_moves_legacy_decision_orders(
 def test_ledger_rejects_a_second_active_entry_for_the_same_symbol(tmp_path: Path) -> None:
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     first = OrderIntent(
-        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
-        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="one",
+        symbol="MSFT",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=1,
+        entry_price=100,
+        stop_price=95,
+        target_price=110,
+        strategy="test",
+        signal_id="one",
     )
     second = OrderIntent(
-        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
-        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="two",
+        symbol="MSFT",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=1,
+        entry_price=100,
+        stop_price=95,
+        target_price=110,
+        strategy="test",
+        signal_id="two",
     )
     ledger.register_entry_order("acct", first)
 
@@ -98,8 +146,15 @@ def test_ledger_rejects_a_second_active_entry_for_the_same_symbol(tmp_path: Path
 def test_rejected_broker_entry_releases_its_ledger_reservation(tmp_path: Path) -> None:
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     intent = OrderIntent(
-        symbol="MSFT", market=Market.EQUITY, direction=Direction.LONG, qty=1,
-        entry_price=100, stop_price=95, target_price=110, strategy="test", signal_id="one",
+        symbol="MSFT",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=1,
+        entry_price=100,
+        stop_price=95,
+        target_price=110,
+        strategy="test",
+        signal_id="one",
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker._account_id = "acct"
@@ -354,7 +409,7 @@ def test_symbol_gap_check_covers_primary_and_higher_timeframes() -> None:
     assert not engine.has_data_gaps_for_symbol("BTC/USD")
 
 
-def test_blocking_stream_workers_stay_healthy_while_thread_is_alive() -> None:
+def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     now = datetime.now(UTC)
     stale = now - timedelta(minutes=10)
@@ -368,7 +423,7 @@ def test_blocking_stream_workers_stay_healthy_while_thread_is_alive() -> None:
         "pb-decisions": WorkerHealth(now, now, alive=True),
         "pb-account": WorkerHealth(now, now, alive=True),
         "pb-trade-updates": WorkerHealth(stale, stale, alive=True),
-        "pb-stocks": WorkerHealth(stale, stale, alive=True),
+        "pb-stocks": WorkerHealth(stale, stale, last_event_at=now, alive=True),
     }
     runtime._running = True
     runtime._state = "running"
@@ -382,6 +437,39 @@ def test_blocking_stream_workers_stay_healthy_while_thread_is_alive() -> None:
 
     assert runtime.health().healthy is True
     assert runtime.health().state == "running"
+
+
+def test_stale_crypto_stream_event_degrades_runtime() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    stale = now - timedelta(minutes=10)
+    runtime.symbols = ["BTC/USD"]
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15,
+        maximum_account_age_for_entry_seconds=30,
+        maximum_queue_age_seconds=30,
+    )
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, now, alive=True),
+        "pb-crypto": WorkerHealth(stale, stale, last_event_at=stale, alive=True),
+    }
+    runtime._running = True
+    runtime._state = "running"
+    runtime._last_account_at = now
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._events = SimpleNamespace(qsize=lambda: 0)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.engine = SimpleNamespace(has_data_gaps=False)
+
+    health = runtime.health()
+
+    assert health.healthy is False
+    assert health.state == "degraded"
+    assert health.markets["crypto"]["stream_healthy"] is False
 
 
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
@@ -742,6 +830,44 @@ def test_execution_ledger_applies_cumulative_entry_and_child_exit_deltas(
         """
     ).fetchone()
     assert row == (10.0, 10.0, 0.0, "closed")
+    ledger.close()
+
+
+def test_late_entry_fee_restates_realized_pnl(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "fees.sqlite3"))
+    order = OrderIntent(
+        "signal",
+        "AAPL",
+        Market.EQUITY,
+        Direction.LONG,
+        10,
+        100,
+        95,
+        110,
+        "test",
+        client_order_id="parayabuck-fee-entry",
+    )
+    ledger.register_entry_order("acct", order, "broker-entry")
+    ledger.record_entry_fill(
+        "acct",
+        order,
+        Fill(order.client_order_id, "AAPL", 10, 100, Direction.LONG, datetime.now(UTC)),
+        "broker-entry",
+    )
+    assert ledger.record_exit_fill_delta("acct", order.client_order_id, 10, 110) == 100
+
+    assert ledger.apply_fee_activity(
+        "acct",
+        activity_id="fee-1",
+        broker_order_id="broker-entry",
+        fee=5,
+        occurred_at=datetime.now(UTC),
+    )
+    realized = ledger.connection.execute(
+        "SELECT realized_pnl FROM managed_positions WHERE entry_client_order_id=?",
+        (order.client_order_id,),
+    ).fetchone()[0]
+    assert realized == pytest.approx(95)
     ledger.close()
 
 

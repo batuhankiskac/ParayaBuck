@@ -64,6 +64,16 @@ class _RestartFailureManagerStub(_EngineManagerStub):
         raise TimeoutError("Alpaca timed out")
 
 
+@pytest.mark.parametrize("state", ["warming_up", "degraded", "halted", "stop_failed"])
+def test_engine_manager_refuses_second_runtime(state: str) -> None:
+    manager = server.EngineManager()
+    manager.engine_state = state
+    manager.runtime = object()
+
+    with pytest.raises(ValueError, match=f"already {state}"):
+        manager.start_engine()
+
+
 def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -380,9 +390,7 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(
             "active_universe_path": str(equity_path),
         },
     )()
-    crypto_config = type(
-        "CryptoConfig", (), {"active_universe_path": str(crypto_path)}
-    )()
+    crypto_config = type("CryptoConfig", (), {"active_universe_path": str(crypto_path)})()
     config = type(
         "Config",
         (),

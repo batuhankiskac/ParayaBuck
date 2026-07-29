@@ -875,10 +875,19 @@ class ExecutionLedger:
                     self.connection.execute(
                         """
                         UPDATE managed_positions
-                        SET entry_fees=entry_fees+?, updated_at=?
+                        SET entry_fees=entry_fees+?,
+                            realized_pnl=realized_pnl-(
+                                CASE
+                                    WHEN entry_filled_qty > 0
+                                    THEN ? * MIN(exit_filled_qty, entry_filled_qty)
+                                             / entry_filled_qty
+                                    ELSE 0
+                                END
+                            ),
+                            updated_at=?
                         WHERE account_id=? AND entry_client_order_id=?
                         """,
-                        (fee, now, account_id, str(order[0])),
+                        (fee, fee, now, account_id, str(order[0])),
                     )
                 else:
                     self.connection.execute(

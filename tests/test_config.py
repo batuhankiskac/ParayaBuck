@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
@@ -49,3 +50,10 @@ def test_rejects_duplicate_symbols(tmp_path: Path) -> None:
 def test_risk_percentages_are_bounded() -> None:
     with pytest.raises(ValueError, match="Risk ratios"):
         RiskLimits(daily_loss_limit_pct=1.01)
+
+
+def test_non_finite_config_values_are_rejected() -> None:
+    with pytest.raises(ValueError, match="Risk ratios"):
+        RiskLimits(risk_per_trade_pct=math.nan)
+    with pytest.raises(ValueError, match="timing"):
+        EngineConfig(event_grace_seconds=math.nan)

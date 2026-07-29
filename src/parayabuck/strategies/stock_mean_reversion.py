@@ -23,10 +23,10 @@ class StockMeanReversion(Strategy):
         supported = self.supports(bars)
         regime_ok = context.regime.regime == Regime.RANGE
         inverse = bool(bars and is_inverse_equity(bars[-1].symbol))
-        benchmark_ok = (
-            not inverse
-            or context.benchmark_regime in {Regime.TREND_DOWN, Regime.UNKNOWN}
-        )
+        benchmark_ok = not inverse or context.benchmark_regime in {
+            Regime.TREND_DOWN,
+            Regime.UNKNOWN,
+        }
         conditions = [
             ConditionEvaluation(
                 "strategy_support",

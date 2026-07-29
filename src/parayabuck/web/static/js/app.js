@@ -90,10 +90,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isPaperMode = true;
     let accountSuffix = '';
-    const equityHistoryKey = 'parayabuck-equity-history-v1';
-    const loadEquityHistory = () => {
+    let equityHistoryScope = 'paper:unknown';
+    const equityHistoryKey = (scope) => `parayabuck-equity-history-v2:${scope}`;
+    const loadEquityHistory = (scope) => {
         try {
-            const stored = JSON.parse(sessionStorage.getItem(equityHistoryKey) || '{}');
+            const stored = JSON.parse(sessionStorage.getItem(equityHistoryKey(scope)) || '{}');
             const values = Array.isArray(stored.values) ? stored.values.map(Number) : [];
             const times = Array.isArray(stored.times) ? stored.times.map(String) : [];
             const snapshots = Array.isArray(stored.snapshots) ? stored.snapshots.map(String) : [];
@@ -113,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return { values: [], times: [], snapshots: [] };
     };
-    const storedEquityHistory = loadEquityHistory();
+    const storedEquityHistory = loadEquityHistory(equityHistoryScope);
     let equityHistory = storedEquityHistory.values;
     let timeHistory = storedEquityHistory.times;
     let snapshotHistory = storedEquityHistory.snapshots;
@@ -275,6 +276,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateAccountUI = (data) => {
         if (!data) return;
         accountSuffix = data.account_suffix || accountSuffix;
+        const nextHistoryScope = `${isPaperMode ? 'paper' : 'live'}:${accountSuffix || 'unknown'}`;
+        if (nextHistoryScope !== equityHistoryScope) {
+            equityHistoryScope = nextHistoryScope;
+            const stored = loadEquityHistory(equityHistoryScope);
+            equityHistory = stored.values;
+            timeHistory = stored.times;
+            snapshotHistory = stored.snapshots;
+            equityChart.data.labels = timeHistory;
+            equityChart.data.datasets[0].data = equityHistory;
+            equityChart.update();
+        }
 
         equityValue.textContent = formatCurrency(data.equity);
         cashValue.textContent = formatCurrency(data.cash);
@@ -301,23 +313,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (positions.length === 0) {
             positionsTableBody.innerHTML = `<tr><td colspan="9" class="empty-state"><span class="empty-icon">—</span>Henüz açık pozisyon bulunmuyor</td></tr>`;
         } else {
-            positionsTableBody.innerHTML = positions.map(p => `
-                <tr>
-                    <td><strong>${p.symbol}</strong>${p.ownership === 'external' ? ' <small>(external)</small>' : ''}</td>
-                    <td>${p.market || '-'}</td>
-                    <td><span class="${p.direction === 'LONG' ? 'badge-long' : 'badge-short'}">${p.direction}</span></td>
-                    <td>${p.qty}</td>
-                    <td>$${p.avg_price.toFixed(2)}</td>
-                    <td class="${p.unrealized_pnl > 0 ? 'positive' : (p.unrealized_pnl < 0 ? 'negative' : '')}">
-                        ${formatPnl(p.unrealized_pnl)}
-                    </td>
-                    <td class="${p.manual_intervention_required ? 'negative' : ''}">
-                        ${p.manual_intervention_required ? 'MANUAL' : (p.protection_state || '-')}
-                    </td>
-                    <td>${p.stop_price ? '$' + p.stop_price.toFixed(4) : '-'} / ${p.target_price ? '$' + p.target_price.toFixed(4) : '-'}</td>
-                    <td>${p.stop_order_state || '-'} / ${p.target_exit_state || '-'}</td>
-                </tr>
-            `).join('');
+            const rows = positions.map((position) => {
+                const row = document.createElement('tr');
+                const values = [
+                    `${position.symbol}${position.ownership === 'external' ? ' (external)' : ''}`,
+                    position.market || '-',
+                    position.direction || '-',
+                    position.qty,
+                    `$${Number(position.avg_price).toFixed(2)}`,
+                    formatPnl(position.unrealized_pnl),
+                    position.manual_intervention_required
+                        ? 'MANUAL'
+                        : (position.protection_state || '-'),
+                    `${position.stop_price ? '$' + Number(position.stop_price).toFixed(4) : '-'} / ${position.target_price ? '$' + Number(position.target_price).toFixed(4) : '-'}`,
+                    `${position.stop_order_state || '-'} / ${position.target_exit_state || '-'}`
+                ];
+                values.forEach((value, index) => {
+                    const cell = document.createElement('td');
+                    cell.textContent = String(value);
+                    if (index === 0) cell.className = 'position-symbol';
+                    if (index === 2) {
+                        cell.className = position.direction === 'LONG' ? 'badge-long' : 'badge-short';
+                    }
+                    if (index === 5) {
+                        cell.className = position.unrealized_pnl > 0
+                            ? 'positive'
+                            : (position.unrealized_pnl < 0 ? 'negative' : '');
+                    }
+                    if (index === 6 && position.manual_intervention_required) {
+                        cell.className = 'negative';
+                    }
+                    row.appendChild(cell);
+                });
+                return row;
+            });
+            positionsTableBody.replaceChildren(...rows);
         }
 
         // Push to Chart
@@ -340,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 snapshotHistory.shift();
             }
 
-            sessionStorage.setItem(equityHistoryKey, JSON.stringify({
+            sessionStorage.setItem(equityHistoryKey(equityHistoryScope), JSON.stringify({
                 times: timeHistory,
                 values: equityHistory,
                 snapshots: snapshotHistory
@@ -362,6 +392,9 @@ document.addEventListener('DOMContentLoaded', () => {
         messageSpan.textContent = ` ${msg}`;
         line.append(timeSpan, messageSpan);
         terminalLogView.appendChild(line);
+        while (terminalLogView.children.length > 500) {
+            terminalLogView.firstElementChild.remove();
+        }
         terminalLogView.scrollTop = terminalLogView.scrollHeight;
     };
 
@@ -619,12 +652,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await refreshSystemStatus();
             window.setInterval(refreshSystemStatus, 2000);
-
+            initWebSockets();
             const accountRes = await fetch('/api/account');
+            if (!accountRes.ok) throw new Error(`Hesap alınamadı (${accountRes.status})`);
             const accountData = await accountRes.json();
             updateAccountUI(accountData);
-
-            initWebSockets();
         } catch (err) {
             console.error("Initialization error:", err);
         }

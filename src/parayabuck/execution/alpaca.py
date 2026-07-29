@@ -225,9 +225,7 @@ class AlpacaBroker:
             result = self._submit_with_recovery(request, intent.client_order_id)
             result_id = self._field(result, "id")
             if not result_id:
-                raise AmbiguousOrderState(
-                    f"Alpaca order response has no id for {intent.symbol}"
-                )
+                raise AmbiguousOrderState(f"Alpaca order response has no id for {intent.symbol}")
             broker_order_id = str(result_id)
             if ledger is not None:
                 ledger.register_entry_order(
@@ -352,7 +350,7 @@ class AlpacaBroker:
                 if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
                     ledger.mark_manual_intervention(
                         self._account_id or "unknown", intent.client_order_id
-                )
+                    )
                 log.critical(
                     "Order processing failed after broker acceptance; "
                     "reconciliation is required: %s",
@@ -634,19 +632,28 @@ class AlpacaBroker:
         ledger = getattr(self, "ledger", None)
         if request is None or ledger is None or not hasattr(ledger, "apply_fee_activity"):
             return
+        activities: list[dict[str, Any]] = []
+        page_token: str | None = None
+        seen_tokens: set[str] = set()
         try:
-            payload = request(
-                "GET",
-                "/account/activities/FILL",
-                data={"direction": "desc", "page_size": 100},
-            )
+            while True:
+                params = {"direction": "desc", "page_size": 100}
+                if page_token is not None:
+                    params["page_token"] = page_token
+                payload = request("GET", "/account/activities/FILL", data=params)
+                page = payload if isinstance(payload, list) else []
+                activities.extend(item for item in page if isinstance(item, dict))
+                if len(page) < 100:
+                    break
+                next_token = str(page[-1].get("id", "") or "")
+                if not next_token or next_token in seen_tokens:
+                    break
+                seen_tokens.add(next_token)
+                page_token = next_token
         except Exception as exc:
             log.warning("Fill activity fee reconciliation deferred: %s", exc)
             return
-        activities = payload if isinstance(payload, list) else []
         for activity in activities:
-            if not isinstance(activity, dict):
-                continue
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
                 fee = abs(float(fee_raw or 0))
@@ -1291,7 +1298,7 @@ class AlpacaBroker:
                             intent.symbol,
                             closing_qty,
                             price,
-                            intent.direction,
+                            Direction.FLAT,
                             datetime.now(UTC),
                         ),
                         str(order_id),
@@ -1703,9 +1710,21 @@ class AlpacaBroker:
             side = str(self._field(order, "side", "")).lower().split(".")[-1]
             order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
             stop_price = self._field(order, "stop_price")
+            status = str(self._field(order, "status", "")).lower().split(".")[-1]
             if (
                 owned
                 and side == closing_side
+                and status
+                not in {
+                    "canceled",
+                    "cancelled",
+                    "done_for_day",
+                    "expired",
+                    "filled",
+                    "rejected",
+                    "replaced",
+                    "stopped",
+                }
                 and (
                     stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
                 )

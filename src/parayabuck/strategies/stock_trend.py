@@ -45,9 +45,7 @@ class StockTrendPullback(Strategy):
         )
         inverse = bool(bars and is_inverse_equity(bars[-1].symbol))
         allowed_benchmark_regimes = (
-            {Regime.TREND_DOWN, Regime.UNKNOWN}
-            if inverse
-            else {Regime.TREND_UP, Regime.UNKNOWN}
+            {Regime.TREND_DOWN, Regime.UNKNOWN} if inverse else {Regime.TREND_UP, Regime.UNKNOWN}
         )
         benchmark_ok = context.benchmark_regime in allowed_benchmark_regimes
         conditions.append(

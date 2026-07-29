@@ -4,7 +4,16 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
+from parayabuck.core.models import (
+    Bar,
+    Direction,
+    Fill,
+    Market,
+    OrderIntent,
+    OrderState,
+    Regime,
+    Signal,
+)
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring import AIDecisionJournal
 from parayabuck.strategies.base import (
@@ -126,6 +135,44 @@ def test_open_prediction_survives_restart_and_times_out(tmp_path: Path) -> None:
     assert outcomes[0].outcome == "timeout_correct"
     assert outcomes[0].return_pct == 2
     assert json.loads((tmp_path / "paper" / "open_predictions.json").read_text()) == []
+
+
+def test_async_entry_fill_marks_prediction_as_traded(tmp_path: Path) -> None:
+    journal = AIDecisionJournal(str(tmp_path), "paper", "5m", horizon_bars=2)
+    bar = _bar(0)
+    signal = _signal(bar.timestamp)
+    order = OrderIntent(
+        signal.signal_id,
+        signal.symbol,
+        signal.market,
+        signal.direction,
+        1,
+        signal.entry_price,
+        signal.invalidation_price,
+        signal.target_price,
+        signal.strategy,
+        client_order_id="parayabuck-async-entry",
+    )
+    journal.record_signal(
+        bar,
+        signal,
+        _evaluation(signal),
+        RegimeAssessment(Regime.RANGE, 0.8, 12, 0.01, ("weak_trend",)),
+        Regime.UNKNOWN.value,
+        Regime.UNKNOWN.value,
+        [],
+        False,
+        order=order,
+        order_state=OrderState.ACCEPTED,
+    )
+
+    journal.record_broker_fill(
+        Fill(order.client_order_id, order.symbol, 1, 100, Direction.LONG, _bar(1).timestamp)
+    )
+
+    assert journal._open[signal.signal_id].traded is True
+    persisted = json.loads((tmp_path / "paper" / "open_predictions.json").read_text())
+    assert persisted[0]["traded"] is True
 
 
 def test_scan_digest_records_first_strategy_reason(tmp_path: Path) -> None:

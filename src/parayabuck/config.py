@@ -82,6 +82,7 @@ class EngineConfig:
     crypto_stop_cancel_poll_interval_seconds: float = 0.25
     strategy_profile: str = "equity_5m_v1"
     allow_short: bool = False
+    crypto_min_volume_bar_ratio: float = 0.5
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:
@@ -96,6 +97,10 @@ class EngineConfig:
             raise ValueError("Invalid signal score or warmup")
         if self.prediction_horizon_bars <= 0:
             raise ValueError("prediction_horizon_bars must be positive")
+        if not math.isfinite(self.crypto_min_volume_bar_ratio) or not (
+            0 < self.crypto_min_volume_bar_ratio <= 1
+        ):
+            raise ValueError("crypto_min_volume_bar_ratio must be in (0, 1]")
         minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
         if minutes[self.higher_timeframe] <= minutes[self.timeframe]:
             raise ValueError("higher_timeframe must be greater than timeframe")

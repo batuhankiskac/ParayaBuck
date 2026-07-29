@@ -119,6 +119,7 @@ engine:
   crypto_stop_cancel_poll_interval_seconds: 0.25
   strategy_profile: equity_5m_v1
   allow_short: false
+  crypto_min_volume_bar_ratio: 0.5
   minimum_signal_score: 65.0
   warmup_bars: 250
   decision_db_path: data/runtime/parayabuck.sqlite3

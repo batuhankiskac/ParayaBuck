@@ -57,7 +57,7 @@ class TradingEngine:
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = broker
-        self.strategies = strategies or default_strategies()
+        self.strategies = strategies or default_strategies(self.config)
         self.journal = journal
         self.ai_journal = ai_journal
         self.enforce_live_safety = enforce_live_safety

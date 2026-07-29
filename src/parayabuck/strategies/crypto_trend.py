@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.features.indicators import atr, ema
@@ -16,6 +17,9 @@ class CryptoTrendBreakout(Strategy):
     name = "crypto_trend_breakout"
     market = Market.CRYPTO
     minimum_bars = 200
+
+    def __init__(self, min_volume_bar_ratio: float = 0.5) -> None:
+        self.min_volume_bar_ratio = min_volume_bar_ratio
 
     def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None:
         return self.evaluate_with_trace(bars, context).signal
@@ -46,13 +50,20 @@ class CryptoTrendBreakout(Strategy):
         fast = ema(closes, 20)
         slow = ema(closes, 100)
         atr_value = atr(bars, 14)
+        volume_window = bars[-21:]
+        nonzero_volume_bars = sum(
+            1 for bar in volume_window if math.isfinite(bar.volume) and bar.volume > 0
+        )
+        volume_gate_ok = nonzero_volume_bars >= max(
+            1, int(self.min_volume_bar_ratio * len(volume_window))
+        )
         indicators_ok = (
             fast is not None
             and slow is not None
             and atr_value is not None
             and math.isfinite(atr_value)
             and atr_value > 0
-            and all(math.isfinite(bar.volume) and bar.volume > 0 for bar in bars[-21:])
+            and volume_gate_ok
         )
         conditions.append(
             ConditionEvaluation(
@@ -98,8 +109,8 @@ class CryptoTrendBreakout(Strategy):
             return StrategyEvaluation(
                 self.name, False, failed.explanation, tuple(conditions), metrics
             )
-        baseline = bars[-21:-1]
-        average_volume = sum(bar.volume for bar in baseline) / len(baseline)
+        baseline_volumes = [bar.volume for bar in bars[-21:-1] if bar.volume > 0]
+        average_volume = statistics.median(baseline_volumes) if baseline_volumes else 0.0
         relative_volume = current.volume / average_volume if average_volume > 0 else 1.0
         trend_points = min(17, context.regime.trend_strength / 2)
         volume_points = min(10, relative_volume * 4)

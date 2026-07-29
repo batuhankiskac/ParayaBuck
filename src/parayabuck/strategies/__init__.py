@@ -1,3 +1,4 @@
+from parayabuck.config import EngineConfig
 from parayabuck.strategies.base import (
     ConditionEvaluation,
     Strategy,
@@ -10,12 +11,13 @@ from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
 from parayabuck.strategies.stock_trend import StockTrendPullback
 
 
-def default_strategies() -> tuple[Strategy, ...]:
+def default_strategies(config: EngineConfig | None = None) -> tuple[Strategy, ...]:
+    volume_bar_ratio = (config or EngineConfig()).crypto_min_volume_bar_ratio
     return (
         StockTrendPullback(),
         StockMeanReversion(),
-        CryptoTrendBreakout(),
-        CryptoRangeReversion(),
+        CryptoTrendBreakout(min_volume_bar_ratio=volume_bar_ratio),
+        CryptoRangeReversion(min_volume_bar_ratio=volume_bar_ratio),
     )
 
 

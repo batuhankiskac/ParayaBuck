@@ -17,6 +17,9 @@ class CryptoRangeReversion(Strategy):
     market = Market.CRYPTO
     minimum_bars = 50
 
+    def __init__(self, min_volume_bar_ratio: float = 0.5) -> None:
+        self.min_volume_bar_ratio = min_volume_bar_ratio
+
     def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None:
         return self.evaluate_with_trace(bars, context).signal
 
@@ -46,13 +49,20 @@ class CryptoRangeReversion(Strategy):
         bands = bollinger(closes, 20, 2.2)
         rsi_value = rsi(closes, 14)
         atr_value = atr(bars, 14)
+        volume_window = bars[-20:]
+        nonzero_volume_bars = sum(
+            1 for bar in volume_window if math.isfinite(bar.volume) and bar.volume > 0
+        )
+        volume_gate_ok = nonzero_volume_bars >= max(
+            1, int(self.min_volume_bar_ratio * len(volume_window))
+        )
         indicators_ok = (
             bands is not None
             and rsi_value is not None
             and atr_value is not None
             and math.isfinite(atr_value)
             and atr_value > 0
-            and all(math.isfinite(bar.volume) and bar.volume > 0 for bar in bars[-20:])
+            and volume_gate_ok
         )
         conditions.append(
             ConditionEvaluation(

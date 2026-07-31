@@ -201,7 +201,10 @@ class AlpacaBroker:
                 entry_registered = True
             qty, stop_price, target_price = self._validated_values(intent)
             side = OrderSide.BUY if intent.direction == Direction.LONG else OrderSide.SELL
-            tif = TimeInForce.GTC if intent.market == Market.CRYPTO else TimeInForce.DAY
+            # DAY bracket legs expire at the close and leave overnight equity
+            # positions without their take-profit. Alpaca supports GTC bracket
+            # orders, keeping both OCO legs intact across sessions.
+            tif = TimeInForce.GTC
             if intent.market == Market.EQUITY:
                 request: Any = MarketOrderRequest(
                     symbol=intent.symbol,
@@ -422,8 +425,9 @@ class AlpacaBroker:
         managed = (
             ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         )
-        if ledger is not None:
-            self._reconcile_fill_activity_fees()
+        fill_activities_reconciled = True
+        if ledger is not None and hasattr(ledger, "apply_fee_activity"):
+            fill_activities_reconciled = self._reconcile_fill_activity_fees()
         broker_symbols = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
@@ -448,6 +452,19 @@ class AlpacaBroker:
                     continue
                 if entry.exit_client_order_id:
                     self._reconcile_crypto_exit(entry)
+                    continue
+                if entry.market == Market.EQUITY and not fill_activities_reconciled:
+                    ledger.mark_manual_intervention(
+                        self._account_id or "unknown",
+                        entry.entry_client_order_id,
+                    )
+                    log.warning(
+                        "Managed ledger close deferred: market=equity symbol=%s "
+                        "entry_client_order_id=%s "
+                        "recovery_action=await_fill_activity_reconciliation",
+                        entry.canonical_symbol,
+                        entry.entry_client_order_id,
+                    )
                     continue
                 # ``account()`` has successfully returned Alpaca's complete
                 # position snapshot.  A managed symbol absent from that
@@ -626,12 +643,12 @@ class AlpacaBroker:
                     ProtectionState.ACTIVE,
                 )
 
-    def _reconcile_fill_activity_fees(self) -> None:
+    def _reconcile_fill_activity_fees(self) -> bool:
         """Backfill fees when TradingStream fill payloads omit commission."""
         request = getattr(getattr(self, "_client", None), "_request", None)
         ledger = getattr(self, "ledger", None)
         if request is None or ledger is None or not hasattr(ledger, "apply_fee_activity"):
-            return
+            return False
         activities: list[dict[str, Any]] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
@@ -652,7 +669,12 @@ class AlpacaBroker:
                 page_token = next_token
         except Exception as exc:
             log.warning("Fill activity fee reconciliation deferred: %s", exc)
-            return
+            return False
+        activities.sort(
+            key=lambda item: str(
+                item.get("transaction_time") or item.get("date") or ""
+            )
+        )
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
@@ -670,10 +692,49 @@ class AlpacaBroker:
                     occurred_at = occurred_at.replace(tzinfo=UTC)
             except ValueError:
                 occurred_at = datetime.now(UTC)
+            activity_id = str(activity.get("id", "") or "")
+            broker_order_id = str(activity.get("order_id", "") or "")
+            side = str(activity.get("side", "") or "").lower().split(".")[-1]
+            symbol = str(activity.get("symbol", "") or "")
+            try:
+                qty = abs(float(activity.get("qty", 0) or 0))
+                price = float(activity.get("price", 0) or 0)
+            except (TypeError, ValueError):
+                qty = 0.0
+                price = 0.0
+            # Recover an exit that filled while TradingStream was offline.
+            # A stable activity id makes this idempotent across reconciliations.
+            if (
+                activity_id
+                and broker_order_id
+                and symbol
+                and side == "sell"
+                and qty > 0
+                and price > 0
+            ):
+                market = Market.CRYPTO if "/" in symbol else Market.EQUITY
+                ledger.apply_execution_event(
+                    ExecutionEvent(
+                        account_id=self._account_id or "unknown",
+                        client_order_id=f"alpaca-fill-activity-{activity_id}",
+                        broker_order_id=broker_order_id,
+                        parent_order_id=None,
+                        role=OrderRole.MANUAL_EXIT,
+                        symbol=canonical_symbol(symbol, market),
+                        market=market,
+                        state=OrderState.FILLED,
+                        requested_qty=qty,
+                        cumulative_filled_qty=qty,
+                        average_fill_price=price,
+                        occurred_at=occurred_at,
+                        fee=fee,
+                        activity_id=activity_id,
+                    )
+                )
             applied = ledger.apply_fee_activity(
                 self._account_id or "unknown",
-                activity_id=str(activity.get("id", "")),
-                broker_order_id=str(activity.get("order_id", "")),
+                activity_id=activity_id,
+                broker_order_id=broker_order_id,
                 fee=fee,
                 occurred_at=occurred_at,
             )
@@ -684,6 +745,7 @@ class AlpacaBroker:
                     activity.get("order_id"),
                     fee,
                 )
+        return True
 
     def _reconcile_crypto_exit(self, position: Any) -> None:
         get_by_client_id = getattr(self._client, "get_order_by_client_id", None)

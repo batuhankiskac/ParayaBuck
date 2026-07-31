@@ -69,9 +69,10 @@ class AlpacaTradingUpdateStream:
         average = _field(order, "filled_avg_price")
         parent_order_id = _field(order, "parent_order_id")
         order_type = str(_field(order, "type", "")).lower().split(".")[-1]
+        order_class = str(_field(order, "order_class", "")).lower().split(".")[-1]
         stop_price = _field(order, "stop_price")
         client_order_id = str(_field(order, "client_order_id", ""))
-        if parent_order_id:
+        if parent_order_id or order_class == "bracket":
             role = (
                 OrderRole.PROTECTIVE_STOP
                 if stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}

@@ -28,9 +28,11 @@ def rsi(values: list[float], period: int = 14) -> float | None:
     if len(values) < period + 1:
         return None
     changes = [values[i] - values[i - 1] for i in range(1, len(values))]
-    window = changes[-period:]
-    avg_gain = sum(max(change, 0) for change in window) / period
-    avg_loss = sum(max(-change, 0) for change in window) / period
+    avg_gain = sum(max(change, 0) for change in changes[:period]) / period
+    avg_loss = sum(max(-change, 0) for change in changes[:period]) / period
+    for change in changes[period:]:
+        avg_gain = (avg_gain * (period - 1) + max(change, 0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-change, 0)) / period
     if avg_loss == 0:
         return 100.0
     return 100 - 100 / (1 + avg_gain / avg_loss)
@@ -80,6 +82,31 @@ def adx(bars: list[Bar], period: int = 14) -> float | None:
         denom = plus + minus
         dx_values.append(100 * abs(plus - minus) / denom if denom else 0.0)
     return sum(dx_values[-period:]) / min(period, len(dx_values)) if dx_values else None
+
+
+def directional_indicators(
+    bars: list[Bar], period: int = 14
+) -> tuple[float, float] | None:
+    """Return the latest +DI and -DI using the same windowing as ``adx``."""
+    if len(bars) < period + 1:
+        return None
+    window = bars[-(period + 1) :]
+    true_range = 0.0
+    plus_dm = 0.0
+    minus_dm = 0.0
+    for previous, current in zip(window[:-1], window[1:], strict=True):
+        up = current.high - previous.high
+        down = previous.low - current.low
+        plus_dm += up if up > down and up > 0 else 0.0
+        minus_dm += down if down > up and down > 0 else 0.0
+        true_range += max(
+            current.high - current.low,
+            abs(current.high - previous.close),
+            abs(current.low - previous.close),
+        )
+    if true_range <= 0:
+        return None
+    return 100 * plus_dm / true_range, 100 * minus_dm / true_range
 
 
 @dataclass(frozen=True)

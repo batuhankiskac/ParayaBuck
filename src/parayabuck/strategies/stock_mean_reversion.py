@@ -23,10 +23,11 @@ class StockMeanReversion(Strategy):
         supported = self.supports(bars)
         regime_ok = context.regime.regime == Regime.RANGE
         inverse = bool(bars and is_inverse_equity(bars[-1].symbol))
-        benchmark_ok = not inverse or context.benchmark_regime in {
-            Regime.TREND_DOWN,
-            Regime.UNKNOWN,
-        }
+        benchmark_ok = (
+            context.benchmark_regime in {Regime.TREND_DOWN, Regime.UNKNOWN}
+            if inverse
+            else context.benchmark_regime != Regime.TREND_DOWN
+        )
         conditions = [
             ConditionEvaluation(
                 "strategy_support",
@@ -46,11 +47,11 @@ class StockMeanReversion(Strategy):
                 "benchmark_regime",
                 benchmark_ok,
                 context.benchmark_regime.value,
-                "trend_down or unknown" if inverse else "any",
+                "trend_down or unknown" if inverse else "not trend_down",
                 (
                     "An inverse ETF is only bought while the benchmark is bearish."
                     if inverse
-                    else "Regular equity mean reversion keeps its existing benchmark policy."
+                    else "Regular equity mean reversion is blocked in a bearish benchmark trend."
                 ),
             ),
         ]

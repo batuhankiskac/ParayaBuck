@@ -394,8 +394,15 @@ class TradingEngine:
             trails[signal.signal_id].append(
                 {
                     "gate": "broker",
-                    "status": ("passed" if executions[signal.signal_id]["traded"] else "failed"),
-                    "reason": f"broker_response={lifecycle.state.value}",
+                    "status": "passed" if broker_effective else "failed",
+                    "reason": (
+                        f"broker_response={lifecycle.state.value}; "
+                        + (
+                            "order_working"
+                            if broker_effective and not filled_qty
+                            else ("fill_confirmed" if filled_qty else "order_not_effective")
+                        )
+                    ),
                 }
             )
             if self.journal:

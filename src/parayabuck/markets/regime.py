@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from parayabuck.core.models import Bar, Market, Regime
-from parayabuck.features.indicators import adx, atr, ema
+from parayabuck.features.indicators import adx, atr, directional_indicators, ema
 
 
 @dataclass(frozen=True)
@@ -34,20 +34,41 @@ class RegimeDetector:
         atr_value = atr(bars, 14) or 0.0
         volatility_pct = atr_value / closes[-1] if closes[-1] > 0 else 0.0
         volatility_limit = 0.035 if bars[-1].market == Market.CRYPTO else 0.025
+        reasons: tuple[str, ...]
 
         if volatility_pct >= volatility_limit:
             regime = Regime.HIGH_VOLATILITY
             reasons = (f"atr_pct={volatility_pct:.3%}", "volatility_above_limit")
         elif fast is not None and slow is not None and trend_strength >= 22:
+            directional = directional_indicators(bars, 14)
+            plus_di, minus_di = directional or (0.0, 0.0)
             if closes[-1] > fast > slow:
                 regime = Regime.TREND_UP
                 reasons = ("price>ema50>ema200", f"adx={trend_strength:.1f}")
             elif closes[-1] < fast < slow:
                 regime = Regime.TREND_DOWN
                 reasons = ("price<ema50<ema200", f"adx={trend_strength:.1f}")
+            elif closes[-1] < fast and minus_di > plus_di:
+                regime = Regime.TREND_DOWN
+                reasons = (
+                    "fresh_bearish_break_below_ema50",
+                    f"-di={minus_di:.1f}>+di={plus_di:.1f}",
+                    f"adx={trend_strength:.1f}",
+                )
+            elif closes[-1] > fast and plus_di > minus_di:
+                regime = Regime.TREND_UP
+                reasons = (
+                    "fresh_bullish_break_above_ema50",
+                    f"+di={plus_di:.1f}>-di={minus_di:.1f}",
+                    f"adx={trend_strength:.1f}",
+                )
             else:
                 regime = Regime.RANGE
-                reasons = ("moving_averages_not_aligned", f"adx={trend_strength:.1f}")
+                reasons = (
+                    "moving_averages_not_aligned",
+                    f"+di={plus_di:.1f},-di={minus_di:.1f}",
+                    f"adx={trend_strength:.1f}",
+                )
         else:
             regime = Regime.RANGE
             reasons = (f"adx={trend_strength:.1f}", "weak_directional_trend")

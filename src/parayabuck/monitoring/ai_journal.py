@@ -85,6 +85,7 @@ class AIDecisionJournal:
         self._stats_path = self.root / "strategy_stats.json"
         self._open: dict[str, PredictionRecord] = {}
         self._stats: dict[str, dict[str, Any]] = {}
+        self._pending_entry_fills: dict[str, list[Fill]] = {}
         self._load_state()
         self._write_manifest()
 
@@ -171,6 +172,15 @@ class AIDecisionJournal:
         risk_diagnostics: dict[str, Any] | None = None,
     ) -> None:
         with self._lock:
+            pending_fills = (
+                self._pending_entry_fills.pop(order.client_order_id, [])
+                if order is not None
+                else []
+            )
+            if pending_fills:
+                traded = True
+                if fill is None:
+                    fill = pending_fills[-1]
             day = self._day_dir(signal.timestamp)
             safe_symbol = signal.symbol.replace("/", "-")
             filename = (
@@ -233,6 +243,16 @@ class AIDecisionJournal:
                 client_order_id=order.client_order_id if order is not None else None,
             )
             self._atomic_json(self._open_path, [asdict(item) for item in self._open.values()])
+            for pending_fill in pending_fills:
+                self._append(
+                    path,
+                    (
+                        f"\n- Async ENTRY fill at "
+                        f"{pending_fill.timestamp.astimezone(UTC).isoformat()}: "
+                        f"qty={pending_fill.qty}, price={pending_fill.price}, "
+                        f"commission={pending_fill.commission}.\n"
+                    ),
+                )
 
     def record_broker_fill(self, fill: Fill) -> None:
         """Attach asynchronous/backtest fills to the matching decision artifact."""
@@ -270,6 +290,8 @@ class AIDecisionJournal:
                         f"qty={fill.qty}, price={fill.price}, commission={fill.commission}.\n"
                     ),
                 )
+            elif fill.direction != Direction.FLAT:
+                self._pending_entry_fills.setdefault(fill.client_order_id, []).append(fill)
 
     def record_account(self, timestamp: datetime, payload: dict[str, Any]) -> None:
         with self._lock:
@@ -331,7 +353,20 @@ class AIDecisionJournal:
             f"- Time: {context['bar']['timestamp']}",
             f"- Signal ID: `{payload['signal_id']}`",
             f"- Score: {payload['score']:.2f}/100 | Confidence: {payload['confidence']:.3f}",
-            f"- Execution: {'TRADED' if execution['traded'] else 'VIRTUAL — not traded'}",
+            (
+                "- Execution: TRADED"
+                if execution["traded"]
+                else (
+                    "- Execution: WORKING — awaiting broker fill"
+                    if execution["order_state"] in {
+                        OrderState.ACCEPTED.value,
+                        OrderState.PARTIALLY_FILLED.value,
+                        OrderState.RECONCILIATION_REQUIRED.value,
+                        OrderState.UNKNOWN.value,
+                    }
+                    else "- Execution: VIRTUAL — not traded"
+                )
+            ),
             "",
             "## Market context",
             "",

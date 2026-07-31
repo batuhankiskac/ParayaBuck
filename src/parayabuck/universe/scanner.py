@@ -51,7 +51,7 @@ class ScannerResult:
 class EquityUniverseScanner:
     """Deterministic pre-session selector; it never opens a market-data stream."""
 
-    version = "equity-scanner-v2"
+    version = "equity-scanner-v3"
 
     def __init__(
         self,
@@ -153,14 +153,20 @@ class EquityUniverseScanner:
             for symbol in reserved
         }
         sector_counts: dict[str, int] = {}
+        selected_issuers: set[str] = set()
         for symbol in reserved:
             sector = str(breakdowns[symbol]["economic_sector"]).lower()
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
+            selected_issuers.add(_issuer_key(symbol))
         capacity = self.config.maximum_stream_symbols
         for _score, symbol, sector, breakdown in sorted(
             scored, key=lambda item: (-item[0], item[1])
         ):
             if symbol in selected:
+                continue
+            issuer = _issuer_key(symbol)
+            if issuer in selected_issuers:
+                eliminated[symbol] = "duplicate_issuer"
                 continue
             if len(selected) >= capacity:
                 eliminated.setdefault(symbol, "stream_capacity")
@@ -170,6 +176,7 @@ class EquityUniverseScanner:
                 eliminated[symbol] = "sector_concentration"
                 continue
             selected.append(symbol)
+            selected_issuers.add(issuer)
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
             breakdowns[symbol] = breakdown
         timestamp = (selection_timestamp or datetime.now(UTC)).astimezone(UTC)
@@ -184,7 +191,6 @@ class EquityUniverseScanner:
             config_digest=self._config_digest(),
             sector_distribution=dict(sorted(sector_counts.items())),
         )
-
     def persist(self, result: ScannerResult) -> None:
         path = Path(self.config.active_universe_path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -230,6 +236,11 @@ class EquityUniverseScanner:
 
     def _config_digest(self) -> str:
         return scanner_config_digest(self.config)
+
+
+def _issuer_key(symbol: str) -> str:
+    """Collapse economically identical share classes for concentration checks."""
+    return "ALPHABET" if symbol in {"GOOG", "GOOGL"} else symbol
 
 
 def scanner_config_digest(config: EquityUniverseConfig) -> str:

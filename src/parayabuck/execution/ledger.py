@@ -1009,6 +1009,8 @@ class ExecutionLedger:
                 )
                 entry_client_order_id = str(existing[3]) if existing and existing[3] else None
                 role = OrderRole(existing[4]) if existing else event.role
+                if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
+                    role = event.role
                 if entry_client_order_id is None and event.parent_order_id:
                     parent = self.connection.execute(
                         """
@@ -1031,6 +1033,30 @@ class ExecutionLedger:
                     ).fetchone()
                     if named_parent:
                         entry_client_order_id = str(named_parent[0])
+                if entry_client_order_id is None and event.role != OrderRole.ENTRY:
+                    # Alpaca bracket child updates can omit parent_order_id and
+                    # use broker-generated UUID client ids. Link only when one
+                    # managed lot is an unambiguous match; never guess between
+                    # multiple same-symbol entries.
+                    candidates = self.connection.execute(
+                        """
+                        SELECT entry_client_order_id
+                        FROM managed_positions
+                        WHERE account_id=? AND canonical_symbol=? AND market=?
+                          AND status IN ('open', 'manual_intervention_required')
+                          AND remaining_owned_qty > 0
+                          AND opened_at <= ?
+                        ORDER BY opened_at
+                        """,
+                        (
+                            event.account_id,
+                            canonical_symbol(event.symbol, event.market),
+                            event.market.value,
+                            event.occurred_at.isoformat(),
+                        ),
+                    ).fetchall()
+                    if len(candidates) == 1:
+                        entry_client_order_id = str(candidates[0][0])
                 if role == OrderRole.ENTRY:
                     entry_client_order_id = event.client_order_id
 

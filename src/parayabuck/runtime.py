@@ -1085,8 +1085,17 @@ class EngineRuntime:
         account_id = self.broker.account_id or "unknown"
         today = datetime.now(UTC).date()
         previous = self.ledger.load_risk_state(account_id, today)
-        if previous is not None:
-            self.engine.risk.consecutive_losses = previous.consecutive_losses
+        if (
+            previous is not None
+            and self.engine.risk.consecutive_losses == previous.consecutive_losses
+        ):
+            realized_delta = float(account.realized_pnl) - previous.realized_pnl
+            if abs(realized_delta) > 1e-9:
+                # Insurance for fills recovered from broker activities while
+                # the TradingStream callback was unavailable. Live callbacks
+                # already change the counter, so the equality guard prevents
+                # counting the same close twice.
+                self.engine.risk.record_realized_pnl(realized_delta)
         self.ledger.save_risk_state(
             RiskState(
                 account_id=account_id,

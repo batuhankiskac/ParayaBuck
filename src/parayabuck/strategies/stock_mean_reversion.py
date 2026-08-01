@@ -122,8 +122,8 @@ class StockMeanReversion(Strategy):
         deviation_points = min(15, abs(bands.zscore) * 6)
         volume_points = min(10, relative_volume * 4)
         score = 60 + deviation_points + volume_points
-        stop = min(previous.low, current.close - max(1.5 * atr_value, current.close * 0.01))
-        target = max(bands.middle, current.close + 1.8 * (current.close - stop))
+        stop = min(previous.low, current.close - max(2.0 * atr_value, current.close * 0.012))
+        target = max(bands.middle, current.close + 1.85 * (current.close - stop))
         signal = self.long_signal(
             current,
             score,

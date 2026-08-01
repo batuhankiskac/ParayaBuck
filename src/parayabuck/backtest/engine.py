@@ -53,6 +53,7 @@ class BacktestEngine:
         crypto_taker_fee_bps: float = 0.0,
         strategies: tuple[Strategy, ...] | None = None,
         run_id: str | None = None,
+        allowed_trade_symbols: set[str] | None = None,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = BacktestBroker(
@@ -81,6 +82,7 @@ class BacktestEngine:
             self.config,
             strategies,
             ai_journal=self.ai_journal,
+            allowed_trade_symbols=allowed_trade_symbols,
         )
         self.execution = ExecutionCoordinator(self.engine.orders, self.engine.risk)
         self.starting_equity = starting_equity

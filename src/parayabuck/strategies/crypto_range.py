@@ -115,7 +115,7 @@ class CryptoRangeReversion(Strategy):
                 self.name, False, failed.explanation, tuple(conditions), metrics
             )
         stop = min(previous.low, current.close - max(1.8 * atr_value, current.close * 0.015))
-        target = max(bands.middle, current.close + 1.9 * (current.close - stop))
+        target = max(bands.middle, current.close + 1.95 * (current.close - stop))
         score = min(100.0, 65 + abs(bands.zscore) * 7 + (43 - rsi_value) / 2)
         signal = self.long_signal(
             current,

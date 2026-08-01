@@ -147,8 +147,8 @@ engine:
     cash_buffer_pct: 0.05
     max_sector_exposure_pct: 0.25
     max_gross_exposure_pct: 0.6
-    max_positions: 5
-    daily_loss_limit_pct: 0.015
+    max_positions: 3
+    daily_loss_limit_pct: 0.01
     max_drawdown_pct: 0.10
     minimum_risk_reward: 1.8
     consecutive_loss_reduction_after: 3

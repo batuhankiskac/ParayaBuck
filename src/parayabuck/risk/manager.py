@@ -96,7 +96,7 @@ class RiskManager:
             signal.target_price < signal.entry_price < signal.invalidation_price
         ):
             return reject("invalid_short_price_geometry")
-        if signal.risk_reward < self.limits.minimum_risk_reward:
+        if signal.risk_reward < self.limits.minimum_risk_reward - 1e-9:
             return reject(
                 f"risk_reward={signal.risk_reward:.2f}_below_minimum",
                 minimum_risk_reward=self.limits.minimum_risk_reward,

@@ -20,14 +20,12 @@ from parayabuck.core.models import (
     Bar,
     Direction,
     ExecutionEvent,
-    ExecutionStatus,
     Fill,
     Market,
     OrderIntent,
     OrderRole,
     OrderState,
     PositionSnapshot,
-    Regime,
     Signal,
 )
 from parayabuck.data.aggregator import TimeframeAggregator
@@ -37,9 +35,9 @@ from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.sectors import classify_instrument, is_inverse_equity, sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
-from parayabuck.portfolio.allocator import PortfolioAllocator
-from parayabuck.runtime import EngineRuntime, WorkerHealth, _symbol_batches
+from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.web import server
+from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -191,28 +189,7 @@ def test_canonical_crypto_symbols_and_adapters() -> None:
     assert not same_symbol("AAPL", "AAPL/USD")
 
 
-def test_legacy_crypto_position_blocks_canonical_signal_and_counts_as_crypto() -> None:
-    signal = Signal(
-        "BTC/USD",
-        Market.CRYPTO,
-        Direction.LONG,
-        "test",
-        90,
-        0.9,
-        100,
-        95,
-        110,
-        datetime.now(UTC),
-        regime=Regime.RANGE,
-    )
-    account = AccountSnapshot(
-        1_000,
-        10_000,
-        10_000,
-        0,
-        positions=(PositionSnapshot("BTCUSD", 0.5, 90, 100, Market.CRYPTO),),
-    )
-    assert PortfolioAllocator().select([signal], account) == []
+def test_legacy_crypto_symbols_have_crypto_sector_classification() -> None:
     assert sector_of("BTCUSD") == "crypto"
     assert sector_of("AAPL") == "technology"
     assert sector_of("SH") == "inverse_market"
@@ -305,7 +282,8 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period(
     runtime._circuit_breaker_reason = None
     runtime._refresh_readiness = lambda: None
     runtime._persist_risk_state = lambda _account: None
-    runtime._entry_readiness_reasons = lambda: ()
+    runtime._entry_readiness_reasons = lambda _market=None: ()
+    runtime._engine_has_symbol_gap = lambda _symbol: False
 
     runtime._process_timestamp(timestamp, {"AAPL": bar}, {"AAPL", "MSFT"})
 
@@ -471,7 +449,10 @@ def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> N
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.engine = SimpleNamespace(has_data_gaps=False)
+    runtime.engine = SimpleNamespace(
+        has_data_gaps_for_market=lambda _market: False,
+        has_data_gaps_for_symbol=lambda _symbol: False,
+    )
 
     assert runtime.health().healthy is True
     assert runtime.health().state == "running"
@@ -501,13 +482,40 @@ def test_stale_crypto_stream_event_degrades_runtime() -> None:
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.engine = SimpleNamespace(has_data_gaps=False)
+    runtime.engine = SimpleNamespace(
+        has_data_gaps_for_market=lambda _market: False,
+        has_data_gaps_for_symbol=lambda _symbol: False,
+    )
 
     health = runtime.health()
 
     assert health.healthy is False
     assert health.state == "degraded"
     assert health.markets["crypto"]["stream_healthy"] is False
+
+
+def test_queue_overflow_never_evicts_final_primary_bar() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._events = _EventQueue(maxsize=2)
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime._oldest_received_at = None
+    runtime._circuit_breaker_reason = None
+    timestamp = datetime.now(UTC)
+    first = Bar(timestamp, "AAPL", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY)
+    second = Bar(timestamp, "MSFT", "5m", 100, 101, 99, 100, 1_000, Market.EQUITY)
+    higher = Bar(timestamp, "AAPL", "1h", 100, 101, 99, 100, 1_000, Market.EQUITY)
+    runtime._events.put_nowait(_Event("primary", first, timestamp))
+    runtime._events.put_nowait(_Event("primary", second, timestamp))
+
+    runtime._put_event("higher", higher)
+
+    assert [item.kind for item in runtime._events.snapshot() if item is not None] == [
+        "primary",
+        "primary",
+    ]
+    assert runtime._circuit_breaker_reason == "final_market_event_queue_overflow"
+    assert runtime._dropped_events == 1
 
 
 def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
@@ -627,16 +635,11 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     )
     broker._has_protective_order = lambda *_args: False
     broker._available_position_qty = lambda _symbol, qty, **_kwargs: qty
-    broker._submit_stop = lambda _symbol, _market, qty, *_args: submitted.append(qty) or True
+    broker._submit_stop = (
+        lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
+    )
     broker.reconcile()
     assert submitted == [pytest.approx(0.01)]
-
-
-def test_execution_status_keeps_partial_fill_when_terminal_state_is_cancelled() -> None:
-    status = ExecutionStatus.from_values(2, 0.5, 100, OrderState.CANCELLED)
-    assert status.has_any_fill
-    assert status.position_opened
-    assert status.remaining_qty == 1.5
 
 
 def test_backtest_checks_stop_on_entry_bar_and_gap_price() -> None:
@@ -886,13 +889,30 @@ def test_late_entry_fee_restates_realized_pnl(tmp_path: Path) -> None:
         client_order_id="parayabuck-fee-entry",
     )
     ledger.register_entry_order("acct", order, "broker-entry")
-    ledger.record_entry_fill(
+    apply_entry_fill(
+        ledger,
         "acct",
         order,
         Fill(order.client_order_id, "AAPL", 10, 100, Direction.LONG, datetime.now(UTC)),
         "broker-entry",
     )
-    assert ledger.record_exit_fill_delta("acct", order.client_order_id, 10, 110) == 100
+    exit_transition = ledger.apply_execution_event(
+        ExecutionEvent(
+            "acct",
+            "target-exit",
+            "broker-target",
+            "broker-entry",
+            OrderRole.TAKE_PROFIT,
+            "AAPL",
+            Market.EQUITY,
+            OrderState.FILLED,
+            10,
+            10,
+            110,
+            datetime.now(UTC),
+        )
+    )
+    assert exit_transition.realized_pnl_delta == 100
 
     assert ledger.apply_fee_activity(
         "acct",

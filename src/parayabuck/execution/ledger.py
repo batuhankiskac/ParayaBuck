@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,7 +9,6 @@ from parayabuck.core.models import (
     Direction,
     ExecutionEvent,
     ExecutionTransition,
-    Fill,
     Market,
     OrderIntent,
     OrderRole,
@@ -20,6 +17,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.risk.manager import RiskState
+from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 
 @dataclass(frozen=True)
@@ -54,19 +52,17 @@ class ManagedPosition:
 class ExecutionLedger:
     """Small transactional ownership ledger shared by execution and reconciliation."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.path, check_same_thread=False)
-        self.connection.execute("PRAGMA journal_mode=WAL")
-        self.connection.execute("PRAGMA foreign_keys=ON")
-        self.connection.execute("PRAGMA busy_timeout=5000")
-        self._lock = threading.RLock()
+        self._store = store or SQLiteStore(self.path)
+        self._store.acquire()
+        self.connection = self._store.connection
+        self._lock = self._store.lock
         self._migrate()
 
     def _migrate(self) -> None:
         with self._lock:
-            self._migrate_legacy_orders_table()
+            migrate_legacy_decision_orders(self.connection)
             self.connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -106,16 +102,6 @@ class ExecutionLedger:
                     terminal_state TEXT,
                     protection_state TEXT NOT NULL DEFAULT 'unprotected',
                     updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS broker_fills (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_order_id TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    qty REAL NOT NULL,
-                    price REAL NOT NULL,
-                    commission REAL NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    UNIQUE(client_order_id, qty, price, timestamp)
                 );
                 CREATE TABLE IF NOT EXISTS fee_activities (
                     activity_id TEXT PRIMARY KEY,
@@ -241,39 +227,6 @@ class ExecutionLedger:
             )
             self.connection.commit()
 
-    def _migrate_legacy_orders_table(self) -> None:
-        """Preserve the former decision journal table before creating ledger orders."""
-        columns = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")}
-        legacy_columns = {
-            "client_order_id",
-            "timestamp",
-            "symbol",
-            "state",
-            "reason",
-            "payload",
-        }
-        if not legacy_columns.issubset(columns) or "broker_order_id" in columns:
-            return
-        self.connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS decision_orders (
-                client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
-                state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
-                PRIMARY KEY (client_order_id, timestamp, state)
-            )
-            """
-        )
-        self.connection.execute(
-            """
-            INSERT OR IGNORE INTO decision_orders(
-                client_order_id, timestamp, symbol, state, reason, payload
-            )
-            SELECT client_order_id, timestamp, symbol, state, reason, payload
-            FROM orders
-            """
-        )
-        self.connection.execute("DROP TABLE orders")
-
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {str(row[1]) for row in self.connection.execute(f"PRAGMA table_info({table})")}
         if name not in columns:
@@ -353,81 +306,6 @@ class ExecutionLedger:
             )
             self.connection.commit()
 
-    def record_entry_fill(
-        self,
-        account_id: str,
-        order: OrderIntent,
-        fill: Fill,
-        broker_order_id: str | None = None,
-    ) -> None:
-        """Record a discrete entry fill exactly once.
-
-        TradingStream cumulative updates should use ``apply_execution_event``;
-        this method remains the synchronous broker/backtest boundary.
-        """
-        symbol = canonical_symbol(order.symbol, order.market)
-        now = datetime.now(UTC).isoformat()
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                inserted = self.connection.execute(
-                    """
-                    INSERT OR IGNORE INTO broker_fills
-                    (client_order_id, symbol, qty, price, commission, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        fill.client_order_id,
-                        symbol,
-                        fill.qty,
-                        fill.price,
-                        fill.commission,
-                        fill.timestamp.isoformat(),
-                    ),
-                )
-                if inserted.rowcount:
-                    self._record_entry_fill_delta_tx(
-                        account_id,
-                        order,
-                        fill.qty,
-                        fill.price,
-                        fill.commission,
-                        broker_order_id,
-                        now,
-                    )
-                self.connection.commit()
-            except Exception:
-                self.connection.rollback()
-                raise
-
-    def record_entry_fill_delta(
-        self,
-        account_id: str,
-        order: OrderIntent,
-        qty_delta: float,
-        price: float,
-        fee_delta: float = 0.0,
-        broker_order_id: str | None = None,
-    ) -> None:
-        if qty_delta <= 0:
-            return
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._record_entry_fill_delta_tx(
-                    account_id,
-                    order,
-                    qty_delta,
-                    price,
-                    fee_delta,
-                    broker_order_id,
-                    datetime.now(UTC).isoformat(),
-                )
-                self.connection.commit()
-            except Exception:
-                self.connection.rollback()
-                raise
-
     def _record_entry_fill_delta_tx(
         self,
         account_id: str,
@@ -499,35 +377,6 @@ class ExecutionLedger:
                 now,
             ),
         )
-
-    def record_exit_fill_delta(
-        self,
-        account_id: str,
-        entry_client_order_id: str,
-        qty_delta: float,
-        price: float,
-        fee_delta: float = 0.0,
-        *,
-        occurred_at: datetime | None = None,
-    ) -> float:
-        if qty_delta <= 0:
-            return 0.0
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                pnl = self._record_exit_fill_delta_tx(
-                    account_id,
-                    entry_client_order_id,
-                    qty_delta,
-                    price,
-                    fee_delta,
-                    (occurred_at or datetime.now(UTC)).isoformat(),
-                )
-                self.connection.commit()
-                return pnl
-            except Exception:
-                self.connection.rollback()
-                raise
 
     def _record_exit_fill_delta_tx(
         self,
@@ -904,82 +753,6 @@ class ExecutionLedger:
                 self.connection.rollback()
                 raise
 
-    def record_order_update(
-        self,
-        client_order_id: str,
-        broker_order_id: str,
-        event_type: str,
-        broker_timestamp: datetime,
-        requested_qty: float,
-        filled_qty: float,
-        average_fill_price: float | None,
-        terminal_state: str | None,
-    ) -> float:
-        payload = json.dumps(
-            {
-                "requested_qty": requested_qty,
-                "filled_qty": filled_qty,
-                "average_fill_price": average_fill_price,
-            },
-            sort_keys=True,
-        )
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                previous = self.connection.execute(
-                    "SELECT filled_qty FROM executions WHERE client_order_id=?",
-                    (client_order_id,),
-                ).fetchone()
-                previous_filled = float(previous[0]) if previous else 0.0
-                bounded_filled = min(max(0.0, filled_qty), max(0.0, requested_qty))
-                fill_delta = max(0.0, bounded_filled - previous_filled)
-                self.connection.execute(
-                    """
-                    INSERT OR IGNORE INTO order_events(
-                        client_order_id, broker_order_id, event_type,
-                        broker_timestamp, payload
-                    ) VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        client_order_id,
-                        broker_order_id,
-                        event_type,
-                        broker_timestamp.isoformat(),
-                        payload,
-                    ),
-                )
-                self.connection.execute(
-                    """
-                    INSERT INTO executions(
-                        client_order_id, requested_qty, filled_qty,
-                        average_fill_price, terminal_state, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(client_order_id) DO UPDATE SET
-                        requested_qty=excluded.requested_qty,
-                        filled_qty=MAX(executions.filled_qty, excluded.filled_qty),
-                        average_fill_price=COALESCE(
-                            excluded.average_fill_price, executions.average_fill_price
-                        ),
-                        terminal_state=COALESCE(
-                            excluded.terminal_state, executions.terminal_state
-                        ),
-                        updated_at=excluded.updated_at
-                    """,
-                    (
-                        client_order_id,
-                        requested_qty,
-                        bounded_filled,
-                        average_fill_price,
-                        terminal_state,
-                        broker_timestamp.isoformat(),
-                    ),
-                )
-                self.connection.commit()
-                return fill_delta
-            except Exception:
-                self.connection.rollback()
-                raise
-
     def apply_execution_event(self, event: ExecutionEvent) -> ExecutionTransition:
         """Apply one broker event atomically using cumulative fill quantities."""
         terminal_states = {
@@ -1329,6 +1102,27 @@ class ExecutionLedger:
                     result.append((order, max(0.0, order.qty - float(cumulative))))
             return result
 
+    def entry_order_for_broker_id(
+        self, account_id: str, broker_order_id: str
+    ) -> tuple[OrderIntent, float] | None:
+        """Return a durable entry and its known cumulative fill for recovery."""
+        with self._lock:
+            row = self.connection.execute(
+                """
+                SELECT client_order_id, cumulative_filled_qty
+                FROM orders
+                WHERE account_id=? AND broker_order_id=? AND order_role='entry'
+                LIMIT 1
+                """,
+                (account_id, broker_order_id),
+            ).fetchone()
+            if row is None:
+                return None
+            order = self._load_order_intent_tx(str(row[0]))
+            if order is None:
+                return None
+            return order, float(row[1] or 0)
+
     def save_risk_state(self, state: RiskState) -> None:
         payload = json.dumps(
             {
@@ -1387,8 +1181,7 @@ class ExecutionLedger:
         )
 
     def close(self) -> None:
-        with self._lock:
-            self.connection.close()
+        self._store.release()
 
 
 __all__ = ["ExecutionLedger", "ManagedPosition"]

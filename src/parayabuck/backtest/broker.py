@@ -15,6 +15,7 @@ from parayabuck.core.models import (
     OrderState,
     PositionSnapshot,
 )
+from parayabuck.markets.timeframes import timeframe_duration
 
 
 @dataclass
@@ -132,14 +133,7 @@ class BacktestBroker:
                 self.order_rejections[order.client_order_id] = "existing_position"
                 self._entry_terminal_event(order, OrderState.REJECTED, bar, 0.0, None)
                 continue
-            expected_seconds = {
-                "1m": 60,
-                "5m": 300,
-                "15m": 900,
-                "30m": 1800,
-                "1h": 3600,
-                "1d": 86400,
-            }[bar.timeframe]
+            expected_seconds = timeframe_duration(bar.timeframe).total_seconds()
             if (bar.timestamp - order.created_at).total_seconds() > expected_seconds * 1.5:
                 self.order_rejections[order.client_order_id] = "stale_pending_order"
                 self._entry_terminal_event(order, OrderState.EXPIRED, bar, 0.0, None)

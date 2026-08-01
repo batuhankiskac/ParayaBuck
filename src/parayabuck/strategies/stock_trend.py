@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
+from parayabuck.core.models import Bar, Market, Regime, Signal
 from parayabuck.features.indicators import atr, ema, rsi
 from parayabuck.markets.sectors import is_inverse_equity
 from parayabuck.strategies.base import (
@@ -64,7 +64,7 @@ class StockTrendPullback(Strategy):
         if not (supported and regime_ok and benchmark_ok):
             failed = next(item for item in conditions if not item.passed)
             return StrategyEvaluation(self.name, False, failed.explanation, tuple(conditions))
-        closes = [bar.close for bar in bars]
+        closes = self.closes(bars)
         fast = ema(closes, 20)
         slow = ema(closes, 50)
         rsi_value = rsi(closes, 14)
@@ -138,9 +138,7 @@ class StockTrendPullback(Strategy):
                     "pullback_distance_atr": pullback_distance,
                 },
             )
-        baseline = bars[-21:-1]
-        average_volume = sum(bar.volume for bar in baseline) / len(baseline)
-        relative_volume = current.volume / average_volume if average_volume > 0 else 1.0
+        relative_volume = self.relative_volume(current, bars[-21:-1])
         trend_points = min(15, context.regime.trend_strength / 2)
         volume_points = min(10, relative_volume * 5)
         higher_points = 10 if context.higher_timeframe_regime == Regime.TREND_UP else 0
@@ -149,24 +147,18 @@ class StockTrendPullback(Strategy):
             score += 10
         stop = current.close - max(2 * atr_value, current.close * 0.012)
         target = current.close + 2.2 * (current.close - stop)
-        signal = Signal(
-            symbol=current.symbol,
-            market=self.market,
-            direction=Direction.LONG,
-            strategy=self.name,
-            score=min(100, score),
-            confidence=min(1.0, score / 100),
-            entry_price=current.close,
-            invalidation_price=stop,
-            target_price=target,
-            timestamp=current.timestamp,
-            reasons=(
+        signal = self.long_signal(
+            current,
+            score,
+            stop,
+            target,
+            (
                 "ema20>ema50",
                 "pullback_reclaimed",
                 f"rsi={rsi_value:.1f}",
                 f"relative_volume={relative_volume:.2f}",
             ),
-            regime=context.regime.regime,
+            context.regime.regime,
         )
         return StrategyEvaluation(
             self.name,

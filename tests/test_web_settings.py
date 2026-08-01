@@ -27,6 +27,9 @@ class _EngineManagerStub:
     def get_credentials(self) -> tuple[str, str]:
         return "existing-key", "existing-secret"
 
+    def has_active_runtime(self) -> bool:
+        return self.engine_state not in {"stopped", "error"}
+
     def stop_engine(self) -> None:
         self.stop_calls += 1
         self.engine_state = "stopped"

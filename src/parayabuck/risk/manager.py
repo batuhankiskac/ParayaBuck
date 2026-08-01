@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import ROUND_DOWN, Decimal
@@ -39,21 +40,31 @@ class RiskManager:
         self.limits = limits
         self.consecutive_losses = 0
         self._reservations: dict[str, OrderIntent] = {}
+        self._lock = threading.RLock()
 
     def reserve(self, order: OrderIntent, remaining_qty: float | None = None) -> None:
-        qty = order.qty if remaining_qty is None else max(0.0, remaining_qty)
-        if qty <= 0:
-            self._reservations.pop(order.client_order_id, None)
-            return
-        self._reservations[order.client_order_id] = OrderIntent(**{**order.__dict__, "qty": qty})
+        with self._lock:
+            qty = order.qty if remaining_qty is None else max(0.0, remaining_qty)
+            if qty <= 0:
+                self._reservations.pop(order.client_order_id, None)
+                return
+            self._reservations[order.client_order_id] = OrderIntent(
+                **{**order.__dict__, "qty": qty}
+            )
 
     def release(self, client_order_id: str) -> None:
-        self._reservations.pop(client_order_id, None)
+        with self._lock:
+            self._reservations.pop(client_order_id, None)
 
     def record_realized_pnl(self, pnl: float) -> None:
-        self.consecutive_losses = self.consecutive_losses + 1 if pnl < 0 else 0
+        with self._lock:
+            self.consecutive_losses = self.consecutive_losses + 1 if pnl < 0 else 0
 
     def evaluate(self, signal: Signal, account: AccountSnapshot) -> RiskDecision:
+        with self._lock:
+            return self._evaluate_unlocked(signal, account)
+
+    def _evaluate_unlocked(self, signal: Signal, account: AccountSnapshot) -> RiskDecision:
         diagnostics: dict[str, Any] = {
             "equity": account.equity,
             "cash": account.cash,
@@ -181,7 +192,10 @@ class RiskManager:
         available_cash = account.cash
         if signal.market == Market.CRYPTO and account.crypto_buying_power is not None:
             available_cash = min(available_cash, account.crypto_buying_power)
-        qty_by_cash = max(0.0, available_cash * 0.95 / signal.entry_price)
+        qty_by_cash = max(
+            0.0,
+            available_cash * (1 - self.limits.cash_buffer_pct) / signal.entry_price,
+        )
         qty_by_gross = (
             max(
                 0.0,
@@ -209,7 +223,9 @@ class RiskManager:
                 account.equity * self.limits.max_crypto_exposure_pct - crypto_value,
             )
             sizing_caps["crypto_exposure"] = remaining_crypto / signal.entry_price
-            sizing_caps["crypto_order_notional"] = 200_000 / signal.entry_price
+            sizing_caps["crypto_order_notional"] = (
+                self.limits.maximum_crypto_order_notional / signal.entry_price
+            )
         binding_cap = min(sizing_caps, key=lambda name: sizing_caps[name])
         qty = sizing_caps[binding_cap]
         if signal.market == Market.EQUITY:

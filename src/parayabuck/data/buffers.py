@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import timeframe_duration
 
 
 class BarRevision(StrEnum):
@@ -53,14 +54,7 @@ class BarStore:
         mutation = BarMutation.INSERTED
         if series:
             delta = normalized.timestamp - series[-1].timestamp
-            expected_seconds = {
-                "1m": 60,
-                "5m": 300,
-                "15m": 900,
-                "30m": 1800,
-                "1h": 3600,
-                "1d": 86400,
-            }[bar.timeframe]
+            expected_seconds = timeframe_duration(bar.timeframe).total_seconds()
             # Alpaca equity bars are trade-based. A quiet IEX/SIP interval is
             # omitted rather than emitted as a zero-volume candle, so a
             # timestamp jump alone cannot distinguish normal market silence

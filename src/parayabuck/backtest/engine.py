@@ -12,6 +12,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.logger import get_logger
+from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.monitoring import AIDecisionJournal
 from parayabuck.strategies.base import Strategy
 
@@ -211,17 +212,7 @@ class BacktestEngine:
 
     @staticmethod
     def _available_at(bar: Bar) -> datetime:
-        seconds = {
-            "1m": 60,
-            "5m": 300,
-            "15m": 900,
-            "30m": 1800,
-            "1h": 3600,
-            "1d": 86400,
-        }[bar.timeframe]
-        from datetime import timedelta
-
-        return bar.timestamp + timedelta(seconds=seconds)
+        return bar.timestamp + timeframe_duration(bar.timeframe)
 
     @staticmethod
     def _stddev(values: list[float]) -> float:
@@ -229,21 +220,3 @@ class BacktestEngine:
             return 0.0
         mean = sum(values) / len(values)
         return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
-
-    @staticmethod
-    def _annualizer(timestamps: list[datetime]) -> float:
-        if len(timestamps) < 2:
-            return 0.0
-        intervals = sorted(
-            (right - left).total_seconds()
-            for left, right in zip(timestamps, timestamps[1:], strict=False)
-            if right > left
-        )
-        if not intervals:
-            return 0.0
-        median_seconds = intervals[len(intervals) // 2]
-        observed_days = {timestamp.date() for timestamp in timestamps}
-        calendar_span = max(1, (timestamps[-1].date() - timestamps[0].date()).days + 1)
-        sessions_per_year = min(365.0, len(observed_days) / calendar_span * 365.25)
-        periods_per_session = 86_400 / median_seconds
-        return math.sqrt(max(1.0, sessions_per_year * periods_per_session))

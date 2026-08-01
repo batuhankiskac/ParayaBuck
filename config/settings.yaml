@@ -54,6 +54,16 @@ universe:
     active_universe_path: data/runtime/active_equity_universe.json
     active_universe_max_age_hours: 36
     require_scanner_config_digest_match: true
+    scanner:
+      minimum_price: 5
+      minimum_median_dollar_volume: 20000000
+      minimum_data_completeness: 0.95
+      minimum_atr_pct: 0.005
+      maximum_atr_pct: 0.12
+      maximum_per_sector: 5
+      volatility_optimum_pct: 0.03
+      spread_quality_ceiling_bps: 50
+      unknown_sector_penalty: 2
   crypto:
     enabled: true
     dynamic_selection_enabled: true
@@ -133,10 +143,12 @@ engine:
     max_crypto_position_pct: 0.05
     max_crypto_positions: 2
     minimum_crypto_order_notional: 12
+    maximum_crypto_order_notional: 200000
+    cash_buffer_pct: 0.05
     max_sector_exposure_pct: 0.25
     max_gross_exposure_pct: 0.6
     max_positions: 5
-    daily_loss_limit_pct: 0.0151
-    max_drawdown_pct: 0.1001
+    daily_loss_limit_pct: 0.015
+    max_drawdown_pct: 0.10
     minimum_risk_reward: 1.8
     consecutive_loss_reduction_after: 3

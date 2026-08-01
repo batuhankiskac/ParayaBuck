@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import yaml
 
-from parayabuck.config import EquityUniverseConfig, load_config
+from parayabuck.config import EquityScannerConfig, EquityUniverseConfig, load_config
 from parayabuck.core.models import (
     Direction,
     Fill,
@@ -29,6 +29,7 @@ from parayabuck.universe import (
     load_active_symbols,
     validate_active_universe,
 )
+from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -115,14 +116,15 @@ def test_scanner_is_deterministic_and_atomic(tmp_path: Path) -> None:
         reference_symbols=("SPY",),
         fallback_trade_symbols=("AAPL",),
         active_universe_path=str(active),
+        scanner=EquityScannerConfig(maximum_per_sector=1),
     )
-    scanner = EquityUniverseScanner(config, maximum_per_sector=1)
+    scanner = EquityUniverseScanner(config)
     candidates = [
         EquityCandidate("MSFT", 400, 500_000_000, 0.03, 1.0, 2, "technology"),
         EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology"),
         EquityCandidate("JPM", 220, 300_000_000, 0.025, 0.99, 3, "financial"),
     ]
-    timestamp = datetime(2026, 7, 28, 12, tzinfo=UTC)
+    timestamp = datetime.now(UTC)
     first = scanner.scan(candidates, data_timestamp=timestamp, selection_timestamp=timestamp)
     second = scanner.scan(
         list(reversed(candidates)), data_timestamp=timestamp, selection_timestamp=timestamp
@@ -228,7 +230,8 @@ def _managed_crypto_ledger(tmp_path: Path) -> tuple[ExecutionLedger, OrderIntent
         client_order_id="parayabuck-entry",
     )
     ledger.register_entry_order("acct", order, "entry-id")
-    ledger.record_entry_fill(
+    apply_entry_fill(
+        ledger,
         "acct",
         order,
         Fill(
@@ -336,6 +339,42 @@ def test_unconfirmed_stop_cancel_halts_without_target_order(tmp_path: Path) -> N
     assert client.submitted == []
     position = ledger.managed_for_account("acct")["BTC/USD"]
     assert position.status == "manual_intervention_required"
+    ledger.close()
+
+
+def test_partial_crypto_exit_is_cancelled_and_remaining_qty_reprotected(
+    tmp_path: Path,
+) -> None:
+    ledger, order = _managed_crypto_ledger(tmp_path)
+    client = _ExitClient()
+    broker = _broker(ledger, client)
+    partial = Fill(
+        order.client_order_id,
+        order.symbol,
+        0.04,
+        111,
+        Direction.LONG,
+        datetime.now(UTC),
+    )
+    responses = iter(
+        (
+            (OrderState.PARTIALLY_FILLED, partial),
+            (OrderState.CANCELLED, partial),
+        )
+    )
+    broker._wait_for_fill = lambda *_args, **_kwargs: next(responses)
+
+    result = broker.process_crypto_price(
+        CryptoPriceObservation("BTC/USD", 111, 109, 110, "one_minute_bar", datetime.now(UTC))
+    )
+
+    assert result == "target"
+    assert len(client.submitted) == 2
+    assert float(client.submitted[1].qty) == pytest.approx(0.06)
+    remaining = ledger.managed_for_account("acct")["BTC/USD"]
+    assert remaining.owned_qty == pytest.approx(0.06)
+    assert remaining.stop_state == "open"
+    assert remaining.status == "open"
     ledger.close()
 
 

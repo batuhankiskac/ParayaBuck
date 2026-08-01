@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from parayabuck.core.models import (
     ExecutionEvent,
     ExecutionTransition,
@@ -25,8 +27,13 @@ class ExecutionCoordinator:
         self.risk = risk
         self.ledger = ledger
         self._cumulative_fills: dict[str, float] = {}
+        self._lock = threading.RLock()
 
     def apply(self, event: ExecutionEvent) -> ExecutionTransition:
+        with self._lock:
+            return self._apply_unlocked(event)
+
+    def _apply_unlocked(self, event: ExecutionEvent) -> ExecutionTransition:
         if self.ledger is not None:
             transition = self.ledger.apply_execution_event(event)
         else:

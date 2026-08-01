@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import math
 import queue
 import threading
 import time
+from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -33,8 +35,10 @@ from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskState
+from parayabuck.storage import SQLiteStore
 from parayabuck.universe import (
     ensure_active_universes,
     load_active_crypto_symbols,
@@ -77,6 +81,82 @@ class _Event:
     received_at: datetime
 
 
+class _EventQueue:
+    """Bounded queue with domain-aware coalescing and overflow policy."""
+
+    def __init__(self, maxsize: int) -> None:
+        self.maxsize = maxsize
+        self._items: deque[_Event | None] = deque()
+        self._condition = threading.Condition()
+
+    def put_nowait(self, item: _Event | None) -> None:
+        with self._condition:
+            if len(self._items) >= self.maxsize:
+                raise queue.Full
+            self._items.append(item)
+            self._condition.notify()
+
+    def get(self, timeout: float | None = None) -> _Event | None:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self._condition:
+            while not self._items:
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise queue.Empty
+                self._condition.wait(remaining)
+            return self._items.popleft()
+
+    def get_nowait(self) -> _Event | None:
+        with self._condition:
+            if not self._items:
+                raise queue.Empty
+            return self._items.popleft()
+
+    def qsize(self) -> int:
+        with self._condition:
+            return len(self._items)
+
+    def empty(self) -> bool:
+        return self.qsize() == 0
+
+    def put_market_event(self, event: _Event) -> str:
+        with self._condition:
+            if len(self._items) < self.maxsize:
+                self._items.append(event)
+                self._condition.notify()
+                return "added"
+            key = (event.kind, event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
+            for index in range(len(self._items) - 1, -1, -1):
+                candidate = self._items[index]
+                if candidate is None:
+                    continue
+                candidate_key = (
+                    candidate.kind,
+                    candidate.bar.symbol,
+                    candidate.bar.timeframe,
+                    candidate.bar.timestamp,
+                )
+                if candidate_key == key:
+                    self._items[index] = event
+                    return "coalesced"
+            if event.kind == "primary":
+                return "overflow"
+            victim = None
+            for index in range(len(self._items) - 1, -1, -1):
+                candidate = self._items[index]
+                if candidate is not None and candidate.kind != "primary":
+                    victim = index
+                    break
+            if victim is None:
+                return "overflow"
+            self._items[victim] = event
+            return "replaced"
+
+    def snapshot(self) -> tuple[_Event | None, ...]:
+        with self._condition:
+            return tuple(self._items)
+
+
 class EngineRuntime:
     """Web-manageable streaming runtime for the ParayaBuck engine."""
 
@@ -111,12 +191,13 @@ class EngineRuntime:
             Market.CRYPTO: None,
         }
         self.paper = config.alpaca.paper
-        self.journal = DecisionJournal(self.config.decision_db_path)
+        self.store = SQLiteStore(self.config.decision_db_path)
+        self.journal = DecisionJournal(self.config.decision_db_path, store=self.store)
         self.journal_writer = AsyncDecisionJournal(
             self.journal,
             on_critical_failure=self._on_critical_journal_failure,
         )
-        self.ledger = ExecutionLedger(self.config.decision_db_path)
+        self.ledger = ExecutionLedger(self.config.decision_db_path, store=self.store)
         self.broker = AlpacaBroker(
             api_key,
             secret_key,
@@ -175,13 +256,12 @@ class EngineRuntime:
             self.config.higher_timeframe,
             self.config.data_finalization_grace_seconds,
         )
-        self._events: queue.Queue[_Event | None] = queue.Queue(
-            maxsize=self.config.event_queue_capacity
-        )
+        self._events = _EventQueue(self.config.event_queue_capacity)
         self._threads: list[threading.Thread] = []
         self._stop_event = threading.Event()
         self._running = False
         self._ingestion_lock = threading.Lock()
+        self._state_lock = threading.RLock()
         self._journal_closed = False
         self._state = "stopped"
         self._workers: dict[str, WorkerHealth] = {}
@@ -203,28 +283,42 @@ class EngineRuntime:
 
     def health(self) -> RuntimeHealth:
         now = datetime.now(UTC)
+        # Some lightweight diagnostics construct a runtime via ``__new__``.
+        # A temporary lock keeps health reporting safe for those snapshots too.
+        state_lock = getattr(self, "_state_lock", threading.RLock())
+        with state_lock:
+            workers = dict(self._workers)
+            market_enabled = dict(
+                getattr(
+                    self,
+                    "_market_enabled",
+                    {
+                        Market.EQUITY: any(not is_crypto(symbol) for symbol in self.symbols),
+                        Market.CRYPTO: any(is_crypto(symbol) for symbol in self.symbols),
+                    },
+                )
+            )
+            symbols_by_market = {
+                market: set(symbols)
+                for market, symbols in getattr(
+                    self,
+                    "_symbols_by_market",
+                    {
+                        Market.EQUITY: {
+                            symbol for symbol in self.symbols if not is_crypto(symbol)
+                        },
+                        Market.CRYPTO: {
+                            symbol for symbol in self.symbols if is_crypto(symbol)
+                        },
+                    },
+                ).items()
+            }
         queue_age = (
             max(0.0, (now - self._oldest_received_at).total_seconds())
             if self._oldest_received_at is not None
             else 0.0
         )
         required = {"pb-decisions", "pb-trade-updates", "pb-account"}
-        market_enabled = getattr(
-            self,
-            "_market_enabled",
-            {
-                Market.EQUITY: any(not is_crypto(symbol) for symbol in self.symbols),
-                Market.CRYPTO: any(is_crypto(symbol) for symbol in self.symbols),
-            },
-        )
-        symbols_by_market = getattr(
-            self,
-            "_symbols_by_market",
-            {
-                Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
-                Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
-            },
-        )
         if market_enabled.get(Market.EQUITY, False) and symbols_by_market.get(Market.EQUITY):
             required.add("pb-stocks")
         if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
@@ -232,14 +326,14 @@ class EngineRuntime:
         heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
 
         def worker_healthy(name: str) -> bool:
-            worker = self._workers.get(name)
+            worker = workers.get(name)
             if worker is None or not worker.alive:
                 return False
             if name == "pb-trade-updates":
                 return True
             if name in {"pb-stocks", "pb-crypto"}:
                 market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
-                event_required = market == Market.CRYPTO or _is_regular_equity_time(now)
+                event_required = market == Market.CRYPTO or is_regular_equity_time(now)
                 if not event_required:
                     return True
                 return bool(
@@ -272,7 +366,7 @@ class EngineRuntime:
         ):
             enabled = market_enabled.get(market, False)
             symbols = symbols_by_market.get(market, set())
-            worker = self._workers.get(worker_name)
+            worker = workers.get(worker_name)
             not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
@@ -280,7 +374,7 @@ class EngineRuntime:
             # not keep an otherwise usable market in warmup forever. The
             # decision loop already excludes not-ready symbols individually.
             ready = not enabled or not symbols or ready_symbol_count > 0
-            event_required = market == Market.CRYPTO or _is_regular_equity_time(now)
+            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
             stream_healthy = (
                 not enabled
                 or not symbols
@@ -315,7 +409,7 @@ class EngineRuntime:
             queue_age_seconds=queue_age,
             dropped_events=self._dropped_events,
             coalesced_events=self._coalesced_events,
-            workers={name: asdict(item) for name, item in self._workers.items()},
+            workers={name: asdict(item) for name, item in workers.items()},
             markets=market_health,
         )
 
@@ -336,7 +430,8 @@ class EngineRuntime:
             )
             self._state = "halted"
             raise
-        self._pin_managed_symbols()
+        with self._state_lock:
+            self._pin_managed_symbols()
         self._restore_persistent_state()
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
@@ -378,9 +473,11 @@ class EngineRuntime:
                     daemon=True,
                 )
             )
+        with self._state_lock:
+            for thread in self._threads:
+                now = datetime.now(UTC)
+                self._workers[thread.name] = WorkerHealth(now, now)
         for thread in self._threads:
-            now = datetime.now(UTC)
-            self._workers[thread.name] = WorkerHealth(now, now)
             thread.start()
         try:
             self._warmup()
@@ -612,7 +709,9 @@ class EngineRuntime:
                 self._circuit_breaker_reason = "post_fill_risk_violation"
             if update.market == Market.CRYPTO and update.role == OrderRole.ENTRY:
                 try:
-                    if not self.broker.protect_recovered_crypto_entry(lifecycle.order):
+                    if not await asyncio.to_thread(
+                        self.broker.protect_recovered_crypto_entry, lifecycle.order
+                    ):
                         self._market_entry_halts[Market.CRYPTO] = (
                             "protection_reconciliation_required"
                         )
@@ -698,7 +797,8 @@ class EngineRuntime:
         self._mark_market_stream_recovered(bar.market)
         if bar.market == Market.CRYPTO:
             try:
-                self.broker.process_crypto_price(
+                await asyncio.to_thread(
+                    self.broker.process_crypto_price,
                     CryptoPriceObservation(
                         symbol=bar.symbol,
                         high=bar.high,
@@ -706,7 +806,7 @@ class EngineRuntime:
                         close=bar.close,
                         source="one_minute_bar",
                         timestamp=bar.timestamp,
-                    )
+                    ),
                 )
             except AmbiguousOrderState as exc:
                 self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
@@ -739,43 +839,14 @@ class EngineRuntime:
 
     def _put_event(self, kind: str, bar: Bar) -> None:
         event = _Event(kind, bar, datetime.now(UTC))
-        try:
-            self._events.put_nowait(event)
-        except queue.Full:
-            key = (kind, bar.symbol, bar.timeframe, bar.timestamp)
-            replaced = False
-            with self._events.mutex:
-                queued = self._events.queue
-                for index in range(len(queued) - 1, -1, -1):
-                    candidate = queued[index]
-                    if candidate is None:
-                        continue
-                    candidate_key = (
-                        candidate.kind,
-                        candidate.bar.symbol,
-                        candidate.bar.timeframe,
-                        candidate.bar.timestamp,
-                    )
-                    if candidate_key == key:
-                        queued[index] = event
-                        replaced = True
-                        self._coalesced_events += 1
-                        break
-                if not replaced and kind == "primary":
-                    self._circuit_breaker_reason = "final_market_event_queue_overflow"
-                elif not replaced:
-                    priorities = {"higher": 1, "correction": 2, "primary": 3}
-                    victim = min(
-                        range(len(queued)),
-                        key=lambda index: priorities.get(
-                            queued[index].kind if queued[index] is not None else "", 0
-                        ),
-                    )
-                    queued[victim] = event
-                    replaced = True
-                    self._dropped_events += 1
-            if not replaced:
-                self._dropped_events += 1
+        result = self._events.put_market_event(event)
+        if result == "coalesced":
+            self._coalesced_events += 1
+        elif result == "replaced":
+            self._dropped_events += 1
+        elif result == "overflow":
+            self._circuit_breaker_reason = "final_market_event_queue_overflow"
+            self._dropped_events += 1
         if self._oldest_received_at is None:
             self._oldest_received_at = event.received_at
 
@@ -812,7 +883,14 @@ class EngineRuntime:
                             item.bar.market, datetime.min.replace(tzinfo=UTC)
                         ),
                     ):
-                        self.engine.ingest_closed_bars([item.bar])
+                        self.engine.ingest_corrections([item.bar])
+                        log.debug(
+                            "Late finalized bar ingested as correction: symbol=%s "
+                            "timeframe=%s timestamp=%s",
+                            item.bar.symbol,
+                            item.bar.timeframe,
+                            item.bar.timestamp,
+                        )
                     else:
                         key = item.bar.timestamp
                         pending.setdefault(key, {})[item.bar.symbol] = item.bar
@@ -870,7 +948,8 @@ class EngineRuntime:
                     next_reconcile = time.monotonic() + 60.0
         except Exception as exc:
             worker.last_error = str(exc)
-            self._state = "error"
+            self._state = "halted"
+            self._circuit_breaker_reason = "decision_worker_crashed"
             log.exception("Decision worker failed")
         finally:
             worker.alive = False
@@ -911,11 +990,7 @@ class EngineRuntime:
         self._refresh_readiness()
         market_reasons: dict[Market, tuple[str, ...]] = {}
         for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-            try:
-                market_reasons[candidate_market] = self._entry_readiness_reasons(candidate_market)
-            except TypeError:
-                # Compatibility for injected test runtimes and older adapters.
-                market_reasons[candidate_market] = self._entry_readiness_reasons()
+            market_reasons[candidate_market] = self._entry_readiness_reasons(candidate_market)
         ready_bars = {
             symbol: bar
             for symbol, bar in bars_by_symbol.items()
@@ -1018,12 +1093,10 @@ class EngineRuntime:
         return tuple(reasons)
 
     def _engine_has_market_gap(self, market: Market) -> bool:
-        checker = getattr(self.engine, "has_data_gaps_for_market", None)
-        return bool(checker(market)) if checker is not None else bool(self.engine.has_data_gaps)
+        return self.engine.has_data_gaps_for_market(market)
 
     def _engine_has_symbol_gap(self, symbol: str) -> bool:
-        checker = getattr(self.engine, "has_data_gaps_for_symbol", None)
-        return bool(checker(symbol)) if checker is not None else False
+        return self.engine.has_data_gaps_for_symbol(symbol)
 
     def _repair_gap(self, bar: Bar) -> None:
         history = self._historical
@@ -1183,7 +1256,7 @@ def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
 
 
 def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
-    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}[timeframe]
+    minutes = TIMEFRAME_MINUTES[timeframe]
     bars_per_day = (1440 if is_crypto(symbol) else 390) / minutes
     trading_days = bars * 1.5 / max(1, bars_per_day)
     calendar_days = trading_days if is_crypto(symbol) else trading_days * 1.5
@@ -1192,13 +1265,7 @@ def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
 
 
 def _is_regular_equity_bar(bar: Bar) -> bool:
-    return _is_regular_equity_time(bar.timestamp)
-
-
-def _is_regular_equity_time(timestamp: datetime) -> bool:
-    local = timestamp.astimezone(_NEW_YORK)
-    minute = local.hour * 60 + local.minute
-    return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
+    return is_regular_equity_time(bar.timestamp)
 
 
 __all__ = ["EngineRuntime"]

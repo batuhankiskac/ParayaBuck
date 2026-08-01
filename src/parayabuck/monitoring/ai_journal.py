@@ -435,7 +435,7 @@ class AIDecisionJournal:
                 "",
             ]
         )
-        path.write_text("\n".join(lines), encoding="utf-8")
+        self._atomic_text(path, "\n".join(lines))
 
     def _write_outcome(self, record: PredictionRecord, outcome: PredictionOutcome) -> None:
         path = self.root / record.decision_file
@@ -588,13 +588,28 @@ class AIDecisionJournal:
         return path
 
     def _atomic_json(self, path: Path, payload: Any) -> None:
+        self._atomic_text(
+            path,
+            json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False),
+        )
+
+    @staticmethod
+    def _atomic_text(path: Path, content: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-        temporary.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False),
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _append(path: Path, text: str) -> None:

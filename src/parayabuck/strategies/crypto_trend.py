@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import math
-import statistics
 
-from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
+from parayabuck.core.models import Bar, Market, Regime, Signal
 from parayabuck.features.indicators import atr, ema
 from parayabuck.strategies.base import (
     ConditionEvaluation,
@@ -46,17 +45,12 @@ class CryptoTrendBreakout(Strategy):
         if not (supported and regime_ok):
             failed = next(item for item in conditions if not item.passed)
             return StrategyEvaluation(self.name, False, failed.explanation, tuple(conditions))
-        closes = [bar.close for bar in bars]
+        closes = self.closes(bars)
         fast = ema(closes, 20)
         slow = ema(closes, 100)
         atr_value = atr(bars, 14)
         volume_window = bars[-21:]
-        nonzero_volume_bars = sum(
-            1 for bar in volume_window if math.isfinite(bar.volume) and bar.volume > 0
-        )
-        volume_gate_ok = nonzero_volume_bars >= max(
-            1, int(self.min_volume_bar_ratio * len(volume_window))
-        )
+        volume_gate_ok = self.nonzero_volume_gate(volume_window, self.min_volume_bar_ratio)
         indicators_ok = (
             fast is not None
             and slow is not None
@@ -109,9 +103,9 @@ class CryptoTrendBreakout(Strategy):
             return StrategyEvaluation(
                 self.name, False, failed.explanation, tuple(conditions), metrics
             )
-        baseline_volumes = [bar.volume for bar in bars[-21:-1] if bar.volume > 0]
-        average_volume = statistics.median(baseline_volumes) if baseline_volumes else 0.0
-        relative_volume = current.volume / average_volume if average_volume > 0 else 1.0
+        relative_volume = self.relative_volume(
+            current, bars[-21:-1], median=True, positive_only=True
+        )
         trend_points = min(17, context.regime.trend_strength / 2)
         volume_points = min(10, relative_volume * 4)
         higher_points = 10 if context.higher_timeframe_regime == Regime.TREND_UP else 0
@@ -120,19 +114,13 @@ class CryptoTrendBreakout(Strategy):
             score += 10
         stop = current.close - max(2.2 * atr_value, current.close * 0.018)
         target = current.close + 2.3 * (current.close - stop)
-        signal = Signal(
-            symbol=current.symbol,
-            market=self.market,
-            direction=Direction.LONG,
-            strategy=self.name,
-            score=min(100, score),
-            confidence=min(1.0, score / 100),
-            entry_price=current.close,
-            invalidation_price=stop,
-            target_price=target,
-            timestamp=current.timestamp,
-            reasons=("20_bar_breakout", "ema20>ema100", f"relative_volume={relative_volume:.2f}"),
-            regime=context.regime.regime,
+        signal = self.long_signal(
+            current,
+            score,
+            stop,
+            target,
+            ("20_bar_breakout", "ema20>ema100", f"relative_volume={relative_volume:.2f}"),
+            context.regime.regime,
         )
         metrics.update(
             {

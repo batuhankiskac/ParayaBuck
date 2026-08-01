@@ -38,6 +38,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
+from parayabuck.utils.objects import field_value
 
 log = get_logger("parayabuck.execution.alpaca")
 
@@ -428,6 +429,9 @@ class AlpacaBroker:
         fill_activities_reconciled = True
         if ledger is not None and hasattr(ledger, "apply_fee_activity"):
             fill_activities_reconciled = self._reconcile_fill_activity_fees()
+            # Fill recovery can create managed ownership that was absent from
+            # the snapshot taken above. Refresh it before protection checks.
+            managed = ledger.managed_for_account(self._account_id or "unknown")
         broker_symbols = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
@@ -593,26 +597,14 @@ class AlpacaBroker:
                 if ownership is not None
                 else None
             )
-            try:
-                protected = self._submit_stop(
-                    position.symbol,
-                    position.market,
-                    qty,
-                    stop_price,
-                    is_long,
-                    client_order_id=protective_client_id,
-                )
-            except TypeError as exc:
-                if "client_order_id" not in str(exc):
-                    raise
-                # Compatibility for injected five-argument test/fake brokers.
-                protected = self._submit_stop(
-                    position.symbol,
-                    position.market,
-                    qty,
-                    stop_price,
-                    is_long,
-                )
+            protected = self._submit_stop(
+                position.symbol,
+                position.market,
+                qty,
+                stop_price,
+                is_long,
+                client_order_id=protective_client_id,
+            )
             if not protected:
                 if (
                     ownership is not None
@@ -675,6 +667,9 @@ class AlpacaBroker:
                 item.get("transaction_time") or item.get("date") or ""
             )
         )
+        recovered_buy_fills: dict[
+            str, list[tuple[float, float, datetime, str, str]]
+        ] = {}
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
@@ -731,6 +726,17 @@ class AlpacaBroker:
                         activity_id=activity_id,
                     )
                 )
+            if (
+                activity_id
+                and broker_order_id
+                and symbol
+                and side == "buy"
+                and qty > 0
+                and price > 0
+            ):
+                recovered_buy_fills.setdefault(broker_order_id, []).append(
+                    (qty, price, occurred_at, activity_id, symbol)
+                )
             applied = ledger.apply_fee_activity(
                 self._account_id or "unknown",
                 activity_id=activity_id,
@@ -744,6 +750,54 @@ class AlpacaBroker:
                     "recovery_action=fill_activity_reconciliation",
                     activity.get("order_id"),
                     fee,
+                )
+        entry_lookup = getattr(ledger, "entry_order_for_broker_id", None)
+        if entry_lookup is not None:
+            for broker_order_id, fills in recovered_buy_fills.items():
+                recovered = entry_lookup(
+                    self._account_id or "unknown",
+                    broker_order_id,
+                )
+                if recovered is None:
+                    continue
+                order, known_cumulative = recovered
+                observed_qty = sum(item[0] for item in fills)
+                cumulative = min(order.qty, max(known_cumulative, observed_qty))
+                if cumulative <= known_cumulative:
+                    continue
+                observed_notional = sum(item[0] * item[1] for item in fills)
+                average_price = observed_notional / observed_qty
+                latest = max(fills, key=lambda item: item[2])
+                state = (
+                    OrderState.FILLED
+                    if cumulative >= order.qty - max(1e-9, order.qty * 1e-8)
+                    else OrderState.PARTIALLY_FILLED
+                )
+                ledger.apply_execution_event(
+                    ExecutionEvent(
+                        account_id=self._account_id or "unknown",
+                        client_order_id=order.client_order_id,
+                        broker_order_id=broker_order_id,
+                        parent_order_id=None,
+                        role=OrderRole.ENTRY,
+                        symbol=order.symbol,
+                        market=order.market,
+                        state=state,
+                        requested_qty=order.qty,
+                        cumulative_filled_qty=cumulative,
+                        average_fill_price=average_price,
+                        occurred_at=latest[2],
+                        activity_id=latest[3],
+                    )
+                )
+                log.warning(
+                    "Entry fill recovered from account activity: market=%s symbol=%s "
+                    "entry_client_order_id=%s broker_order_id=%s cumulative_qty=%s",
+                    order.market.value,
+                    order.symbol,
+                    order.client_order_id,
+                    broker_order_id,
+                    cumulative,
                 )
         return True
 
@@ -1049,7 +1103,8 @@ class AlpacaBroker:
                     return OrderState.REJECTED, fill
                 else:
                     state = OrderState.ACCEPTED
-            except Exception:
+            except Exception as exc:
+                log.warning("Order status lookup failed for %s: %s", order_id, exc)
                 state = OrderState.ACCEPTED
             time.sleep(0.5)
         log.warning("Order %s not filled within %.1fs", order_id, timeout)
@@ -1615,6 +1670,63 @@ class AlpacaBroker:
                 position.entry_client_order_id,
                 target_state="target_exit_partially_filled",
             )
+            try:
+                self._client.cancel_order_by_id(broker_id)
+            except Exception as exc:
+                log.warning(
+                    "Partial crypto exit cancel response ambiguous: broker_order_id=%s "
+                    "error=%s",
+                    broker_id,
+                    exc,
+                )
+            terminal_state, final_fill = self._wait_for_fill(
+                broker_id,
+                intent,
+                qty,
+                timeout=getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0),
+            )
+            if final_fill is not None:
+                ledger.apply_execution_event(
+                    ExecutionEvent(
+                        self._account_id,
+                        client_id,
+                        broker_id,
+                        None,
+                        OrderRole.TAKE_PROFIT
+                        if reason == "target"
+                        else OrderRole.EMERGENCY_EXIT,
+                        position.canonical_symbol,
+                        Market.CRYPTO,
+                        terminal_state,
+                        qty,
+                        final_fill.qty,
+                        final_fill.price,
+                        final_fill.timestamp,
+                    )
+                )
+            if terminal_state == OrderState.FILLED:
+                ledger.set_exit_state(
+                    self._account_id,
+                    position.entry_client_order_id,
+                    target_state="target_exit_filled"
+                    if reason == "target"
+                    else "emergency_exit_filled",
+                )
+                return
+            if terminal_state not in {
+                OrderState.CANCELLED,
+                OrderState.REJECTED,
+                OrderState.EXPIRED,
+            }:
+                ledger.mark_manual_intervention(
+                    self._account_id, position.entry_client_order_id
+                )
+                raise AmbiguousOrderState(
+                    "Partial crypto exit cancellation is unconfirmed for "
+                    f"{position.canonical_symbol}: {terminal_state.value}"
+                )
+            self._reprotect_after_terminal_exit(position)
+            return
         ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
         raise AmbiguousOrderState(
             f"Crypto {reason} exit is not terminal for {position.canonical_symbol}: {state.value}"
@@ -1735,11 +1847,29 @@ class AlpacaBroker:
     def _has_protective_order(
         self, symbol: str, position_is_long: bool, required_qty: float
     ) -> bool:
+        protective_orders = self._open_protective_orders(symbol, position_is_long)
+        protected = sum(
+            (
+                abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+                for order in protective_orders
+            ),
+            start=Decimal("0"),
+        )
+        required = Decimal(str(required_qty))
+        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
+        self._last_protection_mismatch = (
+            "missing"
+            if protected == 0
+            else ("under" if protected < required - tolerance else "over")
+        )
+        return abs(protected - required) <= tolerance
+
+    def _open_protective_orders(self, symbol: str, position_is_long: bool) -> list[Any]:
         orders: Any = self._client.get_orders(
             GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
         )
         if isinstance(orders, dict):
-            return False
+            return []
         closing_side = "sell" if position_is_long else "buy"
         canonical = canonical_symbol(symbol)
         ledger = getattr(self, "ledger", None)
@@ -1767,7 +1897,9 @@ class AlpacaBroker:
                 or client_id.startswith("parayabuck-")
             )
 
-        def protective_qty(order: Any, inherited: bool = False) -> Decimal:
+        protective: list[Any] = []
+
+        def visit(order: Any, inherited: bool = False) -> None:
             owned = is_owned(order, inherited)
             side = str(self._field(order, "side", "")).lower().split(".")[-1]
             order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
@@ -1791,77 +1923,24 @@ class AlpacaBroker:
                     stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
                 )
             ):
-                return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
-            return sum(
-                (protective_qty(leg, owned) for leg in (self._field(order, "legs") or ())),
-                start=Decimal("0"),
-            )
-
-        protected = sum((protective_qty(order) for order in orders), start=Decimal("0"))
-        required = Decimal(str(required_qty))
-        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
-        self._last_protection_mismatch = (
-            "missing"
-            if protected == 0
-            else ("under" if protected < required - tolerance else "over")
-        )
-        return abs(protected - required) <= tolerance
-
-    def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
-        orders: Any = self._client.get_orders(
-            GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
-        )
-        closing_side = "sell" if position_is_long else "buy"
-        canonical = canonical_symbol(symbol)
-        ledger = getattr(self, "ledger", None)
-        account_id = getattr(self, "_account_id", "") or "unknown"
-        legacy_external_management = ledger is None and bool(
-            getattr(self, "manage_external_positions", True)
-        )
-        managed_order_ids = (
-            ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
-        )
-        managed_client_ids = (
-            ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
-        )
-
-        def visit(order: Any, inherited: bool = False) -> None:
-            order_id = str(self._field(order, "id", "") or "")
-            client_id = str(self._field(order, "client_order_id", "") or "")
-            parent_id = str(self._field(order, "parent_order_id", "") or "")
-            owned = (
-                inherited
-                or legacy_external_management
-                or order_id in managed_order_ids
-                or parent_id in managed_order_ids
-                or client_id in managed_client_ids
-                or client_id.startswith("parayabuck-")
-            )
-            side = str(self._field(order, "side", "")).lower().split(".")[-1]
-            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
-            stop_price = self._field(order, "stop_price")
-            if (
-                owned
-                and side == closing_side
-                and (
-                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
-                )
-            ):
-                order_id = self._field(order, "id")
-                if order_id:
-                    self._client.cancel_order_by_id(order_id)
+                protective.append(order)
                 return
             for leg in self._field(order, "legs") or ():
                 visit(leg, owned)
 
         for order in orders or ():
             visit(order)
+        return protective
+
+    def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
+        for order in self._open_protective_orders(symbol, position_is_long):
+            order_id = self._field(order, "id")
+            if order_id:
+                self._client.cancel_order_by_id(order_id)
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:
-        if isinstance(value, dict):
-            return value.get(name, default)
-        return getattr(value, name, default)
+        return field_value(value, name, default)
 
     def _load_peak_equity(self) -> float:
         if not self._peak_state_path.exists():

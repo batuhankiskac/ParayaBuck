@@ -7,6 +7,7 @@ from typing import Any
 
 from parayabuck.core.models import Market, OrderRole, OrderState
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.utils.objects import field_value as _field
 
 
 @dataclass(frozen=True)
@@ -120,10 +121,6 @@ class AlpacaTradingUpdateStream:
         self._stream.stop()
 
 
-def _field(value: Any, name: str, default: Any = None) -> Any:
-    if isinstance(value, dict):
-        return value.get(name, default)
-    return getattr(value, name, default)
 
 
 __all__ = ["AlpacaTradingUpdateStream", "TradeUpdate"]

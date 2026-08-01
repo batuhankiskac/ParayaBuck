@@ -305,7 +305,7 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
             self.risk = object()
 
     class FakeLedger:
-        def __init__(self, _path: str) -> None:
+        def __init__(self, _path: str, **_kwargs: object) -> None:
             pass
 
         def managed_entries_for_account(self, _account: str) -> tuple[object, ...]:

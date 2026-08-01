@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from parayabuck.config import EngineConfig, EquityUniverseConfig
+from parayabuck.config import EngineConfig, EquityScannerConfig, EquityUniverseConfig
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -257,8 +257,9 @@ def test_scanner_unknown_sectors_fill_capacity_and_reject_nan(tmp_path: Path) ->
         reference_symbols=("SPY",),
         fallback_trade_symbols=(),
         active_universe_path=str(tmp_path / "active.json"),
+        scanner=EquityScannerConfig(maximum_per_sector=1),
     )
-    scanner = EquityUniverseScanner(config, maximum_per_sector=1)
+    scanner = EquityUniverseScanner(config)
     candidates = [
         EquityCandidate(f"U{index}", 20, 100_000_000, 0.03, 1.0, 2, None) for index in range(10)
     ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
+from parayabuck.core.models import Bar, Market, Regime, Signal
 from parayabuck.features.indicators import atr, bollinger, rsi
 from parayabuck.strategies.base import (
     ConditionEvaluation,
@@ -45,17 +45,12 @@ class CryptoRangeReversion(Strategy):
         if not (supported and regime_ok):
             failed = next(item for item in conditions if not item.passed)
             return StrategyEvaluation(self.name, False, failed.explanation, tuple(conditions))
-        closes = [bar.close for bar in bars]
+        closes = self.closes(bars)
         bands = bollinger(closes, 20, 2.2)
         rsi_value = rsi(closes, 14)
         atr_value = atr(bars, 14)
         volume_window = bars[-20:]
-        nonzero_volume_bars = sum(
-            1 for bar in volume_window if math.isfinite(bar.volume) and bar.volume > 0
-        )
-        volume_gate_ok = nonzero_volume_bars >= max(
-            1, int(self.min_volume_bar_ratio * len(volume_window))
-        )
+        volume_gate_ok = self.nonzero_volume_gate(volume_window, self.min_volume_bar_ratio)
         indicators_ok = (
             bands is not None
             and rsi_value is not None
@@ -122,19 +117,13 @@ class CryptoRangeReversion(Strategy):
         stop = min(previous.low, current.close - max(1.8 * atr_value, current.close * 0.015))
         target = max(bands.middle, current.close + 1.9 * (current.close - stop))
         score = min(100.0, 65 + abs(bands.zscore) * 7 + (43 - rsi_value) / 2)
-        signal = Signal(
-            symbol=current.symbol,
-            market=self.market,
-            direction=Direction.LONG,
-            strategy=self.name,
-            score=score,
-            confidence=min(1.0, score / 100),
-            entry_price=current.close,
-            invalidation_price=stop,
-            target_price=target,
-            timestamp=current.timestamp,
-            reasons=("crypto_range", "lower_band_reclaim", f"rsi={rsi_value:.1f}"),
-            regime=context.regime.regime,
+        signal = self.long_signal(
+            current,
+            score,
+            stop,
+            target,
+            ("crypto_range", "lower_band_reclaim", f"rsi={rsi_value:.1f}"),
+            context.regime.regime,
         )
         metrics.update(
             {

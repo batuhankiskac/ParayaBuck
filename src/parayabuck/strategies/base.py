@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import math
+import statistics
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from parayabuck.core.models import Bar, Market, PositionSnapshot, Regime, Signal
+from parayabuck.core.models import Bar, Direction, Market, PositionSnapshot, Regime, Signal
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.markets.symbols import canonical_symbol
 
@@ -76,4 +78,58 @@ class Strategy(ABC):
         return all(
             bar.market == self.market and canonical_symbol(bar.symbol, bar.market) == symbol
             for bar in bars
+        )
+
+    @staticmethod
+    def closes(bars: list[Bar]) -> list[float]:
+        return [bar.close for bar in bars]
+
+    @staticmethod
+    def nonzero_volume_gate(bars: list[Bar], ratio: float) -> bool:
+        if not bars:
+            return False
+        available = sum(1 for bar in bars if math.isfinite(bar.volume) and bar.volume > 0)
+        return available >= max(1, int(ratio * len(bars)))
+
+    @staticmethod
+    def relative_volume(
+        current: Bar,
+        baseline: list[Bar],
+        *,
+        median: bool = False,
+        positive_only: bool = False,
+    ) -> float:
+        volumes = [
+            bar.volume
+            for bar in baseline
+            if math.isfinite(bar.volume) and (bar.volume > 0 or not positive_only)
+        ]
+        if not volumes:
+            return 1.0
+        typical = statistics.median(volumes) if median else statistics.fmean(volumes)
+        return current.volume / typical if typical > 0 else 1.0
+
+    def long_signal(
+        self,
+        current: Bar,
+        score: float,
+        stop: float,
+        target: float,
+        reasons: tuple[str, ...],
+        regime: Regime,
+    ) -> Signal:
+        bounded_score = min(100.0, score)
+        return Signal(
+            symbol=current.symbol,
+            market=self.market,
+            direction=Direction.LONG,
+            strategy=self.name,
+            score=bounded_score,
+            confidence=min(1.0, bounded_score / 100),
+            entry_price=current.close,
+            invalidation_price=stop,
+            target_price=target,
+            timestamp=current.timestamp,
+            reasons=reasons,
+            regime=regime,
         )

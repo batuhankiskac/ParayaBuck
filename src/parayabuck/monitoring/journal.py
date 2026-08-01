@@ -1,34 +1,37 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-import threading
 from pathlib import Path
 
 from parayabuck.core.models import AccountSnapshot, Bar, Fill, OrderIntent, OrderState, Signal
 from parayabuck.markets.regime import RegimeAssessment
+from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 
 class DecisionJournal:
     """Durable audit trail for every signal, rejection, order and fill."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._lock = threading.Lock()
-        self.connection.execute("PRAGMA journal_mode=WAL")
+        self._store = store or SQLiteStore(self.path)
+        self._store.acquire()
+        self.connection = self._store.connection
+        self._lock = self._store.lock
         self._migrate()
 
     def _migrate(self) -> None:
-        self._migrate_legacy_orders_table()
+        migrate_legacy_decision_orders(self.connection)
+        self._migrate_decisions_table()
         self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS decisions (
-                signal_id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
                 strategy TEXT NOT NULL, score REAL NOT NULL, regime TEXT NOT NULL,
-                accepted INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL
+                accepted INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE INDEX IF NOT EXISTS idx_decisions_signal_id ON decisions(signal_id);
             CREATE TABLE IF NOT EXISTS decision_orders (
                 client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
                 state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
@@ -51,38 +54,30 @@ class DecisionJournal:
         )
         self.connection.commit()
 
-    def _migrate_legacy_orders_table(self) -> None:
-        """Move the old audit table out of the execution ledger's namespace."""
-        columns = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(orders)")}
-        legacy_columns = {
-            "client_order_id",
-            "timestamp",
-            "symbol",
-            "state",
-            "reason",
-            "payload",
-        }
-        if not legacy_columns.issubset(columns) or "broker_order_id" in columns:
+    def _migrate_decisions_table(self) -> None:
+        columns = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(decisions)")}
+        if not columns or "id" in columns:
             return
-        self.connection.execute(
+        self.connection.executescript(
             """
-            CREATE TABLE IF NOT EXISTS decision_orders (
-                client_order_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
-                state TEXT NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
-                PRIMARY KEY (client_order_id, timestamp, state)
+            ALTER TABLE decisions RENAME TO decisions_legacy;
+            CREATE TABLE decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_id TEXT NOT NULL, timestamp TEXT NOT NULL, symbol TEXT NOT NULL,
+                strategy TEXT NOT NULL, score REAL NOT NULL, regime TEXT NOT NULL,
+                accepted INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO decisions(
+                signal_id, timestamp, symbol, strategy, score, regime,
+                accepted, reason, payload, recorded_at
             )
+            SELECT signal_id, timestamp, symbol, strategy, score, regime,
+                   accepted, reason, payload, timestamp
+            FROM decisions_legacy;
+            DROP TABLE decisions_legacy;
             """
         )
-        self.connection.execute(
-            """
-            INSERT OR IGNORE INTO decision_orders(
-                client_order_id, timestamp, symbol, state, reason, payload
-            )
-            SELECT client_order_id, timestamp, symbol, state, reason, payload
-            FROM orders
-            """
-        )
-        self.connection.execute("DROP TABLE orders")
 
     def record_scan(self, bar: Bar, assessment: RegimeAssessment, reason: str) -> None:
         payload = json.dumps(
@@ -111,7 +106,12 @@ class DecisionJournal:
         payload = json.dumps({"reasons": signal.reasons, "risk_reward": signal.risk_reward})
         with self._lock:
             self.connection.execute(
-                "INSERT OR REPLACE INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                """
+                INSERT INTO decisions(
+                    signal_id, timestamp, symbol, strategy, score, regime,
+                    accepted, reason, payload
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
                     signal.signal_id,
                     signal.timestamp.isoformat(),
@@ -183,5 +183,4 @@ class DecisionJournal:
             self.connection.commit()
 
     def close(self) -> None:
-        with self._lock:
-            self.connection.close()
+        self._store.release()

@@ -9,6 +9,7 @@ import yaml
 from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,8 @@ class RiskLimits:
     max_crypto_position_pct: float = 0.05
     max_crypto_positions: int = 2
     minimum_crypto_order_notional: float = 12.0
+    maximum_crypto_order_notional: float = 200_000.0
+    cash_buffer_pct: float = 0.05
     max_sector_exposure_pct: float = 0.25
     max_gross_exposure_pct: float = 0.60
     max_positions: int = 5
@@ -45,6 +48,8 @@ class RiskLimits:
             or self.max_crypto_positions <= 0
             or self.max_crypto_positions > self.max_positions
             or self.minimum_crypto_order_notional <= 0
+            or self.maximum_crypto_order_notional <= self.minimum_crypto_order_notional
+            or not 0 <= self.cash_buffer_pct < 1
             or self.minimum_risk_reward <= 0
             or self.consecutive_loss_reduction_after <= 0
         ):
@@ -86,7 +91,7 @@ class EngineConfig:
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:
-        supported = {"1m", "5m", "15m", "30m", "1h", "1d"}
+        supported = set(TIMEFRAME_MINUTES)
         if self.timeframe not in supported or self.higher_timeframe not in supported:
             raise ValueError("Unsupported timeframe")
         if (
@@ -101,8 +106,7 @@ class EngineConfig:
             0 < self.crypto_min_volume_bar_ratio <= 1
         ):
             raise ValueError("crypto_min_volume_bar_ratio must be in (0, 1]")
-        minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
-        if minutes[self.higher_timeframe] <= minutes[self.timeframe]:
+        if TIMEFRAME_MINUTES[self.higher_timeframe] <= TIMEFRAME_MINUTES[self.timeframe]:
             raise ValueError("higher_timeframe must be greater than timeframe")
         if self.consecutive_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
@@ -188,6 +192,33 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
+class EquityScannerConfig:
+    minimum_price: float = 5.0
+    minimum_median_dollar_volume: float = 20_000_000.0
+    minimum_data_completeness: float = 0.95
+    minimum_atr_pct: float = 0.005
+    maximum_atr_pct: float = 0.12
+    maximum_per_sector: int = 5
+    volatility_optimum_pct: float = 0.03
+    spread_quality_ceiling_bps: float = 50.0
+    unknown_sector_penalty: float = 2.0
+
+    def __post_init__(self) -> None:
+        if self.minimum_price <= 0 or self.minimum_median_dollar_volume <= 0:
+            raise ValueError("Equity scanner price and liquidity thresholds must be positive")
+        if not 0 < self.minimum_data_completeness <= 1:
+            raise ValueError("Equity scanner completeness must be in (0, 1]")
+        if not 0 < self.minimum_atr_pct < self.maximum_atr_pct <= 1:
+            raise ValueError("Equity scanner ATR range is invalid")
+        if not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct:
+            raise ValueError("Equity scanner volatility optimum must be inside the ATR range")
+        if self.maximum_per_sector <= 0 or self.spread_quality_ceiling_bps <= 0:
+            raise ValueError("Equity scanner sector and spread limits must be positive")
+        if self.unknown_sector_penalty < 0:
+            raise ValueError("Equity scanner unknown-sector penalty must not be negative")
+
+
+@dataclass(frozen=True)
 class EquityUniverseConfig:
     enabled: bool = True
     dynamic_selection_enabled: bool = True
@@ -200,6 +231,7 @@ class EquityUniverseConfig:
     trade_reference_symbols: bool = False
     active_universe_max_age_hours: float = 36.0
     require_scanner_config_digest_match: bool = True
+    scanner: EquityScannerConfig = field(default_factory=EquityScannerConfig)
 
     def __post_init__(self) -> None:
         from parayabuck.markets.symbols import canonical_symbol
@@ -414,7 +446,9 @@ def load_config(config_path: str | None = None) -> Config:
         engine_raw.setdefault("equity_trading_enabled", bool(equities))
     else:
         universe_dict = dict(universe_raw)
-        equity = EquityUniverseConfig(**dict(universe_dict.get("equity", {})))
+        equity_raw = dict(universe_dict.get("equity", {}))
+        equity_scanner = EquityScannerConfig(**dict(equity_raw.pop("scanner", {})))
+        equity = EquityUniverseConfig(scanner=equity_scanner, **equity_raw)
         crypto_raw = dict(universe_dict.get("crypto", {}))
         scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
         crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.config import EngineConfig
@@ -19,8 +19,8 @@ from parayabuck.execution.base import ExecutionBroker
 from parayabuck.execution.state_machine import OrderStateMachine
 from parayabuck.markets.regime import RegimeDetector
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
-from parayabuck.portfolio.allocator import PortfolioAllocator
 from parayabuck.risk.manager import RiskManager
 from parayabuck.signals.ranker import SignalRanker, ranking_score
 from parayabuck.strategies import Strategy, StrategyContext, default_strategies
@@ -70,7 +70,6 @@ class TradingEngine:
         self.bars = BarStore(max(500, self.config.warmup_bars))
         self.regimes = RegimeDetector()
         self.ranker = SignalRanker(self.config.minimum_signal_score)
-        self.allocator = PortfolioAllocator(self.config.max_new_positions_per_cycle)
         self.risk = RiskManager(self.config.risk)
         self.orders = OrderStateMachine()
         self.entry_halt_reason: str | None = None
@@ -497,14 +496,7 @@ class TradingEngine:
         if signal.direction.value == "short" and not self.config.allow_short:
             return "short_trading_disabled"
         if self.enforce_live_safety and self.config.reject_stale_signals:
-            duration = {
-                "1m": timedelta(minutes=1),
-                "5m": timedelta(minutes=5),
-                "15m": timedelta(minutes=15),
-                "30m": timedelta(minutes=30),
-                "1h": timedelta(hours=1),
-                "1d": timedelta(days=1),
-            }[self.config.timeframe]
+            duration = timeframe_duration(self.config.timeframe)
             age = datetime.now(UTC) - (signal.timestamp + duration)
             if age.total_seconds() > self.config.maximum_signal_age_seconds:
                 return "stale_signal"

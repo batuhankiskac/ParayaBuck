@@ -23,7 +23,6 @@ from parayabuck.core.models import (
 )
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
-from parayabuck.execution.shadow import ShadowBroker
 from parayabuck.execution.state_machine import OrderStateMachine
 from parayabuck.features.indicators import ema
 from parayabuck.markets.regime import RegimeAssessment
@@ -34,6 +33,24 @@ from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
 from parayabuck.strategies.stock_trend import StockTrendPullback
 
 pytestmark = pytest.mark.paper_chaos
+
+
+class ShadowBroker:
+    """Test broker that records submissions without creating real orders."""
+
+    def __init__(self, account: AccountSnapshot) -> None:
+        self._account = account
+        self.observed: list[OrderIntent] = []
+
+    def account(self) -> AccountSnapshot:
+        return self._account
+
+    def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
+        self.observed.append(order)
+        return OrderState.ACCEPTED, None
+
+    def reconcile(self) -> None:
+        return
 
 
 def _bar(index: int, close: float = 100.0, high: float | None = None) -> Bar:
@@ -175,6 +192,25 @@ def test_shadow_engine_journals_decision(tmp_path) -> None:
     journal.close()
 
 
+def test_decision_journal_preserves_multiple_reasons_for_one_signal(tmp_path) -> None:
+    journal = DecisionJournal(str(tmp_path / "decision-history.sqlite3"))
+    signal = _OneShotStrategy().evaluate(
+        [_bar(0)],
+        StrategyContext(RegimeAssessment(Regime.RANGE, 1.0, 0, 0, ())),
+    )
+    assert signal is not None
+
+    journal.record_decision(signal, False, "first_gate")
+    journal.record_decision(signal, False, "second_gate")
+
+    reasons = journal.connection.execute(
+        "SELECT reason FROM decisions WHERE signal_id=? ORDER BY id",
+        (signal.signal_id,),
+    ).fetchall()
+    assert reasons == [("first_gate",), ("second_gate",)]
+    journal.close()
+
+
 def test_engine_accepts_broker_partial_fill_response() -> None:
     class PartialFillBroker(ShadowBroker):
         def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
@@ -232,6 +268,7 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
         _qty: float,
         stop_price: float,
         _position_is_long: bool,
+        client_order_id: str | None = None,
     ) -> bool:
         submitted.append((symbol, stop_price))
         return True
@@ -305,7 +342,7 @@ def test_reconcile_does_not_apply_fee_tolerance_to_available_crypto() -> None:
         checked_required_qty.append(required_qty) or False
     )
     broker._available_position_qty = lambda *_args, **_kwargs: 0.01
-    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long: (
+    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long, **_kwargs: (
         submitted.append(qty) or True
     )
 
@@ -326,7 +363,7 @@ def test_reconcile_protects_only_unreserved_equity_qty() -> None:
         positions=(PositionSnapshot("AAPL", 1, 100, 101, Market.EQUITY, qty_available=0.5),),
     )
     broker._has_protective_order = lambda _symbol, _is_long, _qty: False
-    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long: (
+    broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long, **_kwargs: (
         submitted.append(qty) or True
     )
 

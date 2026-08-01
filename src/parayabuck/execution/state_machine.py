@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -77,25 +78,28 @@ class OrderLifecycle:
 class OrderStateMachine:
     def __init__(self) -> None:
         self.orders: dict[str, OrderLifecycle] = {}
+        self._lock = threading.RLock()
 
     def create(self, order: OrderIntent) -> OrderLifecycle:
-        if order.client_order_id in self.orders:
-            return self.orders[order.client_order_id]
-        lifecycle = OrderLifecycle(order)
-        self.orders[order.client_order_id] = lifecycle
-        return lifecycle
+        with self._lock:
+            if order.client_order_id in self.orders:
+                return self.orders[order.client_order_id]
+            lifecycle = OrderLifecycle(order)
+            self.orders[order.client_order_id] = lifecycle
+            return lifecycle
 
     def transition(
         self, client_order_id: str, state: OrderState, reason: str = ""
     ) -> OrderLifecycle:
-        lifecycle = self.orders[client_order_id]
-        # Broker acknowledgements can arrive through both the synchronous
-        # submit response and the asynchronous trade-update stream. Treat the
-        # second observation as an idempotent no-op.
-        if state == lifecycle.state:
+        with self._lock:
+            lifecycle = self.orders[client_order_id]
+            # Broker acknowledgements can arrive through both the synchronous
+            # submit response and the asynchronous trade-update stream. Treat the
+            # second observation as an idempotent no-op.
+            if state == lifecycle.state:
+                return lifecycle
+            if state not in _ALLOWED[lifecycle.state]:
+                raise ValueError(f"Invalid order transition {lifecycle.state} -> {state}")
+            lifecycle.state = state
+            lifecycle.history.append((datetime.now(UTC), state, reason))
             return lifecycle
-        if state not in _ALLOWED[lifecycle.state]:
-            raise ValueError(f"Invalid order transition {lifecycle.state} -> {state}")
-        lifecycle.state = state
-        lifecycle.history.append((datetime.now(UTC), state, reason))
-        return lifecycle

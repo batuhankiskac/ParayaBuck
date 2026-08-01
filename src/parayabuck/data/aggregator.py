@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from parayabuck.core.models import Bar, Market
-
-_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
-_NEW_YORK = ZoneInfo("America/New_York")
+from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES
 
 
 class TimeframeAggregator:
     """Aggregate closed one-minute stream bars into larger closed candles."""
 
     def __init__(self, timeframe: str, finalization_grace_seconds: float = 0.0) -> None:
-        if timeframe not in _MINUTES:
+        if timeframe not in TIMEFRAME_MINUTES:
             raise ValueError(f"Unsupported streaming timeframe: {timeframe}")
         self.timeframe = timeframe
-        self.minutes = _MINUTES[timeframe]
+        self.minutes = TIMEFRAME_MINUTES[timeframe]
         if finalization_grace_seconds < 0:
             raise ValueError("finalization_grace_seconds cannot be negative")
         self.finalization_grace = timedelta(seconds=finalization_grace_seconds)
@@ -63,7 +60,7 @@ class TimeframeAggregator:
     def _bucket(self, timestamp: datetime, market: Market) -> datetime:
         value = timestamp
         if market == Market.EQUITY:
-            local = value.astimezone(_NEW_YORK)
+            local = value.astimezone(NEW_YORK)
             anchor = local.replace(hour=9, minute=30, second=0, microsecond=0)
             elapsed = max(0, int((local - anchor).total_seconds() // 60))
             bucket_offset = elapsed - elapsed % self.minutes
@@ -82,12 +79,12 @@ class TimeframeAggregator:
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
 
     def flush_session_close(self, session_close: datetime) -> list[Bar]:
-        close_date = session_close.astimezone(_NEW_YORK).date()
+        close_date = session_close.astimezone(NEW_YORK).date()
         flushed: list[Bar] = []
         for symbol, bar in list(self._current.items()):
             if (
                 bar.market == Market.EQUITY
-                and bar.timestamp.astimezone(_NEW_YORK).date() == close_date
+                and bar.timestamp.astimezone(NEW_YORK).date() == close_date
             ):
                 flushed.append(self._current.pop(symbol))
                 self._last_components[symbol] = self._components.pop(symbol, {})

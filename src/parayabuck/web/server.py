@@ -74,6 +74,7 @@ class EngineManager:
         self._pending_live_arm: LiveArmToken | None = None
         self._live_arm_token: LiveArmToken | None = None
         self._ws_tickets: dict[str, tuple[str, float]] = {}
+        self._paper_mode_cache: tuple[int, bool] | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -81,9 +82,15 @@ class EngineManager:
     def is_paper_mode(self) -> bool:
         try:
             if self.config_path.exists():
+                modified_ns = self.config_path.stat().st_mtime_ns
+                cached = self._paper_mode_cache
+                if cached is not None and cached[0] == modified_ns:
+                    return cached[1]
                 with open(self.config_path) as f:
                     cfg = yaml.safe_load(f) or {}
-                return bool(cfg.get("alpaca", {}).get("paper", True))
+                paper = bool(cfg.get("alpaca", {}).get("paper", True))
+                self._paper_mode_cache = (modified_ns, paper)
+                return paper
         except Exception:
             pass
         return True
@@ -263,7 +270,7 @@ class EngineManager:
                     paper = self.is_paper_mode()
                     self.broker = AlpacaBroker(key, secret, paper=paper)
                 except Exception as e:
-                    log.warning(f"Could not connect broker: {e}")
+                    log.warning("Could not connect broker: %s", e)
 
         if self.broker is not None:
             try:
@@ -326,7 +333,7 @@ class EngineManager:
                 self._last_account_monotonic = time.monotonic()
                 return snapshot
             except Exception as e:
-                log.warning(f"Error fetching account snapshot: {e}")
+                log.warning("Error fetching account snapshot: %s", e)
 
         if self.last_account:
             age = max(0.0, time.monotonic() - self._last_account_monotonic)
@@ -551,23 +558,6 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
 
 
 manager = EngineManager()
-
-
-def _manager_has_active_runtime(value: Any) -> bool:
-    check = getattr(value, "has_active_runtime", None)
-    if callable(check):
-        return bool(check())
-    return getattr(value, "runtime", None) is not None or getattr(
-        value, "engine_state", "stopped"
-    ) in {
-        "starting",
-        "running",
-        "warming_up",
-        "degraded",
-        "halted",
-        "stopping",
-        "stop_failed",
-    }
 
 
 async def _auto_start_paper_engine() -> None:
@@ -816,7 +806,7 @@ async def stop_engine() -> dict[str, str]:
 
 @app.post("/api/mode")
 async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
-    if _manager_has_active_runtime(manager):
+    if manager.has_active_runtime():
         raise HTTPException(
             status_code=400,
             detail="Cannot toggle trading mode while engine is running. Stop the bot first.",
@@ -1002,12 +992,12 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
 
         # Validation and live-token checks are complete before a healthy
         # runtime is stopped.
-        active_runtime = _manager_has_active_runtime(manager)
+        active_runtime = manager.has_active_runtime()
         restart_engine = active_runtime and payload.restart_engine
         if active_runtime and not payload.restart_engine:
             raise ValueError("Stop the bot before saving settings without a restart")
         if restart_engine:
-            manager.stop_engine()
+            await asyncio.to_thread(manager.stop_engine)
             if manager.engine_state != "stopped":
                 raise RuntimeError(
                     "Bot could not stop safely. Use the Durdur button and try again."
@@ -1024,7 +1014,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         restart_error: str | None = None
         if restart_engine:
             try:
-                manager.start_engine()
+                await asyncio.to_thread(manager.start_engine)
             except Exception as exc:
                 # The settings are already safely persisted. A transient
                 # Alpaca timeout during the automatic restart must not report

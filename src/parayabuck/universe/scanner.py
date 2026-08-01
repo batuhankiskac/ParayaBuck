@@ -7,7 +7,6 @@ import math
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Market
@@ -29,11 +28,6 @@ class EquityCandidate:
     exchange: str = "NASDAQ"
     leveraged_or_inverse: bool = False
 
-    @classmethod
-    def from_mapping(cls, value: dict[str, Any]) -> EquityCandidate:
-        return cls(**value)
-
-
 @dataclass(frozen=True)
 class ScannerResult:
     selection_timestamp: str
@@ -53,24 +47,9 @@ class EquityUniverseScanner:
 
     version = "equity-scanner-v3"
 
-    def __init__(
-        self,
-        config: EquityUniverseConfig,
-        *,
-        minimum_price: float = 5.0,
-        minimum_median_dollar_volume: float = 20_000_000,
-        minimum_completeness: float = 0.95,
-        minimum_atr_pct: float = 0.005,
-        maximum_atr_pct: float = 0.12,
-        maximum_per_sector: int = 5,
-    ) -> None:
+    def __init__(self, config: EquityUniverseConfig) -> None:
         self.config = config
-        self.minimum_price = minimum_price
-        self.minimum_median_dollar_volume = minimum_median_dollar_volume
-        self.minimum_completeness = minimum_completeness
-        self.minimum_atr_pct = minimum_atr_pct
-        self.maximum_atr_pct = maximum_atr_pct
-        self.maximum_per_sector = maximum_per_sector
+        self.scanner = config.scanner
 
     def scan(
         self,
@@ -112,18 +91,20 @@ class EquityUniverseScanner:
             volatility_fit = max(
                 0.0,
                 1
-                - abs(candidate.atr_pct - 0.03)
-                / max(0.001, self.maximum_atr_pct - self.minimum_atr_pct),
+                - abs(candidate.atr_pct - self.scanner.volatility_optimum_pct)
+                / max(0.001, self.scanner.maximum_atr_pct - self.scanner.minimum_atr_pct),
             )
             spread_quality = (
-                0.5 if candidate.spread_bps is None else max(0.0, 1 - candidate.spread_bps / 50)
+                0.5
+                if candidate.spread_bps is None
+                else max(0.0, 1 - candidate.spread_bps / self.scanner.spread_quality_ceiling_bps)
             )
             score = (
                 liquidity * 40
                 + volatility_fit * 25
                 + candidate.data_completeness * 25
                 + spread_quality * 10
-                - (2.0 if sector == "unknown" else 0.0)
+                - (self.scanner.unknown_sector_penalty if sector == "unknown" else 0.0)
             )
             breakdown: dict[str, float | str] = {
                 "total": round(score, 8),
@@ -171,7 +152,7 @@ class EquityUniverseScanner:
             if len(selected) >= capacity:
                 eliminated.setdefault(symbol, "stream_capacity")
                 continue
-            sector_limit = capacity if sector == "unknown" else self.maximum_per_sector
+            sector_limit = capacity if sector == "unknown" else self.scanner.maximum_per_sector
             if sector_counts.get(sector, 0) >= sector_limit:
                 eliminated[symbol] = "sector_concentration"
                 continue
@@ -211,21 +192,21 @@ class EquityUniverseScanner:
             and canonical_symbol(item.symbol) not in self.config.inverse_trade_symbols
         ):
             return "leveraged_or_inverse"
-        if not math.isfinite(item.price) or item.price < self.minimum_price:
+        if not math.isfinite(item.price) or item.price < self.scanner.minimum_price:
             return "minimum_price"
         if (
             not math.isfinite(item.median_dollar_volume_20d)
-            or item.median_dollar_volume_20d < self.minimum_median_dollar_volume
+            or item.median_dollar_volume_20d < self.scanner.minimum_median_dollar_volume
         ):
             return "minimum_liquidity"
         if not math.isfinite(item.atr_pct) or not (
-            self.minimum_atr_pct <= item.atr_pct <= self.maximum_atr_pct
+            self.scanner.minimum_atr_pct <= item.atr_pct <= self.scanner.maximum_atr_pct
         ):
             return "atr_range"
         if (
             not math.isfinite(item.data_completeness)
             or not 0 <= item.data_completeness <= 1
-            or item.data_completeness < self.minimum_completeness
+            or item.data_completeness < self.scanner.minimum_data_completeness
         ):
             return "data_completeness"
         if item.spread_bps is not None and (

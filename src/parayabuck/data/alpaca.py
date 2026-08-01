@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
@@ -13,11 +12,11 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.cache import WarmupCache
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
 log = get_logger("parayabuck.data.alpaca")
-_NEW_YORK = ZoneInfo("America/New_York")
 
 _TIMEFRAMES = {
     "1m": TimeFrame(1, TimeFrameUnit.Minute),
@@ -180,9 +179,7 @@ class AlpacaHistoricalData:
 
     @staticmethod
     def _is_regular_equity_timestamp(timestamp: datetime) -> bool:
-        local = timestamp.astimezone(_NEW_YORK)
-        minute = local.hour * 60 + local.minute
-        return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
+        return is_regular_equity_time(timestamp)
 
     @staticmethod
     def _cache_is_fresh(
@@ -200,14 +197,7 @@ class AlpacaHistoricalData:
         if market == Market.EQUITY:
             maximum_age = timedelta(days=4 if timeframe != "1d" else 8)
         else:
-            minutes = {
-                "1m": 1,
-                "5m": 5,
-                "15m": 15,
-                "30m": 30,
-                "1h": 60,
-                "1d": 1440,
-            }[timeframe]
+            minutes = TIMEFRAME_MINUTES[timeframe]
             maximum_age = timedelta(minutes=max(180, minutes * 3))
         return age <= maximum_age
 

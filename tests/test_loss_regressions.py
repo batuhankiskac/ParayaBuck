@@ -29,6 +29,7 @@ from parayabuck.runtime import EngineRuntime
 from parayabuck.strategies.base import StrategyContext, StrategyEvaluation
 from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
+from tests.helpers import apply_entry_fill
 
 
 def _bars(
@@ -130,7 +131,8 @@ def test_uuid_exit_without_parent_links_to_unique_managed_lot(tmp_path: Path) ->
         client_order_id="parayabuck-entry",
     )
     ledger.register_entry_order("acct", order, "broker-entry")
-    ledger.record_entry_fill(
+    apply_entry_fill(
+        ledger,
         "acct",
         order,
         Fill(order.client_order_id, "GE", 10, 100, Direction.LONG, datetime.now(UTC)),
@@ -253,7 +255,8 @@ def test_fill_activity_recovers_exit_pnl_when_stream_was_offline(tmp_path: Path)
         client_order_id="parayabuck-offline-entry",
     )
     ledger.register_entry_order("acct", order, "broker-entry")
-    ledger.record_entry_fill(
+    apply_entry_fill(
+        ledger,
         "acct",
         order,
         Fill(order.client_order_id, "GE", 10, 100, Direction.LONG, created),
@@ -287,6 +290,50 @@ def test_fill_activity_recovers_exit_pnl_when_stream_was_offline(tmp_path: Path)
         (order.client_order_id,),
     ).fetchone()
     assert row == (10.0, -51.0, 1.0, "closed")
+    ledger.close()
+
+
+def test_fill_activity_recovers_entry_fill_idempotently(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "entry-recovery.sqlite3"))
+    created = datetime.now(UTC) - timedelta(minutes=5)
+    order = OrderIntent(
+        "signal",
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        0.1,
+        100_000,
+        95_000,
+        110_000,
+        "test",
+        created_at=created,
+        client_order_id="parayabuck-offline-crypto-entry",
+    )
+    ledger.register_entry_order("acct", order, "broker-entry")
+    activities = [
+        {
+            "id": f"buy-activity-{index}",
+            "order_id": "broker-entry",
+            "symbol": "BTCUSD",
+            "side": "buy",
+            "qty": "0.05",
+            "price": str(price),
+            "commission": "0",
+            "transaction_time": (created + timedelta(seconds=index)).isoformat(),
+        }
+        for index, price in enumerate((99_000, 101_000), 1)
+    ]
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = ledger
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: activities)
+
+    broker._reconcile_fill_activity_fees()
+    broker._reconcile_fill_activity_fees()
+
+    position = ledger.managed_for_account("acct")["BTC/USD"]
+    assert position.owned_qty == 0.1
+    assert position.filled_avg_price == 100_000
     ledger.close()
 
 

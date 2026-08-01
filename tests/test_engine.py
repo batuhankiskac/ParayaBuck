@@ -241,6 +241,30 @@ def test_submit_exception_becomes_reconciliation_lock() -> None:
     assert engine.entry_halt_reason == "ambiguous_order_state"
 
 
+def test_stale_submit_response_does_not_regress_stream_fill() -> None:
+    class RacingBroker(ShadowBroker):
+        engine: TradingEngine
+
+        def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
+            self.engine.orders.transition(
+                order.client_order_id, OrderState.FILLED, "trade_update"
+            )
+            return OrderState.ACCEPTED, None
+
+    broker = RacingBroker(AccountSnapshot(10_000, 10_000, 10_000, 0))
+    engine = TradingEngine(
+        broker,
+        EngineConfig(warmup_bars=50),
+        (_OneShotStrategy(),),
+    )
+    broker.engine = engine
+
+    orders = engine.process_cycle([_bar(0)])
+
+    assert len(orders) == 1
+    assert engine.orders.orders[orders[0].client_order_id].state == OrderState.FILLED
+
+
 def test_decision_journal_preserves_multiple_reasons_for_one_signal(tmp_path) -> None:
     journal = DecisionJournal(str(tmp_path / "decision-history.sqlite3"))
     signal = _OneShotStrategy().evaluate(
@@ -257,6 +281,33 @@ def test_decision_journal_preserves_multiple_reasons_for_one_signal(tmp_path) ->
         (signal.signal_id,),
     ).fetchall()
     assert reasons == [("first_gate",), ("second_gate",)]
+    journal.close()
+
+
+def test_decision_journal_preserves_repeated_order_state_within_one_second(
+    tmp_path,
+) -> None:
+    journal = DecisionJournal(str(tmp_path / "order-history.sqlite3"))
+    order = OrderIntent(
+        "signal",
+        "TEST",
+        Market.EQUITY,
+        Direction.LONG,
+        1,
+        100,
+        98,
+        104,
+        "test",
+    )
+
+    journal.record_order(order, OrderState.ACCEPTED, "stream")
+    journal.record_order(order, OrderState.ACCEPTED, "reconcile")
+
+    reasons = journal.connection.execute(
+        "SELECT reason FROM decision_orders WHERE client_order_id=? ORDER BY timestamp",
+        (order.client_order_id,),
+    ).fetchall()
+    assert reasons == [("stream",), ("reconcile",)]
     journal.close()
 
 
@@ -376,7 +427,7 @@ def test_reconcile_accepts_fee_adjusted_crypto_stop_as_full_protection() -> None
     assert checked_required_qty == [pytest.approx(57227.813043902)]
 
 
-def test_reconcile_does_not_apply_fee_tolerance_to_available_crypto() -> None:
+def test_reconcile_adds_underprotected_crypto_remainder_without_cancelling() -> None:
     checked_required_qty: list[float] = []
     submitted: list[float] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
@@ -387,8 +438,14 @@ def test_reconcile_does_not_apply_fee_tolerance_to_available_crypto() -> None:
         daily_pnl=0,
         positions=(PositionSnapshot("BTCUSD", 1, 100, 101, Market.CRYPTO, qty_available=0.01),),
     )
-    broker._has_protective_order = lambda _symbol, _is_long, required_qty: (
-        checked_required_qty.append(required_qty) or False
+    def has_protection(_symbol: str, _is_long: bool, required_qty: float) -> bool:
+        checked_required_qty.append(required_qty)
+        broker._last_protection_mismatch = "under"
+        return False
+
+    broker._has_protective_order = has_protection
+    broker._cancel_protective_orders = lambda *_args: pytest.fail(
+        "undersized protection must remain active while the remainder is added"
     )
     broker._available_position_qty = lambda *_args, **_kwargs: 0.01
     broker._submit_stop = lambda _symbol, _market, qty, _stop, _is_long, **_kwargs: (
@@ -399,6 +456,54 @@ def test_reconcile_does_not_apply_fee_tolerance_to_available_crypto() -> None:
 
     assert checked_required_qty == [1]
     assert submitted == [0.01]
+
+
+def test_reconcile_accepts_broker_qty_within_crypto_fee_reserve() -> None:
+    ownership = SimpleNamespace(
+        owned_qty=1.0,
+        entry_client_order_id="entry",
+        original_stop=95.0,
+        broker_order_id=None,
+    )
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {"BTC/USD": ownership},
+        managed_entries_for_account=lambda _account: (),
+        set_protection_state=lambda *_args: None,
+    )
+    broker.account = lambda: AccountSnapshot(
+        cash=9_000,
+        equity=10_000,
+        peak_equity=10_000,
+        daily_pnl=0,
+        positions=(
+            PositionSnapshot(
+                "BTC/USD", 0.9975, 100, 101, Market.CRYPTO, qty_available=0
+            ),
+        ),
+    )
+    broker._round_qty_down = lambda _symbol, qty: qty
+    broker._has_protective_order = lambda _symbol, _long, qty: qty == pytest.approx(0.9975)
+
+    broker.reconcile()
+
+
+def test_cancel_protective_orders_waits_for_confirmation() -> None:
+    statuses = iter(("pending_cancel", "canceled"))
+    cancelled: list[str] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.crypto_stop_cancel_timeout_seconds = 0.2
+    broker.crypto_stop_cancel_poll_interval_seconds = 0.001
+    broker._open_protective_orders = lambda *_args: [SimpleNamespace(id="stop-1")]
+    broker._client = SimpleNamespace(
+        cancel_order_by_id=cancelled.append,
+        get_order_by_id=lambda _order_id: SimpleNamespace(status=next(statuses)),
+    )
+
+    broker._cancel_protective_orders("AAPL", True)
+
+    assert cancelled == ["stop-1"]
 
 
 def test_reconcile_protects_only_unreserved_equity_qty() -> None:

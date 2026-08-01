@@ -393,7 +393,6 @@ def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> N
     runtime._warming_up = False
     runtime._not_ready_symbols = set()
     runtime._last_account_at = datetime.now(UTC)
-    runtime._last_entry_cycle_timestamp = None
     runtime._circuit_breaker_reason = None
     runtime._state = "running"
     runtime._workers = {}

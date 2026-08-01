@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from parayabuck.core.models import AccountSnapshot, Bar, Fill, OrderIntent, OrderState, Signal
@@ -139,9 +140,16 @@ class DecisionJournal:
             self.connection.execute(
                 """
                 INSERT OR REPLACE INTO decision_orders
-                VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (order.client_order_id, order.symbol, state.value, reason, payload),
+                (
+                    order.client_order_id,
+                    datetime.now(UTC).isoformat(timespec="microseconds"),
+                    order.symbol,
+                    state.value,
+                    reason,
+                    payload,
+                ),
             )
             self.connection.commit()
 

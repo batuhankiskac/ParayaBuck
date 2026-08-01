@@ -122,11 +122,7 @@ class TradingEngine:
             # Ingestion is deliberately independent from account availability.
             # Runtime health/circuit-breaker records the failure; no order can
             # be created without a fresh snapshot.
-            from parayabuck.logger import get_logger
-
-            get_logger("parayabuck.engine").warning(
-                "Account snapshot unavailable after bar ingestion: %s", exc
-            )
+            log.warning("Account snapshot unavailable after bar ingestion: %s", exc)
             return []
         return self._evaluate_bars(tradeable, account)
 
@@ -378,7 +374,21 @@ class TradingEngine:
                     order.client_order_id,
                 )
                 state, fill = OrderState.RECONCILIATION_REQUIRED, None
-            lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
+            try:
+                lifecycle = self.orders.transition(
+                    order.client_order_id, state, "broker_response"
+                )
+            except ValueError:
+                # The asynchronous trade-update stream may have advanced the
+                # lifecycle beyond this synchronous submit response. The
+                # stream observation is authoritative because it is newer.
+                lifecycle = self.orders.orders[order.client_order_id]
+                log.info(
+                    "Ignored stale broker response for %s: response=%s current=%s",
+                    order.client_order_id,
+                    state.value,
+                    lifecycle.state.value,
+                )
             filled_qty = fill.qty if fill is not None else 0.0
             broker_effective = filled_qty > 0 or lifecycle.state in {
                 OrderState.ACCEPTED,

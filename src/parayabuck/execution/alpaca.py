@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -497,11 +497,17 @@ class AlpacaBroker:
             if ownership is None and not manage_external:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
+            broker_qty_is_fee_adjusted = False
             if ownership is not None:
                 tolerance = max(1e-9, ownership.owned_qty * 1e-8)
+                minimum_fee_adjusted_qty = ownership.owned_qty
+                if position.market == Market.CRYPTO:
+                    minimum_fee_adjusted_qty *= float(
+                        Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE
+                    )
                 if (
                     position.market == Market.CRYPTO
-                    and abs(position.qty) + tolerance < ownership.owned_qty
+                    and abs(position.qty) + tolerance < minimum_fee_adjusted_qty
                 ):
                     if ledger is not None and hasattr(ledger, "mark_manual_intervention"):
                         ledger.mark_manual_intervention(
@@ -510,6 +516,18 @@ class AlpacaBroker:
                         )
                     raise ProtectionReconciliationError(
                         f"Broker quantity is below managed ledger quantity for {symbol}"
+                    )
+                if (
+                    position.market == Market.CRYPTO
+                    and abs(position.qty) + tolerance < ownership.owned_qty
+                ):
+                    broker_qty_is_fee_adjusted = True
+                    log.info(
+                        "Accepted fee-adjusted crypto ownership: symbol=%s ledger_qty=%s "
+                        "broker_qty=%s",
+                        symbol,
+                        ownership.owned_qty,
+                        abs(position.qty),
                     )
                 stop_price = ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
@@ -523,7 +541,11 @@ class AlpacaBroker:
                 abs(position.qty_available) if position.qty_available is not None else total_qty
             )
             required_qty = total_qty
-            if position.market == Market.CRYPTO and position.qty_available == 0:
+            if (
+                position.market == Market.CRYPTO
+                and position.qty_available == 0
+                and not broker_qty_is_fee_adjusted
+            ):
                 # Alpaca may deduct the taker fee from the acquired asset. A
                 # stop can therefore reserve every sellable unit while being
                 # up to 0.25% smaller than the raw position quantity. Only use
@@ -580,8 +602,17 @@ class AlpacaBroker:
                         ownership.entry_client_order_id,
                         ProtectionState.REQUESTED,
                     )
-                self._cancel_protective_orders(position.symbol, is_long)
+                # Add only the currently available remainder when protection is
+                # undersized. Cancelling the existing stop first creates a
+                # needless unprotected window and can churn fee-adjusted crypto
+                # stops on every reconciliation cycle. Oversized protection
+                # must be cancelled and broker-confirmed before replacement.
+                if mismatch == "over":
+                    self._cancel_protective_orders(position.symbol, is_long)
             qty = min(total_qty, available_qty)
+            if mismatch == "under":
+                protected_qty = float(getattr(self, "_last_protected_qty", 0.0))
+                qty = min(qty, max(0.0, required_qty - protected_qty))
             if position.market == Market.CRYPTO:
                 qty = self._available_position_qty(
                     position.symbol,
@@ -815,7 +846,7 @@ class AlpacaBroker:
             raise ProtectionReconciliationError(
                 f"Crypto exit lookup is ambiguous for {position.canonical_symbol}"
             ) from exc
-        status_name = str(self._field(order, "status", "")).lower().split(".")[-1]
+        status_name = self._normalized_field(order, "status")
         state = {
             "filled": OrderState.FILLED,
             "partially_filled": OrderState.PARTIALLY_FILLED,
@@ -956,10 +987,10 @@ class AlpacaBroker:
         closing_side = "sell" if position_is_long else "buy"
 
         def protective_qty(order: Any) -> Decimal:
-            side = str(self._field(order, "side", "")).lower().split(".")[-1]
-            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
+            side = self._normalized_field(order, "side")
+            order_type = self._normalized_field(order, "type")
             stop_price = self._field(order, "stop_price")
-            status = str(self._field(order, "status", "")).lower().split(".")[-1]
+            status = self._normalized_field(order, "status")
             if (
                 side == closing_side
                 and status not in {"canceled", "expired", "filled", "rejected"}
@@ -982,14 +1013,11 @@ class AlpacaBroker:
             )
             if same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
                 protected += protective_qty(parent)
-        required = Decimal(str(required_qty))
-        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
-        self._last_protection_mismatch = (
-            "missing"
-            if protected == 0
-            else ("under" if protected < required - tolerance else "over")
+        matches, self._last_protection_mismatch = self._protection_matches(
+            protected, Decimal(str(required_qty))
         )
-        return abs(protected - required) <= tolerance
+        self._last_protected_qty = float(protected)
+        return matches
 
     def _asset(self, symbol: str) -> Any:
         identity = normalize_symbol(symbol)
@@ -1079,7 +1107,7 @@ class AlpacaBroker:
         while time.monotonic() < deadline:
             try:
                 order: Any = self._client.get_order_by_id(order_id)
-                status = str(self._field(order, "status", "")).lower().split(".")[-1]
+                status = self._normalized_field(order, "status")
                 filled_qty = float(self._field(order, "filled_qty", 0) or 0)
                 filled_price = float(self._field(order, "filled_avg_price", 0) or 0)
                 if filled_qty > 0 and filled_price > 0:
@@ -1262,14 +1290,29 @@ class AlpacaBroker:
             return False
         try:
             if market == Market.CRYPTO:
-                offset = getattr(self, "crypto_stop_limit_offset_bps", 25.0) / 10_000
-                limit_price = self._round_to_step(
-                    stop_price * (1 - offset if position_is_long else 1 + offset), step
+                offset = Decimal(
+                    str(getattr(self, "crypto_stop_limit_offset_bps", 25.0))
+                ) / Decimal("10000")
+                stop_decimal = Decimal(str(stop_price))
+                distance_steps = max(
+                    1,
+                    int(
+                        (stop_decimal * offset / step).to_integral_value(
+                            rounding=ROUND_CEILING
+                        )
+                    ),
                 )
-                if position_is_long and limit_price >= stop_price:
-                    limit_price = float(Decimal(str(stop_price)) - step)
-                elif not position_is_long and limit_price <= stop_price:
-                    limit_price = float(Decimal(str(stop_price)) + step)
+                limit_decimal = stop_decimal + (
+                    -distance_steps * step if position_is_long else distance_steps * step
+                )
+                limit_price = float(limit_decimal)
+                if limit_price <= 0:
+                    log.warning(
+                        "Skipping protective stop for %s: limit price rounds to %s",
+                        symbol,
+                        limit_price,
+                    )
+                    return False
                 request: Any = StopLimitOrderRequest(
                     symbol=symbol,
                     qty=qty_number,
@@ -1398,7 +1441,7 @@ class AlpacaBroker:
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             order = self._client.get_order_by_id(order_id)
-            status = str(self._field(order, "status", "")).lower().split(".")[-1]
+            status = self._normalized_field(order, "status")
             if status == "filled":
                 expected = max(0.0, before_qty - closing_qty)
                 after_qty = self._position_qty(intent.symbol)
@@ -1452,6 +1495,13 @@ class AlpacaBroker:
         symbol = canonical_symbol(observation.symbol, Market.CRYPTO)
         lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
         if not lock.acquire(blocking=False):
+            log.warning(
+                "Crypto exit observation deferred because symbol lock is busy: "
+                "symbol=%s source=%s observed_at=%s",
+                symbol,
+                observation.source,
+                observation.timestamp.isoformat(),
+            )
             return None
         try:
             entries = [
@@ -1481,7 +1531,7 @@ class AlpacaBroker:
                             f"Intrabar stop/target order is unknown for {symbol}"
                         )
                     stop = self._client.get_order_by_id(item.protective_stop_broker_order_id)
-                    stop_status = str(self._field(stop, "status", "")).lower().split(".")[-1]
+                    stop_status = self._normalized_field(stop, "status")
                     if stop_status == "filled":
                         claimed = ledger.claim_symbol_exit(
                             self._account_id,
@@ -1733,13 +1783,13 @@ class AlpacaBroker:
         )
 
     def _poll_stop_cancellation(self, position: Any, stop_id: str) -> tuple[Any, str]:
-        deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 0.05)
+        deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
         last_stop: Any = None
         last_status = ""
         while time.monotonic() < deadline:
             try:
                 last_stop = self._client.get_order_by_id(stop_id)
-                last_status = str(self._field(last_stop, "status", "")).lower().split(".")[-1]
+                last_status = self._normalized_field(last_stop, "status")
                 filled_qty = float(self._field(last_stop, "filled_qty", 0) or 0)
                 filled_price = float(self._field(last_stop, "filled_avg_price", 0) or 0)
                 if filled_qty > 0 and filled_price > 0:
@@ -1819,7 +1869,7 @@ class AlpacaBroker:
                 except Exception:
                     recovered = None
                 if recovered is not None:
-                    status = str(self._field(recovered, "status", "")).lower().split(".")[-1]
+                    status = self._normalized_field(recovered, "status")
                     if status in {"rejected", "canceled", "cancelled", "expired"}:
                         # A broker-confirmed terminal response is known, not
                         # ambiguous. Preserve the original submit failure.
@@ -1855,14 +1905,11 @@ class AlpacaBroker:
             ),
             start=Decimal("0"),
         )
-        required = Decimal(str(required_qty))
-        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
-        self._last_protection_mismatch = (
-            "missing"
-            if protected == 0
-            else ("under" if protected < required - tolerance else "over")
+        matches, self._last_protection_mismatch = self._protection_matches(
+            protected, Decimal(str(required_qty))
         )
-        return abs(protected - required) <= tolerance
+        self._last_protected_qty = float(protected)
+        return matches
 
     def _open_protective_orders(self, symbol: str, position_is_long: bool) -> list[Any]:
         orders: Any = self._client.get_orders(
@@ -1901,10 +1948,10 @@ class AlpacaBroker:
 
         def visit(order: Any, inherited: bool = False) -> None:
             owned = is_owned(order, inherited)
-            side = str(self._field(order, "side", "")).lower().split(".")[-1]
-            order_type = str(self._field(order, "type", "")).lower().split(".")[-1]
+            side = self._normalized_field(order, "side")
+            order_type = self._normalized_field(order, "type")
             stop_price = self._field(order, "stop_price")
-            status = str(self._field(order, "status", "")).lower().split(".")[-1]
+            status = self._normalized_field(order, "status")
             if (
                 owned
                 and side == closing_side
@@ -1937,6 +1984,49 @@ class AlpacaBroker:
             order_id = self._field(order, "id")
             if order_id:
                 self._client.cancel_order_by_id(order_id)
+                self._wait_for_cancel_confirmation(str(order_id), symbol)
+
+    def _wait_for_cancel_confirmation(self, order_id: str, symbol: str) -> None:
+        deadline = time.monotonic() + getattr(
+            self, "crypto_stop_cancel_timeout_seconds", 5.0
+        )
+        last_status = ""
+        while time.monotonic() < deadline:
+            try:
+                order = self._client.get_order_by_id(order_id)
+                last_status = self._normalized_field(order, "status")
+                if last_status in {"canceled", "cancelled", "expired", "rejected"}:
+                    return
+                if last_status == "filled":
+                    raise AmbiguousOrderState(
+                        f"Protective order filled while cancellation was pending for {symbol}"
+                    )
+            except AmbiguousOrderState:
+                raise
+            except Exception:
+                # A lookup failure is not proof that the protective order was
+                # cancelled. Keep polling until the bounded deadline.
+                pass
+            time.sleep(
+                getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.25)
+            )
+        raise AmbiguousOrderState(
+            f"Protective order cancellation is unconfirmed for {symbol}: "
+            f"{last_status or 'lookup_failed'}"
+        )
+
+    @staticmethod
+    def _protection_matches(protected: Decimal, required: Decimal) -> tuple[bool, str]:
+        tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
+        mismatch = (
+            "missing"
+            if protected == 0
+            else ("under" if protected < required - tolerance else "over")
+        )
+        return abs(protected - required) <= tolerance, mismatch
+
+    def _normalized_field(self, value: Any, name: str) -> str:
+        return str(self._field(value, name, "")).lower().split(".")[-1]
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:

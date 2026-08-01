@@ -15,16 +15,18 @@ from parayabuck.core.models import (
     Bar,
     Direction,
     ExecutionEvent,
+    ExecutionTransition,
     Market,
     OrderIntent,
     OrderRole,
     OrderState,
+    ProtectionState,
     Regime,
     Signal,
 )
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
-from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
+from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.runtime import EngineRuntime, WorkerHealth
 from parayabuck.strategies.base import Strategy, StrategyContext
@@ -296,6 +298,65 @@ def test_critical_journal_failure_opens_global_breaker() -> None:
     runtime._circuit_breaker_reason = None
     runtime._on_critical_journal_failure("disk full")
     assert runtime._circuit_breaker_reason == "critical_journal_failure"
+
+
+def test_ambiguous_recovered_crypto_protection_does_not_escape_stream_callback() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    order = OrderIntent(
+        "signal",
+        "BTC/USD",
+        Market.CRYPTO,
+        Direction.LONG,
+        0.1,
+        100,
+        95,
+        110,
+        "test",
+    )
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        protect_recovered_crypto_entry=lambda _order: (_ for _ in ()).throw(
+            AmbiguousOrderState("unconfirmed")
+        ),
+    )
+    runtime.execution = SimpleNamespace(
+        apply=lambda _event: ExecutionTransition(
+            None,
+            OrderState.FILLED,
+            0.1,
+            0.1,
+            0.0,
+            0.0,
+            ProtectionState.UNPROTECTED,
+            order.client_order_id,
+        )
+    )
+    runtime.engine = SimpleNamespace(
+        orders=SimpleNamespace(
+            orders={order.client_order_id: SimpleNamespace(order=order)}
+        )
+    )
+    runtime.ledger = SimpleNamespace()
+    runtime.ai_journal = None
+    runtime._circuit_breaker_reason = None
+    runtime._market_entry_halts = {Market.CRYPTO: None}
+    update = TradeUpdate(
+        "fill",
+        order.client_order_id,
+        "broker-entry",
+        None,
+        OrderRole.ENTRY,
+        order.symbol,
+        order.market,
+        order.qty,
+        order.qty,
+        order.entry_price,
+        datetime.now(UTC),
+    )
+
+    asyncio.run(runtime._on_trade_update(update))
+
+    assert runtime._market_entry_halts[Market.CRYPTO] == "protection_reconciliation_required"
 
 
 def test_stop_cancel_pending_then_canceled_needs_no_manual_intervention() -> None:

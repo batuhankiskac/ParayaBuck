@@ -278,7 +278,6 @@ class EngineRuntime:
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
         self._portfolio_watermarks: dict[Market, datetime] = {}
         self._warming_up = False
-        self._last_entry_cycle_timestamp: datetime | None = None
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
 
@@ -733,9 +732,16 @@ class EngineRuntime:
                         self._market_entry_halts[Market.CRYPTO] = (
                             "protection_reconciliation_required"
                         )
-                except AmbiguousOrderState:
+                except AmbiguousOrderState as exc:
                     self._market_entry_halts[Market.CRYPTO] = "protection_reconciliation_required"
-                    raise
+                    # A symbol-specific protection ambiguity must not tear down
+                    # the shared TradingStream callback. Reconciliation keeps
+                    # retrying while new crypto entries remain halted.
+                    log.error(
+                        "Recovered crypto entry protection is ambiguous for %s: %s",
+                        update.symbol,
+                        exc,
+                    )
 
     def _run_stream_worker(self, name: str, target: object) -> None:
         worker = self._workers[name]
@@ -1044,18 +1050,6 @@ class EngineRuntime:
         )
         if self.engine.entry_halt_reason is not None:
             self._circuit_breaker_reason = self.engine.entry_halt_reason
-        capacity_states = {
-            OrderState.ACCEPTED,
-            OrderState.PARTIALLY_FILLED,
-            OrderState.FILLED,
-            OrderState.RECONCILIATION_REQUIRED,
-            OrderState.UNKNOWN,
-        }
-        if any(
-            self.engine.orders.orders[order.client_order_id].state in capacity_states
-            for order in result.orders
-        ):
-            self._last_entry_cycle_timestamp = timestamp
         for order in result.orders:
             lifecycle = self.engine.orders.orders[order.client_order_id]
             if lifecycle.state.value == "rejected":
@@ -1195,32 +1189,7 @@ class EngineRuntime:
             return
         symbols = sorted(self._not_ready_symbols)
         log.info("Retrying incomplete warmup for %d symbols", len(symbols))
-        for timeframe in {self.config.timeframe, self.config.higher_timeframe}:
-            groups = (
-                [symbol for symbol in symbols if not is_crypto(symbol)],
-                [symbol for symbol in symbols if is_crypto(symbol)],
-            )
-            for group in groups:
-                for symbol_batch in _symbol_batches(group):
-                    try:
-                        batched = history.get_bars_batch(
-                            symbol_batch,
-                            timeframe,
-                            start=_warmup_start(
-                                symbol_batch[0], timeframe, self.config.warmup_bars
-                            ),
-                        )
-                        with self._ingestion_lock:
-                            for symbol in symbol_batch:
-                                bars = batched.get(symbol, [])
-                                self.engine.seed(bars[-self.config.warmup_bars :])
-                    except Exception as exc:
-                        log.warning(
-                            "Warmup retry failed %s symbols=%d: %s",
-                            timeframe,
-                            len(symbol_batch),
-                            exc,
-                        )
+        self._warmup_symbols(history, symbols, retry=True)
         self._refresh_readiness()
 
     def _has_ready_symbols(self) -> bool:
@@ -1332,13 +1301,23 @@ class EngineRuntime:
         )
         self._historical = history
         log.info("Warmup starting for %d symbols", len(self.symbols))
+        self._warmup_symbols(history, self.symbols, retry=False)
+        log.info("Warmup complete")
+
+    def _warmup_symbols(
+        self,
+        history: AlpacaHistoricalData,
+        symbols: list[str],
+        *,
+        retry: bool,
+    ) -> None:
         groups = (
-            [symbol for symbol in self.symbols if not is_crypto(symbol)],
-            [symbol for symbol in self.symbols if is_crypto(symbol)],
+            [symbol for symbol in symbols if not is_crypto(symbol)],
+            [symbol for symbol in symbols if is_crypto(symbol)],
         )
         for timeframe in {self.config.timeframe, self.config.higher_timeframe}:
-            for symbols in groups:
-                for symbol_batch in _symbol_batches(symbols):
+            for group in groups:
+                for symbol_batch in _symbol_batches(group):
                     try:
                         batched = history.get_bars_batch(
                             symbol_batch,
@@ -1347,25 +1326,26 @@ class EngineRuntime:
                                 symbol_batch[0], timeframe, self.config.warmup_bars
                             ),
                         )
-                        for symbol in symbol_batch:
-                            bars = batched.get(symbol, [])
-                            self.engine.seed(bars[-self.config.warmup_bars :])
-                            if len(bars) < self.config.warmup_bars:
-                                log.warning(
-                                    "Warmup not ready %s %s: %d/%d bars",
-                                    symbol,
-                                    timeframe,
-                                    len(bars),
-                                    self.config.warmup_bars,
-                                )
+                        with self._ingestion_lock:
+                            for symbol in symbol_batch:
+                                bars = batched.get(symbol, [])
+                                self.engine.seed(bars[-self.config.warmup_bars :])
+                                if len(bars) < self.config.warmup_bars:
+                                    log.warning(
+                                        "Warmup not ready %s %s: %d/%d bars",
+                                        symbol,
+                                        timeframe,
+                                        len(bars),
+                                        self.config.warmup_bars,
+                                    )
                     except Exception as exc:
                         log.warning(
-                            "Warmup batch skipped %s symbols=%d: %s",
+                            "Warmup%s batch skipped %s symbols=%d: %s",
+                            " retry" if retry else "",
                             timeframe,
                             len(symbol_batch),
                             exc,
                         )
-        log.info("Warmup complete")
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

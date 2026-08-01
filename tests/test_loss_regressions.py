@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from alpaca.trading.enums import TimeInForce
 
 from parayabuck.config import EquityUniverseConfig
@@ -30,6 +31,8 @@ from parayabuck.strategies.base import StrategyContext, StrategyEvaluation
 from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
+
+pytestmark = pytest.mark.paper_chaos
 
 
 def _bars(

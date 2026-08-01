@@ -66,7 +66,6 @@ class EngineManager:
         self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = (
             set()
         )
-        self.stream_connections: set[WebSocket] = set()
         self._state_lock = threading.Lock()
         self.control_token = secrets.token_urlsafe(32)
         self._live_request_suffix: str | None = None
@@ -243,6 +242,14 @@ class EngineManager:
                 self.last_account = None
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
+
+    def reset_safety_lock(self) -> None:
+        with self._state_lock:
+            runtime = self.runtime
+            state = self.current_engine_state()
+        if runtime is None or state not in {"halted", "degraded"}:
+            raise ValueError("A halted runtime is required to reset the safety lock")
+        runtime.reset_safety_lock()
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:
@@ -804,6 +811,20 @@ async def stop_engine() -> dict[str, str]:
     return {"status": "stopped", "message": "Bot engine stopped."}
 
 
+@app.post("/api/engine/reset-safety-lock")
+async def reset_safety_lock() -> dict[str, str]:
+    try:
+        await asyncio.to_thread(manager.reset_safety_lock)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "status": "reset",
+        "message": "Safety lock reset after broker reconciliation and data checks.",
+    }
+
+
 @app.post("/api/mode")
 async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
     if manager.has_active_runtime():
@@ -1063,7 +1084,6 @@ async def websocket_stream(websocket: WebSocket) -> None:
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    manager.stream_connections.add(websocket)
     try:
         while True:
             account_data = await asyncio.to_thread(manager.fetch_account_snapshot)
@@ -1087,8 +1107,6 @@ async def websocket_stream(websocket: WebSocket) -> None:
         pass
     except Exception:
         pass
-    finally:
-        manager.stream_connections.discard(websocket)
 
 
 @app.websocket("/ws/logs")

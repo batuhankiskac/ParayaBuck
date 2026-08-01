@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
+    const resetSafetyBtn = document.getElementById('resetSafetyBtn');
     const settingsBtn = document.getElementById('settingsBtn');
 
     // Stat Values
@@ -205,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'error': 'Hata'
         };
         statusText.textContent = stateLabels[state] || state;
+        resetSafetyBtn.hidden = state !== 'halted' && state !== 'degraded';
 
         // Buttons state
         if (['running', 'warming_up', 'degraded', 'halted'].includes(state)) {
@@ -505,6 +507,24 @@ document.addEventListener('DOMContentLoaded', () => {
             appendLog("Motor durduruldu.", "warning");
         } catch (err) {
             alert("Hata: " + err.message);
+        }
+    });
+
+    resetSafetyBtn.addEventListener('click', async () => {
+        if (!confirm('Broker koruması ve veri bütünlüğü doğrulandıktan sonra kilit sıfırlansın mı?')) {
+            return;
+        }
+        try {
+            resetSafetyBtn.disabled = true;
+            const res = await controlFetch('/api/engine/reset-safety-lock', { method: 'POST' });
+            const data = await responsePayload(res);
+            if (!res.ok) throw new Error(data.detail || 'Güvenlik kilidi sıfırlanamadı');
+            appendLog('Güvenlik kilidi doğrulama sonrası sıfırlandı.', 'warning');
+            await refreshSystemStatus();
+        } catch (err) {
+            alert('Hata: ' + err.message);
+        } finally {
+            resetSafetyBtn.disabled = false;
         }
     });
 

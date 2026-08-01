@@ -4,6 +4,7 @@ import asyncio
 import math
 import os
 import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -935,6 +936,53 @@ def test_aggregator_waits_for_finalization_grace() -> None:
     aggregator.update(_bar(start))
     assert aggregator.flush_until(start + timedelta(minutes=5, seconds=1)) == []
     assert len(aggregator.flush_until(start + timedelta(minutes=5, seconds=2))) == 1
+
+
+def test_safety_lock_reset_requires_clean_reconciliation() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ambiguous_order_state"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime.engine = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
+    reconciled: list[bool] = []
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: reconciled.append(True),
+        account=lambda: account,
+    )
+    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    persisted: list[AccountSnapshot] = []
+    runtime._persist_risk_state = persisted.append
+
+    runtime.reset_safety_lock()
+
+    assert reconciled == [True]
+    assert runtime._circuit_breaker_reason is None
+    assert runtime.engine.entry_halt_reason is None
+    assert runtime._state == "running"
+    assert persisted == [account]
+
+
+def test_safety_lock_reset_refuses_manual_intervention() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "protection_failure"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime.engine = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (
+            SimpleNamespace(status="manual_intervention_required"),
+        )
+    )
+
+    with pytest.raises(ValueError, match="manual intervention"):
+        runtime.reset_safety_lock()
 
 
 def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(

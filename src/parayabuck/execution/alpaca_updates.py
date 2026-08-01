@@ -73,7 +73,23 @@ class AlpacaTradingUpdateStream:
         order_class = str(_field(order, "order_class", "")).lower().split(".")[-1]
         stop_price = _field(order, "stop_price")
         client_order_id = str(_field(order, "client_order_id", ""))
-        if parent_order_id or order_class == "bracket":
+        if parent_order_id:
+            role = (
+                OrderRole.PROTECTIVE_STOP
+                if stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
+                else OrderRole.TAKE_PROFIT
+            )
+        elif order_class == "bracket" and order_type not in {
+            "limit",
+            "stop",
+            "stop_limit",
+            "trailing_stop",
+        }:
+            # The parent of an Alpaca bracket has no parent_order_id. Its
+            # order_class alone must not make an entry look like a target leg.
+            role = OrderRole.ENTRY
+        elif order_class == "bracket":
+            # Some stream payloads omit parent_order_id on bracket children.
             role = (
                 OrderRole.PROTECTIVE_STOP
                 if stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}

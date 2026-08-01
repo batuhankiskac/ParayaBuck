@@ -11,6 +11,7 @@ import pandas as pd
 from parayabuck.backtest import BacktestEngine
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 
 
 def main() -> None:
@@ -18,7 +19,12 @@ def main() -> None:
     parser.add_argument("csv")
     parser.add_argument("--symbol")
     parser.add_argument("--market", choices=("equity", "crypto"), default="equity")
-    parser.add_argument("--timeframe", default="5m")
+    parser.add_argument(
+        "--timeframe",
+        choices=("5m",),
+        default="5m",
+        help="validated strategy timeframe (currently only 5m)",
+    )
     parser.add_argument("--starting-equity", type=float, default=10_000)
     parser.add_argument("--slippage-bps", type=float, default=2.0)
     parser.add_argument("--spread-bps", type=float, default=0.0)
@@ -45,13 +51,8 @@ def main() -> None:
         for timestamp, row in zip(timestamps, frame.itertuples(index=False), strict=True)
     ]
     config = load_config()
-    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": 1440}
-    if args.timeframe not in minutes:
-        parser.error(f"unsupported timeframe: {args.timeframe}")
-    if args.timeframe == "1d":
-        parser.error("1d backtests require a configured higher timeframe above 1d")
     higher_timeframe = config.engine.higher_timeframe
-    if minutes[higher_timeframe] <= minutes[args.timeframe]:
+    if TIMEFRAME_MINUTES[higher_timeframe] <= TIMEFRAME_MINUTES[args.timeframe]:
         higher_timeframe = "1d"
     backtest_config = replace(
         config.engine,

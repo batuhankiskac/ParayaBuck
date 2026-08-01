@@ -33,6 +33,8 @@ def rsi(values: list[float], period: int = 14) -> float | None:
     for change in changes[period:]:
         avg_gain = (avg_gain * (period - 1) + max(change, 0)) / period
         avg_loss = (avg_loss * (period - 1) + max(-change, 0)) / period
+    if avg_loss == 0 and avg_gain == 0:
+        return 50.0
     if avg_loss == 0:
         return 100.0
     return 100 - 100 / (1 + avg_gain / avg_loss)

@@ -126,7 +126,10 @@ class AlpacaHistoricalData:
                         end=end_at,
                         limit=10_000,
                         feed=self._stock_feed,
-                        adjustment=Adjustment.ALL,
+                        # Streaming bars are unadjusted. Keep warmup on the
+                        # same price basis so splits/dividends do not create an
+                        # artificial discontinuity at the live boundary.
+                        adjustment=Adjustment.RAW,
                     )
                 )
         except Exception:

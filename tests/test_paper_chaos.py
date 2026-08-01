@@ -354,6 +354,7 @@ def test_unresolved_stop_cancel_requires_reconciliation() -> None:
 @pytest.mark.parametrize(
     ("client_id", "parent_id", "order_type", "stop_price", "expected_role"),
     [
+        ("custom-bracket-entry", None, "market", None, OrderRole.ENTRY),
         ("equity-stop", "parent", "stop", 95, OrderRole.PROTECTIVE_STOP),
         ("equity-target", "parent", "limit", None, OrderRole.TAKE_PROFIT),
         ("parayabuck-entry-stop", None, "stop_limit", 95, OrderRole.PROTECTIVE_STOP),
@@ -386,6 +387,7 @@ def test_trade_update_role_mapping(
             "symbol": "BTC/USD" if "equity-" not in client_id else "AAPL",
             "asset_class": "crypto" if "equity-" not in client_id else "us_equity",
             "type": order_type,
+            "order_class": "bracket" if client_id == "custom-bracket-entry" else "",
             "stop_price": stop_price,
             "qty": 1,
             "filled_qty": 1,

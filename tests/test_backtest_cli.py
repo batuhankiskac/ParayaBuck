@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from scripts import run_backtest
 
 
@@ -43,3 +45,13 @@ def test_cli_enables_simulated_execution(
     run_backtest.main()
 
     assert observed["trading_enabled"] is True
+
+
+def test_cli_rejects_unvalidated_timeframe(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_backtest.py", "bars.csv", "--timeframe", "15m"],
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        run_backtest.main()

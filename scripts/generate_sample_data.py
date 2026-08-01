@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+
 
 def generate_bars(
     symbol: str = "MES",
@@ -29,7 +31,10 @@ def generate_bars(
     volatility: float = 0.003,
     start_date: str = "2024-01-01",
 ) -> pd.DataFrame:
-    minutes = int(timeframe[:-1]) if timeframe.endswith("m") else 60
+    try:
+        minutes = TIMEFRAME_MINUTES[timeframe]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported timeframe: {timeframe}") from exc
 
     # Trading hours: 18:00 prev day → 17:00 next day (ET), skip weekends
     # For simplicity, generate continuous bars with 5m intervals on weekdays

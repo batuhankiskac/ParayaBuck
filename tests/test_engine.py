@@ -93,6 +93,18 @@ class _OneShotStrategy(Strategy):
         )
 
 
+class _SymbolFailingStrategy(Strategy):
+    name = "symbol_failure"
+    market = Market.EQUITY
+    minimum_bars = 1
+
+    def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None:
+        del context
+        if bars[-1].symbol == "TEST":
+            raise ValueError("bad symbol data")
+        return None
+
+
 def test_ema_is_exponential_not_sma() -> None:
     assert ema([1.0, 2.0, 3.0, 10.0], 3) == pytest.approx(6.0)
     assert ema([1.0, 2.0, 3.0, 10.0], 3) != pytest.approx(sum([2.0, 3.0, 10.0]) / 3)
@@ -190,6 +202,43 @@ def test_shadow_engine_journals_decision(tmp_path) -> None:
     order_count = journal.connection.execute("SELECT COUNT(*) FROM decision_orders").fetchone()[0]
     assert order_count == 3
     journal.close()
+
+
+def test_strategy_failure_skips_only_the_bad_symbol() -> None:
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    broker = ShadowBroker(account)
+    engine = TradingEngine(
+        broker,
+        EngineConfig(warmup_bars=50),
+        (_SymbolFailingStrategy(), _OneShotStrategy()),
+    )
+    good_bar = Bar(**{**_bar(0).__dict__, "symbol": "GOOD"})
+
+    orders = engine.process_cycle([_bar(0), good_bar])
+
+    assert [order.symbol for order in orders] == ["GOOD"]
+    assert not engine.has_data_gaps_for_symbol("TEST")
+    assert not engine.has_data_gaps_for_symbol("GOOD")
+
+
+def test_submit_exception_becomes_reconciliation_lock() -> None:
+    class FailingBroker(ShadowBroker):
+        def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
+            del order
+            raise TimeoutError("broker timeout")
+
+    engine = TradingEngine(
+        FailingBroker(AccountSnapshot(10_000, 10_000, 10_000, 0)),
+        EngineConfig(warmup_bars=50),
+        (_OneShotStrategy(),),
+    )
+
+    orders = engine.process_cycle([_bar(0)])
+
+    assert len(orders) == 1
+    lifecycle = engine.orders.orders[orders[0].client_order_id]
+    assert lifecycle.state == OrderState.RECONCILIATION_REQUIRED
+    assert engine.entry_halt_reason == "ambiguous_order_state"
 
 
 def test_decision_journal_preserves_multiple_reasons_for_one_signal(tmp_path) -> None:

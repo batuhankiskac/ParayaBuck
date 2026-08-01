@@ -17,6 +17,7 @@ from parayabuck.core.models import (
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.base import ExecutionBroker
 from parayabuck.execution.state_machine import OrderStateMachine
+from parayabuck.logger import get_logger
 from parayabuck.markets.regime import RegimeDetector
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import timeframe_duration
@@ -24,6 +25,8 @@ from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, Decis
 from parayabuck.risk.manager import RiskManager
 from parayabuck.signals.ranker import SignalRanker, ranking_score
 from parayabuck.strategies import Strategy, StrategyContext, default_strategies
+
+log = get_logger("parayabuck.engine")
 
 
 @dataclass(frozen=True)
@@ -187,12 +190,29 @@ class TradingEngine:
             context = StrategyContext(assessment, position, higher_regime, benchmark_regime)
             produced = False
             evaluations = []
+            bar_signal_ids: list[str] = []
+            evaluation_failed = False
             for strategy in self.strategies:
-                evaluation = strategy.evaluate_with_trace(series, context)
+                try:
+                    evaluation = strategy.evaluate_with_trace(series, context)
+                except Exception:
+                    # A strategy defect or bad symbol-specific input must not
+                    # terminate the portfolio-wide decision worker. Skip every
+                    # candidate for this symbol in the current cycle; a later
+                    # finalized bar may retry without an operator restart.
+                    evaluation_failed = True
+                    log.exception(
+                        "Strategy %s failed for %s %s; symbol skipped for this cycle",
+                        strategy.name,
+                        bar.symbol,
+                        bar.timeframe,
+                    )
+                    break
                 evaluations.append(evaluation)
                 signal = evaluation.signal
                 if signal is not None:
                     signals.append(signal)
+                    bar_signal_ids.append(signal.signal_id)
                     produced = True
                     metadata[signal.signal_id] = {
                         "bar": bar,
@@ -210,6 +230,13 @@ class TradingEngine:
                     ]
                     if signal.score < self.config.minimum_signal_score and self.journal:
                         self.journal.record_decision(signal, False, "score_below_minimum")
+            if evaluation_failed:
+                failed_ids = set(bar_signal_ids)
+                signals = [signal for signal in signals if signal.signal_id not in failed_ids]
+                for signal_id in failed_ids:
+                    metadata.pop(signal_id, None)
+                    trails.pop(signal_id, None)
+                produced = False
             self._ai_call(
                 "record_scan",
                 bar,
@@ -340,7 +367,17 @@ class TradingEngine:
             )
             if self.journal:
                 self.journal.record_order(order, lifecycle.state, "broker_submit")
-            state, fill = self.broker.submit(order)
+            try:
+                state, fill = self.broker.submit(order)
+            except Exception:
+                # Once submit has been attempted, an exception cannot prove
+                # that the broker rejected the write. Preserve the order as
+                # ambiguous and halt new entries without killing the worker.
+                log.exception(
+                    "Broker submit failed for %s; reconciliation required",
+                    order.client_order_id,
+                )
+                state, fill = OrderState.RECONCILIATION_REQUIRED, None
             lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
             filled_qty = fill.qty if fill is not None else 0.0
             broker_effective = filled_qty > 0 or lifecycle.state in {

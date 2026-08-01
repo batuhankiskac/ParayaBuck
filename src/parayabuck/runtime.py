@@ -49,6 +49,7 @@ from parayabuck.utils import is_crypto
 log = get_logger("parayabuck.runtime")
 _NEW_YORK = ZoneInfo("America/New_York")
 _WARMUP_SYMBOL_BATCH_SIZE = 8
+_WARMUP_RETRY_SECONDS = 600.0
 
 
 @dataclass
@@ -258,6 +259,10 @@ class EngineRuntime:
         )
         self._events = _EventQueue(self.config.event_queue_capacity)
         self._threads: list[threading.Thread] = []
+        self._reconcile_thread: threading.Thread | None = None
+        self._reconcile_lock = threading.Lock()
+        self._warmup_retry_thread: threading.Thread | None = None
+        self._last_warmup_retry_at = time.monotonic()
         self._stop_event = threading.Event()
         self._running = False
         self._ingestion_lock = threading.Lock()
@@ -587,6 +592,16 @@ class EngineRuntime:
             for thread in self._threads:
                 thread.join(timeout=5)
             alive = [thread.name for thread in self._threads if thread.is_alive()]
+            reconcile_thread = self._reconcile_thread
+            if reconcile_thread is not None:
+                reconcile_thread.join(timeout=30)
+                if reconcile_thread.is_alive():
+                    alive.append(reconcile_thread.name)
+            warmup_thread = self._warmup_retry_thread
+            if warmup_thread is not None:
+                warmup_thread.join(timeout=30)
+                if warmup_thread.is_alive():
+                    alive.append(warmup_thread.name)
             if alive:
                 self._state = "stop_failed"
                 log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
@@ -644,31 +659,33 @@ class EngineRuntime:
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         account_id = self.broker.account_id or "unknown"
-        transition = self.execution.apply(
-            ExecutionEvent(
-                account_id=account_id,
-                client_order_id=update.client_order_id,
-                broker_order_id=update.broker_order_id,
-                parent_order_id=update.parent_order_id,
-                role=update.role,
-                symbol=update.symbol,
-                market=update.market,
-                state=update.state,
-                requested_qty=update.requested_qty,
-                cumulative_filled_qty=update.filled_qty,
-                average_fill_price=update.average_fill_price,
-                occurred_at=update.timestamp,
-                fee=update.fee,
-                activity_id=update.activity_id,
-            )
+        event = ExecutionEvent(
+            account_id=account_id,
+            client_order_id=update.client_order_id,
+            broker_order_id=update.broker_order_id,
+            parent_order_id=update.parent_order_id,
+            role=update.role,
+            symbol=update.symbol,
+            market=update.market,
+            state=update.state,
+            requested_qty=update.requested_qty,
+            cumulative_filled_qty=update.filled_qty,
+            average_fill_price=update.average_fill_price,
+            occurred_at=update.timestamp,
+            fee=update.fee,
+            activity_id=update.activity_id,
         )
+        # TradingStream callbacks run on an asyncio loop. SQLite transactions
+        # and journal file writes are synchronous, so keep them off that loop.
+        transition = await asyncio.to_thread(self.execution.apply, event)
         if (
             update.market == Market.CRYPTO
             and transition.entry_client_order_id
             and update.state is not None
         ):
             if update.role == OrderRole.PROTECTIVE_STOP and update.state == OrderState.FILLED:
-                self.ledger.set_exit_state(
+                await asyncio.to_thread(
+                    self.ledger.set_exit_state,
                     account_id,
                     transition.entry_client_order_id,
                     stop_state="filled",
@@ -680,7 +697,8 @@ class EngineRuntime:
                     OrderState.FILLED: "target_exit_filled",
                 }.get(update.state)
                 if target_state:
-                    self.ledger.set_exit_state(
+                    await asyncio.to_thread(
+                        self.ledger.set_exit_state,
                         account_id,
                         transition.entry_client_order_id,
                         target_state=target_state,
@@ -700,7 +718,7 @@ class EngineRuntime:
                 update.timestamp,
             )
             if self.ai_journal is not None:
-                self.ai_journal.record_broker_fill(fill)
+                await asyncio.to_thread(self.ai_journal.record_broker_fill, fill)
             actual_risk = abs(fill.price - lifecycle.order.stop_price) * fill.qty + fill.commission
             approved_risk = (
                 abs(lifecycle.order.entry_price - lifecycle.order.stop_price) * lifecycle.order.qty
@@ -944,7 +962,7 @@ class EngineRuntime:
                         default=None,
                     )
                 if time.monotonic() >= next_reconcile:
-                    self._reconcile_safely()
+                    self._schedule_reconcile()
                     next_reconcile = time.monotonic() + 60.0
         except Exception as exc:
             worker.last_error = str(exc)
@@ -1148,8 +1166,62 @@ class EngineRuntime:
             higher = self.engine.bars.get(symbol, self.config.higher_timeframe)
             if len(primary) >= self.config.warmup_bars and len(higher) >= self.config.warmup_bars:
                 self._not_ready_symbols.discard(symbol)
+        if (
+            self._running
+            and self._not_ready_symbols
+            and time.monotonic() - getattr(self, "_last_warmup_retry_at", time.monotonic())
+            >= _WARMUP_RETRY_SECONDS
+        ):
+            self._schedule_warmup_retry()
         if self._running and self._has_ready_symbols() and self._state == "warming_up":
             self._state = "running"
+
+    def _schedule_warmup_retry(self) -> None:
+        current = getattr(self, "_warmup_retry_thread", None)
+        if current is not None and current.is_alive():
+            return
+        self._last_warmup_retry_at = time.monotonic()
+        thread = threading.Thread(
+            target=self._retry_incomplete_warmup,
+            name="pb-warmup-retry",
+            daemon=True,
+        )
+        self._warmup_retry_thread = thread
+        thread.start()
+
+    def _retry_incomplete_warmup(self) -> None:
+        history = self._historical
+        if history is None:
+            return
+        symbols = sorted(self._not_ready_symbols)
+        log.info("Retrying incomplete warmup for %d symbols", len(symbols))
+        for timeframe in {self.config.timeframe, self.config.higher_timeframe}:
+            groups = (
+                [symbol for symbol in symbols if not is_crypto(symbol)],
+                [symbol for symbol in symbols if is_crypto(symbol)],
+            )
+            for group in groups:
+                for symbol_batch in _symbol_batches(group):
+                    try:
+                        batched = history.get_bars_batch(
+                            symbol_batch,
+                            timeframe,
+                            start=_warmup_start(
+                                symbol_batch[0], timeframe, self.config.warmup_bars
+                            ),
+                        )
+                        with self._ingestion_lock:
+                            for symbol in symbol_batch:
+                                bars = batched.get(symbol, [])
+                                self.engine.seed(bars[-self.config.warmup_bars :])
+                    except Exception as exc:
+                        log.warning(
+                            "Warmup retry failed %s symbols=%d: %s",
+                            timeframe,
+                            len(symbol_batch),
+                            exc,
+                        )
+        self._refresh_readiness()
 
     def _has_ready_symbols(self) -> bool:
         return any(symbol not in self._not_ready_symbols for symbol in self.symbols)
@@ -1185,23 +1257,71 @@ class EngineRuntime:
         )
 
     def _reconcile_safely(self) -> None:
-        try:
+        reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
+        with reconcile_lock:
+            try:
+                self.broker.reconcile()
+                self._last_account_at = datetime.now(UTC)
+                if self._circuit_breaker_reason == "reconciliation_failed":
+                    self._circuit_breaker_reason = None
+            except RequestException as exc:
+                # Alpaca occasionally times out for a single request. The next
+                # scheduled reconciliation retries it; a full traceback every
+                # minute obscures actionable protection failures.
+                log.warning("Position protection check deferred after Alpaca API error: %s", exc)
+                self._circuit_breaker_reason = "reconciliation_failed"
+            except ProtectionReconciliationError:
+                log.exception("Managed position protection reconciliation failed")
+                self._circuit_breaker_reason = "protection_failure"
+            except Exception:
+                log.exception("Periodic position protection check failed")
+                self._circuit_breaker_reason = "reconciliation_failed"
+
+    def _schedule_reconcile(self) -> None:
+        """Run the expensive broker scan without stalling finalized-bar decisions."""
+        current = self._reconcile_thread
+        if current is not None and current.is_alive():
+            log.warning("Periodic reconciliation still running; overlapping scan skipped")
+            return
+        thread = threading.Thread(
+            target=self._reconcile_safely,
+            name="pb-reconcile",
+            daemon=True,
+        )
+        self._reconcile_thread = thread
+        thread.start()
+
+    def reset_safety_lock(self) -> None:
+        """Acknowledge a recoverable entry lock after broker/data verification."""
+        recoverable = {
+            "ambiguous_order_state",
+            "protection_failure",
+            "protection_mismatch",
+            "ledger_mismatch",
+            "post_fill_risk_violation",
+            "final_market_event_queue_overflow",
+        }
+        reason = self._circuit_breaker_reason
+        if reason not in recoverable:
+            raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
+        if not self._events.empty():
+            raise ValueError("Market event queue must drain before resetting the safety lock")
+        if self.engine.has_data_gaps or self._not_ready_symbols:
+            raise ValueError("All symbol data must be ready before resetting the safety lock")
+        with self._reconcile_lock:
             self.broker.reconcile()
+            account_id = self.broker.account_id or "unknown"
+            entries = self.ledger.managed_entries_for_account(account_id)
+            if any(item.status == "manual_intervention_required" for item in entries):
+                raise ValueError("A managed position still requires manual intervention")
+            account = self.broker.account()
             self._last_account_at = datetime.now(UTC)
-            if self._circuit_breaker_reason == "reconciliation_failed":
-                self._circuit_breaker_reason = None
-        except RequestException as exc:
-            # Alpaca occasionally times out for a single request. The next
-            # scheduled reconciliation retries it; a full traceback every
-            # minute obscures actionable protection failures.
-            log.warning("Position protection check deferred after Alpaca API error: %s", exc)
-            self._circuit_breaker_reason = "reconciliation_failed"
-        except ProtectionReconciliationError:
-            log.exception("Managed position protection reconciliation failed")
-            self._circuit_breaker_reason = "protection_failure"
-        except Exception:
-            log.exception("Periodic position protection check failed")
-            self._circuit_breaker_reason = "reconciliation_failed"
+            self.engine.entry_halt_reason = None
+            self._circuit_breaker_reason = None
+            self._persist_risk_state(account)
+        if self._running and self._state == "halted":
+            self._state = "running"
+        log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
 
     def _warmup(self) -> None:
         history = AlpacaHistoricalData(

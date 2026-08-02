@@ -85,15 +85,8 @@ class BarStore:
 
     def is_contiguous(self, symbol: str, timeframe: str) -> bool:
         series = self.get(symbol, timeframe)
-        expected_seconds = {
-            "1m": 60,
-            "5m": 300,
-            "15m": 900,
-            "30m": 1800,
-            "1h": 3600,
-            "1d": 86400,
-        }[timeframe]
-        for previous, current in zip(series, series[1:], strict=False):
+        expected_seconds = timeframe_duration(timeframe).total_seconds()
+        for previous, current in zip(series, series[1:], strict=True):
             if current.market == Market.EQUITY:
                 continue
             if (current.timestamp - previous.timestamp).total_seconds() > expected_seconds:

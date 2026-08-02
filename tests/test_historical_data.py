@@ -8,6 +8,7 @@ import pytest
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
+from parayabuck.markets.timeframes import is_regular_equity_time
 
 
 def _bar(timestamp: datetime, market: Market) -> Bar:
@@ -15,15 +16,9 @@ def _bar(timestamp: datetime, market: Market) -> Bar:
 
 
 def test_equity_historical_filter_accepts_only_regular_session() -> None:
-    assert AlpacaHistoricalData._is_regular_equity_timestamp(
-        datetime(2026, 7, 2, 13, 30, tzinfo=UTC)
-    )
-    assert not AlpacaHistoricalData._is_regular_equity_timestamp(
-        datetime(2026, 7, 2, 12, 0, tzinfo=UTC)
-    )
-    assert not AlpacaHistoricalData._is_regular_equity_timestamp(
-        datetime(2026, 7, 2, 20, 0, tzinfo=UTC)
-    )
+    assert is_regular_equity_time(datetime(2026, 7, 2, 13, 30, tzinfo=UTC))
+    assert not is_regular_equity_time(datetime(2026, 7, 2, 12, 0, tzinfo=UTC))
+    assert not is_regular_equity_time(datetime(2026, 7, 2, 20, 0, tzinfo=UTC))
 
 
 def test_warmup_cache_requires_recent_market_data() -> None:

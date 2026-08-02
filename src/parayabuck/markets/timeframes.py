@@ -27,4 +27,24 @@ def is_regular_equity_time(timestamp: datetime) -> bool:
     return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
 
 
-__all__ = ["NEW_YORK", "TIMEFRAME_MINUTES", "is_regular_equity_time", "timeframe_duration"]
+def weekday_count(start: datetime, end: datetime) -> int:
+    """Approximate number of trading days (Mon-Fri) in an inclusive window."""
+    total_days = (end.date() - start.date()).days + 1
+    if total_days <= 0:
+        return 0
+    full_weeks, remainder = divmod(total_days, 7)
+    weekend_days = full_weeks * 2
+    weekday = start.date().weekday()
+    for offset in range(remainder):
+        if (weekday + offset) % 7 >= 5:
+            weekend_days += 1
+    return total_days - weekend_days
+
+
+__all__ = [
+    "NEW_YORK",
+    "TIMEFRAME_MINUTES",
+    "is_regular_equity_time",
+    "timeframe_duration",
+    "weekday_count",
+]

@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
-from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, weekday_count
 from parayabuck.utils import is_crypto
 
 # Alpaca caps every bars request at 10,000 rows. Chunk sizes are computed per
@@ -163,7 +163,7 @@ def coverage_for(
                 total_minutes = (expected_end - expected_start).total_seconds() / 60
                 expected = max(0, int(total_minutes / minutes))
             else:
-                trading_days = _weekday_count(expected_start, expected_end)
+                trading_days = weekday_count(expected_start, expected_end)
                 bars_per_day = max(1, EQUITY_BARS_PER_DAY_MINUTES // minutes)
                 expected = trading_days * bars_per_day
     gaps = [
@@ -190,20 +190,6 @@ def coverage_for(
         max_gap_minutes=max_gap,
         duplicate_bars=len(bars) - unique,
     )
-
-
-def _weekday_count(start: datetime, end: datetime) -> int:
-    """Approximate number of trading days (Mon-Fri) in an inclusive window."""
-    total_days = (end.date() - start.date()).days + 1
-    if total_days <= 0:
-        return 0
-    full_weeks, remainder = divmod(total_days, 7)
-    weekend_days = full_weeks * 2
-    weekday = start.date().weekday()
-    for offset in range(remainder):
-        if (weekday + offset) % 7 >= 5:
-            weekend_days += 1
-    return total_days - weekend_days
 
 
 def coverage_table(coverage: list[SymbolCoverage]) -> str:

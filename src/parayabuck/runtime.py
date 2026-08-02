@@ -8,7 +8,6 @@ import time
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from requests.exceptions import RequestException
 
@@ -35,7 +34,11 @@ from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
+from parayabuck.markets.timeframes import (
+    NEW_YORK,
+    TIMEFRAME_MINUTES,
+    is_regular_equity_time,
+)
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskState
 from parayabuck.storage import SQLiteStore
@@ -47,7 +50,6 @@ from parayabuck.universe import (
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
-_NEW_YORK = ZoneInfo("America/New_York")
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
 
@@ -808,7 +810,7 @@ class EngineRuntime:
         )
 
     async def _on_minute_bar(self, bar: Bar) -> None:
-        if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
+        if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
             return
         worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
         if worker := self._workers.get(worker_name):
@@ -843,7 +845,7 @@ class EngineRuntime:
             self._put_event("primary", primary)
 
     async def _on_updated_minute_bar(self, bar: Bar) -> None:
-        if bar.market.value == "equity" and not _is_regular_equity_bar(bar):
+        if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
             return
         worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
         if worker := self._workers.get(worker_name):
@@ -976,7 +978,7 @@ class EngineRuntime:
 
     def _flush_aggregators(self) -> None:
         now = datetime.now(UTC)
-        local = now.astimezone(_NEW_YORK)
+        local = now.astimezone(NEW_YORK)
         with self._ingestion_lock:
             primary = self.primary_aggregator.flush_until(now)
             higher = self.higher_aggregator.flush_until(now)
@@ -1358,10 +1360,6 @@ def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
     calendar_days = trading_days if is_crypto(symbol) else trading_days * 1.5
     days = max(2, min(180, math.ceil(calendar_days)))
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
-
-
-def _is_regular_equity_bar(bar: Bar) -> bool:
-    return is_regular_equity_time(bar.timestamp)
 
 
 __all__ = ["EngineRuntime"]

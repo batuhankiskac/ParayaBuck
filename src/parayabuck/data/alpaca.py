@@ -12,7 +12,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.cache import WarmupCache
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time, weekday_count
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
@@ -31,20 +31,6 @@ _TIMEFRAMES = {
 # window — a fresh last bar alone is not enough, otherwise a cache holding
 # only the tail of the window silently serves as if it were complete data.
 MIN_CACHE_COVERAGE_PCT = 0.60
-
-
-def _weekday_count(start: datetime, end: datetime) -> int:
-    """Approximate number of trading days (Mon-Fri) in an inclusive window."""
-    total_days = (end.date() - start.date()).days + 1
-    if total_days <= 0:
-        return 0
-    full_weeks, remainder = divmod(total_days, 7)
-    weekend_days = full_weeks * 2
-    weekday = start.date().weekday()
-    for offset in range(remainder):
-        if (weekday + offset) % 7 >= 5:
-            weekend_days += 1
-    return total_days - weekend_days
 
 
 class AlpacaHistoricalData:
@@ -121,7 +107,7 @@ class AlpacaHistoricalData:
                 if (
                     market != Market.EQUITY
                     or timeframe == "1d"
-                    or self._is_regular_equity_timestamp(bar.timestamp)
+                    or is_regular_equity_time(bar.timestamp)
                 )
             ]
             for symbol in symbols
@@ -183,7 +169,7 @@ class AlpacaHistoricalData:
             if (
                 market == Market.EQUITY
                 and timeframe != "1d"
-                and not self._is_regular_equity_timestamp(timestamp)
+                and not is_regular_equity_time(timestamp)
             ):
                 continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
@@ -208,10 +194,6 @@ class AlpacaHistoricalData:
             bars[symbol] = [merged[key] for key in sorted(merged)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         return bars
-
-    @staticmethod
-    def _is_regular_equity_timestamp(timestamp: datetime) -> bool:
-        return bool(is_regular_equity_time(timestamp))
 
     @staticmethod
     def _cache_is_fresh(
@@ -257,7 +239,7 @@ class AlpacaHistoricalData:
         if market == Market.CRYPTO:
             expected = max(0, int((end_at - start_at).total_seconds() / 60 / minutes))
         else:
-            trading_days = _weekday_count(start_at, end_at)
+            trading_days = weekday_count(start_at, end_at)
             bars_per_day = max(1, 390 // minutes)
             expected = trading_days * bars_per_day
         return bool(expected <= 0 or unique / expected >= min_pct)

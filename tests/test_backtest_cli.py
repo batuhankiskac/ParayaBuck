@@ -54,6 +54,7 @@ def _args(**overrides: Any) -> Any:
         "wf_test": 250,
         "min_coverage_pct": 50.0,
         "max_gap_multiplier": 12.0,
+        "allow_incomplete_data": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -117,6 +118,54 @@ class _GappedHistory(_FakeHistory):
             bars.append(_bar_at(timestamp, symbol, timeframe))
             timestamp += timedelta(days=1)
         return bars
+
+
+class _LateHistory(_FakeHistory):
+    """Session-consistent bars starting 50 days into a 90-day window.
+
+    Only the regular session (weekdays 13:30-19:59 UTC, 5m) is generated, so
+    the coverage ratio is proportional to the late start: ~44% of the window,
+    below the default 50% threshold.
+    """
+
+    def get_bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        adjustment: str = "splits",
+    ) -> list[Any]:
+        del adjustment
+        minutes = TIMEFRAME_MINUTES[timeframe]
+        bars: list[Any] = []
+        cursor = start + timedelta(days=50)
+        while cursor < end:
+            if (
+                cursor.weekday() < 5
+                and cursor.hour >= 13
+                and cursor.hour <= 19
+                and not (cursor.hour == 13 and cursor.minute < 30)
+            ):
+                bars.append(_bar_at(cursor, symbol, timeframe))
+            cursor += timedelta(minutes=minutes)
+        return bars
+
+
+class _MixedHistory(_FakeHistory):
+    """Full coverage for AAPL, no data at all for EMPTY."""
+
+    def get_bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        adjustment: str = "splits",
+    ) -> list[Any]:
+        if symbol == "EMPTY":
+            return []
+        return super().get_bars(symbol, timeframe, start, end, adjustment=adjustment)
 
 
 # --------------------------------------------------------------------------
@@ -489,6 +538,13 @@ def test_main_crypto_only_uses_crypto_benchmark(tmp_path: Path, monkeypatch: Any
     monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
     monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _FakeHistory())
     monkeypatch.setattr(
+        run_backtest,
+        "ensure_active_universes",
+        lambda _config, _key, _secret: SimpleNamespace(
+            equity_refreshed=False, crypto_refreshed=False
+        ),
+    )
+    monkeypatch.setattr(
         "sys.argv",
         [
             "run_backtest.py",
@@ -509,6 +565,69 @@ def test_main_crypto_only_uses_crypto_benchmark(tmp_path: Path, monkeypatch: Any
     # must not exclude it from trading — the live BTC strategy stays tested.
     allowed = observed["engine_kwargs"]["allowed_trade_symbols"]
     assert "BTC/USD" in allowed
+
+
+def test_main_runs_universe_preflight(tmp_path: Path, monkeypatch: Any) -> None:
+    called: dict[str, Any] = {}
+
+    @dataclass
+    class Result:
+        equity_curve: tuple[float, ...] = (100_000.0, 110_000.0)
+        realized_pnls: tuple[float, ...] = (500.0,)
+        total_trades: int = 1
+        total_return: float = 0.1
+        benchmark_return: float = 0.05
+        excess_return: float = 0.05
+        max_drawdown: float = 0.02
+        win_rate: float = 1.0
+        profit_factor: float | None = None
+        profit_factor_is_infinite: bool = True
+        expectancy: float = 500.0
+        sharpe: float = 1.2
+        sortino: float = 1.0
+        starting_equity: float = 100_000.0
+        ending_equity: float = 110_000.0
+        open_positions: int = 0
+        unrealized_pnl: float = 0.0
+        open_risk: float = 0.0
+        liquidated_at_end: bool = False
+
+    class FakeBacktestEngine:
+        ai_journal = None
+
+        def __init__(self, config: Any, **_kwargs: Any) -> None:
+            self.curve_timestamps: list[datetime] = []
+            self.broker = SimpleNamespace(trades=())
+
+        def run(self, bars: Any) -> Result:
+            return Result()
+
+    def fake_preflight(config: Any, api_key: str, secret_key: str) -> Any:
+        del config, secret_key
+        called["api_key"] = api_key
+        return SimpleNamespace(equity_refreshed=False, crypto_refreshed=False)
+
+    monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _FakeHistory())
+    monkeypatch.setattr(run_backtest, "ensure_active_universes", fake_preflight)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--market",
+            "crypto",
+            "--start",
+            "2024-01-01",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    run_backtest.main()
+
+    # Default universe resolution must refresh stale scanner output first,
+    # exactly like the live runtime does before building subscriptions.
+    assert called["api_key"] is not None
 
 
 def test_main_fails_fast_on_low_coverage(tmp_path: Path, monkeypatch: Any) -> None:
@@ -553,6 +672,128 @@ def test_main_fails_fast_on_large_gap(tmp_path: Path, monkeypatch: Any) -> None:
         run_backtest.main()
 
     assert not (tmp_path / "report.json").exists()
+
+
+def test_main_fails_fast_on_empty_symbol(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _MixedHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL,EMPTY",
+            "--days",
+            "90",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="Veri kalitesi"):
+        run_backtest.main()
+
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_main_late_starting_data_fails_by_default(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _LateHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL",
+            "--days",
+            "90",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    # A broken cache / partial fetch looks like a late listing; without an
+    # explicit opt-in it must fail rather than silently pass validation.
+    with pytest.raises(SystemExit, match="Veri kalitesi"):
+        run_backtest.main()
+
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_main_allow_incomplete_data_exempts_late_and_empty(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    @dataclass
+    class Result:
+        equity_curve: tuple[float, ...] = (100_000.0, 110_000.0)
+        realized_pnls: tuple[float, ...] = (500.0,)
+        total_trades: int = 1
+        total_return: float = 0.1
+        benchmark_return: float = 0.05
+        excess_return: float = 0.05
+        max_drawdown: float = 0.02
+        win_rate: float = 1.0
+        profit_factor: float | None = None
+        profit_factor_is_infinite: bool = True
+        expectancy: float = 500.0
+        sharpe: float = 1.2
+        sortino: float = 1.0
+        starting_equity: float = 100_000.0
+        ending_equity: float = 110_000.0
+        open_positions: int = 0
+        unrealized_pnl: float = 0.0
+        open_risk: float = 0.0
+        liquidated_at_end: bool = False
+
+    class FakeBacktestEngine:
+        ai_journal = None
+
+        def __init__(self, config: Any, **_kwargs: Any) -> None:
+            self.curve_timestamps: list[datetime] = []
+            self.broker = SimpleNamespace(trades=())
+
+        def run(self, bars: Any) -> Result:
+            return Result()
+
+    class LateAndEmptyHistory:
+        """Late-starting data for AAPL, no data at all for EMPTY."""
+
+        def get_bars(
+            self,
+            symbol: str,
+            timeframe: str,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "splits",
+        ) -> list[Any]:
+            del adjustment
+            if symbol == "EMPTY":
+                return []
+            minutes = TIMEFRAME_MINUTES[timeframe]
+            late_start = start + timedelta(days=50)
+            total = int((end - late_start).total_seconds() // 60 // minutes) + 1
+            return [
+                _bar_at(late_start + timedelta(minutes=minutes) * index, symbol, timeframe)
+                for index in range(total)
+            ]
+
+    monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: LateAndEmptyHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL,EMPTY",
+            "--days",
+            "90",
+            "--allow-incomplete-data",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    run_backtest.main()  # explicit opt-in: late data and empties are tolerated
+
+    assert (tmp_path / "report.json").exists()
 
 
 def test_main_passes_data_quality_gate_with_complete_data(tmp_path: Path, monkeypatch: Any) -> None:

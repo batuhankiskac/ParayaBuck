@@ -136,3 +136,40 @@ def test_complete_cache_is_used_as_api_fallback() -> None:
     history = _crypto_history(full)
     result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
     assert result == {"BTC/USD": full}
+
+
+def _empty_crypto_history(cache_bars: list[Bar]) -> Any:
+    import pandas as pd
+
+    import parayabuck.data.alpaca as alpaca_module
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "iex"
+    history._stock_client = None
+    history._crypto_client = SimpleNamespace(
+        get_crypto_bars=lambda request: SimpleNamespace(df=pd.DataFrame())
+    )
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: cache_bars,
+        upsert=lambda *args, **kwargs: None,
+    )
+    return history
+
+
+def test_fresh_tail_cache_not_used_when_api_returns_empty() -> None:
+    end = datetime.now(UTC)
+    start = end - timedelta(days=30)
+    # A fresh 2-day tail must not stand in for a 30-day window when the API
+    # returns no rows: the response is empty, not the cache tail.
+    history = _empty_crypto_history(_crypto_bars(end, count=2 * 24 * 12))
+    result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
+    assert result == {"BTC/USD": []}
+
+
+def test_full_cache_is_used_when_api_returns_empty() -> None:
+    end = datetime.now(UTC)
+    start = end - timedelta(days=10)
+    full = _crypto_bars(end, count=10 * 24 * 12)
+    history = _empty_crypto_history(full)
+    result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
+    assert result == {"BTC/USD": full}

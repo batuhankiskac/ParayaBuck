@@ -165,7 +165,10 @@ class AlpacaHistoricalData:
             raise
         frame = response.df
         if frame.empty:
-            if len(fresh_cached) == len(symbols):
+            if len(fresh_cached) == len(symbols) and all(
+                self._cache_covers_window(bars, market, timeframe, start_at, end_at)
+                for bars in fresh_cached.values()
+            ):
                 log.warning("Historical API returned no rows; using feed-matched local cache")
                 return fresh_cached
             return {symbol: [] for symbol in symbols}

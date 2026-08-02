@@ -73,7 +73,11 @@ from parayabuck.config import Config, EngineConfig, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
-from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+from parayabuck.universe import (
+    ensure_active_universes,
+    load_active_crypto_symbols,
+    load_active_symbols,
+)
 from parayabuck.utils import is_crypto
 
 EQUITY_BENCHMARK = "SPY"
@@ -297,19 +301,26 @@ def _validate_data_quality(
 ) -> None:
     """Fail fast when downloaded data is too incomplete to trust.
 
-    Coverage below the minimum or a gap far beyond the timeframe's regular
-    interval means the simulation would run on unreliable data and produce
-    confident-looking but invalid results. Late-listed symbols (which by
-    definition only cover part of the window) are exempt.
+    Fail-closed by default: symbols with no bars at all are errors, and
+    coverage below the minimum or a gap far beyond the timeframe's regular
+    interval stops the run — a broken cache or a data outage must not be
+    mistaken for a genuine late listing. The late-starting exemption and the
+    zero-bar pass only apply when the user explicitly opts in with
+    ``--allow-incomplete-data``.
     """
     interval_minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
     min_coverage = args.min_coverage_pct / 100.0
     offenders: list[str] = []
     for item in coverage:
-        if item.expected_bars <= 0 or item.bars == 0:
+        if item.bars == 0:
+            if not args.allow_incomplete_data:
+                offenders.append(f"{item.symbol}: veri yok (0 bar)")
             continue
-        if item.start > start_at + timedelta(days=7):
-            continue  # late-listed: legitimately partial window
+        if item.expected_bars <= 0:
+            continue
+        if args.allow_incomplete_data and item.start > start_at + timedelta(days=7):
+            # Explicit opt-in: treat late-starting data as a real listing.
+            continue
         reasons: list[str] = []
         if item.coverage_pct < min_coverage:
             reasons.append(f"kapsama %{item.coverage_pct * 100:.1f} < %{args.min_coverage_pct:.0f}")
@@ -328,7 +339,8 @@ def _validate_data_quality(
         raise SystemExit(
             "Veri kalitesi eşikleri karşılanmıyor; koşu durduruldu:\n  "
             + "\n  ".join(offenders)
-            + "\n--min-coverage-pct / --max-gap-multiplier ile gevşetilebilir."
+            + "\n--min-coverage-pct / --max-gap-multiplier ile gevşetilebilir "
+            "(geç listelenen veri için --allow-incomplete-data)."
         )
 
 
@@ -605,6 +617,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Alpaca modunda izin verilen en büyük bar boşluğu; timeframe "
         "aralığının katı olarak (varsayılan: 12)",
     )
+    parser.add_argument(
+        "--allow-incomplete-data",
+        action="store_true",
+        help="eksik veriyi hata yerine uyarıya düşürür: sıfır barlı sembolleri "
+        "atlar ve ilk barı başlangıçtan 7+ gün sonra başlayan sembolleri "
+        "coverage/gap kontrollerinden muaf tutar (varsayılan: fail-closed)",
+    )
     args = parser.parse_args(effective_argv)
 
     if not effective_argv:
@@ -650,6 +669,14 @@ def main(argv: list[str] | None = None) -> int:
         assert api_key is not None and secret_key is not None
         alpaca_api_key: str = api_key
         alpaca_secret_key: str = secret_key
+        if not args.symbols:
+            # Mirror the live runtime: stale/invalid scanner output is
+            # refreshed before the universe is resolved, so the backtest and
+            # the engine stream the same selection instead of silently
+            # diverging to the configured fallback.
+            preflight = ensure_active_universes(config, alpaca_api_key, alpaca_secret_key)
+            if preflight.equity_refreshed or preflight.crypto_refreshed:
+                print("Canlı universe taraması tamamlandı; güncel seçim kullanılıyor.")
         end_at = _parse_date(args.end) if args.end else datetime.now(UTC)
         if args.start:
             start_at = _parse_date(args.start)
@@ -734,11 +761,17 @@ def main(argv: list[str] | None = None) -> int:
             item for item in coverage if item.bars > 0 and item.start > start_at + timedelta(days=7)
         ]
         for item in late_listings:
-            print(
-                f"Uyarı: {item.symbol} verisi {item.start.date()} itibarıyla başlıyor; "
-                "öncesinde işlem görmedi (geç listelenmiş veya verisi kısa bir sembol). "
-                "Bu, point-in-time olarak doğru kabul edilir."
-            )
+            if args.allow_incomplete_data:
+                print(
+                    f"Uyarı: {item.symbol} verisi {item.start.date()} itibarıyla başlıyor; "
+                    "geç listelenmiş olarak kabul edildi (--allow-incomplete-data)."
+                )
+            else:
+                print(
+                    f"Uyarı: {item.symbol} verisi {item.start.date()} itibarıyla başlıyor; "
+                    "geç listelenme mi yoksa eksik veri mi olduğu bilinmiyor — "
+                    "varsayılan doğrulama bunu veri hatası olarak durdurabilir."
+                )
 
         empty = [item.symbol for item in coverage if item.bars == 0]
         if empty:

@@ -34,6 +34,7 @@ from parayabuck.core.models import (
     PositionSnapshot,
     ProtectionState,
 )
+from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
@@ -80,7 +81,7 @@ class AlpacaBroker:
         paper: bool = True,
         *,
         manage_external_positions: bool = False,
-        ledger: Any = None,
+        ledger: ExecutionLedger | None = None,
         crypto_stop_limit_offset_bps: float = 25.0,
         crypto_emergency_exit_bps: float = 75.0,
         crypto_stop_cancel_timeout_seconds: float = 5.0,
@@ -827,16 +828,21 @@ class AlpacaBroker:
         return True
 
     def _reconcile_crypto_exit(self, position: Any) -> None:
+        ledger = self.ledger
+        if ledger is None:
+            raise ProtectionReconciliationError(
+                f"Cannot recover crypto exit for {position.canonical_symbol}: no ledger"
+            )
         get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
         if get_by_client_id is None or not position.exit_client_order_id:
-            self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
             raise ProtectionReconciliationError(
                 f"Cannot recover crypto exit for {position.canonical_symbol}"
             )
         try:
             order = get_by_client_id(position.exit_client_order_id)
         except Exception as exc:
-            self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
             raise ProtectionReconciliationError(
                 f"Crypto exit lookup is ambiguous for {position.canonical_symbol}"
             ) from exc
@@ -858,7 +864,7 @@ class AlpacaBroker:
             else OrderRole.EMERGENCY_EXIT
         )
         if filled_qty > 0 and average is not None:
-            self.ledger.apply_execution_event(
+            ledger.apply_execution_event(
                 ExecutionEvent(
                     self._account_id,
                     position.exit_client_order_id,
@@ -875,7 +881,7 @@ class AlpacaBroker:
                 )
             )
         if state == OrderState.FILLED:
-            self.ledger.set_exit_state(
+            ledger.set_exit_state(
                 self._account_id,
                 position.entry_client_order_id,
                 target_state=(
@@ -888,16 +894,21 @@ class AlpacaBroker:
         if state in {OrderState.CANCELLED, OrderState.REJECTED, OrderState.EXPIRED}:
             self._reprotect_after_terminal_exit(position)
             return
-        self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
         raise ProtectionReconciliationError(
             f"Crypto exit remains {state.value} for {position.canonical_symbol}"
         )
 
     def _reprotect_after_terminal_exit(self, position: Any) -> None:
+        ledger = self.ledger
+        if ledger is None:
+            raise ProtectionReconciliationError(
+                f"Cannot re-protect {position.canonical_symbol}: no ledger"
+            )
         current = next(
             (
                 item
-                for item in self.ledger.managed_entries_for_account(self._account_id)
+                for item in ledger.managed_entries_for_account(self._account_id)
                 if item.entry_client_order_id == position.entry_client_order_id
             ),
             None,
@@ -910,7 +921,7 @@ class AlpacaBroker:
             reserve_fee_on_lookup_failure=False,
         )
         if not resolution.verified or resolution.available_qty <= 0:
-            self.ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
+            ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
             raise ProtectionReconciliationError(
                 f"Remaining exit quantity is unverified for {current.canonical_symbol}"
             )
@@ -934,7 +945,7 @@ class AlpacaBroker:
         )
         if not protected:
             if self._has_protective_order(current.canonical_symbol, True, resolution.available_qty):
-                self.ledger.mark_manual_intervention(
+                ledger.mark_manual_intervention(
                     self._account_id, current.entry_client_order_id
                 )
                 raise AmbiguousOrderState(
@@ -955,7 +966,7 @@ class AlpacaBroker:
             )
             self._flatten(intent, resolution.available_qty)
             return
-        self.ledger.set_exit_state(
+        ledger.set_exit_state(
             self._account_id,
             current.entry_client_order_id,
             stop_state="open",
@@ -1579,6 +1590,10 @@ class AlpacaBroker:
 
     def _cancel_stop_then_exit(self, position: Any, reason: str) -> None:
         ledger = self.ledger
+        if ledger is None:
+            raise AmbiguousOrderState(
+                f"Cannot cancel stop for {position.canonical_symbol}: no ledger"
+            )
         stop_id = position.protective_stop_broker_order_id
         if not stop_id:
             ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
@@ -1768,6 +1783,11 @@ class AlpacaBroker:
         )
 
     def _poll_stop_cancellation(self, position: Any, stop_id: str) -> tuple[Any, str]:
+        ledger = self.ledger
+        if ledger is None:
+            raise AmbiguousOrderState(
+                f"Stop cancellation is unverified for {position.canonical_symbol}: no ledger"
+            )
         deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
         last_stop: Any = None
         last_status = ""
@@ -1783,7 +1803,7 @@ class AlpacaBroker:
                         if last_status == "filled"
                         else OrderState.PARTIALLY_FILLED
                     )
-                    self.ledger.apply_execution_event(
+                    ledger.apply_execution_event(
                         ExecutionEvent(
                             self._account_id,
                             position.protective_stop_client_order_id
@@ -1816,7 +1836,7 @@ class AlpacaBroker:
                 # A read failure is not evidence that the stop disappeared.
                 pass
             time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.01))
-        self.ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
         raise AmbiguousOrderState(
             f"Stop cancellation is unconfirmed for {position.canonical_symbol}: "
             f"{last_status or 'lookup_failed'}"

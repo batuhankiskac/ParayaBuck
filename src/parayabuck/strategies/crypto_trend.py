@@ -109,9 +109,7 @@ class CryptoTrendBreakout(Strategy):
         trend_points = min(17, context.regime.trend_strength / 2)
         volume_points = min(10, relative_volume * 4)
         higher_points = 10 if context.higher_timeframe_regime == Regime.TREND_UP else 0
-        score = 58 + trend_points + volume_points
-        if context.higher_timeframe_regime == Regime.TREND_UP:
-            score += 10
+        score = 58 + trend_points + volume_points + higher_points
         stop = current.close - max(2.2 * atr_value, current.close * 0.018)
         target = current.close + 2.3 * (current.close - stop)
         signal = self.long_signal(

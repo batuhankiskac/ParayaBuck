@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from parayabuck.core.models import (
@@ -1153,23 +1153,21 @@ class ExecutionLedger:
             )
             self.connection.commit()
 
-    def load_risk_state(self, account_id: str, session_date: object) -> RiskState | None:
+    def load_risk_state(self, account_id: str, session_date: date) -> RiskState | None:
         with self._lock:
             row = self.connection.execute(
                 """
                 SELECT payload, updated_at FROM risk_state
                 WHERE account_id=? AND session_date=?
                 """,
-                (account_id, str(session_date)),
+                (account_id, session_date.isoformat()),
             ).fetchone()
         if row is None:
             return None
         payload = json.loads(row[0])
-        from datetime import date
-
         return RiskState(
             account_id=account_id,
-            session_date=date.fromisoformat(str(session_date)),
+            session_date=session_date,
             day_start_equity=float(payload["day_start_equity"]),
             peak_equity=float(payload["peak_equity"]),
             realized_pnl=float(payload["realized_pnl"]),

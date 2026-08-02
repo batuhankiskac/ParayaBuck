@@ -244,7 +244,7 @@ class EngineManager:
                 cached = self._paper_mode_cache
                 if cached is not None and cached[0] == modified_ns:
                     return cached[1]
-                with open(self.config_path) as f:
+                with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
                 paper = bool(cfg.get("alpaca", {}).get("paper", True))
                 self._paper_mode_cache = (modified_ns, paper)
@@ -262,7 +262,11 @@ class EngineManager:
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards."""
         try:
-            raw = yaml.safe_load(self.config_path.read_text()) if self.config_path.exists() else {}
+            raw = (
+            yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+            if self.config_path.exists()
+            else {}
+        )
             app_config = (raw or {}).get("app", {})
             alpaca_config = (raw or {}).get("alpaca", {})
             key, secret = self.get_credentials()
@@ -615,7 +619,7 @@ class EngineManager:
     def _config_digest(self, *, paper: bool) -> str:
         raw: dict[str, Any] = {}
         if self.config_path.exists():
-            raw = yaml.safe_load(self.config_path.read_text()) or {}
+            raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
         return self._digest_config(raw, paper=paper)
 
     @staticmethod
@@ -704,7 +708,7 @@ def _atomic_write(path: Path, content: str, mode: int | None = None) -> None:
 
 
 def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> None:
-    existing = path.read_text() if path.exists() else ""
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
     managed = {"ALPACA_API_KEY": api_key, "ALPACA_SECRET_KEY": secret_key}
     seen: set[str] = set()
     lines: list[str] = []
@@ -922,11 +926,19 @@ async def get_status() -> dict[str, Any]:
         active_path = Path(cfg.universe.equity.active_universe_path)
         active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
         candidate_payload = (
-            json.loads(candidate_path.read_text()) if candidate_path.exists() else []
+            json.loads(candidate_path.read_text(encoding="utf-8"))
+            if candidate_path.exists()
+            else []
         )
-        active_payload = json.loads(active_path.read_text()) if active_path.exists() else {}
+        active_payload = (
+            json.loads(active_path.read_text(encoding="utf-8"))
+            if active_path.exists()
+            else {}
+        )
         active_crypto_payload = (
-            json.loads(active_crypto_path.read_text()) if active_crypto_path.exists() else {}
+            json.loads(active_crypto_path.read_text(encoding="utf-8"))
+            if active_crypto_path.exists()
+            else {}
         )
         candidate_items = (
             candidate_payload.get(
@@ -1016,7 +1028,7 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
                 raise ValueError("Complete server-side live arming before selecting live mode")
         raw: dict[str, Any] = {}
         if manager.config_path.exists():
-            with open(manager.config_path) as f:
+            with open(manager.config_path, encoding="utf-8") as f:
                 raw = yaml.safe_load(f) or {}
         raw.setdefault("alpaca", {})["paper"] = payload.paper
         _atomic_write(
@@ -1069,7 +1081,7 @@ async def get_settings() -> dict[str, Any]:
     key, secret = manager.get_credentials()
     cfg_raw: dict[str, Any] = {}
     if manager.config_path.exists():
-        with open(manager.config_path) as f:
+        with open(manager.config_path, encoding="utf-8") as f:
             cfg_raw = yaml.safe_load(f) or {}
 
     return {
@@ -1130,7 +1142,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         # Write settings.yaml
         cfg_raw: dict[str, Any] = {}
         if manager.config_path.exists():
-            with open(manager.config_path) as f:
+            with open(manager.config_path, encoding="utf-8") as f:
                 cfg_raw = yaml.safe_load(f) or {}
 
         old_app = dict(cfg_raw.get("app", {}))

@@ -420,7 +420,7 @@ def load_config(config_path: str | None = None) -> Config:
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     engine_raw = dict(raw.get("engine", {}))
     risk = RiskLimits(**engine_raw.pop("risk", {}))
     universe_raw = raw.get("universe")

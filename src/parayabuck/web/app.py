@@ -20,7 +20,7 @@ def main() -> None:
     config_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
     app_config: dict[str, object] = {}
     if config_path.exists():
-        with config_path.open() as config_file:
+        with config_path.open(encoding="utf-8") as config_file:
             app_config = (yaml.safe_load(config_file) or {}).get("app", {})
 
     setup_logging(level=os.getenv("LOG_LEVEL", str(app_config.get("log_level", "INFO"))))

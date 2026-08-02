@@ -32,6 +32,7 @@ anında tamamlanır.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import random
@@ -141,6 +142,38 @@ def _parse_float_list(value: str, option: str) -> tuple[float, ...]:
     return items
 
 
+def _sweep_parameters(
+    args: argparse.Namespace,
+) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+    """Resolve sweep/walk-forward parameter grids from CLI flags or defaults."""
+    scores = (
+        _parse_float_list(args.sweep_scores, "sweep-scores")
+        if args.sweep_scores
+        else DEFAULT_SCORES
+    )
+    risks = (
+        _parse_float_list(args.sweep_risks, "sweep-risks") if args.sweep_risks else DEFAULT_RISKS
+    )
+    positions = (
+        _parse_float_list(args.sweep_positions, "sweep-positions")
+        if args.sweep_positions
+        else DEFAULT_POSITIONS
+    )
+    return scores, risks, positions
+
+
+def _fold_dict(
+    result: BacktestResult, train_params: dict[str, float] | None = None
+) -> dict[str, object]:
+    """One walk-forward fold as a report-ready dict without per-bar series."""
+    fold_dict = asdict(result)
+    fold_dict.pop("equity_curve")
+    fold_dict.pop("realized_pnls")
+    if train_params:
+        fold_dict["train_params"] = train_params
+    return fold_dict
+
+
 def _auto_profile(requested: str | None, start_at: datetime, end_at: datetime) -> str:
     """Pick the bar timeframe for Alpaca mode when --timeframe is omitted.
 
@@ -180,7 +213,7 @@ def write_run_manifest(
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     revision = "unknown"
-    try:
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         revision = (
             subprocess.run(
                 ["git", "rev-parse", "HEAD"],
@@ -191,8 +224,6 @@ def write_run_manifest(
             ).stdout.strip()
             or "unknown"
         )
-    except (OSError, subprocess.SubprocessError):
-        pass
     started_at = datetime.now(UTC).isoformat()
     result_dict = asdict(result)
     manifest = {
@@ -269,9 +300,9 @@ def _resolve_symbols(args: argparse.Namespace, config: Config) -> dict[str, list
 
 
 def _equity_universe(args: argparse.Namespace, config: Config) -> list[str]:
-    if args.universe and os.path.exists(args.universe):
-        path = args.universe
-        with open(path) as handle:
+    if args.universe and Path(args.universe).exists():
+        path = Path(args.universe)
+        with path.open(encoding="utf-8") as handle:
             raw = json.load(handle)
         candidates = raw.get("candidate_symbols", []) if isinstance(raw, dict) else raw
         symbols = (
@@ -643,7 +674,7 @@ def main(argv: list[str] | None = None) -> int:
             start_price=args.start_price,
             start_date=args.start_date,
         )
-        os.makedirs(os.path.dirname(sample_path) or ".", exist_ok=True)
+        Path(sample_path).parent.mkdir(parents=True, exist_ok=True)
         frame.to_csv(sample_path, index=False)
         print(
             f"Örnek veri üretildi: {sample_path} "
@@ -852,39 +883,32 @@ def main(argv: list[str] | None = None) -> int:
             test_size=args.wf_test,
         )
         for fold in folds:
-            fold_dict = asdict(fold.result)
-            fold_dict.pop("equity_curve")
-            fold_dict.pop("realized_pnls")
-            walk_forward_folds.append(fold_dict)
+            walk_forward_folds.append(_fold_dict(fold.result))
     if args.walk_forward_optimize and timeframe != "1m":
         print("Nested walk-forward (her train diliminde parametre seçimi) çalıştırılıyor...")
+        scores, risks, positions = _sweep_parameters(args)
         optimized_folds = walk_forward_optimized(
             all_bars,
             engine_config,
             make_engine,
             train_size=args.wf_train,
             test_size=args.wf_test,
-            scores=_parse_float_list(args.sweep_scores, "sweep-scores")
-            if args.sweep_scores
-            else DEFAULT_SCORES,
-            risks=_parse_float_list(args.sweep_risks, "sweep-risks")
-            if args.sweep_risks
-            else DEFAULT_RISKS,
-            positions=_parse_float_list(args.sweep_positions, "sweep-positions")
-            if args.sweep_positions
-            else DEFAULT_POSITIONS,
+            scores=scores,
+            risks=risks,
+            positions=positions,
             min_trades=args.sweep_min_trades,
         )
         for opt_fold in optimized_folds:
-            fold_dict = asdict(opt_fold.result)
-            fold_dict.pop("equity_curve")
-            fold_dict.pop("realized_pnls")
-            fold_dict["train_params"] = {
-                "minimum_signal_score": opt_fold.minimum_signal_score,
-                "risk_per_trade_pct": opt_fold.risk_per_trade_pct,
-                "max_position_pct": opt_fold.max_position_pct,
-            }
-            walk_forward_folds.append(fold_dict)
+            walk_forward_folds.append(
+                _fold_dict(
+                    opt_fold.result,
+                    train_params={
+                        "minimum_signal_score": opt_fold.minimum_signal_score,
+                        "risk_per_trade_pct": opt_fold.risk_per_trade_pct,
+                        "max_position_pct": opt_fold.max_position_pct,
+                    },
+                )
+            )
 
     report = build_report(
         result,
@@ -897,8 +921,8 @@ def main(argv: list[str] | None = None) -> int:
         walk_forward=tuple(walk_forward_folds),
     )
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    output_path = args.output or os.path.join(args.output_dir, "report.json")
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = args.output or str(Path(args.output_dir) / "report.json")
     with open(output_path, "w", encoding="utf-8") as handle:
         json.dump(report.to_dict(), handle, indent=2, allow_nan=False, ensure_ascii=False)
     csv_paths = report.write_csvs(args.output_dir)
@@ -928,19 +952,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.sweep:
         print("\nParametre taraması çalıştırılıyor (aynı veri, tüm kombinasyonlar)...")
+        scores, risks, positions = _sweep_parameters(args)
         points = run_sweep(
             all_bars,
             engine_config,
             make_engine,
-            scores=_parse_float_list(args.sweep_scores, "sweep-scores")
-            if args.sweep_scores
-            else DEFAULT_SCORES,
-            risks=_parse_float_list(args.sweep_risks, "sweep-risks")
-            if args.sweep_risks
-            else DEFAULT_RISKS,
-            positions=_parse_float_list(args.sweep_positions, "sweep-positions")
-            if args.sweep_positions
-            else DEFAULT_POSITIONS,
+            scores=scores,
+            risks=risks,
+            positions=positions,
             min_trades=args.sweep_min_trades,
         )
         if points:

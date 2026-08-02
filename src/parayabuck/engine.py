@@ -40,7 +40,6 @@ class CycleResult:
     timestamp: datetime
     symbols: tuple[str, ...]
     orders: tuple[OrderIntent, ...]
-    account_available: bool = True
     missing_symbols: tuple[str, ...] = ()
 
 
@@ -161,7 +160,7 @@ class TradingEngine:
             and (canonical_symbol(symbol), self.config.timeframe) not in self._not_ready
         ]
         orders = self._evaluate_bars(bars, account)
-        return CycleResult(timestamp, tuple(sorted(wanted)), tuple(orders), True, missing_symbols)
+        return CycleResult(timestamp, tuple(sorted(wanted)), tuple(orders), missing_symbols)
 
     def _evaluate_bars(self, closed_bars: list[Bar], account: AccountSnapshot) -> list[OrderIntent]:
         signals: list[Signal] = []
@@ -553,11 +552,7 @@ class TradingEngine:
         try:
             return getattr(self.ai_journal, method)(*args)
         except Exception:
-            from parayabuck.logger import get_logger
-
-            get_logger("parayabuck.engine").exception(
-                "AI decision journal failed during %s; trading continues", method
-            )
+            log.exception("AI decision journal failed during %s; trading continues", method)
             return None
 
     def _benchmark_regime(self, timeframe: str) -> Regime:

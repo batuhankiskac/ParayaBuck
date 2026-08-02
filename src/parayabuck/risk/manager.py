@@ -154,8 +154,6 @@ class RiskManager:
                     crypto_exposure_pct=crypto_exposure,
                     max_crypto_exposure_pct=self.limits.max_crypto_exposure_pct,
                 )
-        else:
-            crypto_value = 0.0
 
         signal_sector = sector_of(signal.symbol)
         sector_value = sum(

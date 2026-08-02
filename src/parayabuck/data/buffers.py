@@ -28,9 +28,6 @@ class BarStore:
             lambda: deque(maxlen=self.capacity)
         )
 
-    def add(self, bar: Bar) -> bool:
-        return self.upsert(bar) in {BarMutation.INSERTED, BarMutation.GAP_DETECTED}
-
     def upsert(self, bar: Bar, revision: BarRevision = BarRevision.FINAL) -> BarMutation:
         key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
         series = self._bars[key]

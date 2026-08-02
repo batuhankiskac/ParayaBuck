@@ -246,9 +246,7 @@ def test_stale_submit_response_does_not_regress_stream_fill() -> None:
         engine: TradingEngine
 
         def submit(self, order: OrderIntent) -> tuple[OrderState, Fill | None]:
-            self.engine.orders.transition(
-                order.client_order_id, OrderState.FILLED, "trade_update"
-            )
+            self.engine.orders.transition(order.client_order_id, OrderState.FILLED, "trade_update")
             return OrderState.ACCEPTED, None
 
     broker = RacingBroker(AccountSnapshot(10_000, 10_000, 10_000, 0))
@@ -438,6 +436,7 @@ def test_reconcile_adds_underprotected_crypto_remainder_without_cancelling() -> 
         daily_pnl=0,
         positions=(PositionSnapshot("BTCUSD", 1, 100, 101, Market.CRYPTO, qty_available=0.01),),
     )
+
     def has_protection(_symbol: str, _is_long: bool, required_qty: float) -> bool:
         checked_required_qty.append(required_qty)
         broker._last_protection_mismatch = "under"
@@ -477,11 +476,7 @@ def test_reconcile_accepts_broker_qty_within_crypto_fee_reserve() -> None:
         equity=10_000,
         peak_equity=10_000,
         daily_pnl=0,
-        positions=(
-            PositionSnapshot(
-                "BTC/USD", 0.9975, 100, 101, Market.CRYPTO, qty_available=0
-            ),
-        ),
+        positions=(PositionSnapshot("BTC/USD", 0.9975, 100, 101, Market.CRYPTO, qty_available=0),),
     )
     broker._round_qty_down = lambda _symbol, qty: qty
     broker._has_protective_order = lambda _symbol, _long, qty: qty == pytest.approx(0.9975)

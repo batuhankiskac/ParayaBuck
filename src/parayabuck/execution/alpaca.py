@@ -502,9 +502,7 @@ class AlpacaBroker:
                 tolerance = max(1e-9, ownership.owned_qty * 1e-8)
                 minimum_fee_adjusted_qty = ownership.owned_qty
                 if position.market == Market.CRYPTO:
-                    minimum_fee_adjusted_qty *= float(
-                        Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE
-                    )
+                    minimum_fee_adjusted_qty *= float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
                 if (
                     position.market == Market.CRYPTO
                     and abs(position.qty) + tolerance < minimum_fee_adjusted_qty
@@ -694,13 +692,9 @@ class AlpacaBroker:
             log.warning("Fill activity fee reconciliation deferred: %s", exc)
             return False
         activities.sort(
-            key=lambda item: str(
-                item.get("transaction_time") or item.get("date") or ""
-            )
+            key=lambda item: str(item.get("transaction_time") or item.get("date") or "")
         )
-        recovered_buy_fills: dict[
-            str, list[tuple[float, float, datetime, str, str]]
-        ] = {}
+        recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
@@ -1296,11 +1290,7 @@ class AlpacaBroker:
                 stop_decimal = Decimal(str(stop_price))
                 distance_steps = max(
                     1,
-                    int(
-                        (stop_decimal * offset / step).to_integral_value(
-                            rounding=ROUND_CEILING
-                        )
-                    ),
+                    int((stop_decimal * offset / step).to_integral_value(rounding=ROUND_CEILING)),
                 )
                 limit_decimal = stop_decimal + (
                     -distance_steps * step if position_is_long else distance_steps * step
@@ -1724,8 +1714,7 @@ class AlpacaBroker:
                 self._client.cancel_order_by_id(broker_id)
             except Exception as exc:
                 log.warning(
-                    "Partial crypto exit cancel response ambiguous: broker_order_id=%s "
-                    "error=%s",
+                    "Partial crypto exit cancel response ambiguous: broker_order_id=%s error=%s",
                     broker_id,
                     exc,
                 )
@@ -1742,9 +1731,7 @@ class AlpacaBroker:
                         client_id,
                         broker_id,
                         None,
-                        OrderRole.TAKE_PROFIT
-                        if reason == "target"
-                        else OrderRole.EMERGENCY_EXIT,
+                        OrderRole.TAKE_PROFIT if reason == "target" else OrderRole.EMERGENCY_EXIT,
                         position.canonical_symbol,
                         Market.CRYPTO,
                         terminal_state,
@@ -1768,9 +1755,7 @@ class AlpacaBroker:
                 OrderState.REJECTED,
                 OrderState.EXPIRED,
             }:
-                ledger.mark_manual_intervention(
-                    self._account_id, position.entry_client_order_id
-                )
+                ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
                 raise AmbiguousOrderState(
                     "Partial crypto exit cancellation is unconfirmed for "
                     f"{position.canonical_symbol}: {terminal_state.value}"
@@ -1899,10 +1884,7 @@ class AlpacaBroker:
     ) -> bool:
         protective_orders = self._open_protective_orders(symbol, position_is_long)
         protected = sum(
-            (
-                abs(Decimal(str(self._field(order, "qty", 0) or 0)))
-                for order in protective_orders
-            ),
+            (abs(Decimal(str(self._field(order, "qty", 0) or 0))) for order in protective_orders),
             start=Decimal("0"),
         )
         matches, self._last_protection_mismatch = self._protection_matches(
@@ -1987,9 +1969,7 @@ class AlpacaBroker:
                 self._wait_for_cancel_confirmation(str(order_id), symbol)
 
     def _wait_for_cancel_confirmation(self, order_id: str, symbol: str) -> None:
-        deadline = time.monotonic() + getattr(
-            self, "crypto_stop_cancel_timeout_seconds", 5.0
-        )
+        deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
         last_status = ""
         while time.monotonic() < deadline:
             try:
@@ -2007,9 +1987,7 @@ class AlpacaBroker:
                 # A lookup failure is not proof that the protective order was
                 # cancelled. Keep polling until the bounded deadline.
                 pass
-            time.sleep(
-                getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.25)
-            )
+            time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.25))
         raise AmbiguousOrderState(
             f"Protective order cancellation is unconfirmed for {symbol}: "
             f"{last_status or 'lookup_failed'}"

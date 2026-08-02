@@ -35,6 +35,53 @@ class WarmupCache:
             """
         )
         self.connection.commit()
+        self._migrate_legacy_schema()
+
+    def _migrate_legacy_schema(self) -> None:
+        """Rebuild a pre-adjustment cache table created by older versions.
+
+        The original schema had no ``adjustment`` column in its primary key;
+        such a cache is unusable by the current schema (INSERT would fail with
+        "no column named adjustment"). Older code fetched history on the RAW
+        price basis, so migrated rows are labeled ``raw`` — labeling them
+        ``all`` would let raw prices satisfy an all-adjusted lookup.
+        """
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
+        if "adjustment" in columns:
+            return
+        market_expr = "market" if "market" in columns else "'equity'"
+        with self._lock:
+            self.connection.execute("ALTER TABLE bars RENAME TO bars_legacy")
+            self.connection.execute(
+                """
+                CREATE TABLE bars (
+                    feed TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    adjustment TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    open REAL NOT NULL,
+                    high REAL NOT NULL,
+                    low REAL NOT NULL,
+                    close REAL NOT NULL,
+                    volume REAL NOT NULL,
+                    retrieved_at TEXT NOT NULL,
+                    PRIMARY KEY(feed, symbol, timeframe, adjustment, timestamp)
+                )
+                """
+            )
+            self.connection.execute(
+                f"""
+                INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                  open, high, low, close, volume, retrieved_at)
+                SELECT feed, symbol, {market_expr}, timeframe, 'raw', timestamp,
+                       open, high, low, close, volume, retrieved_at
+                FROM bars_legacy
+                """
+            )
+            self.connection.execute("DROP TABLE bars_legacy")
+            self.connection.commit()
 
     def upsert(self, bars: list[Bar], *, feed: str, adjustment: str = "all") -> None:
         retrieved_at = datetime.now(UTC).isoformat()

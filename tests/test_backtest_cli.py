@@ -11,10 +11,10 @@ import pytest
 
 from parayabuck.backtest import cli as run_backtest
 from parayabuck.backtest.cli import _resolve_symbols, validate_range
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 
 
-def _bar(day_offset: int, symbol: str, timeframe: str = "1d") -> Any:
-    timestamp = datetime(2023, 1, 1, tzinfo=UTC) + timedelta(days=day_offset)
+def _bar_at(timestamp: datetime, symbol: str, timeframe: str = "1d") -> Any:
     return SimpleNamespace(
         timestamp=timestamp,
         symbol=symbol,
@@ -52,12 +52,16 @@ def _args(**overrides: Any) -> Any:
         "walk_forward": False,
         "wf_train": 1250,
         "wf_test": 250,
+        "min_coverage_pct": 50.0,
+        "max_gap_multiplier": 12.0,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
 
 
 class _FakeHistory:
+    """Returns full, realistic coverage for any requested window."""
+
     def get_bars(
         self,
         symbol: str,
@@ -66,8 +70,53 @@ class _FakeHistory:
         end: datetime,
         adjustment: str = "splits",
     ) -> list[Any]:
-        days = max(1, min(120, int((end - start).days)))
-        return [_bar(offset, symbol, timeframe) for offset in range(days)]
+        del adjustment
+        minutes = TIMEFRAME_MINUTES[timeframe]
+        step = timedelta(minutes=minutes)
+        total = int((end - start).total_seconds() // 60 // minutes) + 1
+        count = min(total, 10_000)
+        return [_bar_at(start + step * index, symbol, timeframe) for index in range(count)]
+
+
+class _ThinHistory(_FakeHistory):
+    """Returns a tiny fraction of the window — coverage far below threshold."""
+
+    def get_bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        adjustment: str = "splits",
+    ) -> list[Any]:
+        del adjustment
+        return [
+            _bar_at(start + timedelta(minutes=5 * index), symbol, timeframe) for index in range(5)
+        ]
+
+
+class _GappedHistory(_FakeHistory):
+    """Returns daily bars with a 20-day hole in the middle of the window."""
+
+    def get_bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        adjustment: str = "splits",
+    ) -> list[Any]:
+        del adjustment
+        bars: list[Any] = []
+        timestamp = start
+        while timestamp < start + timedelta(days=5):
+            bars.append(_bar_at(timestamp, symbol, timeframe))
+            timestamp += timedelta(days=1)
+        timestamp = start + timedelta(days=25)
+        while timestamp < end:
+            bars.append(_bar_at(timestamp, symbol, timeframe))
+            timestamp += timedelta(days=1)
+        return bars
 
 
 # --------------------------------------------------------------------------
@@ -122,7 +171,7 @@ def test_csv_mode_enables_simulated_execution(tmp_path: Path, monkeypatch: Any) 
     monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
     monkeypatch.setattr(
         "sys.argv",
-        ["run_backtest.py", str(csv_path), "--timeframe", "5m"],
+        ["run_backtest.py", str(csv_path), "--timeframe", "5m", "--output-dir", str(tmp_path)],
     )
 
     run_backtest.main()
@@ -151,7 +200,17 @@ def test_csv_mode_defaults_to_5m_when_timeframe_omitted(tmp_path: Path, monkeypa
             return _MinimalResult()
 
     monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
-    monkeypatch.setattr("sys.argv", ["run_backtest.py", str(csv_path), "--symbol", "AAPL"])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            str(csv_path),
+            "--symbol",
+            "AAPL",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
 
     run_backtest.main()
 
@@ -244,13 +303,60 @@ def test_resolve_symbols_splits_mixed_symbols() -> None:
 def test_resolve_symbols_uses_universe_config() -> None:
     config = SimpleNamespace(
         universe=SimpleNamespace(
-            equity=SimpleNamespace(fallback_trade_symbols=("AAPL", "MSFT")),
-            crypto=SimpleNamespace(trade_symbols=("BTC/USD", "ETH/USD")),
+            equity=SimpleNamespace(
+                dynamic_selection_enabled=False,
+                reference_symbols=("SPY",),
+                trade_reference_symbols=False,
+                fallback_trade_symbols=("AAPL", "MSFT"),
+                maximum_stream_symbols=30,
+            ),
+            crypto=SimpleNamespace(
+                dynamic_selection_enabled=False,
+                pinned_symbols=("BTC/USD",),
+                trade_symbols=("BTC/USD", "ETH/USD"),
+                maximum_stream_symbols=12,
+            ),
         )
     )
     resolved = _resolve_symbols(_args(market="equity"), config)
     assert resolved["crypto"] == []
     assert "AAPL" in resolved["equity"]
+    # Reference-only symbols (SPY) are not part of the trade universe.
+    assert "SPY" not in resolved["equity"]
+
+
+def test_resolve_symbols_uses_live_selected_universe(monkeypatch: Any) -> None:
+    config = SimpleNamespace(
+        universe=SimpleNamespace(
+            equity=SimpleNamespace(
+                dynamic_selection_enabled=True,
+                reference_symbols=("SPY",),
+                trade_reference_symbols=False,
+                fallback_trade_symbols=("AAPL",),
+                maximum_stream_symbols=30,
+            ),
+            crypto=SimpleNamespace(
+                dynamic_selection_enabled=True,
+                pinned_symbols=("BTC/USD",),
+                trade_symbols=("BTC/USD", "ETH/USD"),
+                maximum_stream_symbols=12,
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        run_backtest,
+        "load_active_symbols",
+        lambda _config, log_rejection=True: ("SPY", "AAPL", "MSFT", "GOOGL"),
+    )
+    monkeypatch.setattr(
+        run_backtest,
+        "load_active_crypto_symbols",
+        lambda _config, log_rejection=True: ("BTC/USD", "ETH/USD", "SOL/USD"),
+    )
+    resolved = _resolve_symbols(_args(), config)
+    # The validated live selection is used; SPY stays benchmark-only.
+    assert resolved["equity"] == ["AAPL", "MSFT", "GOOGL"]
+    assert resolved["crypto"] == ["BTC/USD", "ETH/USD", "SOL/USD"]
 
 
 def test_validate_range_rejects_long_equity_5m_window() -> None:
@@ -399,6 +505,107 @@ def test_main_crypto_only_uses_crypto_benchmark(tmp_path: Path, monkeypatch: Any
 
     assert observed["engine_kwargs"]["benchmark_symbol"] == "BTC/USD"
     assert observed["config_crypto_trading_enabled"] is True
+    # BTC/USD comes from the configured trade universe, so being the benchmark
+    # must not exclude it from trading — the live BTC strategy stays tested.
+    allowed = observed["engine_kwargs"]["allowed_trade_symbols"]
+    assert "BTC/USD" in allowed
+
+
+def test_main_fails_fast_on_low_coverage(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _ThinHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL",
+            "--days",
+            "90",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="Veri kalitesi"):
+        run_backtest.main()
+
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_main_fails_fast_on_large_gap(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _GappedHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL",
+            "--days",
+            "90",
+            "--timeframe",
+            "1d",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="Veri kalitesi"):
+        run_backtest.main()
+
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_main_passes_data_quality_gate_with_complete_data(tmp_path: Path, monkeypatch: Any) -> None:
+    @dataclass
+    class Result:
+        equity_curve: tuple[float, ...] = (100_000.0, 110_000.0)
+        realized_pnls: tuple[float, ...] = (1_000.0, -500.0)
+        total_trades: int = 2
+        total_return: float = 0.1
+        benchmark_return: float = 0.05
+        excess_return: float = 0.05
+        max_drawdown: float = 0.02
+        win_rate: float = 0.5
+        profit_factor: float | None = 2.0
+        profit_factor_is_infinite: bool = False
+        expectancy: float = 250.0
+        sharpe: float = 1.2
+        sortino: float = 1.0
+        starting_equity: float = 100_000.0
+        ending_equity: float = 110_000.0
+        open_positions: int = 0
+        unrealized_pnl: float = 0.0
+        open_risk: float = 0.0
+        liquidated_at_end: bool = False
+
+    class FakeBacktestEngine:
+        ai_journal = None
+
+        def __init__(self, config: Any, **_kwargs: Any) -> None:
+            self.curve_timestamps: list[datetime] = []
+            self.broker = SimpleNamespace(trades=())
+
+        def run(self, bars: Any) -> Result:
+            return Result()
+
+    monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
+    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _FakeHistory())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_backtest.py",
+            "--symbols",
+            "AAPL",
+            "--days",
+            "90",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    run_backtest.main()  # complete fake coverage must pass the gate
+
+    assert (tmp_path / "report.json").exists()
 
 
 def test_main_sweep_writes_sweep_csv(tmp_path: Path, monkeypatch: Any) -> None:

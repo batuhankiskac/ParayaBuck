@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -76,12 +75,59 @@ def test_open_positions_are_liquidated_at_end_of_test() -> None:
 
 def test_no_liquidation_without_open_positions() -> None:
     config = EngineConfig(warmup_bars=50)
-    backtest = BacktestEngine(
-        config, strategies=(_HoldStrategy(),), slippage_bps=0
-    )
+    backtest = BacktestEngine(config, strategies=(_HoldStrategy(),), slippage_bps=0)
     bars = [_bar(0, 100)]
     result = backtest.run(bars)
     assert result.liquidated_at_end is False
+
+
+def test_multi_symbol_benchmark_falls_back_to_first_symbol() -> None:
+    backtest = BacktestEngine(
+        EngineConfig(warmup_bars=50), strategies=(), slippage_bps=0, benchmark_symbol="SPY"
+    )
+    base = datetime(2025, 1, 1, 14, 30, tzinfo=UTC)
+    bars = [
+        Bar(
+            base + timedelta(minutes=5 * index),
+            symbol,
+            "5m",
+            100.0,
+            101.0,
+            99.0,
+            100.0,
+            1000.0,
+            Market.EQUITY,
+        )
+        for index in range(3)
+        for symbol in ("AAA", "BBB")
+    ]
+    result = backtest.run(bars)
+    # SPY has no data; the comparison must fall back to a real symbol instead
+    # of silently reporting a 0% benchmark on a multi-symbol run.
+    assert result.benchmark_symbol == "AAA"
+    assert result.benchmark_return == 0.0
+
+
+def test_duplicate_bars_are_simulated_once_in_engine() -> None:
+    config = EngineConfig(warmup_bars=50)
+    clean = BacktestEngine(config, strategies=(_HoldStrategy(),), slippage_bps=0)
+    duplicated = BacktestEngine(config, strategies=(_HoldStrategy(),), slippage_bps=0)
+    bars = [_bar(0, 100), _bar(1, 100), _bar(2, 102)]
+    duplicated_bars = [_bar(0, 100), _bar(1, 100), _bar(1, 100), _bar(2, 102)]
+    clean_result = clean.run(bars)
+    dup_result = duplicated.run(duplicated_bars)
+    # A duplicated bar must not let the broker act on one real bar twice
+    # (double participation-cap fills, double exits).
+    assert dup_result.ending_equity == clean_result.ending_equity
+    assert dup_result.total_trades == clean_result.total_trades
+    assert len(duplicated.broker.fills) == len(clean.broker.fills)
+
+
+def test_duplicate_bars_with_conflicting_ohlc_raise() -> None:
+    config = EngineConfig(warmup_bars=50)
+    backtest = BacktestEngine(config, strategies=(), slippage_bps=0)
+    with pytest.raises(ValueError, match="Conflicting duplicate bars"):
+        backtest.run([_bar(0, 100), _bar(0, 101)])
 
 
 def _result(**overrides: Any) -> BacktestResult:

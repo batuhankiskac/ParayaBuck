@@ -46,6 +46,10 @@ class SymbolCoverage:
     bars: int
     start: datetime
     end: datetime
+    expected_bars: int = 0
+    coverage_pct: float = 0.0
+    max_gap_minutes: int = 0
+    duplicate_bars: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -54,6 +58,10 @@ class SymbolCoverage:
             "bars": self.bars,
             "start": self.start.isoformat(),
             "end": self.end.isoformat(),
+            "expected_bars": self.expected_bars,
+            "coverage_pct": self.coverage_pct,
+            "max_gap_minutes": self.max_gap_minutes,
+            "duplicate_bars": self.duplicate_bars,
         }
 
 
@@ -121,24 +129,93 @@ def download_history(
     return collected
 
 
-def coverage_for(symbol: str, bars: list[Bar]) -> SymbolCoverage:
+def coverage_for(
+    symbol: str,
+    bars: list[Bar],
+    *,
+    timeframe: str = "",
+    expected_start: datetime | None = None,
+    expected_end: datetime | None = None,
+) -> SymbolCoverage:
+    """Coverage stats for one symbol's bars.
+
+    When the requested window and timeframe are supplied, the coverage ratio
+    compares unique bars against an expected count (crypto trades 24/7;
+    equity sessions are approximated as weekdays with a regular 390-minute
+    session). ``duplicate_bars`` flags repeated timestamps.
+
+    ``max_gap_minutes`` is the largest gap between consecutive bars. For
+    intraday equity only same-session gaps count, because overnight and
+    weekend pauses are structural, not missing data; for daily equity and
+    crypto the raw minute gap is reported.
+    """
     market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+    now = datetime.now(UTC)
     if not bars:
-        return SymbolCoverage(symbol, market, 0, datetime.now(UTC), datetime.now(UTC))
+        return SymbolCoverage(symbol, market, 0, now, now)
+    timestamps = sorted(bar.timestamp for bar in bars)
+    unique = len(set(timestamps))
+    expected = 0
+    if timeframe and expected_start is not None and expected_end is not None:
+        minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
+        if minutes:
+            if market == Market.CRYPTO:
+                total_minutes = (expected_end - expected_start).total_seconds() / 60
+                expected = max(0, int(total_minutes / minutes))
+            else:
+                trading_days = _weekday_count(expected_start, expected_end)
+                bars_per_day = max(1, EQUITY_BARS_PER_DAY_MINUTES // minutes)
+                expected = trading_days * bars_per_day
+    gaps = [
+        int((later - earlier).total_seconds() // 60)
+        for earlier, later in zip(timestamps, timestamps[1:])
+    ]
+    max_gap = max(gaps, default=0)
+    interval_minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
+    if market == Market.EQUITY and 0 < interval_minutes < 1440:
+        same_session = [
+            gap
+            for (earlier, later), gap in zip(zip(timestamps, timestamps[1:]), gaps)
+            if earlier.date() == later.date()
+        ]
+        max_gap = max(same_session, default=0)
     return SymbolCoverage(
         symbol=symbol,
         market=market,
         bars=len(bars),
-        start=min(bar.timestamp for bar in bars),
-        end=max(bar.timestamp for bar in bars),
+        start=timestamps[0],
+        end=timestamps[-1],
+        expected_bars=expected,
+        coverage_pct=(unique / expected) if expected > 0 else 0.0,
+        max_gap_minutes=max_gap,
+        duplicate_bars=len(bars) - unique,
     )
 
 
+def _weekday_count(start: datetime, end: datetime) -> int:
+    """Approximate number of trading days (Mon-Fri) in an inclusive window."""
+    total_days = (end.date() - start.date()).days + 1
+    if total_days <= 0:
+        return 0
+    full_weeks, remainder = divmod(total_days, 7)
+    weekend_days = full_weeks * 2
+    weekday = start.date().weekday()
+    for offset in range(remainder):
+        if (weekday + offset) % 7 >= 5:
+            weekend_days += 1
+    return total_days - weekend_days
+
+
 def coverage_table(coverage: list[SymbolCoverage]) -> str:
-    lines = [f"  {'Sembol':<14}{'Piyasa':<8}{'Bar':>8}  {'Başlangıç':<22}{'Bitiş':<22}"]
+    lines = [
+        "  " + f"{'Sembol':<14}{'Piyasa':<8}{'Bar':>8}{'Beklenen':>10}"
+        f"{'Kapsam%':>8}{'Boşluk':>8}  {'Başlangıç':<22}{'Bitiş':<22}"
+    ]
     for item in coverage:
         lines.append(
-            f"  {item.symbol:<14}{item.market.value:<8}{item.bars:>8}  "
+            f"  {item.symbol:<14}{item.market.value:<8}{item.bars:>8}"
+            f"{item.expected_bars or '-':>10}{item.coverage_pct * 100:>7.1f}%"
+            f"{item.max_gap_minutes:>8}  "
             f"{item.start.isoformat():<22}{item.end.isoformat():<22}"
         )
     return "\n".join(lines)

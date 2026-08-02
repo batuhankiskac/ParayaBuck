@@ -332,9 +332,7 @@ def test_ambiguous_recovered_crypto_protection_does_not_escape_stream_callback()
         )
     )
     runtime.engine = SimpleNamespace(
-        orders=SimpleNamespace(
-            orders={order.client_order_id: SimpleNamespace(order=order)}
-        )
+        orders=SimpleNamespace(orders={order.client_order_id: SimpleNamespace(order=order)})
     )
     runtime.ledger = SimpleNamespace()
     runtime.ai_journal = None

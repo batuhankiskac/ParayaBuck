@@ -635,8 +635,8 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     )
     broker._has_protective_order = lambda *_args: False
     broker._available_position_qty = lambda _symbol, qty, **_kwargs: qty
-    broker._submit_stop = (
-        lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
+    broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: (
+        submitted.append(qty) or True
     )
     broker.reconcile()
     assert submitted == [pytest.approx(0.01)]

@@ -137,6 +137,4 @@ class AlpacaTradingUpdateStream:
         self._stream.stop()
 
 
-
-
 __all__ = ["AlpacaTradingUpdateStream", "TradeUpdate"]

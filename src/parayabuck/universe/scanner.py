@@ -28,6 +28,7 @@ class EquityCandidate:
     exchange: str = "NASDAQ"
     leveraged_or_inverse: bool = False
 
+
 @dataclass(frozen=True)
 class ScannerResult:
     selection_timestamp: str
@@ -172,6 +173,7 @@ class EquityUniverseScanner:
             config_digest=self._config_digest(),
             sector_distribution=dict(sorted(sector_counts.items())),
         )
+
     def persist(self, result: ScannerResult) -> None:
         path = Path(self.config.active_universe_path)
         path.parent.mkdir(parents=True, exist_ok=True)

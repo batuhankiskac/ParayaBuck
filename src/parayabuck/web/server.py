@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import yaml
 from dotenv import load_dotenv
@@ -60,18 +61,14 @@ class BacktestManager:
     @property
     def is_running(self) -> bool:
         with self._lock:
-            return (
-                self.state == "running"
-                and self._thread is not None
-                and self._thread.is_alive()
-            )
+            return self.state == "running" and self._thread is not None and self._thread.is_alive()
 
     def start(self, payload: dict[str, Any]) -> str:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
             self.state = "running"
-            self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+            self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
             self.output_dir = str(Path("reports") / self.run_id)
             self.started_at = datetime.now(UTC).isoformat()
             self.finished_at = None
@@ -79,7 +76,7 @@ class BacktestManager:
             self.summary = None
             self.manifest = None
             self.progress = []
-            argv = self._build_argv(payload)
+            argv = self._build_argv(payload, self.output_dir)
             self._thread = self._thread_factory(
                 target=self._run, args=(argv,), daemon=True, name="web-backtest"
             )
@@ -87,8 +84,8 @@ class BacktestManager:
             return self.run_id
 
     @staticmethod
-    def _build_argv(payload: dict[str, Any]) -> list[str]:
-        argv = ["run_backtest.py", "--no-monte-carlo"]
+    def _build_argv(payload: dict[str, Any], output_dir: str) -> list[str]:
+        argv = ["--no-monte-carlo", "--output-dir", output_dir]
         profile = payload.get("profile") or "auto"
         if profile != "auto":
             argv += ["--profile", profile]
@@ -123,8 +120,9 @@ class BacktestManager:
 
         error: str | None = None
         try:
-            with contextlib.redirect_stdout(self._stream()), contextlib.redirect_stderr(
-                self._stream()
+            with (
+                contextlib.redirect_stdout(self._stream()),
+                contextlib.redirect_stderr(self._stream()),
             ):
                 backtest_cli.main(argv)
         except SystemExit:
@@ -135,6 +133,7 @@ class BacktestManager:
 
     def _stream(self) -> Any:
         import io
+
         class ProgressStream(io.StringIO):
             def __init__(self, owner: BacktestManager) -> None:
                 super().__init__()
@@ -156,7 +155,12 @@ class BacktestManager:
             report_path = Path(self.output_dir) / "report.json"
             manifest_path = Path(self.output_dir) / "run_manifest.json"
             try:
-                if report_path.exists():
+                if not report_path.exists():
+                    error = (
+                        f"Rapor üretilmedi: {report_path} "
+                        "(CLI hatasız çıktı ama rapor dosyası yazılmadı)"
+                    )
+                else:
                     raw = json.loads(report_path.read_text(encoding="utf-8"))
                     summary = raw.get("summary")
                 if manifest_path.exists():
@@ -1243,9 +1247,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
 @app.post("/api/backtest/run")
 async def run_backtest(payload: BacktestPayload) -> dict[str, Any]:
     try:
-        run_id = await asyncio.to_thread(
-            backtest_manager.start, payload.model_dump()
-        )
+        run_id = await asyncio.to_thread(backtest_manager.start, payload.model_dump())
         return {"status": "started", "run_id": run_id}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

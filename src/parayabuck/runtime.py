@@ -308,12 +308,8 @@ class EngineRuntime:
                     self,
                     "_symbols_by_market",
                     {
-                        Market.EQUITY: {
-                            symbol for symbol in self.symbols if not is_crypto(symbol)
-                        },
-                        Market.CRYPTO: {
-                            symbol for symbol in self.symbols if is_crypto(symbol)
-                        },
+                        Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
+                        Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
                     },
                 ).items()
             }

@@ -8,6 +8,7 @@ sarmalayıcıdır. Aynı komuta şu yollardan erişebilirsiniz:
     python -m parayabuck.backtest ...       # modül
     parayabuck-backtest ...                 # kurulu konsol komutu
 """
+
 from __future__ import annotations
 
 from parayabuck.backtest.cli import main

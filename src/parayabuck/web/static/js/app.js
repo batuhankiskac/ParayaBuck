@@ -759,11 +759,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     backtestRunBtn.addEventListener('click', async () => {
+        const daysValue = parseInt(btDays.value, 10);
         const payload = {
             profile: btProfile.value,
             market: btMarket.value,
             years: parseInt(btYears.value, 10) || 3,
-            days: parseInt(btDays.value, 10) || 0,
+            days: Number.isNaN(daysValue) ? 90 : daysValue,
             max_symbols: parseInt(btMaxSymbols.value, 10) || 40,
             symbols: btSymbols.value.trim(),
             sweep: btSweep.checked,

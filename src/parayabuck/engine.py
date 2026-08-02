@@ -375,9 +375,7 @@ class TradingEngine:
                 )
                 state, fill = OrderState.RECONCILIATION_REQUIRED, None
             try:
-                lifecycle = self.orders.transition(
-                    order.client_order_id, state, "broker_response"
-                )
+                lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
             except ValueError:
                 # The asynchronous trade-update stream may have advanced the
                 # lifecycle beyond this synchronous submit response. The

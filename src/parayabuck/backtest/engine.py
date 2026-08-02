@@ -115,6 +115,35 @@ class BacktestEngine:
         self.starting_equity = starting_equity
         self._liquidated_since_last_run = False
 
+    @staticmethod
+    def _deduplicate_bars(bars: list[Bar]) -> list[Bar]:
+        """Collapse duplicate bars, keeping the first occurrence of each.
+
+        Adjacent download chunks share an inclusive cache boundary, so the
+        same (symbol, timeframe, timestamp) can legitimately appear twice;
+        simulating it twice would let one real bar consume the participation
+        cap twice. Identical duplicates are collapsed silently, but
+        conflicting OHLCV for the same bar is a data error and raises.
+        """
+        unique: dict[tuple[str, str, datetime], Bar] = {}
+        for bar in bars:
+            key = (bar.symbol, bar.timeframe, bar.timestamp)
+            previous = unique.get(key)
+            if previous is None:
+                unique[key] = bar
+            elif (previous.open, previous.high, previous.low, previous.close, previous.volume) != (
+                bar.open,
+                bar.high,
+                bar.low,
+                bar.close,
+                bar.volume,
+            ):
+                raise ValueError(
+                    f"Conflicting duplicate bars for {bar.symbol} {bar.timeframe} "
+                    f"at {bar.timestamp.isoformat()}"
+                )
+        return list(unique.values())
+
     def run(
         self,
         bars: list[Bar],
@@ -125,7 +154,7 @@ class BacktestEngine:
         if warmup:
             self.engine.seed(warmup)
         self._liquidated_since_last_run = False
-        ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))
+        ordered = sorted(self._deduplicate_bars(bars), key=lambda bar: (bar.timestamp, bar.symbol))
         curve: list[float] = []
         curve_timestamps: list[datetime] = []
         recorded_pnls = 0
@@ -177,9 +206,21 @@ class BacktestEngine:
             if bar.symbol == self.benchmark_symbol and bar.timeframe == self.config.timeframe
         ]
         used_benchmark_symbol = self.benchmark_symbol
-        if not benchmark and len({bar.symbol for bar in ordered}) == 1:
-            benchmark = [bar for bar in ordered if bar.timeframe == self.config.timeframe]
-            used_benchmark_symbol = benchmark[0].symbol if benchmark else self.benchmark_symbol
+        if not benchmark:
+            # The requested benchmark has no data (for example a multi-symbol
+            # CSV without SPY): fall back to the first available symbol so the
+            # comparison column never silently reports 0%.
+            fallback_symbols = sorted(
+                {bar.symbol for bar in ordered if bar.timeframe == self.config.timeframe}
+            )
+            if fallback_symbols:
+                fallback = fallback_symbols[0]
+                benchmark = [
+                    bar
+                    for bar in ordered
+                    if bar.symbol == fallback and bar.timeframe == self.config.timeframe
+                ]
+                used_benchmark_symbol = fallback
         self.benchmark_bars = benchmark
         self.used_benchmark_symbol = used_benchmark_symbol
         benchmark_return = (
@@ -311,8 +352,7 @@ class BacktestEngine:
                 abs(position.current_price - position.stop) * position.qty
                 for position in self.broker.positions.values()
             ),
-            liquidated_at_end=not self.broker.positions
-            and self._liquidated_since_last_run,
+            liquidated_at_end=not self.broker.positions and self._liquidated_since_last_run,
             benchmark_symbol=benchmark_symbol,
             start_date=start_ts.isoformat() if start_ts else "",
             end_date=end_ts.isoformat() if end_ts else "",

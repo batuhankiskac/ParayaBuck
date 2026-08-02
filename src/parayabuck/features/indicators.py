@@ -86,9 +86,7 @@ def adx(bars: list[Bar], period: int = 14) -> float | None:
     return sum(dx_values[-period:]) / min(period, len(dx_values)) if dx_values else None
 
 
-def directional_indicators(
-    bars: list[Bar], period: int = 14
-) -> tuple[float, float] | None:
+def directional_indicators(bars: list[Bar], period: int = 14) -> tuple[float, float] | None:
     """Return the latest +DI and -DI using the same windowing as ``adx``."""
     if len(bars) < period + 1:
         return None

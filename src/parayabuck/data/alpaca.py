@@ -27,6 +27,25 @@ _TIMEFRAMES = {
     "1d": TimeFrame(1, TimeFrameUnit.Day),
 }
 
+# When the API fails, a cached fallback must cover most of the requested
+# window — a fresh last bar alone is not enough, otherwise a cache holding
+# only the tail of the window silently serves as if it were complete data.
+MIN_CACHE_COVERAGE_PCT = 0.60
+
+
+def _weekday_count(start: datetime, end: datetime) -> int:
+    """Approximate number of trading days (Mon-Fri) in an inclusive window."""
+    total_days = (end.date() - start.date()).days + 1
+    if total_days <= 0:
+        return 0
+    full_weeks, remainder = divmod(total_days, 7)
+    weekend_days = full_weeks * 2
+    weekday = start.date().weekday()
+    for offset in range(remainder):
+        if (weekday + offset) % 7 >= 5:
+            weekend_days += 1
+    return total_days - weekend_days
+
 
 class AlpacaHistoricalData:
     """Bounded Alpaca REST client used to warm up the streaming engine."""
@@ -58,9 +77,9 @@ class AlpacaHistoricalData:
         adjustment: str = "raw",
     ) -> list[Bar]:
         canonical = canonical_symbol(symbol)
-        return self.get_bars_batch(
-            [canonical], timeframe, start, end, adjustment=adjustment
-        ).get(canonical, [])
+        return self.get_bars_batch([canonical], timeframe, start, end, adjustment=adjustment).get(
+            canonical, []
+        )
 
     def get_bars_batch(
         self,
@@ -133,11 +152,14 @@ class AlpacaHistoricalData:
                         end=end_at,
                         limit=10_000,
                         feed=self._stock_feed,
-                        adjustment=Adjustment(adjustment),
+                        adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
                     )
                 )
         except Exception:
-            if len(fresh_cached) == len(symbols):
+            if len(fresh_cached) == len(symbols) and all(
+                self._cache_covers_window(bars, market, timeframe, start_at, end_at)
+                for bars in fresh_cached.values()
+            ):
                 log.warning("Historical API failed; using feed-matched local warmup cache")
                 return fresh_cached
             raise
@@ -207,6 +229,35 @@ class AlpacaHistoricalData:
             minutes = TIMEFRAME_MINUTES[timeframe]
             maximum_age = timedelta(minutes=max(180, minutes * 3))
         return bool(age <= maximum_age)
+
+    @staticmethod
+    def _cache_covers_window(
+        bars: list[Bar],
+        market: Market,
+        timeframe: str,
+        start_at: datetime,
+        end_at: datetime,
+        min_pct: float = MIN_CACHE_COVERAGE_PCT,
+    ) -> bool:
+        """Whether cached bars plausibly cover the requested window.
+
+        Recency (``_cache_is_fresh``) only proves the tail exists; a cache
+        holding a small fraction of a long window must not stand in for the
+        whole request.
+        """
+        if not bars:
+            return False
+        minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
+        if minutes <= 0:
+            return True
+        unique = len({bar.timestamp for bar in bars})
+        if market == Market.CRYPTO:
+            expected = max(0, int((end_at - start_at).total_seconds() / 60 / minutes))
+        else:
+            trading_days = _weekday_count(start_at, end_at)
+            bars_per_day = max(1, 390 // minutes)
+            expected = trading_days * bars_per_day
+        return bool(expected <= 0 or unique / expected >= min_pct)
 
     def get_latest_crypto_quotes(self, symbols: list[str]) -> dict[str, Any]:
         canonical = [canonical_symbol(symbol, Market.CRYPTO) for symbol in symbols]

@@ -358,7 +358,8 @@ class AIDecisionJournal:
                 if execution["traded"]
                 else (
                     "- Execution: WORKING — awaiting broker fill"
-                    if execution["order_state"] in {
+                    if execution["order_state"]
+                    in {
                         OrderState.ACCEPTED.value,
                         OrderState.PARTIALLY_FILLED.value,
                         OrderState.RECONCILIATION_REQUIRED.value,

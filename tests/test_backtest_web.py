@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -50,7 +49,9 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
     assert response["run_id"].startswith("web-")
 
     argv = thread_box["kwargs"]["args"][0]
-    assert argv[0] == "run_backtest.py"
+    assert argv[0] == "--no-monte-carlo"
+    assert "--output-dir" in argv
+    assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
     assert "--profile" in argv and argv[argv.index("--profile") + 1] == "live"
     assert "--days" in argv and argv[argv.index("--days") + 1] == "90"
     assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
@@ -71,13 +72,21 @@ def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:
     server.backtest_manager.state = "running"
     try:
         with pytest.raises(Exception, match="zaten çalışıyor"):
-            asyncio.run(
-                server.run_backtest(server.BacktestPayload(**_payload()))
-            )
+            asyncio.run(server.run_backtest(server.BacktestPayload(**_payload())))
     finally:
         server.backtest_manager._thread = None
         server.backtest_manager.state = "idle"
         server.backtest_manager._thread_factory = None
+
+
+def test_backtest_argv_zero_days_uses_years() -> None:
+    manager = server.BacktestManager()
+    argv = manager._build_argv(
+        {"profile": "auto", "market": "equity", "days": 0, "years": 10},
+        "/tmp/out",
+    )
+    assert "--days" not in argv
+    assert "--years" in argv and argv[argv.index("--years") + 1] == "10"
 
 
 def test_backtest_manager_stream_captures_progress() -> None:

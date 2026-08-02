@@ -179,9 +179,8 @@ def test_equity_bracket_uses_gtc_so_both_legs_survive_the_close() -> None:
     broker.ledger = None
     broker._validate_pre_submit = lambda _intent: None
     broker._validated_values = lambda _intent: (10, 95, 110)
-    broker._submit_with_recovery = (
-        lambda request, _client_order_id: submitted.append(request)
-        or SimpleNamespace(id="broker-entry")
+    broker._submit_with_recovery = lambda request, _client_order_id: (
+        submitted.append(request) or SimpleNamespace(id="broker-entry")
     )
     intent = OrderIntent(
         "signal",

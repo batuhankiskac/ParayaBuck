@@ -73,11 +73,11 @@ from parayabuck.config import Config, EngineConfig, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
 from parayabuck.utils import is_crypto
 
 EQUITY_BENCHMARK = "SPY"
 CRYPTO_BENCHMARK = "BTC/USD"
-DEFAULT_UNIVERSE = "data/runtime/active_equity_universe.json"
 
 USAGE = """\
 ParayaBuck Backtest
@@ -184,8 +184,7 @@ def write_run_manifest(
                 capture_output=True,
                 text=True,
                 cwd=Path(__file__).resolve().parents[3],
-            )
-            .stdout.strip()
+            ).stdout.strip()
             or "unknown"
         )
     except (OSError, subprocess.SubprocessError):
@@ -250,7 +249,12 @@ def _resolve_symbols(args: argparse.Namespace, config: Config) -> dict[str, list
         if args.market in {"both", "equity"}:
             equity_symbols = _equity_universe(args, config)
         if args.market in {"both", "crypto"}:
-            crypto_symbols = [str(symbol).upper() for symbol in universe.crypto.trade_symbols]
+            # Mirror the live runtime: the validated scanner selection (or the
+            # configured fallback), capacity-capped exactly like the engine.
+            crypto_symbols = [
+                str(symbol).upper()
+                for symbol in load_active_crypto_symbols(universe.crypto, log_rejection=True)
+            ]
             if args.max_symbols:
                 crypto_symbols = crypto_symbols[: args.max_symbols]
     if args.market == "equity":
@@ -263,21 +267,69 @@ def _resolve_symbols(args: argparse.Namespace, config: Config) -> dict[str, list
 def _equity_universe(args: argparse.Namespace, config: Config) -> list[str]:
     if args.universe and os.path.exists(args.universe):
         path = args.universe
-    elif os.path.exists(DEFAULT_UNIVERSE):
-        path = DEFAULT_UNIVERSE
-    else:
-        path = ""
-    if path:
         with open(path) as handle:
             raw = json.load(handle)
         candidates = raw.get("candidate_symbols", []) if isinstance(raw, dict) else raw
-        if candidates:
-            symbols = [str(symbol).upper() for symbol in candidates]
-        else:
-            symbols = list(config.universe.equity.fallback_trade_symbols)
+        symbols = (
+            [str(symbol).upper() for symbol in candidates]
+            if candidates
+            else list(config.universe.equity.fallback_trade_symbols)
+        )
     else:
-        symbols = list(config.universe.equity.fallback_trade_symbols)
+        # Same source the live engine streams: validated scanner selection
+        # (fallback_trade_symbols when rejected), references and pins, capped
+        # at maximum_stream_symbols. Reference-only symbols are not tradable
+        # (matching the runtime's allowed_trade_symbols) but stay in the
+        # download list for benchmark/regime context.
+        symbols = list(load_active_symbols(config.universe.equity, log_rejection=True))
+        if not config.universe.equity.trade_reference_symbols:
+            references = set(config.universe.equity.reference_symbols)
+            symbols = [symbol for symbol in symbols if symbol not in references]
     return list(dict.fromkeys(symbols))[: args.max_symbols]
+
+
+def _validate_data_quality(
+    coverage: list[SymbolCoverage],
+    args: argparse.Namespace,
+    start_at: datetime,
+    end_at: datetime,
+    timeframe: str,
+) -> None:
+    """Fail fast when downloaded data is too incomplete to trust.
+
+    Coverage below the minimum or a gap far beyond the timeframe's regular
+    interval means the simulation would run on unreliable data and produce
+    confident-looking but invalid results. Late-listed symbols (which by
+    definition only cover part of the window) are exempt.
+    """
+    interval_minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
+    min_coverage = args.min_coverage_pct / 100.0
+    offenders: list[str] = []
+    for item in coverage:
+        if item.expected_bars <= 0 or item.bars == 0:
+            continue
+        if item.start > start_at + timedelta(days=7):
+            continue  # late-listed: legitimately partial window
+        reasons: list[str] = []
+        if item.coverage_pct < min_coverage:
+            reasons.append(f"kapsama %{item.coverage_pct * 100:.1f} < %{args.min_coverage_pct:.0f}")
+        if (
+            interval_minutes > 0
+            and item.max_gap_minutes > interval_minutes * args.max_gap_multiplier
+        ):
+            reasons.append(
+                f"boşluk {item.max_gap_minutes} dk > "
+                f"{interval_minutes * args.max_gap_multiplier:.0f} dk "
+                f"({args.max_gap_multiplier:.0f}x {timeframe})"
+            )
+        if reasons:
+            offenders.append(f"{item.symbol}: " + "; ".join(reasons))
+    if offenders:
+        raise SystemExit(
+            "Veri kalitesi eşikleri karşılanmıyor; koşu durduruldu:\n  "
+            + "\n  ".join(offenders)
+            + "\n--min-coverage-pct / --max-gap-multiplier ile gevşetilebilir."
+        )
 
 
 def _download_market(
@@ -294,7 +346,12 @@ def _download_market(
         primary[symbol] = download_history(
             history, [symbol], timeframe, start_at, end_at, adjustment=adjustment
         ).get(symbol, [])
-    coverage = [coverage_for(symbol, bars) for symbol, bars in primary.items()]
+    coverage = [
+        coverage_for(
+            symbol, bars, timeframe=timeframe, expected_start=start_at, expected_end=end_at
+        )
+        for symbol, bars in primary.items()
+    ]
     if higher_timeframe and higher_timeframe != timeframe:
         for symbol in symbols:
             primary[symbol].extend(
@@ -521,20 +578,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sweep-risks",
         default="",
-        help="sweep risk oranları, virgülle ayrılmış (örn. 0.0025,0.005; "
-        "varsayılan: 0.0025-0.01)",
+        help="sweep risk oranları, virgülle ayrılmış (örn. 0.0025,0.005; varsayılan: 0.0025-0.01)",
     )
     parser.add_argument(
         "--sweep-positions",
         default="",
-        help="sweep pozisyon yüzdeleri, virgülle ayrılmış (örn. 0.05,0.15; "
-        "varsayılan: 0.05-0.15)",
+        help="sweep pozisyon yüzdeleri, virgülle ayrılmış (örn. 0.05,0.15; varsayılan: 0.05-0.15)",
     )
     parser.add_argument(
         "--sweep-min-trades",
         type=int,
         default=10,
         help="sweep'te dikkate alınacak minimum işlem sayısı (varsayılan: 10)",
+    )
+    parser.add_argument(
+        "--min-coverage-pct",
+        type=float,
+        default=50.0,
+        help="Alpaca modunda sembol başına minimum veri kapsama yüzdesi; altında "
+        "kalan koşu veri hatasıyla durdurulur (varsayılan: 50)",
+    )
+    parser.add_argument(
+        "--max-gap-multiplier",
+        type=float,
+        default=12.0,
+        help="Alpaca modunda izin verilen en büyük bar boşluğu; timeframe "
+        "aralığının katı olarak (varsayılan: 12)",
     )
     args = parser.parse_args(effective_argv)
 
@@ -574,12 +643,7 @@ def main(argv: list[str] | None = None) -> int:
         load_dotenv()
         api_key = os.getenv("ALPACA_API_KEY")
         secret_key = os.getenv("ALPACA_SECRET_KEY")
-        if (
-            api_key is None
-            or secret_key is None
-            or not api_key
-            or not secret_key
-        ):
+        if api_key is None or secret_key is None or not api_key or not secret_key:
             raise SystemExit(
                 "ALPACA_API_KEY / ALPACA_SECRET_KEY environment variables are required"
             )
@@ -611,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     coverage: list[SymbolCoverage]
     if args.csv:
         bars_by_symbol, coverage = _load_csv_bars(args, parser, timeframe)
+        requested_symbols = set(bars_by_symbol)
         all_bars = [bar for bars in bars_by_symbol.values() for bar in bars]
         if not all_bars:
             raise SystemExit("CSV'de bar bulunamadı")
@@ -620,6 +685,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         symbols_by_market = _resolve_symbols(args, config)
+        requested_symbols = set(symbols_by_market["equity"]) | set(symbols_by_market["crypto"])
         if symbols_by_market["equity"]:
             symbols_by_market["equity"].append(EQUITY_BENCHMARK)
         if symbols_by_market["crypto"]:
@@ -665,9 +731,7 @@ def main(argv: list[str] | None = None) -> int:
         print(coverage_table(coverage))
 
         late_listings = [
-            item
-            for item in coverage
-            if item.bars > 0 and item.start > start_at + timedelta(days=7)
+            item for item in coverage if item.bars > 0 and item.start > start_at + timedelta(days=7)
         ]
         for item in late_listings:
             print(
@@ -682,18 +746,25 @@ def main(argv: list[str] | None = None) -> int:
         all_bars = [bar for bars in bars_by_symbol.values() for bar in bars]
         if not all_bars:
             raise SystemExit("Hiç veri çekilemedi")
+        _validate_data_quality(coverage, args, start_at, end_at, timeframe)
 
     non_empty = [symbol for symbol, bars in bars_by_symbol.items() if bars]
     has_equity = any(not is_crypto(symbol) for symbol in non_empty)
     has_crypto = any(is_crypto(symbol) for symbol in non_empty)
     benchmark_symbol = EQUITY_BENCHMARK if has_equity else CRYPTO_BENCHMARK
-    explicit_symbols = {
-        item.strip().upper() for item in args.symbols.split(",") if item.strip()
-    } if args.symbols else set()
+    explicit_symbols = (
+        {item.strip().upper() for item in args.symbols.split(",") if item.strip()}
+        if args.symbols
+        else set()
+    )
+    # The benchmark is a comparison reference, but when it also belongs to the
+    # configured trade universe (e.g. BTC/USD in a default crypto run) it must
+    # stay tradeable — otherwise the live strategy on that symbol is never
+    # tested. Only exclude it when it was added purely for benchmarking.
     tradeable = [
         symbol
         for symbol in non_empty
-        if symbol != benchmark_symbol or symbol in explicit_symbols
+        if symbol != benchmark_symbol or symbol in explicit_symbols or symbol in requested_symbols
     ]
 
     engine_config = replace(
@@ -753,10 +824,7 @@ def main(argv: list[str] | None = None) -> int:
             fold_dict.pop("realized_pnls")
             walk_forward_folds.append(fold_dict)
     if args.walk_forward_optimize and timeframe != "1m":
-        print(
-            "Nested walk-forward (her train diliminde parametre seçimi) "
-            "çalıştırılıyor..."
-        )
+        print("Nested walk-forward (her train diliminde parametre seçimi) çalıştırılıyor...")
         optimized_folds = walk_forward_optimized(
             all_bars,
             engine_config,

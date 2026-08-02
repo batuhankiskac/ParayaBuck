@@ -101,9 +101,7 @@ def test_relative_volume_defaults_to_one_without_any_volumed_baseline() -> None:
     # A tolerant ratio lets the gate open with only the current bar volumed; with no
     # nonzero baseline bars at all the neutral relative_volume fallback applies.
     strategy = CryptoTrendBreakout(min_volume_bar_ratio=0.05)
-    evaluation = strategy.evaluate_with_trace(
-        _trend_bars([0.0] * 20), _context(Regime.TREND_UP)
-    )
+    evaluation = strategy.evaluate_with_trace(_trend_bars([0.0] * 20), _context(Regime.TREND_UP))
     assert evaluation.fired
     assert evaluation.metrics is not None
     assert evaluation.metrics["relative_volume"] == pytest.approx(1.0)
@@ -114,9 +112,7 @@ def test_relative_volume_defaults_to_one_without_any_volumed_baseline() -> None:
 
 def test_range_reversion_volume_gate_is_ratio_based() -> None:
     context = _context(Regime.RANGE)
-    sparse = CryptoRangeReversion().evaluate_with_trace(
-        _range_bars([1000.0, 0.0] * 10), context
-    )
+    sparse = CryptoRangeReversion().evaluate_with_trace(_range_bars([1000.0, 0.0] * 10), context)
     assert _condition(sparse, "indicators_available").passed
     dead = CryptoRangeReversion().evaluate_with_trace(
         _range_bars([1000.0, 0.0, 0.0, 0.0] * 5), context

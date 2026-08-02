@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import groupby
 from uuid import uuid4
 
 from parayabuck.backtest.broker import BacktestBroker
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import Bar
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.logger import get_logger
@@ -40,6 +40,24 @@ class BacktestResult:
     unrealized_pnl: float
     open_risk: float
     liquidated_at_end: bool
+    benchmark_symbol: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    duration_days: int = 0
+    cagr: float = 0.0
+    annualized_volatility: float = 0.0
+    calmar: float = 0.0
+    trades_per_year: float = 0.0
+    average_holding_days: float = 0.0
+    median_holding_days: float = 0.0
+    best_trade_pnl: float = 0.0
+    worst_trade_pnl: float = 0.0
+    average_win: float = 0.0
+    average_loss: float = 0.0
+    payoff_ratio: float = 0.0
+    max_consecutive_wins: int = 0
+    max_consecutive_losses: int = 0
+    max_drawdown_duration_days: int = 0
 
 
 class BacktestEngine:
@@ -54,6 +72,9 @@ class BacktestEngine:
         strategies: tuple[Strategy, ...] | None = None,
         run_id: str | None = None,
         allowed_trade_symbols: set[str] | None = None,
+        benchmark_symbol: str = "SPY",
+        max_entry_participation_pct: float = 0.10,
+        max_exit_participation_pct: float = 0.10,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = BacktestBroker(
@@ -63,7 +84,13 @@ class BacktestEngine:
             spread_bps=spread_bps,
             allow_short=self.config.allow_short,
             crypto_taker_fee_bps=crypto_taker_fee_bps,
+            max_entry_participation_pct=max_entry_participation_pct,
+            max_exit_participation_pct=max_exit_participation_pct,
         )
+        self.benchmark_symbol = benchmark_symbol
+        self.benchmark_bars: list[Bar] = []
+        self.used_benchmark_symbol = benchmark_symbol
+        self.curve_timestamps: list[datetime] = []
         self.run_id = run_id or (f"backtest-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}")
         self.ai_journal = None
         if self.config.ai_logging_enabled:
@@ -86,10 +113,18 @@ class BacktestEngine:
         )
         self.execution = ExecutionCoordinator(self.engine.orders, self.engine.risk)
         self.starting_equity = starting_equity
+        self._liquidated_since_last_run = False
 
-    def run(self, bars: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
+    def run(
+        self,
+        bars: list[Bar],
+        warmup: list[Bar] | None = None,
+        *,
+        liquidate_at_end: bool = True,
+    ) -> BacktestResult:
         if warmup:
             self.engine.seed(warmup)
+        self._liquidated_since_last_run = False
         ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))
         curve: list[float] = []
         curve_timestamps: list[datetime] = []
@@ -122,11 +157,31 @@ class BacktestEngine:
             self.engine.process_cycle(primary)
             curve.append(self.broker.account().equity)
             curve_timestamps.append(decision_time)
+        self.curve_timestamps = curve_timestamps
+        if liquidate_at_end and self.broker.positions:
+            last_primary: dict[str, Bar] = {}
+            for last_candidate in ordered:
+                if last_candidate.timeframe == self.config.timeframe:
+                    last_primary[last_candidate.symbol] = last_candidate
+            for symbol in list(self.broker.positions):
+                last_bar = last_primary.get(symbol)
+                if last_bar is not None:
+                    self.broker.liquidate_at_end(last_bar)
+            self._liquidated_since_last_run = True
+            if curve:
+                curve.append(self.broker.account().equity)
+                curve_timestamps.append(curve_timestamps[-1])
         benchmark = [
-            bar for bar in ordered if bar.symbol == "SPY" and bar.timeframe == self.config.timeframe
+            bar
+            for bar in ordered
+            if bar.symbol == self.benchmark_symbol and bar.timeframe == self.config.timeframe
         ]
+        used_benchmark_symbol = self.benchmark_symbol
         if not benchmark and len({bar.symbol for bar in ordered}) == 1:
             benchmark = [bar for bar in ordered if bar.timeframe == self.config.timeframe]
+            used_benchmark_symbol = benchmark[0].symbol if benchmark else self.benchmark_symbol
+        self.benchmark_bars = benchmark
+        self.used_benchmark_symbol = used_benchmark_symbol
         benchmark_return = (
             benchmark[-1].close / benchmark[0].close - 1
             if len(benchmark) > 1 and benchmark[0].close > 0
@@ -143,23 +198,39 @@ class BacktestEngine:
                     )
                 ]
             )
-        has_equity = any(bar.market == Market.EQUITY for bar in ordered)
-        annualizer = math.sqrt(252.0 if has_equity else 365.0)
-        return self._result(curve, benchmark_return, annualizer, daily_curve)
+        return self._result(
+            curve,
+            benchmark_return,
+            daily_curve,
+            curve_timestamps,
+            used_benchmark_symbol,
+        )
 
     def _result(
         self,
         curve: list[float],
         benchmark_return: float,
-        annualizer: float,
         metric_curve: list[float] | None = None,
+        curve_timestamps: list[datetime] | None = None,
+        benchmark_symbol: str = "",
     ) -> BacktestResult:
         ending = curve[-1] if curve else self.starting_equity
         peak = self.starting_equity
+        peak_index = 0
         max_drawdown = 0.0
-        for equity in curve:
-            peak = max(peak, equity)
-            max_drawdown = max(max_drawdown, (peak - equity) / peak if peak else 0.0)
+        max_drawdown_duration_days = 0
+        for index, equity in enumerate(curve):
+            if equity > peak:
+                peak = equity
+                peak_index = index
+            elif equity < peak and peak > 0:
+                drawdown = (peak - equity) / peak
+                max_drawdown = max(max_drawdown, drawdown)
+                if curve_timestamps:
+                    duration_days = (
+                        curve_timestamps[index] - curve_timestamps[peak_index]
+                    ).total_seconds() / 86_400
+                    max_drawdown_duration_days = max(max_drawdown_duration_days, int(duration_days))
         pnls = self.broker.realized_pnls
         wins = [pnl for pnl in pnls if pnl > 0]
         losses = [pnl for pnl in pnls if pnl < 0]
@@ -175,12 +246,47 @@ class BacktestEngine:
         downside_std = self._stddev(downside)
         gross_profit = sum(wins)
         gross_loss = abs(sum(losses))
+        trades = self.broker.trades
+        holding_days = [trade.holding_days for trade in trades]
+        streaks: list[bool] = [pnl > 0 for pnl in pnls]
+        max_wins = 0
+        max_losses = 0
+        current = 0
+        previous: bool | None = None
+        for is_win in streaks:
+            if previous is not None and is_win != previous:
+                current = 0
+            current += 1
+            if is_win:
+                max_wins = max(max_wins, current)
+            else:
+                max_losses = max(max_losses, current)
+            previous = is_win
+        start_ts = curve_timestamps[0] if curve_timestamps else None
+        end_ts = curve_timestamps[-1] if curve_timestamps else None
+        duration_days = (
+            int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0
+        )
+        years = duration_days / 365.0
+        total_return = ending / self.starting_equity - 1
+        cagr = (
+            ((ending / self.starting_equity) ** (1 / years) - 1)
+            if years > 0 and ending > 0
+            else 0.0
+        )
+        # Annualization follows the observed bar calendar of the metric curve,
+        # so mixed equity+crypto portfolios do not assume a single 252/365-day
+        # year: Sharpe and volatility are self-consistent with the data.
+        periods_per_year = len(returns) / years if years > 0 else 0.0
+        annualizer = math.sqrt(max(1.0, periods_per_year)) if returns else 1.0
+        avg_win = sum(wins) / len(wins) if wins else 0.0
+        avg_loss = sum(losses) / len(losses) if losses else 0.0
         return BacktestResult(
             starting_equity=self.starting_equity,
             ending_equity=ending,
-            total_return=ending / self.starting_equity - 1,
+            total_return=total_return,
             benchmark_return=benchmark_return,
-            excess_return=ending / self.starting_equity - 1 - benchmark_return,
+            excess_return=total_return - benchmark_return,
             max_drawdown=max_drawdown,
             total_trades=len(pnls),
             win_rate=len(wins) / len(pnls) if pnls else 0.0,
@@ -205,7 +311,28 @@ class BacktestEngine:
                 abs(position.current_price - position.stop) * position.qty
                 for position in self.broker.positions.values()
             ),
-            liquidated_at_end=False,
+            liquidated_at_end=not self.broker.positions
+            and self._liquidated_since_last_run,
+            benchmark_symbol=benchmark_symbol,
+            start_date=start_ts.isoformat() if start_ts else "",
+            end_date=end_ts.isoformat() if end_ts else "",
+            duration_days=duration_days,
+            cagr=cagr,
+            annualized_volatility=std * annualizer if std > 0 else 0.0,
+            calmar=cagr / max_drawdown if max_drawdown > 0 else 0.0,
+            trades_per_year=len(pnls) / years if years > 0 else 0.0,
+            average_holding_days=sum(holding_days) / len(holding_days) if holding_days else 0.0,
+            median_holding_days=sorted(holding_days)[len(holding_days) // 2]
+            if holding_days
+            else 0.0,
+            best_trade_pnl=max(pnls) if pnls else 0.0,
+            worst_trade_pnl=min(pnls) if pnls else 0.0,
+            average_win=avg_win,
+            average_loss=avg_loss,
+            payoff_ratio=avg_win / abs(avg_loss) if avg_loss < 0 else 0.0,
+            max_consecutive_wins=max_wins,
+            max_consecutive_losses=max_losses,
+            max_drawdown_duration_days=max_drawdown_duration_days,
         )
 
     def _apply_execution_events(self) -> None:
@@ -214,7 +341,8 @@ class BacktestEngine:
 
     @staticmethod
     def _available_at(bar: Bar) -> datetime:
-        return bar.timestamp + timeframe_duration(bar.timeframe)
+        duration: timedelta = timeframe_duration(bar.timeframe)
+        return bar.timestamp + duration
 
     @staticmethod
     def _stddev(values: list[float]) -> float:

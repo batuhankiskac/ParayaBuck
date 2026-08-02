@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from parayabuck.backtest import BacktestEngine
+from parayabuck.backtest.engine import BacktestResult
+from parayabuck.backtest.validation import walk_forward_optimized
+from parayabuck.config import EngineConfig
+from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
+from parayabuck.strategies.base import Strategy, StrategyContext
+
+
+def _bar(index: int, close: float = 100.0, high: float | None = None) -> Bar:
+    timestamp = datetime(2025, 1, 1, 14, 30, tzinfo=UTC) + timedelta(minutes=5 * index)
+    return Bar(
+        timestamp,
+        "TEST",
+        "5m",
+        close,
+        high if high is not None else close + 0.5,
+        close - 0.5,
+        close,
+        1000,
+        Market.EQUITY,
+    )
+
+
+class _HoldStrategy(Strategy):
+    """Enters once and never exits on its own, so the run must liquidate it."""
+
+    name = "hold"
+    market = Market.EQUITY
+    minimum_bars = 1
+
+    def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None:
+        if context.position is not None:
+            return None
+        bar = bars[-1]
+        return Signal(
+            bar.symbol,
+            bar.market,
+            Direction.LONG,
+            self.name,
+            90,
+            0.9,
+            bar.close,
+            bar.close - 1,
+            bar.close * 5,
+            bar.timestamp,
+            ("hold",),
+            Regime.RANGE,
+        )
+
+
+def test_open_positions_are_liquidated_at_end_of_test() -> None:
+    config = EngineConfig(warmup_bars=50)
+    backtest = BacktestEngine(config, strategies=(_HoldStrategy(),), slippage_bps=0)
+    bars = [_bar(0, 100), _bar(1, 100), _bar(2, 102)]
+    result = backtest.run(bars)
+
+    assert result.liquidated_at_end is True
+    assert result.open_positions == 0
+    assert result.unrealized_pnl == 0.0
+    assert result.total_trades == 1
+    trade = backtest.broker.trades[0]
+    assert trade.exit_reason == "end"
+    assert trade.exit_price == pytest.approx(102.0)
+    assert trade.pnl == pytest.approx(20.0)
+    # Ending equity is fully realized: entry 100 shares * 100 + 20 pnl.
+    assert result.ending_equity == pytest.approx(10_020)
+
+
+def test_no_liquidation_without_open_positions() -> None:
+    config = EngineConfig(warmup_bars=50)
+    backtest = BacktestEngine(
+        config, strategies=(_HoldStrategy(),), slippage_bps=0
+    )
+    bars = [_bar(0, 100)]
+    result = backtest.run(bars)
+    assert result.liquidated_at_end is False
+
+
+def _result(**overrides: Any) -> BacktestResult:
+    values: dict[str, Any] = dict(
+        starting_equity=100_000.0,
+        ending_equity=110_000.0,
+        total_return=0.1,
+        benchmark_return=0.05,
+        excess_return=0.05,
+        max_drawdown=0.1,
+        total_trades=20,
+        win_rate=0.5,
+        profit_factor=1.5,
+        profit_factor_is_infinite=False,
+        expectancy=100.0,
+        sharpe=1.0,
+        sortino=1.0,
+        equity_curve=(100_000.0, 110_000.0),
+        realized_pnls=(100.0,) * 20,
+        open_positions=0,
+        unrealized_pnl=0.0,
+        open_risk=0.0,
+        liquidated_at_end=False,
+        cagr=0.1,
+    )
+    values.update(overrides)
+    return BacktestResult(**values)
+
+
+def _bars(count: int, close: float = 100.0) -> list[Bar]:
+    start = datetime(2024, 1, 1, 14, 30, tzinfo=UTC)
+    return [
+        Bar(
+            timestamp=start + timedelta(minutes=5 * index),
+            symbol="TEST",
+            timeframe="5m",
+            open=close,
+            high=close + 0.5,
+            low=close - 0.5,
+            close=close,
+            volume=1000.0,
+            market=Market.EQUITY,
+        )
+        for index in range(count)
+    ]
+
+
+def test_walk_forward_optimized_selects_on_train_evaluates_on_test() -> None:
+    config = EngineConfig()
+    bars = _bars(400)
+
+    def factory(cfg: EngineConfig) -> Any:
+        # The "best" score on the train window must be selected and applied
+        # to the test window; every engine reports which score it received.
+        observed: dict[str, Any] = {}
+
+        class Engine:
+            def __init__(self, engine_config: EngineConfig) -> None:
+                self.config = engine_config
+                observed["score"] = engine_config.minimum_signal_score
+
+            def run(self, test: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
+                del test, warmup
+                return _result(total_trades=15)
+
+        return Engine(cfg)
+
+    folds = walk_forward_optimized(
+        bars,
+        config,
+        factory,
+        train_size=100,
+        test_size=50,
+        scores=(60.0, 70.0, 80.0),
+        risks=(0.005,),
+        positions=(0.10,),
+        min_trades=5,
+    )
+
+    assert len(folds) == 6  # (400 - 100) / 50
+    for fold in folds:
+        assert fold.minimum_signal_score in {60.0, 70.0, 80.0}
+        assert fold.test_bars == 50
+        assert fold.result.total_trades == 15
+
+
+def test_walk_forward_optimized_skips_folds_without_enough_trades() -> None:
+    config = EngineConfig()
+    bars = _bars(200)
+
+    def factory(cfg: EngineConfig) -> Any:
+        class Engine:
+            def __init__(self, engine_config: EngineConfig) -> None:
+                self.config = engine_config
+
+            def run(self, test: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
+                del test, warmup
+                return _result(total_trades=2)  # below min_trades
+
+        return Engine(cfg)
+
+    folds = walk_forward_optimized(
+        bars,
+        config,
+        factory,
+        train_size=50,
+        test_size=25,
+        scores=(60.0,),
+        risks=(0.005,),
+        positions=(0.10,),
+        min_trades=10,
+    )
+    assert folds == ()

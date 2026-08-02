@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime
 
+from parayabuck.backtest.trades import EXIT_END_OF_TEST, EXIT_STOP, EXIT_TARGET, TradeRecord
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -30,10 +31,27 @@ class _Position:
     client_order_id: str
     direction: Direction
     entry_fee: float
+    strategy: str = "unknown"
+    entry_timestamp: datetime | None = None
+    max_favorable: float = 0.0
+    max_adverse: float = 0.0
+
+    def augment(self, qty: float, price: float, fee: float) -> None:
+        """Merge a partial entry fill into an existing position from the same order."""
+        total_qty = self.qty + qty
+        self.avg_price = (self.qty * self.avg_price + qty * price) / total_qty
+        self.qty = total_qty
+        self.entry_fee += fee
 
 
 class BacktestBroker:
-    """Next-bar execution simulator with commission, slippage and protective exits."""
+    """Next-bar execution simulator with commission, slippage and protective exits.
+
+    Fills are volume-aware: an order may only consume up to a participation
+    ratio of the bar's volume, so illiquid bars produce partial fills and the
+    remainder stays pending for the next bar. Protective exits obey the same
+    constraint, which keeps low-liquidity results from looking optimistic.
+    """
 
     def __init__(
         self,
@@ -45,6 +63,8 @@ class BacktestBroker:
         allow_short: bool = False,
         intrabar_policy: str = "conservative",
         crypto_taker_fee_bps: float = 0.0,
+        max_entry_participation_pct: float = 0.10,
+        max_exit_participation_pct: float = 0.10,
     ) -> None:
         self.cash = starting_cash
         self.starting_cash = starting_cash
@@ -56,6 +76,10 @@ class BacktestBroker:
             raise ValueError("Unsupported intrabar policy")
         self.intrabar_policy = intrabar_policy
         self.crypto_taker_fee_bps = crypto_taker_fee_bps
+        if not 0 < max_entry_participation_pct <= 1 or not 0 < max_exit_participation_pct <= 1:
+            raise ValueError("Participation ratios must be in (0, 1]")
+        self.max_entry_participation_pct = max_entry_participation_pct
+        self.max_exit_participation_pct = max_exit_participation_pct
         self.peak_equity = starting_cash
         self._day_start_equity = starting_cash
         self._current_date: date | None = None
@@ -63,6 +87,7 @@ class BacktestBroker:
         self.pending: list[OrderIntent] = []
         self.fills: list[Fill] = []
         self.realized_pnls: list[float] = []
+        self.trades: list[TradeRecord] = []
         self.order_rejections: dict[str, str] = {}
         self.execution_events: list[ExecutionEvent] = []
 
@@ -129,7 +154,9 @@ class BacktestBroker:
             if order.symbol != bar.symbol or order.created_at >= bar.timestamp:
                 remaining.append(order)
                 continue
-            if order.symbol in self.positions:
+            if order.symbol in self.positions and (
+                self.positions[order.symbol].client_order_id != order.client_order_id
+            ):
                 self.order_rejections[order.client_order_id] = "existing_position"
                 self._entry_terminal_event(order, OrderState.REJECTED, bar, 0.0, None)
                 continue
@@ -138,10 +165,14 @@ class BacktestBroker:
                 self.order_rejections[order.client_order_id] = "stale_pending_order"
                 self._entry_terminal_event(order, OrderState.EXPIRED, bar, 0.0, None)
                 continue
+            fillable = self._fillable_qty(order.qty, bar, self.max_entry_participation_pct)
+            if fillable <= 0:
+                remaining.append(order)
+                continue
             adverse_bps = self.slippage_bps + self.spread_bps / 2
             side_multiplier = 1 if order.direction == Direction.LONG else -1
             fill_price = bar.open * (1 + side_multiplier * adverse_bps / 10_000)
-            notional = order.qty * fill_price
+            notional = fillable * fill_price
             entry_fee = self.commission + (
                 notional * self.crypto_taker_fee_bps / 10_000
                 if order.market == Market.CRYPTO
@@ -151,34 +182,53 @@ class BacktestBroker:
                 self.order_rejections[order.client_order_id] = "insufficient_cash"
                 self._entry_terminal_event(order, OrderState.REJECTED, bar, 0.0, None)
                 continue
+            existing = self.positions.get(order.symbol)
+            if existing is not None:
+                existing.augment(fillable, fill_price, entry_fee)
+            else:
+                self.positions[order.symbol] = _Position(
+                    order.symbol,
+                    fillable,
+                    fill_price,
+                    bar.close,
+                    order.market,
+                    order.stop_price,
+                    order.target_price,
+                    order.client_order_id,
+                    order.direction,
+                    entry_fee,
+                    strategy=order.strategy,
+                    entry_timestamp=bar.timestamp,
+                )
             if order.direction == Direction.LONG:
                 self.cash -= notional + entry_fee
             else:
                 self.cash += notional - entry_fee
-            self.positions[order.symbol] = _Position(
-                order.symbol,
-                order.qty,
-                fill_price,
-                bar.close,
-                order.market,
-                order.stop_price,
-                order.target_price,
-                order.client_order_id,
-                order.direction,
-                entry_fee,
-            )
             self.fills.append(
                 Fill(
                     order.client_order_id,
                     order.symbol,
-                    order.qty,
+                    fillable,
                     fill_price,
                     order.direction,
                     bar.timestamp,
                     entry_fee,
                 )
             )
-            self._entry_terminal_event(order, OrderState.FILLED, bar, order.qty, fill_price)
+            self._entry_terminal_event(
+                order,
+                OrderState.FILLED if fillable >= order.qty else OrderState.PARTIALLY_FILLED,
+                bar,
+                fillable,
+                fill_price,
+            )
+            if fillable < order.qty:
+                # The unfilled remainder keeps working as a fresh order so the
+                # staleness check cannot expire a partially-filled entry that
+                # is still being built up bar by bar.
+                remaining.append(
+                    replace(order, qty=order.qty - fillable, created_at=bar.timestamp)
+                )
         self.pending = remaining
 
         # 2-4. Newly-filled and existing positions see this bar's open and
@@ -186,11 +236,41 @@ class BacktestBroker:
         position = self.positions.get(bar.symbol)
         if position is not None:
             position.current_price = bar.close
-            exit_price = self._exit_price(position, bar)
-            if exit_price is not None:
-                self._close(position, exit_price, bar)
+            self._track_excursions(position, bar)
+            exit_result = self._exit_price(position, bar)
+            if exit_result is not None:
+                exit_price, exit_reason = exit_result
+                exitable = self._fillable_qty(
+                    position.qty, bar, self.max_exit_participation_pct
+                )
+                if exitable >= position.qty or bar.volume <= 0:
+                    self._close(position, exit_price, exit_reason, bar)
+                else:
+                    self._close(position, exit_price, exit_reason, bar, qty=exitable)
 
-    def _exit_price(self, position: _Position, bar: Bar) -> float | None:
+    @staticmethod
+    def _fillable_qty(requested: float, bar: Bar, participation_pct: float) -> float:
+        """Maximum fillable quantity on this bar under the participation cap."""
+        if bar.volume <= 0:
+            return 0.0
+        participation_cap = bar.volume * participation_pct
+        if requested < participation_cap:
+            return requested
+        return participation_cap
+
+    def _track_excursions(self, position: _Position, bar: Bar) -> None:
+        if position.entry_timestamp is None or bar.timestamp <= position.entry_timestamp:
+            return
+        if position.direction == Direction.LONG:
+            adverse = (position.avg_price - bar.low) / position.avg_price
+            favorable = (bar.high - position.avg_price) / position.avg_price
+        else:
+            adverse = (bar.high - position.avg_price) / position.avg_price
+            favorable = (position.avg_price - bar.low) / position.avg_price
+        position.max_adverse = max(position.max_adverse, adverse)
+        position.max_favorable = max(position.max_favorable, favorable)
+
+    def _exit_price(self, position: _Position, bar: Bar) -> tuple[float, str] | None:
         long = position.direction == Direction.LONG
         if long and bar.open <= position.stop:
             raw = bar.open
@@ -220,34 +300,98 @@ class BacktestBroker:
                 is_stop = stop_hit
         adverse = self.slippage_bps + self.spread_bps / 2
         if is_stop:
-            return raw * (1 - adverse / 10_000 if long else 1 + adverse / 10_000)
-        return raw * (1 - self.slippage_bps / 10_000 if long else 1 + self.slippage_bps / 10_000)
+            return (
+                raw * (1 - adverse / 10_000 if long else 1 + adverse / 10_000),
+                EXIT_STOP,
+            )
+        return (
+            raw * (1 - self.slippage_bps / 10_000 if long else 1 + self.slippage_bps / 10_000),
+            EXIT_TARGET,
+        )
 
-    def _close(self, position: _Position, price: float, bar: Bar) -> None:
+    def liquidate_at_end(self, bar: Bar) -> None:
+        """Close a still-open position at the final bar's close, exit costs applied.
+
+        Makes the ending equity fully realized so total return, trade count,
+        win rate and expectancy all measure the same economic scope.
+        """
+        position = self.positions.get(bar.symbol)
+        if position is None:
+            return
+        adverse_bps = self.slippage_bps + self.spread_bps / 2
+        if position.direction == Direction.LONG:
+            exit_price = bar.close * (1 - adverse_bps / 10_000)
+        else:
+            exit_price = bar.close * (1 + adverse_bps / 10_000)
+        self._close(position, exit_price, EXIT_END_OF_TEST, bar)
+
+    def _close(
+        self,
+        position: _Position,
+        price: float,
+        exit_reason: str,
+        bar: Bar,
+        *,
+        qty: float | None = None,
+    ) -> None:
+        close_qty = position.qty if qty is None else qty
+        if close_qty <= 0 or close_qty > position.qty:
+            raise ValueError("Invalid close quantity")
         exit_fee = self.commission + (
-            position.qty * price * self.crypto_taker_fee_bps / 10_000
+            close_qty * price * self.crypto_taker_fee_bps / 10_000
             if position.market == Market.CRYPTO
             else 0.0
         )
+        entry_fee_share = position.entry_fee * (close_qty / position.qty)
         if position.direction == Direction.LONG:
-            self.cash += position.qty * price - exit_fee
-            pnl = (price - position.avg_price) * position.qty - position.entry_fee - exit_fee
+            self.cash += close_qty * price - exit_fee
+            pnl = (price - position.avg_price) * close_qty - entry_fee_share - exit_fee
         else:
-            self.cash -= position.qty * price + exit_fee
-            pnl = (position.avg_price - price) * position.qty - position.entry_fee - exit_fee
+            self.cash -= close_qty * price + exit_fee
+            pnl = (position.avg_price - price) * close_qty - entry_fee_share - exit_fee
         self.realized_pnls.append(pnl)
+        self.trades.append(
+            TradeRecord(
+                client_order_id=position.client_order_id,
+                symbol=position.symbol,
+                market=position.market,
+                strategy=position.strategy,
+                direction=position.direction,
+                qty=close_qty,
+                entry_time=position.entry_timestamp or bar.timestamp,
+                exit_time=bar.timestamp,
+                entry_price=position.avg_price,
+                exit_price=price,
+                pnl=pnl,
+                return_pct=(
+                    (price - position.avg_price)
+                    * (1 if position.direction == Direction.LONG else -1)
+                    / position.avg_price
+                    if position.avg_price > 0
+                    else 0.0
+                ),
+                mae_pct=position.max_adverse,
+                mfe_pct=position.max_favorable,
+                exit_reason=exit_reason,
+                fees=entry_fee_share + exit_fee,
+            )
+        )
         self.fills.append(
             Fill(
                 position.client_order_id,
                 position.symbol,
-                position.qty,
+                close_qty,
                 price,
                 Direction.FLAT,
                 bar.timestamp,
                 exit_fee,
             )
         )
-        del self.positions[position.symbol]
+        if close_qty >= position.qty:
+            del self.positions[position.symbol]
+        else:
+            position.qty -= close_qty
+            position.entry_fee -= entry_fee_share
 
     def _entry_terminal_event(
         self,

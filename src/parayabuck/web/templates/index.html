@@ -71,6 +71,76 @@
         </section>
 
         <main class="dashboard-content">
+            <section class="panel backtest-panel" aria-label="Backtest çalıştırıcı">
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">ARAŞTIRMA</span>
+                        <h2>Backtest çalıştır</h2>
+                        <p>Tek tıkla canlı motorun aynı strateji ve risk motoruyla geçmiş veride test eder; her koşu reports/ altına manifestiyle yazılır.</p>
+                    </div>
+                    <span id="backtestStateBadge" class="count-badge">beklemede</span>
+                </div>
+                <div class="backtest-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="btProfile">Profil</label>
+                            <select id="btProfile">
+                                <option value="auto">Otomatik (pencereye göre)</option>
+                                <option value="live">Live (5m + 1h)</option>
+                                <option value="deep">Deep (1d)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="btMarket">Piyasa</label>
+                            <select id="btMarket">
+                                <option value="both">Borsa + Kripto</option>
+                                <option value="equity">Borsa</option>
+                                <option value="crypto">Kripto</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="btYears">Yıl</label>
+                            <input type="number" id="btYears" min="1" max="30" value="3">
+                        </div>
+                        <div class="form-group">
+                            <label for="btDays">Gün (0 = yıllar)</label>
+                            <input type="number" id="btDays" min="0" max="3650" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="btMaxSymbols">Max sembol</label>
+                            <input type="number" id="btMaxSymbols" min="1" max="100" value="40">
+                        </div>
+                        <div class="form-group form-wide">
+                            <label for="btSymbols">Semboller (boş = universe)</label>
+                            <input type="text" id="btSymbols" placeholder="AAPL,MSFT,BTC/USD">
+                        </div>
+                    </div>
+                    <div class="backtest-options">
+                        <label class="switch-row switch-inline">
+                            <span><strong>Sweep</strong><small>parametre taraması</small></span>
+                            <input type="checkbox" id="btSweep">
+                            <span class="switch-control" aria-hidden="true"></span>
+                        </label>
+                        <label class="switch-row switch-inline">
+                            <span><strong>Walk-forward</strong><small>rolling OOS</small></span>
+                            <input type="checkbox" id="btWalkForward">
+                            <span class="switch-control" aria-hidden="true"></span>
+                        </label>
+                        <label class="switch-row switch-inline">
+                            <span><strong>Nested optimize</strong><small>train'de seç, test'te ölç</small></span>
+                            <input type="checkbox" id="btOptimize">
+                            <span class="switch-control" aria-hidden="true"></span>
+                        </label>
+                        <button id="backtestRunBtn" class="btn btn-primary">
+                            <span class="button-icon" aria-hidden="true">▶</span>
+                            <span>Backtest'i çalıştır</span>
+                        </button>
+                    </div>
+                    <div id="backtestSummary" class="backtest-summary" hidden></div>
+                    <div id="backtestProgress" class="terminal-view backtest-progress" aria-live="polite"></div>
+                </div>
+            </section>
+
             <section class="metric-grid" aria-label="Portföy özeti">
                 <article class="metric-card metric-primary">
                     <div class="metric-head">

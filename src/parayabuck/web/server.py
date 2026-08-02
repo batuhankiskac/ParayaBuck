@@ -35,6 +35,161 @@ from parayabuck.universe import validate_active_crypto_universe, validate_active
 log = get_logger("parayabuck.web.server")
 
 
+class BacktestManager:
+    """Runs the backtest CLI in a background thread with live progress.
+
+    Every run writes its own output directory (``reports/<run_id>/``) with
+    ``report.json`` and ``run_manifest.json``, so the web UI can show the same
+    manifest the CLI produces and reproduce any run.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._thread_factory = threading.Thread
+        self.state = "idle"
+        self.run_id = ""
+        self.output_dir = ""
+        self.started_at: str | None = None
+        self.finished_at: str | None = None
+        self.error: str | None = None
+        self.progress: list[str] = []
+        self.summary: dict[str, Any] | None = None
+        self.manifest: dict[str, Any] | None = None
+
+    @property
+    def is_running(self) -> bool:
+        with self._lock:
+            return (
+                self.state == "running"
+                and self._thread is not None
+                and self._thread.is_alive()
+            )
+
+    def start(self, payload: dict[str, Any]) -> str:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
+            self.state = "running"
+            self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+            self.output_dir = str(Path("reports") / self.run_id)
+            self.started_at = datetime.now(UTC).isoformat()
+            self.finished_at = None
+            self.error = None
+            self.summary = None
+            self.manifest = None
+            self.progress = []
+            argv = self._build_argv(payload)
+            self._thread = self._thread_factory(
+                target=self._run, args=(argv,), daemon=True, name="web-backtest"
+            )
+            self._thread.start()
+            return self.run_id
+
+    @staticmethod
+    def _build_argv(payload: dict[str, Any]) -> list[str]:
+        argv = ["run_backtest.py", "--no-monte-carlo"]
+        profile = payload.get("profile") or "auto"
+        if profile != "auto":
+            argv += ["--profile", profile]
+        market = payload.get("market") or "both"
+        argv += ["--market", market]
+        symbols = (payload.get("symbols") or "").strip()
+        if symbols:
+            argv += ["--symbols", symbols]
+        days = payload.get("days")
+        if days:
+            argv += ["--days", str(int(days))]
+        else:
+            argv += ["--years", str(int(payload.get("years") or 10))]
+        max_symbols = payload.get("max_symbols")
+        if max_symbols:
+            argv += ["--max-symbols", str(int(max_symbols))]
+        adjustment = payload.get("adjustment")
+        if adjustment in {"raw", "splits", "all"}:
+            argv += ["--adjustment", adjustment]
+        if payload.get("sweep"):
+            argv.append("--sweep")
+        if payload.get("walk_forward"):
+            argv.append("--walk-forward")
+        if payload.get("walk_forward_optimize"):
+            argv.append("--walk-forward-optimize")
+        return argv
+
+    def _run(self, argv: list[str]) -> None:
+        import contextlib
+
+        from parayabuck.backtest import cli as backtest_cli
+
+        error: str | None = None
+        try:
+            with contextlib.redirect_stdout(self._stream()), contextlib.redirect_stderr(
+                self._stream()
+            ):
+                backtest_cli.main(argv)
+        except SystemExit:
+            error = "Backtest CLI beklenmedik şekilde çıktı"
+        except Exception as exc:
+            error = str(exc)
+        self._finish(error)
+
+    def _stream(self) -> Any:
+        import io
+        class ProgressStream(io.StringIO):
+            def __init__(self, owner: BacktestManager) -> None:
+                super().__init__()
+                self.owner = owner
+
+            def write(self, text: str) -> int:
+                with self.owner._lock:
+                    self.owner.progress.extend(text.splitlines())
+                    if len(self.owner.progress) > 300:
+                        self.owner.progress = self.owner.progress[-300:]
+                return super().write(text)
+
+        return ProgressStream(self)
+
+    def _finish(self, error: str | None) -> None:
+        summary: dict[str, Any] | None = None
+        manifest: dict[str, Any] | None = None
+        if error is None:
+            report_path = Path(self.output_dir) / "report.json"
+            manifest_path = Path(self.output_dir) / "run_manifest.json"
+            try:
+                if report_path.exists():
+                    raw = json.loads(report_path.read_text(encoding="utf-8"))
+                    summary = raw.get("summary")
+                if manifest_path.exists():
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                error = f"Rapor okunamadı: {exc}"
+        with self._lock:
+            self.state = "error" if error else "done"
+            self.error = error
+            self.summary = summary
+            self.manifest = manifest
+            self.finished_at = datetime.now(UTC).isoformat()
+        log.info("Web backtest finished: %s (%s)", self.run_id, self.state)
+
+    def status(self) -> dict[str, Any]:
+        is_running = self.is_running
+        with self._lock:
+            return {
+                "state": "running" if is_running else self.state,
+                "run_id": self.run_id,
+                "output_dir": self.output_dir,
+                "started_at": self.started_at,
+                "finished_at": self.finished_at,
+                "error": self.error,
+                "progress": list(self.progress[-60:]),
+                "summary": self.summary,
+                "manifest": self.manifest,
+            }
+
+
+backtest_manager = BacktestManager()
+
+
 @dataclass(frozen=True)
 class LiveArmToken:
     account_id: str
@@ -700,6 +855,19 @@ class WebSocketTicketPayload(BaseModel):
     kind: Literal["stream", "logs"]
 
 
+class BacktestPayload(BaseModel):
+    profile: Literal["auto", "live", "deep"] = "auto"
+    market: Literal["both", "equity", "crypto"] = "both"
+    years: int = Field(10, ge=1, le=30)
+    days: int = Field(0, ge=0)
+    symbols: str = ""
+    max_symbols: int = Field(40, ge=1, le=100)
+    adjustment: Literal["raw", "splits", "all"] = "splits"
+    sweep: bool = False
+    walk_forward: bool = False
+    walk_forward_optimize: bool = False
+
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request) -> HTMLResponse:
@@ -1069,6 +1237,23 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Backtest (tek tık) — same CLI, background thread, manifest per run
+@app.post("/api/backtest/run")
+async def run_backtest(payload: BacktestPayload) -> dict[str, Any]:
+    try:
+        run_id = await asyncio.to_thread(
+            backtest_manager.start, payload.model_dump()
+        )
+        return {"status": "started", "run_id": run_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/backtest/status")
+async def backtest_status() -> dict[str, Any]:
+    return await asyncio.to_thread(backtest_manager.status)
 
 
 # WebSockets

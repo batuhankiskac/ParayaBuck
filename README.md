@@ -116,15 +116,64 @@ Paper doğrulamasında önce scanner'ı çalıştırın, JSON'daki seçimi incel
 yeniden başlatın ve health ekranındaki crypto `symbol_count` ile stream aboneliklerini
 karşılaştırın. Bu işlem `live_trading_enabled` değerini değiştirmez.
 
-## Offline backtest
+## Backtest
+
+Tek giriş noktası: `scripts/run_backtest.py` (aynı CLI: `python -m parayabuck.backtest`
+veya kurulu pakette `parayabuck-backtest`). Her çalıştırma konsola detaylı rapor
+basar ve `reports/` dizinine `report.json` + `run_manifest.json` + 7 CSV yazar
+(summary, trades, yearly/monthly returns, by-symbol, equity curve, drawdowns).
+Manifest, koşunun parametrelerini, veri kapsamını, benchmark'ı, fiyat düzeltme
+tabanını ve kod revizyonunu kaydeder; böylece her rapor yeniden üretilebilir.
 
 ```bash
-python scripts/run_backtest.py data/historical/MES_5m_2024.csv \
-  --symbol MES --market equity --timeframe 5m
+# 1) Örnek veriyle hızlı test (offline, hiçbir şey indirmez; DEMO sembolü sentetiktir):
+python scripts/run_backtest.py --generate-sample
+
+# 2) Kendi CSV verinle:
+python scripts/run_backtest.py data/historical/DEMO_5m_2024.csv --symbol DEMO --timeframe 5m
+
+# 3) Alpaca'dan 10 yıl gerçek veri, borsa + kripto (.env anahtarları ile):
+#    10 yıllık pencere deep profil (1d) kullanır.
+python scripts/run_backtest.py --market both --years 10
+python scripts/run_backtest.py --market crypto --years 7
+
+# 4) Canlıda doğrulanmış 5m + 1h profil — canlı motorla aynı zaman ölçeği:
+#    (pencere <= ~120 işlem günü; daha uzun pencerelerde --timeframe 1d gerekir)
+python scripts/run_backtest.py --market equity --days 90 --profile live
+
+# 5) Walk-forward out-of-sample dilimleri ekle:
+python scripts/run_backtest.py --market both --years 10 --walk-forward
+
+# 6) Nested walk-forward: her train diliminde parametre seç (sweep), seçilen
+#    parametreleri bir sonraki out-of-sample diliminde ölç (overfitting koruması):
+python scripts/run_backtest.py --market both --years 10 --walk-forward-optimize
+
+# 7) Tek tıkla parametre taraması — in-sample en uygun kombinasyonları bul:
+python scripts/run_backtest.py --market both --years 10 --sweep
 ```
 
+`--sweep`, indirilen aynı veriyi `minimum_signal_score` × `risk_per_trade_pct` ×
+`max_position_pct` grid'i üzerinde yeniden koşar (ekstra indirme yok) ve
+kombinasyonları Calmar oranına göre sıralar. Sweep aynı veri üzerinde sıraladığı
+için in-sample'dir; dış örnek doğrulama için `--walk-forward-optimize` kullanın.
+Sonuçlar `reports/sweep.csv` dosyasına yazılır; minimum işlem eşiği
+`--sweep-min-trades` (varsayılan 10) ile ayarlanır ve grid değerleri
+`--sweep-scores "55,65,75"`, `--sweep-risks "0.0025,0.005"`, `--sweep-positions
+"0.05,0.15"` ile özelleştirilir.
+
+Alpaca modunda `--profile` belirtilmezse pencere otomatik karar verir: pencere
+`EQUITY_MAX_DAYS["5m"]` (120 işlem günü) içindeyse canlı profili (5m + 1h), daha
+uzunsa deep profili (1d). Uzun hisse testlerinde veri corporate-action düzeltmeli
+indirilir (`--adjustment splits`, varsayılan); böylece bölünme geçişleri yanlış
+sinyal ve stop mesafesi üretmez.
+
 Backtest aynı motor, strateji ve risk katmanını kullanır; yalnızca broker uygulaması
-simülasyon brokerı ile değiştirilir.
+simülasyon brokerı ile değiştirilir. Alpaca'dan indirilen veri `data/cache/` altında
+saklanır; sonraki çalıştırmalar önbellekten anında tamamlanır. Simülasyon brokerı
+hacim katılımına dayalı dolum uygular: bir emir tek barda hacmin varsayılan %10'unu
+geçemez (kısmi dolumlar bir sonraki barda devam eder) ve test sonunda açık
+pozisyonlar kapanış fiyatından realize edilir — böylece toplam getiri ile işlem
+istatistikleri aynı ekonomik kapsamı ölçer.
 
 ## AI Decision Logs
 
@@ -327,8 +376,8 @@ atomik olarak değiştirilir. JSONL ve günlük Markdown dosyaları append-only 
 .venv/bin/ruff check .
 ```
 
-`scripts/generate_sample_data.py`, test ve backtest geliştirmesi için sentetik OHLCV
-verisi üretir.
+Backtest için örnek veri `python scripts/run_backtest.py --generate-sample` ile
+üretilip aynı komut içinde çalıştırılır (sentetik OHLCV, `data/historical/`).
 
 ## Güvenlik ve live geçişi
 

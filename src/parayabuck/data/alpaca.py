@@ -55,9 +55,12 @@ class AlpacaHistoricalData:
         timeframe: str,
         start: datetime | str | None = None,
         end: datetime | str | None = None,
+        adjustment: str = "raw",
     ) -> list[Bar]:
         canonical = canonical_symbol(symbol)
-        return self.get_bars_batch([canonical], timeframe, start, end).get(canonical, [])
+        return self.get_bars_batch(
+            [canonical], timeframe, start, end, adjustment=adjustment
+        ).get(canonical, [])
 
     def get_bars_batch(
         self,
@@ -65,9 +68,12 @@ class AlpacaHistoricalData:
         timeframe: str,
         start: datetime | str | None = None,
         end: datetime | str | None = None,
+        adjustment: str = "raw",
     ) -> dict[str, list[Bar]]:
         if timeframe not in _TIMEFRAMES:
             raise ValueError(f"Unsupported timeframe: {timeframe}")
+        if adjustment not in {"raw", "splits", "all"}:
+            raise ValueError("adjustment must be one of raw, splits, all")
         if not symbols:
             return {}
         symbols = [canonical_symbol(symbol) for symbol in symbols]
@@ -91,6 +97,7 @@ class AlpacaHistoricalData:
                     feed=feed_name,
                     start=start_at,
                     end=end_at,
+                    adjustment=adjustment,
                 )
                 if (
                     market != Market.EQUITY
@@ -126,10 +133,7 @@ class AlpacaHistoricalData:
                         end=end_at,
                         limit=10_000,
                         feed=self._stock_feed,
-                        # Streaming bars are unadjusted. Keep warmup on the
-                        # same price basis so splits/dividends do not create an
-                        # artificial discontinuity at the live boundary.
-                        adjustment=Adjustment.RAW,
+                        adjustment=Adjustment(adjustment),
                     )
                 )
         except Exception:
@@ -172,7 +176,7 @@ class AlpacaHistoricalData:
             bars.setdefault(row_symbol, []).append(item)
         total = sum(len(items) for items in bars.values())
         fetched = [bar for items in bars.values() for bar in items]
-        self._cache.upsert(fetched, feed=feed_name)
+        self._cache.upsert(fetched, feed=feed_name, adjustment=adjustment)
         for symbol in symbols:
             merged = {bar.timestamp: bar for bar in cached.get(symbol, [])}
             merged.update({bar.timestamp: bar for bar in bars.get(symbol, [])})
@@ -182,7 +186,7 @@ class AlpacaHistoricalData:
 
     @staticmethod
     def _is_regular_equity_timestamp(timestamp: datetime) -> bool:
-        return is_regular_equity_time(timestamp)
+        return bool(is_regular_equity_time(timestamp))
 
     @staticmethod
     def _cache_is_fresh(
@@ -202,7 +206,7 @@ class AlpacaHistoricalData:
         else:
             minutes = TIMEFRAME_MINUTES[timeframe]
             maximum_age = timedelta(minutes=max(180, minutes * 3))
-        return age <= maximum_age
+        return bool(age <= maximum_age)
 
     def get_latest_crypto_quotes(self, symbols: list[str]) -> dict[str, Any]:
         canonical = [canonical_symbol(symbol, Market.CRYPTO) for symbol in symbols]

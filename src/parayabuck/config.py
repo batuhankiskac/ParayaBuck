@@ -106,16 +106,17 @@ class EngineConfig:
             0 < self.crypto_min_volume_bar_ratio <= 1
         ):
             raise ValueError("crypto_min_volume_bar_ratio must be in (0, 1]")
-        if TIMEFRAME_MINUTES[self.higher_timeframe] <= TIMEFRAME_MINUTES[self.timeframe]:
-            raise ValueError("higher_timeframe must be greater than timeframe")
+        if TIMEFRAME_MINUTES[self.higher_timeframe] < TIMEFRAME_MINUTES[self.timeframe]:
+            raise ValueError("higher_timeframe must not be smaller than timeframe")
         if self.consecutive_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
         if self.max_new_positions_per_cycle != 1:
             raise ValueError("Only one new position per cycle is supported")
-        if self.trading_enabled and self.strategy_profile != "equity_5m_v1":
-            raise ValueError("Broker trading requires the equity_5m_v1 strategy profile")
-        if self.trading_enabled and (self.timeframe != "5m" or self.higher_timeframe != "1h"):
-            raise ValueError("Broker trading is enabled only for the validated 5m + 1h profile")
+        if self.live_trading_enabled:
+            if self.trading_enabled and self.strategy_profile != "equity_5m_v1":
+                raise ValueError("Broker trading requires the equity_5m_v1 strategy profile")
+            if self.trading_enabled and (self.timeframe != "5m" or self.higher_timeframe != "1h"):
+                raise ValueError("Broker trading is enabled only for the validated 5m + 1h profile")
 
     @property
     def consecutive_values_invalid(self) -> bool:

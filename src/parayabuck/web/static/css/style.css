@@ -1170,3 +1170,79 @@ summary {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ------------------------------------------------------------------
+   Backtest panel (tek tık araştırma)
+   ------------------------------------------------------------------ */
+.backtest-panel {
+    margin-bottom: 20px;
+}
+
+.backtest-body {
+    padding: 18px 20px 20px;
+}
+
+.backtest-body .form-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+}
+
+.backtest-body .form-wide {
+    grid-column: span 2;
+}
+
+.backtest-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    margin-top: 14px;
+}
+
+.switch-inline {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+.backtest-progress {
+    margin-top: 14px;
+    height: 180px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+.backtest-summary {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.backtest-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.backtest-summary-grid span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+    color: #94A3B8;
+}
+
+.backtest-summary-grid strong {
+    color: #E2E8F0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+@media (max-width: 900px) {
+    .backtest-body .form-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}

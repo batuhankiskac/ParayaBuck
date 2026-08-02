@@ -70,6 +70,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const terminalLogView = document.getElementById('terminalLogView');
     const clearLogsBtn = document.getElementById('clearLogsBtn');
 
+    // Backtest Panel Elements
+    const backtestRunBtn = document.getElementById('backtestRunBtn');
+    const backtestStateBadge = document.getElementById('backtestStateBadge');
+    const backtestSummary = document.getElementById('backtestSummary');
+    const backtestProgress = document.getElementById('backtestProgress');
+    const btProfile = document.getElementById('btProfile');
+    const btMarket = document.getElementById('btMarket');
+    const btYears = document.getElementById('btYears');
+    const btDays = document.getElementById('btDays');
+    const btMaxSymbols = document.getElementById('btMaxSymbols');
+    const btSymbols = document.getElementById('btSymbols');
+    const btSweep = document.getElementById('btSweep');
+    const btWalkForward = document.getElementById('btWalkForward');
+    const btOptimize = document.getElementById('btOptimize');
+
     // Settings Modal Elements
     const settingsModal = document.getElementById('settingsModal');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -674,12 +689,110 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Backtest (tek tık)
+    const backtestStateLabels = {
+        idle: 'beklemede',
+        running: 'çalışıyor',
+        done: 'tamamlandı',
+        error: 'hata'
+    };
+    const renderBacktestSummary = (summary) => {
+        if (!summary) {
+            backtestSummary.hidden = true;
+            return;
+        }
+        const pct = (key) => {
+            const value = Number(summary[key] || 0);
+            return (value * 100).toFixed(2) + '%';
+        };
+        backtestSummary.hidden = false;
+        backtestSummary.innerHTML =
+            `<div class="backtest-summary-grid">
+                <span><strong>Getiri</strong>${pct('total_return')}</span>
+                <span><strong>CAGR</strong>${pct('cagr')}</span>
+                <span><strong>Benchmark</strong>${pct('benchmark_return')} (${summary.benchmark_symbol || '-'})</span>
+                <span><strong>MaxDD</strong>${pct('max_drawdown')}</span>
+                <span><strong>Sharpe</strong>${Number(summary.sharpe || 0).toFixed(2)}</span>
+                <span><strong>İşlem</strong>${summary.total_trades || 0}</span>
+                <span><strong>Kazanma</strong>${pct('win_rate')}</span>
+                <span><strong>Bitiş</strong>$${Number(summary.ending_equity || 0).toLocaleString()}</span>
+                <span><strong>Periyot</strong>${summary.start_date ? summary.start_date.slice(0, 10) : '-'} → ${summary.end_date ? summary.end_date.slice(0, 10) : '-'}</span>
+                <span><strong>Kapanış</strong>${summary.open_positions > 0 ? summary.open_positions + ' açık' : 'hepsi realize'}</span>
+            </div>`;
+    };
+    const renderBacktestProgress = (lines) => {
+        const container = backtestProgress;
+        container.innerHTML = '';
+        for (const line of lines) {
+            const div = document.createElement('div');
+            div.className = 'log-line info';
+            const message = document.createElement('span');
+            message.className = 'log-msg';
+            message.textContent = line;
+            div.appendChild(message);
+            container.appendChild(div);
+        }
+        container.scrollTop = container.scrollHeight;
+    };
+    const refreshBacktestStatus = async () => {
+        let response;
+        try {
+            response = await fetch('/api/backtest/status');
+        } catch (_) {
+            return;
+        }
+        if (!response.ok) return;
+        const data = await response.json();
+        backtestStateBadge.textContent = backtestStateLabels[data.state] || data.state;
+        backtestRunBtn.disabled = data.state === 'running';
+        renderBacktestProgress(data.progress || []);
+        if (data.state === 'done' || data.state === 'error') {
+            renderBacktestSummary(data.summary);
+            if (data.error) {
+                backtestSummary.hidden = false;
+                backtestSummary.innerHTML = `<span class="negative">Hata: ${data.error}</span>`;
+            }
+            appendLog(`Backtest ${data.state}: reports/${data.run_id}`, data.state === 'error' ? 'warning' : 'info');
+        } else if (data.state === 'running') {
+            backtestSummary.hidden = true;
+        }
+    };
+
+    backtestRunBtn.addEventListener('click', async () => {
+        const payload = {
+            profile: btProfile.value,
+            market: btMarket.value,
+            years: parseInt(btYears.value, 10) || 3,
+            days: parseInt(btDays.value, 10) || 0,
+            max_symbols: parseInt(btMaxSymbols.value, 10) || 40,
+            symbols: btSymbols.value.trim(),
+            sweep: btSweep.checked,
+            walk_forward: btWalkForward.checked,
+            walk_forward_optimize: btOptimize.checked
+        };
+        try {
+            const res = await controlFetch('/api/backtest/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await responsePayload(res);
+            if (!res.ok) throw new Error(data.detail || 'Backtest başlatılamadı');
+            appendLog(`Backtest başladı: ${data.run_id} (${btProfile.value} profil, ${payload.days || payload.years * 365} gün)`, 'info');
+            await refreshBacktestStatus();
+        } catch (err) {
+            alert('Hata: ' + err.message);
+        }
+    });
+
     // Initial Fetch & Start WebSockets
     const init = async () => {
         try {
             await refreshSystemStatus();
             window.setInterval(refreshSystemStatus, 2000);
             initWebSockets();
+            await refreshBacktestStatus();
+            window.setInterval(refreshBacktestStatus, 3000);
             const accountRes = await fetch('/api/account');
             if (!accountRes.ok) throw new Error(`Hesap alınamadı (${accountRes.status})`);
             const accountData = await accountRes.json();

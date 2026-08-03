@@ -120,8 +120,9 @@ karşılaştırın. Bu işlem `live_trading_enabled` değerini değiştirmez.
 
 Tek giriş noktası: `scripts/run_backtest.py` (aynı CLI: `python -m parayabuck.backtest`
 veya kurulu pakette `parayabuck-backtest`). Her çalıştırma konsola detaylı rapor
-basar ve `reports/` dizinine `report.json` + `run_manifest.json` + 7 CSV yazar
-(summary, trades, yearly/monthly returns, by-symbol, equity curve, drawdowns).
+basar ve `reports/` dizinine `report.json` + `run_manifest.json` + CSV raporları yazar
+(summary, trades, yearly/monthly returns, by-symbol, by-regime, score decile,
+equity curve, drawdowns).
 Manifest, koşunun parametrelerini, veri kapsamını, benchmark'ı, fiyat düzeltme
 tabanını ve kod revizyonunu kaydeder; böylece her rapor yeniden üretilebilir.
 
@@ -150,7 +151,15 @@ python scripts/run_backtest.py --market both --years 10 --walk-forward-optimize
 
 # 7) Tek tıkla parametre taraması — in-sample en uygun kombinasyonları bul:
 python scripts/run_backtest.py --market both --years 10 --sweep
+
+# 8) Strateji ve çıkış parametrelerini takvim bazlı nested araştırma içinde tara:
+python scripts/run_backtest.py \
+  --experiment-spec config/experiments/strategy_1h_v1.yaml \
+  --output-dir reports/experiments/strategy_1h_v1
 ```
+
+Yeni 1h araştırma akışı, maliyet senaryoları ve tek-kullanımlık holdout kuralı için
+[`docs/strategy_research.md`](docs/strategy_research.md) belgesine bakın.
 
 `--sweep`, indirilen aynı veriyi `minimum_signal_score` × `risk_per_trade_pct` ×
 `max_position_pct` grid'i üzerinde yeniden koşar (ekstra indirme yok) ve

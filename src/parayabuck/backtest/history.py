@@ -124,7 +124,13 @@ def download_history(
             cursor = segment_end
         collected[symbol] = symbol_bars
         if progress is not None:
-            coverage = coverage_for(symbol, symbol_bars)
+            coverage = coverage_for(
+                symbol,
+                symbol_bars,
+                timeframe=timeframe,
+                expected_start=start,
+                expected_end=end,
+            )
             progress(index, len(symbols), coverage)
     return collected
 

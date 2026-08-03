@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import random
 import subprocess
@@ -47,6 +48,16 @@ from dotenv import load_dotenv
 
 from parayabuck.backtest import BacktestEngine
 from parayabuck.backtest.engine import BacktestResult
+from parayabuck.backtest.experiments import (
+    CRYPTO_BASE,
+    CRYPTO_STRESS,
+    EQUITY_BASE,
+    EQUITY_STRESS,
+    CostScenario,
+    ExperimentSpec,
+    ProductionGate,
+    hash_bars,
+)
 from parayabuck.backtest.history import (
     DEEP_BACKTEST_TIMEFRAMES,
     EQUITY_MAX_DAYS,
@@ -57,6 +68,7 @@ from parayabuck.backtest.history import (
     validate_range,
 )
 from parayabuck.backtest.report import build_report
+from parayabuck.backtest.research import run_nested_experiment
 from parayabuck.backtest.sweep import (
     DEFAULT_POSITIONS,
     DEFAULT_RISKS,
@@ -65,6 +77,7 @@ from parayabuck.backtest.sweep import (
     run_sweep,
     write_sweep_csv,
 )
+from parayabuck.backtest.universe import build_crypto_point_in_time_universe
 from parayabuck.backtest.validation import (
     monte_carlo_trades,
     rolling_out_of_sample,
@@ -74,6 +87,7 @@ from parayabuck.config import Config, EngineConfig, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+from parayabuck.strategies.base import Strategy
 from parayabuck.universe import (
     ensure_active_universes,
     load_active_crypto_symbols,
@@ -83,6 +97,7 @@ from parayabuck.utils import is_crypto
 
 EQUITY_BENCHMARK = "SPY"
 CRYPTO_BENCHMARK = "BTC/USD"
+HOLDOUT_REGISTRY_PATH = Path("data/runtime/holdout_registry.json")
 
 USAGE = """\
 ParayaBuck Backtest
@@ -140,6 +155,38 @@ def _parse_float_list(value: str, option: str) -> tuple[float, ...]:
     if not items:
         raise SystemExit(f"--{option} boş olamaz")
     return items
+
+
+def _holdout_registry() -> dict[str, object]:
+    if not HOLDOUT_REGISTRY_PATH.exists():
+        return {}
+    raw = json.loads(HOLDOUT_REGISTRY_PATH.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
+
+
+def _assert_holdout_locked_once(experiment_id: str) -> None:
+    if experiment_id in _holdout_registry():
+        raise SystemExit(
+            f"Holdout daha önce değerlendirildi: {experiment_id}. "
+            "Aynı holdout üzerinde yeniden ayar ve değerlendirme yasaktır."
+        )
+
+
+def _record_holdout_evaluation(experiment: ExperimentSpec, data_hash: str) -> None:
+    registry = _holdout_registry()
+    registry[experiment.experiment_id] = {
+        "evaluated_at": datetime.now(UTC).isoformat(),
+        "data_hash": data_hash,
+        "holdout_months": experiment.outer_holdout_months,
+        "seed": experiment.seed,
+    }
+    HOLDOUT_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = HOLDOUT_REGISTRY_PATH.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(registry, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    temporary.replace(HOLDOUT_REGISTRY_PATH)
 
 
 def _sweep_parameters(
@@ -428,7 +475,18 @@ def _load_csv_bars(
             market=Market(str(getattr(row, "market", default_market))),
         )
         bars_by_symbol.setdefault(symbol, []).append(bar)
-    coverage = [coverage_for(symbol, bars) for symbol, bars in bars_by_symbol.items()]
+    coverage = [
+        coverage_for(
+            symbol,
+            bars,
+            timeframe=default_timeframe,
+            expected_start=min(bar.timestamp for bar in bars),
+            expected_end=max(bar.timestamp for bar in bars)
+            + timedelta(minutes=TIMEFRAME_MINUTES[default_timeframe]),
+        )
+        for symbol, bars in bars_by_symbol.items()
+        if bars
+    ]
     return bars_by_symbol, coverage
 
 
@@ -587,6 +645,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--commission", type=float, default=0.0)
     parser.add_argument("--crypto-taker-fee-bps", type=float, default=5.0)
     parser.add_argument(
+        "--cost-scenario",
+        choices=("legacy", "equity_base", "equity_stress", "crypto_base", "crypto_stress"),
+        default="legacy",
+        help="hazır net maliyet varsayımı; legacy mevcut tekil maliyet bayraklarını korur",
+    )
+    parser.add_argument(
+        "--experiment-spec",
+        help="YAML deney manifesti; strateji ve çıkış parametrelerini takvim bazlı nested "
+        "walk-forward içinde tarar",
+    )
+    parser.add_argument(
+        "--unlock-holdout",
+        action="store_true",
+        help="kilitli son 6 aylık holdout'u yalnızca finalistler için bir kez değerlendir",
+    )
+    parser.add_argument(
         "--output", help="rapor JSON çıktı yolu (varsayılan: <output-dir>/report.json)"
     )
     parser.add_argument(
@@ -656,6 +730,19 @@ def main(argv: list[str] | None = None) -> int:
         "coverage/gap kontrollerinden muaf tutar (varsayılan: fail-closed)",
     )
     args = parser.parse_args(effective_argv)
+
+    experiment = ExperimentSpec.from_file(args.experiment_spec) if args.experiment_spec else None
+    if experiment is not None:
+        args.start = experiment.start.isoformat()
+        args.end = experiment.end.isoformat()
+        args.symbols = ",".join(experiment.universe)
+        timeframes = {space.timeframe for space in experiment.candidate_spaces}
+        if len(timeframes) != 1:
+            parser.error("--experiment-spec currently requires one shared candidate timeframe")
+        args.timeframe = next(iter(timeframes))
+        markets = {space.market for space in experiment.candidate_spaces}
+        if len(markets) == 1:
+            args.market = next(iter(markets)).value
 
     if not effective_argv:
         print(USAGE)
@@ -815,6 +902,33 @@ def main(argv: list[str] | None = None) -> int:
     non_empty = [symbol for symbol, bars in bars_by_symbol.items() if bars]
     has_equity = any(not is_crypto(symbol) for symbol in non_empty)
     has_crypto = any(is_crypto(symbol) for symbol in non_empty)
+    scenario_map = {
+        "equity_base": EQUITY_BASE,
+        "equity_stress": EQUITY_STRESS,
+        "crypto_base": CRYPTO_BASE,
+        "crypto_stress": CRYPTO_STRESS,
+    }
+    selected_scenario = scenario_map.get(args.cost_scenario)
+    if experiment is not None and selected_scenario is None:
+        if has_crypto and not has_equity:
+            selected_scenario = CRYPTO_BASE
+        elif has_equity and not has_crypto:
+            selected_scenario = EQUITY_BASE
+        else:
+            # The baseline portfolio broker has one spread setting. Use the
+            # more conservative crypto spread; candidate research below still
+            # applies market-specific base/stress scenarios independently.
+            args.slippage_bps = 2.0
+            args.spread_bps = 6.0
+            args.crypto_taker_fee_bps = 5.0
+    if selected_scenario is not None:
+        if selected_scenario.market == Market.EQUITY and has_crypto:
+            parser.error("Equity cost scenario cannot be used with crypto bars")
+        if selected_scenario.market == Market.CRYPTO and has_equity:
+            parser.error("Crypto cost scenario cannot be used with equity bars")
+        args.slippage_bps = selected_scenario.slippage_bps
+        args.spread_bps = selected_scenario.spread_bps
+        args.crypto_taker_fee_bps = selected_scenario.taker_fee_bps
     benchmark_symbol = EQUITY_BENCHMARK if has_equity else CRYPTO_BENCHMARK
     explicit_symbols = (
         {item.strip().upper() for item in args.symbols.split(",") if item.strip()}
@@ -942,6 +1056,31 @@ def main(argv: list[str] | None = None) -> int:
             "profile_source": "cli",
             "argv": effective_argv,
             "walk_forward_folds": len(walk_forward_folds),
+            "data_hash": hash_bars(all_bars),
+            "universe_version": experiment.universe_version if experiment else "runtime",
+            "cost_scenario": (
+                selected_scenario.name
+                if selected_scenario
+                else ("mixed_base" if experiment else "legacy")
+            ),
+            "strategy_specs": (
+                [
+                    {
+                        "name": space.name,
+                        "version": space.version,
+                        "timeframe": space.timeframe,
+                        "parameter_grid": dict(space.parameter_grid),
+                        "exit_policy_ids": [
+                            policy.policy_id for policy in space.exit_policies
+                        ],
+                    }
+                    for space in experiment.candidate_spaces
+                ]
+                if experiment
+                else []
+            ),
+            "random_seed": experiment.seed if experiment else None,
+            "experiment_spec": experiment.to_dict() if experiment else None,
         },
     )
 
@@ -972,6 +1111,118 @@ def main(argv: list[str] | None = None) -> int:
                 f"Sweep sonuçlandı: minimum {args.sweep_min_trades} işleme ulaşan "
                 "kombinasyon yok; --sweep-min-trades düşürmeyi deneyin."
             )
+    if experiment is not None:
+        print("\nTakvim bazlı strateji/çıkış deneyi çalıştırılıyor...")
+        if args.unlock_holdout:
+            _assert_holdout_locked_once(experiment.experiment_id)
+        crypto_primary = [
+            bar
+            for bar in all_bars
+            if bar.market == Market.CRYPTO and bar.timeframe == timeframe
+        ]
+        crypto_point_in_time = (
+            build_crypto_point_in_time_universe(
+                crypto_primary,
+                maximum_symbols=config.universe.crypto.maximum_stream_symbols,
+            )
+            if crypto_primary
+            else None
+        )
+
+        def make_research_engine(
+            candidate_config: EngineConfig,
+            candidate_strategies: tuple[Strategy, ...],
+            cost_scenario: CostScenario,
+        ) -> BacktestEngine:
+            return BacktestEngine(
+                candidate_config,
+                starting_equity=args.starting_equity,
+                slippage_bps=cost_scenario.slippage_bps,
+                spread_bps=cost_scenario.spread_bps,
+                commission=args.commission,
+                crypto_taker_fee_bps=cost_scenario.taker_fee_bps,
+                strategies=candidate_strategies,
+                allowed_trade_symbols=set(tradeable) if tradeable else None,
+                benchmark_symbol=benchmark_symbol,
+                max_entry_participation_pct=args.entry_participation_pct,
+                max_exit_participation_pct=args.exit_participation_pct,
+                historical_universe_filter=(
+                    crypto_point_in_time.contains
+                    if crypto_point_in_time is not None
+                    and cost_scenario.market == Market.CRYPTO
+                    else None
+                ),
+            )
+
+        trials = run_nested_experiment(
+            all_bars,
+            experiment,
+            engine_config,
+            make_research_engine,
+            unlock_holdout=args.unlock_holdout,
+        )
+        if args.unlock_holdout:
+            _record_holdout_evaluation(experiment, hash_bars(all_bars))
+        gate = ProductionGate()
+        trial_payload = []
+        for trial in trials:
+            decision = gate.evaluate(trial) if trial.holdout_evaluations else None
+            trial_payload.append(
+                {
+                    "trial_id": trial.trial_id,
+                    "strategy": trial.strategy_name,
+                    "strategy_version": trial.strategy_version,
+                    "parameters": dict(trial.parameters),
+                    "folds": len(trial.fold_results),
+                    "fold_results": [
+                        {
+                            "start_date": fold.start_date,
+                            "end_date": fold.end_date,
+                            "trades": fold.total_trades,
+                            "profit_factor": (
+                                fold.profit_factor
+                                if fold.profit_factor is not None
+                                and math.isfinite(fold.profit_factor)
+                                else None
+                            ),
+                            "sharpe": fold.sharpe,
+                            "calmar": fold.calmar,
+                            "expectancy": fold.expectancy,
+                            "max_drawdown": fold.max_drawdown,
+                        }
+                        for fold in trial.fold_results
+                    ],
+                    "total_trades": trial.total_trades,
+                    "profit_factor": (
+                        trial.profit_factor if math.isfinite(trial.profit_factor) else None
+                    ),
+                    "sharpe": trial.sharpe,
+                    "median_calmar": trial.median_fold_calmar,
+                    "expectancy": trial.expectancy,
+                    "max_drawdown": trial.max_drawdown,
+                    "deflated_sharpe_probability": trial.deflated_sharpe_probability,
+                    "pbo": trial.probability_backtest_overfitting,
+                    "positive_fold_ratio": trial.positive_fold_ratio,
+                    "stress_profit_factor": (
+                        trial.stress_profit_factor
+                        if math.isfinite(trial.stress_profit_factor)
+                        else None
+                    ),
+                    "stress_expectancy": trial.stress_expectancy,
+                    "cost_sensitivity": dict(trial.cost_sensitivity),
+                    "gross_profit_by_symbol": dict(trial.gross_profit_by_symbol),
+                    "parameter_plateau": trial.neighborhood_robust,
+                    "holdout_evaluations": trial.holdout_evaluations,
+                    "production_gate_passed": decision.passed if decision else None,
+                    "production_gate_failures": list(decision.failures) if decision else [],
+                }
+            )
+        trials_path = Path(args.output_dir) / "trial_results.json"
+        trials_path.write_text(
+            json.dumps(trial_payload, indent=2, allow_nan=False, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        print(f"Deney sonuçları: {trials_path}")
     return 0
 
 

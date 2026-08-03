@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from parayabuck.backtest.broker import BacktestBroker
-from parayabuck.core.models import Bar, Direction, Market, OrderIntent
+from parayabuck.core.models import (
+    Bar,
+    Direction,
+    ExitPolicy,
+    Market,
+    OrderIntent,
+    TrailingStopType,
+)
 
 
 def _bar(
@@ -77,7 +85,7 @@ def test_broker_records_stop_exit_when_both_hit_conservatively() -> None:
     assert trade.mfe_pct == pytest.approx(0.0248, abs=1e-4)
 
 
-def test_mae_mfe_ignore_entry_bar_extremes() -> None:
+def test_mae_mfe_include_entry_bar_extremes() -> None:
     broker = BacktestBroker(10_000.0)
     broker.submit(_order(target=104.0))
     broker.advance(_bar(0, open=100.0, high=101.0, low=99.0, close=100.0))
@@ -86,8 +94,60 @@ def test_mae_mfe_ignore_entry_bar_extremes() -> None:
     trade = broker.trades[0]
     assert trade.exit_reason == "target"
     assert trade.mfe_pct == pytest.approx(0.0498, abs=1e-4)
-    # Bar 0's low 99 (= 1% adverse) must not count; only bar 1-2 lows do.
-    assert trade.mae_pct == pytest.approx(0.0052, abs=1e-4)
+    # The known next-open fill precedes the entry bar range, so its low counts.
+    assert trade.mae_pct == pytest.approx(0.0102, abs=1e-4)
+
+
+def test_break_even_stop_is_calculated_on_close_and_activates_next_bar() -> None:
+    policy = ExitPolicy(policy_id="be", break_even_trigger_r=1.0)
+    broker = BacktestBroker(10_000.0)
+    broker.submit(
+        replace(
+            _order(target=120.0),
+            exit_policy=policy,
+            volatility_at_entry=1.0,
+        )
+    )
+    broker.advance(_bar(0, open=100.0, high=103.0, low=99.0, close=102.0))
+    position = broker.positions["AAPL"]
+    assert position.stop == 98.0
+    assert position.pending_stop is not None
+    broker.advance(_bar(1, open=101.0, high=102.0, low=100.0, close=101.0))
+    assert broker.trades[0].exit_reason == "break_even"
+
+
+def test_chandelier_stop_never_moves_away_from_price() -> None:
+    policy = ExitPolicy(
+        policy_id="trail",
+        trailing_type=TrailingStopType.CHANDELIER,
+        trailing_atr_multiple=2.0,
+        trailing_activation_r=1.0,
+    )
+    order = _order(target=120.0)
+    broker = BacktestBroker(10_000.0)
+    broker.submit(replace(order, exit_policy=policy, volatility_at_entry=1.0))
+    broker.advance(_bar(0, open=100.0, high=105.0, low=99.0, close=104.0))
+    first_pending = broker.positions["AAPL"].pending_stop
+    assert first_pending == pytest.approx(103.0)
+    broker.advance(_bar(1, open=104.0, high=104.5, low=103.5, close=104.0))
+    position = broker.positions["AAPL"]
+    assert position.stop == pytest.approx(103.0)
+    assert position.pending_stop is None
+
+
+def test_time_exit_runs_at_next_bar_open() -> None:
+    policy = ExitPolicy(policy_id="time2", max_holding_bars=2)
+    order = _order(stop=90.0, target=120.0)
+    broker = BacktestBroker(10_000.0, slippage_bps=0)
+    broker.submit(replace(order, exit_policy=policy))
+    broker.advance(_bar(0, open=100.0, high=101.0, low=99.0, close=100.0))
+    broker.advance(_bar(1, open=101.0, high=102.0, low=100.0, close=101.0))
+    assert broker.positions["AAPL"].pending_time_exit
+    broker.advance(_bar(2, open=103.0, high=104.0, low=102.0, close=103.0))
+    trade = broker.trades[0]
+    assert trade.exit_reason == "time"
+    assert trade.exit_price == pytest.approx(103.0)
+    assert trade.bars_held == 2
 
 
 def test_strategy_name_propagated() -> None:

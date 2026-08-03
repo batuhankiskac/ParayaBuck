@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from alpaca.trading.requests import (
     GetOrderByIdRequest,
     GetOrdersRequest,
     MarketOrderRequest,
+    ReplaceOrderRequest,
     StopLimitOrderRequest,
     StopLossRequest,
     StopOrderRequest,
@@ -124,11 +126,12 @@ class AlpacaBroker:
         previous_equity = float(account.last_equity or equity)
         positions: list[PositionSnapshot] = []
         ledger = getattr(self, "ledger", None)
-        managed_symbols = (
-            set(ledger.managed_for_account(self._account_id or "unknown"))
+        managed_positions = (
+            ledger.managed_for_account(self._account_id or "unknown")
             if ledger is not None
-            else set()
+            else {}
         )
+        managed_symbols = set(managed_positions)
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
@@ -142,9 +145,11 @@ class AlpacaBroker:
                 if "crypto" in asset_class or is_crypto(str(raw.symbol))
                 else Market.EQUITY
             )
+            canonical = canonical_symbol(str(raw.symbol), market)
+            managed = managed_positions.get(canonical)
             positions.append(
                 PositionSnapshot(
-                    symbol=canonical_symbol(str(raw.symbol), market),
+                    symbol=canonical,
                     qty=float(raw.qty),
                     avg_price=float(raw.avg_entry_price),
                     current_price=current_price,
@@ -156,8 +161,18 @@ class AlpacaBroker:
                     ),
                     ownership=(
                         "managed"
-                        if canonical_symbol(str(raw.symbol), market) in managed_symbols
+                        if canonical in managed_symbols
                         else "external"
+                    ),
+                    stop_price=(
+                        managed.current_stop or managed.original_stop
+                        if managed is not None
+                        else None
+                    ),
+                    initial_risk=(
+                        abs(float(raw.avg_entry_price) - managed.original_stop)
+                        if managed is not None
+                        else None
                     ),
                 )
             )
@@ -528,7 +543,9 @@ class AlpacaBroker:
                         ownership.owned_qty,
                         abs(position.qty),
                     )
-                stop_price = ownership.original_stop
+                stop_price = (
+                    getattr(ownership, "current_stop", None) or ownership.original_stop
+                )
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
                 # Backwards-compatible opt-in policy for explicitly managed
@@ -939,7 +956,7 @@ class AlpacaBroker:
             current.canonical_symbol,
             Market.CRYPTO,
             resolution.available_qty,
-            current.original_stop,
+            current.current_stop or current.original_stop,
             True,
             client_order_id=client_id,
         )
@@ -959,7 +976,7 @@ class AlpacaBroker:
                 Direction.LONG,
                 resolution.available_qty,
                 current.filled_avg_price,
-                current.original_stop,
+                current.current_stop or current.original_stop,
                 current.original_target,
                 current.strategy,
                 client_order_id=current.entry_client_order_id,
@@ -1178,10 +1195,111 @@ class AlpacaBroker:
             return False
         if current.protective_stop_broker_order_id and current.stop_state == "open":
             return True
-        protected = self._submit_crypto_stop(intent, current.owned_qty, current.original_stop)
+        protected = self._submit_crypto_stop(
+            intent,
+            current.owned_qty,
+            current.current_stop or current.original_stop,
+        )
         if not protected:
             ledger.mark_manual_intervention(self._account_id or "unknown", intent.client_order_id)
         return protected
+
+    def replace_protective_stop(
+        self,
+        entry_client_order_id: str,
+        requested_stop: float,
+    ) -> bool:
+        """Atomically tighten a managed stop and persist the acknowledged order.
+
+        Alpaca's replace endpoint is used directly. The method never cancels the
+        active order first, so an API failure leaves the existing stop in force.
+        """
+        ledger = getattr(self, "ledger", None)
+        account_id = self._account_id
+        if ledger is None or not account_id or not math.isfinite(requested_stop):
+            return False
+        current = next(
+            (
+                item
+                for item in ledger.managed_entries_for_account(account_id)
+                if item.entry_client_order_id == entry_client_order_id
+            ),
+            None,
+        )
+        if current is None or not current.protective_stop_broker_order_id:
+            return False
+        active_stop = current.current_stop or current.original_stop
+        position_is_long = current.original_stop < current.filled_avg_price
+        tighter = requested_stop > active_stop if position_is_long else requested_stop < active_stop
+        if requested_stop <= 0 or not tighter:
+            return False
+
+        step = self._price_step(current.canonical_symbol, current.market, requested_stop)
+        stop_price = self._round_to_step(requested_stop, step)
+        rounded_tighter = (
+            stop_price > active_stop if position_is_long else stop_price < active_stop
+        )
+        if stop_price <= 0 or not rounded_tighter:
+            return False
+        request_values: dict[str, float] = {"stop_price": stop_price}
+        if current.market == Market.CRYPTO:
+            offset = Decimal(str(self.crypto_stop_limit_offset_bps)) / Decimal("10000")
+            stop_decimal = Decimal(str(stop_price))
+            distance_steps = max(
+                1,
+                int((stop_decimal * offset / step).to_integral_value(rounding=ROUND_CEILING)),
+            )
+            limit_decimal = stop_decimal + (
+                -distance_steps * step if position_is_long else distance_steps * step
+            )
+            if limit_decimal <= 0:
+                return False
+            request_values["limit_price"] = float(limit_decimal)
+
+        try:
+            result = self._client.replace_order_by_id(
+                current.protective_stop_broker_order_id,
+                ReplaceOrderRequest(**request_values),
+            )
+        except Exception as exc:
+            log.error(
+                "Atomic protective stop replacement failed for %s: %s",
+                current.canonical_symbol,
+                exc,
+            )
+            return False
+        status = self._normalized_field(result, "status")
+        if status in {"canceled", "cancelled", "expired", "rejected"}:
+            return False
+        broker_order_id = str(self._field(result, "id", "") or "")
+        client_order_id = str(
+            self._field(result, "client_order_id", "")
+            or current.protective_stop_client_order_id
+            or ""
+        )
+        if not broker_order_id or not client_order_id:
+            ledger.mark_manual_intervention(account_id, entry_client_order_id)
+            log.critical(
+                "Replacement acknowledged without stable identifiers: symbol=%s",
+                current.canonical_symbol,
+            )
+            return False
+        try:
+            ledger.register_protective_stop_replacement(
+                account_id,
+                entry_client_order_id,
+                stop_price=stop_price,
+                client_order_id=client_order_id,
+                broker_order_id=broker_order_id,
+            )
+        except Exception:
+            ledger.mark_manual_intervention(account_id, entry_client_order_id)
+            log.exception(
+                "Replacement stop could not be persisted: symbol=%s",
+                current.canonical_symbol,
+            )
+            return False
+        return True
 
     def _available_position_qty(
         self,
@@ -1513,7 +1631,8 @@ class AlpacaBroker:
             for item in entries:
                 reason: str | None = None
                 target_seen = observation.high >= item.original_target
-                stop_seen = observation.low <= item.original_stop
+                active_stop = item.current_stop or item.original_stop
+                stop_seen = observation.low <= active_stop
                 if target_seen and stop_seen:
                     log.critical(
                         "Intrabar path ambiguous: market=crypto symbol=%s "
@@ -1549,12 +1668,12 @@ class AlpacaBroker:
                 if target_seen:
                     reason = "target"
                 else:
-                    emergency_price = item.original_stop * (
+                    emergency_price = active_stop * (
                         1 - self.crypto_emergency_exit_bps / 10_000
                     )
                     if observation.low <= emergency_price:
                         reason = "stop_failover"
-                    elif observation.low <= item.original_stop and item.stop_state == "open":
+                    elif observation.low <= active_stop and item.stop_state == "open":
                         ledger.set_exit_state(
                             self._account_id,
                             item.entry_client_order_id,

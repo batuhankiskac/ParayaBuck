@@ -5,6 +5,8 @@ from parayabuck.markets.symbols import canonical_symbol
 
 
 def ranking_score(signal: Signal) -> float:
+    if signal.normalized_expected_r is not None:
+        return signal.normalized_expected_r
     normalized_setup_score = signal.score / 100.0
     rr_modifier = min(max(signal.risk_reward, 0.0), 3.0) / 3.0
     regime_modifier = {

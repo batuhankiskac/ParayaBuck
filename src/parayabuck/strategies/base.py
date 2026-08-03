@@ -6,7 +6,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from parayabuck.core.models import Bar, Direction, Market, PositionSnapshot, Regime, Signal
+from parayabuck.core.models import (
+    Bar,
+    Direction,
+    ExitPolicy,
+    Market,
+    PositionSnapshot,
+    Regime,
+    Signal,
+)
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.markets.symbols import canonical_symbol
 
@@ -17,6 +25,7 @@ class StrategyContext:
     position: PositionSnapshot | None = None
     higher_timeframe_regime: Regime = Regime.UNKNOWN
     benchmark_regime: Regime = Regime.UNKNOWN
+    relative_strength: float | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,7 @@ class StrategyEvaluation:
 
 class Strategy(ABC):
     name: str
+    version: str = "1.0.0"
     market: Market
     minimum_bars: int = 50
 
@@ -117,6 +127,11 @@ class Strategy(ABC):
         target: float,
         reasons: tuple[str, ...],
         regime: Regime,
+        *,
+        exit_policy: ExitPolicy | None = None,
+        volatility_at_entry: float | None = None,
+        minimum_risk_reward: float | None = None,
+        reentry_cooldown_bars: int = 0,
     ) -> Signal:
         bounded_score = min(100.0, score)
         return Signal(
@@ -132,4 +147,9 @@ class Strategy(ABC):
             timestamp=current.timestamp,
             reasons=reasons,
             regime=regime,
+            strategy_version=self.version,
+            exit_policy=exit_policy or ExitPolicy(),
+            volatility_at_entry=volatility_at_entry,
+            minimum_risk_reward=minimum_risk_reward,
+            reentry_cooldown_bars=reentry_cooldown_bars,
         )

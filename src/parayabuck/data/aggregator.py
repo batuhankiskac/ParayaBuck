@@ -117,3 +117,60 @@ class TimeframeAggregator:
             volume=sum(bar.volume for bar in ordered),
             market=first.market,
         )
+
+
+def aggregate_historical_bars(
+    bars: list[Bar],
+    target_timeframe: str,
+    *,
+    require_complete: bool = True,
+) -> list[Bar]:
+    """Aggregate closed historical bars without leaking incomplete target bars."""
+    if not bars:
+        return []
+    source_timeframes = {bar.timeframe for bar in bars}
+    if len(source_timeframes) != 1:
+        raise ValueError("Historical aggregation requires one source timeframe")
+    source_timeframe = next(iter(source_timeframes))
+    source_minutes = TIMEFRAME_MINUTES[source_timeframe]
+    target_minutes = TIMEFRAME_MINUTES[target_timeframe]
+    if target_minutes < source_minutes or target_minutes % source_minutes:
+        raise ValueError("Target timeframe must be an integer multiple of the source")
+    if target_minutes == source_minutes:
+        return [Bar(**{**bar.__dict__, "timeframe": target_timeframe}) for bar in bars]
+
+    aggregator = TimeframeAggregator(target_timeframe)
+    buckets: dict[tuple[str, datetime], list[Bar]] = {}
+    for bar in sorted(bars, key=lambda item: (item.symbol, item.timestamp)):
+        bucket = aggregator._bucket(bar.timestamp, bar.market)
+        buckets.setdefault((bar.symbol, bucket), []).append(bar)
+    expected = target_minutes // source_minutes
+    result: list[Bar] = []
+    source_delta = timedelta(minutes=source_minutes)
+    for (_symbol, bucket), components in sorted(
+        buckets.items(), key=lambda item: (item[0][1], item[0][0])
+    ):
+        ordered = sorted(components, key=lambda item: item.timestamp)
+        contiguous = all(
+            current.timestamp - previous.timestamp == source_delta
+            for previous, current in zip(ordered, ordered[1:])
+        )
+        if require_complete and (len(ordered) != expected or not contiguous):
+            continue
+        result.append(
+            Bar(
+                timestamp=bucket,
+                symbol=ordered[0].symbol,
+                timeframe=target_timeframe,
+                open=ordered[0].open,
+                high=max(bar.high for bar in ordered),
+                low=min(bar.low for bar in ordered),
+                close=ordered[-1].close,
+                volume=sum(bar.volume for bar in ordered),
+                market=ordered[0].market,
+            )
+        )
+    return result
+
+
+__all__ = ["TimeframeAggregator", "aggregate_historical_bars"]

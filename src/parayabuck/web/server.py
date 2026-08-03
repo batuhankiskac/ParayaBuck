@@ -469,7 +469,11 @@ class EngineManager:
                                 "protection_state": (
                                     owned.protection_state.value if owned is not None else None
                                 ),
-                                "stop_price": owned.original_stop if owned is not None else None,
+                                "stop_price": (
+                                    owned.current_stop or owned.original_stop
+                                    if owned is not None
+                                    else None
+                                ),
                                 "target_price": owned.original_target
                                 if owned is not None
                                 else None,

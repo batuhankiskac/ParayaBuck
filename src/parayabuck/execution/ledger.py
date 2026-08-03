@@ -34,6 +34,7 @@ class ManagedPosition:
     original_stop: float
     original_target: float
     status: str
+    current_stop: float | None = None
     entry_filled_qty: float = 0.0
     exit_filled_qty: float = 0.0
     realized_pnl: float = 0.0
@@ -189,6 +190,7 @@ class ExecutionLedger:
             self._ensure_column("managed_positions", "exit_client_order_id", "TEXT")
             self._ensure_column("managed_positions", "exit_broker_order_id", "TEXT")
             self._ensure_column("managed_positions", "updated_at", "TEXT")
+            self._ensure_column("managed_positions", "current_stop", "REAL")
             self.connection.execute(
                 """
                 UPDATE managed_positions
@@ -206,6 +208,12 @@ class ExecutionLedger:
                 """
                 UPDATE managed_positions
                 SET updated_at=COALESCE(updated_at, opened_at)
+                """
+            )
+            self.connection.execute(
+                """
+                UPDATE managed_positions
+                SET current_stop=COALESCE(current_stop, original_stop)
                 """
             )
             # A symbol may have historical rows, but never two positions that
@@ -339,9 +347,9 @@ class ExecutionLedger:
                 account_id, canonical_symbol, market, strategy, source_signal_id,
                 entry_client_order_id, broker_order_id, owned_qty, entry_filled_qty,
                 exit_filled_qty, remaining_owned_qty, filled_avg_price,
-                original_stop, original_target, realized_pnl, entry_fees, exit_fees,
+                original_stop, original_target, current_stop, realized_pnl, entry_fees, exit_fees,
                 protection_state, status, opened_at, closed_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, ?, 0,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, 0,
                       'unprotected', 'open', ?, NULL, ?)
             ON CONFLICT(account_id, canonical_symbol, entry_client_order_id) DO UPDATE SET
                 broker_order_id=COALESCE(
@@ -372,6 +380,7 @@ class ExecutionLedger:
                 average,
                 order.stop_price,
                 order.target_price,
+                order.stop_price,
                 fee_delta,
                 now,
                 now,
@@ -613,7 +622,7 @@ class ExecutionLedger:
                 SELECT account_id, canonical_symbol, market, strategy, source_signal_id,
                        entry_client_order_id, broker_order_id, remaining_owned_qty,
                        entry_filled_qty, exit_filled_qty, filled_avg_price,
-                       original_stop, original_target, realized_pnl, entry_fees,
+                       original_stop, original_target, current_stop, realized_pnl, entry_fees,
                        exit_fees, protection_state, status,
                        protective_stop_client_order_id, protective_stop_broker_order_id,
                        stop_state, target_state, exit_client_order_id, exit_broker_order_id,
@@ -643,19 +652,82 @@ class ExecutionLedger:
             filled_avg_price=float(str(row[10])),
             original_stop=float(str(row[11])),
             original_target=float(str(row[12])),
-            realized_pnl=float(str(row[13])),
-            entry_fees=float(str(row[14])),
-            exit_fees=float(str(row[15])),
-            protection_state=ProtectionState(str(row[16])),
-            status=str(row[17]),
-            protective_stop_client_order_id=str(row[18]) if row[18] else None,
-            protective_stop_broker_order_id=str(row[19]) if row[19] else None,
-            stop_state=str(row[20]),
-            target_state=str(row[21]),
-            exit_client_order_id=str(row[22]) if row[22] else None,
-            exit_broker_order_id=str(row[23]) if row[23] else None,
-            updated_at=datetime.fromisoformat(str(row[24])) if row[24] else None,
+            current_stop=float(str(row[13])) if row[13] is not None else None,
+            realized_pnl=float(str(row[14])),
+            entry_fees=float(str(row[15])),
+            exit_fees=float(str(row[16])),
+            protection_state=ProtectionState(str(row[17])),
+            status=str(row[18]),
+            protective_stop_client_order_id=str(row[19]) if row[19] else None,
+            protective_stop_broker_order_id=str(row[20]) if row[20] else None,
+            stop_state=str(row[21]),
+            target_state=str(row[22]),
+            exit_client_order_id=str(row[23]) if row[23] else None,
+            exit_broker_order_id=str(row[24]) if row[24] else None,
+            updated_at=datetime.fromisoformat(str(row[25])) if row[25] else None,
         )
+
+    def update_current_stop(
+        self, account_id: str, entry_client_order_id: str, stop_price: float
+    ) -> None:
+        if stop_price <= 0:
+            raise ValueError("Current stop must be positive")
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                UPDATE managed_positions
+                SET current_stop=?, updated_at=?
+                WHERE account_id=? AND entry_client_order_id=?
+                  AND status IN ('open', 'manual_intervention_required')
+                """,
+                (stop_price, datetime.now(UTC).isoformat(), account_id, entry_client_order_id),
+            )
+            if cursor.rowcount != 1:
+                self.connection.rollback()
+                raise KeyError("Managed position not found for stop update")
+            self.connection.commit()
+
+    def register_protective_stop_replacement(
+        self,
+        account_id: str,
+        entry_client_order_id: str,
+        *,
+        stop_price: float,
+        client_order_id: str,
+        broker_order_id: str,
+    ) -> None:
+        """Persist an acknowledged broker-side atomic stop replacement."""
+        if stop_price <= 0:
+            raise ValueError("Current stop must be positive")
+        if not client_order_id or not broker_order_id:
+            raise ValueError("Replacement stop identifiers are required")
+        with self._lock:
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = self.connection.execute(
+                    """
+                    UPDATE managed_positions
+                    SET current_stop=?, protective_stop_client_order_id=?,
+                        protective_stop_broker_order_id=?, stop_state='open',
+                        protection_state='active', updated_at=?
+                    WHERE account_id=? AND entry_client_order_id=?
+                      AND status IN ('open', 'manual_intervention_required')
+                    """,
+                    (
+                        stop_price,
+                        client_order_id,
+                        broker_order_id,
+                        datetime.now(UTC).isoformat(),
+                        account_id,
+                        entry_client_order_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise KeyError("Managed position not found for stop replacement")
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
 
     def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
         rows = self.managed_entries_for_account(account_id)

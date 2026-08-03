@@ -2,6 +2,7 @@ from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
     Direction,
+    ExitPolicy,
     Fill,
     Market,
     OrderIntent,
@@ -9,12 +10,14 @@ from parayabuck.core.models import (
     PositionSnapshot,
     Regime,
     Signal,
+    TrailingStopType,
 )
 
 __all__ = [
     "AccountSnapshot",
     "Bar",
     "Direction",
+    "ExitPolicy",
     "Fill",
     "Market",
     "OrderIntent",
@@ -22,4 +25,5 @@ __all__ = [
     "PositionSnapshot",
     "Regime",
     "Signal",
+    "TrailingStopType",
 ]

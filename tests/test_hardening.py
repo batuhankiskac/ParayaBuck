@@ -6,6 +6,7 @@ import os
 import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -168,6 +169,161 @@ def test_rejected_broker_entry_releases_its_ledger_reservation(tmp_path: Path) -
     assert ledger.pending_entry_orders("acct") == []
     ledger.register_entry_order("acct", intent)
     ledger.close()
+
+
+def test_atomic_stop_replacement_persists_current_stop_across_restart(tmp_path: Path) -> None:
+    path = tmp_path / "stop-replacement.sqlite3"
+    ledger = ExecutionLedger(str(path))
+    intent = OrderIntent(
+        symbol="SPY",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=2,
+        entry_price=100,
+        stop_price=95,
+        target_price=110,
+        strategy="test",
+        signal_id="stop-replace",
+    )
+    ledger.register_entry_order("acct", intent, "entry-broker-id")
+    apply_entry_fill(
+        ledger,
+        "acct",
+        intent,
+        Fill(intent.client_order_id, "SPY", 2, 100, 0, datetime.now(UTC)),
+        "entry-broker-id",
+    )
+    ledger.register_protective_stop(
+        "acct",
+        intent.client_order_id,
+        "stop-client-v1",
+        "stop-broker-v1",
+    )
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = ledger
+    broker._price_step = lambda *_args: Decimal("0.01")
+    broker._client = SimpleNamespace(
+        replace_order_by_id=lambda order_id, request: SimpleNamespace(
+            id="stop-broker-v2",
+            client_order_id="stop-client-v2",
+            status="new",
+            replaced_order_id=order_id,
+            stop_price=request.stop_price,
+        )
+    )
+
+    assert broker.replace_protective_stop(intent.client_order_id, 98.127)
+    replaced = ledger.managed_entries_for_account("acct")[0]
+    assert replaced.current_stop == pytest.approx(98.13)
+    assert replaced.protective_stop_broker_order_id == "stop-broker-v2"
+    ledger.close()
+
+    reopened = ExecutionLedger(str(path))
+    restored = reopened.managed_entries_for_account("acct")[0]
+    assert restored.current_stop == pytest.approx(98.13)
+    assert restored.protective_stop_client_order_id == "stop-client-v2"
+    reopened.close()
+
+
+def test_failed_atomic_stop_replacement_leaves_ledger_stop_unchanged(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "stop-replacement-failure.sqlite3"))
+    intent = OrderIntent(
+        symbol="SPY",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=1,
+        entry_price=100,
+        stop_price=95,
+        target_price=110,
+        strategy="test",
+        signal_id="stop-replace-failure",
+    )
+    ledger.register_entry_order("acct", intent, "entry-broker-id")
+    apply_entry_fill(
+        ledger,
+        "acct",
+        intent,
+        Fill(intent.client_order_id, "SPY", 1, 100, 0, datetime.now(UTC)),
+        "entry-broker-id",
+    )
+    ledger.register_protective_stop(
+        "acct",
+        intent.client_order_id,
+        "stop-client-v1",
+        "stop-broker-v1",
+    )
+
+    def fail_replace(_order_id: str, _request: Any) -> None:
+        raise TimeoutError("replace unavailable")
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.ledger = ledger
+    broker._price_step = lambda *_args: Decimal("0.01")
+    broker._client = SimpleNamespace(replace_order_by_id=fail_replace)
+
+    assert not broker.replace_protective_stop(intent.client_order_id, 98)
+    unchanged = ledger.managed_entries_for_account("acct")[0]
+    assert unchanged.current_stop == pytest.approx(95)
+    assert unchanged.protective_stop_broker_order_id == "stop-broker-v1"
+    assert unchanged.status == "open"
+    ledger.close()
+
+
+def test_crypto_atomic_stop_replacement_moves_stop_limit_pair_together() -> None:
+    position = ManagedPosition(
+        account_id="acct",
+        canonical_symbol="BTC/USD",
+        market=Market.CRYPTO,
+        strategy="test",
+        source_signal_id="crypto-replace",
+        entry_client_order_id="crypto-entry",
+        broker_order_id="entry-broker",
+        owned_qty=0.01,
+        filled_avg_price=100,
+        original_stop=95,
+        original_target=120,
+        status="open",
+        current_stop=95,
+        protective_stop_client_order_id="stop-client-v1",
+        protective_stop_broker_order_id="stop-broker-v1",
+        stop_state="open",
+    )
+    persisted: list[dict[str, Any]] = []
+    requests: list[Any] = []
+
+    def replace_order(order_id: str, request: Any) -> Any:
+        assert order_id == "stop-broker-v1"
+        requests.append(request)
+        return SimpleNamespace(
+            id="stop-broker-v2",
+            client_order_id="stop-client-v2",
+            status="new",
+        )
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._account_id = "acct"
+    broker.crypto_stop_limit_offset_bps = 25
+    broker._price_step = lambda *_args: Decimal("0.01")
+    broker._client = SimpleNamespace(replace_order_by_id=replace_order)
+    broker.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: [position],
+        register_protective_stop_replacement=lambda *_args, **kwargs: persisted.append(kwargs),
+        mark_manual_intervention=lambda *_args: pytest.fail("replacement is unambiguous"),
+    )
+
+    assert broker.replace_protective_stop("crypto-entry", 98)
+    assert float(requests[0].stop_price) == pytest.approx(98)
+    assert float(requests[0].limit_price) == pytest.approx(97.75)
+    assert persisted == [
+        {
+            "stop_price": 98.0,
+            "client_order_id": "stop-client-v2",
+            "broker_order_id": "stop-broker-v2",
+        }
+    ]
 
 
 def _bar(

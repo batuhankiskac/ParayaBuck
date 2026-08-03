@@ -7,6 +7,13 @@ from parayabuck.strategies.base import (
 )
 from parayabuck.strategies.crypto_range import CryptoRangeReversion
 from parayabuck.strategies.crypto_trend import CryptoTrendBreakout
+from parayabuck.strategies.specs import (
+    CryptoRangeParams,
+    CryptoTrendParams,
+    StockMeanReversionParams,
+    StockTrendParams,
+    StrategySpec,
+)
 from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
 from parayabuck.strategies.stock_trend import StockTrendPullback
 
@@ -24,11 +31,16 @@ def default_strategies(config: EngineConfig | None = None) -> tuple[Strategy, ..
 __all__ = [
     "CryptoRangeReversion",
     "CryptoTrendBreakout",
+    "CryptoRangeParams",
+    "CryptoTrendParams",
     "ConditionEvaluation",
     "StockMeanReversion",
+    "StockMeanReversionParams",
     "StockTrendPullback",
+    "StockTrendParams",
     "Strategy",
     "StrategyContext",
     "StrategyEvaluation",
+    "StrategySpec",
     "default_strategies",
 ]

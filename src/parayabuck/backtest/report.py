@@ -66,6 +66,27 @@ class DrawdownPoint:
 
 
 @dataclass(frozen=True)
+class ScoreDecilePerformance:
+    strategy: str
+    decile: int
+    minimum_score: float
+    maximum_score: float
+    trades: int
+    expectancy: float
+    profit_factor: float | None
+
+
+@dataclass(frozen=True)
+class RegimePerformance:
+    strategy: str
+    regime: str
+    trades: int
+    net_pnl: float
+    expectancy: float
+    profit_factor: float | None
+
+
+@dataclass(frozen=True)
 class BacktestReport:
     summary: dict[str, object]
     period: dict[str, object]
@@ -77,6 +98,9 @@ class BacktestReport:
     equity_curve: tuple[tuple[str, float], ...]
     monte_carlo: dict[str, object] | None
     walk_forward: tuple[dict[str, object], ...]
+    score_deciles: tuple[ScoreDecilePerformance, ...]
+    score_expectancy_monotonic: dict[str, bool]
+    by_regime: tuple[RegimePerformance, ...]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -101,6 +125,9 @@ class BacktestReport:
             ],
             "monte_carlo": self.monte_carlo,
             "walk_forward": self.walk_forward,
+            "score_deciles": [asdict(item) for item in self.score_deciles],
+            "score_expectancy_monotonic": self.score_expectancy_monotonic,
+            "by_regime": [asdict(item) for item in self.by_regime],
         }
 
     def write_csvs(self, output_dir: str) -> list[str]:
@@ -211,6 +238,51 @@ class BacktestReport:
                     ]
                 )
         written.append(str(directory / "drawdowns.csv"))
+        with (directory / "score_deciles.csv").open(
+            "w", newline="", encoding="utf-8"
+        ) as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                [
+                    "strategy",
+                    "decile",
+                    "minimum_score",
+                    "maximum_score",
+                    "trades",
+                    "expectancy",
+                    "profit_factor",
+                ]
+            )
+            for item in self.score_deciles:
+                writer.writerow(
+                    [
+                        item.strategy,
+                        item.decile,
+                        item.minimum_score,
+                        item.maximum_score,
+                        item.trades,
+                        item.expectancy,
+                        item.profit_factor,
+                    ]
+                )
+        written.append(str(directory / "score_deciles.csv"))
+        with (directory / "by_regime.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                ["strategy", "regime", "trades", "net_pnl", "expectancy", "profit_factor"]
+            )
+            for regime_item in self.by_regime:
+                writer.writerow(
+                    [
+                        regime_item.strategy,
+                        regime_item.regime,
+                        regime_item.trades,
+                        regime_item.net_pnl,
+                        regime_item.expectancy,
+                        regime_item.profit_factor,
+                    ]
+                )
+        written.append(str(directory / "by_regime.csv"))
         return written
 
     def render_text(self) -> str:
@@ -404,6 +476,9 @@ def build_report(
         ),
         monte_carlo=monte_carlo,
         walk_forward=walk_forward,
+        score_deciles=_score_decile_performance(trades),
+        score_expectancy_monotonic=_score_monotonicity(trades),
+        by_regime=_regime_performance(trades),
     )
 
 
@@ -525,8 +600,81 @@ def _symbol_performance(trades: tuple[TradeRecord, ...]) -> tuple[SymbolPerforma
                 average_holding_days=sum(holding) / len(holding) if holding else 0.0,
                 average_mae_pct=sum(trade.mae_pct for trade in symbol_trades) / len(symbol_trades),
                 average_mfe_pct=sum(trade.mfe_pct for trade in symbol_trades) / len(symbol_trades),
-                stop_exits=sum(1 for trade in symbol_trades if trade.exit_reason == "stop"),
+                stop_exits=sum(
+                    1
+                    for trade in symbol_trades
+                    if trade.exit_reason in {"stop", "break_even", "trailing_stop"}
+                ),
                 target_exits=sum(1 for trade in symbol_trades if trade.exit_reason == "target"),
+            )
+        )
+    return tuple(results)
+
+
+def _score_decile_performance(
+    trades: tuple[TradeRecord, ...],
+) -> tuple[ScoreDecilePerformance, ...]:
+    grouped: dict[str, list[TradeRecord]] = {}
+    for trade in trades:
+        grouped.setdefault(trade.strategy, []).append(trade)
+    results: list[ScoreDecilePerformance] = []
+    for strategy, strategy_trades in sorted(grouped.items()):
+        ordered = sorted(strategy_trades, key=lambda trade: trade.entry_score)
+        bucket_count = min(10, len(ordered))
+        if bucket_count == 0:
+            continue
+        buckets: list[list[TradeRecord]] = [[] for _ in range(bucket_count)]
+        for index, trade in enumerate(ordered):
+            bucket_index = min(bucket_count - 1, index * bucket_count // len(ordered))
+            buckets[bucket_index].append(trade)
+        for index, bucket_trades in enumerate(buckets, start=1):
+            pnls = [trade.pnl for trade in bucket_trades]
+            gross_profit = sum(pnl for pnl in pnls if pnl > 0)
+            gross_loss = abs(sum(pnl for pnl in pnls if pnl < 0))
+            results.append(
+                ScoreDecilePerformance(
+                    strategy,
+                    index,
+                    min(trade.entry_score for trade in bucket_trades),
+                    max(trade.entry_score for trade in bucket_trades),
+                    len(bucket_trades),
+                    sum(pnls) / len(pnls),
+                    gross_profit / gross_loss if gross_loss > 0 else None,
+                )
+            )
+    return tuple(results)
+
+
+def _score_monotonicity(trades: tuple[TradeRecord, ...]) -> dict[str, bool]:
+    deciles = _score_decile_performance(trades)
+    grouped: dict[str, list[ScoreDecilePerformance]] = {}
+    for item in deciles:
+        grouped.setdefault(item.strategy, []).append(item)
+    return {
+        strategy: all(
+            later.expectancy >= earlier.expectancy
+            for earlier, later in zip(items, items[1:])
+        )
+        for strategy, items in grouped.items()
+    }
+
+
+def _regime_performance(trades: tuple[TradeRecord, ...]) -> tuple[RegimePerformance, ...]:
+    grouped: dict[tuple[str, str], list[float]] = {}
+    for trade in trades:
+        grouped.setdefault((trade.strategy, trade.entry_regime.value), []).append(trade.pnl)
+    results: list[RegimePerformance] = []
+    for (strategy, regime), pnls in sorted(grouped.items()):
+        gross_profit = sum(pnl for pnl in pnls if pnl > 0)
+        gross_loss = abs(sum(pnl for pnl in pnls if pnl < 0))
+        results.append(
+            RegimePerformance(
+                strategy,
+                regime,
+                len(pnls),
+                sum(pnls),
+                sum(pnls) / len(pnls),
+                gross_profit / gross_loss if gross_loss > 0 else None,
             )
         )
     return tuple(results)
@@ -536,6 +684,8 @@ __all__ = [
     "BacktestReport",
     "DrawdownPoint",
     "SymbolPerformance",
+    "ScoreDecilePerformance",
+    "RegimePerformance",
     "YearPerformance",
     "build_report",
 ]

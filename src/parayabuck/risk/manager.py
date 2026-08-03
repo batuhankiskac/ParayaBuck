@@ -41,6 +41,22 @@ class RiskManager:
         self.consecutive_losses = 0
         self._reservations: dict[str, OrderIntent] = {}
         self._lock = threading.RLock()
+        self._volatility_scale = 1.0
+
+    def set_realized_volatility(self, annualized_volatility: float) -> float:
+        """Update the risk multiplier; volatility targeting can only de-risk."""
+        with self._lock:
+            if not self.limits.volatility_targeting_enabled:
+                self._volatility_scale = 1.0
+            elif annualized_volatility <= 0:
+                self._volatility_scale = self.limits.maximum_volatility_scale
+            else:
+                raw = self.limits.annualized_volatility_target / annualized_volatility
+                self._volatility_scale = min(
+                    self.limits.maximum_volatility_scale,
+                    max(self.limits.minimum_volatility_scale, raw),
+                )
+            return self._volatility_scale
 
     def reserve(self, order: OrderIntent, remaining_qty: float | None = None) -> None:
         with self._lock:
@@ -96,10 +112,11 @@ class RiskManager:
             signal.target_price < signal.entry_price < signal.invalidation_price
         ):
             return reject("invalid_short_price_geometry")
-        if signal.risk_reward < self.limits.minimum_risk_reward - 1e-9:
+        minimum_risk_reward = signal.minimum_risk_reward or self.limits.minimum_risk_reward
+        if signal.risk_reward < minimum_risk_reward - 1e-9:
             return reject(
                 f"risk_reward={signal.risk_reward:.2f}_below_minimum",
-                minimum_risk_reward=self.limits.minimum_risk_reward,
+                minimum_risk_reward=minimum_risk_reward,
             )
         if account.daily_pnl / account.equity <= -self.limits.daily_loss_limit_pct:
             return reject(
@@ -179,7 +196,29 @@ class RiskManager:
         risk_fraction = self.limits.risk_per_trade_pct
         if self.consecutive_losses >= self.limits.consecutive_loss_reduction_after:
             risk_fraction *= 0.5
-        risk_amount = account.equity * risk_fraction
+        open_stop_risk = sum(
+            (
+                abs(position.avg_price - position.stop_price) * abs(position.qty)
+                if position.stop_price is not None
+                else (position.initial_risk or 0.0) * abs(position.qty)
+            )
+            for position in active
+        ) + sum(
+            abs(order.entry_price - order.stop_price) * order.qty
+            for order in self._reservations.values()
+        )
+        maximum_open_risk = account.equity * self.limits.max_open_risk_pct
+        remaining_open_risk = max(0.0, maximum_open_risk - open_stop_risk)
+        if remaining_open_risk <= 0:
+            return reject(
+                "max_open_stop_risk",
+                open_stop_risk=open_stop_risk,
+                maximum_open_risk=maximum_open_risk,
+            )
+        risk_amount = min(
+            account.equity * risk_fraction * self._volatility_scale,
+            remaining_open_risk,
+        )
         qty_by_risk = risk_amount / stop_distance
         qty_by_position = account.equity * self.limits.max_position_pct / signal.entry_price
         if signal.market == Market.CRYPTO:
@@ -238,6 +277,9 @@ class RiskManager:
             {
                 "risk_fraction": risk_fraction,
                 "risk_amount": risk_amount,
+                "volatility_scale": self._volatility_scale,
+                "open_stop_risk": open_stop_risk,
+                "maximum_open_risk": maximum_open_risk,
                 "stop_distance": stop_distance,
                 "gross_exposure_pct": gross_exposure,
                 "reserved_gross_exposure": reserved_gross,
@@ -273,6 +315,12 @@ class RiskManager:
                 target_price=signal.target_price,
                 strategy=signal.strategy,
                 created_at=signal.timestamp,
+                strategy_version=signal.strategy_version,
+                exit_policy=signal.exit_policy,
+                volatility_at_entry=signal.volatility_at_entry,
+                signal_score=signal.score,
+                normalized_expected_r=signal.normalized_expected_r,
+                signal_regime=signal.regime,
             ),
             risk_amount,
             diagnostics,

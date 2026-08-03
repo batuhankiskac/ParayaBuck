@@ -1,0 +1,129 @@
+experiment_id: strategy_1h_v1
+start: 2024-08-01T00:00:00Z
+end: 2026-08-01T00:00:00Z
+universe_version: etf_core_crypto_spot_v1
+universe:
+  - SPY
+  - QQQ
+  - IWM
+  - XLB
+  - XLC
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLRE
+  - XLU
+  - XLV
+  - XLY
+  - BTC/USD
+  - ETH/USD
+  - SOL/USD
+  - AVAX/USD
+  - LINK/USD
+
+train_months: 9
+validation_months: 1
+outer_holdout_months: 6
+embargo_bars: 72
+max_mechanism_trials: 30
+max_parameter_trials: 200
+max_holdout_finalists: 10
+alpha_risk_per_trade_pct: 0.0025
+seed: 7
+
+cost_scenarios:
+  - name: equity_base
+    market: equity
+    slippage_bps: 2
+    spread_bps: 4
+  - name: equity_stress
+    market: equity
+    slippage_bps: 5
+    spread_bps: 10
+  - name: crypto_base
+    market: crypto
+    slippage_bps: 2
+    spread_bps: 6
+    taker_fee_bps: 5
+  - name: crypto_stress
+    market: crypto
+    slippage_bps: 5
+    spread_bps: 15
+    taker_fee_bps: 10
+
+candidate_spaces:
+  - name: stock_trend_pullback
+    version: 2.0.0
+    market: equity
+    timeframe: 1h
+    parameter_grid:
+      rsi_ceiling: [65, 68]
+      pullback_lookback: [3, 5]
+      stop_atr_multiple: [1.8, 2.2]
+    exit_policies:
+      - policy_id: fixed_baseline
+      - policy_id: break_even_1r
+        break_even_trigger_r: 1.0
+      - policy_id: chandelier_2_5atr_35bars
+        break_even_trigger_r: 1.0
+        trailing_type: chandelier
+        trailing_atr_multiple: 2.5
+        trailing_activation_r: 1.0
+        max_holding_bars: 35
+
+  - name: stock_mean_reversion
+    version: 2.0.0
+    market: equity
+    timeframe: 1h
+    parameter_grid:
+      bollinger_deviations: [1.8, 2.0]
+      rsi_ceiling: [40, 45]
+      minimum_middle_band_rr: [1.2, 1.5, 1.8]
+    exit_policies:
+      - policy_id: middle_band_fixed
+      - policy_id: middle_band_break_even
+        break_even_trigger_r: 1.0
+      - policy_id: middle_band_35bars
+        max_holding_bars: 35
+
+  - name: crypto_trend_breakout
+    version: 2.0.0
+    market: crypto
+    timeframe: 1h
+    parameter_grid:
+      donchian_period: [20, 40, 60]
+      stop_atr_multiple: [2.0, 2.2]
+      safety_target_r_multiple: [2.3, 6.0]
+    exit_policies:
+      - policy_id: fixed_baseline
+      - policy_id: break_even_1r
+        break_even_trigger_r: 1.0
+      - policy_id: chandelier_2atr_48bars
+        break_even_trigger_r: 1.0
+        trailing_type: chandelier
+        trailing_atr_multiple: 2.0
+        trailing_activation_r: 1.0
+        max_holding_bars: 48
+      - policy_id: chandelier_2_5atr_72bars
+        break_even_trigger_r: 1.0
+        trailing_type: chandelier
+        trailing_atr_multiple: 2.5
+        trailing_activation_r: 1.0
+        max_holding_bars: 72
+
+  - name: crypto_range_reversion
+    version: 2.0.0
+    market: crypto
+    timeframe: 1h
+    parameter_grid:
+      bollinger_deviations: [2.0, 2.2]
+      rsi_ceiling: [40, 43]
+      minimum_middle_band_rr: [1.2, 1.5, 1.8]
+    exit_policies:
+      - policy_id: middle_band_fixed
+      - policy_id: middle_band_break_even
+        break_even_trigger_r: 1.0
+      - policy_id: middle_band_48bars
+        max_holding_bars: 48

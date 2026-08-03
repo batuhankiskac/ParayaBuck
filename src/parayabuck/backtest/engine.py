@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from itertools import groupby
 from uuid import uuid4
 
 from parayabuck.backtest.broker import BacktestBroker
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import Bar
+from parayabuck.core.models import Bar, Market
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.logger import get_logger
@@ -75,6 +76,7 @@ class BacktestEngine:
         benchmark_symbol: str = "SPY",
         max_entry_participation_pct: float = 0.10,
         max_exit_participation_pct: float = 0.10,
+        historical_universe_filter: Callable[[str, Market, datetime], bool] | None = None,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = BacktestBroker(
@@ -110,10 +112,12 @@ class BacktestEngine:
             strategies,
             ai_journal=self.ai_journal,
             allowed_trade_symbols=allowed_trade_symbols,
+            historical_universe_filter=historical_universe_filter,
         )
         self.execution = ExecutionCoordinator(self.engine.orders, self.engine.risk)
         self.starting_equity = starting_equity
         self._liquidated_since_last_run = False
+        self._daily_equity_for_volatility: dict[date, float] = {}
 
     @staticmethod
     def _deduplicate_bars(bars: list[Bar]) -> list[Bar]:
@@ -183,6 +187,8 @@ class BacktestEngine:
             for pnl in self.broker.realized_pnls[recorded_pnls:]:
                 self.engine.risk.record_realized_pnl(pnl)
             recorded_pnls = len(self.broker.realized_pnls)
+            current_equity = self.broker.account().equity
+            self._update_volatility_scale(decision_time, current_equity)
             self.engine.process_cycle(primary)
             curve.append(self.broker.account().equity)
             curve_timestamps.append(decision_time)
@@ -246,6 +252,29 @@ class BacktestEngine:
             curve_timestamps,
             used_benchmark_symbol,
         )
+
+    def _update_volatility_scale(self, timestamp: datetime, equity: float) -> None:
+        current_day = timestamp.date()
+        self._daily_equity_for_volatility[current_day] = equity
+        completed = [
+            self._daily_equity_for_volatility[day]
+            for day in sorted(self._daily_equity_for_volatility)
+            if day < current_day
+        ][-21:]
+        if len(completed) < 2:
+            return
+        returns = [
+            completed[index] / completed[index - 1] - 1
+            for index in range(1, len(completed))
+            if completed[index - 1] > 0
+        ]
+        if not returns:
+            return
+        alpha = 2 / 21
+        variance = returns[0] ** 2
+        for value in returns[1:]:
+            variance = alpha * value**2 + (1 - alpha) * variance
+        self.engine.risk.set_realized_volatility(math.sqrt(variance * 252))
 
     def _result(
         self,

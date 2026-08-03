@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -27,6 +28,13 @@ from parayabuck.signals.ranker import SignalRanker, ranking_score
 from parayabuck.strategies import Strategy, StrategyContext, default_strategies
 
 log = get_logger("parayabuck.engine")
+
+VALIDATED_LIVE_STRATEGY_VERSIONS: dict[str, dict[str, str]] = {
+    "equity_5m_v1": {
+        "stock_trend_pullback": "1.0.0",
+        "stock_mean_reversion": "1.0.0",
+    }
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +64,7 @@ class TradingEngine:
         enforce_live_safety: bool = False,
         paper_mode: bool = True,
         allowed_trade_symbols: set[str] | None = None,
+        historical_universe_filter: Callable[[str, Market, datetime], bool] | None = None,
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = broker
@@ -69,6 +78,7 @@ class TradingEngine:
             if allowed_trade_symbols is not None
             else None
         )
+        self.historical_universe_filter = historical_universe_filter
         self.bars = BarStore(max(500, self.config.warmup_bars))
         self.regimes = RegimeDetector()
         self.ranker = SignalRanker(self.config.minimum_signal_score)
@@ -76,6 +86,7 @@ class TradingEngine:
         self.orders = OrderStateMachine()
         self.entry_halt_reason: str | None = None
         self._not_ready: set[tuple[str, str]] = set()
+        self._last_entry_at: dict[tuple[str, str], datetime] = {}
 
     def seed(self, bars: list[Bar]) -> None:
         self.bars.seed(bars)
@@ -180,9 +191,16 @@ class TradingEngine:
                 ),
                 None,
             )
-            benchmark_regime = self._benchmark_regime(bar.timeframe)
+            benchmark_regime = self._benchmark_regime(bar)
             higher_regime = self._higher_timeframe_regime(bar.symbol)
-            context = StrategyContext(assessment, position, higher_regime, benchmark_regime)
+            relative_strength = self._relative_strength(bar)
+            context = StrategyContext(
+                assessment,
+                position,
+                higher_regime,
+                benchmark_regime,
+                relative_strength,
+            )
             produced = False
             evaluations = []
             bar_signal_ids: list[str] = []
@@ -396,6 +414,9 @@ class TradingEngine:
             }
             if broker_effective:
                 capacity_consumed += 1
+                self._last_entry_at[
+                    (canonical_symbol(signal.symbol, signal.market), signal.strategy)
+                ] = signal.timestamp
             if lifecycle.state in {
                 OrderState.UNKNOWN,
                 OrderState.RECONCILIATION_REQUIRED,
@@ -533,12 +554,31 @@ class TradingEngine:
             and canonical_symbol(signal.symbol, signal.market) not in self.allowed_trade_symbols
         ):
             return "reference_symbol_not_tradeable"
+        if self.historical_universe_filter is not None and not self.historical_universe_filter(
+            signal.symbol, signal.market, signal.timestamp
+        ):
+            return "not_in_point_in_time_universe"
         if signal.market.value == "equity" and not self.config.equity_trading_enabled:
             return "equity_trading_disabled"
         if signal.market.value == "crypto" and not self.config.crypto_trading_enabled:
             return "crypto_trading_disabled"
         if signal.direction.value == "short" and not self.config.allow_short:
             return "short_trading_disabled"
+        last_entry = self._last_entry_at.get(
+            (canonical_symbol(signal.symbol, signal.market), signal.strategy)
+        )
+        if last_entry is not None and signal.reentry_cooldown_bars > 0:
+            cooldown = timeframe_duration(self.config.timeframe) * signal.reentry_cooldown_bars
+            if signal.timestamp < last_entry + cooldown:
+                return "strategy_reentry_cooldown"
+        if self.enforce_live_safety:
+            expected_version = VALIDATED_LIVE_STRATEGY_VERSIONS.get(
+                self.config.strategy_profile, {}
+            ).get(signal.strategy)
+            if expected_version is not None and signal.strategy_version != expected_version:
+                return "strategy_version_not_live_validated"
+        if self.enforce_live_safety and signal.exit_policy.is_dynamic:
+            return "dynamic_exit_policy_not_live_validated"
         if self.enforce_live_safety and self.config.reject_stale_signals:
             duration = timeframe_duration(self.config.timeframe)
             age = datetime.now(UTC) - (signal.timestamp + duration)
@@ -555,9 +595,22 @@ class TradingEngine:
             log.exception("AI decision journal failed during %s; trading continues", method)
             return None
 
-    def _benchmark_regime(self, timeframe: str) -> Regime:
-        series = self.bars.get("SPY", timeframe)
+    def _benchmark_regime(self, bar: Bar) -> Regime:
+        benchmark = "BTC/USD" if bar.market == Market.CRYPTO else "SPY"
+        series = self.bars.get(benchmark, bar.timeframe)
         return self.regimes.detect(series).regime if series else Regime.UNKNOWN
+
+    def _relative_strength(self, bar: Bar, lookback: int = 20) -> float | None:
+        benchmark = "BTC/USD" if bar.market == Market.CRYPTO else "SPY"
+        if canonical_symbol(bar.symbol, bar.market) == canonical_symbol(benchmark, bar.market):
+            return 0.0
+        symbol_bars = self.bars.get(bar.symbol, bar.timeframe)
+        benchmark_bars = self.bars.get(benchmark, bar.timeframe)
+        if len(symbol_bars) < lookback + 1 or len(benchmark_bars) < lookback + 1:
+            return None
+        symbol_return = symbol_bars[-1].close / symbol_bars[-lookback - 1].close - 1
+        benchmark_return = benchmark_bars[-1].close / benchmark_bars[-lookback - 1].close - 1
+        return symbol_return - benchmark_return
 
     def _higher_timeframe_regime(self, symbol: str) -> Regime:
         series = self.bars.get(symbol, self.config.higher_timeframe)

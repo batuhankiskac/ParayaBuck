@@ -27,8 +27,13 @@ class RiskLimits:
     max_positions: int = 5
     daily_loss_limit_pct: float = 0.015
     max_drawdown_pct: float = 0.10
+    max_open_risk_pct: float = 0.015
     minimum_risk_reward: float = 1.8
     consecutive_loss_reduction_after: int = 3
+    volatility_targeting_enabled: bool = False
+    annualized_volatility_target: float = 0.08
+    minimum_volatility_scale: float = 0.25
+    maximum_volatility_scale: float = 1.0
 
     def __post_init__(self) -> None:
         ratios = (
@@ -40,6 +45,10 @@ class RiskLimits:
             self.max_gross_exposure_pct,
             self.daily_loss_limit_pct,
             self.max_drawdown_pct,
+            self.max_open_risk_pct,
+            self.annualized_volatility_target,
+            self.minimum_volatility_scale,
+            self.maximum_volatility_scale,
         )
         if any(not math.isfinite(value) or value <= 0 or value > 1 for value in ratios):
             raise ValueError("Risk ratios must be in (0, 1]")
@@ -52,6 +61,7 @@ class RiskLimits:
             or not 0 <= self.cash_buffer_pct < 1
             or self.minimum_risk_reward <= 0
             or self.consecutive_loss_reduction_after <= 0
+            or self.minimum_volatility_scale > self.maximum_volatility_scale
         ):
             raise ValueError("Invalid risk limits")
 

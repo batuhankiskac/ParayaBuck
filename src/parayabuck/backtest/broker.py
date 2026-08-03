@@ -1,21 +1,34 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections import defaultdict, deque
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 
-from parayabuck.backtest.trades import EXIT_END_OF_TEST, EXIT_STOP, EXIT_TARGET, TradeRecord
+from parayabuck.backtest.trades import (
+    EXIT_BREAK_EVEN,
+    EXIT_END_OF_TEST,
+    EXIT_STOP,
+    EXIT_TARGET,
+    EXIT_TIME,
+    EXIT_TRAILING_STOP,
+    TradeRecord,
+)
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
     Direction,
     ExecutionEvent,
+    ExitPolicy,
     Fill,
     Market,
     OrderIntent,
     OrderRole,
     OrderState,
     PositionSnapshot,
+    Regime,
+    TrailingStopType,
 )
+from parayabuck.features.indicators import atr
 from parayabuck.markets.timeframes import timeframe_duration
 
 
@@ -33,6 +46,21 @@ class _Position:
     entry_fee: float
     strategy: str = "unknown"
     entry_timestamp: datetime | None = None
+    strategy_version: str = "1.0.0"
+    exit_policy: ExitPolicy = field(default_factory=ExitPolicy)
+    volatility_at_entry: float | None = None
+    entry_score: float = 0.0
+    normalized_expected_r: float | None = None
+    entry_regime: Regime = Regime.UNKNOWN
+    initial_stop: float | None = None
+    initial_risk: float = 0.0
+    highest_high: float | None = None
+    lowest_low: float | None = None
+    bars_held: int = 0
+    pending_stop: float | None = None
+    pending_stop_reason: str = EXIT_STOP
+    active_stop_reason: str = EXIT_STOP
+    pending_time_exit: bool = False
     max_favorable: float = 0.0
     max_adverse: float = 0.0
     stop_triggered: bool = False
@@ -48,6 +76,7 @@ class _Position:
         self.avg_price = (self.qty * self.avg_price + qty * price) / total_qty
         self.qty = total_qty
         self.entry_fee += fee
+        self.initial_risk = abs(self.avg_price - self.stop)
 
 
 class BacktestBroker:
@@ -99,6 +128,7 @@ class BacktestBroker:
         self._entry_requested_qty: dict[str, float] = {}
         self._entry_cumulative_fill: dict[str, float] = {}
         self._entry_fill_value: dict[str, float] = {}
+        self._bar_history: dict[str, deque[Bar]] = defaultdict(lambda: deque(maxlen=128))
 
     def account(self) -> AccountSnapshot:
         snapshots = tuple(
@@ -109,6 +139,15 @@ class BacktestBroker:
                 p.current_price,
                 p.market,
                 ownership="managed",
+                stop_price=p.stop,
+                initial_risk=p.initial_risk,
+                bars_held=p.bars_held,
+                trailing_stop=(
+                    p.stop if p.active_stop_reason == EXIT_TRAILING_STOP else None
+                ),
+                highest_high=p.highest_high,
+                lowest_low=p.lowest_low,
+                pending_trailing_stop=p.pending_stop,
             )
             for p in self.positions.values()
         )
@@ -159,6 +198,7 @@ class BacktestBroker:
         if self._current_date != bar.timestamp.date():
             self._current_date = bar.timestamp.date()
             self._day_start_equity = self.account().equity
+        self._bar_history[bar.symbol].append(bar)
 
         # 1. Fill eligible entries at the open.
         remaining: list[OrderIntent] = []
@@ -211,6 +251,16 @@ class BacktestBroker:
                     entry_fee,
                     strategy=order.strategy,
                     entry_timestamp=bar.timestamp,
+                    strategy_version=order.strategy_version,
+                    exit_policy=order.exit_policy,
+                    volatility_at_entry=order.volatility_at_entry,
+                    entry_score=order.signal_score,
+                    normalized_expected_r=order.normalized_expected_r,
+                    entry_regime=order.signal_regime,
+                    initial_stop=order.stop_price,
+                    initial_risk=abs(fill_price - order.stop_price),
+                    highest_high=fill_price,
+                    lowest_low=fill_price,
                 )
             if order.direction == Direction.LONG:
                 self.cash -= notional + entry_fee
@@ -249,21 +299,27 @@ class BacktestBroker:
         # intrabar range. This prevents impossible survival through an entry bar.
         position = self.positions.get(bar.symbol)
         if position is not None:
+            self._activate_pending_stop(position)
             position.current_price = bar.close
-            self._track_excursions(position, bar)
             exit_price: float | None = None
             exit_reason = ""
-            if position.stop_triggered:
+            if position.pending_time_exit:
+                exit_price = self._market_exit_price(position, bar)
+                exit_reason = EXIT_TIME
+                position.exit_reason = EXIT_TIME
+                self._cancel_remainder(position.symbol, position.client_order_id, bar)
+            elif position.stop_triggered:
                 # A triggered stop-market exit keeps liquidating the remaining
                 # quantity at the open until flat, even if price has recovered
                 # beyond the stop level.
                 exit_price = self._market_exit_price(position, bar)
                 exit_reason = position.exit_reason
             else:
+                self._track_excursions(position, bar)
                 exit_result = self._exit_price(position, bar)
                 if exit_result is not None:
                     exit_price, exit_reason = exit_result
-                    if exit_reason == EXIT_STOP:
+                    if exit_reason in {EXIT_STOP, EXIT_BREAK_EVEN, EXIT_TRAILING_STOP}:
                         # From here on the remainder is a triggered market exit.
                         position.stop_triggered = True
                         position.exit_reason = exit_reason
@@ -281,6 +337,9 @@ class BacktestBroker:
                         self._close(position, exit_price, exit_reason, bar)
                     else:
                         self._close(position, exit_price, exit_reason, bar, qty=exitable)
+            current_position = self.positions.get(bar.symbol)
+            if current_position is not None and exit_price is None:
+                self._advance_exit_policy(current_position)
 
     @staticmethod
     def _fillable_qty(requested: float, bar: Bar, participation_pct: float) -> float:
@@ -315,7 +374,7 @@ class BacktestBroker:
         self.pending = remaining
 
     def _track_excursions(self, position: _Position, bar: Bar) -> None:
-        if position.entry_timestamp is None or bar.timestamp <= position.entry_timestamp:
+        if position.entry_timestamp is None or bar.timestamp < position.entry_timestamp:
             return
         if position.direction == Direction.LONG:
             adverse = (position.avg_price - bar.low) / position.avg_price
@@ -325,6 +384,97 @@ class BacktestBroker:
             favorable = (position.avg_price - bar.low) / position.avg_price
         position.max_adverse = max(position.max_adverse, adverse)
         position.max_favorable = max(position.max_favorable, favorable)
+        position.highest_high = max(position.highest_high or bar.high, bar.high)
+        position.lowest_low = min(position.lowest_low or bar.low, bar.low)
+        position.bars_held += 1
+
+    def _activate_pending_stop(self, position: _Position) -> None:
+        candidate = position.pending_stop
+        if candidate is None:
+            return
+        if position.direction == Direction.LONG and candidate > position.stop:
+            position.stop = candidate
+            position.active_stop_reason = position.pending_stop_reason
+        elif position.direction == Direction.SHORT and candidate < position.stop:
+            position.stop = candidate
+            position.active_stop_reason = position.pending_stop_reason
+        position.pending_stop = None
+
+    def _advance_exit_policy(self, position: _Position) -> None:
+        """Schedule dynamic exits using only the just-completed bar history."""
+        policy = position.exit_policy
+        if policy.max_holding_bars is not None and position.bars_held >= policy.max_holding_bars:
+            position.pending_time_exit = True
+
+        if position.initial_risk <= 0:
+            return
+        favorable_r = (
+            ((position.highest_high or position.avg_price) - position.avg_price)
+            / position.initial_risk
+            if position.direction == Direction.LONG
+            else (
+                position.avg_price - (position.lowest_low or position.avg_price)
+            )
+            / position.initial_risk
+        )
+        candidates: list[tuple[float, str]] = []
+        if policy.break_even_trigger_r is not None and favorable_r >= policy.break_even_trigger_r:
+            candidates.append((self._cost_covered_break_even(position), EXIT_BREAK_EVEN))
+
+        trailing_active = (
+            policy.trailing_type == TrailingStopType.CHANDELIER
+            and policy.trailing_atr_multiple is not None
+            and favorable_r >= (policy.trailing_activation_r or 0.0)
+        )
+        if trailing_active:
+            trailing_multiple = policy.trailing_atr_multiple
+            assert trailing_multiple is not None
+            current_atr = atr(
+                list(self._bar_history[position.symbol]), policy.trailing_atr_period
+            )
+            volatility = current_atr or position.volatility_at_entry
+            if volatility is not None and volatility > 0:
+                if position.direction == Direction.LONG:
+                    trailing = (position.highest_high or position.avg_price) - (
+                        trailing_multiple * volatility
+                    )
+                else:
+                    trailing = (position.lowest_low or position.avg_price) + (
+                        trailing_multiple * volatility
+                    )
+                candidates.append((trailing, EXIT_TRAILING_STOP))
+        if not candidates:
+            return
+        if position.direction == Direction.LONG:
+            candidate, reason = max(candidates, key=lambda item: item[0])
+            if candidate <= position.stop:
+                return
+            if position.pending_stop is not None and position.pending_stop > candidate:
+                return
+        else:
+            candidate, reason = min(candidates, key=lambda item: item[0])
+            if candidate >= position.stop:
+                return
+            if position.pending_stop is not None and position.pending_stop < candidate:
+                return
+        position.pending_stop = candidate
+        position.pending_stop_reason = reason
+
+    def _cost_covered_break_even(self, position: _Position) -> float:
+        entry_notional = position.qty * position.avg_price
+        entry_fee_fraction = position.entry_fee / entry_notional if entry_notional > 0 else 0.0
+        adverse_fraction = (self.slippage_bps + self.spread_bps / 2) / 10_000
+        fee_fraction = (
+            self.crypto_taker_fee_bps / 10_000
+            if position.market == Market.CRYPTO
+            else 0.0
+        )
+        if position.direction == Direction.LONG:
+            denominator = max(1e-9, 1 - adverse_fraction - fee_fraction)
+            return position.avg_price * (1 + entry_fee_fraction) / denominator
+        return position.avg_price * (1 - entry_fee_fraction) / (
+            1 + adverse_fraction + fee_fraction
+        )
 
     def _exit_price(self, position: _Position, bar: Bar) -> tuple[float, str] | None:
         long = position.direction == Direction.LONG
@@ -358,7 +508,7 @@ class BacktestBroker:
         if is_stop:
             return (
                 raw * (1 - adverse / 10_000 if long else 1 + adverse / 10_000),
-                EXIT_STOP,
+                position.active_stop_reason,
             )
         return (
             raw * (1 - self.slippage_bps / 10_000 if long else 1 + self.slippage_bps / 10_000),
@@ -454,6 +604,13 @@ class BacktestBroker:
                     mfe_pct=position.max_favorable,
                     exit_reason=position.exit_reason or exit_reason,
                     fees=position._acc_fees,
+                    strategy_version=position.strategy_version,
+                    exit_policy_id=position.exit_policy.policy_id,
+                    initial_risk=position.initial_risk,
+                    bars_held=position.bars_held,
+                    entry_score=position.entry_score,
+                    normalized_expected_r=position.normalized_expected_r,
+                    entry_regime=position.entry_regime,
                 )
             )
             del self.positions[position.symbol]

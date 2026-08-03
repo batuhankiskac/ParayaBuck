@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -8,6 +9,7 @@ from parayabuck.backtest.engine import BacktestResult
 from parayabuck.backtest.report import build_report
 from parayabuck.backtest.trades import TradeRecord
 from parayabuck.core.models import Bar, Direction, Market
+from parayabuck.signals.calibration import fit_score_calibration
 
 
 def _result() -> BacktestResult:
@@ -125,6 +127,39 @@ def test_report_by_symbol_breakdown() -> None:
     assert symbol.win_rate == pytest.approx(2 / 3)
     assert symbol.stop_exits == 2
     assert symbol.target_exits == 1
+
+
+def test_report_includes_strategy_score_deciles_and_regimes() -> None:
+    trades = tuple(
+        replace(_trade(2025, float(index - 5)), entry_score=50 + index)
+        for index in range(1, 11)
+    )
+    report = build_report(_result(), curve_timestamps=_timestamps(), trades=trades)
+    assert len(report.score_deciles) == 10
+    assert "stock_trend_pullback" in report.score_expectancy_monotonic
+    assert report.by_regime[0].strategy == "stock_trend_pullback"
+
+
+def test_score_calibration_uses_strategy_internal_expected_r() -> None:
+    trades = tuple(
+        replace(
+            _trade(2025, float(index - 10)),
+            entry_score=50 + index,
+            initial_risk=1.0,
+            qty=1.0,
+        )
+        for index in range(20)
+    )
+    calibration = fit_score_calibration(
+        trades,
+        strategy="stock_trend_pullback",
+        bins=5,
+        minimum_observations=20,
+    )
+    assert calibration.monotonic
+    high = calibration.expected_r(70)
+    low = calibration.expected_r(50)
+    assert high is not None and low is not None and high > low
 
 
 def test_report_drawdown_series_and_equity_curve() -> None:

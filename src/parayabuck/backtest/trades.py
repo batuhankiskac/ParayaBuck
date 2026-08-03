@@ -3,19 +3,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from parayabuck.core.models import Direction, Market
+from parayabuck.core.models import Direction, Market, Regime
 
 EXIT_STOP = "stop"
 EXIT_TARGET = "target"
 EXIT_END_OF_TEST = "end"
+EXIT_BREAK_EVEN = "break_even"
+EXIT_TRAILING_STOP = "trailing_stop"
+EXIT_TIME = "time"
 
 
 @dataclass(frozen=True)
 class TradeRecord:
     """A fully closed round-trip recorded by the backtest broker.
 
-    MAE/MFE excursions are percentages of the entry price and only count bars
-    after the entry bar (intrabar order within the entry bar is unknown).
+    MAE/MFE excursions are percentages of the actual entry fill. The entry bar
+    is included because the next-open fill is known to precede that bar's
+    subsequent high/low range; ambiguous stop/target ordering is still handled
+    by the broker's configured conservative intrabar policy.
     """
 
     client_order_id: str
@@ -34,6 +39,13 @@ class TradeRecord:
     mfe_pct: float
     exit_reason: str
     fees: float
+    strategy_version: str = "1.0.0"
+    exit_policy_id: str = "fixed"
+    initial_risk: float = 0.0
+    bars_held: int = 0
+    entry_score: float = 0.0
+    normalized_expected_r: float | None = None
+    entry_regime: Regime = Regime.UNKNOWN
 
     @property
     def holding_days(self) -> float:
@@ -58,7 +70,22 @@ class TradeRecord:
             "exit_reason": self.exit_reason,
             "holding_days": self.holding_days,
             "fees": self.fees,
+            "strategy_version": self.strategy_version,
+            "exit_policy_id": self.exit_policy_id,
+            "initial_risk": self.initial_risk,
+            "bars_held": self.bars_held,
+            "entry_score": self.entry_score,
+            "normalized_expected_r": self.normalized_expected_r,
+            "entry_regime": self.entry_regime.value,
         }
 
 
-__all__ = ["EXIT_END_OF_TEST", "EXIT_STOP", "EXIT_TARGET", "TradeRecord"]
+__all__ = [
+    "EXIT_BREAK_EVEN",
+    "EXIT_END_OF_TEST",
+    "EXIT_STOP",
+    "EXIT_TARGET",
+    "EXIT_TIME",
+    "EXIT_TRAILING_STOP",
+    "TradeRecord",
+]

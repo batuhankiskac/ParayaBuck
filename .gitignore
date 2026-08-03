@@ -221,3 +221,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ParayaBuck: generated artifacts (reports, runtime state, scanner output)
+reports/
+data/storage.sqlite*
+data/universe/
+data/historical/*_sample.csv

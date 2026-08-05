@@ -25,16 +25,9 @@ from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskManager
 from parayabuck.signals.ranker import SignalRanker, ranking_score
-from parayabuck.strategies import Strategy, StrategyContext, default_strategies
+from parayabuck.strategies import Strategy, StrategyContext
 
 log = get_logger("parayabuck.engine")
-
-VALIDATED_LIVE_STRATEGY_VERSIONS: dict[str, dict[str, str]] = {
-    "equity_5m_v1": {
-        "stock_trend_pullback": "1.0.0",
-        "stock_mean_reversion": "1.0.0",
-    }
-}
 
 
 @dataclass(frozen=True)
@@ -68,7 +61,7 @@ class TradingEngine:
     ) -> None:
         self.config = config or EngineConfig()
         self.broker = broker
-        self.strategies = strategies or default_strategies(self.config)
+        self.strategies = strategies or ()
         self.journal = journal
         self.ai_journal = ai_journal
         self.enforce_live_safety = enforce_live_safety
@@ -571,12 +564,6 @@ class TradingEngine:
             cooldown = timeframe_duration(self.config.timeframe) * signal.reentry_cooldown_bars
             if signal.timestamp < last_entry + cooldown:
                 return "strategy_reentry_cooldown"
-        if self.enforce_live_safety:
-            expected_version = VALIDATED_LIVE_STRATEGY_VERSIONS.get(
-                self.config.strategy_profile, {}
-            ).get(signal.strategy)
-            if expected_version is not None and signal.strategy_version != expected_version:
-                return "strategy_version_not_live_validated"
         if self.enforce_live_safety and signal.exit_policy.is_dynamic:
             return "dynamic_exit_policy_not_live_validated"
         if self.enforce_live_safety and self.config.reject_stale_signals:

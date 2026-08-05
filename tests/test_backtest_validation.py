@@ -7,7 +7,7 @@ import pytest
 
 from parayabuck.backtest import BacktestEngine
 from parayabuck.backtest.engine import BacktestResult
-from parayabuck.backtest.validation import walk_forward_optimized
+from parayabuck.backtest.validation import calendar_fold_windows
 from parayabuck.config import EngineConfig
 from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
 from parayabuck.strategies.base import Strategy, StrategyContext
@@ -175,69 +175,46 @@ def _bars(count: int, close: float = 100.0) -> list[Bar]:
     ]
 
 
-def test_walk_forward_optimized_selects_on_train_evaluates_on_test() -> None:
-    config = EngineConfig()
-    bars = _bars(400)
-
-    def factory(cfg: EngineConfig) -> Any:
-        # The "best" score on the train window must be selected and applied
-        # to the test window; every engine reports which score it received.
-        observed: dict[str, Any] = {}
-
-        class Engine:
-            def __init__(self, engine_config: EngineConfig) -> None:
-                self.config = engine_config
-                observed["score"] = engine_config.minimum_signal_score
-
-            def run(self, test: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
-                del test, warmup
-                return _result(total_trades=15)
-
-        return Engine(cfg)
-
-    folds = walk_forward_optimized(
+def test_calendar_fold_windows_reserve_holdout_and_embargo() -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = [
+        Bar(
+            timestamp=start + timedelta(days=index),
+            symbol="TEST",
+            timeframe="1d",
+            open=100.0,
+            high=100.5,
+            low=99.5,
+            close=100.0,
+            volume=1000.0,
+            market=Market.EQUITY,
+        )
+        for index in range(700)
+    ]
+    windows = calendar_fold_windows(
         bars,
-        config,
-        factory,
-        train_size=100,
-        test_size=50,
-        scores=(60.0, 70.0, 80.0),
-        risks=(0.005,),
-        positions=(0.10,),
-        min_trades=5,
+        train_months=9,
+        test_months=1,
+        outer_holdout_months=6,
+        embargo=timedelta(days=3),
     )
-
-    assert len(folds) == 6  # (400 - 100) / 50
-    for fold in folds:
-        assert fold.minimum_signal_score in {60.0, 70.0, 80.0}
-        assert fold.test_bars == 50
-        assert fold.result.total_trades == 15
+    assert windows
+    assert all(window.train_end < window.test_start for window in windows)
 
 
-def test_walk_forward_optimized_skips_folds_without_enough_trades() -> None:
-    config = EngineConfig()
-    bars = _bars(200)
-
-    def factory(cfg: EngineConfig) -> Any:
-        class Engine:
-            def __init__(self, engine_config: EngineConfig) -> None:
-                self.config = engine_config
-
-            def run(self, test: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
-                del test, warmup
-                return _result(total_trades=2)  # below min_trades
-
-        return Engine(cfg)
-
-    folds = walk_forward_optimized(
-        bars,
-        config,
-        factory,
-        train_size=50,
-        test_size=25,
-        scores=(60.0,),
-        risks=(0.005,),
-        positions=(0.10,),
-        min_trades=10,
+def test_calendar_fold_window_count_is_timestamp_independent() -> None:
+    """The number of folds depends only on calendar dates, not bar count."""
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    dense = [
+        Bar(start + timedelta(days=i), "T", "1d", 100, 101, 99, 100, 1000, Market.EQUITY)
+        for i in range(700)
+    ]
+    sparse = dense[::7]
+    dense_windows = calendar_fold_windows(
+        dense, train_months=9, test_months=1, outer_holdout_months=6
     )
-    assert folds == ()
+    sparse_windows = calendar_fold_windows(
+        sparse, train_months=9, test_months=1, outer_holdout_months=6
+    )
+    assert dense_windows
+    assert len(dense_windows) == len(sparse_windows)

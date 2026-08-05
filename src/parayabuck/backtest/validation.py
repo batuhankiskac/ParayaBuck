@@ -1,19 +1,12 @@
 from __future__ import annotations
 
 import random
+from calendar import monthrange
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from parayabuck.backtest.engine import BacktestEngine, BacktestResult
-from parayabuck.backtest.sweep import (
-    DEFAULT_POSITIONS,
-    DEFAULT_RISKS,
-    DEFAULT_SCORES,
-    MIN_TRADES,
-    run_sweep,
-)
-from parayabuck.config import EngineConfig
 from parayabuck.core.models import Bar
 
 
@@ -21,20 +14,6 @@ from parayabuck.core.models import Bar
 class WalkForwardFold:
     train_bars: int
     test_bars: int
-    result: BacktestResult
-    train_start: datetime | None = None
-    train_end: datetime | None = None
-    test_start: datetime | None = None
-    test_end: datetime | None = None
-
-
-@dataclass(frozen=True)
-class OptimizedFold:
-    train_bars: int
-    test_bars: int
-    minimum_signal_score: float
-    risk_per_trade_pct: float
-    max_position_pct: float
     result: BacktestResult
     train_start: datetime | None = None
     train_end: datetime | None = None
@@ -96,77 +75,6 @@ def rolling_out_of_sample(
     return tuple(folds)
 
 
-def walk_forward_optimized(
-    bars: list[Bar],
-    base_config: EngineConfig,
-    engine_factory: Callable[[EngineConfig], BacktestEngine],
-    train_size: int,
-    test_size: int,
-    *,
-    scores: tuple[float, ...] = DEFAULT_SCORES,
-    risks: tuple[float, ...] = DEFAULT_RISKS,
-    positions: tuple[float, ...] = DEFAULT_POSITIONS,
-    min_trades: int = MIN_TRADES,
-) -> tuple[OptimizedFold, ...]:
-    """Nested walk-forward: parameters are selected on each train window, then
-    the selected configuration is evaluated on the following out-of-sample test
-    window.
-
-    Unlike ``run_sweep`` — which ranks combinations on the full data and is
-    therefore in-sample — this splits selection (train) from measurement
-    (test), so the reported OOS results are not contaminated by choosing the
-    best parameters on the very data being measured.
-    """
-    if train_size <= 0 or test_size <= 0:
-        raise ValueError("Walk-forward sizes must be positive")
-    if min_trades < 1:
-        raise ValueError("min_trades must be positive")
-    ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol, bar.timeframe))
-    timestamps = sorted({bar.timestamp for bar in ordered})
-    folds: list[OptimizedFold] = []
-    offset = train_size
-    while offset + test_size <= len(timestamps):
-        warmup_times = set(timestamps[offset - train_size : offset])
-        test_times = set(timestamps[offset : offset + test_size])
-        warmup = [bar for bar in ordered if bar.timestamp in warmup_times]
-        test = [bar for bar in ordered if bar.timestamp in test_times]
-        points = run_sweep(
-            warmup,
-            base_config,
-            engine_factory,
-            scores=scores,
-            risks=risks,
-            positions=positions,
-            min_trades=min_trades,
-        )
-        if not points:
-            offset += test_size
-            continue
-        best = points[0]
-        selected = replace(
-            base_config,
-            minimum_signal_score=best.minimum_signal_score,
-            risk=replace(
-                base_config.risk,
-                risk_per_trade_pct=best.risk_per_trade_pct,
-                max_position_pct=best.max_position_pct,
-            ),
-        )
-        result = engine_factory(selected).run(test, warmup=warmup)
-        folds.append(
-            OptimizedFold(
-                len(warmup),
-                len(test),
-                best.minimum_signal_score,
-                best.risk_per_trade_pct,
-                best.max_position_pct,
-                result,
-            )
-        )
-        offset += test_size
-    return tuple(folds)
-
-
 def calendar_fold_windows(
     bars: list[Bar],
     *,
@@ -174,6 +82,7 @@ def calendar_fold_windows(
     test_months: int = 1,
     outer_holdout_months: int = 6,
     embargo: timedelta = timedelta(0),
+    holdout_start: datetime | None = None,
 ) -> tuple[CalendarFoldWindow, ...]:
     """Build fixed-length rolling calendar boundaries without counting timestamps."""
     if train_months <= 0 or test_months <= 0 or outer_holdout_months < 0:
@@ -185,10 +94,12 @@ def calendar_fold_windows(
     timestamps = [bar.timestamp for bar in bars]
     start = _month_floor(min(timestamps))
     data_end = max(timestamps)
-    holdout_start = _add_months(_month_floor(data_end), -outer_holdout_months + 1)
+    locked_start = holdout_start or _shift_calendar_months(data_end, -outer_holdout_months)
+    if locked_start.tzinfo != data_end.tzinfo:
+        raise ValueError("Holdout start must use the same timezone as the bars")
     validation_start = _add_months(start, train_months)
     windows: list[CalendarFoldWindow] = []
-    while _add_months(validation_start, test_months) <= holdout_start:
+    while _add_months(validation_start, test_months) <= locked_start:
         test_end = _add_months(validation_start, test_months)
         train_start = _add_months(validation_start, -train_months)
         train_end = validation_start - embargo
@@ -230,77 +141,6 @@ def calendar_rolling_out_of_sample(
             WalkForwardFold(
                 len(warmup),
                 len(test),
-                result,
-                window.train_start,
-                window.train_end,
-                window.test_start,
-                window.test_end,
-            )
-        )
-    return tuple(folds)
-
-
-def calendar_walk_forward_optimized(
-    bars: list[Bar],
-    base_config: EngineConfig,
-    engine_factory: Callable[[EngineConfig], BacktestEngine],
-    *,
-    train_months: int = 9,
-    test_months: int = 1,
-    outer_holdout_months: int = 6,
-    embargo: timedelta = timedelta(0),
-    scores: tuple[float, ...] = DEFAULT_SCORES,
-    positions: tuple[float, ...] = DEFAULT_POSITIONS,
-    alpha_risk_per_trade_pct: float = 0.0025,
-    min_trades: int = MIN_TRADES,
-) -> tuple[OptimizedFold, ...]:
-    """Calendar-based nested selection with strategy risk fixed during alpha research."""
-    if not 0 < alpha_risk_per_trade_pct <= 0.005:
-        raise ValueError("Alpha research risk must be in (0, 0.5%]")
-    ordered = sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol, bar.timeframe))
-    folds: list[OptimizedFold] = []
-    for window in calendar_fold_windows(
-        ordered,
-        train_months=train_months,
-        test_months=test_months,
-        outer_holdout_months=outer_holdout_months,
-        embargo=embargo,
-    ):
-        train = [
-            bar for bar in ordered if window.train_start <= bar.timestamp < window.train_end
-        ]
-        test = [bar for bar in ordered if window.test_start <= bar.timestamp < window.test_end]
-        if not train or not test:
-            continue
-        points = run_sweep(
-            train,
-            base_config,
-            engine_factory,
-            scores=scores,
-            risks=(alpha_risk_per_trade_pct,),
-            positions=positions,
-            min_trades=min_trades,
-        )
-        if not points:
-            continue
-        best = points[0]
-        selected = replace(
-            base_config,
-            minimum_signal_score=best.minimum_signal_score,
-            risk=replace(
-                base_config.risk,
-                risk_per_trade_pct=alpha_risk_per_trade_pct,
-                max_position_pct=best.max_position_pct,
-            ),
-        )
-        result = engine_factory(selected).run(test, warmup=train)
-        folds.append(
-            OptimizedFold(
-                len(train),
-                len(test),
-                best.minimum_signal_score,
-                alpha_risk_per_trade_pct,
-                best.max_position_pct,
                 result,
                 window.train_start,
                 window.train_end,
@@ -356,3 +196,26 @@ def _add_months(value: datetime, months: int) -> datetime:
     absolute = value.year * 12 + value.month - 1 + months
     year, month_index = divmod(absolute, 12)
     return value.replace(year=year, month=month_index + 1, day=1)
+
+
+def _shift_calendar_months(value: datetime, months: int) -> datetime:
+    absolute = value.year * 12 + value.month - 1 + months
+    year, month_index = divmod(absolute, 12)
+    month = month_index + 1
+    return value.replace(
+        year=year,
+        month=month,
+        day=min(value.day, monthrange(year, month)[1]),
+    )
+
+
+__all__ = [
+    "CalendarFoldWindow",
+    "MonteCarloResult",
+    "WalkForwardFold",
+    "calendar_fold_windows",
+    "calendar_rolling_out_of_sample",
+    "monte_carlo_trades",
+    "rolling_out_of_sample",
+    "walk_forward",
+]

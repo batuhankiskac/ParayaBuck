@@ -152,10 +152,10 @@ def test_time_exit_runs_at_next_bar_open() -> None:
 
 def test_strategy_name_propagated() -> None:
     broker = BacktestBroker(10_000.0)
-    broker.submit(_order(strategy="stock_trend_pullback"))
+    broker.submit(_order(strategy="equity_etf_dual_momentum_v1"))
     broker.advance(_bar(0, open=100.0, high=101.0, low=99.0, close=100.0))
     broker.advance(_bar(1, open=100.0, high=106.0, low=99.0, close=100.0))
-    assert broker.trades[0].strategy == "stock_trend_pullback"
+    assert broker.trades[0].strategy == "equity_etf_dual_momentum_v1"
 
 
 def test_rejected_order_creates_no_trade() -> None:

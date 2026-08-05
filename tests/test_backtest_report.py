@@ -53,7 +53,7 @@ def _trade(exit_year: int, pnl: float, reason: str = "target") -> TradeRecord:
         client_order_id=f"order-{exit_year}-{pnl}",
         symbol="AAPL",
         market=Market.EQUITY,
-        strategy="stock_trend_pullback",
+        strategy="equity_etf_dual_momentum_v1",
         direction=Direction.LONG,
         qty=10.0,
         entry_time=datetime(exit_year - 1, 6, 1, tzinfo=UTC),
@@ -136,8 +136,8 @@ def test_report_includes_strategy_score_deciles_and_regimes() -> None:
     )
     report = build_report(_result(), curve_timestamps=_timestamps(), trades=trades)
     assert len(report.score_deciles) == 10
-    assert "stock_trend_pullback" in report.score_expectancy_monotonic
-    assert report.by_regime[0].strategy == "stock_trend_pullback"
+    assert "equity_etf_dual_momentum_v1" in report.score_expectancy_monotonic
+    assert report.by_regime[0].strategy == "equity_etf_dual_momentum_v1"
 
 
 def test_score_calibration_uses_strategy_internal_expected_r() -> None:
@@ -152,7 +152,7 @@ def test_score_calibration_uses_strategy_internal_expected_r() -> None:
     )
     calibration = fit_score_calibration(
         trades,
-        strategy="stock_trend_pullback",
+        strategy="equity_etf_dual_momentum_v1",
         bins=5,
         minimum_observations=20,
     )

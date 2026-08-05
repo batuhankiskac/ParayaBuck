@@ -49,9 +49,6 @@ def _args(**overrides: Any) -> Any:
         "output": None,
         "output_dir": "reports",
         "no_monte_carlo": False,
-        "walk_forward": False,
-        "wf_train": 1250,
-        "wf_test": 250,
         "min_coverage_pct": 50.0,
         "max_gap_multiplier": 12.0,
         "allow_incomplete_data": False,
@@ -847,74 +844,6 @@ def test_main_passes_data_quality_gate_with_complete_data(tmp_path: Path, monkey
     run_backtest.main()  # complete fake coverage must pass the gate
 
     assert (tmp_path / "report.json").exists()
-
-
-def test_main_sweep_writes_sweep_csv(tmp_path: Path, monkeypatch: Any) -> None:
-    @dataclass
-    class Result:
-        equity_curve: tuple[float, ...] = (100_000.0, 110_000.0)
-        realized_pnls: tuple[float, ...] = (500.0, 300.0)
-        total_trades: int = 5
-        total_return: float = 0.1
-        benchmark_return: float = 0.05
-        excess_return: float = 0.05
-        max_drawdown: float = 0.02
-        win_rate: float = 0.6
-        profit_factor: float | None = 2.0
-        profit_factor_is_infinite: bool = False
-        expectancy: float = 160.0
-        sharpe: float = 1.2
-        sortino: float = 1.0
-        starting_equity: float = 100_000.0
-        ending_equity: float = 110_000.0
-        open_positions: int = 0
-        unrealized_pnl: float = 0.0
-        open_risk: float = 0.0
-        liquidated_at_end: bool = False
-        cagr: float = 0.1
-
-    class FakeBacktestEngine:
-        ai_journal = None
-
-        def __init__(self, config: Any, **_kwargs: Any) -> None:
-            self.config = config
-            self.curve_timestamps: list[datetime] = []
-            self.broker = SimpleNamespace(trades=())
-
-        def run(self, bars: Any) -> Result:
-            return Result()
-
-    monkeypatch.setattr(run_backtest, "BacktestEngine", FakeBacktestEngine)
-    monkeypatch.setattr(run_backtest, "AlpacaHistoricalData", lambda *a, **k: _FakeHistory())
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "run_backtest.py",
-            "--symbols",
-            "AAPL,BTC/USD",
-            "--days",
-            "90",
-            "--sweep",
-            "--sweep-scores",
-            "60,70",
-            "--sweep-risks",
-            "0.005",
-            "--sweep-positions",
-            "0.10",
-            "--sweep-min-trades",
-            "1",
-            "--output-dir",
-            str(tmp_path),
-        ],
-    )
-
-    run_backtest.main()
-
-    sweep_csv = tmp_path / "sweep.csv"
-    assert sweep_csv.exists()
-    lines = sweep_csv.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 3  # header + 2 combinations
-    assert "minimum_signal_score" in lines[0]
 
 
 def test_main_deep_profile_for_multi_year_window(tmp_path: Path, monkeypatch: Any) -> None:

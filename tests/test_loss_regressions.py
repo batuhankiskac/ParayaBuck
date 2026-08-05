@@ -27,8 +27,7 @@ from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.markets.regime import RegimeAssessment, RegimeDetector
 from parayabuck.monitoring import AIDecisionJournal
 from parayabuck.runtime import EngineRuntime
-from parayabuck.strategies.base import StrategyContext, StrategyEvaluation
-from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
+from parayabuck.strategies.base import StrategyEvaluation
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
 
@@ -68,21 +67,6 @@ def test_fresh_high_adx_break_is_not_mislabeled_as_range() -> None:
     assert assessment.regime == Regime.TREND_DOWN
     assert assessment.trend_strength > 22
     assert "fresh_bearish_break_below_ema50" in assessment.reasons
-
-
-def test_regular_mean_reversion_is_blocked_by_bearish_benchmark() -> None:
-    bars = _bars(symbol="AAPL", count=50)
-    context = StrategyContext(
-        regime=RegimeAssessment(Regime.RANGE, 0.8, 10, 0.01, ("test",)),
-        higher_timeframe_regime=Regime.UNKNOWN,
-        benchmark_regime=Regime.TREND_DOWN,
-    )
-
-    evaluation = StockMeanReversion().evaluate_with_trace(bars, context)
-
-    assert not evaluation.fired
-    benchmark = next(item for item in evaluation.conditions if item.code == "benchmark_regime")
-    assert not benchmark.passed
 
 
 def test_parentless_bracket_children_keep_their_exit_roles() -> None:

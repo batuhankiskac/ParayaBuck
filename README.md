@@ -142,33 +142,18 @@ python scripts/run_backtest.py --market crypto --years 7
 #    (pencere <= ~120 işlem günü; daha uzun pencerelerde --timeframe 1d gerekir)
 python scripts/run_backtest.py --market equity --days 90 --profile live
 
-# 5) Walk-forward out-of-sample dilimleri ekle:
-python scripts/run_backtest.py --market both --years 10 --walk-forward
-
-# 6) Nested walk-forward: her train diliminde parametre seç (sweep), seçilen
-#    parametreleri bir sonraki out-of-sample diliminde ölç (overfitting koruması):
-python scripts/run_backtest.py --market both --years 10 --walk-forward-optimize
-
-# 7) Tek tıkla parametre taraması — in-sample en uygun kombinasyonları bul:
-python scripts/run_backtest.py --market both --years 10 --sweep
-
-# 8) Strateji ve çıkış parametrelerini takvim bazlı nested araştırma içinde tara:
-python scripts/run_backtest.py \
-  --experiment-spec config/experiments/strategy_1h_v1.yaml \
-  --output-dir reports/experiments/strategy_1h_v1
+# 5) Portföy strateji araştırması (veri indirme + baseline + nested validation):
+python scripts/run_portfolio_research.py --download
+python scripts/run_portfolio_research.py --baseline
+python scripts/run_portfolio_research.py --nested
 ```
 
-Yeni 1h araştırma akışı, maliyet senaryoları ve tek-kullanımlık holdout kuralı için
-[`docs/strategy_research.md`](docs/strategy_research.md) belgesine bakın.
-
-`--sweep`, indirilen aynı veriyi `minimum_signal_score` × `risk_per_trade_pct` ×
-`max_position_pct` grid'i üzerinde yeniden koşar (ekstra indirme yok) ve
-kombinasyonları Calmar oranına göre sıralar. Sweep aynı veri üzerinde sıraladığı
-için in-sample'dir; dış örnek doğrulama için `--walk-forward-optimize` kullanın.
-Sonuçlar `reports/sweep.csv` dosyasına yazılır; minimum işlem eşiği
-`--sweep-min-trades` (varsayılan 10) ile ayarlanır ve grid değerleri
-`--sweep-scores "55,65,75"`, `--sweep-risks "0.0025,0.005"`, `--sweep-positions
-"0.05,0.15"` ile özelleştirilir.
+Portföy düzeyinde strateji araştırması (kalıcı ETF evreninde dual momentum,
+1h kripto cross-sectional momentum, günlük time-series momentum) kilitli outer
+holdout ve production gate ile [`docs/research_summary_2026-08-04.md`](docs/research_summary_2026-08-04.md)
+içinde açıklanır; eski tekil sembol alpha katmanının kaldırılması için
+[`docs/strategy_migration_2026-08-04.md`](docs/strategy_migration_2026-08-04.md)
+belgesine bakın.
 
 Alpaca modunda `--profile` belirtilmezse pencere otomatik karar verir: pencere
 `EQUITY_MAX_DAYS["5m"]` (120 işlem günü) içindeyse canlı profili (5m + 1h), daha

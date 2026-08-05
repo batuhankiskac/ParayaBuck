@@ -29,8 +29,6 @@ from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring import DecisionJournal
 from parayabuck.risk import RiskManager
 from parayabuck.strategies.base import Strategy, StrategyContext
-from parayabuck.strategies.stock_mean_reversion import StockMeanReversion
-from parayabuck.strategies.stock_trend import StockTrendPullback
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -110,8 +108,32 @@ def test_ema_is_exponential_not_sma() -> None:
     assert ema([1.0, 2.0, 3.0, 10.0], 3) != pytest.approx(sum([2.0, 3.0, 10.0]) / 3)
 
 
-@pytest.mark.parametrize("strategy", [StockTrendPullback(), StockMeanReversion()])
-def test_inverse_equity_entries_require_non_bullish_benchmark(strategy: Strategy) -> None:
+class _BenchmarkGatedStrategy(Strategy):
+    name = "benchmark_gated"
+    market = Market.EQUITY
+    minimum_bars = 1
+
+    def evaluate(self, bars: list[Bar], context: StrategyContext) -> Signal | None:
+        if context.benchmark_regime == Regime.TREND_UP:
+            return None
+        bar = bars[-1]
+        return Signal(
+            bar.symbol,
+            bar.market,
+            Direction.LONG,
+            self.name,
+            90,
+            0.9,
+            bar.close,
+            bar.close - 1,
+            bar.close + 2,
+            bar.timestamp,
+            ("test_setup",),
+            Regime.RANGE,
+        )
+
+
+def test_inverse_equity_entries_require_non_bullish_benchmark() -> None:
     bars = [
         Bar(
             datetime(2025, 1, 1, 14, 30, tzinfo=UTC) + timedelta(minutes=5 * index),
@@ -124,19 +146,21 @@ def test_inverse_equity_entries_require_non_bullish_benchmark(strategy: Strategy
             1000,
             Market.EQUITY,
         )
-        for index in range(strategy.minimum_bars)
+        for index in range(10)
     ]
-    regime = Regime.TREND_UP if isinstance(strategy, StockTrendPullback) else Regime.RANGE
+    strategy = _BenchmarkGatedStrategy()
     context = StrategyContext(
-        RegimeAssessment(regime, 20, 0, 0, ()),
+        RegimeAssessment(Regime.TREND_UP, 20, 0, 0, ()),
         benchmark_regime=Regime.TREND_UP,
     )
 
-    evaluation = strategy.evaluate_with_trace(bars, context)
-    benchmark = next(item for item in evaluation.conditions if item.code == "benchmark_regime")
+    assert strategy.evaluate(bars, context) is None
 
-    assert benchmark.passed is False
-    assert evaluation.signal is None
+    context = StrategyContext(
+        RegimeAssessment(Regime.TREND_DOWN, 20, 0, 0, ()),
+        benchmark_regime=Regime.TREND_DOWN,
+    )
+    assert strategy.evaluate(bars, context) is not None
 
 
 def test_risk_manager_sizes_from_stop_distance() -> None:
@@ -1045,7 +1069,7 @@ def test_risk_manager_sizes_equity_in_whole_shares() -> None:
         "XLU",
         Market.EQUITY,
         Direction.LONG,
-        "stock_mean_reversion",
+        "equity_etf_dual_momentum_v1",
         80,
         0.8,
         45.91,

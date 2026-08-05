@@ -32,6 +32,36 @@ python scripts/run_backtest.py \
 Bu işlem `data/runtime/holdout_registry.json` kaydı oluşturur. Aynı deney
 kimliğiyle ikinci holdout değerlendirmesi reddedilir.
 
+## Timeframe'e özel optimizasyonlar
+
+Dört mevcut stratejinin tamamı bağımsız deney kimliği, maliyet modeli,
+parametre uzayı ve kilitli holdout ile dört timeframe'de araştırılabilir:
+
+| Manifest | Veri penceresi | Train/validation/holdout | Aday |
+| --- | --- | --- | ---: |
+| `strategy_5m_v1.yaml` | yaklaşık 4 ay | 2/1/1 ay | 160 |
+| `strategy_15m_v1.yaml` | yaklaşık 6 ay | 3/1/1 ay | 160 |
+| `strategy_1h_v1.yaml` | yaklaşık 24 ay | 9/1/6 ay | 144 |
+| `strategy_1d_v1.yaml` | yaklaşık 24 ay | 9/1/6 ay | 176 |
+
+5m ve 15m deneylerinde daha yüksek spread/slippage, daha küçük minimum stop
+yüzdeleri ve aynı ekonomik bekleme süresine denk gelen daha yüksek bar
+sayıları kullanılır. Timeframe'ler arasında parametre veya holdout paylaşılmaz.
+
+Holdout'u açmadan tüm validation deneylerini sırayla çalıştırmak için:
+
+```bash
+for tf in 5m 15m 1h 1d; do
+  .venv/bin/python scripts/run_backtest.py \
+    --experiment-spec "config/experiments/strategy_${tf}_v1.yaml" \
+    --output-dir "reports/experiments/strategy_${tf}_v1_validation"
+done
+```
+
+5m ve 15m sonuçları kısa takvim nedeniyle yalnız erken araştırma/falsification
+kanıtı sayılır. Production gate'teki 100 OOS işlem ve DSR/PBO şartları aynen
+korunur; örneklem azlığı gate'i gevşetmez.
+
 ## Timeframe karşılaştırması ve uzun 1h koşusu
 
 ```bash

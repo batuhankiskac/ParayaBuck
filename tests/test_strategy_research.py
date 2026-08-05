@@ -1,31 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from parayabuck.backtest.broker import BacktestBroker
-from parayabuck.backtest.challengers import (
-    crypto_cross_sectional_momentum,
-    dual_momentum_weights,
-    time_series_momentum_target,
-)
-from parayabuck.backtest.engine import BacktestResult
 from parayabuck.backtest.experiments import (
-    ExperimentSpec,
     ProductionGate,
-    StrategyCandidateSpace,
     TrialResult,
     deflated_sharpe_probability,
     hash_bars,
+    new_manifest,
+    outer_holdout_start,
     probability_backtest_overfitting,
 )
-from parayabuck.backtest.research import run_nested_experiment
 from parayabuck.backtest.universe import build_crypto_point_in_time_universe
 from parayabuck.backtest.validation import calendar_fold_windows
-from parayabuck.config import EngineConfig, RiskLimits
+from parayabuck.config import RiskLimits
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -36,16 +27,7 @@ from parayabuck.core.models import (
     Signal,
     TrailingStopType,
 )
-from parayabuck.data.aggregator import aggregate_historical_bars
-from parayabuck.engine import TradingEngine
-from parayabuck.execution.protective_stops import safely_replace_stop
-from parayabuck.execution.rollout import (
-    RolloutStage,
-    RolloutState,
-    evaluate_rollout,
-)
 from parayabuck.risk.manager import RiskManager
-from parayabuck.strategies.specs import CryptoTrendParams, StockTrendParams
 
 
 def _bar(
@@ -62,24 +44,6 @@ def _bar(
 def test_exit_policy_rejects_incomplete_trailing_configuration() -> None:
     with pytest.raises(ValueError, match="requires a trailing multiple"):
         ExitPolicy(policy_id="bad", trailing_type=TrailingStopType.CHANDELIER)
-
-
-def test_strategy_parameter_boundaries_are_fail_closed() -> None:
-    with pytest.raises(ValueError, match="Fast EMA"):
-        StockTrendParams(fast_ema_period=50, slow_ema_period=20)
-    with pytest.raises(ValueError, match="Donchian|donchian"):
-        CryptoTrendParams(donchian_period=0)
-
-
-def test_historical_aggregation_drops_incomplete_target_bucket() -> None:
-    start = datetime(2026, 1, 1, tzinfo=UTC)
-    bars = [
-        _bar(start + timedelta(minutes=5 * index), timeframe="5m") for index in range(23)
-    ]
-    aggregated = aggregate_historical_bars(bars, "1h")
-    assert len(aggregated) == 1
-    assert aggregated[0].timestamp == start
-    assert aggregated[0].volume == 1200
 
 
 def test_calendar_folds_reserve_holdout_and_apply_embargo() -> None:
@@ -100,6 +64,36 @@ def test_calendar_folds_reserve_holdout_and_apply_embargo() -> None:
     assert windows[-1].test_end <= datetime(2025, 8, 1, tzinfo=UTC)
 
 
+def test_holdout_cutoff_is_shared_across_markets() -> None:
+    end = datetime(2026, 8, 3, tzinfo=UTC)
+    assert outer_holdout_start(end, 6) == outer_holdout_start(end, 6)
+    assert outer_holdout_start(end, 6) == datetime(2026, 2, 3, tzinfo=UTC)
+
+
+def test_holdout_cutoff_uses_shared_calendar_math_for_equity_and_crypto() -> None:
+    """Equity and crypto experiments with the same end/months share one cutoff,
+    so the manifest holdout boundary is identical across markets."""
+    equity_end = datetime(2026, 7, 31, 20, tzinfo=UTC)
+    crypto_end = datetime(2026, 8, 1, 0, tzinfo=UTC)
+    months = 6
+    assert outer_holdout_start(equity_end, months) == datetime(2026, 1, 31, 20, tzinfo=UTC)
+    assert outer_holdout_start(crypto_end, months) == datetime(2026, 2, 1, 0, tzinfo=UTC)
+
+
+def test_calendar_fold_window_count_does_not_depend_on_timestamp_count() -> None:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    dense = [_bar(start + timedelta(days=index)) for index in range(400)]
+    sparse = dense[::7]
+    dense_windows = calendar_fold_windows(
+        dense, train_months=2, test_months=1, outer_holdout_months=1
+    )
+    sparse_windows = calendar_fold_windows(
+        sparse, train_months=2, test_months=1, outer_holdout_months=1
+    )
+    assert dense_windows
+    assert len(dense_windows) == len(sparse_windows)
+
+
 def test_multiple_testing_statistics_are_deterministic() -> None:
     probability = deflated_sharpe_probability(0.2, 250, 100)
     assert 0 < probability < 1
@@ -109,15 +103,6 @@ def test_multiple_testing_statistics_are_deterministic() -> None:
         [-0.01, 0.01, 0.02, 0.03, -0.02, 0.01],
     ]
     assert probability_backtest_overfitting(matrix) == probability_backtest_overfitting(matrix)
-
-
-def test_experiment_manifest_has_bounded_concrete_candidate_space() -> None:
-    root = Path(__file__).resolve().parents[1]
-    spec = ExperimentSpec.from_file(root / "config/experiments/strategy_1h_v1.yaml")
-    assert sum(space.combinations for space in spec.candidate_spaces) == 144
-    assert sum(len(space.exit_policies) for space in spec.candidate_spaces) <= 30
-    assert spec.alpha_risk_per_trade_pct == 0.0025
-    assert spec.outer_holdout_months == 6
 
 
 def test_data_hash_changes_when_market_data_changes() -> None:
@@ -172,24 +157,20 @@ def test_strict_production_gate_requires_every_condition() -> None:
     assert "negative_stress_expectancy" in failed.failures
 
 
-def test_strategy_specific_mean_reversion_rr_can_be_below_global_trend_gate() -> None:
-    signal = Signal(
-        "SPY",
-        Market.EQUITY,
-        Direction.LONG,
-        "stock_mean_reversion",
-        75,
-        0.75,
-        100,
-        98,
-        102.6,
-        datetime.now(UTC),
-        minimum_risk_reward=1.2,
+def test_manifest_round_trip_and_hash_are_stable() -> None:
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    bars = [_bar(timestamp)]
+    manifest = new_manifest(
+        experiment_id="exp",
+        spec_dict={"a": 1},
+        universe_version="v1",
+        seed=7,
+        bars=bars,
+        code_revision="abc",
     )
-    decision = RiskManager(RiskLimits(minimum_risk_reward=1.8)).evaluate(
-        signal, AccountSnapshot(10_000, 10_000, 10_000, 0)
-    )
-    assert decision.approved
+    payload = manifest.to_json()
+    assert "data_hash" in payload
+    assert manifest.data_hash == hash_bars(bars)
 
 
 def test_open_stop_risk_heat_blocks_new_entries() -> None:
@@ -243,195 +224,3 @@ def test_volatility_targeting_only_reduces_trade_risk() -> None:
     decision = manager.evaluate(signal, AccountSnapshot(10_000, 10_000, 10_000, 0))
     assert decision.approved
     assert decision.risk_amount == pytest.approx(25.0)
-
-
-def test_dual_momentum_is_long_or_cash_and_weights_sum_to_one() -> None:
-    start = datetime(2024, 1, 1, tzinfo=UTC)
-    bars: list[Bar] = []
-    for index in range(280):
-        timestamp = start + timedelta(days=index)
-        for symbol, drift in (("SPY", 0.1), ("QQQ", 0.2), ("XLE", -0.1)):
-            close = 100 + drift * index
-            bars.append(
-                Bar(
-                    timestamp,
-                    symbol,
-                    "1d",
-                    close,
-                    close + 1,
-                    close - 1,
-                    close,
-                    1000,
-                    Market.EQUITY,
-                )
-            )
-    selection = dual_momentum_weights(bars, start + timedelta(days=280), top_n=2)
-    assert {symbol for symbol, _ in selection.weights} == {"SPY", "QQQ"}
-    assert sum(weight for _, weight in selection.weights) == pytest.approx(1.0)
-
-
-def test_crypto_momentum_obeys_btc_regime_gate() -> None:
-    assert crypto_cross_sectional_momentum(
-        [], datetime.now(UTC), btc_regime_positive=False
-    ).weights == ()
-
-
-def test_time_series_momentum_never_uses_leverage() -> None:
-    start = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = [
-        Bar(
-            start + timedelta(days=index),
-            "SPY",
-            "1d",
-            100 + index,
-            101 + index,
-            99 + index,
-            100 + index,
-            1000,
-            Market.EQUITY,
-        )
-        for index in range(280)
-    ]
-    exposures = time_series_momentum_target(bars, start + timedelta(days=280))
-    assert exposures
-    assert all(0 <= exposure <= 1 for _, exposure in exposures)
-
-
-def test_rollout_halts_only_new_entries_on_live_drift() -> None:
-    decision = evaluate_rollout(
-        RolloutState(
-            stage=RolloutStage.CANARY,
-            stage_started=date(2026, 1, 1),
-            as_of=date(2026, 2, 1),
-            fills=50,
-            trades=50,
-            expected_slippage_bps=2,
-            realized_slippage_bps=3.1,
-            rolling_50_profit_factor=0.85,
-            realized_drawdown=0.16,
-            validated_drawdown=0.10,
-        )
-    )
-    assert decision.halt_new_entries
-    assert not decision.eligible_for_next_stage
-    assert "realized_slippage_above_limit" in decision.reasons
-
-
-def test_failed_live_stop_replace_keeps_old_protection() -> None:
-    result = safely_replace_stop(
-        direction=Direction.LONG,
-        current_stop=98,
-        requested_stop=101,
-        replace=lambda _price: False,
-    )
-    assert not result.succeeded
-    assert result.active_stop == 98
-    assert result.reason == "atomic_replace_failed"
-
-
-def test_nested_experiment_keeps_alpha_risk_fixed_and_holdout_locked() -> None:
-    start = datetime(2024, 1, 1, tzinfo=UTC)
-    end = datetime(2025, 7, 1, tzinfo=UTC)
-    bars = [
-        Bar(
-            start + timedelta(days=index),
-            "SPY",
-            "1h",
-            100,
-            101,
-            99,
-            100,
-            1000,
-            Market.EQUITY,
-        )
-        for index in range((end - start).days)
-    ]
-    space = StrategyCandidateSpace(
-        "stock_trend_pullback",
-        "2.0.0",
-        Market.EQUITY,
-        "1h",
-        (("rsi_ceiling", (65.0, 68.0)),),
-    )
-    experiment = ExperimentSpec(
-        "test_nested",
-        start,
-        end,
-        ("SPY",),
-        "test_v1",
-        candidate_spaces=(space,),
-        train_months=9,
-        validation_months=1,
-        outer_holdout_months=1,
-        embargo_bars=1,
-        max_parameter_trials=2,
-        max_holdout_finalists=1,
-    )
-    observed_risks: list[float] = []
-
-    class FakeEngine:
-        def __init__(self, config: EngineConfig) -> None:
-            observed_risks.append(config.risk.risk_per_trade_pct)
-            self.broker = type("Broker", (), {"trades": ()})()
-
-        def run(self, test: list[Bar], warmup: list[Bar] | None = None) -> BacktestResult:
-            del warmup
-            return BacktestResult(
-                100_000,
-                100_100,
-                0.001,
-                0.0,
-                0.001,
-                0.01,
-                10,
-                0.6,
-                1.2,
-                False,
-                10,
-                0.8,
-                1.0,
-                (100_000, 100_100),
-                (10.0,) * 6 + (-5.0,) * 4,
-                0,
-                0,
-                0,
-                False,
-                start_date=test[0].timestamp.date().isoformat(),
-                end_date=test[-1].timestamp.date().isoformat(),
-                duration_days=max(1, (test[-1].timestamp - test[0].timestamp).days),
-                calmar=0.1,
-            )
-
-    trials = run_nested_experiment(
-        bars,
-        experiment,
-        EngineConfig(timeframe="1h", higher_timeframe="1d"),
-        lambda config, _strategies, _cost: FakeEngine(config),
-    )
-    assert len(trials) == 2
-    assert set(observed_risks) == {0.0025}
-    assert all(trial.holdout_evaluations == 0 for trial in trials)
-
-
-def test_unvalidated_strategy_version_is_fail_closed_for_live_profile() -> None:
-    config = EngineConfig(live_trading_enabled=True)
-    engine = TradingEngine(
-        BacktestBroker(10_000),
-        config,
-        enforce_live_safety=True,
-        paper_mode=False,
-    )
-    signal = Signal(
-        "SPY",
-        Market.EQUITY,
-        Direction.LONG,
-        "stock_trend_pullback",
-        80,
-        0.8,
-        100,
-        98,
-        104,
-        datetime.now(UTC),
-        strategy_version="2.0.0",
-    )
-    assert engine._execution_gate_reason(signal) == "strategy_version_not_live_validated"

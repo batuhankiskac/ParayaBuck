@@ -1,0 +1,49 @@
+experiment_id: crypto_cross_sectional_momentum_1h_v1
+start: 2024-08-01T00:00:00Z
+end: 2026-08-01T00:00:00Z
+universe_version: crypto_trailing_liquidity_v1
+universe:
+  - BTC/USD
+  - ETH/USD
+  - SOL/USD
+  - AVAX/USD
+  - LINK/USD
+  - UNI/USD
+  - LTC/USD
+  - BCH/USD
+  - XRP/USD
+  - ADA/USD
+  - DOT/USD
+  - DOGE/USD
+
+train_months: 6
+validation_months: 1
+outer_holdout_months: 3
+embargo_bars: 24
+max_mechanism_trials: 30
+max_parameter_trials: 200
+max_holdout_finalists: 10
+seed: 7
+
+cost_scenarios:
+  - name: crypto_base
+    market: crypto
+    slippage_bps: 2
+    spread_bps: 6
+    taker_fee_bps: 5
+  - name: crypto_stress
+    market: crypto
+    slippage_bps: 5
+    spread_bps: 15
+    taker_fee_bps: 10
+
+candidate_spaces:
+  - name: crypto_cross_sectional_momentum_1h_v1
+    version: 1.0.0
+    market: crypto
+    timeframe: 1h
+    parameter_grid:
+      momentum_scheme: ["24h", "7d", "30d", "norm_24_7_30"]
+      rebalance_hours: [6, 12, 24]
+      top_n: [2, 3]
+      volatility_window: [24, 72]

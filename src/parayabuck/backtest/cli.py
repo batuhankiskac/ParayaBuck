@@ -1,9 +1,8 @@
-"""ParayaBuck backtest CLI — tek komutla CSV verisi veya 10+ yıl borsa + kripto.
+"""ParayaBuck backtest CLI — veri indirme, kapsam doğrulama ve raporlama.
 
-Botu günlerce açık tutmak yerine strateji performansını geçmiş veri üzerinde
-ölçer ve detaylı rapor üretir. Alpaca modunda veriler ilk çalıştırmada
-indirilir ve data/cache/ altında saklanır; sonraki çalıştırmalar önbellekten
-anında tamamlanır.
+Strateji performansı artık portföy düzeyinde çalışır; bu CLI'nin görevi geçmiş
+veriyi indirmek, kapsam/boşluk kontrolleriyle doğrulamak ve rapor üretmektir.
+Portföy strateji araştırması ``scripts/run_portfolio_research.py`` ile koşulur.
 
 Çalıştırma yolları (hepsi aynı CLI):
     python scripts/run_backtest.py ...          # script
@@ -12,21 +11,10 @@ anında tamamlanır.
 
 Örnekler:
     # Hiçbir argüman vermeden çalıştırın: kullanım rehberi gösterir.
-    # Örnek veriyle hızlı test (offline, indirme yok):
     python scripts/run_backtest.py --generate-sample
-    # Kendi CSV'n:
-    python scripts/run_backtest.py data/historical/DEMO_5m_2024.csv --timeframe 5m
-    # Canlıda doğrulanmış 5m + 1h profiliyle (pencere <= ~120 işlem günü):
-    python scripts/run_backtest.py --market both --days 90 --profile live
-    # Alpaca, 10 yıl, her iki piyasa (1d, deep profil):
+    python scripts/run_backtest.py <veri.csv> --timeframe 5m
     python scripts/run_backtest.py --market both --years 10
-    python scripts/run_backtest.py --market crypto --years 7 --timeframe 1d
-    python scripts/run_backtest.py --market equity --years 2 --timeframe 1h --max-symbols 50
-    python scripts/run_backtest.py --symbols AAPL,MSFT,GOOG,BTC/USD --years 10
-    python scripts/run_backtest.py --market equity --timeframe 5m --days 90 --max-symbols 15
-    python scripts/run_backtest.py --market both --years 10 --walk-forward
-    python scripts/run_backtest.py --market both --years 10 --walk-forward-optimize
-    python scripts/run_backtest.py --market both --years 10 --sweep
+    python scripts/run_backtest.py --market equity --timeframe 5m --days 90
 """
 
 from __future__ import annotations
@@ -34,7 +22,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
-import math
 import os
 import random
 import subprocess
@@ -53,9 +40,6 @@ from parayabuck.backtest.experiments import (
     CRYPTO_STRESS,
     EQUITY_BASE,
     EQUITY_STRESS,
-    CostScenario,
-    ExperimentSpec,
-    ProductionGate,
     hash_bars,
 )
 from parayabuck.backtest.history import (
@@ -68,26 +52,11 @@ from parayabuck.backtest.history import (
     validate_range,
 )
 from parayabuck.backtest.report import build_report
-from parayabuck.backtest.research import run_nested_experiment
-from parayabuck.backtest.sweep import (
-    DEFAULT_POSITIONS,
-    DEFAULT_RISKS,
-    DEFAULT_SCORES,
-    render_sweep_text,
-    run_sweep,
-    write_sweep_csv,
-)
-from parayabuck.backtest.universe import build_crypto_point_in_time_universe
-from parayabuck.backtest.validation import (
-    monte_carlo_trades,
-    rolling_out_of_sample,
-    walk_forward_optimized,
-)
+from parayabuck.backtest.validation import monte_carlo_trades
 from parayabuck.config import Config, EngineConfig, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
-from parayabuck.strategies.base import Strategy
 from parayabuck.universe import (
     ensure_active_universes,
     load_active_crypto_symbols,
@@ -97,47 +66,28 @@ from parayabuck.utils import is_crypto
 
 EQUITY_BENCHMARK = "SPY"
 CRYPTO_BENCHMARK = "BTC/USD"
-HOLDOUT_REGISTRY_PATH = Path("data/runtime/holdout_registry.json")
 
 USAGE = """\
-ParayaBuck Backtest
-===================
+ParayaBuck Backtest (veri + rapor aracı)
+========================================
 
-Tek komutla backtest çalıştırır ve detaylı rapor üretir (konsol + reports/).
+Geçmiş veriyi indirir, kapsam/boşluk kontrolleriyle doğrular ve rapor üretir.
+Portföy strateji araştırması için: scripts/run_portfolio_research.py
 
-  # 1) Örnek veriyle hızlı test (indirme yok, tamamen offline):
   python scripts/run_backtest.py --generate-sample
-
-  # 2) Kendi CSV'nle:
   python scripts/run_backtest.py <veri.csv> [--symbol SYM] [--timeframe 5m]
-
-  # 3) Alpaca'dan gerçek veriyle (anahtarlar .env dosyasında):
   python scripts/run_backtest.py --market both --years 10
   python scripts/run_backtest.py --market crypto --years 7
   python scripts/run_backtest.py --market equity --timeframe 5m --days 90
-
-  # 4) Canlıda doğrulanmış 5m + 1h profil (pencere <= ~120 işlem günü):
-  python scripts/run_backtest.py --market both --days 90 --profile live
-
-  # 5) Gelişmiş: rolling out-of-sample dilimleri ve parametre seçimli
-  #    nested walk-forward (train'de seç, test'te ölç):
-  python scripts/run_backtest.py --market both --years 10 --walk-forward
-  python scripts/run_backtest.py --market both --years 10 --walk-forward-optimize
-
-  # 6) Tek tıkla parametre taraması (in-sample en uygun kombinasyonları bul):
-  python scripts/run_backtest.py --market both --years 10 --sweep
-  python scripts/run_backtest.py --market both --years 10 --sweep --sweep-scores "55,65,75"
 
 Rapor çıktıları (varsayılan reports/ dizininde):
   report.json          tüm metriklerin tam JSON'u
   run_manifest.json    koşu manifesti (parametreler, veri, sürüm, benchmark)
   summary.csv          özet metrikler
-  trades.csv           işlem bazında detay (giriş/çıkış, MAE/MFE, çıkış nedeni)
-  yearly_returns.csv   yıl yıl performans (benchmark karşılaştırmalı)
-  monthly_returns.csv  aylık getiri matrisi
-  by_symbol.csv        sembol bazında dağılım
   equity_curve.csv     equity eğrisi
   drawdowns.csv        drawdown serisi
+  yearly_returns.csv   yıl yıl performans
+  monthly_returns.csv  aylık getiri matrisi
 
 Tüm seçenekler için: python scripts/run_backtest.py --help
 """
@@ -148,93 +98,6 @@ def _parse_date(value: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
-
-
-def _parse_float_list(value: str, option: str) -> tuple[float, ...]:
-    items = tuple(float(item) for item in value.split(",") if item.strip())
-    if not items:
-        raise SystemExit(f"--{option} boş olamaz")
-    return items
-
-
-def _holdout_registry() -> dict[str, object]:
-    if not HOLDOUT_REGISTRY_PATH.exists():
-        return {}
-    raw = json.loads(HOLDOUT_REGISTRY_PATH.read_text(encoding="utf-8"))
-    return raw if isinstance(raw, dict) else {}
-
-
-def _assert_holdout_locked_once(experiment_id: str) -> None:
-    if experiment_id in _holdout_registry():
-        raise SystemExit(
-            f"Holdout daha önce değerlendirildi: {experiment_id}. "
-            "Aynı holdout üzerinde yeniden ayar ve değerlendirme yasaktır."
-        )
-
-
-def _record_holdout_evaluation(experiment: ExperimentSpec, data_hash: str) -> None:
-    registry = _holdout_registry()
-    registry[experiment.experiment_id] = {
-        "evaluated_at": datetime.now(UTC).isoformat(),
-        "data_hash": data_hash,
-        "holdout_months": experiment.outer_holdout_months,
-        "seed": experiment.seed,
-    }
-    HOLDOUT_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = HOLDOUT_REGISTRY_PATH.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps(registry, indent=2, ensure_ascii=False, sort_keys=True),
-        encoding="utf-8",
-    )
-    temporary.replace(HOLDOUT_REGISTRY_PATH)
-
-
-def _sweep_parameters(
-    args: argparse.Namespace,
-) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
-    """Resolve sweep/walk-forward parameter grids from CLI flags or defaults."""
-    scores = (
-        _parse_float_list(args.sweep_scores, "sweep-scores")
-        if args.sweep_scores
-        else DEFAULT_SCORES
-    )
-    risks = (
-        _parse_float_list(args.sweep_risks, "sweep-risks") if args.sweep_risks else DEFAULT_RISKS
-    )
-    positions = (
-        _parse_float_list(args.sweep_positions, "sweep-positions")
-        if args.sweep_positions
-        else DEFAULT_POSITIONS
-    )
-    return scores, risks, positions
-
-
-def _fold_dict(
-    result: BacktestResult, train_params: dict[str, float] | None = None
-) -> dict[str, object]:
-    """One walk-forward fold as a report-ready dict without per-bar series."""
-    fold_dict = asdict(result)
-    fold_dict.pop("equity_curve")
-    fold_dict.pop("realized_pnls")
-    if train_params:
-        fold_dict["train_params"] = train_params
-    return fold_dict
-
-
-def _auto_profile(requested: str | None, start_at: datetime, end_at: datetime) -> str:
-    """Pick the bar timeframe for Alpaca mode when --timeframe is omitted.
-
-    ``live`` maps to the exact validated 5m + 1h profile; ``deep`` to 1d for
-    multi-year windows. Without an explicit profile, the window decides: the
-    live profile is only meaningful within the equity 5m data horizon
-    (``EQUITY_MAX_DAYS``), otherwise the deep 1d profile is used.
-    """
-    if requested == "live":
-        return "5m"
-    if requested == "deep":
-        return "1d"
-    requested_days = max(0, (end_at - start_at).days)
-    return "5m" if requested_days <= EQUITY_MAX_DAYS["5m"] else "1d"
 
 
 def write_run_manifest(
@@ -252,11 +115,7 @@ def write_run_manifest(
     participation: tuple[float, float],
     extra: dict[str, object] | None = None,
 ) -> str:
-    """Write run_manifest.json describing how this backtest was produced.
-
-    The manifest makes every report reproducible: parameters, data coverage,
-    benchmark, adjustment basis and the producing code revision.
-    """
+    """Write run_manifest.json describing how this backtest was produced."""
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     revision = "unknown"
@@ -331,8 +190,6 @@ def _resolve_symbols(args: argparse.Namespace, config: Config) -> dict[str, list
         if args.market in {"both", "equity"}:
             equity_symbols = _equity_universe(args, config)
         if args.market in {"both", "crypto"}:
-            # Mirror the live runtime: the validated scanner selection (or the
-            # configured fallback), capacity-capped exactly like the engine.
             crypto_symbols = [
                 str(symbol).upper()
                 for symbol in load_active_crypto_symbols(universe.crypto, log_rejection=True)
@@ -358,11 +215,6 @@ def _equity_universe(args: argparse.Namespace, config: Config) -> list[str]:
             else list(config.universe.equity.fallback_trade_symbols)
         )
     else:
-        # Same source the live engine streams: validated scanner selection
-        # (fallback_trade_symbols when rejected), references and pins, capped
-        # at maximum_stream_symbols. Reference-only symbols are not tradable
-        # (matching the runtime's allowed_trade_symbols) but stay in the
-        # download list for benchmark/regime context.
         symbols = list(load_active_symbols(config.universe.equity, log_rejection=True))
         if not config.universe.equity.trade_reference_symbols:
             references = set(config.universe.equity.reference_symbols)
@@ -377,15 +229,7 @@ def _validate_data_quality(
     end_at: datetime,
     timeframe: str,
 ) -> None:
-    """Fail fast when downloaded data is too incomplete to trust.
-
-    Fail-closed by default: symbols with no bars at all are errors, and
-    coverage below the minimum or a gap far beyond the timeframe's regular
-    interval stops the run — a broken cache or a data outage must not be
-    mistaken for a genuine late listing. The late-starting exemption and the
-    zero-bar pass only apply when the user explicitly opts in with
-    ``--allow-incomplete-data``.
-    """
+    """Fail fast when downloaded data is too incomplete to trust."""
     interval_minutes = TIMEFRAME_MINUTES.get(timeframe, 0)
     min_coverage = args.min_coverage_pct / 100.0
     offenders: list[str] = []
@@ -397,7 +241,6 @@ def _validate_data_quality(
         if item.expected_bars <= 0:
             continue
         if args.allow_incomplete_data and item.start > start_at + timedelta(days=7):
-            # Explicit opt-in: treat late-starting data as a real listing.
             continue
         reasons: list[str] = []
         if item.coverage_pct < min_coverage:
@@ -501,9 +344,9 @@ def generate_sample_bars(
 ) -> pd.DataFrame:
     """Sentetik OHLCV üretir; --generate-sample modunun veri kaynağı.
 
-    Varsayılan sembol DEMO'dur: veri sentetiktir ve hiçbir piyasa enstrümanını
-    (futures dahil) temsil etmez. Sonuçlar yalnızca akışın doğru çalıştığını
-    gösterir, strateji performansı olarak yorumlanmamalıdır.
+    Veri sentetiktir ve hiçbir piyasa enstrümanını temsil etmez. Sonuçlar
+    yalnızca akışın doğru çalıştığını gösterir, strateji performansı olarak
+    yorumlanmamalıdır.
     """
     try:
         minutes = TIMEFRAME_MINUTES[timeframe]
@@ -513,10 +356,8 @@ def generate_sample_bars(
     timestamps: list[datetime] = []
     t = start_dt
     while len(timestamps) < n_bars:
-        if t.weekday() < 5:  # Mon-Fri
-            hour = t.hour
-            if not (hour == 17 and t.minute < 60):
-                timestamps.append(t)
+        if t.weekday() < 5:
+            timestamps.append(t)
         t += timedelta(minutes=minutes)
     timestamps = timestamps[:n_bars]
     rng = random.Random(42)
@@ -544,10 +385,19 @@ def generate_sample_bars(
     return pd.DataFrame(data)
 
 
+def _auto_profile(requested: str | None, start_at: datetime, end_at: datetime) -> str:
+    if requested == "live":
+        return "5m"
+    if requested == "deep":
+        return "1d"
+    requested_days = max(0, (end_at - start_at).days)
+    return "5m" if requested_days <= EQUITY_MAX_DAYS["5m"] else "1d"
+
+
 def main(argv: list[str] | None = None) -> int:
     effective_argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(
-        description="ParayaBuck backtest: CSV veya 10+ yıl borsa + kripto, detaylı rapor"
+        description="ParayaBuck backtest: veri indirme, kapsam doğrulama ve rapor"
     )
     parser.add_argument(
         "csv",
@@ -558,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--generate-sample",
         action="store_true",
-        help="önce sentetik örnek veri üret (indirme yok), ardından backtest'i çalıştır",
+        help="önce sentetik örnek veri üret (indirme yok), ardından rapor üret",
     )
     parser.add_argument(
         "--market",
@@ -581,38 +431,32 @@ def main(argv: list[str] | None = None) -> int:
         "--timeframe",
         choices=DEEP_BACKTEST_TIMEFRAMES,
         default=None,
-        help="bar periyodu (CSV: varsayılan 5m; Alpaca: profil veya pencereye göre, "
-        "çok yıllık testler için 1d önerilir)",
+        help="bar periyodu (CSV: varsayılan 5m; Alpaca: profil veya pencereye göre)",
     )
     parser.add_argument(
         "--profile",
         choices=("live", "deep"),
         default=None,
-        help="Alpaca profili: live = canlıda doğrulanmış 5m + 1h (pencere "
-        "<= ~120 işlem günü); deep = 1d (10 yıllık testler). Belirtilmezse "
-        "pencereye göre otomatik seçilir.",
+        help="Alpaca profili: live = 5m; deep = 1d. Belirtilmezse pencereye göre otomatik seçilir.",
     )
     parser.add_argument(
         "--adjustment",
         choices=("raw", "splits", "all"),
         default="splits",
-        help="hisse fiyat düzeltmesi (corporate actions): splits = bölünmeler "
-        "düzeltilmiş (varsayılan, uzun testlerde önerilir), raw = ham fiyat, "
+        help="hisse fiyat düzeltmesi (corporate actions): splits = bölünmeler düzeltilmiş, "
         "all = bölünme + temettü",
     )
     parser.add_argument(
         "--entry-participation-pct",
         type=float,
         default=0.10,
-        help="giriş emrinin tek barda hacmin yüzde kaçını doldurabileceği "
-        "(varsayılan: 0.10, yani yüzde 10; kısmi dolum simülasyonu)",
+        help="giriş emrinin tek barda hacmin yüzde kaçını doldurabileceği (varsayılan: 0.10)",
     )
     parser.add_argument(
         "--exit-participation-pct",
         type=float,
         default=0.10,
-        help="stop/hedef çıkışının tek barda hacmin yüzde kaçını doldurabileceği "
-        "(varsayılan: 0.10, yani yüzde 10; kısmi çıkış simülasyonu)",
+        help="çıkış emrinin tek barda hacmin yüzde kaçını doldurabileceği (varsayılan: 0.10)",
     )
     parser.add_argument(
         "--symbols", help="virgülle ayrılmış semboller (borsa + kripto karışabilir)"
@@ -620,8 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--symbol",
         default=None,
-        help="CSV'de symbol sütunu yoksa kullanılacak sembol; "
-        "örnek verideki sembol (varsayılan: DEMO, sentetik)",
+        help="CSV'de symbol sütunu yoksa kullanılacak sembol; örnek verideki sembol",
     )
     parser.add_argument("--universe", help="özel borsa universe dosyası")
     parser.add_argument("--max-symbols", type=int, default=40)
@@ -636,8 +479,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--sample-output",
-        help="--generate-sample CSV çıktı yolu "
-        "(varsayılan: data/historical/<sembol>_<tf>_sample.csv)",
+        help="--generate-sample CSV çıktı yolu",
     )
     parser.add_argument("--starting-equity", type=float, default=100_000.0)
     parser.add_argument("--slippage-bps", type=float, default=2.0)
@@ -651,16 +493,6 @@ def main(argv: list[str] | None = None) -> int:
         help="hazır net maliyet varsayımı; legacy mevcut tekil maliyet bayraklarını korur",
     )
     parser.add_argument(
-        "--experiment-spec",
-        help="YAML deney manifesti; strateji ve çıkış parametrelerini takvim bazlı nested "
-        "walk-forward içinde tarar",
-    )
-    parser.add_argument(
-        "--unlock-holdout",
-        action="store_true",
-        help="kilitli son 6 aylık holdout'u yalnızca finalistler için bir kez değerlendir",
-    )
-    parser.add_argument(
         "--output", help="rapor JSON çıktı yolu (varsayılan: <output-dir>/report.json)"
     )
     parser.add_argument(
@@ -670,79 +502,23 @@ def main(argv: list[str] | None = None) -> int:
         "--no-monte-carlo", action="store_true", help="Monte Carlo simülasyonunu atla"
     )
     parser.add_argument(
-        "--walk-forward",
-        action="store_true",
-        help="rolling out-of-sample dilimlerini de çalıştır (yavaşlatır)",
-    )
-    parser.add_argument(
-        "--walk-forward-optimize",
-        action="store_true",
-        help="nested walk-forward: her train diliminde parametre seç (sweep), "
-        "seçilen parametrelerle bir sonraki test diliminde ölç (yavaşlatır)",
-    )
-    parser.add_argument("--wf-train", type=int, default=1250, help="walk-forward eğitim bar sayısı")
-    parser.add_argument("--wf-test", type=int, default=250, help="walk-forward test bar sayısı")
-    parser.add_argument(
-        "--sweep",
-        action="store_true",
-        help="aynı veri üzerinde parametre taraması yap, en iyi kombinasyonları raporla",
-    )
-    parser.add_argument(
-        "--sweep-scores",
-        default="",
-        help="sweep skor eşikleri, virgülle ayrılmış (örn. 55,65,75; varsayılan: 55-85)",
-    )
-    parser.add_argument(
-        "--sweep-risks",
-        default="",
-        help="sweep risk oranları, virgülle ayrılmış (örn. 0.0025,0.005; varsayılan: 0.0025-0.01)",
-    )
-    parser.add_argument(
-        "--sweep-positions",
-        default="",
-        help="sweep pozisyon yüzdeleri, virgülle ayrılmış (örn. 0.05,0.15; varsayılan: 0.05-0.15)",
-    )
-    parser.add_argument(
-        "--sweep-min-trades",
-        type=int,
-        default=10,
-        help="sweep'te dikkate alınacak minimum işlem sayısı (varsayılan: 10)",
-    )
-    parser.add_argument(
         "--min-coverage-pct",
         type=float,
         default=50.0,
-        help="Alpaca modunda sembol başına minimum veri kapsama yüzdesi; altında "
-        "kalan koşu veri hatasıyla durdurulur (varsayılan: 50)",
+        help="sembol başına minimum veri kapsama yüzdesi (varsayılan: 50)",
     )
     parser.add_argument(
         "--max-gap-multiplier",
         type=float,
         default=12.0,
-        help="Alpaca modunda izin verilen en büyük bar boşluğu; timeframe "
-        "aralığının katı olarak (varsayılan: 12)",
+        help="izin verilen en büyük bar boşluğu; timeframe aralığının katı olarak",
     )
     parser.add_argument(
         "--allow-incomplete-data",
         action="store_true",
-        help="eksik veriyi hata yerine uyarıya düşürür: sıfır barlı sembolleri "
-        "atlar ve ilk barı başlangıçtan 7+ gün sonra başlayan sembolleri "
-        "coverage/gap kontrollerinden muaf tutar (varsayılan: fail-closed)",
+        help="eksik veriyi hata yerine uyarıya düşürür",
     )
     args = parser.parse_args(effective_argv)
-
-    experiment = ExperimentSpec.from_file(args.experiment_spec) if args.experiment_spec else None
-    if experiment is not None:
-        args.start = experiment.start.isoformat()
-        args.end = experiment.end.isoformat()
-        args.symbols = ",".join(experiment.universe)
-        timeframes = {space.timeframe for space in experiment.candidate_spaces}
-        if len(timeframes) != 1:
-            parser.error("--experiment-spec currently requires one shared candidate timeframe")
-        args.timeframe = next(iter(timeframes))
-        markets = {space.market for space in experiment.candidate_spaces}
-        if len(markets) == 1:
-            args.market = next(iter(markets)).value
 
     if not effective_argv:
         print(USAGE)
@@ -767,10 +543,6 @@ def main(argv: list[str] | None = None) -> int:
             f"Örnek veri üretildi: {sample_path} "
             f"({len(frame)} bar, {sample_symbol} {sample_timeframe})"
         )
-        print(
-            f"Periyot: {frame['timestamp'].iloc[0]} -> {frame['timestamp'].iloc[-1]}  "
-            f"Fiyat: {frame['low'].min():.2f} -> {frame['high'].max():.2f}"
-        )
         args.csv = sample_path
 
     config = load_config()
@@ -788,10 +560,6 @@ def main(argv: list[str] | None = None) -> int:
         alpaca_api_key: str = api_key
         alpaca_secret_key: str = secret_key
         if not args.symbols:
-            # Mirror the live runtime: stale/invalid scanner output is
-            # refreshed before the universe is resolved, so the backtest and
-            # the engine stream the same selection instead of silently
-            # diverging to the configured fallback.
             preflight = ensure_active_universes(config, alpaca_api_key, alpaca_secret_key)
             if preflight.equity_refreshed or preflight.crypto_refreshed:
                 print("Canlı universe taraması tamamlandı; güncel seçim kullanılıyor.")
@@ -806,12 +574,6 @@ def main(argv: list[str] | None = None) -> int:
             timeframe = args.timeframe
         else:
             timeframe = _auto_profile(args.profile, start_at, end_at)
-            if args.profile is None:
-                profile_label = "live (5m + 1h)" if timeframe == "5m" else "deep (1d)"
-                print(
-                    f"Profil otomatik seçildi: {profile_label} "
-                    f"(--profile live/deep ile geçersiz kılınabilir)"
-                )
     higher_timeframe = config.engine.higher_timeframe
     if TIMEFRAME_MINUTES[higher_timeframe] <= TIMEFRAME_MINUTES[timeframe]:
         higher_timeframe = "1d"
@@ -887,10 +649,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(
                     f"Uyarı: {item.symbol} verisi {item.start.date()} itibarıyla başlıyor; "
-                    "geç listelenme mi yoksa eksik veri mi olduğu bilinmiyor — "
-                    "varsayılan doğrulama bunu veri hatası olarak durdurabilir."
+                    "geç listelenme mi yoksa eksik veri mi olduğu bilinmiyor."
                 )
-
         empty = [item.symbol for item in coverage if item.bars == 0]
         if empty:
             print(f"Uyarı: veri gelmeyen semboller: {empty}")
@@ -909,18 +669,6 @@ def main(argv: list[str] | None = None) -> int:
         "crypto_stress": CRYPTO_STRESS,
     }
     selected_scenario = scenario_map.get(args.cost_scenario)
-    if experiment is not None and selected_scenario is None:
-        if has_crypto and not has_equity:
-            selected_scenario = CRYPTO_BASE
-        elif has_equity and not has_crypto:
-            selected_scenario = EQUITY_BASE
-        else:
-            # The baseline portfolio broker has one spread setting. Use the
-            # more conservative crypto spread; candidate research below still
-            # applies market-specific base/stress scenarios independently.
-            args.slippage_bps = 2.0
-            args.spread_bps = 6.0
-            args.crypto_taker_fee_bps = 5.0
     if selected_scenario is not None:
         if selected_scenario.market == Market.EQUITY and has_crypto:
             parser.error("Equity cost scenario cannot be used with crypto bars")
@@ -935,10 +683,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.symbols
         else set()
     )
-    # The benchmark is a comparison reference, but when it also belongs to the
-    # configured trade universe (e.g. BTC/USD in a default crypto run) it must
-    # stay tradeable — otherwise the live strategy on that symbol is never
-    # tested. Only exclude it when it was added purely for benchmarking.
     tradeable = [
         symbol
         for symbol in non_empty
@@ -987,42 +731,6 @@ def main(argv: list[str] | None = None) -> int:
             result.realized_pnls, args.starting_equity, simulations=2_000
         )
         monte_carlo = asdict(monte_carlo_result)
-    walk_forward_folds: list[dict[str, object]] = []
-    if args.walk_forward and timeframe != "1m":
-        print("Walk-forward (rolling out-of-sample) çalıştırılıyor...")
-        folds = rolling_out_of_sample(
-            all_bars,
-            lambda: make_engine(engine_config),
-            train_size=args.wf_train,
-            test_size=args.wf_test,
-        )
-        for fold in folds:
-            walk_forward_folds.append(_fold_dict(fold.result))
-    if args.walk_forward_optimize and timeframe != "1m":
-        print("Nested walk-forward (her train diliminde parametre seçimi) çalıştırılıyor...")
-        scores, risks, positions = _sweep_parameters(args)
-        optimized_folds = walk_forward_optimized(
-            all_bars,
-            engine_config,
-            make_engine,
-            train_size=args.wf_train,
-            test_size=args.wf_test,
-            scores=scores,
-            risks=risks,
-            positions=positions,
-            min_trades=args.sweep_min_trades,
-        )
-        for opt_fold in optimized_folds:
-            walk_forward_folds.append(
-                _fold_dict(
-                    opt_fold.result,
-                    train_params={
-                        "minimum_signal_score": opt_fold.minimum_signal_score,
-                        "risk_per_trade_pct": opt_fold.risk_per_trade_pct,
-                        "max_position_pct": opt_fold.max_position_pct,
-                    },
-                )
-            )
 
     report = build_report(
         result,
@@ -1032,7 +740,6 @@ def main(argv: list[str] | None = None) -> int:
         timeframe=timeframe,
         symbols=tradeable,
         monte_carlo=monte_carlo,
-        walk_forward=tuple(walk_forward_folds),
     )
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
@@ -1055,32 +762,9 @@ def main(argv: list[str] | None = None) -> int:
         extra={
             "profile_source": "cli",
             "argv": effective_argv,
-            "walk_forward_folds": len(walk_forward_folds),
             "data_hash": hash_bars(all_bars),
-            "universe_version": experiment.universe_version if experiment else "runtime",
-            "cost_scenario": (
-                selected_scenario.name
-                if selected_scenario
-                else ("mixed_base" if experiment else "legacy")
-            ),
-            "strategy_specs": (
-                [
-                    {
-                        "name": space.name,
-                        "version": space.version,
-                        "timeframe": space.timeframe,
-                        "parameter_grid": dict(space.parameter_grid),
-                        "exit_policy_ids": [
-                            policy.policy_id for policy in space.exit_policies
-                        ],
-                    }
-                    for space in experiment.candidate_spaces
-                ]
-                if experiment
-                else []
-            ),
-            "random_seed": experiment.seed if experiment else None,
-            "experiment_spec": experiment.to_dict() if experiment else None,
+            "cost_scenario": selected_scenario.name if selected_scenario else "legacy",
+            "random_seed": None,
         },
     )
 
@@ -1088,141 +772,6 @@ def main(argv: list[str] | None = None) -> int:
     print(f"JSON rapor   : {output_path}")
     print(f"CSV dosyaları: {', '.join(csv_paths)}")
     print(f"Manifest     : {manifest_path}")
-
-    if args.sweep:
-        print("\nParametre taraması çalıştırılıyor (aynı veri, tüm kombinasyonlar)...")
-        scores, risks, positions = _sweep_parameters(args)
-        points = run_sweep(
-            all_bars,
-            engine_config,
-            make_engine,
-            scores=scores,
-            risks=risks,
-            positions=positions,
-            min_trades=args.sweep_min_trades,
-        )
-        if points:
-            sweep_path = write_sweep_csv(points, args.output_dir)
-            print(f"\nEn iyi {min(5, len(points))} kombinasyon (Calmar'a göre):")
-            print(render_sweep_text(points))
-            print(f"Sweep CSV   : {sweep_path}")
-        else:
-            print(
-                f"Sweep sonuçlandı: minimum {args.sweep_min_trades} işleme ulaşan "
-                "kombinasyon yok; --sweep-min-trades düşürmeyi deneyin."
-            )
-    if experiment is not None:
-        print("\nTakvim bazlı strateji/çıkış deneyi çalıştırılıyor...")
-        if args.unlock_holdout:
-            _assert_holdout_locked_once(experiment.experiment_id)
-        crypto_primary = [
-            bar
-            for bar in all_bars
-            if bar.market == Market.CRYPTO and bar.timeframe == timeframe
-        ]
-        crypto_point_in_time = (
-            build_crypto_point_in_time_universe(
-                crypto_primary,
-                maximum_symbols=config.universe.crypto.maximum_stream_symbols,
-            )
-            if crypto_primary
-            else None
-        )
-
-        def make_research_engine(
-            candidate_config: EngineConfig,
-            candidate_strategies: tuple[Strategy, ...],
-            cost_scenario: CostScenario,
-        ) -> BacktestEngine:
-            return BacktestEngine(
-                candidate_config,
-                starting_equity=args.starting_equity,
-                slippage_bps=cost_scenario.slippage_bps,
-                spread_bps=cost_scenario.spread_bps,
-                commission=args.commission,
-                crypto_taker_fee_bps=cost_scenario.taker_fee_bps,
-                strategies=candidate_strategies,
-                allowed_trade_symbols=set(tradeable) if tradeable else None,
-                benchmark_symbol=benchmark_symbol,
-                max_entry_participation_pct=args.entry_participation_pct,
-                max_exit_participation_pct=args.exit_participation_pct,
-                historical_universe_filter=(
-                    crypto_point_in_time.contains
-                    if crypto_point_in_time is not None
-                    and cost_scenario.market == Market.CRYPTO
-                    else None
-                ),
-            )
-
-        trials = run_nested_experiment(
-            all_bars,
-            experiment,
-            engine_config,
-            make_research_engine,
-            unlock_holdout=args.unlock_holdout,
-        )
-        if args.unlock_holdout:
-            _record_holdout_evaluation(experiment, hash_bars(all_bars))
-        gate = ProductionGate()
-        trial_payload = []
-        for trial in trials:
-            decision = gate.evaluate(trial) if trial.holdout_evaluations else None
-            trial_payload.append(
-                {
-                    "trial_id": trial.trial_id,
-                    "strategy": trial.strategy_name,
-                    "strategy_version": trial.strategy_version,
-                    "parameters": dict(trial.parameters),
-                    "folds": len(trial.fold_results),
-                    "fold_results": [
-                        {
-                            "start_date": fold.start_date,
-                            "end_date": fold.end_date,
-                            "trades": fold.total_trades,
-                            "profit_factor": (
-                                fold.profit_factor
-                                if fold.profit_factor is not None
-                                and math.isfinite(fold.profit_factor)
-                                else None
-                            ),
-                            "sharpe": fold.sharpe,
-                            "calmar": fold.calmar,
-                            "expectancy": fold.expectancy,
-                            "max_drawdown": fold.max_drawdown,
-                        }
-                        for fold in trial.fold_results
-                    ],
-                    "total_trades": trial.total_trades,
-                    "profit_factor": (
-                        trial.profit_factor if math.isfinite(trial.profit_factor) else None
-                    ),
-                    "sharpe": trial.sharpe,
-                    "median_calmar": trial.median_fold_calmar,
-                    "expectancy": trial.expectancy,
-                    "max_drawdown": trial.max_drawdown,
-                    "deflated_sharpe_probability": trial.deflated_sharpe_probability,
-                    "pbo": trial.probability_backtest_overfitting,
-                    "positive_fold_ratio": trial.positive_fold_ratio,
-                    "stress_profit_factor": (
-                        trial.stress_profit_factor
-                        if math.isfinite(trial.stress_profit_factor)
-                        else None
-                    ),
-                    "stress_expectancy": trial.stress_expectancy,
-                    "cost_sensitivity": dict(trial.cost_sensitivity),
-                    "gross_profit_by_symbol": dict(trial.gross_profit_by_symbol),
-                    "parameter_plateau": trial.neighborhood_robust,
-                    "holdout_evaluations": trial.holdout_evaluations,
-                    "production_gate_passed": decision.passed if decision else None,
-                    "production_gate_failures": list(decision.failures) if decision else [],
-                }
-            )
-        trials_path = Path(args.output_dir) / "trial_results.json"
-        trials_path.write_text(
-            json.dumps(trial_payload, indent=2, allow_nan=False, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        print(f"Deney sonuçları: {trials_path}")
     return 0
 
 

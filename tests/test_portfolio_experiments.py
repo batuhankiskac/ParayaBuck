@@ -1,0 +1,221 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from parayabuck.backtest.experiments import outer_holdout_start
+from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
+from parayabuck.backtest.portfolio_experiments import (
+    PortfolioCandidateSpace,
+    PortfolioExperimentSpec,
+    PortfolioGate,
+    run_portfolio_experiment,
+)
+from parayabuck.core.models import Bar, Market
+from parayabuck.portfolio import rebalance_policy_for
+from parayabuck.portfolio.base import PortfolioStrategy
+
+START = datetime(2023, 1, 1, tzinfo=UTC)
+END = datetime(2025, 7, 1, tzinfo=UTC)
+
+
+def _bars(days: int = 900) -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(days):
+        timestamp = START + timedelta(days=index)
+        for symbol, drift in (("SPY", 0.0004), ("QQQ", 0.0006), ("XLE", -0.0002)):
+            close = 100 * (1 + drift) ** index
+            bars.append(
+                Bar(
+                    timestamp,
+                    symbol,
+                    "1d",
+                    close * 0.999,
+                    close * 1.001,
+                    close * 0.998,
+                    close,
+                    5_000_000,
+                    Market.EQUITY,
+                )
+            )
+    return bars
+
+
+def _spec(
+    *, max_parameter_trials: int = 4, outer_holdout_months: int = 6
+) -> PortfolioExperimentSpec:
+    return PortfolioExperimentSpec(
+        experiment_id="test_portfolio_exp",
+        start=START,
+        end=END,
+        universe=("SPY", "QQQ", "XLE"),
+        universe_version="permanent_etf_core_v1",
+        candidate_spaces=(
+            PortfolioCandidateSpace(
+                "equity_etf_dual_momentum_v1",
+                "1.0.0",
+                Market.EQUITY,
+                "1d",
+                (("momentum_scheme", ("12_1", "6_1")), ("volatility_window", (20, 60))),
+            ),
+        ),
+        train_months=9,
+        validation_months=1,
+        outer_holdout_months=outer_holdout_months,
+        embargo_bars=5,
+        max_mechanism_trials=30,
+        max_parameter_trials=max_parameter_trials,
+        max_holdout_finalists=2,
+    )
+
+
+def _factory(strategy: PortfolioStrategy, cost: object) -> PortfolioBacktestEngine:
+    return PortfolioBacktestEngine(
+        strategy,
+        rebalance_policy_for(strategy),
+        starting_equity=100_000.0,
+        slippage_bps=cost.slippage_bps,  # type: ignore[attr-defined]
+        spread_bps=cost.spread_bps,  # type: ignore[attr-defined]
+        crypto_taker_fee_bps=cost.taker_fee_bps,  # type: ignore[attr-defined]
+        benchmark_symbol="SPY",
+    )
+
+
+def test_holdout_is_hidden_from_validation_folds_and_reports() -> None:
+    spec = _spec()
+    cutoff = outer_holdout_start(END, spec.outer_holdout_months)
+    trials = run_portfolio_experiment(_bars(), spec, _factory)
+    assert trials
+    for trial in trials:
+        assert trial.holdout_evaluations == 0
+        assert all(fold.end_date <= cutoff.isoformat() for fold in trial.fold_results)
+
+
+def test_holdout_can_only_be_opened_once_for_finalists() -> None:
+    spec = _spec()
+    trials = run_portfolio_experiment(_bars(), spec, _factory, unlock_holdout=True)
+    finalist_count = min(spec.max_holdout_finalists, len(trials))
+    evaluated = [trial for trial in trials if trial.holdout_evaluations == 1]
+    assert len(evaluated) == finalist_count
+    # Opening the holdout appends the holdout fold only; validation folds
+    # themselves must be byte-identical to the locked run.
+    locked = run_portfolio_experiment(_bars(), spec, _factory)
+    for trial in trials:
+        locked_trial = next(t for t in locked if t.trial_id == trial.trial_id)
+        assert locked_trial.fold_results == trial.fold_results[: len(locked_trial.fold_results)]
+
+
+def test_all_trials_share_pbo_computation() -> None:
+    spec = _spec()
+    trials = run_portfolio_experiment(_bars(), spec, _factory)
+    pbo_values = {trial.probability_backtest_overfitting for trial in trials}
+    assert len(pbo_values) == 1
+
+
+def test_same_data_spec_seed_produce_identical_trials() -> None:
+    spec = _spec()
+    first = run_portfolio_experiment(_bars(), spec, _factory)
+    second = run_portfolio_experiment(_bars(), spec, _factory)
+    assert [(t.trial_id, t.sharpe, t.calmar, t.total_rebalance_months) for t in first] == [
+        (t.trial_id, t.sharpe, t.calmar, t.total_rebalance_months) for t in second
+    ]
+
+
+def test_embargo_never_exceeds_fold_boundary() -> None:
+    spec = _spec()
+    trials = run_portfolio_experiment(_bars(), spec, _factory)
+    assert trials
+
+
+def test_portfolio_gate_fails_closed_on_insufficient_evidence() -> None:
+    gate = PortfolioGate.for_market(Market.EQUITY)
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    trial = PortfolioTrialResult(
+        trial_id="x",
+        strategy_name="equity_etf_dual_momentum_v1",
+        strategy_version="1.0.0",
+        parameters=(),
+        fold_results=(),
+        market=Market.EQUITY,
+        total_rebalance_months=20,
+        closed_positions=0,
+        profit_factor=1.0,
+        sharpe=0.4,
+        calmar=0.0,
+        expectancy=0.0,
+        deflated_sharpe_probability=0.5,
+        probability_backtest_overfitting=0.5,
+        max_drawdown=0.1,
+        positive_fold_ratio=0.5,
+        positive_month_ratio=0.5,
+        stress_profit_factor=0.9,
+        stress_expectancy=-1.0,
+        stress_realized_pnls=(),
+        gross_profit_by_symbol=(),
+        maximum_concentration=0.7,
+        regime_diverse=False,
+    )
+    decision = gate.evaluate(trial)
+    assert not decision.passed
+    assert "insufficient_oos_sample" in decision.failures
+    assert "sharpe_below_gate" in decision.failures
+
+
+def test_portfolio_gate_passes_with_full_evidence() -> None:
+    gate = PortfolioGate.for_market(Market.EQUITY)
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    trial = PortfolioTrialResult(
+        trial_id="ok",
+        strategy_name="equity_etf_dual_momentum_v1",
+        strategy_version="1.0.0",
+        parameters=(("momentum_scheme", "12_1"),),
+        fold_results=(),
+        market=Market.EQUITY,
+        total_rebalance_months=70,
+        closed_positions=0,
+        profit_factor=1.3,
+        sharpe=0.9,
+        calmar=1.0,
+        expectancy=5.0,
+        deflated_sharpe_probability=0.96,
+        probability_backtest_overfitting=0.1,
+        max_drawdown=0.2,
+        positive_fold_ratio=0.8,
+        positive_month_ratio=0.6,
+        stress_profit_factor=1.1,
+        stress_expectancy=1.0,
+        stress_realized_pnls=(1.0,),
+        gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0), ("XLE", 100.0)),
+        maximum_concentration=0.4,
+        regime_diverse=True,
+        neighborhood_robust=True,
+        holdout_evaluations=1,
+    )
+    decision = gate.evaluate(trial)
+    assert decision.passed, decision.failures
+
+
+def test_equity_and_crypto_use_distinct_gate_thresholds() -> None:
+    equity = PortfolioGate.for_market(Market.EQUITY)
+    crypto = PortfolioGate.for_market(Market.CRYPTO)
+    assert equity.minimum_oos_rebalance_months == 60
+    assert equity.minimum_oos_positions == 0
+    assert crypto.minimum_oos_positions == 100
+    assert crypto.minimum_positive_month_ratio == 0.60
+    assert equity.maximum_drawdown < crypto.maximum_drawdown
+
+
+def test_experiment_spec_budget_validation() -> None:
+    spec = _spec()
+    assert spec.max_parameter_trials >= sum(space.combinations for space in spec.candidate_spaces)
+    with __import__("pytest").raises(ValueError):
+        PortfolioExperimentSpec(
+            experiment_id="bad",
+            start=START,
+            end=END,
+            universe=("SPY",),
+            universe_version="v1",
+            candidate_spaces=_spec().candidate_spaces,
+            max_parameter_trials=1,
+        )

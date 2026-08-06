@@ -62,12 +62,13 @@ def test_nyse_holidays_known_dates() -> None:
 
 
 def test_nyse_holidays_weekend_observation() -> None:
-    # Jan 1 2022 was a Saturday: observed Friday 2021-12-31, so that Friday
-    # must not count as a session.
-    assert datetime(2021, 12, 31).date() not in nyse_sessions(
+    # Jan 1 2022 was a Saturday: the NYSE does NOT observe a Saturday New
+    # Year on the prior Friday (verified: 2021-12-31 has real SPY bars), so
+    # that Friday was a regular session.
+    assert datetime(2021, 12, 31).date() in nyse_sessions(
         datetime(2021, 12, 27).date(), datetime(2022, 1, 4).date()
     )
-    # Jan 1 2023 was a Sunday: observed Monday Jan 2.
+    # Jan 1 2023 was a Sunday: observed Monday Jan 2 (no bars exist then).
     assert datetime(2023, 1, 2).date() not in nyse_sessions(
         datetime(2022, 12, 27).date(), datetime(2023, 1, 5).date()
     )
@@ -281,12 +282,56 @@ def test_dataset_gate_detects_hash_mismatch() -> None:
     assert not report.passed
 
 
-def test_inauguration_day_is_closed_but_not_a_regular_holiday() -> None:
-    # Jan 20 2021 (Wednesday) was an NYSE closure; 2020 was not.
-    assert datetime(2021, 1, 20).date() not in nyse_sessions(
-        datetime(2021, 1, 18).date(), datetime(2021, 1, 22).date()
+def test_inauguration_day_is_a_regular_session_in_2017_and_2021() -> None:
+    # Jan 20 2017 (Friday) and Jan 20 2021 (Wednesday) were regular NYSE
+    # sessions (verified against actual SPY bars in the v2 dataset). The
+    # handwritten calendar wrongly marked them closed; the verified package
+    # calendar does not.
+    for day in (
+        datetime(2017, 1, 20).date(),
+        datetime(2021, 1, 20).date(),
+        datetime(2023, 1, 20).date(),
+    ):
+        assert day in nyse_sessions(day, day)
+    # 2025-01-20 fell on MLK Day: closed for that reason.
+    assert datetime(2025, 1, 20).date() not in nyse_sessions(
+        datetime(2025, 1, 20).date(), datetime(2025, 1, 20).date()
     )
-    # 2023-01-20 (Friday, no inauguration) was a regular session.
-    assert datetime(2023, 1, 20).date() in nyse_sessions(
-        datetime(2023, 1, 18).date(), datetime(2023, 1, 23).date()
+
+
+def test_calendar_matches_known_good_friday_oracle() -> None:
+    # Easter 2018 was April 1, so Good Friday was 2018-03-30; the previous
+    # handwritten algorithm produced 2018-04-06 (wrong) and caused both
+    # coverage > 100% and an unexplained gap of 1 on every symbol.
+    assert datetime(2018, 3, 30).date() not in nyse_sessions(
+        datetime(2018, 3, 30).date(), datetime(2018, 3, 30).date()
     )
+    assert datetime(2018, 4, 6).date() in nyse_sessions(
+        datetime(2018, 4, 6).date(), datetime(2018, 4, 6).date()
+    )
+    assert datetime(2019, 4, 19).date() not in nyse_sessions(
+        datetime(2019, 4, 19).date(), datetime(2019, 4, 19).date()
+    )
+    assert datetime(2022, 4, 15).date() not in nyse_sessions(
+        datetime(2022, 4, 15).date(), datetime(2022, 4, 15).date()
+    )
+
+
+def test_calendar_matches_actual_v2_dataset_bars() -> None:
+    """Oracle check: every persisted bar must be a verified calendar session."""
+    import pytest
+
+    from parayabuck.data.research_store import VersionedResearchStore
+
+    store = VersionedResearchStore("data/research")
+    by_symbol = store.load_dataset("equity_etf_1d_v2")
+    if not by_symbol:
+        pytest.skip("equity_etf_1d_v2 dataset not present")
+    sessions = nyse_sessions(datetime(2016, 1, 1).date(), datetime(2026, 12, 31).date())
+    for symbol, bars in by_symbol.items():
+        non_sessions = [
+            bar.timestamp.date().isoformat()
+            for bar in bars
+            if bar.timestamp.date() not in sessions
+        ]
+        assert not non_sessions, f"{symbol} has bars outside the calendar: {non_sessions[:5]}"

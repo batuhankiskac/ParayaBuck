@@ -22,11 +22,12 @@ def _bar(
     close: float,
     market: Market = Market.EQUITY,
     volume: float = 1000.0,
+    timeframe: str = "1d",
 ) -> Bar:
     return Bar(
         timestamp,
         symbol,
-        "1d",
+        timeframe,
         close * 0.999,
         close * 1.001,
         close * 0.998,
@@ -91,6 +92,81 @@ def test_dataset_round_trip_preserves_bars_and_manifest(tmp_path: Path) -> None:
     assert first.timestamp == bars[0].timestamp
     round_trip_bars = [bar for bars_list in loaded.values() for bar in bars_list]
     assert hash_dataset(round_trip_bars) == manifest.data_hash
+
+
+def test_hash_and_csv_round_trip_high_precision_crypto_prices(tmp_path: Path) -> None:
+    """The manifest hash must match the persisted CSV for high-precision
+    prices; a truncated writer used to break the save->load->hash contract."""
+    store = VersionedResearchStore(tmp_path)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = [
+        _bar(
+            start + timedelta(days=index),
+            "BTC/USD",
+            1.2545678901234567,
+            Market.CRYPTO,
+            timeframe="1h",
+        )
+        for index in range(5)
+    ]
+    bars.append(
+        _bar(
+            start + timedelta(days=6),
+            "BTC/USD",
+            0.00000123456789012345,
+            Market.CRYPTO,
+            timeframe="1h",
+        )
+    )
+    manifest = store.save_dataset(
+        "crypto_v1",
+        bars,
+        timeframe="1h",
+        source_feed="local",
+        adjustment="splits",
+        universe_version="crypto_v1",
+    )
+    loaded = store.load_dataset("crypto_v1")
+    round_trip = [bar for bars_list in loaded.values() for bar in bars_list]
+    assert hash_dataset(round_trip) == manifest.data_hash
+    assert all(bar.close == bar.close for bar in round_trip)  # loadable
+    # Exact float round trip: the most precise value must survive byte-identical.
+    precise = next(bar for bar in round_trip if bar.close < 0.0001)
+    assert precise.close == 1.23456789012345e-06
+
+
+def test_dataset_save_is_atomic_and_resaves_cleanly(tmp_path: Path) -> None:
+    store, bars = _dataset(tmp_path)
+    first = store.save_dataset(
+        "equity_v1",
+        bars,
+        timeframe="1d",
+        source_feed="iex",
+        adjustment="splits",
+        universe_version="permanent_etf_core_v1",
+    )
+    assert store.manifest("equity_v1") == first
+    # No temporary/backup siblings may remain after a successful save.
+    leftovers = [
+        entry.name for entry in tmp_path.iterdir() if entry.name.startswith(".")
+    ]
+    assert leftovers == []
+    # Re-saving over an existing dataset replaces it cleanly.
+    second_bars = [
+        _bar(bar.timestamp, bar.symbol, bar.close + 1.0) for bar in deduplicate_bars(bars)[0]
+    ]
+    second = store.save_dataset(
+        "equity_v1",
+        second_bars,
+        timeframe="1d",
+        source_feed="iex",
+        adjustment="splits",
+        universe_version="permanent_etf_core_v1",
+    )
+    assert second.data_hash != first.data_hash
+    assert store.manifest("equity_v1").data_hash == second.data_hash
+    leftovers = [entry.name for entry in tmp_path.iterdir() if entry.name.startswith(".")]
+    assert leftovers == []
 
 
 def test_exact_duplicate_collapses_deterministically() -> None:

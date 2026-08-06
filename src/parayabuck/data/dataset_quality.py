@@ -13,9 +13,11 @@ fails nothing:
 * benchmark present with full coverage
 * data hash deterministic (manifest hash equals recomputed hash)
 
-The equity session model is a deterministic NYSE calendar
-(``nyse_weekday_holiday_v1``): weekdays minus observed NYSE holidays, so
-weekends and official holidays are never counted as gaps.
+The equity session model is the verified NYSE calendar from the
+``pandas-market-calendars`` package (``XNYS``). The calendar is validated
+against actual bar history by oracle tests: every bar timestamp must be a
+package session and every session inside a symbol's listing window must have
+a bar.
 """
 
 from __future__ import annotations
@@ -23,6 +25,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from functools import lru_cache
+from importlib.metadata import version as _package_version
+
+import pandas_market_calendars as _market_calendars
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.research_store import (
@@ -32,7 +38,11 @@ from parayabuck.data.research_store import (
 )
 from parayabuck.markets.symbols import canonical_symbol
 
-EXCHANGE_CALENDAR_NAME = "nyse_weekday_holiday_v1"
+EXCHANGE_PACKAGE = "pandas-market-calendars"
+EXCHANGE_CALENDAR_NAME = (
+    f"{EXCHANGE_PACKAGE}=={_package_version(EXCHANGE_PACKAGE)} NYSE"
+)
+_CALENDAR = _market_calendars.get_calendar("NYSE")
 
 # Equity production research requires a dividend-adjusted (total-return)
 # policy; split-only adjustment silently breaks momentum signals around
@@ -45,79 +55,41 @@ MIN_BENCHMARK_COVERAGE_RATIO = 0.95
 MIN_COVERAGE_RATIO = 0.90
 
 
-def _observed_weekday(day: date) -> date:
-    """NYSE observation rule: Saturday -> Friday before, Sunday -> Monday after."""
-    if day.weekday() == 5:  # Saturday
-        return day - timedelta(days=1)
-    if day.weekday() == 6:  # Sunday
-        return day + timedelta(days=1)
-    return day
+@lru_cache(maxsize=64)
+def _cached_sessions(start: date, end: date) -> frozenset[date]:
+    """NYSE session dates in ``[start, end]`` from the verified calendar.
 
-
-def _easter(year: int) -> date:
-    """Anonymous Gregorian algorithm; used for Good Friday."""
-    a = year % 19
-    b, c = year // 100, year % 100
-    d = (19 * a + b - b // 4 - ((b - 8 * b // 25 + 1) // 3) + 15) % 30
-    e = (32 + 2 * (b % 4) + 2 * (c // 4) - d - c % 4) % 7
-    f = d + e - 7 * ((a + 11 * d + 22 * e) // 451) + 114
-    month, day = f // 31, f % 31 + 1
-    return date(year, month, day)
-
-
-def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
-    first = date(year, month, 1)
-    offset = (weekday - first.weekday()) % 7
-    return first + timedelta(days=offset + (n - 1) * 7)
-
-
-def nyse_holidays(year: int) -> frozenset[date]:
-    """Observed NYSE closure dates for one year (deterministic rules)."""
-    holidays: set[date] = set()
-    new_year = date(year, 1, 1)
-    if new_year.weekday() == 5:  # Saturday -> observed prior-year Friday
-        holidays.add(date(year - 1, 12, 31))
-    elif new_year.weekday() == 6:  # Sunday -> observed Monday Jan 2
-        holidays.add(date(year, 1, 2))
-    else:
-        holidays.add(new_year)
-    holidays.add(_nth_weekday(year, 1, 0, 3))  # MLK
-    holidays.add(_nth_weekday(year, 2, 0, 3))  # Washington's Birthday
-    if year in {2017, 2021, 2025}:
-        holidays.add(_observed_weekday(date(year, 1, 20)))  # Inauguration Day
-    holidays.add(_easter(year) - timedelta(days=2))  # Good Friday
-    last_monday_may = date(year, 5, 31) - timedelta(days=date(year, 5, 31).weekday())
-    holidays.add(last_monday_may)  # Memorial Day
-    if year >= 2022:
-        holidays.add(_observed_weekday(date(year, 6, 19)))  # Juneteenth
-    holidays.add(_observed_weekday(date(year, 7, 4)))  # Independence Day
-    holidays.add(_nth_weekday(year, 9, 0, 1))  # Labor Day
-    holidays.add(_nth_weekday(year, 11, 3, 4))  # Thanksgiving
-    holidays.add(_observed_weekday(date(year, 12, 25)))  # Christmas
-    # Cross-year observations are kept (e.g. Jan 1 on Saturday closes the
-    # prior-year Dec 31); _is_session checks the neighbouring year sets.
-    return frozenset(holidays)
+    The package schedule is authoritative for observed holidays (including
+    cross-year observations such as Jan 1 on Saturday closing the prior
+    December 31) and special closes; no hand-rolled rules are maintained.
+    """
+    schedule = _CALENDAR.schedule(
+        start_date=start.isoformat(),
+        end_date=end.isoformat(),
+    )
+    return frozenset(day.date() for day in schedule.index)
 
 
 def _is_session(day: date) -> bool:
-    if day.weekday() >= 5:
-        return False
-    return day not in (
-        nyse_holidays(day.year)
-        | nyse_holidays(day.year - 1)
-        | nyse_holidays(day.year + 1)
-    )
+    return day in _cached_sessions(day, day)
 
 
 def nyse_sessions(start: date, end: date) -> frozenset[date]:
     """Deterministic set of expected NYSE sessions between two dates."""
-    sessions: set[date] = set()
-    current = start
-    while current <= end:
-        if _is_session(current):
-            sessions.add(current)
+    return _cached_sessions(start, end)
+
+
+@lru_cache(maxsize=64)
+def nyse_holidays(year: int) -> frozenset[date]:
+    """Weekday closure dates inside one year (observed dates included)."""
+    sessions = _cached_sessions(date(year, 1, 1), date(year, 12, 31))
+    holidays: set[date] = set()
+    current = date(year, 1, 1)
+    while current <= date(year, 12, 31):
+        if current.weekday() < 5 and current not in sessions:
+            holidays.add(current)
         current += timedelta(days=1)
-    return frozenset(sessions)
+    return frozenset(holidays)
 
 
 def expected_trading_sessions(start: date, end: date) -> int:

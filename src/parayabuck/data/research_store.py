@@ -16,6 +16,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
@@ -250,16 +251,26 @@ def hash_dataset(bars: list[Bar]) -> str:
             bar.timestamp.isoformat(),
             canonical_symbol(bar.symbol, bar.market),
             bar.timeframe,
-            f"{bar.open:.12g}",
-            f"{bar.high:.12g}",
-            f"{bar.low:.12g}",
-            f"{bar.close:.12g}",
-            f"{bar.volume:.12g}",
+            _float_text(bar.open),
+            _float_text(bar.high),
+            _float_text(bar.low),
+            _float_text(bar.close),
+            _float_text(bar.volume),
             bar.market.value,
         )
         digest.update("|".join(row).encode())
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def _float_text(value: float) -> str:
+    """Canonical exact text for a float64 (round-trip safe).
+
+    ``17`` significant digits round-trip any IEEE-754 double losslessly and
+    match the CSV partition writer, so a persisted dataset always hashes to
+    its manifest hash regardless of price precision.
+    """
+    return f"{value:.17g}"
 
 
 def deduplicate_bars(
@@ -357,6 +368,11 @@ class VersionedResearchStore:
                 "Provider adjustment_method does not match dataset adjustment: "
                 f"{provider_metadata.adjustment_method!r} vs {adjustment!r}"
             )
+        if any(bar.timeframe != timeframe for bar in bars):
+            raise ValueError(
+                "All bars must use the dataset timeframe "
+                f"({timeframe!r}); got mixed timeframes"
+            )
         # Duplicate/conflict policy is enforced before any directory is created:
         # a conflicting duplicate must never leave a half-written dataset behind.
         canonical_bars, input_duplicates, conflicting = deduplicate_bars(bars)
@@ -368,7 +384,6 @@ class VersionedResearchStore:
                 "Conflicting duplicate bars detected; dataset not written: " + details
             )
         directory = self.dataset_dir(dataset_id)
-        directory.mkdir(parents=True, exist_ok=True)
         format_name = "parquet" if PARQUET_AVAILABLE else "csv_gz"
         by_symbol: dict[str, list[Bar]] = {}
         for bar in canonical_bars:
@@ -376,33 +391,67 @@ class VersionedResearchStore:
             if canonical not in by_symbol:
                 by_symbol[canonical] = []
             by_symbol[canonical].append(bar)
-        for symbol, symbol_bars in by_symbol.items():
-            ordered = sorted(symbol_bars, key=lambda item: item.timestamp)
-            self._write_partition(directory, symbol, timeframe, ordered, format_name)
-        timestamps = [bar.timestamp for bar in canonical_bars]
-        manifest = DatasetManifest(
-            dataset_id=dataset_id,
-            format=format_name,
-            timeframe=timeframe,
-            source_feed=source_feed,
-            adjustment=adjustment,
-            universe_version=universe_version,
-            downloaded_at=datetime.now(UTC),
-            start=min(timestamps),
-            end=max(timestamps),
-            symbols=tuple(sorted(by_symbol)),
-            bars_per_symbol={symbol: len(bars_list) for symbol, bars_list in by_symbol.items()},
-            data_hash=hash_dataset(canonical_bars),
-            duplicate_bars={symbol: 0 for symbol in by_symbol},
-            input_duplicate_bars=input_duplicates,
-            conflicting_duplicate_bars=conflicting,
-            provider_metadata=provider_metadata,
-            notes=notes,
-        )
-        (directory / MANIFEST_FILENAME).write_text(
-            json.dumps(manifest.to_dict(), indent=2, sort_keys=True, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        # Atomic persist: partitions and manifest are written to a temporary
+        # sibling directory first; only after everything is on disk is the
+        # final dataset directory swapped in, so a crash never leaves a
+        # half-written dataset whose manifest disagrees with its partitions.
+        temporary = directory.parent / f".{dataset_id}.tmp-{uuid4().hex[:12]}"
+        try:
+            temporary.mkdir(parents=True, exist_ok=True)
+            for symbol, symbol_bars in by_symbol.items():
+                ordered = sorted(symbol_bars, key=lambda item: item.timestamp)
+                self._write_partition(temporary, symbol, timeframe, ordered, format_name)
+            timestamps = [bar.timestamp for bar in canonical_bars]
+            manifest = DatasetManifest(
+                dataset_id=dataset_id,
+                format=format_name,
+                timeframe=timeframe,
+                source_feed=source_feed,
+                adjustment=adjustment,
+                universe_version=universe_version,
+                downloaded_at=datetime.now(UTC),
+                start=min(timestamps),
+                end=max(timestamps),
+                symbols=tuple(sorted(by_symbol)),
+                bars_per_symbol={
+                    symbol: len(bars_list) for symbol, bars_list in by_symbol.items()
+                },
+                data_hash=hash_dataset(canonical_bars),
+                duplicate_bars={symbol: 0 for symbol in by_symbol},
+                input_duplicate_bars=input_duplicates,
+                conflicting_duplicate_bars=conflicting,
+                provider_metadata=provider_metadata,
+                notes=notes,
+            )
+            (temporary / MANIFEST_FILENAME).write_text(
+                json.dumps(
+                    manifest.to_dict(), indent=2, sort_keys=True, ensure_ascii=False
+                ),
+                encoding="utf-8",
+            )
+            backup = (
+                directory.parent / f".{dataset_id}.bak-{uuid4().hex[:12]}"
+                if directory.exists()
+                else None
+            )
+            if backup is not None:
+                directory.replace(backup)
+            try:
+                temporary.replace(directory)
+            except Exception:
+                if backup is not None and not directory.exists():
+                    backup.replace(directory)
+                raise
+            if backup is not None:
+                for path in backup.iterdir():
+                    path.unlink()
+                backup.rmdir()
+        except Exception:
+            if temporary.exists():
+                for path in temporary.iterdir():
+                    path.unlink()
+                temporary.rmdir()
+            raise
         return manifest
 
     def load_dataset(
@@ -540,11 +589,11 @@ class VersionedResearchStore:
         return [
             bar.timestamp.isoformat(),
             bar.symbol,
-            f"{bar.open:.10g}",
-            f"{bar.high:.10g}",
-            f"{bar.low:.10g}",
-            f"{bar.close:.10g}",
-            f"{bar.volume:.10g}",
+            _float_text(bar.open),
+            _float_text(bar.high),
+            _float_text(bar.low),
+            _float_text(bar.close),
+            _float_text(bar.volume),
             bar.market.value,
         ]
 

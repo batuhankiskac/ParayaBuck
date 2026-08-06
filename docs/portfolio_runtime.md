@@ -28,9 +28,13 @@ uygulanmamıştır; bu doküman tasarım sözleşmesini ve bloklayıcıyı kayde
 - Restart sonrası target/order/position parity; kesintisiz ve restartlı
   koşular aynı qty/cash/equity/order id/fill üretmeli. `liquidate_at_end`
   sonrası state'ten holdings/pending temizlenir ve cash güncellenir —
-  restart phantom pozisyon diriltemez.
+  restart phantom pozisyon diriltemez. Kısmi exit sonrası restart için
+  pozisyon başına realized accumulator da state'e persist edilir.
+- `EngineRuntime.start()` fail-closed: `strategy_status` üretim gate'ini
+  geçip açıkça allowlist'e alınmış bir stratejiyi onaylamadan
+  (`approved_for_live`) runtime BAŞLAMAZ; status alanı tek başına koruma
+  değildir.
 - Market holiday ve first-trading-day takvimi.
-
 ## Ortak saf bileşenler (backtest + runtime)
 
 - `PortfolioDecisionService` — planlanmadı (strateji reddi).

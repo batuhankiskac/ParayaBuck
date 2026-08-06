@@ -27,6 +27,15 @@ max_parameter_trials: 200
 max_holdout_finalists: 1
 seed: 7
 
+# Holdout only ever unlocks for this preregistered candidate, and only after
+# its validation gate passes (deterministic hash of the frozen parameters
+# below).
+frozen_candidate_trial_id: 6d869b6909a7cd7d
+
+# Annualized yield applied to the average cash ratio (T-bill proxy) in
+# reports; the strategy itself does not model cash interest.
+cash_rate_annualized: 0.0
+
 source_provider: alpaca
 adjustment_policy: all
 

@@ -41,34 +41,46 @@ nested/<experiment_id>/trial_results.json + manifest.json + gate_table.md).
   doğruluğu asla varsayılmaz; `reconcile_providers` ile Alpaca `all`
   overlap'i üzerinde doğrulanmadan veri seti kabul edilmez.
 - `data/dataset_quality.py` — sembol başına kalite kapısı: kapsam, takvim
-  bilinçli gap analizi (`nyse_weekday_holiday_v1`), geç listelenme, OHLC
+  bilinçli gap analizi (`pandas-market-calendars` NYSE — orakle testlerle
+  2016-2026 gerçek bar verisine karşı doğrulanmış), geç listelenme, OHLC
   geçerliliği, timezone, adjustment politikası. Equity production araştırması
-  dividend+split ayarlı (total-return) veri ister.
+  dividend+split ayarlı (total-return) veri ister. Kapı her
+  `--baseline/--rerun/--nested` koşusundan ÖNCE fail-closed çalışır ve
+  `reports/portfolio_research/quality/<dataset>.json` artefaktını yazar.
 
-## Nested validation metrikleri
+## Nested validation metrikleri (continuous OOS)
 
-- `unique_oos_calendar_months`: validation gözlemlerinden unique (year, month).
-- Aggregate OOS metrikleri (sharpe/sortino/calmar/max_drawdown/return):
-  fold return serileri normalize edilip kronolojik birleştirilen stitched
-  OOS eğrisinden hesaplanır; fold seviyeleri ham nominal olarak bağlanmaz.
-- `positive_fold_ratio` fold total_return'lerinden, `positive_month_ratio`
-  stitched eğrinin aylık getirilerinden.
+- Aday, validation penceresinin TAMAMINDA tek bir continuous koşuyla
+  değerlendirilir: warmup validation öncesi tüm barlar (embargo purge yok —
+  stratejiler model fit etmez, gösterge ısıtması son barları da kullanmalı),
+  ay sonu zorunlu liquidation yok (gerçek devamlı portföy semantiği).
+- Bağımsız aylık fold metrikleri (`positive_fold_ratio`, PBO blokları,
+  median_fold_*) continuous koşunun aylık bölümlenmesinden türetilir;
+  ayrı fold koşularıyla sat-al-yeniden-al artefaktı üretilmez.
+- `unique_oos_calendar_months`: continuous OOS gözlemlerinden unique (year, month).
+- Aggregate OOS metrikleri (sharpe/sortino/calmar/max_drawdown/return)
+  doğrudan continuous eğriden hesaplanır (stitching gereksizdir).
 - DSR: gerçek kronolojik OOS return serisi üzerinden (skew/kurtosis seriden,
-  observation sayısı gerçek gözlem sayısı, tüm denenmiş adaylar trials).
+  observation sayısı gerçek gözlem sayısı, trials = dataset hash'e bağlı
+  GLOBAL trial ledger sayısı — yeni experiment id bütçeyi sıfırlayamaz).
 - CSCV/PBO: kombinasyon uzayı yönetilebilirse exhaustive, değilse seed'li
   dengeli uniform örnekleme; aynı seed aynı sonucu üretir.
 - Parametre platosu: kendisi komşu sayılmaz; en az beş gerçek komşu
   (Hamming ≤ 1) pozitif expectancy ve PF > 1,05 sağlamalıdır.
+- Zorunlu rapor alanları: benchmark return, excess return, information ratio
+  ve cash yield (ortalama cash oranı × `cash_rate_annualized`, T-bill proxy).
 
 ## Production gate
 
 `PortfolioGate.for_market(...)` sabit eşiklerle çalışır (sonuçlara göre
-ayarlanmaz). Equity: unique OOS ay ≥ 60, aggregate OOS Sharpe ≥ 0,75,
-aggregate MaxDD ≤ %10, DSR ≥ %95, PBO ≤ %20, pozitif fold oranı ≥ %60,
-pozitif ay oranı ≥ %60, stress PF ≥ 1,00, stress expectancy ≥ 0, plato ve
-rejim çeşitliliği gerekli, tek varlık ≤ %50, tek sembol brüt kâr ≤ %30,
-holdout tam bir kez. Holdout sonucu validation metriklerine asla karışmaz
-(`holdout_result`/`holdout_gate_decision` ayrıdır).
+ayarlanmaz). Equity: unique OOS ay ≥ 60, PF ≥ 1,15, aggregate OOS Sharpe
+≥ 0,75, aggregate MaxDD ≤ %10, DSR ≥ %95, PBO ≤ %20, pozitif fold oranı
+≥ %60, pozitif ay oranı ≥ %60, stress PF ≥ 1,00, stress expectancy ≥ 0,
+plato ve rejim çeşitliliği gerekli, tek varlık ≤ %50, tek sembol brüt kâr
+≤ %30, holdout tam bir kez. Crypto ayrıca pozitif fold oranı ve rejim
+çeşitliliği ister. Holdout sonucu validation metriklerine asla karışmaz
+(`holdout_result`/`holdout_gate_decision` ayrıdır). Validation-only gate
+holdout gereksinimlerini içermez (`include_holdout_requirements=False`).
 
 ## Holdout hijyeni
 
@@ -78,10 +90,19 @@ holdout tam bir kez. Holdout sonucu validation metriklerine asla karışmaz
   (market, timeframe, universe snapshot hash, holdout penceresi, adjustment,
   provider) ile kilitlenir; kontrol holdout barlarına erişimden ÖNCE yapılır.
   Aynı holdout yeni experiment_id ile tekrar açılamaz. State'ler:
-  pending / complete / failed. Değerlendirme ortasında çöken koşuların
-  `pending` kayıtları TTL sonrası otomatik `failed`'a düşer (crash recovery).
-- `max_holdout_finalists: 1`; finalist trial_id + parametreleri manifeste
-  kaydedilir.
+  pending / complete / failed / audited. Çöken koşuların `pending` kayıtları
+  `failed`'a işaretlenir ama ASLA otomatik yeniden açılmaz: crash öncesi
+  holdout hesaplanmış olabilir. Tek yeniden açma yolu, `recover_holdout(...)`
+  ile kayıt altına alınmış manuel operatör auditidir. Tüm yazımlar OS dosya
+  kilidi (flock) altındadır.
+- Holdout yalnız `frozen_candidate_trial_id` (YAML'da preregistered,
+  deterministik `trial_id_for` hash'i) için ve validation gate'i TAMAMEN
+  geçtiğinde açılır; sıralamadaki en iyi aday asla örtük seçilmez.
+  `max_holdout_finalists: 1` zorlanır; finalist trial_id + parametreleri
+  manifeste kaydedilir.
+- Araştırma manifesti kaynak durumunu birebir tanımlar: kirli working tree
+  ile koşu reddedilir (veya `--allow-dirty` ile dirty flag + tracked/untracked
+  hash'ler manifeste yazılır).
 
 ## Universe snapshot'ları
 

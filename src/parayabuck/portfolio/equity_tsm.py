@@ -57,7 +57,7 @@ class EquityTimeSeriesMomentum1dV1(PortfolioStrategy):
             "3m": 92,
             "6m": 148,
             "12m": 274,
-            "norm_3_6_12": 92,
+            "norm_3_6_12": 252 + MOMENTUM_SKIP_BARS + 1,
         }[scheme]
 
     def _validate_parameters(self) -> None:

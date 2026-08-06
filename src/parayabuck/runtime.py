@@ -427,6 +427,16 @@ class EngineRuntime:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
             raise RuntimeError("Previous runtime workers did not stop; process restart required")
+        # Fail-closed: no portfolio strategy is approved for live trading, so
+        # the runtime refuses to start instead of reporting a research-only
+        # status while trading. The status alone is never a guard.
+        if self.strategy_status != "approved_for_live":
+            raise RuntimeError(
+                "Runtime start refused: no approved portfolio strategy "
+                f"(strategy_status={self.strategy_status!r}); "
+                "a strategy must pass the production gate and be explicitly "
+                "allowlisted before any live/paper trading"
+            )
         self._stop_event.clear()
         self._state = "starting"
         try:

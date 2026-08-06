@@ -79,11 +79,16 @@ class EquityEtfDualMomentumV1(PortfolioStrategy):
     @property
     def minimum_history_bars(self) -> int:
         scheme = self.param_str("momentum_scheme", "12_1")
-        return {
-            "12_1": 274,
-            "6_1": 148,
-            "3_6_12": 92,
+        scheme_need = {
+            "12_1": 252 + MOMENTUM_SKIP_BARS,
+            "6_1": 126 + MOMENTUM_SKIP_BARS,
+            "3_6_12": 252 + MOMENTUM_SKIP_BARS,
         }[scheme]
+        # Every absolute filter evaluates a raw 12-1 momentum
+        # (252 + skip bars) and above_200dma needs 200 closes on top; the
+        # common requirement is the 12-1 lookback, never less.
+        filter_need = 252 + MOMENTUM_SKIP_BARS
+        return max(scheme_need, filter_need)
 
     def _validate_parameters(self) -> None:
         allowed_schemes = {"12_1", "6_1", "3_6_12"}

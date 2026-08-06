@@ -70,6 +70,13 @@ candidate_spaces:
 
 metadata:
   purpose: phase2_v2_dataset
+  archived: true
+  archive_reason: >-
+    Correctness rerun_2 (corrected calendar/continuous-OOS/global-ledger
+    infrastructure) is RED for the frozen candidate: Sharpe 0.69, MaxDD
+    24.1%, DSR 46.1%, PBO 93.9%, excess return -133.5% vs SPY. The dual
+    momentum family is permanently archived; no further 6_1 variant scans
+    on this dataset.
   frozen_candidate:
     momentum_scheme: "6_1"
     absolute_filter: above_200dma

@@ -159,7 +159,13 @@ holdout ve production gate ile yürütülür. Araştırma durumu:
   [`docs/research_correctness_audit_2026-08-05.md`](docs/research_correctness_audit_2026-08-05.md)
   (holdout contamination, duplicate SPY, adjustment, DSR/PBO hesap hataları).
 - Düzeltilmiş doğrulama (v1 rerun + v2 verisi): **RED — strateji arşivlendi**:
-  [`docs/equity_dual_momentum_v2_results.md`](docs/equity_dual_momentum_v2_results.md).
+  [`docs/equity_dual_momentum_v2_results.md`](docs/equity_dual_momentum_v2_results.md)
+  (SUPERSEDED — eski altyapı).
+- Düzeltilmiş altyapıyla (doğrulanmış NYSE takvimi, continuous OOS, global
+  trial ledger) v2 rerun_2: **hâlâ RED — dual momentum ailesi kalıcı arşiv**:
+  [`docs/equity_dual_momentum_v2_rerun_2_results.md`](docs/equity_dual_momentum_v2_rerun_2_results.md)
+  (frozen aday Sharpe 0,69 / MaxDD %24,1 / DSR %46,1 / PBO %93,9 / excess
+  return −%133). Aynı veride yeni 6_1 varyantı taranmaz.
 - Eski tekil sembol alpha katmanının kaldırılması:
   [`docs/strategy_migration_2026-08-04.md`](docs/strategy_migration_2026-08-04.md).
 

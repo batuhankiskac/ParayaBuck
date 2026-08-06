@@ -505,13 +505,13 @@ def run_portfolio_experiment(
     * The holdout is locked unless the preregistered frozen candidate passed
       the validation gate; the top-sorted trial is never implicitly chosen.
     """
-    if universe_hash_verifier is not None:
-        universe_hash_verifier()
     if experiment.suspended:
         raise ValueError(
             f"Experiment {experiment.experiment_id!r} is suspended "
             "(suspended=True); evaluation is forbidden"
         )
+    if universe_hash_verifier is not None:
+        universe_hash_verifier()
     bounded = [bar for bar in bars if experiment.start <= bar.timestamp <= experiment.end]
     candidates = tuple(
         strategy

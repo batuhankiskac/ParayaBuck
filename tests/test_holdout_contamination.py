@@ -14,7 +14,7 @@ from parayabuck.backtest.holdout_registry import (
     HoldoutRegistry,
 )
 from parayabuck.core.models import Bar, Market
-from parayabuck.data.research_store import VersionedResearchStore
+from parayabuck.data.research_store import ProviderMetadata, VersionedResearchStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -129,3 +129,48 @@ def test_legacy_contamination_skipped_when_dataset_absent(tmp_path: Path) -> Non
         experiment_note="legacy_v1_original_contaminated",
     )
     assert registry._records == []  # noqa: SLF001
+
+
+def test_contamination_uses_provider_metadata_when_present(tmp_path: Path) -> None:
+    import run_portfolio_research as rpr
+
+    store, registry, experiment_path = _setup(tmp_path)
+    store.save_dataset(
+        "equity_etf_1d_v1",
+        [_bar(datetime(2020, 1, 1, tzinfo=UTC) + timedelta(days=day)) for day in range(30)],
+        timeframe="1d",
+        source_feed="sip",
+        adjustment="all",
+        universe_version="permanent_etf_core_v1",
+        provider_metadata=ProviderMetadata(
+            provider_name="alpaca",
+            source_feed="sip",
+            vendor_symbol="SPY",
+            adjustment_method="all",
+            currency="USD",
+            timezone="America/New_York",
+            exchange_calendar="NYSE",
+            downloaded_at=datetime(2026, 8, 5, tzinfo=UTC),
+            provider_version="1.0.0",
+            research_provider_differs_from_execution=False,
+        ),
+    )
+    rpr._register_holdout_contamination(
+        store,
+        registry,
+        dataset_id="equity_etf_1d_v1",
+        experiment_path=experiment_path,
+        experiment_note="legacy_v1_original_contaminated",
+    )
+    # With provider_metadata present, the fingerprint provider is the
+    # metadata provider_name (alpaca), not the source_feed fallback.
+    digest = HoldoutFingerprint(
+        market=Market.EQUITY,
+        timeframe="1d",
+        universe_snapshot_hash="",
+        holdout_start=datetime(2026, 2, 1, tzinfo=UTC),
+        holdout_end=datetime(2026, 8, 1, tzinfo=UTC),
+        adjustment="all",
+        source_provider="alpaca",
+    ).structural_digest()
+    assert registry.records_for(digest)

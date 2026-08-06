@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -448,3 +449,41 @@ def test_experiment_spec_budget_validation() -> None:
             candidate_spaces=_spec().candidate_spaces,
             max_parameter_trials=1,
         )
+
+
+def test_suspended_flag_round_trips_through_spec_serialization(tmp_path: Path) -> None:
+    import yaml
+
+    spec = replace(_spec(), suspended=True)
+    path = tmp_path / "spec.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment_id": spec.experiment_id,
+                "start": spec.start.isoformat(),
+                "end": spec.end.isoformat(),
+                "universe": list(spec.universe),
+                "universe_version": spec.universe_version,
+                "candidate_spaces": [
+                    {
+                        "name": space.name,
+                        "version": space.version,
+                        "market": space.market.value,
+                        "timeframe": space.timeframe,
+                        "parameter_grid": {
+                            name: list(values) for name, values in space.parameter_grid
+                        },
+                    }
+                    for space in spec.candidate_spaces
+                ],
+                "suspended": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = PortfolioExperimentSpec.from_file(path)
+    assert loaded.suspended is True
+    assert loaded.to_dict()["suspended"] is True
+    assert PortfolioExperimentSpec.from_file(
+        path
+    ).to_dict()["suspended"] is True

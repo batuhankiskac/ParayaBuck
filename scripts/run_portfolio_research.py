@@ -51,6 +51,7 @@ from parayabuck.backtest.experiments import (
 )
 from parayabuck.backtest.holdout_registry import (
     HoldoutFingerprint,
+    HoldoutLockedError,
     HoldoutRegistry,
 )
 from parayabuck.backtest.portfolio_engine import (
@@ -716,7 +717,13 @@ def _register_holdout_contamination(
     digest = fingerprint.structural_digest()
     if registry.records_for(digest):
         return
-    registry.begin_evaluation(fingerprint, experiment_note)
+    try:
+        registry.begin_evaluation(fingerprint, experiment_note)
+    except HoldoutLockedError:
+        # A concurrent process registered the same holdout between the
+        # unlocked existence check and the locked begin: treat it as already
+        # recorded (the registry's flock makes the final state identical).
+        return
     registry.fail_evaluation(
         fingerprint,
         experiment_note,
@@ -1482,7 +1489,15 @@ def main(argv: list[str] | None = None) -> int:
             legacy_audit_bypass=equity_dataset == EQUITY_DATASET,
         )
         if not (args.skip_crypto or args.v2 or args.rerun_v2):
-            _preflight_research_quality(store, CRYPTO_DATASET, market=Market.CRYPTO)
+            crypto_probe = PortfolioExperimentSpec.from_file(CRYPTO_EXPERIMENT)
+            if crypto_probe.suspended:
+                reason = crypto_probe.metadata.get("suspend_reason", "")
+                print(
+                    "Kripto deney askıda; kalite kapısı atlandı"
+                    + (f" — {reason}" if reason else "")
+                )
+            else:
+                _preflight_research_quality(store, CRYPTO_DATASET, market=Market.CRYPTO)
         # The legacy v1 dataset's outer holdout was spent by the original
         # full-sample-contaminated run; record that fact permanently so the
         # registry can never be fooled into reopening it.
@@ -1546,20 +1561,34 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         if not args.skip_crypto:
-            pre_holdout_crypto = [bar for bar in crypto_bars if bar.timestamp < crypto_locked]
-            baseline_specs.append(
-                (
-                    "crypto_cross_sectional_momentum_1h_v1",
-                    CryptoCrossSectionalMomentum1hV1(
-                        dict(BASELINE_PARAMETERS["crypto_cross_sectional_momentum_1h_v1"])
-                    ),
-                    pre_holdout_crypto,
-                    crypto_universe,
-                    CRYPTO_UNIVERSE_VERSION,
-                    crypto_locked,
-                    CRYPTO_DATASET,
+            crypto_probe = PortfolioExperimentSpec.from_file(CRYPTO_EXPERIMENT)
+            if crypto_probe.suspended:
+                reason = crypto_probe.metadata.get("suspend_reason", "")
+                print(
+                    f"Baseline atlandı (suspended): {CRYPTO_EXPERIMENT.name}"
+                    + (f" — {reason}" if reason else "")
                 )
-            )
+            else:
+                pre_holdout_crypto = [
+                    bar for bar in crypto_bars if bar.timestamp < crypto_locked
+                ]
+                baseline_specs.append(
+                    (
+                        "crypto_cross_sectional_momentum_1h_v1",
+                        CryptoCrossSectionalMomentum1hV1(
+                            dict(
+                                BASELINE_PARAMETERS[
+                                    "crypto_cross_sectional_momentum_1h_v1"
+                                ]
+                            )
+                        ),
+                        pre_holdout_crypto,
+                        crypto_universe,
+                        CRYPTO_UNIVERSE_VERSION,
+                        crypto_locked,
+                        CRYPTO_DATASET,
+                    )
+                )
         for name, strategy, bars, universe, universe_version, locked, dataset_id in baseline_specs:
             market = Market.CRYPTO if strategy.market == Market.CRYPTO else Market.EQUITY
             base_cost, stress_cost = scenarios[market]

@@ -6,7 +6,6 @@ from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMome
 from parayabuck.portfolio.equity_dual_momentum import EquityEtfDualMomentumV1
 from parayabuck.portfolio.equity_tsm import EquityTimeSeriesMomentum1dV1
 from parayabuck.portfolio.models import (
-    PortfolioDecision,
     PortfolioState,
     RebalancePolicy,
     RebalanceReason,
@@ -63,7 +62,6 @@ __all__ = [
     "EquityEtfDualMomentumV1",
     "EquityTimeSeriesMomentum1dV1",
     "PortfolioContext",
-    "PortfolioDecision",
     "PortfolioState",
     "PortfolioStrategy",
     "RebalancePolicy",

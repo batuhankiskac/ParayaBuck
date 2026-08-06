@@ -138,6 +138,7 @@ def test_portfolio_gate_fails_closed_on_insufficient_evidence() -> None:
         fold_results=(),
         market=Market.EQUITY,
         total_rebalance_months=20,
+        unique_oos_calendar_months=20,
         closed_positions=0,
         profit_factor=1.0,
         sharpe=0.4,
@@ -173,6 +174,7 @@ def test_portfolio_gate_passes_with_full_evidence() -> None:
         fold_results=(),
         market=Market.EQUITY,
         total_rebalance_months=70,
+        unique_oos_calendar_months=70,
         closed_positions=0,
         profit_factor=1.3,
         sharpe=0.9,
@@ -180,15 +182,18 @@ def test_portfolio_gate_passes_with_full_evidence() -> None:
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
         probability_backtest_overfitting=0.1,
-        max_drawdown=0.2,
+        max_drawdown=0.05,
         positive_fold_ratio=0.8,
-        positive_month_ratio=0.6,
+        positive_month_ratio=0.7,
         stress_profit_factor=1.1,
         stress_expectancy=1.0,
         stress_realized_pnls=(1.0,),
-        gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0), ("XLE", 100.0)),
+        gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0), ("XLE", 100.0), ("XLK", 100.0)),
         maximum_concentration=0.4,
         regime_diverse=True,
+        aggregate_oos_sharpe=0.9,
+        aggregate_oos_max_drawdown=0.05,
+        aggregate_oos_return=0.3,
         neighborhood_robust=True,
         holdout_evaluations=1,
     )
@@ -199,11 +204,14 @@ def test_portfolio_gate_passes_with_full_evidence() -> None:
 def test_equity_and_crypto_use_distinct_gate_thresholds() -> None:
     equity = PortfolioGate.for_market(Market.EQUITY)
     crypto = PortfolioGate.for_market(Market.CRYPTO)
-    assert equity.minimum_oos_rebalance_months == 60
+    assert equity.minimum_oos_calendar_months == 60
     assert equity.minimum_oos_positions == 0
     assert crypto.minimum_oos_positions == 100
     assert crypto.minimum_positive_month_ratio == 0.60
+    assert equity.minimum_positive_fold_ratio == 0.60
+    assert equity.maximum_drawdown == 0.10
     assert equity.maximum_drawdown < crypto.maximum_drawdown
+    assert equity.maximum_symbol_profit_concentration == 0.30
 
 
 def test_experiment_spec_budget_validation() -> None:

@@ -108,7 +108,7 @@ class PortfolioReport:
                         record.decision_timestamp.isoformat(),
                         record.reason,
                         f"{record.target_cash_weight:.6f}",
-                        f"{record.turnover:.6f}",
+                        f"{record.realized_turnover:.6f}",
                         f"{record.cost:.6f}",
                         record.universe_version,
                     ]
@@ -281,7 +281,7 @@ class PortfolioReport:
             lines.append(
                 f"  #{record.rebalance_number:>3} {record.decision_timestamp.date()} "
                 f"[{record.reason}] {targets or 'nakit'}  "
-                f"turnover={record.turnover * 100:.1f}%"
+                f"turnover={record.realized_turnover * 100:.1f}%"
             )
         if len(self.rebalances) > 12:
             lines.append(f"  ... ve {len(self.rebalances) - 12} rebalance daha")

@@ -250,6 +250,7 @@ def test_csv_mode_defaults_to_5m_when_timeframe_omitted(tmp_path: Path, monkeypa
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             str(csv_path),
             "--symbol",
             "AAPL",
@@ -308,6 +309,7 @@ def test_generate_sample_runs_backtest(tmp_path: Path, monkeypatch: Any) -> None
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--generate-sample",
             "--symbol",
             "MES",
@@ -470,6 +472,7 @@ def test_main_runs_full_pipeline(tmp_path: Path, monkeypatch: Any) -> None:
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL,MSFT,BTC/USD",
             "--days",
@@ -545,6 +548,7 @@ def test_main_crypto_only_uses_crypto_benchmark(tmp_path: Path, monkeypatch: Any
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--market",
             "crypto",
             "--start",
@@ -611,6 +615,7 @@ def test_main_runs_universe_preflight(tmp_path: Path, monkeypatch: Any) -> None:
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--market",
             "crypto",
             "--start",
@@ -633,6 +638,7 @@ def test_main_fails_fast_on_low_coverage(tmp_path: Path, monkeypatch: Any) -> No
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",
@@ -654,6 +660,7 @@ def test_main_fails_fast_on_large_gap(tmp_path: Path, monkeypatch: Any) -> None:
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",
@@ -677,6 +684,7 @@ def test_main_fails_fast_on_empty_symbol(tmp_path: Path, monkeypatch: Any) -> No
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL,EMPTY",
             "--days",
@@ -698,6 +706,7 @@ def test_main_late_starting_data_fails_by_default(tmp_path: Path, monkeypatch: A
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",
@@ -778,6 +787,7 @@ def test_main_allow_incomplete_data_exempts_late_and_empty(
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL,EMPTY",
             "--days",
@@ -832,6 +842,7 @@ def test_main_passes_data_quality_gate_with_complete_data(tmp_path: Path, monkey
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",
@@ -888,6 +899,7 @@ def test_main_deep_profile_for_multi_year_window(tmp_path: Path, monkeypatch: An
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--years",
@@ -946,6 +958,7 @@ def test_main_explicit_live_profile_forces_5m(tmp_path: Path, monkeypatch: Any) 
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",
@@ -1004,6 +1017,7 @@ def test_main_writes_run_manifest(tmp_path: Path, monkeypatch: Any) -> None:
         "sys.argv",
         [
             "run_backtest.py",
+            "--legacy-fixture-mode",
             "--symbols",
             "AAPL",
             "--days",

@@ -75,6 +75,7 @@ class RuntimeHealth:
     coalesced_events: int
     workers: dict[str, dict[str, object]]
     markets: dict[str, dict[str, object]]
+    strategy_status: str = "research_only_no_approved_portfolio_strategy"
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,11 @@ class EngineRuntime:
             Market.EQUITY: None,
             Market.CRYPTO: None,
         }
+        # Fail-closed: no portfolio strategy is approved for live trading yet.
+        # The runtime is research-only; no UI path may report an active
+        # strategy until the production gate passes and the strategy is
+        # allowlisted for live execution.
+        self.strategy_status = "research_only_no_approved_portfolio_strategy"
         self.paper = config.alpaca.paper
         self.store = SQLiteStore(self.config.decision_db_path)
         self.journal = DecisionJournal(self.config.decision_db_path, store=self.store)
@@ -413,6 +419,7 @@ class EngineRuntime:
             coalesced_events=self._coalesced_events,
             workers={name: asdict(item) for name, item in workers.items()},
             markets=market_health,
+            strategy_status=getattr(self, "strategy_status", "research_only"),
         )
 
     def start(self) -> None:

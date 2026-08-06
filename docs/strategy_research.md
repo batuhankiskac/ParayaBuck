@@ -1,93 +1,102 @@
-# Strateji araştırma akışı
+# Portföy stratejisi araştırma akışı
 
-Ana araştırma zaman dilimi `1h`'dir. Alpha denemelerinde işlem riski deney
-manifesti tarafından `%0,25`'te sabitlenir; risk oranı strateji seçim
-parametresi değildir.
+Bu doküman, emekli edilen sinyal tabanlı strateji araştırma akışının
+(`--experiment-spec`, `--sweep`, `--walk-forward`) yerine geçen güncel
+portföy araştırma akışını anlatır. Eski akış `scripts/run_backtest.py`
+içinde artık yalnız "veri kalite / legacy fixture" modunda çalışır ve
+strateji değerlendirmez (bkz. `scripts/run_backtest.py` başlığı ve
+`docs/strategy_migration_2026-08-04.md`).
 
-## Hazır deney
+## Araştırma hattı
 
-Kilitli holdout'a dokunmadan aylık validation fold'larını çalıştırmak için:
-
-```bash
-python scripts/run_backtest.py \
-  --experiment-spec config/experiments/strategy_1h_v1.yaml \
-  --output-dir reports/experiments/strategy_1h_v1
-```
-
-Bu koşu stratejiye özel giriş parametrelerini ve sabit/break-even/Chandelier/
-süre çıkışlarını markete özel base ve stress maliyetleriyle değerlendirir.
-`trial_results.json` medyan Calmar sıralamasını, DSR, CSCV/PBO, stress
-hassasiyetini ve parametre platosunu içerir.
-
-Son altı ay varsayılan olarak değerlendirilmez. Önceden seçilmiş en fazla on
-finalist için holdout'u bir kez açmak açık bir karar gerektirir:
+Tek giriş noktası `scripts/run_portfolio_research.py`:
 
 ```bash
-python scripts/run_backtest.py \
-  --experiment-spec config/experiments/strategy_1h_v1.yaml \
-  --unlock-holdout \
-  --output-dir reports/experiments/strategy_1h_v1_holdout
+# 1) Veri indirme (düzeltilmiş pipeline: canonical unique semboller,
+#    dividend+split ayarlı, provider metadata + dataset kalite kapısı)
+python scripts/run_portfolio_research.py --download
+
+# 2) Baseline (yalnız kilitli holdout öncesi barlar; tam örneklem baseline yok)
+python scripts/run_portfolio_research.py --baseline
+
+# 3) Nested validation (holdout kilitli; registry preflight önce)
+python scripts/run_portfolio_research.py --nested
+
+# 4) Holdout (yalnız bir kez; registry fingerprint kilidi)
+python scripts/run_portfolio_research.py --nested --unlock-holdout
 ```
 
-Bu işlem `data/runtime/holdout_registry.json` kaydı oluşturur. Aynı deney
-kimliğiyle ikinci holdout değerlendirmesi reddedilir.
+Raporlar `reports/portfolio_research/` altındadır (baseline, cost_comparison,
+nested/<experiment_id>/trial_results.json + manifest.json + gate_table.md).
 
-## Timeframe'e özel optimizasyonlar
+## Veri katmanı
 
-Dört mevcut stratejinin tamamı bağımsız deney kimliği, maliyet modeli,
-parametre uzayı ve kilitli holdout ile dört timeframe'de araştırılabilir:
+- `data/research_store.py` — versiyonlu Parquet/CSV depo. Kaydetme politikası:
+  exact duplicate barlar tek bara düşer (`input_duplicate_bars` audit sayacı),
+  conflicting duplicate koşuyu fail eder ve veri seti yazılmaz. `data_hash`
+  canonical sembol + timeframe üzerinden deterministik hesaplanır.
+- `data/providers.py` — `ResearchDataProvider` protokolü:
+  `AlpacaResearchDataProvider`, `LocalResearchDataProvider`,
+  `ExternalAdjustedDailyProvider` (Stooq). Harici provider'ın adjustment
+  doğruluğu asla varsayılmaz; `reconcile_providers` ile Alpaca `all`
+  overlap'i üzerinde doğrulanmadan veri seti kabul edilmez.
+- `data/dataset_quality.py` — sembol başına kalite kapısı: kapsam, takvim
+  bilinçli gap analizi (`nyse_weekday_holiday_v1`), geç listelenme, OHLC
+  geçerliliği, timezone, adjustment politikası. Equity production araştırması
+  dividend+split ayarlı (total-return) veri ister.
 
-| Manifest | Veri penceresi | Train/validation/holdout | Aday |
-| --- | --- | --- | ---: |
-| `strategy_5m_v1.yaml` | yaklaşık 4 ay | 2/1/1 ay | 160 |
-| `strategy_15m_v1.yaml` | yaklaşık 6 ay | 3/1/1 ay | 160 |
-| `strategy_1h_v1.yaml` | yaklaşık 24 ay | 9/1/6 ay | 144 |
-| `strategy_1d_v1.yaml` | yaklaşık 24 ay | 9/1/6 ay | 176 |
+## Nested validation metrikleri
 
-5m ve 15m deneylerinde daha yüksek spread/slippage, daha küçük minimum stop
-yüzdeleri ve aynı ekonomik bekleme süresine denk gelen daha yüksek bar
-sayıları kullanılır. Timeframe'ler arasında parametre veya holdout paylaşılmaz.
+- `unique_oos_calendar_months`: validation gözlemlerinden unique (year, month).
+- Aggregate OOS metrikleri (sharpe/sortino/calmar/max_drawdown/return):
+  fold return serileri normalize edilip kronolojik birleştirilen stitched
+  OOS eğrisinden hesaplanır; fold seviyeleri ham nominal olarak bağlanmaz.
+- `positive_fold_ratio` fold total_return'lerinden, `positive_month_ratio`
+  stitched eğrinin aylık getirilerinden.
+- DSR: gerçek kronolojik OOS return serisi üzerinden (skew/kurtosis seriden,
+  observation sayısı gerçek gözlem sayısı, tüm denenmiş adaylar trials).
+- CSCV/PBO: kombinasyon uzayı yönetilebilirse exhaustive, değilse seed'li
+  dengeli uniform örnekleme; aynı seed aynı sonucu üretir.
+- Parametre platosu: kendisi komşu sayılmaz; en az beş gerçek komşu
+  (Hamming ≤ 1) pozitif expectancy ve PF > 1,05 sağlamalıdır.
 
-Holdout'u açmadan tüm validation deneylerini sırayla çalıştırmak için:
+## Production gate
+
+`PortfolioGate.for_market(...)` sabit eşiklerle çalışır (sonuçlara göre
+ayarlanmaz). Equity: unique OOS ay ≥ 60, aggregate OOS Sharpe ≥ 0,75,
+aggregate MaxDD ≤ %10, DSR ≥ %95, PBO ≤ %20, pozitif fold oranı ≥ %60,
+pozitif ay oranı ≥ %60, stress PF ≥ 1,00, stress expectancy ≥ 0, plato ve
+rejim çeşitliliği gerekli, tek varlık ≤ %50, tek sembol brüt kâr ≤ %30,
+holdout tam bir kez. Holdout sonucu validation metriklerine asla karışmaz
+(`holdout_result`/`holdout_gate_decision` ayrıdır).
+
+## Holdout hijyeni
+
+- Baseline yalnız `outer_holdout_start` öncesi barlarla çalışır; `locked_holdout_start`
+  manifeste yazılır.
+- `data/runtime/portfolio_holdout_registry.json`: structural fingerprint
+  (market, timeframe, universe snapshot hash, holdout penceresi, adjustment,
+  provider) ile kilitlenir; kontrol holdout barlarına erişimden ÖNCE yapılır.
+  Aynı holdout yeni experiment_id ile tekrar açılamaz. State'ler:
+  pending / complete / failed. Değerlendirme ortasında çöken koşuların
+  `pending` kayıtları TTL sonrası otomatik `failed`'a düşer (crash recovery).
+- `max_holdout_finalists: 1`; finalist trial_id + parametreleri manifeste
+  kaydedilir.
+
+## Universe snapshot'ları
+
+Kripto PIT evreni deterministik `hash_point_in_time_universe` hash'i ile
+`data/research/<dataset>/universe_snapshots.json` altında kalıcılaştırılır;
+experiment manifestine `universe_snapshot_hash` yazılır ve koşu sırasında
+sessizce yeniden hesaplanan farklı evren reddedilir.
+
+## Correctness rerun
 
 ```bash
-for tf in 5m 15m 1h 1d; do
-  .venv/bin/python scripts/run_backtest.py \
-    --experiment-spec "config/experiments/strategy_${tf}_v1.yaml" \
-    --output-dir "reports/experiments/strategy_${tf}_v1_validation"
-done
+python scripts/run_portfolio_research.py --rerun
 ```
 
-5m ve 15m sonuçları kısa takvim nedeniyle yalnız erken araştırma/falsification
-kanıtı sayılır. Production gate'teki 100 OOS işlem ve DSR/PBO şartları aynen
-korunur; örneklem azlığı gate'i gevşetmez.
-
-## Timeframe karşılaştırması ve uzun 1h koşusu
-
-```bash
-python scripts/run_strategy_backtests.py
-```
-
-Koşucu iki ayrı rapor ailesi üretir:
-
-- `reports/backtests/common_120d/`: aynı 120 günlük 5m kaynaktan türetilen
-  5m/15m/1h barların karşılaştırması.
-- `reports/backtests/research_1h/`: mevcut yaklaşık 720 günlük 1h araştırması.
-
-Borsa araştırması kalıcı geniş/sektör ETF çekirdeğini kullanır. Kripto üyeliği
-her ay yalnızca geriye dönük 30 günlük likidite, ATR ve veri sürekliliğiyle
-yeniden seçilir. Her strateji hem tek başına hem birleşik portföyde raporlanır.
-
-## Çıktılar ve güvenlik
-
-Manifest; Git revizyonu, veri hash'i, evren sürümü, seed, maliyet senaryosu,
-strateji sürümü, parametre gridleri ve çıkış politikalarını kaydeder. Normal
-raporlara `score_deciles.csv` ve `by_regime.csv` eklenmiştir.
-
-Dinamik stoplar yalnızca kapanmış bardan hesaplanır ve sonraki barda etkin
-olur. Alpaca sınırı stopu önce iptal etmeden atomik replace yapar; güncel stop
-ve yeni broker order kimliği aynı ledger transaction'ında kalıcılaştırılır.
-Broker hatasında eski stop korunur. Buna rağmen canlı güvenlik açıkken dinamik
-çıkış politikaları, kapanmış-bar scheduler'ı ve profil doğrulaması tamamlanana
-kadar reddedilir. `equity_1h_v1` ve `crypto_1h_v1` canlı allowlist'e
-eklenmemiştir; production gate geçilmeden 1h canlı işlem açılamaz.
+Aynı mevcut `equity_etf_1d_v1` verisi üzerinde yalnız kod doğruluğu
+değişikliklerinin etkisini ölçer; `equity_dual_momentum_v1_correctness_rerun`
+üretir, holdout kilitli kalır, baseline holdout öncesi kesilir. Sonuç
+`docs/research_correctness_audit_2026-08-05.md` içinde yorumlanır.

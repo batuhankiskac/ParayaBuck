@@ -68,10 +68,9 @@ def test_same_spec_seed_and_data_produce_identical_targets() -> None:
     assert first.name == second.name and first.version == second.version
 
 
-def test_decision_and_effective_timestamps_are_distinct_fields() -> None:
+def test_decision_carries_only_the_single_decision_timestamp() -> None:
     portfolio = _portfolio(("SPY", 1.0))
     assert portfolio.decision_timestamp == NOW
-    assert portfolio.effective_timestamp is None
     assert portfolio.data_timestamp == NOW or portfolio.data_timestamp is None
 
 

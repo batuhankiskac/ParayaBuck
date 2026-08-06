@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -105,6 +106,39 @@ def build_crypto_point_in_time_universe(
     )
 
 
+def hash_point_in_time_universe(universe: PointInTimeUniverse) -> str:
+    """Deterministic hash of methodology + snapshot boundaries and members.
+
+    Equal data and methodology must always produce the same hash so a
+    persisted snapshot set can be verified against a recomputed one and a
+    silently different universe is rejected.
+    """
+    digest = hashlib.sha256()
+    digest.update(universe.market.value.encode())
+    digest.update("|".join(universe.methodology.split()).encode())
+    for snapshot in sorted(universe.snapshots, key=lambda item: item.effective_at):
+        digest.update(snapshot.effective_at.isoformat().encode())
+        digest.update(b"\n")
+        digest.update("|".join(sorted(snapshot.symbols)).encode())
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def verify_persisted_universe(
+    universe: PointInTimeUniverse,
+    expected_hash: str,
+) -> None:
+    """Fail-closed check that the run's universe matches the persisted one."""
+    if not expected_hash:
+        return
+    recomputed = hash_point_in_time_universe(universe)
+    if recomputed != expected_hash:
+        raise ValueError(
+            "Universe snapshot hash mismatch: persisted "
+            f"{expected_hash[:12]}... vs recomputed {recomputed[:12]}..."
+        )
+
+
 def _next_month(value: datetime) -> datetime:
     current = value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     absolute = current.year * 12 + current.month
@@ -116,4 +150,6 @@ __all__ = [
     "PointInTimeUniverse",
     "UniverseSnapshot",
     "build_crypto_point_in_time_universe",
+    "hash_point_in_time_universe",
+    "verify_persisted_universe",
 ]

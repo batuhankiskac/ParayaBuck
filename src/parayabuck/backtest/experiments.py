@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-import itertools
 import json
 import math
+import random
 from calendar import monthrange
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -199,16 +199,47 @@ def deflated_sharpe_probability(
     return NormalDist().cdf(statistic)
 
 
+def _kth_combination(n: int, k: int, rank: int) -> list[int]:
+    """Unrank the ``rank``-th (0-based) k-combination of n elements.
+
+    Combinadic unranking: uniform sampling must never enumerate the whole
+    combination space (C(52, 26) is astronomically large), so sampled ranks
+    are converted directly into combinations in O(k*n).
+    """
+    result: list[int] = []
+    start = 0
+    remaining = rank
+    for size in range(k, 0, -1):
+        candidate = start
+        while candidate < n:
+            count = math.comb(n - candidate - 1, size - 1)
+            if remaining < count:
+                result.append(candidate)
+                start = candidate + 1
+                break
+            remaining -= count
+            candidate += 1
+    return result
+
+
 def probability_backtest_overfitting(
     trial_block_returns: list[list[float]],
     *,
     maximum_splits: int = 2_000,
+    seed: int = 7,
 ) -> float:
     """Estimate CSCV/PBO from trial-by-block returns.
 
     Rows are parameter trials and columns are chronological, non-overlapping
     return blocks. Odd trailing blocks are ignored because CSCV uses equal
     in-sample and out-of-sample partitions.
+
+    The combination space is evaluated exhaustively when manageable; when the
+    number of combinations exceeds ``maximum_splits`` a deterministic,
+    balanced uniform sample is used instead (rank-based unranking, so the
+    sample is drawn from the whole space and never restricted to the first
+    lexicographic combinations). Sampling is seeded: the same input and seed
+    always reproduce the same PBO.
     """
     if len(trial_block_returns) < 2 or not trial_block_returns[0]:
         return 0.0
@@ -217,14 +248,26 @@ def probability_backtest_overfitting(
     if width < 2:
         return 0.0
     half = width // 2
-    combinations = itertools.combinations(range(width), half)
+    total = math.comb(width, half)
+    rng = random.Random(seed)
+    # A fixed deterministic column permutation removes the lexicographic
+    # ordering bias from the sampled combinations.
+    permutation = list(range(width))
+    rng.shuffle(permutation)
+    if total <= maximum_splits:
+        ranks: range | list[int] = range(total)
+    else:
+        # random.sample(range(huge)) overflows on C ssize_t; draw ranks via
+        # randrange (arbitrary precision) with set dedup instead.
+        sampled: set[int] = set()
+        while len(sampled) < maximum_splits:
+            sampled.add(rng.randrange(total))
+        ranks = sorted(sampled)
     overfit = 0
     evaluated = 0
     all_indexes = set(range(width))
-    for in_sample_indexes in combinations:
-        if evaluated >= maximum_splits:
-            break
-        in_sample = set(in_sample_indexes)
+    for rank in ranks:
+        in_sample = {permutation[index] for index in _kth_combination(width, half, rank)}
         out_sample = all_indexes - in_sample
         train_scores = [
             sum(row[index] for index in in_sample) / half for row in trial_block_returns
@@ -234,8 +277,8 @@ def probability_backtest_overfitting(
             sum(row[index] for index in out_sample) / half for row in trial_block_returns
         ]
         selected_score = out_scores[selected]
-        rank = sum(score <= selected_score for score in out_scores) / len(out_scores)
-        if rank <= 0.5:
+        rank_value = sum(score <= selected_score for score in out_scores) / len(out_scores)
+        if rank_value <= 0.5:
             overfit += 1
         evaluated += 1
     return overfit / evaluated if evaluated else 0.0

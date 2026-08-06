@@ -58,7 +58,6 @@ class TargetPortfolio:
     parameters: tuple[tuple[str, object], ...] = ()
     risk_multiplier: float = 1.0
     metadata: dict[str, object] = field(default_factory=dict)
-    effective_timestamp: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.strategy_name.strip() or not self.strategy_version.strip():
@@ -91,9 +90,6 @@ class TargetPortfolio:
             "strategy_name": self.strategy_name,
             "strategy_version": self.strategy_version,
             "decision_timestamp": self.decision_timestamp.isoformat(),
-            "effective_timestamp": (
-                self.effective_timestamp.isoformat() if self.effective_timestamp else None
-            ),
             "data_timestamp": self.data_timestamp.isoformat() if self.data_timestamp else None,
             "weights": [
                 {"symbol": weight.symbol, "weight": weight.weight, "reason": weight.reason}
@@ -107,14 +103,6 @@ class TargetPortfolio:
             "risk_multiplier": self.risk_multiplier,
             "metadata": self.metadata,
         }
-
-
-@dataclass(frozen=True)
-class PortfolioDecision:
-    """A strategy decision together with its human-readable rationale."""
-
-    portfolio: TargetPortfolio
-    rationale: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,6 +158,11 @@ class PortfolioState:
     restarted engine resumes from the same allocation instead of re-deciding
     from scratch. Persisted as JSON; the backtest engine treats it as the
     single source of truth for current holdings across ``run`` calls.
+
+    Schema v2 adds cash, realized PnL, entry fees, last prices, pending
+    target/orders and the last-processed-bar watermark so a restart resumes
+    economically complete state instead of re-deriving cash from the
+    starting equity.
     """
 
     strategy_name: str
@@ -180,7 +173,17 @@ class PortfolioState:
     last_rebalance_at: datetime | None = None
     rebalance_count: int = 0
     universe_version: str = ""
-    schema_version: int = 1
+    universe_snapshot_id: str = ""
+    # None means "unknown (v1 state)": cash is derived from holdings once.
+    cash: float | None = None
+    realized_pnl: float = 0.0
+    entry_fees: dict[str, float] = field(default_factory=dict)
+    last_prices: dict[str, float] = field(default_factory=dict)
+    # Decision made but not yet filled; never dropped on restart.
+    pending_target: dict[str, float] = field(default_factory=dict)
+    pending_orders: tuple[dict[str, object], ...] = ()
+    last_processed_bar: str | None = None
+    schema_version: int = 2
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -195,6 +198,14 @@ class PortfolioState:
             ),
             "rebalance_count": self.rebalance_count,
             "universe_version": self.universe_version,
+            "universe_snapshot_id": self.universe_snapshot_id,
+            "cash": self.cash,
+            "realized_pnl": self.realized_pnl,
+            "entry_fees": self.entry_fees,
+            "last_prices": self.last_prices,
+            "pending_target": self.pending_target,
+            "pending_orders": list(self.pending_orders),
+            "last_processed_bar": self.last_processed_bar,
         }
 
     @classmethod
@@ -211,7 +222,26 @@ class PortfolioState:
             str(symbol): float(weight)
             for symbol, weight in dict(raw.get("last_target", {})).items()
         }
+        entry_fees = {
+            str(symbol): float(fee)
+            for symbol, fee in dict(raw.get("entry_fees", {})).items()
+        }
+        last_prices = {
+            str(symbol): float(price)
+            for symbol, price in dict(raw.get("last_prices", {})).items()
+        }
+        pending_target = {
+            str(symbol): float(weight)
+            for symbol, weight in dict(raw.get("pending_target", {})).items()
+        }
+        raw_pending = raw.get("pending_orders", ())
+        pending_orders = tuple(
+            dict(item)
+            for item in raw_pending
+            if isinstance(item, dict)
+        )
         last_rebalance = raw.get("last_rebalance_at")
+        raw_cash = raw.get("cash")
         return cls(
             strategy_name=str(raw.get("strategy_name", "")),
             strategy_version=str(raw.get("strategy_version", "")),
@@ -223,6 +253,16 @@ class PortfolioState:
             ),
             rebalance_count=int(raw.get("rebalance_count", 0)),
             universe_version=str(raw.get("universe_version", "")),
+            universe_snapshot_id=str(raw.get("universe_snapshot_id", "")),
+            cash=float(raw_cash) if raw_cash is not None else None,
+            realized_pnl=float(raw.get("realized_pnl", 0.0)),
+            entry_fees=entry_fees,
+            last_prices=last_prices,
+            pending_target=pending_target,
+            pending_orders=pending_orders,
+            last_processed_bar=(
+                str(raw["last_processed_bar"]) if raw.get("last_processed_bar") else None
+            ),
             schema_version=int(raw.get("schema_version", 1)),
         )
 
@@ -230,7 +270,6 @@ class PortfolioState:
 __all__ = [
     "MAX_WEIGHT",
     "WEIGHT_TOLERANCE",
-    "PortfolioDecision",
     "PortfolioState",
     "RebalancePolicy",
     "RebalanceReason",

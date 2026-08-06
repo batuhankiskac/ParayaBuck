@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from itertools import groupby
 from pathlib import Path
-from uuid import uuid4
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext
+from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
 from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
@@ -61,6 +61,7 @@ class PortfolioFill:
     spread_cost: float
     fee: float
     decision_timestamp: datetime
+    client_order_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,9 +70,18 @@ class RebalanceRecord:
     reason: str
     target_weights: tuple[tuple[str, float], ...]
     target_cash_weight: float
-    executed_weights: tuple[tuple[str, float], ...]
-    turnover: float
+    # Execution accounting: signed deltas/weights so buys and sells are not
+    # folded into one positive magnitude.
+    pre_trade_weights: tuple[tuple[str, float], ...]
+    signed_trade_weights: tuple[tuple[str, float], ...]
+    post_fill_actual_weights: tuple[tuple[str, float], ...]
+    target_vs_actual_drift: float
+    unfilled_notional: float
+    rejected_notional: float
+    expected_turnover: float
+    realized_turnover: float
     cost: float
+    executed_weights: tuple[tuple[str, float], ...]
     universe_version: str
     universe_snapshot_id: str
     equity_at_decision: float
@@ -210,9 +220,9 @@ class PortfolioBacktestEngine:
         self.state = state or PortfolioState(
             strategy_name=strategy.name, strategy_version=strategy.version
         )
+        self._idempotency = IdempotencyKeyFactory(strategy.name, strategy.version)
         self._history: dict[tuple[str, str], list[Bar]] = {}
         self._positions: dict[str, _Position] = {}
-        self._cash = starting_equity
         self._pending: list[PortfolioOrder] = []
         self._fills: list[PortfolioFill] = []
         self._rebalances: list[RebalanceRecord] = []
@@ -221,7 +231,7 @@ class PortfolioBacktestEngine:
             Market.EQUITY: None,
             Market.CRYPTO: None,
         }
-        self._last_price: dict[str, float] = {}
+        self._last_price: dict[str, float] = dict(self.state.last_prices)
         self._weight_history: list[tuple[datetime, dict[str, float]]] = []
         self._universe_history: list[tuple[datetime, tuple[str, ...]]] = []
         self._holdings_history: list[tuple[int, float, float]] = []
@@ -230,6 +240,12 @@ class PortfolioBacktestEngine:
             # Period detection resumes from the last decision so a restart in
             # the middle of a month does not fire an unscheduled rebalance.
             self._previous_timestamp[strategy.market] = self.state.last_rebalance_at
+        # Cash is authoritative when persisted (schema v2); a v1 state without
+        # cash derives it from holdings once at migration time.
+        if self.state.cash is not None:
+            self._cash = self.state.cash
+        else:
+            self._cash = starting_equity
         if self.state.holdings:
             for symbol, quantity in self.state.holdings.items():
                 avg_price = self.state.avg_prices.get(symbol, 0.0)
@@ -242,8 +258,18 @@ class PortfolioBacktestEngine:
                     quantity,
                     avg_price,
                     self.state.last_rebalance_at or datetime(1970, 1, 1, tzinfo=UTC),
+                    entry_fee=self.state.entry_fees.get(symbol, 0.0),
+                    realized_pnl_accumulator=0.0,
                 )
-                self._cash -= quantity * avg_price
+                if self.state.cash is None:
+                    # v1 migration: derive cash from the holdings cost basis.
+                    self._cash -= quantity * avg_price
+        # Pending orders decided before the restart must survive it; they are
+        # re-armed so fills resume where the interrupted run left off.
+        for raw_order in self.state.pending_orders:
+            order = self._order_from_dict(raw_order)
+            if order is not None:
+                self._pending.append(order)
 
     # -- public API ---------------------------------------------------------
 
@@ -254,6 +280,9 @@ class PortfolioBacktestEngine:
         *,
         liquidate_at_end: bool = True,
     ) -> PortfolioBacktestResult:
+        # Orders pending from a restored state survive the fresh-run reset so
+        # a restart resumes fills exactly where the interrupted run left off.
+        restored_pending = [order for order in self._pending]
         self._pending = []
         self._fills = []
         self._rebalances = []
@@ -261,7 +290,12 @@ class PortfolioBacktestEngine:
         self._weight_history = []
         self._universe_history = []
         self._holdings_history = []
+        self._pending.extend(restored_pending)
         ordered = sorted(self._deduplicate(bars), key=lambda bar: (bar.timestamp, bar.symbol))
+        watermark = self.state.last_processed_bar
+        if watermark:
+            cutoff = datetime.fromisoformat(watermark)
+            ordered = [bar for bar in ordered if bar.timestamp > cutoff]
         for bar in sorted(warmup or [], key=lambda item: (item.timestamp, item.symbol)):
             self._ingest(bar)
         curve: list[float] = []
@@ -286,6 +320,18 @@ class PortfolioBacktestEngine:
             if curve:
                 curve.append(self._equity())
                 curve_timestamps.append(curve_timestamps[-1])
+            if not self._positions:
+                # The state must reflect the liquidation: holdings and pending
+                # orders are gone and cash already holds the proceeds, so a
+                # later restart cannot resurrect phantom positions.
+                self.state.holdings = {}
+                self.state.avg_prices = {}
+                self.state.entry_fees = {}
+                self.state.pending_orders = ()
+                self.state.pending_target = {}
+                self.state.cash = self._cash
+                if self.state_path is not None:
+                    self.save_state()
         benchmark = [bar for bar in ordered if bar.symbol == self.benchmark_symbol]
         benchmark_return = (
             benchmark[-1].close / benchmark[0].close - 1
@@ -317,6 +363,32 @@ class PortfolioBacktestEngine:
 
     def _key(self, bar: Bar) -> tuple[str, str]:
         return canonical_symbol(bar.symbol, bar.market), bar.timeframe
+
+    @staticmethod
+    def _order_to_dict(order: PortfolioOrder) -> dict[str, object]:
+        return {
+            "client_order_id": order.client_order_id,
+            "symbol": order.symbol,
+            "market": order.market.value,
+            "side": order.side.value,
+            "qty": order.qty,
+            "created_at": order.created_at.isoformat(),
+            "decision_timestamp": order.decision_timestamp.isoformat(),
+        }
+
+    def _order_from_dict(self, raw: dict[str, object]) -> PortfolioOrder | None:
+        try:
+            return PortfolioOrder(
+                client_order_id=str(raw["client_order_id"]),
+                symbol=str(raw["symbol"]),
+                market=Market(str(raw["market"])),
+                side=OrderSide(str(raw["side"])),
+                qty=float(str(raw["qty"])),
+                created_at=datetime.fromisoformat(str(raw["created_at"])),
+                decision_timestamp=datetime.fromisoformat(str(raw["decision_timestamp"])),
+            )
+        except (KeyError, ValueError):
+            return None
 
     def _ingest(self, bar: Bar) -> None:
         series = self._history.setdefault(self._key(bar), [])
@@ -373,6 +445,15 @@ class PortfolioBacktestEngine:
             for symbol, position in self._positions.items()
             if position.qty > 0
         }
+        self.state.entry_fees = {
+            symbol: position.entry_fee
+            for symbol, position in self._positions.items()
+            if position.qty > 0
+        }
+        self.state.cash = self._cash
+        self.state.last_prices = dict(self._last_price)
+        self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
+        self.state.last_processed_bar = timestamp.isoformat()
         if self.state_path is not None:
             self.save_state()
 
@@ -448,16 +529,20 @@ class PortfolioBacktestEngine:
                 filled_qty = close_qty
                 notional = close_qty * fill_price
                 self._cash += notional - fee
+                # The entry-fee share is a real cost of the closed portion:
+                # it reduces realized PnL on partial AND full exits alike.
                 fee_share = position.entry_fee * (close_qty / max(1e-9, position.qty))
                 position.entry_fee -= fee_share
                 position.realized_pnl_accumulator += (
-                    (fill_price - position.avg_price) * close_qty - fee
+                    (fill_price - position.avg_price) * close_qty - fee - fee_share
                 )
+                self.state.realized_pnl = self.state.realized_pnl - fee_share
                 position.qty -= close_qty
                 if position.qty <= 0:
                     self._realized_pnl_events.append(
                         (bar.timestamp, symbol, position.realized_pnl_accumulator)
                     )
+                    self.state.realized_pnl += position.realized_pnl_accumulator
                     self._positions.pop(symbol, None)
             self._fills.append(
                 PortfolioFill(
@@ -472,6 +557,7 @@ class PortfolioBacktestEngine:
                     spread_cost=spread_cost,
                     fee=fee,
                     decision_timestamp=order.decision_timestamp,
+                    client_order_id=order.client_order_id,
                 )
             )
             if filled_qty < order.qty:
@@ -540,6 +626,8 @@ class PortfolioBacktestEngine:
             symbol_targets[symbol] = weight.weight
         for symbol in self._positions:
             symbol_targets.setdefault(symbol, 0.0)
+        self._current_pre_trade_weights: dict[str, float] = {}
+        self._expected_turnover = 0.0
         for symbol, target_weight in symbol_targets.items():
             price = self._last_price.get(symbol)
             if price is None or price <= 0:
@@ -547,6 +635,7 @@ class PortfolioBacktestEngine:
             current_position = self._positions.get(symbol)
             current_qty = current_position.qty if current_position is not None else 0.0
             current_weight = current_qty * price / equity if equity > 0 else 0.0
+            self._current_pre_trade_weights[symbol] = current_weight
             if abs(target_weight - current_weight) < self.turnover_band:
                 continue
             target_qty = target_weight * equity / price
@@ -554,9 +643,15 @@ class PortfolioBacktestEngine:
             if abs(delta) * price < self.minimum_order_notional:
                 continue
             side = OrderSide.BUY if delta > 0 else OrderSide.SELL
+            self._expected_turnover += abs(target_weight - current_weight)
             self._pending.append(
                 PortfolioOrder(
-                    client_order_id=f"rebalance-{uuid4().hex[:12]}",
+                    client_order_id=self._idempotency.key(
+                        decision_timestamp=target.decision_timestamp,
+                        symbol=symbol,
+                        side=side.value,
+                        rebalance_number=self._rebalance_number,
+                    ),
                     symbol=symbol,
                     market=self.strategy.market,
                     side=side,
@@ -565,9 +660,24 @@ class PortfolioBacktestEngine:
                     decision_timestamp=target.decision_timestamp,
                 )
             )
+        self.state.pending_target = dict(symbol_targets)
 
     def _record_rebalance(self, target: TargetPortfolio) -> None:
         decision = target.decision_timestamp
+        target_map = {
+            canonical_symbol(weight.symbol, self.strategy.market): weight.weight
+            for weight in target.weights
+        }
+        signed = tuple(
+            sorted(
+                (
+                    symbol,
+                    weight - self._current_pre_trade_weights.get(symbol, 0.0),
+                )
+                for symbol, weight in target_map.items()
+                if abs(weight - self._current_pre_trade_weights.get(symbol, 0.0)) > 1e-9
+            )
+        )
         self._rebalances.append(
             RebalanceRecord(
                 decision_timestamp=decision,
@@ -576,9 +686,18 @@ class PortfolioBacktestEngine:
                     sorted((weight.symbol, weight.weight) for weight in target.weights)
                 ),
                 target_cash_weight=target.cash_weight,
-                executed_weights=(),
-                turnover=0.0,
+                pre_trade_weights=tuple(
+                    sorted(self._current_pre_trade_weights.items())
+                ),
+                signed_trade_weights=signed,
+                post_fill_actual_weights=(),
+                target_vs_actual_drift=0.0,
+                unfilled_notional=0.0,
+                rejected_notional=0.0,
+                expected_turnover=self._expected_turnover,
+                realized_turnover=0.0,
                 cost=0.0,
+                executed_weights=(),
                 universe_version=target.universe_version or self.universe_version,
                 universe_snapshot_id=target.universe_snapshot_id,
                 equity_at_decision=self._equity(),
@@ -622,6 +741,7 @@ class PortfolioBacktestEngine:
         )
         self._cash += position.qty * exit_price - fee
         self._realized_pnl_events.append((bar.timestamp, position.symbol, realized))
+        self.state.realized_pnl += realized
         self._positions.pop(position.symbol, None)
 
     def _result(
@@ -704,6 +824,13 @@ class PortfolioBacktestEngine:
             for symbol, position in self._positions.items()
             if position.qty > 0
         }
+        self.state.entry_fees = {
+            symbol: position.entry_fee
+            for symbol, position in self._positions.items()
+            if position.qty > 0
+        }
+        self.state.cash = self._cash
+        self.state.last_prices = dict(self._last_price)
         return PortfolioBacktestResult(
             starting_equity=self.starting_equity,
             ending_equity=ending,
@@ -759,26 +886,56 @@ class PortfolioBacktestEngine:
         enriched: list[RebalanceRecord] = []
         for record in self._rebalances:
             decision_fills = fills_by_decision.get(record.decision_timestamp, ())
+            signed_notional: dict[str, float] = {}
             executed: dict[str, float] = {}
+            cost = 0.0
             for fill in decision_fills:
-                executed[fill.symbol] = executed.get(fill.symbol, 0.0) + fill.qty * fill.fill_price
+                sign = 1 if fill.side == OrderSide.BUY else -1
+                signed_notional[fill.symbol] = (
+                    signed_notional.get(fill.symbol, 0.0) + sign * fill.qty * fill.fill_price
+                )
+                executed[fill.symbol] = (
+                    executed.get(fill.symbol, 0.0) + fill.qty * fill.fill_price
+                )
+                cost += fill.slippage_cost + fill.spread_cost + fill.fee
             equity = record.equity_at_decision
+            pre_trade = dict(record.pre_trade_weights)
+            actual_weights: dict[str, float] = {}
+            for symbol, notional in signed_notional.items():
+                if equity > 0:
+                    actual_weights[symbol] = pre_trade.get(symbol, 0.0) + notional / equity
+            drift = 0.0
+            for symbol, target_weight in dict(record.target_weights).items():
+                actual = actual_weights.get(symbol, pre_trade.get(symbol, 0.0))
+                drift = max(drift, abs(target_weight - actual))
             executed_weights = tuple(
                 sorted(
                     ((symbol, value / equity) for symbol, value in executed.items() if equity > 0)
                 )
             )
-            turnover = sum(abs(value) for _, value in executed_weights)
-            cost = sum(fill.slippage_cost + fill.spread_cost + fill.fee for fill in decision_fills)
+            realized_turnover = sum(abs(value) for _, value in executed_weights)
+            expected_notional = sum(
+                abs(target_weight - pre_trade.get(symbol, 0.0)) * equity
+                for symbol, target_weight in dict(record.target_weights).items()
+            )
+            realized_notional = sum(abs(value) for value in signed_notional.values())
+            unfilled = max(0.0, expected_notional - realized_notional)
             enriched.append(
                 RebalanceRecord(
                     decision_timestamp=record.decision_timestamp,
                     reason=record.reason,
                     target_weights=record.target_weights,
                     target_cash_weight=record.target_cash_weight,
-                    executed_weights=executed_weights,
-                    turnover=turnover,
+                    pre_trade_weights=record.pre_trade_weights,
+                    signed_trade_weights=tuple(sorted(signed_notional.items())),
+                    post_fill_actual_weights=tuple(sorted(actual_weights.items())),
+                    target_vs_actual_drift=drift,
+                    unfilled_notional=unfilled,
+                    rejected_notional=0.0,
+                    expected_turnover=record.expected_turnover,
+                    realized_turnover=realized_turnover,
                     cost=cost,
+                    executed_weights=executed_weights,
                     universe_version=record.universe_version,
                     universe_snapshot_id=record.universe_snapshot_id,
                     equity_at_decision=equity,

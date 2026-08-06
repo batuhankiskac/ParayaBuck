@@ -22,7 +22,7 @@ outer_holdout_months: 3
 embargo_bars: 24
 max_mechanism_trials: 30
 max_parameter_trials: 200
-max_holdout_finalists: 10
+max_holdout_finalists: 1
 seed: 7
 
 cost_scenarios:

@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""ParayaBuck backtest CLI (tek giriş noktası).
+"""ParayaBuck veri kalite / legacy fixture CLI (tek giriş noktası).
+
+BU ARAÇ STRATEJİ DEĞERLENDİRMEZ. Eski sinyal tabanlı simülasyon emekli
+edilmiştir ve onaylı portföy stratejisi olmadan trade simülasyonu
+çalıştırılmaz:
+
+  * CSV / sentetik örnek veri (--generate-sample) akışları veri kalitesi ve
+    legacy fixture doğrulama içindir.
+  * Canlı indirme akışı yalnızca --legacy-fixture-mode ile çalışır ve
+    manifest "data_quality_fixture / strategy_evaluated=false" etiketi taşır;
+    sıfır işlemli sonuç strateji başarısı olarak raporlanmaz.
+
+Portföy stratejisi araştırması için:
+    python scripts/run_portfolio_research.py --baseline --nested
 
 Tüm mantık parayabuck/backtest/cli.py içindedir; bu dosya yalnızca bir
 sarmalayıcıdır. Aynı komuta şu yollardan erişebilirsiniz:

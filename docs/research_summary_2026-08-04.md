@@ -1,5 +1,23 @@
 # Portföy Strateji Araştırma Özeti — 2026-08-04
 
+> **STATUS: SUPERSEDED — araştırma doğruluğu denetimi gerekli.**
+>
+> Bu rapordaki metrikler (medyan fold Sharpe ≈ 1,77; MaxDD ≈ %11,7; DSR ≈
+> %98,5; PBO ≈ %24,9; pozitif fold ≈ %58,5) aşağıdaki nedenlerle geçerli
+> üretim kanıtı DEĞİLDİR:
+>
+> 1. Baseline ve raporlar tam veri setiyle (outer holdout başlangıcı ≈
+>    2026-02-01 dahil) çalıştırıldı → outer holdout contamination.
+> 2. SPY download listesinde iki kez bulunuyordu (duplicate bars).
+> 3. Equity verisi yalnız split-adjusted; temettü ayarlaması yok.
+> 4. DSR/PBO/ay oranı hesapları hatalıydı (bkz. 4. bölüm).
+> 5. Gate eşikleri (MaxDD %35, pozitif fold %60 uygulanmıyordu) sonuca göre
+>    gevşekti.
+>
+> Yerine geçen denetim raporu: `docs/research_correctness_audit_2026-08-05.md`.
+> Düzeltilmiş koşu çıktısı: `reports/portfolio_research/nested/
+> equity_dual_momentum_v1_correctness_rerun/`.
+
 Üç yeni portföy stratejisi gerçek Alpaca verisiyle baseline ve kilitli-holdout
 nested validation'dan geçirildi. Sonuçlar `reports/portfolio_research/`
 altında tekrar üretilebilir biçimde saklanır (rapor + manifest + fold

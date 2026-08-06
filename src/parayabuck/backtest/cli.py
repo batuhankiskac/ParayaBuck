@@ -447,6 +447,15 @@ def main(argv: list[str] | None = None) -> int:
         "all = bölünme + temettü",
     )
     parser.add_argument(
+        "--legacy-fixture-mode",
+        action="store_true",
+        help=(
+            "veri kalite/legacy fixture koşusu: strateji DEĞERLENDİRİLMEZ; "
+            "yalnız indirme, kapsam ve veri kalitesi raporlanır. Onaylı portföy "
+            "stratejisi olmadan trade simülasyonu yapılmaz."
+        ),
+    )
+    parser.add_argument(
         "--entry-participation-pct",
         type=float,
         default=0.10,
@@ -523,6 +532,25 @@ def main(argv: list[str] | None = None) -> int:
     if not effective_argv:
         print(USAGE)
         return 0
+
+    # Fail-closed: the legacy signal-based simulation is retired because no
+    # approved portfolio strategy exists. CSV and --generate-sample runs are
+    # data-quality/legacy fixture tools; live-download trade simulation
+    # requires an explicit --legacy-fixture-mode acknowledgment and the run
+    # is labelled as a fixture (never as a strategy evaluation).
+    if not (args.legacy_fixture_mode or bool(args.csv) or args.generate_sample):
+        raise SystemExit(
+            "Legacy signal-based backtest simulation is retired (no approved portfolio "
+            "strategy). Pass --legacy-fixture-mode for a data-quality/coverage fixture "
+            "run, or use the portfolio research pipeline "
+            "(python scripts/run_portfolio_research.py --baseline/--nested)."
+        )
+    fixture_mode = args.legacy_fixture_mode or bool(args.csv) or args.generate_sample
+    if fixture_mode:
+        print(
+            "Mod: data-quality/legacy FIXTURE koşusu — strateji değerlendirilmez; "
+            "rapor yalnız veri kapsamı/kalitesi içindir."
+        )
 
     if args.generate_sample:
         sample_timeframe = args.timeframe or "5m"
@@ -765,6 +793,8 @@ def main(argv: list[str] | None = None) -> int:
             "data_hash": hash_bars(all_bars),
             "cost_scenario": selected_scenario.name if selected_scenario else "legacy",
             "random_seed": None,
+            "mode": "data_quality_fixture",
+            "strategy_evaluated": False,
         },
     )
 

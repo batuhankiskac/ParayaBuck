@@ -17,9 +17,6 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "symbols": "AAPL",
         "max_symbols": 5,
         "adjustment": "splits",
-        "sweep": False,
-        "walk_forward": False,
-        "walk_forward_optimize": False,
     }
     values.update(overrides)
     return values

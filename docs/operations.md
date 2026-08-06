@@ -13,6 +13,13 @@ Production hardening tamamlanıp paper chaos testleri onaylanana kadar:
 - `manage_external_positions: false`
 - cycle başına en fazla bir yeni pozisyon
 
+Ayrıca runtime **research-only** durumundadır
+(`strategy_status=research_only_no_approved_portfolio_strategy`): onaylı
+portföy stratejisi yoktur, legacy sinyal stratejileri emekli edilmiştir ve
+`scripts/run_backtest.py` yalnız veri kalite/legacy fixture modunda çalışır
+(`--legacy-fixture-mode`). Strateji durumu:
+`docs/equity_dual_momentum_v2_results.md` (RED → arşivlendi).
+
 Crypto verisi ve virtual sinyaller izlenebilir; bu ayarlarda broker'a crypto emri gitmez.
 `live_trading_enabled=false`, live hesap bağlantısı arming ile doğrulansa bile entry üretimini
 ayrıca engeller.

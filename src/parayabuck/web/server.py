@@ -105,12 +105,9 @@ class BacktestManager:
         adjustment = payload.get("adjustment")
         if adjustment in {"raw", "splits", "all"}:
             argv += ["--adjustment", adjustment]
-        if payload.get("sweep"):
-            argv.append("--sweep")
-        if payload.get("walk_forward"):
-            argv.append("--walk-forward")
-        if payload.get("walk_forward_optimize"):
-            argv.append("--walk-forward-optimize")
+        # The legacy signal simulation is retired; the web backtest page is a
+        # data-quality/legacy fixture run and must say so in its manifest.
+        argv.append("--legacy-fixture-mode")
         return argv
 
     def _run(self, argv: list[str]) -> None:
@@ -875,9 +872,6 @@ class BacktestPayload(BaseModel):
     symbols: str = ""
     max_symbols: int = Field(40, ge=1, le=100)
     adjustment: Literal["raw", "splits", "all"] = "splits"
-    sweep: bool = False
-    walk_forward: bool = False
-    walk_forward_optimize: bool = False
 
 
 # Routes

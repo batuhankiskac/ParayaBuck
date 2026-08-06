@@ -23,6 +23,10 @@ from parayabuck.markets.symbols import canonical_symbol
 MANIFEST_FILENAME = "manifest.json"
 SNAPSHOTS_FILENAME = "universe_snapshots.json"
 
+# Adjustment policies accepted for research datasets. ``unknown`` or a missing
+# value is rejected so research never silently consumes unverifiable data.
+KNOWN_ADJUSTMENTS = ("raw", "splits", "all", "adjusted")
+
 
 def _try_import_pyarrow() -> bool:
     try:
@@ -34,6 +38,77 @@ def _try_import_pyarrow() -> bool:
 
 
 PARQUET_AVAILABLE = _try_import_pyarrow()
+
+
+@dataclass(frozen=True)
+class ProviderMetadata:
+    """Verifiable provenance of a research data source.
+
+    Every production research dataset must carry this block. The adjustment
+    method must be stated explicitly; ``unknown`` is rejected by the dataset
+    quality gate. ``research_provider_differs_from_execution`` records whether
+    the research feed differs from the execution broker's feed (relevant when
+    signal and fill prices come from different series).
+    """
+
+    provider_name: str
+    source_feed: str
+    vendor_symbol: str | None
+    adjustment_method: str
+    currency: str
+    timezone: str
+    exchange_calendar: str
+    downloaded_at: datetime
+    provider_version: str
+    research_provider_differs_from_execution: bool
+    notes: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.provider_name.strip() or not self.source_feed.strip():
+            raise ValueError("Provider name and source feed are required")
+        if not self.adjustment_method or self.adjustment_method.lower() == "unknown":
+            raise ValueError("Adjustment method must be explicit, not unknown")
+        if self.adjustment_method not in KNOWN_ADJUSTMENTS:
+            raise ValueError(
+                f"Unsupported adjustment method: {self.adjustment_method}"
+            )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider_name": self.provider_name,
+            "source_feed": self.source_feed,
+            "vendor_symbol": self.vendor_symbol,
+            "adjustment_method": self.adjustment_method,
+            "currency": self.currency,
+            "timezone": self.timezone,
+            "exchange_calendar": self.exchange_calendar,
+            "downloaded_at": self.downloaded_at.isoformat(),
+            "provider_version": self.provider_version,
+            "research_provider_differs_from_execution": (
+                self.research_provider_differs_from_execution
+            ),
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> ProviderMetadata:
+        return cls(
+            provider_name=str(raw.get("provider_name", "")),
+            source_feed=str(raw.get("source_feed", "")),
+            vendor_symbol=(
+                str(raw["vendor_symbol"]) if raw.get("vendor_symbol") is not None else None
+            ),
+            adjustment_method=str(raw.get("adjustment_method", "unknown")),
+            currency=str(raw.get("currency", "")),
+            timezone=str(raw.get("timezone", "")),
+            exchange_calendar=str(raw.get("exchange_calendar", "")),
+            downloaded_at=datetime.fromisoformat(str(raw.get("downloaded_at", ""))),
+            provider_version=str(raw.get("provider_version", "")),
+            research_provider_differs_from_execution=bool(
+                raw.get("research_provider_differs_from_execution", False)
+            ),
+            notes=str(raw.get("notes", "")),
+        )
 
 
 @dataclass(frozen=True)
@@ -51,6 +126,9 @@ class DatasetManifest:
     bars_per_symbol: dict[str, int]
     data_hash: str
     duplicate_bars: dict[str, int]
+    input_duplicate_bars: dict[str, int] | None = None
+    conflicting_duplicate_bars: dict[str, int] | None = None
+    provider_metadata: ProviderMetadata | None = None
     notes: str = ""
 
     def to_dict(self) -> dict[str, object]:
@@ -68,6 +146,17 @@ class DatasetManifest:
             "bars_per_symbol": dict(self.bars_per_symbol),
             "data_hash": self.data_hash,
             "duplicate_bars": dict(self.duplicate_bars),
+            "input_duplicate_bars": (
+                dict(self.input_duplicate_bars) if self.input_duplicate_bars is not None else {}
+            ),
+            "conflicting_duplicate_bars": (
+                dict(self.conflicting_duplicate_bars)
+                if self.conflicting_duplicate_bars is not None
+                else {}
+            ),
+            "provider_metadata": (
+                self.provider_metadata.to_dict() if self.provider_metadata is not None else None
+            ),
             "notes": self.notes,
         }
 
@@ -85,12 +174,25 @@ class DatasetManifest:
             if isinstance(raw_duplicates, dict)
             else {}
         )
+        raw_input_duplicates = raw.get("input_duplicate_bars", {})
+        input_duplicate_bars = (
+            {str(symbol): int(count) for symbol, count in raw_input_duplicates.items()}
+            if isinstance(raw_input_duplicates, dict)
+            else {}
+        )
+        raw_conflicting = raw.get("conflicting_duplicate_bars", {})
+        conflicting_duplicate_bars = (
+            {str(symbol): int(count) for symbol, count in raw_conflicting.items()}
+            if isinstance(raw_conflicting, dict)
+            else {}
+        )
         raw_symbols = raw["symbols"]
         symbols = (
             tuple(str(symbol) for symbol in raw_symbols)
             if isinstance(raw_symbols, (tuple, list))
             else ()
         )
+        raw_provider = raw.get("provider_metadata")
         return cls(
             dataset_id=str(raw["dataset_id"]),
             format=str(raw["format"]),
@@ -105,6 +207,13 @@ class DatasetManifest:
             bars_per_symbol=bars_per_symbol,
             data_hash=str(raw["data_hash"]),
             duplicate_bars=duplicate_bars,
+            input_duplicate_bars=input_duplicate_bars,
+            conflicting_duplicate_bars=conflicting_duplicate_bars,
+            provider_metadata=(
+                ProviderMetadata.from_dict(raw_provider)
+                if isinstance(raw_provider, dict)
+                else None
+            ),
             notes=str(raw.get("notes", "")),
         )
 
@@ -139,7 +248,7 @@ def hash_dataset(bars: list[Bar]) -> str:
     for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol, item.timeframe)):
         row = (
             bar.timestamp.isoformat(),
-            bar.symbol,
+            canonical_symbol(bar.symbol, bar.market),
             bar.timeframe,
             f"{bar.open:.12g}",
             f"{bar.high:.12g}",
@@ -151,6 +260,48 @@ def hash_dataset(bars: list[Bar]) -> str:
         digest.update("|".join(row).encode())
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def deduplicate_bars(
+    bars: list[Bar],
+) -> tuple[list[Bar], dict[str, int], dict[str, int]]:
+    """Split bars into a canonical deduplicated dataset plus audit counts.
+
+    Exact duplicates (same timestamp and identical OHLCV after symbol
+    canonicalization) collapse to a single bar and are counted in the returned
+    ``input_duplicates`` map. Conflicting duplicates (same canonical
+    symbol/timeframe/timestamp with differing OHLCV) are counted in
+    ``conflicting`` — callers must fail the run on any non-zero conflict, and
+    no dataset may be written.
+    """
+    unique: dict[tuple[str, str, datetime], Bar] = {}
+    input_duplicates: dict[str, int] = {}
+    conflicting: dict[str, int] = {}
+    for bar in bars:
+        symbol = canonical_symbol(bar.symbol, bar.market)
+        key = (symbol, bar.timeframe, bar.timestamp)
+        previous = unique.get(key)
+        if previous is None:
+            unique[key] = bar
+            continue
+        if (
+            previous.open,
+            previous.high,
+            previous.low,
+            previous.close,
+            previous.volume,
+        ) == (
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
+        ):
+            input_duplicates[symbol] = input_duplicates.get(symbol, 0) + 1
+            continue
+        conflicting[symbol] = conflicting.get(symbol, 0) + 1
+    unique_bars = sorted(unique.values(), key=lambda bar: (bar.timestamp, bar.symbol))
+    return unique_bars, input_duplicates, conflicting
 
 
 class VersionedResearchStore:
@@ -189,16 +340,38 @@ class VersionedResearchStore:
         adjustment: str,
         universe_version: str,
         notes: str = "",
+        provider_metadata: ProviderMetadata | None = None,
     ) -> DatasetManifest:
         if not bars:
             raise ValueError("Cannot persist an empty dataset")
         if not dataset_id.strip():
             raise ValueError("Dataset id is required")
+        if adjustment not in KNOWN_ADJUSTMENTS:
+            raise ValueError(
+                f"Adjustment must be one of {KNOWN_ADJUSTMENTS}; got {adjustment!r}"
+            )
+        if provider_metadata is not None and (
+            provider_metadata.adjustment_method != adjustment
+        ):
+            raise ValueError(
+                "Provider adjustment_method does not match dataset adjustment: "
+                f"{provider_metadata.adjustment_method!r} vs {adjustment!r}"
+            )
+        # Duplicate/conflict policy is enforced before any directory is created:
+        # a conflicting duplicate must never leave a half-written dataset behind.
+        canonical_bars, input_duplicates, conflicting = deduplicate_bars(bars)
+        if any(conflicting.values()):
+            details = ", ".join(
+                f"{symbol}={count}" for symbol, count in sorted(conflicting.items())
+            )
+            raise ValueError(
+                "Conflicting duplicate bars detected; dataset not written: " + details
+            )
         directory = self.dataset_dir(dataset_id)
         directory.mkdir(parents=True, exist_ok=True)
         format_name = "parquet" if PARQUET_AVAILABLE else "csv_gz"
         by_symbol: dict[str, list[Bar]] = {}
-        for bar in bars:
+        for bar in canonical_bars:
             canonical = canonical_symbol(bar.symbol, bar.market)
             if canonical not in by_symbol:
                 by_symbol[canonical] = []
@@ -206,11 +379,7 @@ class VersionedResearchStore:
         for symbol, symbol_bars in by_symbol.items():
             ordered = sorted(symbol_bars, key=lambda item: item.timestamp)
             self._write_partition(directory, symbol, timeframe, ordered, format_name)
-        timestamps = [bar.timestamp for bar in bars]
-        duplicates: dict[str, int] = {
-            symbol: len(bars_list) - len({bar.timestamp for bar in bars_list})
-            for symbol, bars_list in by_symbol.items()
-        }
+        timestamps = [bar.timestamp for bar in canonical_bars]
         manifest = DatasetManifest(
             dataset_id=dataset_id,
             format=format_name,
@@ -223,8 +392,11 @@ class VersionedResearchStore:
             end=max(timestamps),
             symbols=tuple(sorted(by_symbol)),
             bars_per_symbol={symbol: len(bars_list) for symbol, bars_list in by_symbol.items()},
-            data_hash=hash_dataset(bars),
-            duplicate_bars=duplicates,
+            data_hash=hash_dataset(canonical_bars),
+            duplicate_bars={symbol: 0 for symbol in by_symbol},
+            input_duplicate_bars=input_duplicates,
+            conflicting_duplicate_bars=conflicting,
+            provider_metadata=provider_metadata,
             notes=notes,
         )
         (directory / MANIFEST_FILENAME).write_text(
@@ -262,29 +434,54 @@ class VersionedResearchStore:
         return loaded
 
     def save_universe_snapshots(
-        self, dataset_id: str, snapshots: tuple[UniverseSnapshotRecord, ...]
+        self,
+        dataset_id: str,
+        snapshots: tuple[UniverseSnapshotRecord, ...],
+        *,
+        methodology: str = "",
+        metadata: dict[str, object] | None = None,
     ) -> None:
         directory = self.dataset_dir(dataset_id)
         directory.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, object] = {
+            "methodology": methodology,
+            "metadata": dict(metadata or {}),
+            "snapshots": [snapshot.to_dict() for snapshot in snapshots],
+        }
         (directory / SNAPSHOTS_FILENAME).write_text(
-            json.dumps(
-                [snapshot.to_dict() for snapshot in snapshots],
-                indent=2,
-                sort_keys=True,
-                ensure_ascii=False,
-            ),
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False),
             encoding="utf-8",
         )
 
-    def load_universe_snapshots(self, dataset_id: str) -> tuple[UniverseSnapshotRecord, ...]:
+    def load_universe_snapshots(
+        self, dataset_id: str
+    ) -> tuple[tuple[UniverseSnapshotRecord, ...], str, dict[str, object]]:
+        """Load snapshots, methodology and metadata from a dataset directory.
+
+        Legacy files written as a bare list of snapshot records load with an
+        empty methodology/metadata so older datasets stay readable.
+        """
         path = self.dataset_dir(dataset_id) / SNAPSHOTS_FILENAME
         if not path.exists():
-            return ()
+            return (), "", {}
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return tuple(
+        if isinstance(raw, list):
+            records = tuple(
+                UniverseSnapshotRecord.from_dict(item) for item in raw if isinstance(item, dict)
+            )
+            return records, "", {}
+        if not isinstance(raw, dict):
+            return (), "", {}
+        records = tuple(
             UniverseSnapshotRecord.from_dict(item)
-            for item in raw
+            for item in raw.get("snapshots", ())
             if isinstance(item, dict)
+        )
+        metadata = raw.get("metadata", {})
+        return (
+            records,
+            str(raw.get("methodology", "")),
+            dict(metadata) if isinstance(metadata, dict) else {},
         )
 
     def delete_dataset(self, dataset_id: str) -> None:
@@ -412,8 +609,9 @@ class VersionedResearchStore:
 
 __all__ = [
     "DatasetManifest",
-    "PARQUET_AVAILABLE",
+    "ProviderMetadata",
     "UniverseSnapshotRecord",
     "VersionedResearchStore",
+    "deduplicate_bars",
     "hash_dataset",
 ]

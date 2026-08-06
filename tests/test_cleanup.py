@@ -74,3 +74,89 @@ def test_new_strategies_are_registered() -> None:
         "crypto_cross_sectional_momentum_1h_v1",
         "equity_time_series_momentum_1d_v1",
     } <= registered
+
+
+# Legacy strategy names are allowed ONLY inside migration/audit documentation;
+# active docs, README, web and runtime paths must not reference them as live
+# features.
+_ALLOWED_LEGACY_DOCS = {
+    "docs/strategy_migration_2026-08-04.md",
+    "docs/multitimeframe_validation_2026-08-04.md",
+    "docs/research_correctness_audit_2026-08-05.md",
+}
+
+
+def _scan_paths(root: Path, extensions: tuple[str, ...], skip: set[str]) -> list[str]:
+    skip_names = {Path(item).name for item in skip}
+    offenders: list[str] = []
+    for path in root.rglob("*"):
+        if path.is_dir() or path.suffix not in extensions:
+            continue
+        if path.name in skip_names:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if any(name in text for name in (*LEGACY_STRATEGY_NAMES,)):
+            offenders.append(str(path.relative_to(root)))
+    return offenders
+
+
+def test_active_docs_and_web_do_not_reference_legacy_strategies() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    skip = set(_ALLOWED_LEGACY_DOCS) | {"docs/research_summary_2026-08-04.md"}
+    offenders = _scan_paths(repo / "docs", (".md",), skip=skip)
+    assert offenders == []
+    web_offenders = _scan_paths(
+        repo / "src" / "parayabuck" / "web", (".html", ".js"), skip=set()
+    )
+    assert web_offenders == []
+
+
+def test_readme_mentions_legacy_strategies_only_in_migration_section() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    readme = (repo / "README.md").read_text(encoding="utf-8")
+    lines = readme.splitlines()
+    allowed_section = False
+    for index, line in enumerate(lines):
+        if line.startswith("## "):
+            heading = line.lower()
+            allowed_section = "migration" in heading or "audit" in heading
+        if any(name in line for name in LEGACY_STRATEGY_NAMES):
+            assert allowed_section, f"legacy name outside migration/audit section: {line}"
+
+
+def test_web_backtest_payload_no_longer_carries_sweep_flags() -> None:
+    from parayabuck.web.server import BacktestPayload
+
+    fields = set(BacktestPayload.model_fields)
+    assert "sweep" not in fields
+    assert "walk_forward" not in fields
+    assert "walk_forward_optimize" not in fields
+
+
+def test_runtime_reports_research_only_strategy_status() -> None:
+    from parayabuck.runtime import RuntimeHealth
+
+    assert "research_only" in RuntimeHealth.strategy_status
+
+
+def test_legacy_simulation_requires_fixture_flag() -> None:
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[1]
+    env = {"PATH": "/usr/bin:/bin"}
+    process = subprocess.run(
+        [
+            str(repo / ".venv" / "bin" / "python"),
+            "-c",
+            (
+                "import sys; sys.argv=['run_backtest.py','--symbols','AAPL']; "
+                "from parayabuck.backtest import cli; cli.main()"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=repo,
+    )
+    assert process.returncode != 0
+    assert "retired" in process.stderr or "retired" in process.stdout

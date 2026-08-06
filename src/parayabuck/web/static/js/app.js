@@ -81,9 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btDays = document.getElementById('btDays');
     const btMaxSymbols = document.getElementById('btMaxSymbols');
     const btSymbols = document.getElementById('btSymbols');
-    const btSweep = document.getElementById('btSweep');
-    const btWalkForward = document.getElementById('btWalkForward');
-    const btOptimize = document.getElementById('btOptimize');
 
     // Settings Modal Elements
     const settingsModal = document.getElementById('settingsModal');
@@ -766,10 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             years: parseInt(btYears.value, 10) || 3,
             days: Number.isNaN(daysValue) ? 90 : daysValue,
             max_symbols: parseInt(btMaxSymbols.value, 10) || 40,
-            symbols: btSymbols.value.trim(),
-            sweep: btSweep.checked,
-            walk_forward: btWalkForward.checked,
-            walk_forward_optimize: btOptimize.checked
+            symbols: btSymbols.value.trim()
         };
         try {
             const res = await controlFetch('/api/backtest/run', {

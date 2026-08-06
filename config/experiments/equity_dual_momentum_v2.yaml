@@ -1,0 +1,70 @@
+experiment_id: equity_etf_dual_momentum_v2
+start: 2016-01-01T00:00:00Z
+end: 2026-08-01T00:00:00Z
+universe_version: permanent_etf_core_v1
+universe:
+  - SPY
+  - QQQ
+  - IWM
+  - XLB
+  - XLC
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLRE
+  - XLU
+  - XLV
+  - XLY
+
+train_months: 14
+validation_months: 1
+outer_holdout_months: 6
+embargo_bars: 5
+max_mechanism_trials: 30
+max_parameter_trials: 200
+max_holdout_finalists: 1
+seed: 7
+
+source_provider: alpaca
+adjustment_policy: all
+
+cost_scenarios:
+  - name: equity_base
+    market: equity
+    slippage_bps: 2
+    spread_bps: 4
+  - name: equity_stress
+    market: equity
+    slippage_bps: 5
+    spread_bps: 10
+
+# Primary frozen candidate (pre-registered, no leverage):
+#   momentum_scheme=6_1, absolute_filter=above_200dma, volatility_window=20,
+#   volatility_target=None, top_n=3
+# The grid below is a pre-declared diagnostic ablation set (12 trials = budget):
+#   momentum: 6_1 merkezli sınırlı alternatifler (6_1, 12_1, 3_6_12)
+#   absolute filter: above_200dma + önceden kayıtlı tek alternatif
+#   volatility window: 20/60
+#   volatility targeting BU aşamada finalist seçimi için kullanılmaz.
+candidate_spaces:
+  - name: equity_etf_dual_momentum_v1
+    version: 1.0.0
+    market: equity
+    timeframe: 1d
+    parameter_grid:
+      momentum_scheme: ["6_1", "12_1", "3_6_12"]
+      absolute_filter: [above_200dma, positive_momentum]
+      volatility_window: [20, 60]
+      volatility_target: [null]
+
+metadata:
+  purpose: phase2_v2_dataset
+  frozen_candidate:
+    momentum_scheme: "6_1"
+    absolute_filter: above_200dma
+    volatility_window: 20
+    volatility_target: null
+    top_n: 3
+    leverage: none

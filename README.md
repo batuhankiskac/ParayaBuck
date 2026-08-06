@@ -150,10 +150,18 @@ python scripts/run_portfolio_research.py --nested
 
 Portföy düzeyinde strateji araştırması (kalıcı ETF evreninde dual momentum,
 1h kripto cross-sectional momentum, günlük time-series momentum) kilitli outer
-holdout ve production gate ile [`docs/research_summary_2026-08-04.md`](docs/research_summary_2026-08-04.md)
-içinde açıklanır; eski tekil sembol alpha katmanının kaldırılması için
-[`docs/strategy_migration_2026-08-04.md`](docs/strategy_migration_2026-08-04.md)
-belgesine bakın.
+holdout ve production gate ile yürütülür. Araştırma durumu:
+
+- **Strateji durumu: RESEARCH ONLY — onaylı canlı strateji yok.** Runtime
+  fail-closed'dur (`strategy_status=research_only_no_approved_portfolio_strategy`)
+  ve UI aktif strateji göstermez.
+- 2026-08-04 raporundaki metrikler doğruluk denetiminde geçersiz çıktı:
+  [`docs/research_correctness_audit_2026-08-05.md`](docs/research_correctness_audit_2026-08-05.md)
+  (holdout contamination, duplicate SPY, adjustment, DSR/PBO hesap hataları).
+- Düzeltilmiş doğrulama (v1 rerun + v2 verisi): **RED — strateji arşivlendi**:
+  [`docs/equity_dual_momentum_v2_results.md`](docs/equity_dual_momentum_v2_results.md).
+- Eski tekil sembol alpha katmanının kaldırılması:
+  [`docs/strategy_migration_2026-08-04.md`](docs/strategy_migration_2026-08-04.md).
 
 Alpaca modunda `--profile` belirtilmezse pencere otomatik karar verir: pencere
 `EQUITY_MAX_DAYS["5m"]` (120 işlem günü) içindeyse canlı profili (5m + 1h), daha
@@ -208,7 +216,7 @@ data/runtime/ai_decisions/
 │       ├── events.jsonl
 │       ├── scan-digest.md
 │       ├── outcomes.md
-│       └── 153000_AAPL_stock_trend_pullback_a1b2c3d4.md
+│       └── 153000_AAPL_<strategy>_a1b2c3d4.md
 ├── live/
 │   └── ...
 └── backtest/
@@ -238,9 +246,10 @@ görülür:
 
 ```text
 15:30:00 | AAPL 5m | close=192.14 | regime=range (adx=16.2, weak_directional_trend) |
-position=none | stock_trend_pullback: skipped (The strategy only buys pullbacks inside
-an established uptrend.) | stock_mean_reversion: skipped (Price must reclaim the lower
-Bollinger band.)
+position=none | <strategy-a>: skipped (reason) | <strategy-b>: skipped (reason)
+
+Not: eski sinyal stratejileri emekli edilmiştir; emeklilik gerekçesi
+docs/strategy_migration_2026-08-04.md içindedir.
 ```
 
 `events.jsonl`, satır başına tek JSON nesnesi içeren append-only makine günlüğüdür.
@@ -258,7 +267,7 @@ Her olayda `schema_version`, `event_type`, `run_id` ve UTC ISO-8601 `timestamp` 
 vardır. Bir `decision` olayının kısaltılmış örneği:
 
 ```json
-{"schema_version":1,"event_type":"decision","run_id":"paper-...","timestamp":"2026-07-26T15:30:00+00:00","signal_id":"a1b2...","symbol":"AAPL","timeframe":"5m","strategy":"stock_trend_pullback","direction":"long","score":78.4,"confidence":0.784,"prediction":{"entry":192.14,"stop":189.83,"target":197.22,"risk_reward":2.2,"horizon_bars":48},"gate_trail":[{"gate":"strategy","status":"passed","reason":"Trend pullback resumed with acceptable momentum and EMA alignment."},{"gate":"minimum_score","status":"passed","reason":"score 78.40 meets 65.00"},{"gate":"ranking","status":"passed","reason":"rank 1 of 2; quality=135.206"},{"gate":"allocation","status":"passed","reason":"portfolio capacity was available and no position was held"},{"gate":"risk","status":"passed","reason":"approved"},{"gate":"broker","status":"passed","reason":"broker_response=accepted"}],"execution":{"traded":true}}
+{"schema_version":1,"event_type":"decision","run_id":"paper-...","timestamp":"2026-07-26T15:30:00+00:00","signal_id":"a1b2...","symbol":"AAPL","timeframe":"5m","strategy":"<strategy>","direction":"long","score":78.4,"confidence":0.784,"prediction":{"entry":192.14,"stop":189.83,"target":197.22,"risk_reward":2.2,"horizon_bars":48},"gate_trail":[{"gate":"strategy","status":"passed","reason":"Trend pullback resumed with acceptable momentum and EMA alignment."},{"gate":"minimum_score","status":"passed","reason":"score 78.40 meets 65.00"},{"gate":"ranking","status":"passed","reason":"rank 1 of 2; quality=135.206"},{"gate":"allocation","status":"passed","reason":"portfolio capacity was available and no position was held"},{"gate":"risk","status":"passed","reason":"approved"},{"gate":"broker","status":"passed","reason":"broker_response=accepted"}],"execution":{"traded":true}}
 ```
 
 `open_predictions.json`, henüz hedefe, stopa veya zaman ufkuna ulaşmamış sinyallerin
@@ -336,7 +345,7 @@ engellediği sinyallerin sonradan gerçekten zararlı mı yoksa kaçırılmış 
 Kısaltılmış bir outcome JSONL örneği:
 
 ```json
-{"schema_version":1,"event_type":"outcome","signal_id":"a1b2...","symbol":"AAPL","strategy":"stock_trend_pullback","outcome":"stop_hit","verdict":"wrong","actual_price":189.83,"return_pct":-1.202,"bars_elapsed":17,"mfe_pct":0.614,"mae_pct":-1.35,"traded":true}
+{"schema_version":1,"event_type":"outcome","signal_id":"a1b2...","symbol":"AAPL","strategy":"<strategy>","outcome":"stop_hit","verdict":"wrong","actual_price":189.83,"return_pct":-1.202,"bars_elapsed":17,"mfe_pct":0.614,"mae_pct":-1.35,"traded":true}
 ```
 
 ### AI ile inceleme sırası

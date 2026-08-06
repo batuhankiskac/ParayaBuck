@@ -7,8 +7,10 @@ import pytest
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.research_store import (
+    ProviderMetadata,
     UniverseSnapshotRecord,
     VersionedResearchStore,
+    deduplicate_bars,
     hash_dataset,
 )
 from parayabuck.markets.symbols import canonical_symbol
@@ -42,8 +44,23 @@ def _dataset(tmp_path: Path) -> tuple[VersionedResearchStore, list[Bar]]:
         for index in range(60)
         for symbol in ("SPY", "QQQ")
     ]
-    bars.append(_bar(start, "SPY", 100.0))  # duplicate bar for counting
+    bars.append(_bar(start, "SPY", 100.0))  # exact duplicate bar for audit counting
     return store, bars
+
+
+def _provider() -> ProviderMetadata:
+    return ProviderMetadata(
+        provider_name="alpaca",
+        source_feed="sip",
+        vendor_symbol="SPY",
+        adjustment_method="all",
+        currency="USD",
+        timezone="America/New_York",
+        exchange_calendar="NYSE",
+        downloaded_at=datetime(2026, 8, 5, tzinfo=UTC),
+        provider_version="1.0.0",
+        research_provider_differs_from_execution=False,
+    )
 
 
 def test_dataset_round_trip_preserves_bars_and_manifest(tmp_path: Path) -> None:
@@ -56,18 +73,126 @@ def test_dataset_round_trip_preserves_bars_and_manifest(tmp_path: Path) -> None:
         adjustment="splits",
         universe_version="permanent_etf_core_v1",
     )
-    assert manifest.data_hash == hash_dataset(bars)
+    unique, _input, _conflicts = deduplicate_bars(bars)
+    assert manifest.data_hash == hash_dataset(unique)
     assert set(manifest.symbols) == {"SPY", "QQQ"}
-    assert manifest.duplicate_bars["SPY"] == 1
+    # The new policy collapses exact duplicates before persisting: the final
+    # dataset must contain every bar exactly once and keep an audit count of
+    # the collapsed input duplicates.
+    assert manifest.duplicate_bars["SPY"] == 0
+    assert manifest.input_duplicate_bars["SPY"] == 1
+    assert manifest.conflicting_duplicate_bars == {}
 
     loaded = store.load_dataset("equity_v1")
     assert set(loaded) == {"SPY", "QQQ"}
-    assert len(loaded["SPY"]) == 61
+    assert len(loaded["SPY"]) == 60
     first = loaded["SPY"][0]
     assert first.symbol == "SPY"
     assert first.timestamp == bars[0].timestamp
     round_trip_bars = [bar for bars_list in loaded.values() for bar in bars_list]
     assert hash_dataset(round_trip_bars) == manifest.data_hash
+
+
+def test_exact_duplicate_collapses_deterministically() -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    original = _bar(start, "SPY", 100.0)
+    duplicate = _bar(start, "SPY", 100.0)
+    unique, input_duplicates, conflicting = deduplicate_bars([original, duplicate])
+    assert len(unique) == 1
+    assert unique[0] == original
+    assert input_duplicates == {"SPY": 1}
+    assert conflicting == {}
+
+
+def test_conflicting_duplicate_rejects_save_and_writes_nothing(tmp_path: Path) -> None:
+    store, bars = _dataset(tmp_path)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    bars.append(_bar(start, "QQQ", 123.0))  # same timestamp, different OHLCV
+    with pytest.raises(ValueError, match="Conflicting duplicate"):
+        store.save_dataset(
+            "equity_v1",
+            bars,
+            timeframe="1d",
+            source_feed="iex",
+            adjustment="splits",
+            universe_version="v1",
+        )
+    assert not store.dataset_dir("equity_v1").exists()
+
+
+def test_hash_is_canonical_and_timeframe_aware() -> None:
+    lower = _bar(datetime(2024, 1, 1, tzinfo=UTC), "spy", 100.0)
+    upper = _bar(datetime(2024, 1, 1, tzinfo=UTC), "SPY", 100.0)
+    assert hash_dataset([lower]) == hash_dataset([upper])
+    hourly = Bar(
+        datetime(2024, 1, 1, tzinfo=UTC),
+        "SPY",
+        "1h",
+        100.0,
+        101.0,
+        99.0,
+        100.5,
+        1000.0,
+        Market.EQUITY,
+    )
+    assert hash_dataset([hourly]) != hash_dataset(
+        [_bar(datetime(2024, 1, 1, tzinfo=UTC), "SPY", 100.5)]
+    )
+
+
+def test_dataset_save_rejects_unknown_adjustment(tmp_path: Path) -> None:
+    store, bars = _dataset(tmp_path)
+    with pytest.raises(ValueError, match="Adjustment"):
+        store.save_dataset(
+            "equity_v1",
+            bars,
+            timeframe="1d",
+            source_feed="iex",
+            adjustment="unknown",
+            universe_version="v1",
+        )
+
+
+def test_provider_metadata_is_persisted_and_validated(tmp_path: Path) -> None:
+    store, bars = _dataset(tmp_path)
+    manifest = store.save_dataset(
+        "equity_v1",
+        bars,
+        timeframe="1d",
+        source_feed="iex",
+        adjustment="all",
+        universe_version="v1",
+        provider_metadata=_provider(),
+    )
+    assert manifest.provider_metadata is not None
+    assert manifest.provider_metadata.adjustment_method == "all"
+    reloaded = store.manifest("equity_v1")
+    assert reloaded is not None and reloaded.provider_metadata is not None
+    assert reloaded.provider_metadata == _provider()
+
+    with pytest.raises(ValueError, match="does not match"):
+        store.save_dataset(
+            "equity_v2",
+            bars,
+            timeframe="1d",
+            source_feed="iex",
+            adjustment="splits",
+            universe_version="v1",
+            provider_metadata=_provider(),
+        )
+    with pytest.raises(ValueError, match="unknown"):
+        ProviderMetadata(
+            provider_name="alpaca",
+            source_feed="iex",
+            vendor_symbol="SPY",
+            adjustment_method="unknown",
+            currency="USD",
+            timezone="UTC",
+            exchange_calendar="NYSE",
+            downloaded_at=datetime(2026, 8, 5, tzinfo=UTC),
+            provider_version="1.0.0",
+            research_provider_differs_from_execution=False,
+        )
 
 
 def test_dataset_partitions_are_symbol_timeframe_based(tmp_path: Path) -> None:
@@ -135,9 +260,16 @@ def test_universe_snapshots_round_trip(tmp_path: Path) -> None:
         UniverseSnapshotRecord(datetime(2024, 2, 1, tzinfo=UTC), ("SPY", "QQQ")),
         UniverseSnapshotRecord(datetime(2024, 3, 1, tzinfo=UTC), ("SPY",)),
     )
-    store.save_universe_snapshots("equity_v1", snapshots)
-    restored = store.load_universe_snapshots("equity_v1")
+    store.save_universe_snapshots(
+        "equity_v1",
+        snapshots,
+        methodology="trailing_liquidity_v1",
+        metadata={"listing_start": "2024-01-02", "lookback_days": 30},
+    )
+    restored, methodology, metadata = store.load_universe_snapshots("equity_v1")
     assert restored == snapshots
+    assert methodology == "trailing_liquidity_v1"
+    assert metadata["lookback_days"] == 30
 
 
 def test_empty_dataset_is_rejected(tmp_path: Path) -> None:

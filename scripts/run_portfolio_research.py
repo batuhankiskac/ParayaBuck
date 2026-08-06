@@ -1379,7 +1379,7 @@ def main(argv: list[str] | None = None) -> int:
             market=Market.EQUITY,
             legacy_audit_bypass=equity_dataset == EQUITY_DATASET,
         )
-        if not (args.skip_crypto or args.v2):
+        if not (args.skip_crypto or args.v2 or args.rerun_v2):
             _preflight_research_quality(store, CRYPTO_DATASET, market=Market.CRYPTO)
 
     if args.baseline:

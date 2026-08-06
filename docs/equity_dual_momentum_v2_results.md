@@ -1,3 +1,5 @@
+> **SUPERSEDED** — bu rapor düzeltilmiş altyapı öncesi üretildi (eski takvim/embargo/fold-liquidation/DSR sayısı ile). Geçerli sonuç: equity_dual_momentum_v2_correctness_rerun_2 (`docs/equity_dual_momentum_v2_rerun_2_results.md`).
+
 # Equity Dual Momentum v2 Sonuçları — equity_etf_dual_momentum_v2
 
 Tarih: 2026-08-05

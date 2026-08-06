@@ -516,13 +516,10 @@ def _ledger_backfill_for_dataset(
             continue
         try:
             report_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            report_metadata = report_manifest.get("metadata", {})
-            report_dataset = str(
-                report_metadata.get("dataset_id", "")
-            ) or str(report_manifest.get("dataset_id", ""))
             raw_trials = json.loads(results_path.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             continue
+        report_dataset = _report_dataset_id(report_manifest, directory.name)
         if report_dataset != dataset_id or not isinstance(raw_trials, list):
             continue
         trials = tuple(
@@ -637,6 +634,24 @@ def _write_rerun_v2_decision(
         )
         if "SUPERSEDED" not in text:
             legacy.write_text(banner + "\n\n" + text, encoding="utf-8")
+
+
+def _report_dataset_id(report_manifest: dict[str, object], directory_name: str) -> str:
+    """Dataset id of a nested report, with a fallback for legacy manifests.
+
+    Modern report writers store ``metadata.dataset_id``; older reports (e.g.
+    the original v2 run) predate that field and are attributed by experiment
+    id, which is a deterministic one-to-one mapping for the v2 family.
+    """
+    metadata = report_manifest.get("metadata")
+    if isinstance(metadata, dict):
+        value = metadata.get("dataset_id")
+        if value:
+            return str(value)
+    if directory_name == "equity_etf_dual_momentum_v2":
+        return EQUITY_DATASET_V2
+    return ""
+
 
 
 def _write_v2_reconciliation_report(

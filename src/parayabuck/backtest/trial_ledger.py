@@ -56,10 +56,9 @@ class TrialLedger:
     def _load(self) -> list[dict[str, object]]:
         if not self.path.exists():
             return []
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            return []
+        # A corrupt ledger must fail loudly, never silently reset: the DSR
+        # multiple-testing count is the whole point of this file.
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
         entries = raw.get("entries", []) if isinstance(raw, dict) else []
         return [dict(item) for item in entries if isinstance(item, dict)]
 

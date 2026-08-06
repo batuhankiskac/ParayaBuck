@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from parayabuck.backtest.experiments import outer_holdout_start
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.backtest.portfolio_experiments import (
@@ -13,7 +15,8 @@ from parayabuck.backtest.portfolio_experiments import (
 )
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import rebalance_policy_for
-from parayabuck.portfolio.base import PortfolioStrategy
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 START = datetime(2023, 1, 1, tzinfo=UTC)
 END = datetime(2025, 7, 1, tzinfo=UTC)
@@ -112,7 +115,6 @@ def _permissive_gate() -> PortfolioGate:
 
 
 def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
-    import pytest
 
     from parayabuck.backtest.portfolio_experiments import trial_id_for
 
@@ -151,7 +153,6 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
 
 
 def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate() -> None:
-    import pytest
 
     from parayabuck.backtest.portfolio_experiments import trial_id_for
 
@@ -356,6 +357,74 @@ def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
     assert not decision.passed
     assert "positive_fold_ratio_below_gate" in decision.failures
     assert "insufficient_regime_diversity" in decision.failures
+
+
+class _FixedTargetStrategy(PortfolioStrategy):
+    """Holds 60% SPY from the first decision (deterministic fills)."""
+
+    name = "fixed_target"
+    version = "1.0.0"
+    market = Market.EQUITY
+    timeframe = "1d"
+    minimum_history_bars = 1
+
+    def _validate_parameters(self) -> None:
+        return None
+
+    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+        return TargetPortfolio(
+            strategy_name=self.name,
+            strategy_version=self.version,
+            decision_timestamp=context.decision_timestamp,
+            weights=(TargetWeight("SPY", 0.6),),
+            cash_weight=0.4,
+            universe_version="test",
+        )
+
+
+def test_monthly_folds_are_contiguous_partitions_of_one_continuous_run() -> None:
+    """Fold diagnostics must be exact calendar-month partitions of ONE
+    continuous run: no forced liquidation, no gaps, no synthetic zero
+    returns. A per-fold-liquidation design fails this: each fold would
+    record its own final liquidation, so the fold totals would exceed the
+    run's totals."""
+    from parayabuck.backtest.portfolio_experiments import _partition_monthly_folds
+    from parayabuck.portfolio import rebalance_policy_for
+
+    strategy = _FixedTargetStrategy()
+    engine = PortfolioBacktestEngine(
+        strategy,
+        rebalance_policy_for(strategy),
+        starting_equity=100_000.0,
+        slippage_bps=2.0,
+        spread_bps=4.0,
+        benchmark_symbol="SPY",
+    )
+    result = engine.run(_bars(400), liquidate_at_end=False)
+    folds = _partition_monthly_folds(result, "1d", Market.EQUITY)
+    assert len(folds) >= 10
+    # Calendar-month boundaries, strictly increasing, no overlaps or gaps.
+    months = [(fold.start_date[:7], fold.end_date[:7]) for fold in folds]
+    assert all(start <= end for start, end in months)
+    assert all(
+        previous[1] < current[0] for previous, current in zip(months, months[1:])
+    )
+    # Exact partition of the continuous book: the folds split the run's
+    # rebalances and realized events without inventing any (a liquidation at
+    # every fold end would add events and break this identity).
+    assert sum(fold.rebalance_count for fold in folds) == result.rebalance_count
+    assert sum(fold.closed_positions for fold in folds) == result.closed_positions
+    # The first fold's leading return must be genuine: a duplicated boundary
+    # point (the old implementation prepended the fold start value) created
+    # a synthetic 0.0 as the first return even though the book is moving.
+    first = folds[0]
+    curve = list(first.equity_curve)
+    returns = [
+        curve[i] / curve[i - 1] - 1
+        for i in range(1, len(curve))
+        if curve[i - 1] > 0
+    ]
+    assert returns and returns[0] != 0.0
 
 
 def test_experiment_spec_budget_validation() -> None:

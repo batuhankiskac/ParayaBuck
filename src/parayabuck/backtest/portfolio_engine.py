@@ -835,16 +835,26 @@ class PortfolioBacktestEngine:
             else 0.0
         )
         per_symbol = self._symbol_contributions()
-        benchmark_closes = [bar.close for bar in benchmark_bars if bar.close > 0]
-        benchmark_returns = [
-            benchmark_closes[index] / benchmark_closes[index - 1] - 1
-            for index in range(1, len(benchmark_closes))
-            if benchmark_closes[index - 1] > 0
-        ]
-        excess = [
-            portfolio - benchmark
-            for portfolio, benchmark in zip(returns, benchmark_returns, strict=False)
-        ]
+        # Excess returns are aligned BY DATE: if a benchmark bar is missing on
+        # a trading day (providers may differ by one session), index zipping
+        # would silently misalign the information-ratio series.
+        benchmark_returns_by_day: dict[tuple[int, int, int], float] = {}
+        for index, bar in enumerate(benchmark_bars):
+            if index == 0 or bar.close <= 0 or benchmark_bars[index - 1].close <= 0:
+                continue
+            day = (bar.timestamp.year, bar.timestamp.month, bar.timestamp.day)
+            benchmark_returns_by_day[day] = (
+                bar.close / benchmark_bars[index - 1].close - 1
+            )
+        excess: list[float] = []
+        for index, curve_ts in enumerate(curve_timestamps):
+            if index == 0:
+                continue
+            day = (curve_ts.year, curve_ts.month, curve_ts.day)
+            benchmark = benchmark_returns_by_day.get(day)
+            if benchmark is None:
+                continue
+            excess.append(returns[index - 1] - benchmark)
         excess_mean = sum(excess) / len(excess) if excess else 0.0
         excess_std = self._stddev(excess)
         information_ratio = (

@@ -83,3 +83,13 @@ def test_ledger_persists_and_reloads(tmp_path: Path) -> None:
     reloaded = TrialLedger(tmp_path / "ledger.json")
     assert reloaded.trial_count("hash-v2") == 1
     assert reloaded.entries_for("hash-v2")[0]["trial_id"] == "t1"
+
+
+def test_ledger_corrupt_file_fails_loudly(tmp_path: Path) -> None:
+    import pytest
+
+    path = tmp_path / "ledger.json"
+    path.write_text("{not-json", encoding="utf-8")
+    # A corrupt ledger must never silently reset the DSR trial count.
+    with pytest.raises(ValueError):
+        TrialLedger(path)

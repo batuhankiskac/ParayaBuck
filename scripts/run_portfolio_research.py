@@ -55,6 +55,7 @@ from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestResult,
 )
 from parayabuck.backtest.portfolio_experiments import (
+    GateDecision,
     PortfolioExperimentSpec,
     PortfolioGate,
     PortfolioTrialResult,
@@ -488,6 +489,24 @@ def download_and_persist_v2(
     print("Equity v2 dataset quality gate: PASSED")
     _write_v2_reconciliation_report(store, by_symbol, manifest)
     return None
+
+
+
+def _dsr_trial_count_override(
+    ledger: TrialLedger,
+    dataset_hash: str,
+    experiment_id: str,
+    new_trials: int,
+) -> int:
+    """DSR trial budget for a run: prior ledger hypotheses + this run's new
+    candidates, WITHOUT double-counting when the same experiment id was
+    already recorded by a previous run (record/backfill are idempotent, so
+    only the delta of new trials is added)."""
+    already = 0
+    for entry in ledger.entries_for(dataset_hash):
+        if str(entry.get("experiment_id", "")) == experiment_id:
+            already += 1
+    return int(ledger.trial_count(dataset_hash)) + max(0, new_trials - already)
 
 
 def _ledger_backfill_for_dataset(
@@ -983,7 +1002,9 @@ def run_nested(
         dataset_hash = dataset_manifest.data_hash if dataset_manifest is not None else ""
         _ledger_backfill_for_dataset(ledger, store, dataset_id)
         new_trials = sum(space.combinations for space in spec.candidate_spaces)
-        trial_count_override = ledger.trial_count(dataset_hash) + new_trials
+        trial_count_override = _dsr_trial_count_override(
+            ledger, dataset_hash, spec.experiment_id, new_trials
+        )
     registry = HoldoutRegistry(HOLDOUT_REGISTRY_PATH)
     trials = run_portfolio_experiment(
         bars,
@@ -1021,7 +1042,17 @@ def write_nested_reports(
     ]
     payload: list[dict[str, object]] = []
     for trial in trials:
-        decision = trial.validation_gate_decision
+        validation = trial.validation_gate_decision
+        holdout_decision = trial.holdout_gate_decision
+        # For holdout-evaluated finalists the combined decision is reported:
+        # validation AND holdout must both pass for the production gate.
+        if holdout_decision is not None and validation is not None:
+            combined = GateDecision(
+                validation.passed and holdout_decision.passed,
+                validation.failures + holdout_decision.failures,
+            )
+        else:
+            combined = validation
         payload.append(
             {
                 "trial_id": trial.trial_id,
@@ -1089,8 +1120,8 @@ def write_nested_reports(
                     if trial.holdout_gate_decision is not None
                     else None
                 ),
-                "production_gate_passed": decision.passed if decision else None,
-                "production_gate_failures": list(decision.failures) if decision else [],
+                "production_gate_passed": combined.passed if combined else None,
+                "production_gate_failures": list(combined.failures) if combined else [],
             }
         )
     (directory / "trial_results.json").write_text(
@@ -1510,7 +1541,9 @@ def main(argv: list[str] | None = None) -> int:
         new_trials = sum(
             space.combinations for space in spec.candidate_spaces
         )
-        trial_count_override = ledger.trial_count(equity_hash) + new_trials
+        trial_count_override = _dsr_trial_count_override(
+            ledger, equity_hash, spec.experiment_id, new_trials
+        )
         trials = run_portfolio_experiment(
             equity_bars,
             spec,
@@ -1566,7 +1599,9 @@ def main(argv: list[str] | None = None) -> int:
         equity_hash = equity_manifest.data_hash if equity_manifest is not None else ""
         _ledger_backfill_for_dataset(ledger, store, equity_dataset)
         new_trials = sum(space.combinations for space in spec.candidate_spaces)
-        trial_count_override = ledger.trial_count(equity_hash) + new_trials
+        trial_count_override = _dsr_trial_count_override(
+            ledger, equity_hash, spec.experiment_id, new_trials
+        )
         trials = run_portfolio_experiment(
             equity_bars,
             spec,

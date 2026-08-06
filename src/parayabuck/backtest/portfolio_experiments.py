@@ -800,19 +800,14 @@ def _partition_monthly_folds(
         buckets.setdefault((timestamp.year, timestamp.month), []).append(index)
     annualizer = _annualizer_for(market, timeframe)
     folds: list[PortfolioBacktestResult] = []
-    previous_month_end: float | None = None
     for (year, month) in sorted(buckets):
         indices = buckets[(year, month)]
-        first = indices[0]
-        start_value = (
-            previous_month_end
-            if previous_month_end is not None
-            else result.equity_curve[first]
-        )
-        month_curve = [start_value] + [result.equity_curve[index] for index in indices]
-        month_ts = [result.curve_timestamps[first]] + [
-            result.curve_timestamps[index] for index in indices
-        ]
+        # Pure intra-month partition of the continuous curve: the fold's
+        # first bar IS its starting equity. No boundary value is prepended,
+        # so folds never contain phantom zero returns from duplicated
+        # boundary points.
+        month_curve = [result.equity_curve[index] for index in indices]
+        month_ts = [result.curve_timestamps[index] for index in indices]
         total_return = month_curve[-1] / month_curve[0] - 1 if month_curve[0] > 0 else 0.0
         returns = [
             month_curve[index] / month_curve[index - 1] - 1
@@ -894,7 +889,6 @@ def _partition_monthly_folds(
                 state=result.state,
             )
         )
-        previous_month_end = month_curve[-1]
     return tuple(folds)
 
 
@@ -1236,12 +1230,6 @@ def _costs_for(
     return base or (EQUITY_BASE if market == Market.EQUITY else CRYPTO_BASE), stress or (
         EQUITY_STRESS if market == Market.EQUITY else CRYPTO_STRESS
     )
-
-
-def _embargo_duration(experiment: PortfolioExperimentSpec) -> timedelta:
-    timeframe = experiment.candidate_spaces[0].timeframe
-    minutes = TIMEFRAME_MINUTES.get(timeframe, 60)
-    return timedelta(minutes=minutes * experiment.embargo_bars)
 
 
 def _profit_factor(pnls: tuple[float, ...]) -> float:

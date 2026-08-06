@@ -920,6 +920,9 @@ async def get_status() -> dict[str, Any]:
         )
     except Exception:
         result["strategy_status"] = "research_only_no_approved_portfolio_strategy"
+        # Mirror the universe-section failure state so consumers never see a
+        # missing scanner key when the config cannot be loaded.
+        result["scanner"] = {"last_run_at": None, "status": "error"}
     runtime = getattr(manager, "runtime", None)
     if runtime is not None and hasattr(runtime, "health"):
         health = runtime.health()

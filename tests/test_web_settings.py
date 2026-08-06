@@ -471,3 +471,32 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
     research_only = asyncio.run(server.get_status())
     assert research_only["strategy_status"] == "research_only_no_approved_portfolio_strategy"
+
+
+def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
+    from parayabuck.web import server
+
+    class StaticManager:
+        config_path = None
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "", ""
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    monkeypatch.setattr(server, "manager", StaticManager())
+
+    def _raise(*_args: object, **_kwargs: object) -> object:
+        raise ValueError("boom")
+
+    monkeypatch.setattr(server, "load_config", _raise)
+    status = asyncio.run(server.get_status())
+    assert status["strategy_status"] == "research_only_no_approved_portfolio_strategy"
+    assert status["scanner"] == {"last_run_at": None, "status": "error"}

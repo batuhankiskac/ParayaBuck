@@ -534,12 +534,14 @@ def _ledger_backfill_for_dataset(
         )
         if not trials:
             continue
-        added += ledger.backfill_from_reports(
+        before = ledger.trial_count(dataset_hash)
+        ledger.backfill_from_reports(
             dataset_id=dataset_id,
             dataset_hash=dataset_hash,
             experiment_id=directory.name,
             trials=trials,
         )
+        added += ledger.trial_count(dataset_hash) - before
     if added:
         print(
             f"Trial ledger: {added} önceki hipotez geri yüklendi "

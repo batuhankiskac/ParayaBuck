@@ -13,9 +13,9 @@
 - unique OOS ay: 107
 - aggregate Sharpe: 0.687
 - aggregate MaxDD: 24.08%
-- DSR: 46.1%
-- PBO: 93.9%
-- pozitif fold oranı: 61.7%
+- DSR: 52.6%
+- PBO: 92.2%
+- pozitif fold oranı: 62.6%
 - benchmark return: 231.83%
 - excess return: -133.51%
 - information ratio: -0.59

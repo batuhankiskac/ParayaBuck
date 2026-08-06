@@ -34,6 +34,12 @@ uygulanmamıştır; bu doküman tasarım sözleşmesini ve bloklayıcıyı kayde
   geçip açıkça allowlist'e alınmış bir stratejiyi onaylamadan
   (`approved_for_live`) runtime BAŞLAMAZ; status alanı tek başına koruma
   değildir.
+- Onay mekanizması: `config/settings.yaml` → `engine.approve_portfolio_strategy`
+  (varsayılan `false`). Strateji production gate'ini geçmeden bu bayrak
+  asla `true` yapılmaz; `true` yapılırsa `strategy_status=approved_for_live`
+  olur ve runtime başlatılabilir. `/api/status` `strategy_status` alanını
+  runtime çalışmasa bile döndürür; UI "ARAŞTIRMA MODU (strateji onayı yok)"
+  gösterir — jenerik hata yerine bilgi.
 - Market holiday ve first-trading-day takvimi.
 ## Ortak saf bileşenler (backtest + runtime)
 

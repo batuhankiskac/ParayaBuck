@@ -35,6 +35,18 @@ def test_loads_single_application_config(tmp_path: Path) -> None:
     assert config.symbols == ("AAPL", "BTC/USD")
     assert config.engine.risk.daily_loss_limit_pct == 0.02
     assert config.engine.risk.max_drawdown_pct == 0.12
+    # Fail-closed default: portfolio approval is off unless explicitly set.
+    assert config.engine.approve_portfolio_strategy is False
+
+
+def test_approve_portfolio_strategy_flag_parses_from_yaml(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["engine"]["approve_portfolio_strategy"] = True
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    config = load_config(str(path))
+    assert config.engine.approve_portfolio_strategy is True
 
 
 def test_rejects_duplicate_symbols(tmp_path: Path) -> None:

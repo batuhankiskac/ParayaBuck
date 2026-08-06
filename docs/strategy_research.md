@@ -103,6 +103,16 @@ holdout gereksinimlerini içermez (`include_holdout_requirements=False`).
 - Araştırma manifesti kaynak durumunu birebir tanımlar: kirli working tree
   ile koşu reddedilir (veya `--allow-dirty` ile dirty flag + tracked/untracked
   hash'ler manifeste yazılır).
+- Askıya alınan deneyler: YAML'da `suspended: true` (ör.
+  `crypto_cross_sectional_1h_v1` — 27 aylık veri parametre taraması için
+  yetersiz). Suspended deney asla değerlendirilmez (`run_portfolio_experiment`
+  reddeder) ve araştırma script'i uyarıyla atlar. Yeterli veri birikince
+  flag kaldırılır.
+- Contaminated legacy holdout: v1 dataset'in outer holdout'u eski
+  full-sample-contaminated koşu tarafından kullanıldığı için registry'de
+  KALICI `failed` kaydı vardır (`contaminated_by_full_sample_baseline`);
+  hiçbir gelecek deney o holdout'u yeniden açamaz. Kayıt her araştırma
+  koşusunda idempotent biçimde doğrulanır.
 
 ## Universe snapshot'ları
 

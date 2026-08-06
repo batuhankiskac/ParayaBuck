@@ -47,3 +47,13 @@ candidate_spaces:
       rebalance_hours: [6, 12, 24]
       top_n: [2, 3]
       volatility_window: [24, 72]
+
+# Suspended: 27 aylık veri (2024-08..2026-08) parametre taraması için yetersiz;
+# değerlendirme yasak (suspended=True → run_portfolio_experiment reddeder,
+# script atlar). Veri uzunluğu yeterli olunca suspend kaldırılır.
+suspended: true
+
+metadata:
+  suspend_reason: >-
+    crypto 1h veri uzunluğu (27 ay) parametre taraması için yetersiz;
+    araştırma askıda (bkz. docs/strategy_research.md)

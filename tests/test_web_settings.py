@@ -425,3 +425,49 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(
     assert status["candidate_universe_size"] == 3
     assert status["scanner"]["equity_status"] == "success"
     assert status["scanner"]["crypto_status"] == "success"
+
+
+def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
+    from parayabuck.web import server
+
+    class StaticManager:
+        config_path = None
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "", ""
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    def make_config(approved: bool) -> object:
+        engine = type("Engine", (), {"approve_portfolio_strategy": approved})()
+        universe = type(
+            "Universe",
+            (),
+            {
+                "equity": type(
+                    "Equity",
+                    (),
+                    {"candidate_universe_path": "c.json", "active_universe_path": "a.json"},
+                )(),
+                "crypto": type(
+                    "Crypto", (), {"active_universe_path": "crypto.json"}
+                )(),
+            },
+        )()
+        return type("Config", (), {"engine": engine, "universe": universe})()
+
+    monkeypatch.setattr(server, "manager", StaticManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
+    approved = asyncio.run(server.get_status())
+    assert approved["strategy_status"] == "approved_for_live"
+
+    monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
+    research_only = asyncio.run(server.get_status())
+    assert research_only["strategy_status"] == "research_only_no_approved_portfolio_strategy"

@@ -105,6 +105,11 @@ class PortfolioExperimentSpec:
     # Annualized yield applied to the average cash ratio (T-bill proxy) so
     # reports separate capital-market return from cash carry.
     cash_rate_annualized: float = 0.0
+    # Suspended experiments may never be evaluated: the flag makes a
+    # deliberate research pause (e.g. insufficient data) explicit instead of
+    # relying on dataset gates alone. Evaluation raises; the research script
+    # skips them with a warning.
+    suspended: bool = False
 
     def __post_init__(self) -> None:
         if self.start.tzinfo is None or self.end.tzinfo is None or self.start >= self.end:
@@ -185,6 +190,7 @@ class PortfolioExperimentSpec:
                 else None
             ),
             cash_rate_annualized=float(raw.get("cash_rate_annualized", 0.0)),
+            suspended=bool(raw.get("suspended", False)),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -222,6 +228,7 @@ class PortfolioExperimentSpec:
             "metadata": self.metadata,
             "frozen_candidate_trial_id": self.frozen_candidate_trial_id,
             "cash_rate_annualized": self.cash_rate_annualized,
+            "suspended": self.suspended,
         }
 
 
@@ -500,6 +507,11 @@ def run_portfolio_experiment(
     """
     if universe_hash_verifier is not None:
         universe_hash_verifier()
+    if experiment.suspended:
+        raise ValueError(
+            f"Experiment {experiment.experiment_id!r} is suspended "
+            "(suspended=True); evaluation is forbidden"
+        )
     bounded = [bar for bar in bars if experiment.start <= bar.timestamp <= experiment.end]
     candidates = tuple(
         strategy

@@ -196,9 +196,13 @@ class EngineRuntime:
         }
         # Fail-closed: no portfolio strategy is approved for live trading yet.
         # The runtime is research-only; no UI path may report an active
-        # strategy until the production gate passes and the strategy is
-        # allowlisted for live execution.
-        self.strategy_status = "research_only_no_approved_portfolio_strategy"
+        # strategy until the production gate passes AND the operator sets
+        # engine.approve_portfolio_strategy=true in the configuration.
+        self.strategy_status = (
+            "approved_for_live"
+            if config.engine.approve_portfolio_strategy
+            else "research_only_no_approved_portfolio_strategy"
+        )
         self.paper = config.alpaca.paper
         self.store = SQLiteStore(self.config.decision_db_path)
         self.journal = DecisionJournal(self.config.decision_db_path, store=self.store)
@@ -434,8 +438,9 @@ class EngineRuntime:
             raise RuntimeError(
                 "Runtime start refused: no approved portfolio strategy "
                 f"(strategy_status={self.strategy_status!r}); "
-                "a strategy must pass the production gate and be explicitly "
-                "allowlisted before any live/paper trading"
+                "a strategy must pass the production gate and the operator "
+                "must set engine.approve_portfolio_strategy=true in "
+                "config/settings.yaml before any live/paper trading"
             )
         self._stop_event.clear()
         self._state = "starting"

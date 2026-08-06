@@ -245,6 +245,14 @@ class ExternalAdjustedDailyProvider(ResearchDataProvider):
     from this provider must pass :func:`reconcile_providers` against Alpaca
     ``all``-adjusted bars on the overlapping window before acceptance, and
     the reconciliation report is recorded next to the dataset.
+
+    NOTE (access status, 2026-08): stooq.com serves its download endpoint
+    behind a JavaScript proof-of-work page; automated requests receive
+    ``Access denied`` / ``404``. This adapter is therefore NOT usable for
+    fresh downloads and is kept only as the reconciliation-target interface
+    for vendor data. The equity research pipeline uses Alpaca SIP+IEX
+    instead. Re-enable only after verifying the vendor's download endpoint
+    is accessible to the research environment.
     """
 
     def __init__(

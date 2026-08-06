@@ -908,6 +908,18 @@ async def get_status() -> dict[str, Any]:
         "active_equity_symbol_count": 0,
         "active_crypto_symbol_count": 0,
     }
+    # Portfolio-strategy approval state is surfaced even before the runtime
+    # exists, so the UI can explain why the engine refuses to start instead
+    # of showing a generic error.
+    try:
+        approval_cfg = load_config(str(manager.config_path))
+        result["strategy_status"] = (
+            "approved_for_live"
+            if approval_cfg.engine.approve_portfolio_strategy
+            else "research_only_no_approved_portfolio_strategy"
+        )
+    except Exception:
+        result["strategy_status"] = "research_only_no_approved_portfolio_strategy"
     runtime = getattr(manager, "runtime", None)
     if runtime is not None and hasattr(runtime, "health"):
         health = runtime.health()

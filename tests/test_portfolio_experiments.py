@@ -427,6 +427,14 @@ def test_monthly_folds_are_contiguous_partitions_of_one_continuous_run() -> None
     assert returns and returns[0] != 0.0
 
 
+def test_suspended_experiment_is_never_evaluated() -> None:
+    import pytest
+
+    spec = replace(_spec(), suspended=True)
+    with pytest.raises(ValueError, match="suspended"):
+        run_portfolio_experiment(_bars(), spec, _factory)
+
+
 def test_experiment_spec_budget_validation() -> None:
     spec = _spec()
     assert spec.max_parameter_trials >= sum(space.combinations for space in spec.candidate_spaces)

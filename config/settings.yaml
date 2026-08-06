@@ -108,6 +108,9 @@ universe:
 engine:
   timeframe: 5m
   higher_timeframe: 1h
+  # Fail-closed: no portfolio strategy is approved for live trading until it
+  # passes the production gate AND this flag is explicitly set to true.
+  approve_portfolio_strategy: false
   trading_enabled: true
   equity_trading_enabled: true
   crypto_trading_enabled: false

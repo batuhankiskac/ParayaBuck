@@ -98,6 +98,10 @@ class EngineConfig:
     strategy_profile: str = "equity_5m_v1"
     allow_short: bool = False
     crypto_min_volume_bar_ratio: float = 0.5
+    # Portfolio-strategy approval: the runtime refuses to start until a
+    # portfolio strategy has passed the production gate AND this flag is
+    # explicitly set. Fail-closed by default: research_only status.
+    approve_portfolio_strategy: bool = False
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:

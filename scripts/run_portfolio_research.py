@@ -49,7 +49,10 @@ from parayabuck.backtest.experiments import (
     new_manifest,
     outer_holdout_start,
 )
-from parayabuck.backtest.holdout_registry import HoldoutRegistry
+from parayabuck.backtest.holdout_registry import (
+    HoldoutFingerprint,
+    HoldoutRegistry,
+)
 from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestEngine,
     PortfolioBacktestResult,
@@ -673,6 +676,57 @@ def _report_dataset_id(report_manifest: dict[str, object], directory_name: str) 
         return EQUITY_DATASET_V2
     return ""
 
+
+
+def _register_holdout_contamination(
+    store: VersionedResearchStore,
+    registry: HoldoutRegistry,
+    *,
+    dataset_id: str,
+    experiment_path: Path,
+    experiment_note: str,
+) -> None:
+    """Permanently lock an already-spent holdout in the registry.
+
+    The legacy v1 run evaluated its outer holdout with a full-sample
+    contaminated baseline (docs/research_correctness_audit_2026-08-05.md).
+    Recording that holdout as permanently FAILED makes the contamination an
+    enforceable fact: no future experiment can silently reopen it, even if a
+    later operator forgets the audit history. Idempotent.
+    """
+    manifest = store.manifest(dataset_id)
+    if manifest is None:
+        return
+    raw = yaml.safe_load(experiment_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return
+    end = _experiment_end(experiment_path)
+    holdout_months = int(raw.get("outer_holdout_months", 6))
+    holdout_start = outer_holdout_start(end, holdout_months)
+    adjustment, provider = _dataset_adjustment_and_provider(store, dataset_id)
+    fingerprint = HoldoutFingerprint(
+        market=Market.EQUITY,
+        timeframe="1d",
+        universe_snapshot_hash="",
+        holdout_start=holdout_start,
+        holdout_end=end,
+        adjustment=adjustment,
+        source_provider=provider,
+    )
+    digest = fingerprint.structural_digest()
+    if registry.records_for(digest):
+        return
+    registry.begin_evaluation(fingerprint, experiment_note)
+    registry.fail_evaluation(
+        fingerprint,
+        experiment_note,
+        "contaminated_by_full_sample_baseline; "
+        "legacy audit dataset; permanently locked",
+    )
+    print(
+        f"Legacy holdout contamination kaydı: {dataset_id} "
+        f"({holdout_start.date()} -> {end.date()}) kalıcı kilitlendi"
+    )
 
 
 def _write_v2_reconciliation_report(
@@ -1429,6 +1483,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         if not (args.skip_crypto or args.v2 or args.rerun_v2):
             _preflight_research_quality(store, CRYPTO_DATASET, market=Market.CRYPTO)
+        # The legacy v1 dataset's outer holdout was spent by the original
+        # full-sample-contaminated run; record that fact permanently so the
+        # registry can never be fooled into reopening it.
+        _register_holdout_contamination(
+            store,
+            HoldoutRegistry(HOLDOUT_REGISTRY_PATH),
+            dataset_id=EQUITY_DATASET,
+            experiment_path=EQUITY_EXPERIMENT,
+            experiment_note="legacy_v1_original_contaminated",
+        )
 
     if args.baseline:
         scenarios = {
@@ -1649,7 +1713,20 @@ def main(argv: list[str] | None = None) -> int:
             # Crypto XSM stays suspended (27 aylık veriyle parametre taraması yok);
             # --v2 koşusu yalnız equity'dir.
             experiments = [item for item in experiments if "crypto" not in item[0].name]
+        active_experiments: list[tuple[Path, list[Bar], object | None, str, str]] = []
         for experiment_path, bars, universe, adjustment, provider_name in experiments:
+            probe = PortfolioExperimentSpec.from_file(experiment_path)
+            if probe.suspended:
+                reason = probe.metadata.get("suspend_reason", "")
+                print(
+                    f"Atlandı (suspended): {experiment_path.name}"
+                    + (f" — {reason}" if reason else "")
+                )
+                continue
+            active_experiments.append(
+                (experiment_path, bars, universe, adjustment, provider_name)
+            )
+        for experiment_path, bars, universe, adjustment, provider_name in active_experiments:
             print(f"\n=== NESTED: {experiment_path.name} ===")
             is_crypto_experiment = "crypto" in experiment_path.name
             spec, trials = run_nested(

@@ -264,11 +264,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const globalHealth = hasRuntime
             ? `${statusData.runtime.state}${statusData.runtime.healthy ? '' : ' (degraded)'}`
             : statusData.state;
+        const strategyStatus = statusData.strategy_status || '';
+        const strategyLabel =
+            strategyStatus === 'approved_for_live'
+                ? 'STRATEJİ ONAYLI'
+                : 'ARAŞTIRMA MODU (strateji onayı yok)';
         const scanner = statusData.scanner || {};
         const equityScanner = scanner.equity_status || scanner.status || 'not_run';
         const cryptoScanner = scanner.crypto_status || 'not_run';
         marketStatusText.textContent =
             `Global ${globalHealth} | ` +
+            `${strategyLabel} | ` +
             `Equity ${statusData.active_equity_symbol_count ?? 0} · ` +
             `${marketLabel(equity)} | ` +
             `Crypto ${statusData.active_crypto_symbol_count ?? 0} · ` +

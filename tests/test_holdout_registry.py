@@ -6,12 +6,14 @@ from pathlib import Path
 import pytest
 
 from parayabuck.backtest.holdout_registry import (
+    STATE_AUDITED,
     STATE_COMPLETE,
     STATE_FAILED,
     HoldoutFingerprint,
     HoldoutLockedError,
     HoldoutRegistry,
 )
+from parayabuck.backtest.portfolio_experiments import PortfolioGate
 from parayabuck.core.models import Market
 
 
@@ -52,13 +54,18 @@ def test_completed_holdout_cannot_be_reopened_by_another_experiment(tmp_path: Pa
     assert records[0].state == STATE_COMPLETE
 
 
-def test_failed_evaluation_can_be_retried(tmp_path: Path) -> None:
+def test_failed_evaluation_stays_locked_until_audited(tmp_path: Path) -> None:
     registry = HoldoutRegistry(tmp_path / "registry.json")
     registry.begin_evaluation(_fingerprint(), "experiment-a")
     registry.fail_evaluation(_fingerprint(), "experiment-a", reason="bars missing")
     records = registry.records_for(_fingerprint().structural_digest())
     assert records[0].state == STATE_FAILED
-    # A failed evaluation does not lock the holdout permanently.
+    # A failed evaluation does NOT auto-unlock; only an audited recovery does.
+    with pytest.raises(HoldoutLockedError):
+        registry.begin_evaluation(_fingerprint(), "experiment-a")
+    registry.recover_holdout(
+        _fingerprint(), "experiment-a", audit_note="verified failed before holdout use"
+    )
     registry.begin_evaluation(_fingerprint(), "experiment-a")
 
 
@@ -134,6 +141,15 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
             )
 
     def spec(experiment_id: str) -> PortfolioExperimentSpec:
+        from parayabuck.backtest.portfolio_experiments import trial_id_for
+
+        strategies = PortfolioCandidateSpace(
+            "equity_etf_dual_momentum_v1",
+            "1.0.0",
+            Market.EQUITY,
+            "1d",
+            (("momentum_scheme", ("12_1", "6_1")), ("volatility_window", (20, 60))),
+        ).iter_strategies()
         return PortfolioExperimentSpec(
             experiment_id=experiment_id,
             start=start,
@@ -159,6 +175,7 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
             cost_scenarios=(EQUITY_BASE, EQUITY_STRESS),
             source_provider="alpaca",
             adjustment_policy="all",
+            frozen_candidate_trial_id=trial_id_for(strategies[0]),
         )
 
     def factory(strategy: PortfolioStrategy, cost: CostScenario) -> PortfolioBacktestEngine:
@@ -173,12 +190,29 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
 
     registry_path = tmp_path / "holdout_registry.json"
     registry = HoldoutRegistry(registry_path)
+    permissive = PortfolioGate(
+        market=Market.EQUITY,
+        minimum_oos_calendar_months=1,
+        minimum_profit_factor=0.0,
+        minimum_sharpe=0.0,
+        maximum_drawdown=1.0,
+        minimum_deflated_sharpe_probability=0.0,
+        maximum_pbo=1.0,
+        minimum_positive_fold_ratio=0.0,
+        minimum_positive_month_ratio=0.0,
+        minimum_stress_profit_factor=0.0,
+        maximum_symbol_profit_concentration=1.0,
+        maximum_single_asset_weight=1.0,
+        require_parameter_plateau=False,
+        require_regime_diversity=False,
+    )
     first = run_portfolio_experiment(
         bars,
         spec("experiment-a"),
         factory,
         unlock_holdout=True,
         holdout_registry=registry,
+        validation_gate=permissive,
     )
     finalist = next(t for t in first if t.holdout_evaluations == 1)
     assert not finalist.holdout_missing
@@ -207,24 +241,41 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
             factory,
             unlock_holdout=True,
             holdout_registry=registry,
+            validation_gate=permissive,
         )
 
 
-def test_stale_pending_expires_and_holdout_can_retry(tmp_path: Path) -> None:
+def test_stale_pending_is_bookmarked_but_never_auto_reopens(tmp_path: Path) -> None:
     registry = HoldoutRegistry(tmp_path / "registry.json")
     fingerprint = _fingerprint()
     registry.begin_evaluation(fingerprint, "experiment-a")
     with pytest.raises(HoldoutLockedError):
         registry.preflight(fingerprint, "experiment-a")
-    # A crashed evaluation (stale PENDING) is recovered automatically.
+    # A crashed evaluation (stale PENDING) is marked FAILED for the audit
+    # trail but the key stays LOCKED: the crashed process may already have
+    # computed the holdout, so automatic reopening is forbidden.
     expired = registry.expire_stale_pending(ttl_seconds=0)
     assert expired == 1
-    registry.preflight(fingerprint, "experiment-a")  # no longer locked
-    registry.begin_evaluation(fingerprint, "experiment-a")
-    registry.complete_evaluation(fingerprint, "experiment-a", "h")
-    # Fresh pending records are never expired. A different structural
-    # fingerprint (different holdout window) is required here because the
-    # completed one above is locked forever.
+    records = registry.records_for(fingerprint.structural_digest())
+    assert records[-1].state == STATE_FAILED
+    with pytest.raises(HoldoutLockedError):
+        registry.preflight(fingerprint, "experiment-a")
+    with pytest.raises(HoldoutLockedError):
+        registry.begin_evaluation(fingerprint, "experiment-b")
+    # The ONLY unlock path is an explicit, audited operator decision; the
+    # audit note is persisted with the record.
+    with pytest.raises(HoldoutLockedError):
+        registry.recover_holdout(fingerprint, "experiment-unknown", audit_note="nope")
+    registry.recover_holdout(
+        fingerprint, "experiment-a", audit_note="operator verified no results leaked"
+    )
+    audited = registry.records_for(fingerprint.structural_digest())
+    assert audited[-1].state == STATE_AUDITED
+    assert "operator verified" in audited[-1].notes
+    registry.preflight(fingerprint, "experiment-b")  # now allowed
+    registry.begin_evaluation(fingerprint, "experiment-b")
+    registry.complete_evaluation(fingerprint, "experiment-b", "h")
+    # Fresh pending records are never expired.
     fresh = HoldoutFingerprint(
         market=Market.EQUITY,
         timeframe="1d",

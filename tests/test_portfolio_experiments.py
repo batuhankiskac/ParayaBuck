@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from parayabuck.backtest.experiments import outer_holdout_start
@@ -90,18 +91,80 @@ def test_holdout_is_hidden_from_validation_folds_and_reports() -> None:
         assert all(fold.end_date <= cutoff.isoformat() for fold in trial.fold_results)
 
 
-def test_holdout_can_only_be_opened_once_for_finalists() -> None:
-    spec = _spec()
-    trials = run_portfolio_experiment(_bars(), spec, _factory, unlock_holdout=True)
-    finalist_count = min(spec.max_holdout_finalists, len(trials))
+def _permissive_gate() -> PortfolioGate:
+    """Gate that every synthetic trial passes; production policy stays strict."""
+    return PortfolioGate(
+        market=Market.EQUITY,
+        minimum_oos_calendar_months=1,
+        minimum_profit_factor=0.0,
+        minimum_sharpe=0.0,
+        maximum_drawdown=1.0,
+        minimum_deflated_sharpe_probability=0.0,
+        maximum_pbo=1.0,
+        minimum_positive_fold_ratio=0.0,
+        minimum_positive_month_ratio=0.0,
+        minimum_stress_profit_factor=0.0,
+        maximum_symbol_profit_concentration=1.0,
+        maximum_single_asset_weight=1.0,
+        require_parameter_plateau=False,
+        require_regime_diversity=False,
+    )
+
+
+def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
+    import pytest
+
+    from parayabuck.backtest.portfolio_experiments import trial_id_for
+
+    strategies = _spec().candidate_spaces[0].iter_strategies()
+    frozen_id = trial_id_for(strategies[0])
+    unknown_id = "f" * 16
+    assert frozen_id != unknown_id
+    spec = replace(
+        _spec(), max_holdout_finalists=1, frozen_candidate_trial_id=frozen_id
+    )
+    trials = run_portfolio_experiment(
+        _bars(), spec, _factory, unlock_holdout=True, validation_gate=_permissive_gate()
+    )
     evaluated = [trial for trial in trials if trial.holdout_evaluations == 1]
-    assert len(evaluated) == finalist_count
-    # Opening the holdout appends the holdout fold only; validation folds
+    assert len(evaluated) == 1
+    assert evaluated[0].trial_id == frozen_id
+    assert not evaluated[0].holdout_missing
+    # A trial id that is not among the evaluated candidates is rejected.
+    with pytest.raises(ValueError, match="not among"):
+        run_portfolio_experiment(
+            _bars(), replace(spec, frozen_candidate_trial_id=unknown_id), _factory,
+            unlock_holdout=True, validation_gate=_permissive_gate(),
+        )
+    # A missing preregistration is rejected too.
+    with pytest.raises(ValueError, match="preregistered"):
+        run_portfolio_experiment(
+            _bars(), replace(spec, frozen_candidate_trial_id=None), _factory,
+            unlock_holdout=True, validation_gate=_permissive_gate(),
+        )
+    # Opening the holdout appends the holdout result only; validation folds
     # themselves must be byte-identical to the locked run.
-    locked = run_portfolio_experiment(_bars(), spec, _factory)
+    locked = run_portfolio_experiment(_bars(), spec, _factory, validation_gate=_permissive_gate())
     for trial in trials:
         locked_trial = next(t for t in locked if t.trial_id == trial.trial_id)
         assert locked_trial.fold_results == trial.fold_results[: len(locked_trial.fold_results)]
+
+
+def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate() -> None:
+    import pytest
+
+    from parayabuck.backtest.portfolio_experiments import trial_id_for
+
+    strategies = _spec().candidate_spaces[0].iter_strategies()
+    spec = replace(
+        _spec(),
+        max_holdout_finalists=1,
+        frozen_candidate_trial_id=trial_id_for(strategies[0]),
+    )
+    # The strict production gate fails every synthetic candidate on sample
+    # size, so the holdout must stay locked and the run must refuse.
+    with pytest.raises(ValueError, match="validation gate"):
+        run_portfolio_experiment(_bars(), spec, _factory, unlock_holdout=True)
 
 
 def test_all_trials_share_pbo_computation() -> None:
@@ -212,6 +275,87 @@ def test_equity_and_crypto_use_distinct_gate_thresholds() -> None:
     assert equity.maximum_drawdown == 0.10
     assert equity.maximum_drawdown < crypto.maximum_drawdown
     assert equity.maximum_symbol_profit_concentration == 0.30
+
+
+def test_equity_gate_requires_profit_factor() -> None:
+    gate = PortfolioGate.for_market(Market.EQUITY)
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    trial = PortfolioTrialResult(
+        trial_id="pf",
+        strategy_name="equity_etf_dual_momentum_v1",
+        strategy_version="1.0.0",
+        parameters=(),
+        fold_results=(),
+        market=Market.EQUITY,
+        total_rebalance_months=70,
+        unique_oos_calendar_months=70,
+        closed_positions=0,
+        profit_factor=1.1,  # below the 1.15 production threshold
+        sharpe=0.9,
+        calmar=1.0,
+        expectancy=5.0,
+        deflated_sharpe_probability=0.96,
+        probability_backtest_overfitting=0.1,
+        max_drawdown=0.05,
+        positive_fold_ratio=0.8,
+        positive_month_ratio=0.7,
+        stress_profit_factor=1.1,
+        stress_expectancy=1.0,
+        stress_realized_pnls=(1.0,),
+        gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0)),
+        maximum_concentration=0.4,
+        regime_diverse=True,
+        aggregate_oos_sharpe=0.9,
+        aggregate_oos_max_drawdown=0.05,
+        aggregate_oos_return=0.3,
+        neighborhood_robust=True,
+        holdout_evaluations=1,
+    )
+    decision = gate.evaluate(trial)
+    assert not decision.passed
+    assert "profit_factor_below_gate" in decision.failures
+
+
+def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
+    gate = PortfolioGate.for_market(Market.CRYPTO)
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    trial = PortfolioTrialResult(
+        trial_id="crypto",
+        strategy_name="crypto_cross_sectional_momentum_1h_v1",
+        strategy_version="1.0.0",
+        parameters=(),
+        fold_results=(),
+        market=Market.CRYPTO,
+        total_rebalance_months=0,
+        unique_oos_calendar_months=0,
+        closed_positions=150,
+        profit_factor=1.3,
+        sharpe=0.9,
+        calmar=1.0,
+        expectancy=5.0,
+        deflated_sharpe_probability=0.96,
+        probability_backtest_overfitting=0.1,
+        max_drawdown=0.3,
+        positive_fold_ratio=0.4,  # below 0.60
+        positive_month_ratio=0.7,
+        stress_profit_factor=1.1,
+        stress_expectancy=1.0,
+        stress_realized_pnls=(1.0,),
+        gross_profit_by_symbol=(("BTC/USD", 100.0), ("ETH/USD", 100.0)),
+        maximum_concentration=0.4,
+        regime_diverse=False,  # regime diversity is required for crypto too
+        aggregate_oos_sharpe=0.9,
+        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_return=0.3,
+        neighborhood_robust=True,
+        holdout_evaluations=1,
+    )
+    decision = gate.evaluate(trial)
+    assert not decision.passed
+    assert "positive_fold_ratio_below_gate" in decision.failures
+    assert "insufficient_regime_diversity" in decision.failures
 
 
 def test_experiment_spec_budget_validation() -> None:

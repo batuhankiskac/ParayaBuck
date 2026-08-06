@@ -178,6 +178,10 @@ class PortfolioState:
     cash: float | None = None
     realized_pnl: float = 0.0
     entry_fees: dict[str, float] = field(default_factory=dict)
+    # Per-position realized accumulator: a partial exit credits realized PnL
+    # immediately, and the remainder travels with the position so a restart
+    # after a partial exit reports the same final realized events.
+    realized_pnl_accumulators: dict[str, float] = field(default_factory=dict)
     last_prices: dict[str, float] = field(default_factory=dict)
     # Decision made but not yet filled; never dropped on restart.
     pending_target: dict[str, float] = field(default_factory=dict)
@@ -202,6 +206,7 @@ class PortfolioState:
             "cash": self.cash,
             "realized_pnl": self.realized_pnl,
             "entry_fees": self.entry_fees,
+            "realized_pnl_accumulators": self.realized_pnl_accumulators,
             "last_prices": self.last_prices,
             "pending_target": self.pending_target,
             "pending_orders": list(self.pending_orders),
@@ -240,6 +245,11 @@ class PortfolioState:
             for item in raw_pending
             if isinstance(item, dict)
         )
+        raw_accumulators = raw.get("realized_pnl_accumulators", {})
+        realized_pnl_accumulators = {
+            str(symbol): float(value)
+            for symbol, value in dict(raw_accumulators).items()
+        }
         last_rebalance = raw.get("last_rebalance_at")
         raw_cash = raw.get("cash")
         return cls(
@@ -257,6 +267,7 @@ class PortfolioState:
             cash=float(raw_cash) if raw_cash is not None else None,
             realized_pnl=float(raw.get("realized_pnl", 0.0)),
             entry_fees=entry_fees,
+            realized_pnl_accumulators=realized_pnl_accumulators,
             last_prices=last_prices,
             pending_target=pending_target,
             pending_orders=pending_orders,

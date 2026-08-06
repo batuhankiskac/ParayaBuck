@@ -14,18 +14,27 @@ State model:
 
 * ``pending`` — evaluation started; locks the structural key.
 * ``complete`` — evaluation finished successfully; locked forever.
-* ``failed`` — evaluation failed or was incomplete; retrying the same
-  experiment is allowed but the attempt stays on record.
+* ``failed`` — evaluation failed or was incomplete; the key stays locked.
+  A crash before the outcome was persisted does NOT auto-unlock: the
+  process may already have computed the holdout, so reopening requires a
+  manual, audited operator decision.
+* ``audited`` — an operator reviewed the failed/pending attempt and
+  explicitly authorized a new evaluation; only then may a new record be
+  started for the same structural key.
 
-Writes are atomic (temporary file + rename) so a crash can never leave a
-half-written registry.
+Concurrency: all read-modify-write operations hold an exclusive OS file
+lock on the registry, so two processes can never both pass ``preflight``
+for the same holdout.
 """
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -35,6 +44,7 @@ from parayabuck.core.models import Market
 STATE_PENDING = "pending"
 STATE_COMPLETE = "complete"
 STATE_FAILED = "failed"
+STATE_AUDITED = "audited"
 
 
 @dataclass(frozen=True)
@@ -150,58 +160,124 @@ class HoldoutRegistry:
             if record.structural_digest == structural_digest
         )
 
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        """Exclusive OS lock over read-modify-write registry operations."""
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(lock_path, "a+", encoding="utf-8")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            self._records = self._load()
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            handle.close()
+
     def expire_stale_pending(self, ttl_seconds: float = 24 * 3600) -> int:
-        """Recover holdouts whose evaluation crashed mid-flight.
+        """Mark crashed evaluations as FAILED for the audit trail.
 
         A crash between ``begin_evaluation`` and ``complete/fail_evaluation``
-        leaves a PENDING record that would otherwise burn the structural key
-        forever. Records older than ``ttl_seconds`` are marked FAILED so the
-        same experiment can retry; the attempt stays on record.
+        leaves a PENDING record. It is marked FAILED (so the audit trail is
+        honest) but NEVER auto-unlocked: the process may have computed the
+        holdout before crashing, so reopening requires ``recover_holdout``.
         """
-        cutoff = datetime.now(UTC) - timedelta(seconds=ttl_seconds)
-        expired = 0
-        for index, record in enumerate(self._records):
-            if record.state == STATE_PENDING and record.evaluated_at < cutoff:
-                self._records[index] = HoldoutEvaluationRecord(
-                    record_id=record.record_id,
-                    structural_digest=record.structural_digest,
-                    full_digest=record.full_digest,
-                    experiment_id=record.experiment_id,
-                    state=STATE_FAILED,
-                    evaluated_at=datetime.now(UTC),
-                    data_hash=record.data_hash,
-                    notes="stale pending evaluation expired (crash recovery)",
+        with self._locked():
+            cutoff = datetime.now(UTC) - timedelta(seconds=ttl_seconds)
+            expired = 0
+            for index, record in enumerate(self._records):
+                if record.state == STATE_PENDING and record.evaluated_at < cutoff:
+                    self._records[index] = HoldoutEvaluationRecord(
+                        record_id=record.record_id,
+                        structural_digest=record.structural_digest,
+                        full_digest=record.full_digest,
+                        experiment_id=record.experiment_id,
+                        state=STATE_FAILED,
+                        evaluated_at=datetime.now(UTC),
+                        data_hash=record.data_hash,
+                        notes=(
+                            "stale pending evaluation expired (crash recovery); "
+                            "manual audit required before reopening"
+                        ),
+                    )
+                    expired += 1
+            if expired:
+                self._persist()
+            return expired
+
+    def _preflight_unlocked(
+        self, fingerprint: HoldoutFingerprint, experiment_id: str
+    ) -> None:
+        digest = fingerprint.structural_digest()
+        for record in self.records_for(digest):
+            if record.state in (STATE_PENDING, STATE_COMPLETE, STATE_FAILED):
+                raise HoldoutLockedError(
+                    f"Holdout already used by experiment {record.experiment_id!r} "
+                    f"(state={record.state}); reopening requires an explicit "
+                    "audited recovery"
                 )
-                expired += 1
-        if expired:
-            self._persist()
-        return expired
 
     def preflight(self, fingerprint: HoldoutFingerprint, experiment_id: str) -> None:
         """Fail-closed check before any holdout bar is read."""
-        self.expire_stale_pending()
-        digest = fingerprint.structural_digest()
-        for record in self.records_for(digest):
-            if record.state in (STATE_PENDING, STATE_COMPLETE):
-                raise HoldoutLockedError(
-                    f"Holdout already used by experiment {record.experiment_id!r} "
-                    f"(state={record.state}); reopening is forbidden"
-                )
+        with self._locked():
+            self._preflight_unlocked(fingerprint, experiment_id)
 
     def begin_evaluation(self, fingerprint: HoldoutFingerprint, experiment_id: str) -> None:
         """Mark the holdout as pending; duplicates a pending/complete lock."""
-        self.preflight(fingerprint, experiment_id)
-        digest = fingerprint.structural_digest()
-        record = HoldoutEvaluationRecord(
-            record_id=uuid.uuid4().hex[:16],
-            structural_digest=digest,
-            full_digest=fingerprint.full_digest(),
-            experiment_id=experiment_id,
-            state=STATE_PENDING,
-            evaluated_at=datetime.now(UTC),
-        )
-        self._records.append(record)
-        self._persist()
+        with self._locked():
+            self._preflight_unlocked(fingerprint, experiment_id)
+            digest = fingerprint.structural_digest()
+            record = HoldoutEvaluationRecord(
+                record_id=uuid.uuid4().hex[:16],
+                structural_digest=digest,
+                full_digest=fingerprint.full_digest(),
+                experiment_id=experiment_id,
+                state=STATE_PENDING,
+                evaluated_at=datetime.now(UTC),
+            )
+            self._records.append(record)
+            self._persist()
+
+    def recover_holdout(
+        self,
+        fingerprint: HoldoutFingerprint,
+        experiment_id: str,
+        *,
+        audit_note: str,
+    ) -> None:
+        """Manually authorize reopening a crashed/incomplete holdout.
+
+        This is the ONLY path that unlocks a ``failed``/``pending`` record
+        and it must be an explicit operator decision: the audit note is
+        persisted with the record so the reopening is fully attributable.
+        After recovery a NEW evaluation may start (with a fresh experiment
+        id).
+        """
+        with self._locked():
+            digest = fingerprint.structural_digest()
+            matches = [
+                record
+                for record in self._records
+                if record.structural_digest == digest
+                and record.experiment_id == experiment_id
+                and record.state in (STATE_PENDING, STATE_FAILED)
+            ]
+            if not matches:
+                raise HoldoutLockedError(
+                    f"No recoverable (pending/failed) evaluation for "
+                    f"{experiment_id!r}; nothing to audit"
+                )
+            updated = HoldoutEvaluationRecord(
+                record_id=matches[-1].record_id,
+                structural_digest=digest,
+                full_digest=matches[-1].full_digest,
+                experiment_id=experiment_id,
+                state=STATE_AUDITED,
+                evaluated_at=datetime.now(UTC),
+                data_hash=matches[-1].data_hash,
+                notes=f"audited reopen: {audit_note}",
+            )
+            self._replace_record(updated)
 
     def complete_evaluation(
         self,
@@ -209,18 +285,19 @@ class HoldoutRegistry:
         experiment_id: str,
         data_hash: str,
     ) -> None:
-        record = self._mutable_record(fingerprint, experiment_id)
-        updated = HoldoutEvaluationRecord(
-            record_id=record.record_id,
-            structural_digest=record.structural_digest,
-            full_digest=fingerprint.full_digest(),
-            experiment_id=experiment_id,
-            state=STATE_COMPLETE,
-            evaluated_at=datetime.now(UTC),
-            data_hash=data_hash,
-            notes="holdout evaluated once; locked forever",
-        )
-        self._replace_record(updated)
+        with self._locked():
+            record = self._mutable_record(fingerprint, experiment_id)
+            updated = HoldoutEvaluationRecord(
+                record_id=record.record_id,
+                structural_digest=record.structural_digest,
+                full_digest=fingerprint.full_digest(),
+                experiment_id=experiment_id,
+                state=STATE_COMPLETE,
+                evaluated_at=datetime.now(UTC),
+                data_hash=data_hash,
+                notes="holdout evaluated once; locked forever",
+            )
+            self._replace_record(updated)
 
     def fail_evaluation(
         self,
@@ -228,18 +305,19 @@ class HoldoutRegistry:
         experiment_id: str,
         reason: str,
     ) -> None:
-        record = self._mutable_record(fingerprint, experiment_id)
-        updated = HoldoutEvaluationRecord(
-            record_id=record.record_id,
-            structural_digest=record.structural_digest,
-            full_digest=fingerprint.full_digest(),
-            experiment_id=experiment_id,
-            state=STATE_FAILED,
-            evaluated_at=datetime.now(UTC),
-            data_hash=record.data_hash,
-            notes=reason,
-        )
-        self._replace_record(updated)
+        with self._locked():
+            record = self._mutable_record(fingerprint, experiment_id)
+            updated = HoldoutEvaluationRecord(
+                record_id=record.record_id,
+                structural_digest=record.structural_digest,
+                full_digest=fingerprint.full_digest(),
+                experiment_id=experiment_id,
+                state=STATE_FAILED,
+                evaluated_at=datetime.now(UTC),
+                data_hash=record.data_hash,
+                notes=reason,
+            )
+            self._replace_record(updated)
 
     def _mutable_record(
         self, fingerprint: HoldoutFingerprint, experiment_id: str
@@ -273,6 +351,7 @@ __all__ = [
     "HoldoutFingerprint",
     "HoldoutLockedError",
     "HoldoutRegistry",
+    "STATE_AUDITED",
     "STATE_COMPLETE",
     "STATE_FAILED",
     "STATE_PENDING",

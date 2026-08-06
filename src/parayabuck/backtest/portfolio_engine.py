@@ -140,6 +140,8 @@ class PortfolioBacktestResult:
     worst_year_return: float
     positive_month_ratio: float
     state: PortfolioState
+    information_ratio: float = 0.0
+    cash_yield: float = 0.0
 
 
 def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
@@ -183,6 +185,7 @@ class PortfolioBacktestEngine:
         universe_version: str = "",
         state: PortfolioState | None = None,
         state_path: str | None = None,
+        cash_rate_annualized: float = 0.0,
     ) -> None:
         from parayabuck.portfolio.base import PortfolioStrategy
 
@@ -217,6 +220,7 @@ class PortfolioBacktestEngine:
             )
         )
         self.state_path = Path(state_path) if state_path else None
+        self.cash_rate_annualized = float(cash_rate_annualized)
         self.state = state or PortfolioState(
             strategy_name=strategy.name, strategy_version=strategy.version
         )
@@ -259,7 +263,9 @@ class PortfolioBacktestEngine:
                     avg_price,
                     self.state.last_rebalance_at or datetime(1970, 1, 1, tzinfo=UTC),
                     entry_fee=self.state.entry_fees.get(symbol, 0.0),
-                    realized_pnl_accumulator=0.0,
+                    realized_pnl_accumulator=self.state.realized_pnl_accumulators.get(
+                        symbol, 0.0
+                    ),
                 )
                 if self.state.cash is None:
                     # v1 migration: derive cash from the holdings cost basis.
@@ -279,6 +285,7 @@ class PortfolioBacktestEngine:
         warmup: list[Bar] | None = None,
         *,
         liquidate_at_end: bool = True,
+        cash_rate_annualized: float | None = None,
     ) -> PortfolioBacktestResult:
         # Orders pending from a restored state survive the fresh-run reset so
         # a restart resumes fills exactly where the interrupted run left off.
@@ -291,6 +298,8 @@ class PortfolioBacktestEngine:
         self._universe_history = []
         self._holdings_history = []
         self._pending.extend(restored_pending)
+        if cash_rate_annualized is not None:
+            self.cash_rate_annualized = float(cash_rate_annualized)
         ordered = sorted(self._deduplicate(bars), key=lambda bar: (bar.timestamp, bar.symbol))
         watermark = self.state.last_processed_bar
         if watermark:
@@ -327,6 +336,7 @@ class PortfolioBacktestEngine:
                 self.state.holdings = {}
                 self.state.avg_prices = {}
                 self.state.entry_fees = {}
+                self.state.realized_pnl_accumulators = {}
                 self.state.pending_orders = ()
                 self.state.pending_target = {}
                 self.state.cash = self._cash
@@ -450,6 +460,11 @@ class PortfolioBacktestEngine:
             for symbol, position in self._positions.items()
             if position.qty > 0
         }
+        self.state.realized_pnl_accumulators = {
+            symbol: position.realized_pnl_accumulator
+            for symbol, position in self._positions.items()
+            if position.qty > 0
+        }
         self.state.cash = self._cash
         self.state.last_prices = dict(self._last_price)
         self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
@@ -533,16 +548,20 @@ class PortfolioBacktestEngine:
                 # it reduces realized PnL on partial AND full exits alike.
                 fee_share = position.entry_fee * (close_qty / max(1e-9, position.qty))
                 position.entry_fee -= fee_share
-                position.realized_pnl_accumulator += (
+                # state.realized_pnl is updated with the NET realized delta at
+                # every fill (partial and full); it is never credited again at
+                # full close, so persisted state always agrees with the
+                # economic result.
+                realized_delta = (
                     (fill_price - position.avg_price) * close_qty - fee - fee_share
                 )
-                self.state.realized_pnl = self.state.realized_pnl - fee_share
+                position.realized_pnl_accumulator += realized_delta
+                self.state.realized_pnl += realized_delta
                 position.qty -= close_qty
                 if position.qty <= 0:
                     self._realized_pnl_events.append(
                         (bar.timestamp, symbol, position.realized_pnl_accumulator)
                     )
-                    self.state.realized_pnl += position.realized_pnl_accumulator
                     self._positions.pop(symbol, None)
             self._fills.append(
                 PortfolioFill(
@@ -816,6 +835,25 @@ class PortfolioBacktestEngine:
             else 0.0
         )
         per_symbol = self._symbol_contributions()
+        benchmark_closes = [bar.close for bar in benchmark_bars if bar.close > 0]
+        benchmark_returns = [
+            benchmark_closes[index] / benchmark_closes[index - 1] - 1
+            for index in range(1, len(benchmark_closes))
+            if benchmark_closes[index - 1] > 0
+        ]
+        excess = [
+            portfolio - benchmark
+            for portfolio, benchmark in zip(returns, benchmark_returns, strict=False)
+        ]
+        excess_mean = sum(excess) / len(excess) if excess else 0.0
+        excess_std = self._stddev(excess)
+        information_ratio = (
+            excess_mean / excess_std * annualizer if excess_std > 0 else 0.0
+        )
+        avg_cash_ratio = (
+            sum(cash_ratios) / len(cash_ratios) if cash_ratios else 0.0
+        )
+        cash_yield = avg_cash_ratio * self.cash_rate_annualized
         self.state.holdings = {
             symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0
         }
@@ -826,6 +864,11 @@ class PortfolioBacktestEngine:
         }
         self.state.entry_fees = {
             symbol: position.entry_fee
+            for symbol, position in self._positions.items()
+            if position.qty > 0
+        }
+        self.state.realized_pnl_accumulators = {
+            symbol: position.realized_pnl_accumulator
             for symbol, position in self._positions.items()
             if position.qty > 0
         }
@@ -875,6 +918,8 @@ class PortfolioBacktestEngine:
             worst_year_return=worst_year,
             positive_month_ratio=positive_month_ratio,
             state=self.state,
+            information_ratio=information_ratio,
+            cash_yield=cash_yield,
         )
 
     def _enrich_rebalances(self) -> tuple[RebalanceRecord, ...]:
@@ -901,24 +946,36 @@ class PortfolioBacktestEngine:
             equity = record.equity_at_decision
             pre_trade = dict(record.pre_trade_weights)
             actual_weights: dict[str, float] = {}
+            signed_weights: dict[str, float] = {}
             for symbol, notional in signed_notional.items():
                 if equity > 0:
+                    signed_weights[symbol] = notional / equity
                     actual_weights[symbol] = pre_trade.get(symbol, 0.0) + notional / equity
+            # Drift/unfilled must account for symbols sold to zero as well
+            # (e.g. a full liquidation, where the target is empty but sells
+            # happen): the check set is the union of targets and executed.
             drift = 0.0
-            for symbol, target_weight in dict(record.target_weights).items():
+            target_map = dict(record.target_weights)
+            drift_symbols = set(target_map) | set(signed_weights)
+            for symbol in sorted(drift_symbols):
+                target_weight = target_map.get(symbol, 0.0)
                 actual = actual_weights.get(symbol, pre_trade.get(symbol, 0.0))
                 drift = max(drift, abs(target_weight - actual))
+            expected_notional = sum(
+                abs(target_weight - pre_trade.get(symbol, 0.0)) * equity
+                for symbol, target_weight in target_map.items()
+            )
+            sold = {symbol for symbol in signed_notional if symbol not in target_map}
+            expected_notional += sum(
+                abs(pre_trade.get(symbol, 0.0)) * equity for symbol in sold
+            )
+            realized_notional = sum(abs(value) for value in signed_notional.values())
             executed_weights = tuple(
                 sorted(
                     ((symbol, value / equity) for symbol, value in executed.items() if equity > 0)
                 )
             )
             realized_turnover = sum(abs(value) for _, value in executed_weights)
-            expected_notional = sum(
-                abs(target_weight - pre_trade.get(symbol, 0.0)) * equity
-                for symbol, target_weight in dict(record.target_weights).items()
-            )
-            realized_notional = sum(abs(value) for value in signed_notional.values())
             unfilled = max(0.0, expected_notional - realized_notional)
             enriched.append(
                 RebalanceRecord(
@@ -927,7 +984,7 @@ class PortfolioBacktestEngine:
                     target_weights=record.target_weights,
                     target_cash_weight=record.target_cash_weight,
                     pre_trade_weights=record.pre_trade_weights,
-                    signed_trade_weights=tuple(sorted(signed_notional.items())),
+                    signed_trade_weights=tuple(sorted(signed_weights.items())),
                     post_fill_actual_weights=tuple(sorted(actual_weights.items())),
                     target_vs_actual_drift=drift,
                     unfilled_notional=unfilled,

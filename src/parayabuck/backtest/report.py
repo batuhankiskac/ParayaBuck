@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
@@ -97,7 +98,6 @@ class BacktestReport:
     drawdown_series: tuple[DrawdownPoint, ...]
     equity_curve: tuple[tuple[str, float], ...]
     monte_carlo: dict[str, object] | None
-    walk_forward: tuple[dict[str, object], ...]
     score_deciles: tuple[ScoreDecilePerformance, ...]
     score_expectancy_monotonic: dict[str, bool]
     by_regime: tuple[RegimePerformance, ...]
@@ -124,7 +124,6 @@ class BacktestReport:
                 for timestamp, equity in self.equity_curve
             ],
             "monte_carlo": self.monte_carlo,
-            "walk_forward": self.walk_forward,
             "score_deciles": [asdict(item) for item in self.score_deciles],
             "score_expectancy_monotonic": self.score_expectancy_monotonic,
             "by_regime": [asdict(item) for item in self.by_regime],
@@ -403,26 +402,6 @@ class BacktestReport:
                 f"Kötü %5 : {monte.get('worst_5pct_ending_equity', 0):,.2f}"
             )
             lines.append(f"  Medyan MaxDD  : {median_max_dd:.2f}%   Kötü %5 : {worst_max_dd:.2f}%")
-        if self.walk_forward:
-            lines.append("")
-            lines.append("-- WALK-FORWARD (out-of-sample) --")
-            for index, fold in enumerate(self.walk_forward, start=1):
-                fold_return = _as_float(fold.get("total_return")) * 100
-                fold_drawdown = _as_float(fold.get("max_drawdown")) * 100
-                selected = fold.get("train_params")
-                selected_text = (
-                    f"  seçilen: skor={selected.get('minimum_signal_score', 0):.0f} "
-                    f"risk={selected.get('risk_per_trade_pct', 0):.4f} "
-                    f"poz={selected.get('max_position_pct', 0):.2f}"
-                    if isinstance(selected, dict)
-                    else ""
-                )
-                lines.append(
-                    f"  Dilim {index}: işlem={fold.get('total_trades', 0)}  "
-                    f"getiri={fold_return:.2f}%  "
-                    f"maxDD={fold_drawdown:.2f}%  "
-                    f"sharpe={fold.get('sharpe', 0):.2f}{selected_text}"
-                )
         lines.append("")
         lines.append("=" * 78)
         return "\n".join(lines)
@@ -437,7 +416,6 @@ def build_report(
     timeframe: str = "",
     symbols: list[str] | None = None,
     monte_carlo: dict[str, object] | None = None,
-    walk_forward: tuple[dict[str, object], ...] = (),
 ) -> BacktestReport:
     curve = list(result.equity_curve)
     timestamps = list(curve_timestamps)
@@ -475,7 +453,6 @@ def build_report(
             (ts.isoformat(), equity) for ts, equity in zip(timestamps, curve, strict=True)
         ),
         monte_carlo=monte_carlo,
-        walk_forward=walk_forward,
         score_deciles=_score_decile_performance(trades),
         score_expectancy_monotonic=_score_monotonicity(trades),
         by_regime=_regime_performance(trades),
@@ -526,7 +503,7 @@ def _yearly_performance(
     return tuple(yearly)
 
 
-def _benchmark_yearly_returns(benchmark_bars: list[Bar] | None) -> dict[int, float]:
+def _benchmark_yearly_returns(benchmark_bars: Sequence[Bar] | None) -> dict[int, float]:
     if not benchmark_bars:
         return {}
     ordered = sorted(benchmark_bars, key=lambda bar: bar.timestamp)
@@ -538,7 +515,7 @@ def _benchmark_yearly_returns(benchmark_bars: list[Bar] | None) -> dict[int, flo
     for year in sorted(by_year):
         closes = by_year[year]
         anchor = previous_close if previous_close is not None else closes[0]
-        returns[year] = closes[-1] / anchor - 1
+        returns[year] = closes[-1] / anchor - 1 if anchor > 0 else 0.0
         previous_close = closes[-1]
     return returns
 

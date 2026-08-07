@@ -71,16 +71,11 @@ class EquityTimeSeriesMomentum1dV1(PortfolioStrategy):
         volatility_window = self.parameters.get("volatility_window", 20)
         if not isinstance(volatility_window, int) or volatility_window < 10:
             raise ValueError("volatility_window must be an integer of at least 10 bars")
-        volatility_target = self.param_optional_float("volatility_target")
-        if volatility_target is not None and not isinstance(volatility_target, (int, float)):
-            raise ValueError("volatility_target must be numeric or null")
+        # Validation only: param_optional_float raises for non-numeric values.
+        self.param_optional_float("volatility_target")
         max_single = self.parameters.get("max_single_weight", 0.5)
         if not isinstance(max_single, (int, float)) or not 0 < float(max_single) <= 1:
             raise ValueError("max_single_weight must be in (0, 1]")
-
-    @property
-    def rebalance_frequency(self) -> str:
-        return self.param_str("rebalance_frequency", "monthly")
 
     def decide(self, context: PortfolioContext) -> TargetPortfolio:
         scheme = self.param_str("momentum_scheme", "12m")

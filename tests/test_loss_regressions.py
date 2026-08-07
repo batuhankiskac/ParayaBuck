@@ -20,6 +20,7 @@ from parayabuck.core.models import (
     OrderRole,
     OrderState,
     Regime,
+    StrategyEvaluation,
 )
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
@@ -27,7 +28,6 @@ from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.markets.regime import RegimeAssessment, RegimeDetector
 from parayabuck.monitoring import AIDecisionJournal
 from parayabuck.runtime import EngineRuntime
-from parayabuck.strategies.base import StrategyEvaluation
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
 
@@ -221,6 +221,27 @@ def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Pa
     saved = ledger.load_risk_state("acct", datetime.now(UTC).date())
     assert saved is not None
     assert saved.consecutive_losses == 4
+    ledger.close()
+
+
+def test_corrupt_risk_state_payload_is_treated_as_absent(tmp_path: Path) -> None:
+    """A truncated/corrupt risk_state row must not fail startup: it is
+    treated as absent and rebuilt from the account."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.connection.execute(
+        """
+        INSERT INTO risk_state(account_id, session_date, payload, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "acct",
+            datetime.now(UTC).date().isoformat(),
+            "{truncated json",
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+    ledger.connection.commit()
+    assert ledger.load_risk_state("acct", datetime.now(UTC).date()) is None
     ledger.close()
 
 

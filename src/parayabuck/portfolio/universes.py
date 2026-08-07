@@ -26,11 +26,6 @@ EQUITY_ETF_UNIVERSE: tuple[str, ...] = (
 # concentration limit.
 BROAD_MARKET_ETFS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM"})
 
-# Cash proxy used when absolute momentum fails everywhere. A full risk-off
-# allocation to this symbol is allowed only when the research data provider
-# delivers its history; otherwise the residual simply stays in cash.
-CASH_PROXY_SYMBOL = "SHY"
-
 EQUITY_UNIVERSE_VERSION = "permanent_etf_core_v1"
 CRYPTO_UNIVERSE_VERSION = "crypto_trailing_liquidity_v1"
 
@@ -58,10 +53,8 @@ def equity_universe_for(market: Market) -> tuple[str, ...]:
 
 __all__ = [
     "BROAD_MARKET_ETFS",
-    "CASH_PROXY_SYMBOL",
     "CRYPTO_UNIVERSE_VERSION",
     "EQUITY_ETF_UNIVERSE",
     "EQUITY_UNIVERSE_VERSION",
     "EXECUTION_SUPPORTED_CRYPTO",
-    "equity_universe_for",
 ]

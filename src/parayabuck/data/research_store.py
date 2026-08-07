@@ -19,7 +19,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+
+log = get_logger("parayabuck.data.research_store")
 
 MANIFEST_FILENAME = "manifest.json"
 SNAPSHOTS_FILENAME = "universe_snapshots.json"
@@ -338,8 +341,18 @@ class VersionedResearchStore:
         path = self.dataset_dir(dataset_id) / MANIFEST_FILENAME
         if not path.exists():
             return None
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return DatasetManifest.from_dict(raw if isinstance(raw, dict) else {})
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            # A corrupt manifest must not crash the caller (e.g. the local
+            # research provider) with a confusing decode error.
+            log.warning("Dataset manifest unreadable for %s: %s", dataset_id, exc)
+            return None
+        try:
+            return DatasetManifest.from_dict(raw if isinstance(raw, dict) else {})
+        except (KeyError, TypeError, ValueError) as exc:
+            log.warning("Dataset manifest schema mismatch for %s: %s", dataset_id, exc)
+            return None
 
     def save_dataset(
         self,

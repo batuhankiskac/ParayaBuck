@@ -6,6 +6,7 @@ from pathlib import Path
 
 from parayabuck.core.models import (
     Bar,
+    ConditionEvaluation,
     Direction,
     Fill,
     Market,
@@ -13,13 +14,10 @@ from parayabuck.core.models import (
     OrderState,
     Regime,
     Signal,
+    StrategyEvaluation,
 )
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring import AIDecisionJournal
-from parayabuck.strategies.base import (
-    ConditionEvaluation,
-    StrategyEvaluation,
-)
 
 
 def _bar(

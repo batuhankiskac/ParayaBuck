@@ -7,11 +7,13 @@ from parayabuck.core.models import (
     ExecutionTransition,
     OrderRole,
     OrderState,
-    ProtectionState,
 )
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.state_machine import OrderStateMachine
+from parayabuck.logger import get_logger
 from parayabuck.risk.manager import RiskManager
+
+log = get_logger("parayabuck.execution.coordinator")
 
 
 class ExecutionCoordinator:
@@ -50,9 +52,7 @@ class ExecutionCoordinator:
                 current_state=event.state,
                 fill_delta=delta,
                 position_delta=delta if event.role == OrderRole.ENTRY else -delta,
-                reservation_delta=-delta if event.role == OrderRole.ENTRY else 0.0,
                 realized_pnl_delta=0.0,
-                protection_state=ProtectionState.UNPROTECTED,
                 entry_client_order_id=(
                     event.client_order_id if event.role == OrderRole.ENTRY else None
                 ),
@@ -71,10 +71,17 @@ class ExecutionCoordinator:
                     event.state,
                     "normalized_execution_event",
                 )
-            except ValueError:
-                # Duplicate, late and out-of-order events remain auditable but
-                # never move the local lifecycle backwards.
-                pass
+            except ValueError as exc:
+                # Duplicate, late and out-of-order events never move the local
+                # lifecycle backwards, but a repeated transition is worth
+                # observing so lifecycle bugs do not stay silent.
+                log.warning(
+                    "Ignored order transition %s -> %s for %s: %s",
+                    lifecycle.state.value,
+                    event.state.value,
+                    event.client_order_id,
+                    exc,
+                )
 
         if lifecycle is not None and event.role == OrderRole.ENTRY:
             if event.state in {

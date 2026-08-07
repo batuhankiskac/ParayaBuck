@@ -42,36 +42,6 @@ class PortfolioContext:
             return True
         return bool(contains(symbol, self.market, self.decision_timestamp))
 
-    def realized_volatility(self, symbol: str, window: int) -> float:
-        import math
-        import statistics
-
-        closes = self.closes(symbol)
-        if len(closes) < window + 1:
-            return 0.0
-        returns = [
-            closes[index] / closes[index - 1] - 1
-            for index in range(len(closes) - window, len(closes))
-            if closes[index - 1] > 0
-        ]
-        if len(returns) < 2:
-            return 0.0
-        mean = statistics.fmean(returns)
-        variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
-        return math.sqrt(variance)
-
-    def trailing_return(self, symbol: str, lookback_bars: int) -> float:
-        """Return over the last ``lookback_bars`` completed bars, skipping the most
-        recent bar so the strategy never reacts to the bar it just closed."""
-        closes = self.closes(symbol)
-        if len(closes) < lookback_bars + 2:
-            return float("-inf")
-        start = closes[-lookback_bars - 2]
-        end = closes[-2]
-        if start <= 0:
-            return float("-inf")
-        return end / start - 1
-
 
 class PortfolioStrategy(ABC):
     """Produces target portfolios from point-in-time market state."""

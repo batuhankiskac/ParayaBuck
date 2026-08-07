@@ -543,4 +543,56 @@ def test_portfolio_backtest_is_deterministic() -> None:
 def test_universe_version_constant_is_used_as_default() -> None:
     engine = _equity_engine(EquityEtfDualMomentumV1())
     assert engine.universe_version == EQUITY_UNIVERSE_VERSION
+
+
+def test_information_ratio_aligns_benchmark_by_trading_day() -> None:
+    """The IR excess series must compare daily portfolio returns against
+    daily benchmark returns. A portfolio that exactly tracks its benchmark
+    must report an information ratio of zero even on hourly bars, where the
+    benchmark's last hourly move used to be subtracted from every hourly
+    portfolio return."""
+
+    class _BtcTarget(PortfolioStrategy):
+        name = "btc_target"
+        version = "1.0.0"
+        market = Market.CRYPTO
+        timeframe = "1h"
+        minimum_history_bars = 1
+
+        def _validate_parameters(self) -> None:
+            return None
+
+        def decide(self, context: PortfolioContext) -> TargetPortfolio:
+            return TargetPortfolio(
+                strategy_name=self.name,
+                strategy_version=self.version,
+                decision_timestamp=context.decision_timestamp,
+                weights=(TargetWeight("BTC/USD", 1.0),),
+                cash_weight=0.0,
+                universe_version="test",
+            )
+
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    base = 100.0
+    bars = [
+        _crypto_bar(
+            start + timedelta(days=day, hours=hour),
+            "BTC/USD",
+            base * 1.01 if hour == 23 else base,
+        )
+        for day in range(10)
+        for hour in range(24)
+    ]
+    warmup = [_crypto_bar(start - timedelta(hours=1), "BTC/USD", base)]
+    engine = PortfolioBacktestEngine(
+        _BtcTarget(),
+        RebalancePolicy(Market.CRYPTO, "hours:6"),
+        starting_equity=100_000.0,
+        slippage_bps=0.0,
+        spread_bps=0.0,
+        crypto_taker_fee_bps=0.0,
+        benchmark_symbol="BTC/USD",
+    )
+    result = engine.run(bars, warmup=warmup, liquidate_at_end=False)
+    assert result.information_ratio == pytest.approx(0.0, abs=1e-9)
     assert set(EQUITY_ETF_UNIVERSE) >= {"SPY", "QQQ", "IWM", "XLK"}

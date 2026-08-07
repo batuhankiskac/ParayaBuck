@@ -86,6 +86,9 @@ class EngineConfig:
     data_finalization_grace_seconds: float = 2.0
     maximum_signal_age_seconds: float = 20.0
     maximum_queue_age_seconds: float = 30.0
+    # Reserved fields: accepted from settings.yaml for schema stability but
+    # not consumed by the engine. The runtime uses account_poll_interval /
+    # maximum_account_age_for_entry and the universe scanners' own ratios.
     account_snapshot_ttl_seconds: float = 15.0
     account_poll_interval_seconds: float = 15.0
     maximum_account_age_for_entry_seconds: float = 30.0
@@ -95,8 +98,12 @@ class EngineConfig:
     crypto_emergency_exit_bps: float = 75.0
     crypto_stop_cancel_timeout_seconds: float = 5.0
     crypto_stop_cancel_poll_interval_seconds: float = 0.25
+    # Reserved: no longer used to select a strategy profile (strategies are
+    # composed in code), but kept for settings.yaml compatibility.
     strategy_profile: str = "equity_5m_v1"
     allow_short: bool = False
+    # Reserved: the runtime does not currently filter crypto bars by volume
+    # ratio; kept for settings.yaml compatibility.
     crypto_min_volume_bar_ratio: float = 0.5
     # Portfolio-strategy approval: the runtime refuses to start until a
     # portfolio strategy has passed the production gate AND this flag is
@@ -122,24 +129,23 @@ class EngineConfig:
             raise ValueError("crypto_min_volume_bar_ratio must be in (0, 1]")
         if TIMEFRAME_MINUTES[self.higher_timeframe] < TIMEFRAME_MINUTES[self.timeframe]:
             raise ValueError("higher_timeframe must not be smaller than timeframe")
-        if self.consecutive_values_invalid:
+        if self.timing_capacity_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
         if self.max_new_positions_per_cycle != 1:
             raise ValueError("Only one new position per cycle is supported")
         if self.live_trading_enabled:
-            if self.trading_enabled and self.strategy_profile != "equity_5m_v1":
-                raise ValueError("Broker trading requires the equity_5m_v1 strategy profile")
+            # Strategy selection happens in code; the legacy profile field is
+            # accepted for settings.yaml compatibility but never validated.
             if self.trading_enabled and (self.timeframe != "5m" or self.higher_timeframe != "1h"):
                 raise ValueError("Broker trading is enabled only for the validated 5m + 1h profile")
 
     @property
-    def consecutive_values_invalid(self) -> bool:
+    def timing_capacity_values_invalid(self) -> bool:
         float_values = (
             self.event_grace_seconds,
             self.data_finalization_grace_seconds,
             self.maximum_signal_age_seconds,
             self.maximum_queue_age_seconds,
-            self.account_snapshot_ttl_seconds,
             self.account_poll_interval_seconds,
             self.maximum_account_age_for_entry_seconds,
             self.crypto_stop_limit_offset_bps,
@@ -153,7 +159,6 @@ class EngineConfig:
             or self.data_finalization_grace_seconds < 0
             or self.maximum_signal_age_seconds <= 0
             or self.maximum_queue_age_seconds <= 0
-            or self.account_snapshot_ttl_seconds <= 0
             or self.account_poll_interval_seconds <= 0
             or self.maximum_account_age_for_entry_seconds <= 0
             or self.event_queue_capacity <= 0

@@ -305,7 +305,7 @@ def test_target_cancels_stop_then_exits_only_managed_quantity(tmp_path: Path) ->
     client = _ExitClient()
     broker = _broker(ledger, client)
     result = broker.process_crypto_price(
-        CryptoPriceObservation("BTC/USD", 111, 109, 110, "one_minute_bar", datetime.now(UTC))
+        CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC))
     )
     assert result == "target"
     assert len(client.submitted) == 1
@@ -321,7 +321,7 @@ def test_stop_fill_during_target_cancel_never_submits_duplicate_sell(
     client = _ExitClient(stop_status="filled")
     broker = _broker(ledger, client)
     broker.process_crypto_price(
-        CryptoPriceObservation("BTC/USD", 111, 94, 100, "one_minute_bar", datetime.now(UTC))
+        CryptoPriceObservation("BTC/USD", 111, 94, "one_minute_bar", datetime.now(UTC))
     )
     assert client.submitted == []
     assert ledger.managed_for_account("acct") == {}
@@ -334,7 +334,7 @@ def test_unconfirmed_stop_cancel_halts_without_target_order(tmp_path: Path) -> N
     broker = _broker(ledger, client)
     with pytest.raises(AmbiguousOrderState, match="unconfirmed"):
         broker.process_crypto_price(
-            CryptoPriceObservation("BTC/USD", 111, 109, 110, "one_minute_bar", datetime.now(UTC))
+            CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC))
         )
     assert client.submitted == []
     position = ledger.managed_for_account("acct")["BTC/USD"]
@@ -365,7 +365,7 @@ def test_partial_crypto_exit_is_cancelled_and_remaining_qty_reprotected(
     broker._wait_for_fill = lambda *_args, **_kwargs: next(responses)
 
     result = broker.process_crypto_price(
-        CryptoPriceObservation("BTC/USD", 111, 109, 110, "one_minute_bar", datetime.now(UTC))
+        CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC))
     )
 
     assert result == "target"
@@ -381,6 +381,7 @@ def test_partial_crypto_exit_is_cancelled_and_remaining_qty_reprotected(
 def test_crypto_risk_rejects_inactive_account() -> None:
     # The direct broker lifecycle must preserve a broker-confirmed inactive state.
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._validate_pre_submit = lambda _intent: None
     broker._validated_values = lambda _intent: (_intent.qty, 95.0, 110.0)
     broker._client = SimpleNamespace()

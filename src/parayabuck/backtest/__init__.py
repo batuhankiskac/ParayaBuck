@@ -33,7 +33,6 @@ from parayabuck.backtest.validation import (
     calendar_rolling_out_of_sample,
     monte_carlo_trades,
     rolling_out_of_sample,
-    walk_forward,
 )
 
 __all__ = [
@@ -68,5 +67,4 @@ __all__ = [
     "new_manifest",
     "rolling_out_of_sample",
     "run_portfolio_experiment",
-    "walk_forward",
 ]

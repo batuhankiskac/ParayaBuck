@@ -9,22 +9,8 @@ from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestResult,
     RebalanceRecord,
 )
+from parayabuck.backtest.report import MONTH_NAMES, _as_float, _benchmark_yearly_returns
 from parayabuck.core.models import Bar
-
-MONTH_NAMES = [
-    "Oca",
-    "Şub",
-    "Mar",
-    "Nis",
-    "May",
-    "Haz",
-    "Tem",
-    "Ağu",
-    "Eyl",
-    "Eki",
-    "Kas",
-    "Ara",
-]
 
 ROLLING_BETA_WINDOW_DAYS = 63
 
@@ -203,68 +189,68 @@ class PortfolioReport:
         )
         lines.append("")
         lines.append("-- ÖZET --")
-        lines.append(f"  Toplam Getiri : {_num(summary.get('total_return')) * 100:.2f}%")
+        lines.append(f"  Toplam Getiri : {_as_float(summary.get('total_return')) * 100:.2f}%")
         lines.append(
-            f"  Benchmark     : {_num(summary.get('benchmark_return')) * 100:.2f}%  "
+            f"  Benchmark     : {_as_float(summary.get('benchmark_return')) * 100:.2f}%  "
             f"({summary.get('benchmark_symbol', '')})"
         )
-        lines.append(f"  Excess        : {_num(summary.get('excess_return')) * 100:.2f}%")
-        lines.append(f"  Brüt / Net    : {_num(summary.get('gross_return')) * 100:.2f}% / "
-                     f"{_num(summary.get('net_return')) * 100:.2f}%")
-        lines.append(f"  Max Drawdown  : {_num(summary.get('max_drawdown')) * 100:.2f}%")
+        lines.append(f"  Excess        : {_as_float(summary.get('excess_return')) * 100:.2f}%")
+        lines.append(f"  Brüt / Net    : {_as_float(summary.get('gross_return')) * 100:.2f}% / "
+                     f"{_as_float(summary.get('net_return')) * 100:.2f}%")
+        lines.append(f"  Max Drawdown  : {_as_float(summary.get('max_drawdown')) * 100:.2f}%")
         lines.append(
-            f"  Sharpe / Sortino / Calmar: {_num(summary.get('sharpe')):.2f} / "
-            f"{_num(summary.get('sortino')):.2f} / {_num(summary.get('calmar')):.2f}"
+            f"  Sharpe / Sortino / Calmar: {_as_float(summary.get('sharpe')):.2f} / "
+            f"{_as_float(summary.get('sortino')):.2f} / {_as_float(summary.get('calmar')):.2f}"
         )
-        lines.append(f"  CAGR          : {_num(summary.get('cagr')) * 100:.2f}%  "
-                     f"Volatilite: {_num(summary.get('annualized_volatility')) * 100:.2f}%")
+        lines.append(f"  CAGR          : {_as_float(summary.get('cagr')) * 100:.2f}%  "
+                     f"Volatilite: {_as_float(summary.get('annualized_volatility')) * 100:.2f}%")
         lines.append("")
         lines.append("-- MALİYETLER --")
         lines.append(
-            f"  Slippage      : {_num(summary.get('slippage_cost_total')):,.2f}  "
-            f"Spread: {_num(summary.get('spread_cost_total')):,.2f}  "
-            f"Fee: {_num(summary.get('fee_total')):,.2f}"
+            f"  Slippage      : {_as_float(summary.get('slippage_cost_total')):,.2f}  "
+            f"Spread: {_as_float(summary.get('spread_cost_total')):,.2f}  "
+            f"Fee: {_as_float(summary.get('fee_total')):,.2f}"
         )
         lines.append(
-            f"  Turnover      : {_num(summary.get('turnover')):.2f}  "
-            f"Ort. varlık: {_num(summary.get('average_holdings_count')):.2f}  "
-            f"Ort. nakit: {_num(summary.get('average_cash_ratio')) * 100:.1f}%"
+            f"  Turnover      : {_as_float(summary.get('turnover')):.2f}  "
+            f"Ort. varlık: {_as_float(summary.get('average_holdings_count')):.2f}  "
+            f"Ort. nakit: {_as_float(summary.get('average_cash_ratio')) * 100:.1f}%"
         )
         lines.append(
             f"  Rebalance     : {summary.get('rebalance_count', 0)}  "
             f"Kapanan pozisyon: {summary.get('closed_positions', 0)}"
         )
         lines.append(
-            f"  Max konsantrasyon: {_num(summary.get('maximum_concentration')) * 100:.1f}%  "
-            f"En kötü ay: {_num(summary.get('worst_month_return')) * 100:.2f}%  "
-            f"En kötü yıl: {_num(summary.get('worst_year_return')) * 100:.2f}%  "
-            f"Pozitif ay oranı: {_num(summary.get('positive_month_ratio')) * 100:.1f}%"
+            f"  Max konsantrasyon: {_as_float(summary.get('maximum_concentration')) * 100:.1f}%  "
+            f"En kötü ay: {_as_float(summary.get('worst_month_return')) * 100:.2f}%  "
+            f"En kötü yıl: {_as_float(summary.get('worst_year_return')) * 100:.2f}%  "
+            f"Pozitif ay oranı: {_as_float(summary.get('positive_month_ratio')) * 100:.1f}%"
         )
         lines.append("")
         lines.append("-- REJİM PERFORMANSI --")
         regime = self.regime_performance
         lines.append(
             f"  Benchmark pozitif aylar: {regime.get('up_months', 0)} "
-            f"(ort. {_num(regime.get('mean_up_month_return')) * 100:.2f}%)  "
+            f"(ort. {_as_float(regime.get('mean_up_month_return')) * 100:.2f}%)  "
             f"Benchmark negatif aylar: {regime.get('down_months', 0)} "
-            f"(ort. {_num(regime.get('mean_down_month_return')) * 100:.2f}%)"
+            f"(ort. {_as_float(regime.get('mean_down_month_return')) * 100:.2f}%)"
         )
         lines.append(
-            f"  Rolling beta (63g): ort. {_num(regime.get('mean_rolling_beta')):.2f} "
-            f"son {_num(regime.get('last_rolling_beta')):.2f}"
+            f"  Rolling beta (63g): ort. {_as_float(regime.get('mean_rolling_beta')):.2f} "
+            f"son {_as_float(regime.get('last_rolling_beta')):.2f}"
         )
         lines.append("")
         lines.append("-- SEMBOL KATKILARI --")
         for contribution in sorted(
             self.per_symbol,
-            key=lambda item: _num(item.get("realized_pnl")),
+            key=lambda item: _as_float(item.get("realized_pnl")),
             reverse=True,
         ):
             lines.append(
                 f"  {contribution['symbol']:<10} "
-                f"realized={_num(contribution.get('realized_pnl')):>12,.2f}  "
-                f"fee={_num(contribution.get('fees')):>8,.2f}  "
-                f"son ağırlık={_num(contribution.get('final_weight')) * 100:>5.1f}%"
+                f"realized={_as_float(contribution.get('realized_pnl')):>12,.2f}  "
+                f"fee={_as_float(contribution.get('fees')):>8,.2f}  "
+                f"son ağırlık={_as_float(contribution.get('final_weight')) * 100:>5.1f}%"
             )
         lines.append("")
         lines.append("-- YILLIK GETİRİLER --")
@@ -287,12 +273,6 @@ class PortfolioReport:
             lines.append(f"  ... ve {len(self.rebalances) - 12} rebalance daha")
         lines.append("=" * 78)
         return "\n".join(lines)
-
-
-def _num(value: object, default: float = 0.0) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    return default
 
 
 def build_portfolio_report(
@@ -442,7 +422,7 @@ def _yearly_returns(result: PortfolioBacktestResult) -> tuple[tuple[int, float, 
     by_year: dict[int, list[float]] = {}
     for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True):
         by_year.setdefault(timestamp.year, []).append(equity)
-    benchmark_yearly = _benchmark_yearly(result.benchmark_bars)
+    benchmark_yearly = _benchmark_yearly_returns(result.benchmark_bars)
     yearly: list[tuple[int, float, float]] = []
     previous = result.starting_equity
     for year in sorted(by_year):
@@ -456,23 +436,6 @@ def _yearly_returns(result: PortfolioBacktestResult) -> tuple[tuple[int, float, 
         )
         previous = values[-1]
     return tuple(yearly)
-
-
-def _benchmark_yearly(benchmark_bars: tuple[Bar, ...]) -> dict[int, float]:
-    if not benchmark_bars:
-        return {}
-    ordered = sorted(benchmark_bars, key=lambda bar: bar.timestamp)
-    by_year: dict[int, list[float]] = {}
-    for bar in ordered:
-        by_year.setdefault(bar.timestamp.year, []).append(bar.close)
-    returns: dict[int, float] = {}
-    previous: float | None = None
-    for year in sorted(by_year):
-        closes = by_year[year]
-        anchor = previous if previous is not None else closes[0]
-        returns[year] = closes[-1] / anchor - 1
-        previous = closes[-1]
-    return returns
 
 
 def _benchmark_monthly_returns(benchmark_bars: tuple[Bar, ...]) -> dict[tuple[int, int], float]:

@@ -17,6 +17,7 @@ from parayabuck.markets.symbols import (
     is_stablecoin_pair,
     split_crypto_pair,
 )
+from parayabuck.utils.io import atomic_write
 
 CRYPTO_CATEGORIES = {
     "BTC/USD": "core",
@@ -40,6 +41,22 @@ CRYPTO_CATEGORIES = {
 }
 
 
+def _bar_close_volume(bar: object) -> tuple[float, float] | None:
+    """Extract close/volume as finite floats, or None for malformed bars.
+
+    The float conversion itself can raise (e.g. ``close=None`` from a partial
+    API response); one bad bar must be skipped, not crash the whole refresh.
+    """
+    try:
+        close = float(getattr(bar, "close", math.nan))
+        volume = float(getattr(bar, "volume", math.nan))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(close) or not math.isfinite(volume):
+        return None
+    return close, volume
+
+
 def crypto_candidate_from_bars(
     symbol: str,
     bars: Sequence[object],
@@ -57,15 +74,21 @@ def crypto_candidate_from_bars(
     UTC daily notional instead of median hourly notional.
     """
     canonical = canonical_symbol(symbol, Market.CRYPTO)
-    by_timestamp = {
-        getattr(bar, "timestamp"): bar
-        for bar in bars
-        if math.isfinite(float(getattr(bar, "close", math.nan)))
-        and math.isfinite(float(getattr(bar, "volume", math.nan)))
-        and float(getattr(bar, "close", 0)) > 0
-        and float(getattr(bar, "volume", -1)) >= 0
-    }
-    ordered = [by_timestamp[key] for key in sorted(by_timestamp)]
+    by_timestamp: dict[object, object] = {}
+    for bar in bars:
+        close_volume = _bar_close_volume(bar)
+        if close_volume is None:
+            continue
+        close, volume = close_volume
+        if close > 0 and volume >= 0 and hasattr(bar, "timestamp"):
+            by_timestamp[getattr(bar, "timestamp")] = bar
+    ordered = [
+        by_timestamp[key]
+        for key in sorted(
+            by_timestamp,
+            key=lambda item: item.isoformat() if isinstance(item, datetime) else str(item),
+        )
+    ]
     completeness = min(1.0, len(ordered) / max(1, expected_bar_count))
     daily_dollar_volumes: dict[object, float] = {}
     for bar in ordered:
@@ -181,6 +204,17 @@ class CryptoUniverseScanner:
         selection_timestamp: datetime | None = None,
         pinned_symbols: tuple[str, ...] = (),
     ) -> CryptoScannerResult:
+        """Deterministically select the crypto stream universe.
+
+        Preconditions: candidates must be canonical and timestamps must be
+        timezone-aware. Pins are force-kept even when they fail a filter and
+        are never reported as eliminated; pool membership is enforced by
+        ``validate_active_crypto_universe`` at load time.
+        """
+        if data_timestamp.tzinfo is None or (
+            selection_timestamp is not None and selection_timestamp.tzinfo is None
+        ):
+            raise ValueError("Scanner timestamps must be timezone-aware (UTC)")
         managed_pins = tuple(
             dict.fromkeys(canonical_symbol(item, Market.CRYPTO) for item in pinned_symbols)
         )
@@ -337,14 +371,10 @@ class CryptoUniverseScanner:
         )
 
     def persist(self, result: CryptoScannerResult) -> None:
-        path = Path(self.config.active_universe_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(
+        atomic_write(
+            Path(self.config.active_universe_path),
             json.dumps(asdict(result), indent=2, sort_keys=True),
-            encoding="utf-8",
         )
-        temporary.replace(path)
 
     def _filter_reason(self, symbol: str, item: CryptoCandidate) -> str | None:
         try:
@@ -444,7 +474,12 @@ def validate_active_crypto_universe(
         ):
             return (), "invalid"
         return selected, "success"
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        # Fail closed, but surface the parse error: a persistent "invalid"
+        # status is indistinguishable from rot without the underlying cause.
+        logging.getLogger("parayabuck.universe").warning(
+            "Active crypto universe validation failed: %s", exc
+        )
         return (), "invalid"
 
 

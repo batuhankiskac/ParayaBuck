@@ -128,6 +128,37 @@ def test_crypto_liquidity_uses_daily_not_hourly_notional() -> None:
     assert candidate.data_completeness == 1.0
 
 
+def test_malformed_bar_is_skipped_not_crash_the_refresh() -> None:
+    """A bar with a non-numeric close (e.g. None from a partial API response)
+    must be filtered out, not raise through the whole crypto refresh."""
+    start = datetime(2026, 7, 27, tzinfo=UTC)
+    good = SimpleNamespace(
+        timestamp=start,
+        open=100.0,
+        high=101.0,
+        low=99.0,
+        close=100.0,
+        volume=4.0,
+    )
+    bad = SimpleNamespace(
+        timestamp=start + timedelta(hours=1),
+        open=100.0,
+        high=101.0,
+        low=99.0,
+        close=None,
+        volume=None,
+    )
+    candidate = crypto_candidate_from_bars(
+        "SOL/USD",
+        [good, bad],
+        expected_bar_count=2,
+        tradable=True,
+        status="active",
+    )
+    assert candidate.data_completeness == pytest.approx(0.5)
+    assert candidate.median_dollar_volume == pytest.approx(400.0)
+
+
 def test_config_canonicalizes_and_validates_crypto_symbols(tmp_path: Path) -> None:
     config = _config(
         tmp_path,
@@ -506,7 +537,10 @@ def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(
 
     result = preflight_module.ensure_active_universes(config, "key", "secret")
 
-    assert result.crypto_status == "missing"
+    # The failed refresh must be reported as refresh_failed, not as the stale
+    # validation reason: "missing"/"stale" describe the file, not that the
+    # refresh itself just failed.
+    assert result.crypto_status == "refresh_failed"
     assert not result.crypto_refreshed
     assert load_active_crypto_symbols(crypto, log_rejection=False) == (
         "BTC/USD",

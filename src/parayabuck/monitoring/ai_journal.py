@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -9,14 +8,25 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from parayabuck.core.models import Bar, Direction, Fill, OrderIntent, OrderState, Signal
+from parayabuck.core.models import (
+    Bar,
+    Direction,
+    Fill,
+    OrderIntent,
+    OrderState,
+    Signal,
+    StrategyEvaluation,
+)
 from parayabuck.logger import get_logger
 from parayabuck.markets.regime import RegimeAssessment
-from parayabuck.strategies.base import StrategyEvaluation
+from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.monitoring.ai_journal")
 
 SCHEMA_VERSION = 1
+
+_MAX_PENDING_FILLS_PER_ORDER = 16
+_MAX_PENDING_ENTRY_FILL_ORDERS = 500
 
 
 @dataclass
@@ -291,7 +301,16 @@ class AIDecisionJournal:
                     ),
                 )
             elif fill.direction != Direction.FLAT:
-                self._pending_entry_fills.setdefault(fill.client_order_id, []).append(fill)
+                # Unmatched entry fills (record lost on restart or the signal
+                # never resolved) must not grow without bound in a long-lived
+                # runtime: keep only the most recent fills per order id.
+                pending = self._pending_entry_fills.setdefault(fill.client_order_id, [])
+                pending.append(fill)
+                if len(pending) > _MAX_PENDING_FILLS_PER_ORDER:
+                    del pending[:-_MAX_PENDING_FILLS_PER_ORDER]
+                if len(self._pending_entry_fills) > _MAX_PENDING_ENTRY_FILL_ORDERS:
+                    oldest = next(iter(self._pending_entry_fills))
+                    del self._pending_entry_fills[oldest]
 
     def record_account(self, timestamp: datetime, payload: dict[str, Any]) -> None:
         with self._lock:
@@ -525,11 +544,28 @@ class AIDecisionJournal:
         raw_open = self._load_json(self._open_path, [])
         if isinstance(raw_open, list):
             for item in raw_open:
-                record = PredictionRecord(**item)
+                # A hand-edited or version-skewed prediction record must not
+                # crash the whole runtime; quarantine the file instead.
+                try:
+                    record = PredictionRecord(**item)
+                except (TypeError, ValueError, KeyError) as exc:
+                    self._quarantine(self._open_path)
+                    log.error(
+                        "AI journal open-predictions schema drift; state reset: %s", exc
+                    )
+                    self._open = {}
+                    return
                 self._open[record.signal_id] = record
         raw_stats = self._load_json(self._stats_path, {})
         if isinstance(raw_stats, dict):
             self._stats = raw_stats
+
+    def _quarantine(self, path: Path) -> None:
+        quarantine = path.with_name(f"{path.name}.corrupt-{datetime.now(UTC):%Y%m%dT%H%M%SZ}")
+        try:
+            path.replace(quarantine)
+        except OSError:
+            pass
 
     def _load_json(self, path: Path, default: Any) -> Any:
         if not path.exists():
@@ -596,21 +632,9 @@ class AIDecisionJournal:
 
     @staticmethod
     def _atomic_text(path: Path, content: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-        try:
-            with temporary.open("w", encoding="utf-8") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-            directory_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        finally:
-            temporary.unlink(missing_ok=True)
+        # Decision files embed account equity and positions; keep them
+        # private even if atomic_write's default mode ever changes.
+        atomic_write(path, content, 0o600)
 
     @staticmethod
     def _append(path: Path, text: str) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,6 +34,24 @@ def _fingerprint(bar_hash: str = "abc123") -> HoldoutFingerprint:
 def test_preflight_passes_for_fresh_holdout(tmp_path: Path) -> None:
     registry = HoldoutRegistry(tmp_path / "registry.json")
     registry.preflight(_fingerprint(), "experiment-a")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "not json at all",
+        json.dumps([]),  # root is not an object
+        json.dumps({"records": "nope"}),  # records is not a list
+        json.dumps({"records": [{"evaluated_at": "2026-01-01T00:00:00+00:00"}, "garbage"]}),
+    ],
+)
+def test_corrupt_registry_fails_closed_instead_of_losing_locks(
+    tmp_path: Path, payload: str
+) -> None:
+    path = tmp_path / "registry.json"
+    path.write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError, match="corrupt"):
+        HoldoutRegistry(path)
 
 
 def test_pending_locks_the_holdout(tmp_path: Path) -> None:

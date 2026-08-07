@@ -5,6 +5,7 @@ import math
 import os
 import sqlite3
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -157,6 +158,7 @@ def test_rejected_broker_entry_releases_its_ledger_reservation(tmp_path: Path) -
         signal_id="one",
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = ledger
     broker._validated_values = lambda _intent: (1.0, 95.0, 110.0)
@@ -201,6 +203,7 @@ def test_atomic_stop_replacement_persists_current_stop_across_restart(tmp_path: 
     )
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = ledger
     broker._price_step = lambda *_args: Decimal("0.01")
@@ -259,6 +262,7 @@ def test_failed_atomic_stop_replacement_leaves_ledger_stop_unchanged(tmp_path: P
         raise TimeoutError("replace unavailable")
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = ledger
     broker._price_step = lambda *_args: Decimal("0.01")
@@ -274,7 +278,6 @@ def test_failed_atomic_stop_replacement_leaves_ledger_stop_unchanged(tmp_path: P
 
 def test_crypto_atomic_stop_replacement_moves_stop_limit_pair_together() -> None:
     position = ManagedPosition(
-        account_id="acct",
         canonical_symbol="BTC/USD",
         market=Market.CRYPTO,
         strategy="test",
@@ -304,6 +307,7 @@ def test_crypto_atomic_stop_replacement_moves_stop_limit_pair_together() -> None
         )
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._account_id = "acct"
     broker.crypto_stop_limit_offset_bps = 25
     broker._price_step = lambda *_args: Decimal("0.01")
@@ -324,6 +328,40 @@ def test_crypto_atomic_stop_replacement_moves_stop_limit_pair_together() -> None
             "broker_order_id": "stop-broker-v2",
         }
     ]
+
+
+def test_crypto_atomic_stop_replacement_refuses_without_direction_evidence() -> None:
+    """A managed row without a take-profit target cannot prove long vs short:
+    the replacement must refuse instead of moving the stop the wrong way."""
+    position = ManagedPosition(
+        canonical_symbol="BTC/USD",
+        market=Market.CRYPTO,
+        strategy="test",
+        source_signal_id="crypto-replace",
+        entry_client_order_id="crypto-entry",
+        broker_order_id="entry-broker",
+        owned_qty=0.01,
+        filled_avg_price=0,
+        original_stop=95,
+        original_target=0,
+        status="open",
+        current_stop=95,
+        protective_stop_client_order_id="stop-client-v1",
+        protective_stop_broker_order_id="stop-broker-v1",
+        stop_state="open",
+    )
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
+    broker._account_id = "acct"
+    broker.crypto_stop_limit_offset_bps = 25
+    broker.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: [position],
+    )
+    broker._client = SimpleNamespace(
+        replace_order_by_id=lambda *_args: pytest.fail("must not reach the broker")
+    )
+
+    assert not broker.replace_protective_stop("crypto-entry", 98)
 
 
 def _bar(
@@ -357,6 +395,7 @@ def test_legacy_crypto_symbols_have_crypto_sector_classification() -> None:
 def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
     looked_up: list[str] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {}
     broker._client = SimpleNamespace(
         get_asset=lambda symbol: looked_up.append(symbol) or SimpleNamespace()
@@ -446,6 +485,97 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period(
 
     assert evaluated == [(("AAPL",), ("MSFT",))]
     assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
+
+
+def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
+    evaluated: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    corrections: list[str] = []
+    first_evaluated = threading.Event()
+
+    class Engine:
+        entry_halt_reason = None
+        has_data_gaps = False
+
+        def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            return SimpleNamespace(
+                bars=tuple(bars),
+                mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
+            )
+
+        def ingest_corrections(self, bars: list[Bar]) -> Any:
+            corrections.extend(bar.symbol for bar in bars)
+
+        def evaluate_timestamp(
+            self,
+            _timestamp: datetime,
+            symbols: list[str],
+            _account: AccountSnapshot,
+            *,
+            missing_symbols: tuple[str, ...],
+        ) -> Any:
+            evaluated.append((tuple(symbols), missing_symbols))
+            first_evaluated.set()
+            return SimpleNamespace(orders=())
+
+    runtime.engine = Engine()
+    runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
+    runtime.config = SimpleNamespace(
+        event_grace_seconds=0.0,
+        maximum_queue_age_seconds=30,
+        maximum_account_age_for_entry_seconds=300,
+    )
+    runtime._historical = None
+    runtime._warming_up = False
+    runtime._not_ready_symbols = set()
+    runtime._last_account_at = None
+    runtime._circuit_breaker_reason = None
+    runtime._refresh_readiness = lambda: None
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_readiness_reasons = lambda _market=None: ()
+    runtime._engine_has_symbol_gap = lambda _symbol: False
+    runtime._expected_all_symbols = {"AAPL", "MSFT"}
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))
+    }
+    runtime._events = _EventQueue(4096)
+    runtime._event_stats_lock = threading.Lock()
+    runtime._oldest_received_at = None
+    runtime._coalesced_events = 0
+    runtime._dropped_events = 0
+    runtime._series_watermarks = {}
+    runtime._portfolio_watermarks = {}
+    runtime._state = "running"
+    runtime._running = True
+    runtime._flush_aggregators = lambda: None
+    runtime._schedule_reconcile = lambda: None
+
+    thread = threading.Thread(target=runtime._decision_loop, daemon=True)
+    thread.start()
+    try:
+        runtime._events.put_market_event(
+            _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
+        )
+        assert first_evaluated.wait(5)
+        runtime._events.put_market_event(
+            _Event("primary", _bar(timestamp, "MSFT"), datetime.now(UTC))
+        )
+        deadline = time.monotonic() + 5
+        while len(evaluated) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        runtime._events.put_market_event(
+            _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
+        )
+        deadline = time.monotonic() + 5
+        while "AAPL" not in corrections and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        runtime._running = False
+        thread.join(timeout=5)
+
+    assert evaluated == [(("AAPL",), ("MSFT",)), (("MSFT",), ())]
+    assert corrections == ["AAPL"]
 
 
 def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
@@ -562,7 +692,6 @@ def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> N
         timestamp,
         {"BTC/USD": btc, "AVAX/USD": avax},
         {"BTC/USD", "AVAX/USD"},
-        market=Market.CRYPTO,
     )
 
     assert runtime._entry_readiness_reasons(Market.CRYPTO) == ()
@@ -701,8 +830,15 @@ def test_account_failure_does_not_drop_ingested_bar() -> None:
 
 def test_external_position_is_not_modified_by_default() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.manage_external_positions = False
-    broker.ledger = SimpleNamespace(managed_for_account=lambda _account: {})
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {},
+        managed_entries_for_account=lambda _account: (),
+        mark_manual_intervention=lambda *_args: None,
+        set_protection_state=lambda *_args: None,
+        apply_fee_activity=lambda *args: True,
+    )
     broker._account_id = "acct"
     broker.account = lambda: AccountSnapshot(
         1_000,
@@ -719,7 +855,6 @@ def test_external_position_is_not_modified_by_default() -> None:
 
 def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> None:
     owned = ManagedPosition(
-        "acct",
         "XLE",
         Market.EQUITY,
         "test",
@@ -734,11 +869,17 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
     )
     closed: list[str] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": owned},
         managed_entries_for_account=lambda _account: [owned],
         mark_position_closed=lambda _account, entry: closed.append(entry),
+        mark_manual_intervention=lambda *_args: None,
+        set_protection_state=lambda *_args: None,
+        managed_entry_broker_order_ids=lambda _account, _symbol: set(),
+        apply_fee_activity=lambda *args: True,
     )
     broker.account = lambda: AccountSnapshot(
         1_000,
@@ -755,8 +896,8 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
 
 def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists() -> None:
     submitted: list[float] = []
+    closed: list[str] = []
     owned = ManagedPosition(
-        "acct",
         "BTC/USD",
         Market.CRYPTO,
         "test",
@@ -770,8 +911,18 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         "open",
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker.ledger = None
     broker.manage_external_positions = False
-    broker.ledger = SimpleNamespace(managed_for_account=lambda _account: {"BTC/USD": owned})
+    broker.ledger = SimpleNamespace(
+        managed_for_account=lambda _account: {"BTC/USD": owned},
+        managed_entries_for_account=lambda _account: [owned],
+        mark_position_closed=lambda _account, entry: closed.append(entry),
+        mark_manual_intervention=lambda *_args: None,
+        set_protection_state=lambda *_args: None,
+        managed_entry_broker_order_ids=lambda _account, _symbol: set(),
+        apply_fee_activity=lambda *_args, **_kwargs: True,
+    )
     broker._account_id = "acct"
     broker.account = lambda: AccountSnapshot(
         1_000,
@@ -872,30 +1023,32 @@ def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
     example.write_text("ALPACA_SECRET_KEY=your_secret_key_here\n")
     before = example.read_bytes()
     server._atomic_update_credentials(env, "new-key", "new-secret")
-    assert "UNMANAGED=value" in env.read_text()
-    assert "ALPACA_API_KEY=new-key" in env.read_text()
-    assert "ALPACA_SECRET_KEY=new-secret" in env.read_text()
+    written = env.read_text()
+    assert "UNMANAGED=value" in written
+    # Values are quoted so '#'/'=' inside a key or secret cannot corrupt the
+    # dotenv file on the next load.
+    assert 'ALPACA_API_KEY="new-key"' in written
+    assert 'ALPACA_SECRET_KEY="new-secret"' in written
     assert example.read_bytes() == before
     assert os.stat(env).st_mode & 0o777 == 0o600
+
+
+def test_atomic_credentials_quote_values_with_special_characters(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("")
+    server._atomic_update_credentials(env, "key#with=sign", "secret with spaces")
+    assert 'ALPACA_API_KEY="key#with=sign"' in env.read_text()
+    assert 'ALPACA_SECRET_KEY="secret with spaces"' in env.read_text()
 
 
 def test_direct_settings_call_cannot_auto_restart_into_live(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    class Manager:
-        config_path = tmp_path / "settings.yaml"
-        env_path = tmp_path / ".env"
-        engine_state = "running"
-        broker = None
-        _live_armed = True
-
-        def is_paper_mode(self) -> bool:
-            return True
-
-        def get_credentials(self) -> tuple[str, str]:
-            return "key", "secret"
-
-    manager = Manager()
+    manager = server.EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.env_path = tmp_path / ".env"
+    manager.engine_state = "running"
+    manager._live_armed = True
     manager.config_path.write_text(
         yaml.safe_dump(
             {
@@ -1101,6 +1254,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
+    runtime._market_entry_halts = {Market.EQUITY: "equity_reason", Market.CRYPTO: None}
     runtime.engine = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
     reconciled: list[bool] = []
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
@@ -1120,6 +1274,10 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     assert runtime.engine.entry_halt_reason is None
     assert runtime._state == "running"
     assert persisted == [account]
+    # Operator reset must also clear market-level entry halts; previously a
+    # transient crypto protection failure kept entries blocked for the whole
+    # process lifetime despite a successful reset.
+    assert runtime._market_entry_halts == {Market.EQUITY: None, Market.CRYPTO: None}
 
 
 def test_safety_lock_reset_refuses_manual_intervention() -> None:
@@ -1156,7 +1314,6 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(
         manager._config_digest(paper=False),
         now,
         now + timedelta(minutes=1),
-        "nonce",
     )
     manager._live_request_suffix = "1234"
     manager.confirm_live_arming("LIVE 1234")

@@ -55,7 +55,11 @@ def _absolute_filter_passes(
         average = simple_moving_average(closes, 200)
         return average is not None and closes[-1] > average
     if filter_name == "excess_over_cash":
-        days: float = 231.0
+        # The 12-1 momentum is measured over 252 trading days; the cash
+        # hurdle must compound over the same window (252/365 of a year),
+        # not an arbitrary 231 days, or the gate silently tightens the
+        # excess-return requirement.
+        days: float = BARS_PER_YEAR
         hurdle: float = (1.0 + risk_free_annual) ** (days / 365.0) - 1.0
         return bool(momentum > hurdle)
     raise ValueError(f"Unsupported absolute filter: {filter_name}")
@@ -105,9 +109,8 @@ class EquityEtfDualMomentumV1(PortfolioStrategy):
         top_n = self.parameters.get("top_n", 3)
         if not isinstance(top_n, int) or top_n <= 0:
             raise ValueError("top_n must be a positive integer")
-        volatility_target = self.param_optional_float("volatility_target")
-        if volatility_target is not None and not isinstance(volatility_target, (int, float)):
-            raise ValueError("Volatility target must be numeric or null")
+        # Validation only: param_optional_float raises for non-numeric values.
+        self.param_optional_float("volatility_target")
         for name in ("max_single_weight", "max_sector_weight"):
             value = self.parameters.get(name, 0.5 if name == "max_single_weight" else 0.40)
             if not isinstance(value, (int, float)) or not 0 < float(value) <= 1:

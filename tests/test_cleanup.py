@@ -36,7 +36,12 @@ def test_legacy_strategies_are_not_registered() -> None:
 
 def test_legacy_strategy_modules_are_gone() -> None:
     for module in LEGACY_MODULES:
-        assert importlib.util.find_spec(module) is None, f"{module} still importable"
+        try:
+            spec = importlib.util.find_spec(module)
+        except ModuleNotFoundError:
+            # The parent package itself no longer exists; the module is gone.
+            continue
+        assert spec is None, f"{module} still importable"
 
 
 def test_no_source_imports_of_legacy_strategies_remain() -> None:

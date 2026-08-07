@@ -37,20 +37,6 @@ class MonteCarloResult:
     worst_5pct_max_drawdown: float
 
 
-def walk_forward(
-    bars: list[Bar],
-    engine_factory: Callable[[], BacktestEngine],
-    train_size: int,
-    test_size: int,
-) -> tuple[WalkForwardFold, ...]:
-    """Backward-compatible alias for rolling_out_of_sample.
-
-    No parameter optimization occurs, so this is intentionally not represented
-    as trained walk-forward optimization in reports.
-    """
-    return rolling_out_of_sample(bars, engine_factory, train_size, test_size)
-
-
 def rolling_out_of_sample(
     bars: list[Bar],
     engine_factory: Callable[[], BacktestEngine],
@@ -217,5 +203,4 @@ __all__ = [
     "calendar_rolling_out_of_sample",
     "monte_carlo_trades",
     "rolling_out_of_sample",
-    "walk_forward",
 ]

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from parayabuck.backtest.experiments import outer_holdout_start
+from parayabuck.backtest.holdout_registry import HoldoutRegistry
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.backtest.portfolio_experiments import (
     PortfolioCandidateSpace,
@@ -115,7 +116,13 @@ def _permissive_gate() -> PortfolioGate:
     )
 
 
-def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
+def _registry(tmp_path: Path, name: str) -> HoldoutRegistry:
+    return HoldoutRegistry(tmp_path / f"{name}.json")
+
+
+def test_holdout_opens_only_for_preregistered_frozen_candidate(
+    tmp_path: Path,
+) -> None:
 
     from parayabuck.backtest.portfolio_experiments import trial_id_for
 
@@ -127,7 +134,8 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
         _spec(), max_holdout_finalists=1, frozen_candidate_trial_id=frozen_id
     )
     trials = run_portfolio_experiment(
-        _bars(), spec, _factory, unlock_holdout=True, validation_gate=_permissive_gate()
+        _bars(), spec, _factory, unlock_holdout=True,
+        validation_gate=_permissive_gate(), holdout_registry=_registry(tmp_path, "open"),
     )
     evaluated = [trial for trial in trials if trial.holdout_evaluations == 1]
     assert len(evaluated) == 1
@@ -138,12 +146,21 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
         run_portfolio_experiment(
             _bars(), replace(spec, frozen_candidate_trial_id=unknown_id), _factory,
             unlock_holdout=True, validation_gate=_permissive_gate(),
+            holdout_registry=_registry(tmp_path, "unknown"),
         )
     # A missing preregistration is rejected too.
     with pytest.raises(ValueError, match="preregistered"):
         run_portfolio_experiment(
             _bars(), replace(spec, frozen_candidate_trial_id=None), _factory,
             unlock_holdout=True, validation_gate=_permissive_gate(),
+            holdout_registry=_registry(tmp_path, "no_frozen"),
+        )
+    # Opening the holdout without a registry must refuse: it would silently
+    # bypass the once-only holdout evaluation lock.
+    with pytest.raises(ValueError, match="holdout_registry"):
+        run_portfolio_experiment(
+            _bars(), spec, _factory, unlock_holdout=True,
+            validation_gate=_permissive_gate(),
         )
     # Opening the holdout appends the holdout result only; validation folds
     # themselves must be byte-identical to the locked run.
@@ -153,7 +170,9 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate() -> None:
         assert locked_trial.fold_results == trial.fold_results[: len(locked_trial.fold_results)]
 
 
-def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate() -> None:
+def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate(
+    tmp_path: Path,
+) -> None:
 
     from parayabuck.backtest.portfolio_experiments import trial_id_for
 
@@ -166,7 +185,10 @@ def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate() -> None:
     # The strict production gate fails every synthetic candidate on sample
     # size, so the holdout must stay locked and the run must refuse.
     with pytest.raises(ValueError, match="validation gate"):
-        run_portfolio_experiment(_bars(), spec, _factory, unlock_holdout=True)
+        run_portfolio_experiment(
+            _bars(), spec, _factory, unlock_holdout=True,
+            holdout_registry=_registry(tmp_path, "gate"),
+        )
 
 
 def test_all_trials_share_pbo_computation() -> None:
@@ -180,8 +202,10 @@ def test_same_data_spec_seed_produce_identical_trials() -> None:
     spec = _spec()
     first = run_portfolio_experiment(_bars(), spec, _factory)
     second = run_portfolio_experiment(_bars(), spec, _factory)
-    assert [(t.trial_id, t.sharpe, t.calmar, t.total_rebalance_months) for t in first] == [
-        (t.trial_id, t.sharpe, t.calmar, t.total_rebalance_months) for t in second
+    assert [
+        (t.trial_id, t.median_fold_sharpe, t.calmar, t.total_rebalance_months) for t in first
+    ] == [
+        (t.trial_id, t.median_fold_sharpe, t.calmar, t.total_rebalance_months) for t in second
     ]
 
 
@@ -206,7 +230,6 @@ def test_portfolio_gate_fails_closed_on_insufficient_evidence() -> None:
         unique_oos_calendar_months=20,
         closed_positions=0,
         profit_factor=1.0,
-        sharpe=0.4,
         calmar=0.0,
         expectancy=0.0,
         deflated_sharpe_probability=0.5,
@@ -242,7 +265,6 @@ def test_portfolio_gate_passes_with_full_evidence() -> None:
         unique_oos_calendar_months=70,
         closed_positions=0,
         profit_factor=1.3,
-        sharpe=0.9,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
@@ -294,7 +316,6 @@ def test_equity_gate_requires_profit_factor() -> None:
         unique_oos_calendar_months=70,
         closed_positions=0,
         profit_factor=1.1,  # below the 1.15 production threshold
-        sharpe=0.9,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
@@ -334,7 +355,6 @@ def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
         unique_oos_calendar_months=0,
         closed_positions=150,
         profit_factor=1.3,
-        sharpe=0.9,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
@@ -358,6 +378,146 @@ def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
     assert not decision.passed
     assert "positive_fold_ratio_below_gate" in decision.failures
     assert "insufficient_regime_diversity" in decision.failures
+
+
+def test_crypto_gate_passes_when_requirements_met() -> None:
+    """A crypto trial that meets every requirement must pass the gate.
+
+    Previously the crypto branch hard-required regime diversity while the
+    benchmark derivation (hard-coded SPY) made it unsatisfiable for crypto
+    universes, so NO crypto candidate could ever pass. The gate itself must
+    be able to pass when the data supports it."""
+    gate = PortfolioGate.for_market(Market.CRYPTO)
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    trial = PortfolioTrialResult(
+        trial_id="crypto-good",
+        strategy_name="crypto_cross_sectional_momentum_1h_v1",
+        strategy_version="1.0.0",
+        parameters=(),
+        fold_results=(),
+        market=Market.CRYPTO,
+        total_rebalance_months=12,
+        unique_oos_calendar_months=0,
+        closed_positions=150,
+        profit_factor=1.3,
+        calmar=1.0,
+        expectancy=5.0,
+        deflated_sharpe_probability=0.96,
+        probability_backtest_overfitting=0.1,
+        max_drawdown=0.3,
+        positive_fold_ratio=0.8,
+        positive_month_ratio=0.7,
+        stress_profit_factor=1.1,
+        stress_expectancy=1.0,
+        stress_realized_pnls=(1.0,),
+        gross_profit_by_symbol=(
+            ("BTC/USD", 60.0),
+            ("ETH/USD", 60.0),
+            ("SOL/USD", 60.0),
+            ("XRP/USD", 60.0),
+            ("ADA/USD", 60.0),
+        ),
+        maximum_concentration=0.4,
+        regime_diverse=True,
+        aggregate_oos_sharpe=0.9,
+        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_return=0.3,
+        neighborhood_robust=True,
+        holdout_evaluations=1,
+    )
+    decision = gate.evaluate(trial)
+    assert decision.passed
+    assert not decision.failures
+
+
+def test_crypto_gate_honors_require_flags() -> None:
+    """The crypto branch must respect require_parameter_plateau and
+    require_regime_diversity just like the equity branch."""
+    from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
+
+    base = dict(
+        trial_id="crypto-flags",
+        strategy_name="crypto_cross_sectional_momentum_1h_v1",
+        strategy_version="1.0.0",
+        parameters=(),
+        fold_results=(),
+        market=Market.CRYPTO,
+        total_rebalance_months=12,
+        unique_oos_calendar_months=0,
+        closed_positions=150,
+        profit_factor=1.3,
+        calmar=1.0,
+        expectancy=5.0,
+        deflated_sharpe_probability=0.96,
+        probability_backtest_overfitting=0.1,
+        max_drawdown=0.3,
+        positive_fold_ratio=0.8,
+        positive_month_ratio=0.7,
+        stress_profit_factor=1.1,
+        stress_expectancy=1.0,
+        stress_realized_pnls=(1.0,),
+        gross_profit_by_symbol=(
+            ("BTC/USD", 60.0),
+            ("ETH/USD", 60.0),
+            ("SOL/USD", 60.0),
+            ("XRP/USD", 60.0),
+            ("ADA/USD", 60.0),
+        ),
+        maximum_concentration=0.4,
+        regime_diverse=False,
+        aggregate_oos_sharpe=0.9,
+        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_return=0.3,
+        neighborhood_robust=False,
+        holdout_evaluations=1,
+    )
+    strict = PortfolioGate.for_market(Market.CRYPTO)
+    assert not strict.evaluate(PortfolioTrialResult(**base)).passed
+    relaxed = PortfolioGate(
+        market=Market.CRYPTO,
+        minimum_oos_positions=100,
+        maximum_drawdown=0.45,
+        minimum_positive_fold_ratio=0.60,
+        minimum_positive_month_ratio=0.60,
+        maximum_symbol_profit_concentration=0.30,
+        require_parameter_plateau=False,
+        require_regime_diversity=False,
+    )
+    decision = relaxed.evaluate(PortfolioTrialResult(**base))
+    assert decision.passed, decision.failures
+
+
+def test_benchmark_bars_follow_engine_benchmark_symbol(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regime diversity must be measured against the engine's declared
+    benchmark symbol (BTC/USD for crypto), not hard-coded SPY."""
+    import parayabuck.backtest.portfolio_experiments as portfolio_experiments
+
+    seen: list[list[Bar]] = []
+
+    def fake_regime_diversity(bars: list[Bar]) -> bool:
+        seen.append(bars)
+        return True
+
+    monkeypatch.setattr(portfolio_experiments, "_regime_diversity", fake_regime_diversity)
+
+    def qqq_factory(strategy: PortfolioStrategy, cost: object) -> PortfolioBacktestEngine:
+        return PortfolioBacktestEngine(
+            strategy,
+            rebalance_policy_for(strategy),
+            starting_equity=100_000.0,
+            slippage_bps=cost.slippage_bps,  # type: ignore[attr-defined]
+            spread_bps=cost.spread_bps,  # type: ignore[attr-defined]
+            crypto_taker_fee_bps=cost.taker_fee_bps,  # type: ignore[attr-defined]
+            benchmark_symbol="QQQ",
+        )
+
+    trials = run_portfolio_experiment(_bars(), _spec(), qqq_factory)
+    assert trials
+    assert seen, "regime diversity was never evaluated"
+    for bars in seen:
+        assert bars, "benchmark bars must not be empty"
+        assert {bar.symbol for bar in bars} == {"QQQ"}
 
 
 class _FixedTargetStrategy(PortfolioStrategy):

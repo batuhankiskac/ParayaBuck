@@ -18,7 +18,6 @@ def _trial(trial_id: str, experiment_id: str = "e1") -> PortfolioTrialResult:
         total_rebalance_months=0,
         closed_positions=0,
         profit_factor=0.0,
-        sharpe=0.0,
         calmar=0.0,
         expectancy=0.0,
         deflated_sharpe_probability=0.0,

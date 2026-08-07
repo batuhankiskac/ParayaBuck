@@ -14,6 +14,34 @@ from parayabuck.core.models import (
     OrderIntent,
     TrailingStopType,
 )
+from parayabuck.features.indicators import atr
+
+
+def test_incremental_atr_cache_matches_library_atr() -> None:
+    """The trailing-stop ATR cache must reproduce atr() exactly for every bar."""
+    broker = BacktestBroker(10_000)
+    bars = []
+    for offset in range(200):
+        close = 100.0 + offset % 7
+        bars.append(
+            Bar(
+                datetime(2025, 1, 1, 14, 30, tzinfo=UTC) + timedelta(days=offset),
+                "AAPL",
+                "1d",
+                close * 0.999,
+                close * 1.001,
+                close * 0.998,
+                close,
+                1000,
+                Market.EQUITY,
+            )
+        )
+    for bar in bars:
+        broker.advance(bar)
+        ranges = list(broker._atr_cache["AAPL"])[-14:]
+        cached = sum(ranges) / len(ranges) if len(ranges) >= 14 else None
+        library = atr(list(broker._bar_history["AAPL"]), 14)
+        assert cached == library
 
 
 def _bar(
@@ -190,6 +218,42 @@ def test_participation_cap_produces_partial_entry_fill() -> None:
     assert position.qty == pytest.approx(50.0)
     assert position.avg_price == pytest.approx(100.02)  # same fill price each bar
     assert len(broker.fills) == 3
+
+
+def test_daily_order_survives_weekend_gap_and_fills_on_monday() -> None:
+    # Friday 16:00 ET order: a wall-clock staleness window would expire it
+    # before Monday's bar; bar-count staleness must let it fill.
+    broker = BacktestBroker(10_000.0)
+    friday = datetime(2025, 1, 3, 21, 0, tzinfo=UTC)  # Friday
+    order = replace(_order(qty=10.0), created_at=friday)
+    broker.submit(order)
+    broker.advance(_bar(0, symbol="OTHER"))  # unrelated symbol: must not count
+    monday = Bar(
+        datetime(2025, 1, 6, 14, 30, tzinfo=UTC),
+        "AAPL",
+        "1d",
+        100.0,
+        101.0,
+        99.0,
+        100.0,
+        1000,
+        Market.EQUITY,
+    )
+    broker.advance(monday)
+    assert broker.positions["AAPL"].qty == pytest.approx(10.0)
+    assert "stale_pending_order" not in broker.order_rejections
+
+
+def test_unfillable_pending_entry_expires_after_bar_limit() -> None:
+    broker = BacktestBroker(10_000.0)
+    order = _order(qty=50.0)
+    broker.submit(order)
+    for offset in range(5):
+        zero_volume = _bar(offset)
+        zero_volume = replace(zero_volume, volume=0.0)
+        broker.advance(zero_volume)
+    assert broker.order_rejections[order.client_order_id] == "stale_pending_order"
+    assert broker.pending == []
 
 
 def test_participation_cap_produces_partial_stop_exit() -> None:

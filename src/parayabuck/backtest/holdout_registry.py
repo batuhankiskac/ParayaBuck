@@ -109,23 +109,37 @@ class HoldoutRegistry:
         self.path = Path(path)
         self._records = self._load()
 
-    @staticmethod
-    def _default_path() -> Path:
-        return Path("data/runtime/portfolio_holdout_registry.json")
-
     def _load(self) -> list[HoldoutEvaluationRecord]:
         if not self.path.exists():
             return []
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(
+                "Holdout registry is corrupt (unreadable JSON); manual audit required"
+            ) from exc
         if not isinstance(raw, dict):
-            return []
+            raise ValueError(
+                "Holdout registry is corrupt (root is not an object); manual audit required"
+            )
         records = raw.get("records", [])
         if not isinstance(records, list):
-            return []
+            raise ValueError(
+                "Holdout registry is corrupt ('records' is not a list); manual audit required"
+            )
         loaded: list[HoldoutEvaluationRecord] = []
         for item in records:
             if not isinstance(item, dict):
-                continue
+                raise ValueError(
+                    "Holdout registry is corrupt (a record is not an object); manual audit required"
+                )
+            try:
+                evaluated_at = datetime.fromisoformat(str(item.get("evaluated_at", "")))
+            except ValueError as exc:
+                raise ValueError(
+                    "Holdout registry contains a record with an invalid "
+                    f"evaluated_at: {item!r}"
+                ) from exc
             loaded.append(
                 HoldoutEvaluationRecord(
                     record_id=str(item.get("record_id", "")),
@@ -133,7 +147,7 @@ class HoldoutRegistry:
                     full_digest=str(item.get("full_digest", "")),
                     experiment_id=str(item.get("experiment_id", "")),
                     state=str(item.get("state", "")),
-                    evaluated_at=datetime.fromisoformat(str(item.get("evaluated_at", ""))),
+                    evaluated_at=evaluated_at,
                     data_hash=str(item.get("data_hash", "")),
                     notes=str(item.get("notes", "")),
                 )

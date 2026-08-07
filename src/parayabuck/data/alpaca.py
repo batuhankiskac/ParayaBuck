@@ -54,6 +54,21 @@ class AlpacaHistoricalData:
             raise ValueError(f"Unsupported Alpaca stock feed: {feed}") from exc
         self._cache = WarmupCache()
 
+    def close(self) -> None:
+        """Release HTTP session pools and the local cache connection."""
+        for client in (self._stock_client, self._crypto_client):
+            session = getattr(client, "_session", None)
+            if session is None:
+                continue
+            try:
+                session.close()
+            except Exception as exc:
+                log.warning("Historical client session close warning: %s", exc)
+        try:
+            self._cache.close()
+        except Exception as exc:
+            log.warning("Warmup cache close warning: %s", exc)
+
     def get_bars(
         self,
         symbol: str,
@@ -87,6 +102,17 @@ class AlpacaHistoricalData:
             raise ValueError("Batch requests must not mix equity and crypto symbols")
         end_at = self._parse_datetime(end) or datetime.now(UTC)
         start_at = self._parse_datetime(start) or end_at - timedelta(days=180)
+        if start_at >= end_at:
+            raise ValueError("Request window must end after it starts")
+        minutes = TIMEFRAME_MINUTES.get(timeframe)
+        if minutes is not None:
+            expected_rows = int((end_at - start_at).total_seconds() // 60 // minutes)
+            if expected_rows > 10_000:
+                raise ValueError(
+                    f"Request window spans ~{expected_rows} {timeframe} bars; "
+                    "Alpaca caps responses at 10,000 rows and the result would "
+                    "be silently truncated. Split the window or use a larger timeframe."
+                )
         market = markets.pop()
         if market == Market.EQUITY and str(self._stock_feed).lower().split(".")[-1] == "iex":
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
@@ -99,6 +125,7 @@ class AlpacaHistoricalData:
                 for bar in self._cache.get(
                     symbol,
                     timeframe,
+                    market=market,
                     feed=feed_name,
                     start=start_at,
                     end=end_at,
@@ -141,12 +168,15 @@ class AlpacaHistoricalData:
                         adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
                     )
                 )
-        except Exception:
+        except Exception as exc:
             if len(fresh_cached) == len(symbols) and all(
                 self._cache_covers_window(bars, market, timeframe, start_at, end_at)
                 for bars in fresh_cached.values()
             ):
-                log.warning("Historical API failed; using feed-matched local warmup cache")
+                log.warning(
+                    "Historical API failed (%s); using feed-matched local warmup cache",
+                    exc,
+                )
                 return fresh_cached
             raise
         frame = response.df

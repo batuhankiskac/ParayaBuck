@@ -4,7 +4,11 @@ import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from parayabuck.markets.regime import RegimeAssessment
 
 
 class Market(StrEnum):
@@ -144,9 +148,7 @@ class ExecutionTransition:
     current_state: OrderState | None
     fill_delta: float
     position_delta: float
-    reservation_delta: float
     realized_pnl_delta: float
-    protection_state: ProtectionState
     entry_client_order_id: str | None = None
 
 
@@ -233,6 +235,40 @@ class Signal:
             self.normalized_expected_r
         ):
             raise ValueError("Normalized expected R must be finite")
+
+
+@dataclass(frozen=True)
+class StrategyContext:
+    """Everything a signal strategy may observe at a decision point."""
+
+    regime: RegimeAssessment
+    position: PositionSnapshot | None = None
+    higher_timeframe_regime: Regime = Regime.UNKNOWN
+    benchmark_regime: Regime = Regime.UNKNOWN
+    relative_strength: float | None = None
+
+
+@dataclass(frozen=True)
+class ConditionEvaluation:
+    """One explainable strategy gate with machine-readable values."""
+
+    code: str
+    passed: bool
+    actual: Any
+    expected: str
+    explanation: str
+
+
+@dataclass(frozen=True)
+class StrategyEvaluation:
+    """A strategy result together with the evidence used to reach it."""
+
+    strategy: str
+    fired: bool
+    summary: str
+    conditions: tuple[ConditionEvaluation, ...] = ()
+    metrics: dict[str, Any] | None = None
+    signal: Signal | None = None
 
 
 @dataclass(frozen=True)

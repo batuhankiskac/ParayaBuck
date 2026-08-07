@@ -15,14 +15,16 @@ from parayabuck.core.models import (
     OrderState,
     ProtectionState,
 )
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.risk.manager import RiskState
 from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
+log = get_logger("parayabuck.execution.ledger")
+
 
 @dataclass(frozen=True)
 class ManagedPosition:
-    account_id: str
     canonical_symbol: str
     market: Market
     strategy: str
@@ -54,8 +56,7 @@ class ExecutionLedger:
     """Small transactional ownership ledger shared by execution and reconciliation."""
 
     def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
-        self.path = Path(path)
-        self._store = store or SQLiteStore(self.path)
+        self._store = store or SQLiteStore(Path(path))
         self._store.acquire()
         self.connection = self._store.connection
         self._lock = self._store.lock
@@ -639,7 +640,6 @@ class ExecutionLedger:
     @staticmethod
     def _managed_from_row(row: tuple[object, ...]) -> ManagedPosition:
         return ManagedPosition(
-            account_id=str(row[0]),
             canonical_symbol=str(row[1]),
             market=Market(str(row[2])),
             strategy=str(row[3]),
@@ -666,26 +666,6 @@ class ExecutionLedger:
             exit_broker_order_id=str(row[24]) if row[24] else None,
             updated_at=datetime.fromisoformat(str(row[25])) if row[25] else None,
         )
-
-    def update_current_stop(
-        self, account_id: str, entry_client_order_id: str, stop_price: float
-    ) -> None:
-        if stop_price <= 0:
-            raise ValueError("Current stop must be positive")
-        with self._lock:
-            cursor = self.connection.execute(
-                """
-                UPDATE managed_positions
-                SET current_stop=?, updated_at=?
-                WHERE account_id=? AND entry_client_order_id=?
-                  AND status IN ('open', 'manual_intervention_required')
-                """,
-                (stop_price, datetime.now(UTC).isoformat(), account_id, entry_client_order_id),
-            )
-            if cursor.rowcount != 1:
-                self.connection.rollback()
-                raise KeyError("Managed position not found for stop update")
-            self.connection.commit()
 
     def register_protective_stop_replacement(
         self,
@@ -852,82 +832,29 @@ class ExecutionLedger:
                 previous_state = (
                     OrderState(existing[2]) if existing and existing[2] is not None else None
                 )
-                entry_client_order_id = str(existing[3]) if existing and existing[3] else None
                 role = OrderRole(existing[4]) if existing else event.role
                 if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
                     role = event.role
-                if entry_client_order_id is None and event.parent_order_id:
-                    parent = self.connection.execute(
-                        """
-                        SELECT COALESCE(entry_client_order_id, client_order_id)
-                        FROM orders WHERE broker_order_id=?
-                        """,
-                        (event.parent_order_id,),
-                    ).fetchone()
-                    if parent:
-                        entry_client_order_id = str(parent[0])
-                if entry_client_order_id is None and event.role != OrderRole.ENTRY:
-                    named_parent = self.connection.execute(
-                        """
-                        SELECT entry_client_order_id
-                        FROM managed_positions
-                        WHERE account_id=? AND ? LIKE entry_client_order_id || '-%'
-                        ORDER BY length(entry_client_order_id) DESC LIMIT 1
-                        """,
-                        (event.account_id, event.client_order_id),
-                    ).fetchone()
-                    if named_parent:
-                        entry_client_order_id = str(named_parent[0])
-                if entry_client_order_id is None and event.role != OrderRole.ENTRY:
-                    # Alpaca bracket child updates can omit parent_order_id and
-                    # use broker-generated UUID client ids. Link only when one
-                    # managed lot is an unambiguous match; never guess between
-                    # multiple same-symbol entries.
-                    candidates = self.connection.execute(
-                        """
-                        SELECT entry_client_order_id
-                        FROM managed_positions
-                        WHERE account_id=? AND canonical_symbol=? AND market=?
-                          AND status IN ('open', 'manual_intervention_required')
-                          AND remaining_owned_qty > 0
-                          AND opened_at <= ?
-                        ORDER BY opened_at
-                        """,
-                        (
-                            event.account_id,
-                            canonical_symbol(event.symbol, event.market),
-                            event.market.value,
-                            event.occurred_at.isoformat(),
-                        ),
-                    ).fetchall()
-                    if len(candidates) == 1:
-                        entry_client_order_id = str(candidates[0][0])
-                if role == OrderRole.ENTRY:
-                    entry_client_order_id = event.client_order_id
+                entry_client_order_id = self._resolve_entry_client_order_id(event, existing)
 
                 requested = max(0.0, event.requested_qty)
                 cumulative = min(max(0.0, event.cumulative_filled_qty), requested)
                 effective_cumulative = max(previous_filled, cumulative)
                 fill_delta = max(0.0, cumulative - previous_filled)
-                fill_price = event.average_fill_price or previous_average or 0.0
-                if (
-                    fill_delta > 0
-                    and event.average_fill_price is not None
-                    and previous_average is not None
-                    and previous_filled > 0
-                ):
-                    fill_price = max(
-                        0.0,
-                        (event.average_fill_price * cumulative - previous_average * previous_filled)
-                        / fill_delta,
-                    )
+                fill_price = self._delta_fill_price(
+                    previous_average, previous_filled, cumulative, fill_delta, event
+                )
                 current_state = event.state
                 if previous_state in terminal_states and current_state not in terminal_states:
                     current_state = previous_state
                 terminal_state = (
                     current_state.value
                     if current_state in terminal_states
-                    else (previous_state.value if previous_state in terminal_states else None)
+                    else (
+                        previous_state.value
+                        if previous_state is not None and previous_state in terminal_states
+                        else None
+                    )
                 )
                 now = event.occurred_at.isoformat()
                 fee_delta = 0.0
@@ -1017,72 +944,172 @@ class ExecutionLedger:
                         payload,
                     ),
                 )
-                position_delta = 0.0
-                realized_pnl_delta = 0.0
-                if fill_delta > 0 and fill_price > 0 and entry_client_order_id:
-                    if role == OrderRole.ENTRY:
-                        order = self._load_order_intent_tx(entry_client_order_id)
-                        if order is not None:
-                            self._record_entry_fill_delta_tx(
-                                event.account_id,
-                                order,
-                                fill_delta,
-                                fill_price,
-                                fee_delta,
-                                event.broker_order_id,
-                                now,
-                            )
-                            position_delta = fill_delta
-                    else:
-                        realized_pnl_delta = self._record_exit_fill_delta_tx(
-                            event.account_id,
-                            entry_client_order_id,
-                            fill_delta,
-                            fill_price,
-                            fee_delta,
-                            now,
-                        )
-                        position_delta = -fill_delta
-                elif fee_delta > 0 and entry_client_order_id:
-                    if role == OrderRole.ENTRY:
-                        self.connection.execute(
-                            """
-                            UPDATE managed_positions
-                            SET entry_fees=entry_fees+?, updated_at=?
-                            WHERE account_id=? AND entry_client_order_id=?
-                            """,
-                            (fee_delta, now, event.account_id, entry_client_order_id),
-                        )
-                    else:
-                        self.connection.execute(
-                            """
-                            UPDATE managed_positions
-                            SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
-                            WHERE account_id=? AND entry_client_order_id=?
-                            """,
-                            (
-                                fee_delta,
-                                fee_delta,
-                                now,
-                                event.account_id,
-                                entry_client_order_id,
-                            ),
-                        )
-                        realized_pnl_delta = -fee_delta
+                position_delta, realized_pnl_delta = self._apply_position_deltas_tx(
+                    event.account_id,
+                    role,
+                    entry_client_order_id,
+                    fill_delta,
+                    fill_price,
+                    fee_delta,
+                    event.broker_order_id,
+                    now,
+                )
                 self.connection.commit()
                 return ExecutionTransition(
                     previous_state=previous_state,
                     current_state=current_state,
                     fill_delta=fill_delta,
                     position_delta=position_delta,
-                    reservation_delta=-fill_delta if role == OrderRole.ENTRY else 0.0,
                     realized_pnl_delta=realized_pnl_delta,
-                    protection_state=ProtectionState.UNPROTECTED,
                     entry_client_order_id=entry_client_order_id,
                 )
             except Exception:
                 self.connection.rollback()
                 raise
+
+    def _resolve_entry_client_order_id(
+        self, event: ExecutionEvent, existing: tuple[object, ...] | None
+    ) -> str | None:
+        """Link a child event to its managed entry lot.
+
+        Order of preference: the stored entry id, the parent broker id, an
+        unambiguous broker-generated prefix match, then a single open lot for
+        the symbol at the event time. Never guess between multiple lots.
+        """
+        entry_client_order_id = str(existing[3]) if existing and existing[3] else None
+        role = OrderRole(str(existing[4])) if existing else event.role
+        if entry_client_order_id is None and event.parent_order_id:
+            parent = self.connection.execute(
+                """
+                SELECT COALESCE(entry_client_order_id, client_order_id)
+                FROM orders WHERE broker_order_id=?
+                """,
+                (event.parent_order_id,),
+            ).fetchone()
+            if parent:
+                entry_client_order_id = str(parent[0])
+        if entry_client_order_id is None and role != OrderRole.ENTRY:
+            named_parent = self.connection.execute(
+                """
+                SELECT entry_client_order_id
+                FROM managed_positions
+                WHERE account_id=? AND ? LIKE entry_client_order_id || '-%'
+                ORDER BY length(entry_client_order_id) DESC LIMIT 1
+                """,
+                (event.account_id, event.client_order_id),
+            ).fetchone()
+            if named_parent:
+                entry_client_order_id = str(named_parent[0])
+        if entry_client_order_id is None and role != OrderRole.ENTRY:
+            # Alpaca bracket child updates can omit parent_order_id and
+            # use broker-generated UUID client ids. Link only when one
+            # managed lot is an unambiguous match; never guess between
+            # multiple same-symbol entries.
+            candidates = self.connection.execute(
+                """
+                SELECT entry_client_order_id
+                FROM managed_positions
+                WHERE account_id=? AND canonical_symbol=? AND market=?
+                  AND status IN ('open', 'manual_intervention_required')
+                  AND remaining_owned_qty > 0
+                  AND opened_at <= ?
+                ORDER BY opened_at
+                """,
+                (
+                    event.account_id,
+                    canonical_symbol(event.symbol, event.market),
+                    event.market.value,
+                    event.occurred_at.isoformat(),
+                ),
+            ).fetchall()
+            if len(candidates) == 1:
+                entry_client_order_id = str(candidates[0][0])
+        if role == OrderRole.ENTRY:
+            entry_client_order_id = event.client_order_id
+        return entry_client_order_id
+
+    @staticmethod
+    def _delta_fill_price(
+        previous_average: float | None,
+        previous_filled: float,
+        cumulative: float,
+        fill_delta: float,
+        event: ExecutionEvent,
+    ) -> float:
+        """Weighted price of the newly-filled delta from cumulative averages."""
+        average_fill_price = event.average_fill_price
+        if (
+            fill_delta > 0
+            and average_fill_price is not None
+            and previous_average is not None
+            and previous_filled > 0
+        ):
+            return max(
+                0.0,
+                (average_fill_price * cumulative - previous_average * previous_filled)
+                / fill_delta,
+            )
+        return event.average_fill_price or previous_average or 0.0
+
+    def _apply_position_deltas_tx(
+        self,
+        account_id: str,
+        role: OrderRole,
+        entry_client_order_id: str | None,
+        fill_delta: float,
+        fill_price: float,
+        fee_delta: float,
+        broker_order_id: str | None,
+        now: str,
+    ) -> tuple[float, float]:
+        """Apply entry/exit fill and fee-only deltas inside the open transaction."""
+        position_delta = 0.0
+        realized_pnl_delta = 0.0
+        if fill_delta > 0 and fill_price > 0 and entry_client_order_id:
+            if role == OrderRole.ENTRY:
+                order = self._load_order_intent_tx(entry_client_order_id)
+                if order is not None:
+                    self._record_entry_fill_delta_tx(
+                        account_id,
+                        order,
+                        fill_delta,
+                        fill_price,
+                        fee_delta,
+                        broker_order_id,
+                        now,
+                    )
+                    position_delta = fill_delta
+            else:
+                realized_pnl_delta = self._record_exit_fill_delta_tx(
+                    account_id,
+                    entry_client_order_id,
+                    fill_delta,
+                    fill_price,
+                    fee_delta,
+                    now,
+                )
+                position_delta = -fill_delta
+        elif fee_delta > 0 and entry_client_order_id:
+            if role == OrderRole.ENTRY:
+                self.connection.execute(
+                    """
+                    UPDATE managed_positions
+                    SET entry_fees=entry_fees+?, updated_at=?
+                    WHERE account_id=? AND entry_client_order_id=?
+                    """,
+                    (fee_delta, now, account_id, entry_client_order_id),
+                )
+            else:
+                self.connection.execute(
+                    """
+                    UPDATE managed_positions
+                    SET exit_fees=exit_fees+?, realized_pnl=realized_pnl-?, updated_at=?
+                    WHERE account_id=? AND entry_client_order_id=?
+                    """,
+                    (fee_delta, fee_delta, now, account_id, entry_client_order_id),
+                )
+                realized_pnl_delta = -fee_delta
+        return position_delta, realized_pnl_delta
 
     def _load_order_intent_tx(self, client_order_id: str) -> OrderIntent | None:
         row = self.connection.execute(
@@ -1236,7 +1263,17 @@ class ExecutionLedger:
             ).fetchone()
         if row is None:
             return None
-        payload = json.loads(row[0])
+        try:
+            payload = json.loads(row[0])
+        except (TypeError, ValueError):
+            # A corrupt/truncated risk_state row must not fail runtime startup:
+            # the state is treated as absent and rebuilt from the account.
+            log.warning(
+                "Ignoring corrupt risk_state payload for account=%s session=%s",
+                account_id,
+                session_date,
+            )
+            return None
         return RiskState(
             account_id=account_id,
             session_date=session_date,

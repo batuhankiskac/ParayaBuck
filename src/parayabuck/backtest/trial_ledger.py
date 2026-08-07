@@ -49,10 +49,6 @@ class TrialLedger:
         self.path = Path(path)
         self._entries: list[dict[str, object]] = self._load()
 
-    @staticmethod
-    def _default_path() -> Path:
-        return Path("data/runtime/portfolio_trial_ledger.json")
-
     def _load(self) -> list[dict[str, object]]:
         if not self.path.exists():
             return []

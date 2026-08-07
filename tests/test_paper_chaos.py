@@ -20,22 +20,23 @@ from parayabuck.core.models import (
     OrderIntent,
     OrderRole,
     OrderState,
-    ProtectionState,
     Regime,
     Signal,
+    StrategyContext,
 )
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
+from parayabuck.risk.manager import RiskDecision
 from parayabuck.runtime import EngineRuntime, WorkerHealth
-from parayabuck.strategies.base import Strategy, StrategyContext
 from parayabuck.universe import (
     EquityCandidate,
     EquityUniverseScanner,
     load_active_symbols,
     validate_active_universe,
 )
+from tests.helpers import Strategy
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -103,6 +104,69 @@ def test_global_ranker_compares_equity_and_crypto(
         [_bar("AAPL", Market.EQUITY, timestamp), _bar("SOL/USD", Market.CRYPTO, timestamp)]
     )
     assert submitted == [expected]
+
+
+def test_replayed_lifecycle_is_not_resubmitted_to_broker() -> None:
+    submitted: list[str] = []
+
+    class Broker:
+        def account(self) -> AccountSnapshot:
+            return AccountSnapshot(10_000, 10_000, 10_000, 0)
+
+        def submit(self, order: OrderIntent) -> tuple[OrderState, None]:
+            submitted.append(order.client_order_id)
+            return OrderState.ACCEPTED, None
+
+        def reconcile(self) -> None:
+            return None
+
+    engine = TradingEngine(
+        Broker(),
+        EngineConfig(warmup_bars=50),
+        (_ScoredStrategy(Market.EQUITY, 95.0),),
+    )
+    timestamp = datetime(2026, 7, 28, 12, tzinfo=UTC)
+    signal = Signal(
+        "AAPL",
+        Market.EQUITY,
+        Direction.LONG,
+        "test",
+        95.0,
+        0.9,
+        100.0,
+        99.0,
+        102.0,
+        timestamp,
+        regime=Regime.RANGE,
+        signal_id="replayed-signal",
+    )
+    order = OrderIntent(
+        signal_id="replayed-signal",
+        symbol="AAPL",
+        market=Market.EQUITY,
+        direction=Direction.LONG,
+        qty=10.0,
+        entry_price=100.0,
+        stop_price=99.0,
+        target_price=102.0,
+        strategy="test",
+        client_order_id="order-1",
+    )
+    # The lifecycle already advanced past CREATED (e.g. a replay after a
+    # restart rehydrated the same order id).
+    engine.orders.create(order)
+    engine.orders.transition("order-1", OrderState.VALIDATED, "test")
+    engine.orders.transition("order-1", OrderState.SUBMITTED, "test")
+    engine.risk.evaluate = lambda _signal, _account: RiskDecision(
+        True, "approved", order, risk_amount=10.0
+    )
+
+    accepted, _attempted, _executions = engine._execute_candidates(
+        [signal], set(), {"replayed-signal": []}, AccountSnapshot(10_000, 10_000, 10_000, 0)
+    )
+
+    assert submitted == []
+    assert accepted == [order]
 
 
 def test_definite_broker_rejection_does_not_consume_global_capacity() -> None:
@@ -176,8 +240,59 @@ def test_verified_market_event_clears_only_that_market_halt() -> None:
     assert runtime._workers["pb-crypto"].restart_count == 0
 
 
+def _crypto_bar() -> Bar:
+    return Bar(
+        datetime(2026, 7, 28, 12, tzinfo=UTC),
+        "BTC/USD",
+        "1m",
+        100,
+        101,
+        99,
+        100,
+        1000,
+        Market.CRYPTO,
+    )
+
+
+def test_transient_crypto_protection_failure_clears_on_next_verified_pass() -> None:
+    """A one-off watcher failure must halt entries only until the next
+    verified price pass proves health; it must not brick crypto entries for
+    the whole process lifetime."""
+    runtime = _readiness_runtime()
+    runtime._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
+    attempts = {"count": 0}
+
+    def flaky(_observation: object) -> None:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise TimeoutError("transient api blip")
+
+    runtime.broker = SimpleNamespace(process_crypto_price=flaky)
+    bar = _crypto_bar()
+
+    asyncio.run(runtime._process_crypto_protection(bar, source="one_minute_bar"))
+    assert runtime._market_entry_halts[Market.CRYPTO] == "crypto_protection_failure"
+    asyncio.run(runtime._process_crypto_protection(bar, source="one_minute_bar"))
+    assert runtime._market_entry_halts[Market.CRYPTO] is None
+    assert attempts["count"] == 2
+
+
+def test_ambiguous_crypto_exit_halt_survives_verified_passes() -> None:
+    """Ambiguity is a reconciliation matter: a successful watcher pass must
+    never clear an ambiguous_crypto_exit halt."""
+    runtime = _readiness_runtime()
+    runtime._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
+    runtime.broker = SimpleNamespace(process_crypto_price=lambda _observation: None)
+    bar = _crypto_bar()
+
+    asyncio.run(runtime._process_crypto_protection(bar, source="one_minute_bar"))
+
+    assert runtime._market_entry_halts[Market.CRYPTO] == "ambiguous_crypto_exit"
+
+
 def test_quantity_lookup_failure_is_fail_closed() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = SimpleNamespace(
         get_open_position=lambda _symbol: (_ for _ in ()).throw(TimeoutError())
     )
@@ -326,8 +441,6 @@ def test_ambiguous_recovered_crypto_protection_does_not_escape_stream_callback()
             0.1,
             0.1,
             0.0,
-            0.0,
-            ProtectionState.UNPROTECTED,
             order.client_order_id,
         )
     )
@@ -360,6 +473,7 @@ def test_ambiguous_recovered_crypto_protection_does_not_escape_stream_callback()
 def test_stop_cancel_pending_then_canceled_needs_no_manual_intervention() -> None:
     statuses = iter(("pending_cancel", "canceled"))
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.crypto_stop_cancel_timeout_seconds = 0.2
     broker.crypto_stop_cancel_poll_interval_seconds = 0.001
     broker._account_id = "acct"
@@ -386,6 +500,7 @@ def test_stop_cancel_pending_then_canceled_needs_no_manual_intervention() -> Non
 
 def test_unresolved_stop_cancel_requires_reconciliation() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.crypto_stop_cancel_timeout_seconds = 0.01
     broker.crypto_stop_cancel_poll_interval_seconds = 0.001
     broker._account_id = "acct"

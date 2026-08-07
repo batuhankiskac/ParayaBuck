@@ -8,14 +8,14 @@ from itertools import groupby
 from uuid import uuid4
 
 from parayabuck.backtest.broker import BacktestBroker
+from parayabuck.backtest.stats import sample_stddev
 from parayabuck.config import EngineConfig
 from parayabuck.core.models import Bar, Market
-from parayabuck.engine import TradingEngine
+from parayabuck.engine import StrategyProtocol, TradingEngine
 from parayabuck.execution.coordinator import ExecutionCoordinator
 from parayabuck.logger import get_logger
 from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.monitoring import AIDecisionJournal
-from parayabuck.strategies.base import Strategy
 
 log = get_logger("parayabuck.backtest.engine")
 
@@ -70,7 +70,7 @@ class BacktestEngine:
         commission: float = 0.0,
         spread_bps: float = 0.0,
         crypto_taker_fee_bps: float = 0.0,
-        strategies: tuple[Strategy, ...] | None = None,
+        strategies: tuple[StrategyProtocol, ...] | None = None,
         run_id: str | None = None,
         allowed_trade_symbols: set[str] | None = None,
         benchmark_symbol: str = "SPY",
@@ -155,14 +155,28 @@ class BacktestEngine:
         *,
         liquidate_at_end: bool = True,
     ) -> BacktestResult:
+        """Run one backtest window on this engine instance.
+
+        The broker accumulates across calls; each result reports only the
+        pnls/fills produced by that call (see the offset bookkeeping below),
+        so the same instance may be re-run for later windows. Bars are
+        deduplicated (conflicting duplicates raise) and processed in
+        timestamp order.
+        """
         if warmup:
             self.engine.seed(warmup)
         self._liquidated_since_last_run = False
+        # The broker accumulates across run() calls on the same instance
+        # (resume / walk-forward patterns); record the starting offsets so
+        # this run only reports the pnls and fills it produced itself.
+        pnl_offset = len(self.broker.realized_pnls)
+        trades_offset = len(self.broker.trades)
+        fills_offset = len(self.broker.fills)
         ordered = sorted(self._deduplicate_bars(bars), key=lambda bar: (bar.timestamp, bar.symbol))
         curve: list[float] = []
         curve_timestamps: list[datetime] = []
-        recorded_pnls = 0
-        recorded_fills = 0
+        recorded_pnls = pnl_offset
+        recorded_fills = fills_offset
         pending_context: list[Bar] = []
         for _, grouped in groupby(ordered, key=lambda bar: bar.timestamp):
             cycle = list(grouped)
@@ -251,6 +265,8 @@ class BacktestEngine:
             daily_curve,
             curve_timestamps,
             used_benchmark_symbol,
+            pnl_offset=pnl_offset,
+            trades_offset=trades_offset,
         )
 
     def _update_volatility_scale(self, timestamp: datetime, equity: float) -> None:
@@ -283,6 +299,9 @@ class BacktestEngine:
         metric_curve: list[float] | None = None,
         curve_timestamps: list[datetime] | None = None,
         benchmark_symbol: str = "",
+        *,
+        pnl_offset: int = 0,
+        trades_offset: int = 0,
     ) -> BacktestResult:
         ending = curve[-1] if curve else self.starting_equity
         peak = self.starting_equity
@@ -301,7 +320,8 @@ class BacktestEngine:
                         curve_timestamps[index] - curve_timestamps[peak_index]
                     ).total_seconds() / 86_400
                     max_drawdown_duration_days = max(max_drawdown_duration_days, int(duration_days))
-        pnls = self.broker.realized_pnls
+        pnls = self.broker.realized_pnls[pnl_offset:]
+        trades = self.broker.trades[trades_offset:]
         wins = [pnl for pnl in pnls if pnl > 0]
         losses = [pnl for pnl in pnls if pnl < 0]
         metric_curve = metric_curve or curve
@@ -312,11 +332,10 @@ class BacktestEngine:
         ]
         downside = [value for value in returns if value < 0]
         mean_return = sum(returns) / len(returns) if returns else 0.0
-        std = self._stddev(returns)
-        downside_std = self._stddev(downside)
+        std = sample_stddev(returns)
+        downside_std = sample_stddev(downside)
         gross_profit = sum(wins)
         gross_loss = abs(sum(losses))
-        trades = self.broker.trades
         holding_days = [trade.holding_days for trade in trades]
         streaks: list[bool] = [pnl > 0 for pnl in pnls]
         max_wins = 0
@@ -412,10 +431,3 @@ class BacktestEngine:
     def _available_at(bar: Bar) -> datetime:
         duration: timedelta = timeframe_duration(bar.timeframe)
         return bar.timestamp + duration
-
-    @staticmethod
-    def _stddev(values: list[float]) -> float:
-        if len(values) < 2:
-            return 0.0
-        mean = sum(values) / len(values)
-        return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))

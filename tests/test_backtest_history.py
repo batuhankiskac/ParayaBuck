@@ -55,6 +55,7 @@ def test_warmup_cache_migrates_legacy_schema(tmp_path) -> None:
     fetched = cache.get(
         "AAPL",
         "1d",
+        market=Market.EQUITY,
         feed="iex",
         start=datetime(2025, 1, 1, tzinfo=UTC),
         end=datetime(2025, 1, 3, tzinfo=UTC),
@@ -70,6 +71,7 @@ def test_warmup_cache_migrates_legacy_schema(tmp_path) -> None:
         cache.get(
             "AAPL",
             "1d",
+            market=Market.EQUITY,
             feed="iex",
             start=datetime(2025, 1, 1, tzinfo=UTC),
             end=datetime(2025, 1, 3, tzinfo=UTC),
@@ -98,12 +100,46 @@ def test_warmup_cache_migrates_legacy_schema(tmp_path) -> None:
     fetched = cache.get(
         "AAPL",
         "1d",
+        market=Market.EQUITY,
         feed="iex",
         start=datetime(2025, 1, 1, tzinfo=UTC),
         end=datetime(2025, 1, 4, tzinfo=UTC),
         adjustment="all",
     )
     assert len(fetched) == 1  # only the freshly upserted bar
+
+
+def test_warmup_cache_separates_markets_with_identical_symbols(tmp_path) -> None:
+    db = tmp_path / "warmup.sqlite3"
+    cache = WarmupCache(str(db))
+    timestamp = datetime(2025, 1, 6, 14, 30, tzinfo=UTC)
+    cache.upsert(
+        [Bar(timestamp, "AAPL", "1d", 100.0, 101.0, 99.0, 100.0, 1000.0, Market.EQUITY)],
+        feed="iex",
+    )
+    cache.upsert(
+        [Bar(timestamp, "BTC/USD", "1d", 200.0, 201.0, 199.0, 200.0, 1000.0, Market.CRYPTO)],
+        feed="crypto",
+    )
+    fetched_equity = cache.get(
+        "AAPL",
+        "1d",
+        market=Market.EQUITY,
+        feed="iex",
+        start=timestamp,
+        end=timestamp + timedelta(days=1),
+    )
+    fetched_crypto = cache.get(
+        "BTC/USD",
+        "1d",
+        market=Market.CRYPTO,
+        feed="crypto",
+        start=timestamp,
+        end=timestamp + timedelta(days=1),
+    )
+    assert [bar.close for bar in fetched_equity] == [100.0]
+    assert [bar.close for bar in fetched_crypto] == [200.0]
+    cache.close()
 
 
 def test_coverage_for_equity_reports_expected_bars_gaps_duplicates() -> None:

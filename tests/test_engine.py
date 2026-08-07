@@ -20,6 +20,7 @@ from parayabuck.core.models import (
     ProtectionState,
     Regime,
     Signal,
+    StrategyContext,
 )
 from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
@@ -28,7 +29,7 @@ from parayabuck.features.indicators import ema
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring import DecisionJournal
 from parayabuck.risk import RiskManager
-from parayabuck.strategies.base import Strategy, StrategyContext
+from tests.helpers import Strategy
 
 pytestmark = pytest.mark.paper_chaos
 
@@ -371,10 +372,31 @@ def test_backtest_fills_next_bar_and_honors_target() -> None:
     assert result.ending_equity == pytest.approx(10_020)
 
 
+def test_backtest_reuse_does_not_double_count_prior_run_pnls() -> None:
+    """Re-running an engine on later bars must not fold the previous run's
+    realized pnls/trades into the new result: the results must partition the
+    broker's accumulated pnls instead of each reporting the full history."""
+    config = EngineConfig(warmup_bars=50)
+    backtest = BacktestEngine(config, strategies=(_OneShotStrategy(),), slippage_bps=0)
+    first = backtest.run([_bar(0, 100), _bar(1, 100), _bar(2, 102, high=103)])
+    second = backtest.run([_bar(3, 100), _bar(4, 100), _bar(5, 102, high=103)])
+    assert first.total_trades == 1
+    assert len(first.realized_pnls) == 1
+    # The second run must not re-report the first run's pnl (that would be
+    # total_trades == 3): it reports exactly the pnls it produced itself.
+    assert len(second.realized_pnls) == 2
+    assert second.total_trades == 2
+    assert sum(first.realized_pnls) + sum(second.realized_pnls) == pytest.approx(
+        sum(backtest.broker.realized_pnls)
+    )
+    assert len(backtest.broker.trades) == first.total_trades + second.total_trades
+
+
 def test_alpaca_reconcile_restores_missing_position_protection() -> None:
     submitted: list[tuple[str, float]] = []
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
         equity=10_000,
@@ -403,6 +425,7 @@ def test_alpaca_reconcile_restores_missing_position_protection() -> None:
 
 def test_reconcile_does_not_treat_reserved_crypto_as_unprotected() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {"BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")}
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
@@ -422,6 +445,7 @@ def test_reconcile_does_not_treat_reserved_crypto_as_unprotected() -> None:
 def test_reconcile_accepts_fee_adjusted_crypto_stop_as_full_protection() -> None:
     checked_required_qty: list[float] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {"ADAUSD": SimpleNamespace(min_trade_increment="0.000000001")}
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
@@ -453,6 +477,7 @@ def test_reconcile_adds_underprotected_crypto_remainder_without_cancelling() -> 
     checked_required_qty: list[float] = []
     submitted: list[float] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
         equity=10_000,
@@ -489,6 +514,7 @@ def test_reconcile_accepts_broker_qty_within_crypto_fee_reserve() -> None:
         broker_order_id=None,
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"BTC/USD": ownership},
@@ -512,6 +538,7 @@ def test_cancel_protective_orders_waits_for_confirmation() -> None:
     statuses = iter(("pending_cancel", "canceled"))
     cancelled: list[str] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.crypto_stop_cancel_timeout_seconds = 0.2
     broker.crypto_stop_cancel_poll_interval_seconds = 0.001
     broker._open_protective_orders = lambda *_args: [SimpleNamespace(id="stop-1")]
@@ -528,6 +555,7 @@ def test_cancel_protective_orders_waits_for_confirmation() -> None:
 def test_reconcile_protects_only_unreserved_equity_qty() -> None:
     submitted: list[float] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker.account = lambda: AccountSnapshot(
         cash=9_000,
         equity=10_000,
@@ -585,11 +613,14 @@ def test_reconcile_finds_held_stop_on_filled_bracket_parent() -> None:
     )
     protection_states: list[ProtectionState] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._account_id = "acct"
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"XLE": ownership},
+        managed_entries_for_account=lambda _account: (),
+        managed_entry_broker_order_ids=lambda _account, _symbol: {"entry-order"},
         set_protection_state=lambda _account, _entry, state: protection_states.append(state),
     )
     broker.account = lambda: AccountSnapshot(
@@ -636,11 +667,13 @@ def test_reconcile_finds_held_stop_across_multiple_managed_entries() -> None:
     )
     protection_states: list[ProtectionState] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._account_id = "acct"
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
         managed_for_account=lambda _account: {"MSFT": ownership},
+        managed_entries_for_account=lambda _account: (),
         managed_entry_broker_order_ids=lambda _account, _symbol: {
             "old-entry",
             "new-entry",
@@ -674,6 +707,7 @@ def test_crypto_order_flattens_when_protection_fails() -> None:
             return SimpleNamespace(id="entry-id")
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._validated_values = lambda intent: (
         intent.qty,
@@ -722,6 +756,7 @@ def test_submit_recovers_order_accepted_before_network_timeout() -> None:
             return recovered
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
 
     result = broker._submit_with_recovery(SimpleNamespace(), "parayabuck-test")
@@ -735,6 +770,7 @@ def test_pre_submit_rejects_equity_order_while_market_is_closed() -> None:
             return SimpleNamespace(is_open=False)
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     intent = OrderIntent("signal", "AAPL", Market.EQUITY, Direction.LONG, 1, 100, 95, 110, "test")
 
@@ -748,6 +784,7 @@ def test_pre_submit_rejects_symbol_with_existing_open_order() -> None:
             return [SimpleNamespace(id="existing-order")]
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     intent = OrderIntent(
         "signal", "BTC/USD", Market.CRYPTO, Direction.LONG, 0.01, 100, 95, 110, "test"
@@ -769,6 +806,7 @@ def test_crypto_partial_fill_is_cancelled_before_stop_is_submitted() -> None:
             cancelled.append(order_id)
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._validated_values = lambda intent: (
         intent.qty,
@@ -815,6 +853,7 @@ def test_crypto_stop_uses_available_qty_after_fee() -> None:
             return SimpleNamespace(id="stop-id")
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._asset_cache = {
         "BTC/USD": SimpleNamespace(
@@ -854,6 +893,7 @@ def test_crypto_stop_retries_with_available_qty_from_alpaca_error() -> None:
             return SimpleNamespace(id="stop-id")
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._asset_cache = {
         "BTC/USD": SimpleNamespace(
@@ -872,6 +912,7 @@ def test_crypto_closing_qty_reserves_max_taker_fee_when_position_lookup_fails() 
         pass
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._asset_cache = {"BTC/USD": SimpleNamespace(min_trade_increment="0.000000001")}
 
@@ -892,6 +933,7 @@ def test_only_stop_like_closing_order_counts_as_position_protection() -> None:
             return self.orders
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     client = FakeClient()
     broker._client = client
     client.orders = [SimpleNamespace(side="sell", type="limit", stop_price=None, legs=None)]
@@ -930,6 +972,7 @@ def test_only_stop_like_closing_order_counts_as_position_protection() -> None:
 
 def test_validated_values_rounds_equity_bracket_to_alpaca_rules() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {
         "XLU": SimpleNamespace(
             tradable=True,
@@ -961,6 +1004,7 @@ def test_validated_values_rounds_equity_bracket_to_alpaca_rules() -> None:
 
 def test_validated_values_rejects_equity_order_below_one_share() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {
         "XLU": SimpleNamespace(
             tradable=True,
@@ -980,6 +1024,7 @@ def test_validated_values_rejects_equity_order_below_one_share() -> None:
 
 def test_validated_values_rounds_crypto_with_asset_increments() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {
         "BTC/USD": SimpleNamespace(
             tradable=True,
@@ -1010,6 +1055,7 @@ def test_validated_values_rounds_crypto_with_asset_increments() -> None:
 
 def test_validated_values_does_not_round_crypto_up_past_risk_limit() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {
         "BTC/USD": SimpleNamespace(
             tradable=True,
@@ -1029,6 +1075,7 @@ def test_validated_values_does_not_round_crypto_up_past_risk_limit() -> None:
 
 def test_validated_values_rejects_crypto_short() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._asset_cache = {
         "BTC/USD": SimpleNamespace(
             tradable=True,
@@ -1054,6 +1101,7 @@ def test_submit_stop_preserves_fractional_equity_qty_with_day_tif() -> None:
             return SimpleNamespace(id="stop-id")
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker._asset_cache = {"AAPL": SimpleNamespace(price_increment=None)}
 
@@ -1179,6 +1227,7 @@ def test_fill_fee_reconciliation_uses_client_relative_activity_path() -> None:
             return False
 
     broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
     broker._client = FakeClient()
     broker.ledger = FakeLedger()
     broker._account_id = "account-id"

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from parayabuck.config import EngineConfig
 from parayabuck.core.models import (
@@ -14,6 +14,8 @@ from parayabuck.core.models import (
     OrderState,
     Regime,
     Signal,
+    StrategyContext,
+    StrategyEvaluation,
 )
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.base import ExecutionBroker
@@ -25,9 +27,23 @@ from parayabuck.markets.timeframes import timeframe_duration
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
 from parayabuck.risk.manager import RiskManager
 from parayabuck.signals.ranker import SignalRanker, ranking_score
-from parayabuck.strategies import Strategy, StrategyContext
 
 log = get_logger("parayabuck.engine")
+
+
+class StrategyProtocol(Protocol):
+    """Signal-strategy contract consumed by the engine's decision pipeline.
+
+    Concrete strategies are defined outside the package (research tests);
+    the runtime evaluates portfolio strategies and runs with no signal
+    strategies, so the engine only needs the evaluation seam.
+    """
+
+    name: str
+
+    def evaluate_with_trace(
+        self, bars: list[Bar], context: StrategyContext
+    ) -> StrategyEvaluation: ...
 
 
 @dataclass(frozen=True)
@@ -51,7 +67,7 @@ class TradingEngine:
         self,
         broker: ExecutionBroker,
         config: EngineConfig | None = None,
-        strategies: tuple[Strategy, ...] | None = None,
+        strategies: tuple[StrategyProtocol, ...] | None = None,
         journal: DecisionJournal | AsyncDecisionJournal | None = None,
         ai_journal: AIDecisionJournal | None = None,
         enforce_live_safety: bool = False,
@@ -167,6 +183,63 @@ class TradingEngine:
         return CycleResult(timestamp, tuple(sorted(wanted)), tuple(orders), missing_symbols)
 
     def _evaluate_bars(self, closed_bars: list[Bar], account: AccountSnapshot) -> list[OrderIntent]:
+        """Signal -> rank -> allocate -> submit pipeline.
+
+        Gate order: strategy setup, minimum score, ranking, allocation,
+        execution policy, risk, broker. A broker submit exception always
+        degrades to RECONCILIATION_REQUIRED (never a silent rejection), and
+        any broker-effective result consumes cycle capacity.
+        """
+        signals, metadata, trails = self._produce_signals(closed_bars, account)
+        ranked = self.ranker.rank(signals)
+        rank_by_id = self._annotate_score_gates(signals, ranked, trails)
+        held = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if not position.is_flat
+        }
+        accepted, attempted_ids, executions = self._execute_candidates(
+            ranked, held, trails, account
+        )
+        self._journal_unattempted_decisions(signals, attempted_ids, rank_by_id, held)
+        self._journal_signal_trails(signals, metadata, trails, executions)
+        if self.journal:
+            self.journal.record_account(account)
+        if closed_bars:
+            self._ai_call(
+                "record_account",
+                max(bar.timestamp for bar in closed_bars),
+                {
+                    "cash": account.cash,
+                    "equity": account.equity,
+                    "peak_equity": account.peak_equity,
+                    "daily_pnl": account.daily_pnl,
+                    "realized_pnl": account.realized_pnl,
+                    "unrealized_pnl": account.unrealized_pnl,
+                    "fees": account.fees,
+                    "drawdown_pct": account.drawdown_pct,
+                    "positions": [
+                        {
+                            "symbol": position.symbol,
+                            "qty": position.qty,
+                            "avg_price": position.avg_price,
+                            "current_price": position.current_price,
+                            "unrealized_pnl": position.unrealized_pnl,
+                        }
+                        for position in account.positions
+                    ],
+                },
+            )
+        return accepted
+
+    def _produce_signals(
+        self, closed_bars: list[Bar], account: AccountSnapshot
+    ) -> tuple[list[Signal], dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+        """Run every strategy over each finalized bar and collect signals.
+
+        A strategy defect skips only the affected symbol for the cycle; the
+        portfolio-wide decision worker must survive bad inputs.
+        """
         signals: list[Signal] = []
         metadata: dict[str, dict[str, Any]] = {}
         trails: dict[str, list[dict[str, Any]]] = {}
@@ -252,8 +325,15 @@ class TradingEngine:
             )
             if not produced and self.journal:
                 self.journal.record_scan(bar, assessment, "no_strategy_setup")
+        return signals, metadata, trails
 
-        ranked = self.ranker.rank(signals)
+    def _annotate_score_gates(
+        self,
+        signals: list[Signal],
+        ranked: list[Signal],
+        trails: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, int]:
+        """Append the minimum-score and ranking gate entries per signal."""
         rank_by_id = {signal.signal_id: index for index, signal in enumerate(ranked, 1)}
         for signal in signals:
             if signal.score < self.config.minimum_signal_score:
@@ -297,11 +377,16 @@ class TradingEngine:
                             "reason": "a higher-quality signal for the same symbol won",
                         }
                     )
-        held = {
-            canonical_symbol(position.symbol, position.market)
-            for position in account.positions
-            if not position.is_flat
-        }
+        return rank_by_id
+
+    def _execute_candidates(
+        self,
+        ranked: list[Signal],
+        held: set[str],
+        trails: dict[str, list[dict[str, Any]]],
+        account: AccountSnapshot,
+    ) -> tuple[list[OrderIntent], set[str], dict[str, dict[str, Any]]]:
+        """Allocate, risk-check and submit the ranked candidates in order."""
         accepted: list[OrderIntent] = []
         attempted_ids: set[str] = set()
         capacity_consumed = 0
@@ -363,40 +448,59 @@ class TradingEngine:
             order = decision.order
             accepted.append(order)
             lifecycle = self.orders.create(order)
-            lifecycle = self.orders.transition(
-                order.client_order_id, OrderState.VALIDATED, "risk_approved"
-            )
-            if self.journal:
-                self.journal.record_order(order, lifecycle.state, "risk_approved")
-            lifecycle = self.orders.transition(
-                order.client_order_id, OrderState.SUBMITTED, "broker_submit"
-            )
-            if self.journal:
-                self.journal.record_order(order, lifecycle.state, "broker_submit")
             try:
-                state, fill = self.broker.submit(order)
-            except Exception:
-                # Once submit has been attempted, an exception cannot prove
-                # that the broker rejected the write. Preserve the order as
-                # ambiguous and halt new entries without killing the worker.
-                log.exception(
-                    "Broker submit failed for %s; reconciliation required",
-                    order.client_order_id,
+                lifecycle = self.orders.transition(
+                    order.client_order_id, OrderState.VALIDATED, "risk_approved"
                 )
-                state, fill = OrderState.RECONCILIATION_REQUIRED, None
-            try:
-                lifecycle = self.orders.transition(order.client_order_id, state, "broker_response")
+                if self.journal:
+                    self.journal.record_order(order, lifecycle.state, "risk_approved")
+                lifecycle = self.orders.transition(
+                    order.client_order_id, OrderState.SUBMITTED, "broker_submit"
+                )
+                if self.journal:
+                    self.journal.record_order(order, lifecycle.state, "broker_submit")
             except ValueError:
-                # The asynchronous trade-update stream may have advanced the
-                # lifecycle beyond this synchronous submit response. The
-                # stream observation is authoritative because it is newer.
+                # A replayed signal or a concurrently-advanced lifecycle means
+                # this order is already active; do not re-submit it. The
+                # existing lifecycle decides broker-effectiveness below.
                 lifecycle = self.orders.orders[order.client_order_id]
+                state = None
                 log.info(
-                    "Ignored stale broker response for %s: response=%s current=%s",
+                    "Ignored duplicate lifecycle for %s; current=%s",
                     order.client_order_id,
-                    state.value,
                     lifecycle.state.value,
                 )
+            else:
+                try:
+                    state, fill = self.broker.submit(order)
+                except Exception:
+                    # Once submit has been attempted, an exception cannot
+                    # prove that the broker rejected the write. Preserve the
+                    # order as ambiguous and halt new entries without killing
+                    # the worker.
+                    log.exception(
+                        "Broker submit failed for %s; reconciliation required",
+                        order.client_order_id,
+                    )
+                    state, fill = OrderState.RECONCILIATION_REQUIRED, None
+                try:
+                    lifecycle = self.orders.transition(
+                        order.client_order_id, state, "broker_response"
+                    )
+                except ValueError:
+                    # The asynchronous trade-update stream may have advanced
+                    # the lifecycle beyond this synchronous submit response.
+                    # The stream observation is authoritative because it is
+                    # newer.
+                    lifecycle = self.orders.orders[order.client_order_id]
+                    log.info(
+                        "Ignored stale broker response for %s: response=%s current=%s",
+                        order.client_order_id,
+                        state.value,
+                        lifecycle.state.value,
+                    )
+            if state is None:
+                fill = None
             filled_qty = fill.qty if fill is not None else 0.0
             broker_effective = filled_qty > 0 or lifecycle.state in {
                 OrderState.ACCEPTED,
@@ -417,6 +521,9 @@ class TradingEngine:
                 self.entry_halt_reason = "ambiguous_order_state"
                 self.risk.reserve(order)
             elif lifecycle.state == OrderState.REJECTED and filled_qty > 0:
+                # A rejected order carrying a fill means the broker filled
+                # then closed the entry (e.g. protection could not be
+                # installed); that is a protection failure, not a non-event.
                 self.entry_halt_reason = "protection_failure"
             if lifecycle.state in {
                 OrderState.ACCEPTED,
@@ -466,6 +573,16 @@ class TradingEngine:
                 self.journal.record_order(order, lifecycle.state, "broker_response")
                 if fill is not None:
                     self.journal.record_fill(fill)
+        return accepted, attempted_ids, executions
+
+    def _journal_unattempted_decisions(
+        self,
+        signals: list[Signal],
+        attempted_ids: set[str],
+        rank_by_id: dict[str, int],
+        held: set[str],
+    ) -> None:
+        """Record why signals that never reached the broker were skipped."""
         for signal in signals:
             if (
                 signal.signal_id not in attempted_ids
@@ -479,6 +596,15 @@ class TradingEngine:
                     else "cycle_capacity_consumed"
                 )
                 self.journal.record_decision(signal, False, reason)
+
+    def _journal_signal_trails(
+        self,
+        signals: list[Signal],
+        metadata: dict[str, dict[str, Any]],
+        trails: dict[str, list[dict[str, Any]]],
+        executions: dict[str, dict[str, Any]],
+    ) -> None:
+        """Persist the full gate trail for every produced signal."""
         for signal in signals:
             meta = metadata[signal.signal_id]
             execution = executions.get(
@@ -506,34 +632,6 @@ class TradingEngine:
                 execution["fill"],
                 execution["diagnostics"],
             )
-        if self.journal:
-            self.journal.record_account(account)
-        if closed_bars:
-            self._ai_call(
-                "record_account",
-                max(bar.timestamp for bar in closed_bars),
-                {
-                    "cash": account.cash,
-                    "equity": account.equity,
-                    "peak_equity": account.peak_equity,
-                    "daily_pnl": account.daily_pnl,
-                    "realized_pnl": account.realized_pnl,
-                    "unrealized_pnl": account.unrealized_pnl,
-                    "fees": account.fees,
-                    "drawdown_pct": account.drawdown_pct,
-                    "positions": [
-                        {
-                            "symbol": position.symbol,
-                            "qty": position.qty,
-                            "avg_price": position.avg_price,
-                            "current_price": position.current_price,
-                            "unrealized_pnl": position.unrealized_pnl,
-                        }
-                        for position in account.positions
-                    ],
-                },
-            )
-        return accepted
 
     def _execution_gate_reason(self, signal: Signal) -> str | None:
         if not self.config.trading_enabled:

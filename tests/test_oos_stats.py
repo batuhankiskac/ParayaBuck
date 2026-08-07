@@ -268,7 +268,6 @@ def test_gate_rejects_old_style_candidate_with_585_pct_fold_ratio() -> None:
         unique_oos_calendar_months=53,
         closed_positions=0,
         profit_factor=1.3,
-        sharpe=1.77,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.985,

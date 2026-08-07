@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from parayabuck.core.models import Bar
@@ -25,7 +26,7 @@ def ema(values: list[float], period: int) -> float | None:
 
 
 def rsi(values: list[float], period: int = 14) -> float | None:
-    if len(values) < period + 1:
+    if period <= 0 or len(values) < period + 1:
         return None
     changes = [values[i] - values[i - 1] for i in range(1, len(values))]
     avg_gain = sum(max(change, 0) for change in changes[:period]) / period
@@ -40,26 +41,30 @@ def rsi(values: list[float], period: int = 14) -> float | None:
     return 100 - 100 / (1 + avg_gain / avg_loss)
 
 
-def atr(bars: list[Bar], period: int = 14) -> float | None:
-    if len(bars) < period + 1:
-        return None
-    ranges: list[float] = []
-    for previous, current in zip(bars[-period - 1 : -1], bars[-period:], strict=True):
-        ranges.append(
-            max(
-                current.high - current.low,
-                abs(current.high - previous.close),
-                abs(current.low - previous.close),
-            )
+def true_ranges(bars: Sequence[Bar]) -> list[float]:
+    """True range for each consecutive bar pair (previous, current)."""
+    return [
+        max(
+            current.high - current.low,
+            abs(current.high - previous.close),
+            abs(current.low - previous.close),
         )
+        for previous, current in zip(bars[:-1], bars[1:], strict=False)
+    ]
+
+
+def atr(bars: list[Bar], period: int = 14) -> float | None:
+    if period <= 0 or len(bars) < period + 1:
+        return None
+    ranges = true_ranges(bars[-(period + 1) :])
     return sum(ranges) / period
 
 
 def adx(bars: list[Bar], period: int = 14) -> float | None:
-    if len(bars) < period * 2 + 1:
+    if period <= 0 or len(bars) < period * 2 + 1:
         return None
     window = bars[-(period * 2 + 1) :]
-    true_ranges: list[float] = []
+    ranges = true_ranges(window)
     plus_dm: list[float] = []
     minus_dm: list[float] = []
     for previous, current in zip(window[:-1], window[1:], strict=True):
@@ -67,16 +72,9 @@ def adx(bars: list[Bar], period: int = 14) -> float | None:
         down = previous.low - current.low
         plus_dm.append(up if up > down and up > 0 else 0.0)
         minus_dm.append(down if down > up and down > 0 else 0.0)
-        true_ranges.append(
-            max(
-                current.high - current.low,
-                abs(current.high - previous.close),
-                abs(current.low - previous.close),
-            )
-        )
     dx_values: list[float] = []
-    for index in range(period, len(true_ranges) + 1):
-        tr = sum(true_ranges[index - period : index])
+    for index in range(period, len(ranges) + 1):
+        tr = sum(ranges[index - period : index])
         if tr <= 0:
             continue
         plus = 100 * sum(plus_dm[index - period : index]) / tr
@@ -88,10 +86,10 @@ def adx(bars: list[Bar], period: int = 14) -> float | None:
 
 def directional_indicators(bars: list[Bar], period: int = 14) -> tuple[float, float] | None:
     """Return the latest +DI and -DI using the same windowing as ``adx``."""
-    if len(bars) < period + 1:
+    if period <= 0 or len(bars) < period + 1:
         return None
     window = bars[-(period + 1) :]
-    true_range = 0.0
+    true_range = sum(true_ranges(window))
     plus_dm = 0.0
     minus_dm = 0.0
     for previous, current in zip(window[:-1], window[1:], strict=True):
@@ -99,11 +97,6 @@ def directional_indicators(bars: list[Bar], period: int = 14) -> tuple[float, fl
         down = previous.low - current.low
         plus_dm += up if up > down and up > 0 else 0.0
         minus_dm += down if down > up and down > 0 else 0.0
-        true_range += max(
-            current.high - current.low,
-            abs(current.high - previous.close),
-            abs(current.low - previous.close),
-        )
     if true_range <= 0:
         return None
     return 100 * plus_dm / true_range, 100 * minus_dm / true_range

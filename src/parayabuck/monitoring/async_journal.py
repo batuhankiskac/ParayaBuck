@@ -6,8 +6,11 @@ from collections.abc import Callable
 from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Fill, OrderIntent, OrderState, Signal
+from parayabuck.logger import get_logger
 from parayabuck.markets.regime import RegimeAssessment
 from parayabuck.monitoring.journal import DecisionJournal
+
+log = get_logger("parayabuck.monitoring.async_journal")
 
 
 class AsyncDecisionJournal:
@@ -26,6 +29,8 @@ class AsyncDecisionJournal:
         self._on_critical_failure = on_critical_failure
         self.dropped_scans = 0
         self.last_error: str | None = None
+        self._lock = threading.Lock()
+        self._closed = False
         self._thread = threading.Thread(target=self._run, name="pb-journal", daemon=True)
         self._thread.start()
 
@@ -45,17 +50,20 @@ class AsyncDecisionJournal:
         self._enqueue("record_account", (account,), critical=True)
 
     def _enqueue(self, method: str, args: tuple[Any, ...], critical: bool) -> None:
-        item = (method, args, critical)
-        try:
-            if critical:
-                self._queue.put(item, timeout=1.0)
-            else:
-                self._queue.put_nowait(item)
-        except queue.Full:
-            if critical:
-                self._fail(f"critical journal queue full while recording {method}")
-            else:
-                self.dropped_scans += 1
+        with self._lock:
+            if self._closed:
+                return
+            item = (method, args, critical)
+            try:
+                if critical:
+                    self._queue.put(item, timeout=1.0)
+                else:
+                    self._queue.put_nowait(item)
+            except queue.Full:
+                if critical:
+                    self._fail(f"critical journal queue full while recording {method}")
+                else:
+                    self.dropped_scans += 1
 
     def _run(self) -> None:
         while True:
@@ -68,6 +76,7 @@ class AsyncDecisionJournal:
                 getattr(self.journal, method)(*args)
             except Exception as exc:
                 self.last_error = str(exc)
+                log.exception("Journal write failed during %s", method)
                 if critical:
                     self._fail(f"critical journal write failed: {method}")
             finally:
@@ -79,8 +88,12 @@ class AsyncDecisionJournal:
             self._on_critical_failure(reason)
 
     def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._queue.put(None)
         self._queue.join()
-        self._queue.put(None)
         self._thread.join(timeout=5)
 
 

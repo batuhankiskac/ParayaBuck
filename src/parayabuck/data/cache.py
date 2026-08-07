@@ -10,78 +10,98 @@ from parayabuck.markets.symbols import canonical_symbol
 
 
 class WarmupCache:
+    _SCHEMA = """
+        CREATE TABLE IF NOT EXISTS bars (
+            feed TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            adjustment TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            retrieved_at TEXT NOT NULL,
+            PRIMARY KEY(feed, symbol, market, timeframe, adjustment, timestamp)
+        )
+    """
+
     def __init__(self, path: str = "data/cache/warmup.sqlite3") -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self._lock = threading.Lock()
-        self.connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS bars (
-                feed TEXT NOT NULL,
-                symbol TEXT NOT NULL,
-                market TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                adjustment TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                open REAL NOT NULL,
-                high REAL NOT NULL,
-                low REAL NOT NULL,
-                close REAL NOT NULL,
-                volume REAL NOT NULL,
-                retrieved_at TEXT NOT NULL,
-                PRIMARY KEY(feed, symbol, timeframe, adjustment, timestamp)
-            )
-            """
-        )
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA busy_timeout=5000")
+        self.connection.execute(self._SCHEMA)
         self.connection.commit()
         self._migrate_legacy_schema()
 
-    def _migrate_legacy_schema(self) -> None:
-        """Rebuild a pre-adjustment cache table created by older versions.
+    def _primary_key_columns(self) -> set[str]:
+        pk_name = next(
+            (
+                row[1]
+                for row in self.connection.execute("PRAGMA index_list(bars)").fetchall()
+                if row[3] == "pk"
+            ),
+            None,
+        )
+        if pk_name is None:
+            return set()
+        return {
+            row[2]
+            for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()
+        }
 
-        The original schema had no ``adjustment`` column in its primary key;
-        such a cache is unusable by the current schema (INSERT would fail with
-        "no column named adjustment"). Older code fetched history on the RAW
-        price basis, so migrated rows are labeled ``raw`` — labeling them
-        ``all`` would let raw prices satisfy an all-adjusted lookup.
+    def _migrate_legacy_schema(self) -> None:
+        """Rebuild caches created before ``market`` joined the primary key.
+
+        Older caches either lack the ``adjustment`` column entirely (pre-2025
+        schema, RAW price basis) or key rows without ``market``. Rows whose
+        key does not include the market can silently collide across markets,
+        so the table is rebuilt whenever the primary key is missing it.
         """
-        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
-        if "adjustment" in columns:
+        columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()
+        }
+        if "adjustment" in columns and "market" in self._primary_key_columns():
             return
-        market_expr = "market" if "market" in columns else "'equity'"
         with self._lock:
             self.connection.execute("ALTER TABLE bars RENAME TO bars_legacy")
-            self.connection.execute(
-                """
-                CREATE TABLE bars (
-                    feed TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    market TEXT NOT NULL,
-                    timeframe TEXT NOT NULL,
-                    adjustment TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    open REAL NOT NULL,
-                    high REAL NOT NULL,
-                    low REAL NOT NULL,
-                    close REAL NOT NULL,
-                    volume REAL NOT NULL,
-                    retrieved_at TEXT NOT NULL,
-                    PRIMARY KEY(feed, symbol, timeframe, adjustment, timestamp)
+            self.connection.execute(self._SCHEMA)
+            if "adjustment" in columns:
+                self.connection.execute(
+                    """
+                    INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                      open, high, low, close, volume, retrieved_at)
+                    SELECT feed, symbol, market, timeframe, adjustment, timestamp,
+                           open, high, low, close, volume, retrieved_at
+                    FROM bars_legacy
+                    """
                 )
-                """
-            )
-            self.connection.execute(
-                f"""
-                INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
-                                  open, high, low, close, volume, retrieved_at)
-                SELECT feed, symbol, {market_expr}, timeframe, 'raw', timestamp,
-                       open, high, low, close, volume, retrieved_at
-                FROM bars_legacy
-                """
-            )
+            else:
+                # Legacy rows carry no market/adjustment; pre-adjustment data
+                # was fetched on the RAW basis, so 'raw' is the honest label.
+                self.connection.execute(
+                    """
+                    INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                      open, high, low, close, volume, retrieved_at)
+                    SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
+                           open, high, low, close, volume, retrieved_at
+                    FROM bars_legacy
+                    """
+                )
             self.connection.execute("DROP TABLE bars_legacy")
             self.connection.commit()
+
+    def close(self) -> None:
+        with self._lock:
+            try:
+                self.connection.close()
+            except sqlite3.Error:
+                pass
 
     def upsert(self, bars: list[Bar], *, feed: str, adjustment: str = "all") -> None:
         retrieved_at = datetime.now(UTC).isoformat()
@@ -108,7 +128,8 @@ class WarmupCache:
             self.connection.executemany(
                 """
                 INSERT INTO bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(feed, symbol, timeframe, adjustment, timestamp) DO UPDATE SET
+                ON CONFLICT(feed, symbol, market, timeframe, adjustment, timestamp)
+                DO UPDATE SET
                     open=excluded.open, high=excluded.high, low=excluded.low,
                     close=excluded.close, volume=excluded.volume,
                     retrieved_at=excluded.retrieved_at
@@ -122,6 +143,7 @@ class WarmupCache:
         symbol: str,
         timeframe: str,
         *,
+        market: Market,
         feed: str,
         start: datetime,
         end: datetime,
@@ -133,13 +155,14 @@ class WarmupCache:
                 """
                 SELECT timestamp, open, high, low, close, volume, market
                 FROM bars
-                WHERE feed=? AND symbol=? AND timeframe=? AND adjustment=?
+                WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=?
                   AND timestamp>=? AND timestamp<=?
                 ORDER BY timestamp
                 """,
                 (
                     feed,
                     canonical,
+                    market.value,
                     timeframe,
                     adjustment,
                     start.isoformat(),

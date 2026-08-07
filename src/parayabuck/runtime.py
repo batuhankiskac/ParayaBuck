@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -160,6 +161,11 @@ class _EventQueue:
         with self._condition:
             return tuple(self._items)
 
+    def oldest_received_at(self) -> datetime | None:
+        with self._condition:
+            received = [item.received_at for item in self._items if item is not None]
+            return min(received) if received else None
+
 
 class EngineRuntime:
     """Web-manageable streaming runtime for the ParayaBuck engine."""
@@ -235,6 +241,9 @@ class EngineRuntime:
                 )
             except Exception:
                 log.exception("AI decision journal initialization failed; trading continues")
+        # The runtime deliberately runs with zero signal strategies: trading
+        # decisions come from the portfolio-strategy layer (approval-gated),
+        # so the engine's signal-strategy seam stays empty in production.
         self.engine = TradingEngine(
             self.broker,
             self.config,
@@ -273,6 +282,7 @@ class EngineRuntime:
         self._threads: list[threading.Thread] = []
         self._reconcile_thread: threading.Thread | None = None
         self._reconcile_lock = threading.Lock()
+        self._risk_state_lock = threading.Lock()
         self._warmup_retry_thread: threading.Thread | None = None
         self._last_warmup_retry_at = time.monotonic()
         self._stop_event = threading.Event()
@@ -285,6 +295,7 @@ class EngineRuntime:
         self._dropped_events = 0
         self._coalesced_events = 0
         self._oldest_received_at: datetime | None = None
+        self._event_stats_lock = threading.Lock()
         self._last_account_at: datetime | None = None
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
@@ -583,6 +594,13 @@ class EngineRuntime:
         self.symbols = sorted(
             self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
         )
+        self._expected_all_symbols = set().union(
+            *(
+                symbols
+                for candidate_market, symbols in self._symbols_by_market.items()
+                if getattr(self, "_market_enabled", {}).get(candidate_market, False)
+            )
+        )
         self._not_ready_symbols.update(equity_pins)
         self._not_ready_symbols.update(crypto_pins)
 
@@ -625,10 +643,25 @@ class EngineRuntime:
                 self._state = "stop_failed"
                 log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
                 return False
+            # Release broker/data HTTP session pools on every start/stop cycle.
+            for candidate in (self.broker, self._historical):
+                close = getattr(candidate, "close", None)
+                if close is None:
+                    continue
+                try:
+                    close()
+                except Exception as exc:
+                    log.warning("Session close warning during stop: %s", exc)
         if not self._journal_closed:
-            self.journal_writer.close()
-            self.journal.close()
-            self.ledger.close()
+            try:
+                # Give in-flight stream-thread writes a moment to land before
+                # the SQLite connections below are released.
+                time.sleep(0.25)
+                self.journal_writer.close()
+                self.journal.close()
+                self.ledger.close()
+            except Exception as exc:
+                log.exception("Runtime journal/ledger close failed: %s", exc)
             self._journal_closed = True
         self._state = "stopped"
         log.info("Engine runtime stopped")
@@ -677,6 +710,23 @@ class EngineRuntime:
         log.error("Entry circuit breaker opened: %s", reason)
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
+        try:
+            await self._handle_trade_update(update)
+        except Exception as exc:
+            # The TradingStream callback is the primary source of truth for
+            # the ledger. An unhandled exception here can kill the stream
+            # worker (or run unobserved inside the SDK loop), degrading the
+            # whole runtime. Escalate to a halt instead of failing silently.
+            with self._state_lock:
+                self._state = "halted"
+                self._circuit_breaker_reason = "trade_update_callback_failure"
+            log.exception(
+                "Trade update handling failed for order %s: %s",
+                update.client_order_id,
+                exc,
+            )
+
+    async def _handle_trade_update(self, update: TradeUpdate) -> None:
         account_id = self.broker.account_id or "unknown"
         event = ExecutionEvent(
             account_id=account_id,
@@ -735,6 +785,7 @@ class EngineRuntime:
                 update.average_fill_price,
                 lifecycle.order.direction,
                 update.timestamp,
+                commission=update.fee or 0.0,
             )
             if self.ai_journal is not None:
                 await asyncio.to_thread(self.ai_journal.record_broker_fill, fill)
@@ -749,11 +800,15 @@ class EngineRuntime:
                     if not await asyncio.to_thread(
                         self.broker.protect_recovered_crypto_entry, lifecycle.order
                     ):
+                        with getattr(self, "_event_stats_lock", threading.Lock()):
+                            self._market_entry_halts[Market.CRYPTO] = (
+                                "protection_reconciliation_required"
+                            )
+                except AmbiguousOrderState as exc:
+                    with getattr(self, "_event_stats_lock", threading.Lock()):
                         self._market_entry_halts[Market.CRYPTO] = (
                             "protection_reconciliation_required"
                         )
-                except AmbiguousOrderState as exc:
-                    self._market_entry_halts[Market.CRYPTO] = "protection_reconciliation_required"
                     # A symbol-specific protection ambiguity must not tear down
                     # the shared TradingStream callback. Reconciliation keeps
                     # retrying while new crypto entries remain halted.
@@ -763,14 +818,14 @@ class EngineRuntime:
                         exc,
                     )
 
-    def _run_stream_worker(self, name: str, target: object) -> None:
+    def _run_stream_worker(self, name: str, target: Callable[[], None]) -> None:
         worker = self._workers[name]
         worker.alive = True
         worker.last_heartbeat = datetime.now(UTC)
         try:
             while self._running:
                 try:
-                    target()  # type: ignore[operator]
+                    target()
                     if not self._running:
                         return
                     raise RuntimeError("stream worker returned unexpectedly")
@@ -832,67 +887,94 @@ class EngineRuntime:
         )
 
     async def _on_minute_bar(self, bar: Bar) -> None:
-        if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
-            return
-        worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
-        if worker := self._workers.get(worker_name):
-            worker.last_heartbeat = datetime.now(UTC)
-            worker.last_event_at = datetime.now(UTC)
-        self._mark_market_stream_recovered(bar.market)
-        if bar.market == Market.CRYPTO:
-            try:
-                await asyncio.to_thread(
-                    self.broker.process_crypto_price,
-                    CryptoPriceObservation(
-                        symbol=bar.symbol,
-                        high=bar.high,
-                        low=bar.low,
-                        close=bar.close,
-                        source="one_minute_bar",
-                        timestamp=bar.timestamp,
-                    ),
-                )
-            except AmbiguousOrderState as exc:
-                self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
-                log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
-            except Exception as exc:
-                self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
-                log.exception("Crypto protection watcher failed: %s", exc)
-        with self._ingestion_lock:
-            primary = self.primary_aggregator.update(bar)
-            higher = self.higher_aggregator.update(bar)
-        if higher is not None:
-            self._put_event("higher", higher)
-        if primary is not None:
-            self._put_event("primary", primary)
+        await self._on_bar(bar, source="one_minute_bar", corrected=False)
 
     async def _on_updated_minute_bar(self, bar: Bar) -> None:
+        await self._on_bar(bar, source="updated_minute_bar", corrected=True)
+
+    async def _on_bar(self, bar: Bar, *, source: str, corrected: bool) -> None:
+        """Ingest a live or corrected bar into the aggregation pipeline."""
         if bar.market.value == "equity" and not is_regular_equity_time(bar.timestamp):
             return
         worker_name = {Market.EQUITY: "pb-stocks", Market.CRYPTO: "pb-crypto"}[bar.market]
         if worker := self._workers.get(worker_name):
             worker.last_heartbeat = datetime.now(UTC)
             worker.last_event_at = datetime.now(UTC)
+        if not corrected:
+            # Only a live bar proves the stream recovered; a corrected bar
+            # does not clear a market halt on its own.
+            self._mark_market_stream_recovered(bar.market)
+        if bar.market == Market.CRYPTO:
+            await self._process_crypto_protection(bar, source=source)
         with self._ingestion_lock:
-            primary = self.primary_aggregator.update_correction(bar)
-            higher = self.higher_aggregator.update_correction(bar)
+            if corrected:
+                primary = self.primary_aggregator.update_correction(bar)
+                higher = self.higher_aggregator.update_correction(bar)
+            else:
+                primary = self.primary_aggregator.update(bar)
+                higher = self.higher_aggregator.update(bar)
+        kind = "correction" if corrected else "primary"
         if higher is not None:
-            self._put_event("correction", higher)
+            self._put_event("higher" if not corrected else kind, higher)
         if primary is not None:
-            self._put_event("correction", primary)
+            self._put_event(kind, primary)
+
+    async def _process_crypto_protection(self, bar: Bar, source: str) -> None:
+        """Feed a crypto price observation to the protective-stop watcher.
+
+        Called for both live bars and corrected/updated bars so a corrected
+        price never leaves the watcher on a stale quote.
+        """
+        try:
+            await asyncio.to_thread(
+                self.broker.process_crypto_price,
+                CryptoPriceObservation(
+                    symbol=bar.symbol,
+                    high=bar.high,
+                    low=bar.low,
+                    source=source,
+                    timestamp=bar.timestamp,
+                ),
+            )
+            # A verified protection pass proves the watcher is healthy
+            # again: clear a TRANSIENT halt so a one-off API blip does
+            # not permanently brick crypto entries. Ambiguity is never
+            # cleared here (reconciliation decides that). The check-then-
+            # clear runs under the halt lock because live and corrected
+            # price passes can run concurrently.
+            with getattr(self, "_event_stats_lock", threading.Lock()):
+                if self._market_entry_halts.get(Market.CRYPTO) == "crypto_protection_failure":
+                    self._market_entry_halts[Market.CRYPTO] = None
+                    log.warning("Crypto protection watcher recovered; crypto entries unhalted")
+        except AmbiguousOrderState as exc:
+            with getattr(self, "_event_stats_lock", threading.Lock()):
+                self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
+            log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
+        except Exception as exc:
+            with getattr(self, "_event_stats_lock", threading.Lock()):
+                self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
+            log.exception(
+                "Crypto protection watcher failed (entries halted until the "
+                "next verified price pass): %s",
+                exc,
+            )
 
     def _put_event(self, kind: str, bar: Bar) -> None:
         event = _Event(kind, bar, datetime.now(UTC))
         result = self._events.put_market_event(event)
-        if result == "coalesced":
-            self._coalesced_events += 1
-        elif result == "replaced":
-            self._dropped_events += 1
-        elif result == "overflow":
-            self._circuit_breaker_reason = "final_market_event_queue_overflow"
-            self._dropped_events += 1
-        if self._oldest_received_at is None:
-            self._oldest_received_at = event.received_at
+        # _put_event runs from several threads (stock stream, crypto stream,
+        # decision loop); the diagnostics counters must not be mutated
+        # unsynchronized.
+        with getattr(self, "_event_stats_lock", threading.Lock()):
+            if result == "coalesced":
+                self._coalesced_events += 1
+            elif result == "replaced":
+                self._dropped_events += 1
+            elif result == "overflow":
+                self._circuit_breaker_reason = "final_market_event_queue_overflow"
+                self._dropped_events += 1
+            if self._oldest_received_at is None:
+                self._oldest_received_at = event.received_at
 
     def _decision_loop(self) -> None:
         worker = self._workers["pb-decisions"]
@@ -900,6 +982,11 @@ class EngineRuntime:
         next_reconcile = time.monotonic() + 60.0
         pending: dict[datetime, dict[str, Bar]] = {}
         first_seen: dict[datetime, float] = {}
+        # Symbols already evaluated per closed batch. A late bar whose symbol
+        # was missing from the closed batch must be re-evaluated instead of
+        # being silently ingested as a correction (which never reaches the
+        # decision pipeline).
+        processed_batches: dict[datetime, frozenset[str]] = {}
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
@@ -927,27 +1014,45 @@ class EngineRuntime:
                             item.bar.market, datetime.min.replace(tzinfo=UTC)
                         ),
                     ):
-                        self.engine.ingest_corrections([item.bar])
-                        log.debug(
-                            "Late finalized bar ingested as correction: symbol=%s "
-                            "timeframe=%s timestamp=%s",
-                            item.bar.symbol,
-                            item.bar.timeframe,
-                            item.bar.timestamp,
-                        )
+                        batch = processed_batches.get(item.bar.timestamp)
+                        if batch is not None and item.bar.symbol not in batch:
+                            processed_batches[item.bar.timestamp] = batch | {
+                                item.bar.symbol
+                            }
+                            expected: set[str] = getattr(
+                                self, "_expected_all_symbols", set()
+                            )
+                            self._process_timestamp(
+                                item.bar.timestamp,
+                                {item.bar.symbol: item.bar},
+                                expected - (batch | {item.bar.symbol}),
+                            )
+                            log.info(
+                                "Late finalized bar re-evaluated: symbol=%s "
+                                "timeframe=%s timestamp=%s",
+                                item.bar.symbol,
+                                item.bar.timeframe,
+                                item.bar.timestamp,
+                            )
+                        else:
+                            self.engine.ingest_corrections([item.bar])
+                            log.debug(
+                                "Late finalized bar ingested as correction: symbol=%s "
+                                "timeframe=%s timestamp=%s",
+                                item.bar.symbol,
+                                item.bar.timeframe,
+                                item.bar.timestamp,
+                            )
                     else:
                         key = item.bar.timestamp
                         pending.setdefault(key, {})[item.bar.symbol] = item.bar
                         first_seen.setdefault(key, time.monotonic())
                 self._flush_aggregators()
                 now_mono = time.monotonic()
-                expected_all = set().union(
-                    *(
-                        symbols
-                        for candidate_market, symbols in self._symbols_by_market.items()
-                        if self._market_enabled.get(candidate_market, False)
-                    )
-                )
+                # Symbol membership only changes on start/pin; the union is
+                # refreshed by _pin_managed_symbols instead of rebuilt on
+                # every loop iteration.
+                expected_all: set[str] = getattr(self, "_expected_all_symbols", set())
                 closable = [
                     timestamp
                     for timestamp, bars in pending.items()
@@ -957,12 +1062,8 @@ class EngineRuntime:
                 for timestamp in sorted(closable):
                     bars_by_symbol = pending.pop(timestamp)
                     first_seen.pop(timestamp, None)
-                    self._process_timestamp(
-                        timestamp,
-                        bars_by_symbol,
-                        expected_all,
-                        market=None,
-                    )
+                    self._process_timestamp(timestamp, bars_by_symbol, expected_all)
+                    processed_batches[timestamp] = frozenset(bars_by_symbol)
                     for bar in bars_by_symbol.values():
                         self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
                             timestamp,
@@ -979,11 +1080,30 @@ class EngineRuntime:
                                 datetime.min.replace(tzinfo=UTC),
                             ),
                         )
-                if self._events.empty():
+                if len(processed_batches) > 256:
+                    cutoff = max(processed_batches) - timedelta(hours=6)
+                    for stale in [ts for ts in processed_batches if ts < cutoff]:
+                        del processed_batches[stale]
+                # Recompute the queue-age diagnostic from both sources under
+                # the stats lock so an event enqueued concurrently cannot be
+                # missed (which would report a zero age while events wait).
+                with self._event_stats_lock:
+                    pending_oldest = min(
+                        (
+                            datetime.now(UTC)
+                            - timedelta(seconds=max(0.0, now_mono - seen))
+                            for seen in first_seen.values()
+                        ),
+                        default=None,
+                    )
                     self._oldest_received_at = min(
                         (
-                            datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
-                            for seen in first_seen.values()
+                            candidate
+                            for candidate in (
+                                self._events.oldest_received_at(),
+                                pending_oldest,
+                            )
+                            if candidate is not None
                         ),
                         default=None,
                     )
@@ -1017,8 +1137,6 @@ class EngineRuntime:
         timestamp: datetime,
         bars_by_symbol: dict[str, Bar],
         expected: set[str],
-        *,
-        market: Market | None = None,
     ) -> None:
         bars = list(bars_by_symbol.values())
         ingestion = self.engine.ingest_closed_bars(bars)
@@ -1216,34 +1334,38 @@ class EngineRuntime:
         return any(symbol not in self._not_ready_symbols for symbol in self.symbols)
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
-        account_id = self.broker.account_id or "unknown"
-        today = datetime.now(UTC).date()
-        previous = self.ledger.load_risk_state(account_id, today)
-        if (
-            previous is not None
-            and self.engine.risk.consecutive_losses == previous.consecutive_losses
-        ):
-            realized_delta = float(account.realized_pnl) - previous.realized_pnl
-            if abs(realized_delta) > 1e-9:
-                # Insurance for fills recovered from broker activities while
-                # the TradingStream callback was unavailable. Live callbacks
-                # already change the counter, so the equality guard prevents
-                # counting the same close twice.
-                self.engine.risk.record_realized_pnl(realized_delta)
-        self.ledger.save_risk_state(
-            RiskState(
-                account_id=account_id,
-                session_date=today,
-                day_start_equity=float(account.equity - account.daily_pnl),
-                peak_equity=float(account.peak_equity),
-                realized_pnl=float(account.realized_pnl),
-                unrealized_pnl=float(account.unrealized_pnl),
-                fees=self.ledger.total_fees_for_account(account_id),
-                consecutive_losses=self.engine.risk.consecutive_losses,
-                circuit_breaker_reason=self._circuit_breaker_reason,
-                updated_at=datetime.now(UTC),
+        # _account_loop, the decision loop and reconciliation call this
+        # concurrently; the load-compare-record sequence must be atomic or
+        # the same realized PnL delta is counted twice.
+        with getattr(self, "_risk_state_lock", threading.Lock()):
+            account_id = self.broker.account_id or "unknown"
+            today = datetime.now(UTC).date()
+            previous = self.ledger.load_risk_state(account_id, today)
+            if (
+                previous is not None
+                and self.engine.risk.consecutive_losses == previous.consecutive_losses
+            ):
+                realized_delta = float(account.realized_pnl) - previous.realized_pnl
+                if abs(realized_delta) > 1e-9:
+                    # Insurance for fills recovered from broker activities
+                    # while the TradingStream callback was unavailable. Live
+                    # callbacks already change the counter, so the equality
+                    # guard prevents counting the same close twice.
+                    self.engine.risk.record_realized_pnl(realized_delta)
+            self.ledger.save_risk_state(
+                RiskState(
+                    account_id=account_id,
+                    session_date=today,
+                    day_start_equity=float(account.equity - account.daily_pnl),
+                    peak_equity=float(account.peak_equity),
+                    realized_pnl=float(account.realized_pnl),
+                    unrealized_pnl=float(account.unrealized_pnl),
+                    fees=self.ledger.total_fees_for_account(account_id),
+                    consecutive_losses=self.engine.risk.consecutive_losses,
+                    circuit_breaker_reason=self._circuit_breaker_reason,
+                    updated_at=datetime.now(UTC),
+                )
             )
-        )
 
     def _reconcile_safely(self) -> None:
         reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
@@ -1251,6 +1373,7 @@ class EngineRuntime:
             try:
                 self.broker.reconcile()
                 self._last_account_at = datetime.now(UTC)
+                self._generic_reconcile_failures = 0
                 if self._circuit_breaker_reason == "reconciliation_failed":
                     self._circuit_breaker_reason = None
             except RequestException as exc:
@@ -1263,8 +1386,18 @@ class EngineRuntime:
                 log.exception("Managed position protection reconciliation failed")
                 self._circuit_breaker_reason = "protection_failure"
             except Exception:
+                # A generic failure is usually a code bug, not a broker
+                # timeout. Keep retrying (defense in depth) but escalate after
+                # repeated failures so the bug is not indistinguishable from
+                # a transient network error.
+                self._generic_reconcile_failures = (
+                    getattr(self, "_generic_reconcile_failures", 0) + 1
+                )
                 log.exception("Periodic position protection check failed")
-                self._circuit_breaker_reason = "reconciliation_failed"
+                if self._generic_reconcile_failures >= 3:
+                    self._circuit_breaker_reason = "reconciliation_bug_suspected"
+                else:
+                    self._circuit_breaker_reason = "reconciliation_failed"
 
     def _schedule_reconcile(self) -> None:
         """Run the expensive broker scan without stalling finalized-bar decisions."""
@@ -1289,6 +1422,8 @@ class EngineRuntime:
             "ledger_mismatch",
             "post_fill_risk_violation",
             "final_market_event_queue_overflow",
+            "reconciliation_failed",
+            "reconciliation_bug_suspected",
         }
         reason = self._circuit_breaker_reason
         if reason not in recoverable:
@@ -1307,6 +1442,10 @@ class EngineRuntime:
             self._last_account_at = datetime.now(UTC)
             self.engine.entry_halt_reason = None
             self._circuit_breaker_reason = None
+            market_halts = getattr(self, "_market_entry_halts", None)
+            if market_halts is not None:
+                market_halts[Market.EQUITY] = None
+                market_halts[Market.CRYPTO] = None
             self._persist_risk_state(account)
         if self._running and self._state == "halted":
             self._state = "running"

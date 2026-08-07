@@ -1,3 +1,12 @@
+"""Score-to-expected-R calibration for backtest research only.
+
+Nothing in the live runtime path calls ``fit_score_calibration`` /
+``apply_score_calibration`` or sets ``Signal.normalized_expected_r``: the
+ranking pipeline always takes its uncalibrated fallback in production. The
+module is kept for research and tests; wiring it into the engine would be a
+deliberate feature decision, not a bug fix.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace

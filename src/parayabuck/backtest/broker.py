@@ -28,8 +28,10 @@ from parayabuck.core.models import (
     Regime,
     TrailingStopType,
 )
-from parayabuck.features.indicators import atr
-from parayabuck.markets.timeframes import timeframe_duration
+
+# A pending entry that has not filled within this many eligible bars of its
+# own symbol is treated as stale and expired.
+_STALE_PENDING_BAR_LIMIT = 5
 
 
 @dataclass
@@ -120,6 +122,7 @@ class BacktestBroker:
         self._current_date: date | None = None
         self.positions: dict[str, _Position] = {}
         self.pending: list[OrderIntent] = []
+        self._pending_bars_waited: dict[str, int] = {}
         self.fills: list[Fill] = []
         self.realized_pnls: list[float] = []
         self.trades: list[TradeRecord] = []
@@ -129,6 +132,7 @@ class BacktestBroker:
         self._entry_cumulative_fill: dict[str, float] = {}
         self._entry_fill_value: dict[str, float] = {}
         self._bar_history: dict[str, deque[Bar]] = defaultdict(lambda: deque(maxlen=128))
+        self._atr_cache: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=128))
 
     def account(self) -> AccountSnapshot:
         snapshots = tuple(
@@ -192,13 +196,24 @@ class BacktestBroker:
         return OrderState.ACCEPTED, None
 
     def reconcile(self) -> None:
-        return
+        """Interface-compatible no-op: backtest positions need no external
+        protection reconciliation because exits are simulated in-engine."""
 
     def advance(self, bar: Bar) -> None:
         if self._current_date != bar.timestamp.date():
             self._current_date = bar.timestamp.date()
             self._day_start_equity = self.account().equity
         self._bar_history[bar.symbol].append(bar)
+        history = self._bar_history[bar.symbol]
+        if len(history) >= 2:
+            previous = history[-2]
+            self._atr_cache[bar.symbol].append(
+                max(
+                    bar.high - bar.low,
+                    abs(bar.high - previous.close),
+                    abs(bar.low - previous.close),
+                )
+            )
 
         # 1. Fill eligible entries at the open.
         remaining: list[OrderIntent] = []
@@ -206,14 +221,18 @@ class BacktestBroker:
             if order.symbol != bar.symbol or order.created_at >= bar.timestamp:
                 remaining.append(order)
                 continue
+            # Staleness is measured in eligible bars, not wall-clock time:
+            # a wall-clock window expires valid orders across structural
+            # gaps (a Friday daily order must survive until Monday).
+            waited = self._pending_bars_waited.get(order.client_order_id, 0) + 1
+            self._pending_bars_waited[order.client_order_id] = waited
             if order.symbol in self.positions and (
                 self.positions[order.symbol].client_order_id != order.client_order_id
             ):
                 self.order_rejections[order.client_order_id] = "existing_position"
                 self._entry_terminal_event(order, OrderState.REJECTED, bar)
                 continue
-            expected_seconds = timeframe_duration(bar.timeframe).total_seconds()
-            if (bar.timestamp - order.created_at).total_seconds() > expected_seconds * 1.5:
+            if waited >= _STALE_PENDING_BAR_LIMIT:
                 self.order_rejections[order.client_order_id] = "stale_pending_order"
                 self._entry_terminal_event(order, OrderState.EXPIRED, bar)
                 continue
@@ -292,6 +311,7 @@ class BacktestBroker:
                 # The unfilled remainder keeps working as a fresh order so the
                 # staleness check cannot expire a partially-filled entry that
                 # is still being built up bar by bar.
+                self._pending_bars_waited[order.client_order_id] = 0
                 remaining.append(replace(order, qty=order.qty - fillable, created_at=bar.timestamp))
         self.pending = remaining
 
@@ -429,9 +449,9 @@ class BacktestBroker:
         if trailing_active:
             trailing_multiple = policy.trailing_atr_multiple
             assert trailing_multiple is not None
-            current_atr = atr(
-                list(self._bar_history[position.symbol]), policy.trailing_atr_period
-            )
+            period = policy.trailing_atr_period
+            ranges = list(self._atr_cache[position.symbol])[-period:]
+            current_atr = sum(ranges) / len(ranges) if len(ranges) >= period else None
             volatility = current_atr or position.volatility_at_entry
             if volatility is not None and volatility > 0:
                 if position.direction == Direction.LONG:

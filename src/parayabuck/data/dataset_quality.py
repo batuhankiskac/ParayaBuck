@@ -71,7 +71,10 @@ def _cached_sessions(start: date, end: date) -> frozenset[date]:
 
 
 def _is_session(day: date) -> bool:
-    return day in _cached_sessions(day, day)
+    # Membership against the year-level cached set: keying the cache by the
+    # single day would evict after 64 days and re-hit the calendar schedule
+    # for every sliding day of a multi-year window.
+    return day in nyse_sessions(date(day.year, 1, 1), date(day.year, 12, 31))
 
 
 def nyse_sessions(start: date, end: date) -> frozenset[date]:
@@ -168,24 +171,24 @@ def evaluate_symbol_quality(
     failures: list[str] = []
     if not bars:
         return SymbolQualityReport(
-            "?",
-            Market.EQUITY,
-            timeframe,
-            None,
-            None,
-            0,
-            0,
-            0.0,
-            0,
-            0,
-            0,
-            None,
-            False,
-            0,
-            0,
-            0,
-            adjustment,
-            ("no_bars",),
+            symbol="?",
+            market=Market.EQUITY,
+            timeframe=timeframe,
+            start=None,
+            end=None,
+            bar_count=0,
+            expected_sessions=0,
+            coverage_ratio=0.0,
+            duplicate_bars=0,
+            conflicting_duplicate_bars=0,
+            largest_unexplained_gap_days=0,
+            listing_start=None,
+            stale_terminal_bar=False,
+            invalid_ohlc_count=0,
+            nonpositive_close_count=0,
+            timezone_naive_count=0,
+            adjustment=adjustment,
+            failures=("no_bars",),
         )
     market = bars[0].market
     symbol = canonical_symbol(bars[0].symbol, market)
@@ -193,24 +196,24 @@ def evaluate_symbol_quality(
     aware = [bar for bar in bars if bar.timestamp.tzinfo is not None]
     if not aware:
         return SymbolQualityReport(
-            symbol,
-            market,
-            timeframe,
-            None,
-            None,
-            len(bars),
-            0,
-            0.0,
-            0,
-            0,
-            0,
-            None,
-            False,
-            0,
-            0,
-            timezone_naive,
-            adjustment,
-            ("naive_timestamps",),
+            symbol=symbol,
+            market=market,
+            timeframe=timeframe,
+            start=None,
+            end=None,
+            bar_count=len(bars),
+            expected_sessions=0,
+            coverage_ratio=0.0,
+            duplicate_bars=0,
+            conflicting_duplicate_bars=0,
+            largest_unexplained_gap_days=0,
+            listing_start=None,
+            stale_terminal_bar=False,
+            invalid_ohlc_count=0,
+            nonpositive_close_count=0,
+            timezone_naive_count=timezone_naive,
+            adjustment=adjustment,
+            failures=("naive_timestamps",),
         )
     ordered = sorted(aware, key=lambda bar: bar.timestamp)
     start = ordered[0].timestamp
@@ -252,24 +255,24 @@ def evaluate_symbol_quality(
     if timezone_naive:
         failures.append("naive_timestamps")
     return SymbolQualityReport(
-        symbol,
-        market,
-        timeframe,
-        start,
-        end,
-        len(ordered),
-        expected,
-        coverage,
-        0,
-        0,
-        gap_days,
-        listing,
-        stale,
-        invalid_ohlc,
-        nonpositive_close,
-        timezone_naive,
-        adjustment,
-        tuple(failures),
+        symbol=symbol,
+        market=market,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+        bar_count=len(ordered),
+        expected_sessions=expected,
+        coverage_ratio=coverage,
+        duplicate_bars=0,
+        conflicting_duplicate_bars=0,
+        largest_unexplained_gap_days=gap_days,
+        listing_start=listing,
+        stale_terminal_bar=stale,
+        invalid_ohlc_count=invalid_ohlc,
+        nonpositive_close_count=nonpositive_close,
+        timezone_naive_count=timezone_naive,
+        adjustment=adjustment,
+        failures=tuple(failures),
     )
 
 

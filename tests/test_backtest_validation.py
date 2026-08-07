@@ -9,8 +9,8 @@ from parayabuck.backtest import BacktestEngine
 from parayabuck.backtest.engine import BacktestResult
 from parayabuck.backtest.validation import calendar_fold_windows
 from parayabuck.config import EngineConfig
-from parayabuck.core.models import Bar, Direction, Market, Regime, Signal
-from parayabuck.strategies.base import Strategy, StrategyContext
+from parayabuck.core.models import Bar, Direction, Market, Regime, Signal, StrategyContext
+from tests.helpers import Strategy
 
 
 def _bar(index: int, close: float = 100.0, high: float | None = None) -> Bar:

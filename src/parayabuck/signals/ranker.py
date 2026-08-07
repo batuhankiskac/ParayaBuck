@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from parayabuck.core.models import Regime, Signal
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+
+log = get_logger("parayabuck.signals.ranker")
 
 
 def ranking_score(signal: Signal) -> float:
@@ -26,7 +29,17 @@ class SignalRanker:
         for signal in signals:
             if signal.score < self.minimum_score:
                 continue
-            key = canonical_symbol(signal.symbol, signal.market)
+            try:
+                key = canonical_symbol(signal.symbol, signal.market)
+            except ValueError:
+                # One malformed symbol must not abort the portfolio-wide
+                # decision cycle; skip it and let the cycle continue.
+                log.warning(
+                    "Skipping signal with malformed symbol %r (market=%s)",
+                    signal.symbol,
+                    signal.market.value,
+                )
+                continue
             current = best_by_symbol.get(key)
             quality = ranking_score(signal)
             current_quality = ranking_score(current) if current is not None else -1.0

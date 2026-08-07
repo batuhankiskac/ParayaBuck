@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import statistics
-from collections import Counter
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +16,7 @@ from alpaca.trading.requests import GetAssetsRequest
 from parayabuck.config import Config
 from parayabuck.core.models import Market
 from parayabuck.data import AlpacaHistoricalData
+from parayabuck.features.indicators import true_ranges
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
@@ -42,6 +43,34 @@ class UniversePreflightResult:
     crypto_refreshed: bool = False
 
 
+def _refresh_with_retry(
+    refresh: Callable[[], object], name: str
+) -> bool:
+    """Run one universe refresh with a single retry on transient failures.
+
+    Returns True when the refresh succeeded. Failures surface through the
+    returned False (the caller reports an explicit ``refresh_failed`` status)
+    instead of being swallowed silently.
+    """
+    import time as _time
+
+    for attempt in range(2):
+        try:
+            refresh()
+            return True
+        except Exception as exc:
+            log.warning(
+                "Automatic %s universe scan attempt %d failed; "
+                "fallback=configured error=%s",
+                name,
+                attempt + 1,
+                exc,
+            )
+            if attempt == 0:
+                _time.sleep(1.0)
+    return False
+
+
 def ensure_active_universes(
     config: Config,
     api_key: str,
@@ -58,44 +87,28 @@ def ensure_active_universes(
         _, equity_status = validate_active_universe(equity)
         if equity_status != "success":
             log.info("Automatic equity universe scan started; reason=%s", equity_status)
-            try:
-                equity_result = refresh_equity_universe(config, api_key, secret_key)
+            if _refresh_with_retry(
+                lambda: refresh_equity_universe(config, api_key, secret_key), "equity"
+            ):
                 equity_status = "success"
                 equity_refreshed = True
-                log.info(
-                    "Automatic equity universe scan completed; selected=%d symbols=%s",
-                    len(equity_result.selected_symbols),
-                    ",".join(equity_result.selected_symbols),
-                )
-            except Exception as exc:
-                log.warning(
-                    "Automatic equity universe scan failed; reason=%s fallback=configured error=%s",
-                    equity_status,
-                    exc,
-                )
+                log.info("Automatic equity universe scan completed")
+            else:
+                equity_status = "refresh_failed"
 
     crypto = config.universe.crypto
     if crypto.enabled and crypto.dynamic_selection_enabled:
         _, crypto_status = validate_active_crypto_universe(crypto)
         if crypto_status != "success":
             log.info("Automatic crypto universe scan started; reason=%s", crypto_status)
-            try:
-                crypto_result = refresh_crypto_universe(config, api_key, secret_key)
+            if _refresh_with_retry(
+                lambda: refresh_crypto_universe(config, api_key, secret_key), "crypto"
+            ):
                 crypto_status = "success"
                 crypto_refreshed = True
-                log.info(
-                    "Automatic crypto universe scan completed; selected=%d symbols=%s "
-                    "eliminated=%s",
-                    len(crypto_result.selected_symbols),
-                    ",".join(crypto_result.selected_symbols),
-                    elimination_reason_summary(crypto_result.eliminated),
-                )
-            except Exception as exc:
-                log.warning(
-                    "Automatic crypto universe scan failed; reason=%s fallback=configured error=%s",
-                    crypto_status,
-                    exc,
-                )
+                log.info("Automatic crypto universe scan completed")
+            else:
+                crypto_status = "refresh_failed"
 
     return UniversePreflightResult(
         equity_status=equity_status,
@@ -232,14 +245,7 @@ def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandida
     if not recent:
         return EquityCandidate(symbol, 0, 0, 0, 0)
     dollar_volumes = [bar.close * bar.volume for bar in recent]
-    true_ranges = [
-        max(
-            current.high - current.low,
-            abs(current.high - previous.close),
-            abs(current.low - previous.close),
-        )
-        for previous, current in zip(recent, recent[1:], strict=False)
-    ]
+    ranges = true_ranges(recent)
     price = recent[-1].close
     name = str(getattr(asset, "name", "")).lower()
     leveraged = any(
@@ -249,7 +255,7 @@ def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandida
         symbol=symbol,
         price=price,
         median_dollar_volume_20d=statistics.median(dollar_volumes),
-        atr_pct=(statistics.mean(true_ranges) / price if true_ranges and price > 0 else 0),
+        atr_pct=(statistics.mean(ranges) / price if ranges and price > 0 else 0),
         data_completeness=min(1.0, len(recent) / 20),
         economic_sector=(
             str(getattr(asset, "sector", "") or getattr(asset, "economic_sector", "")).strip()
@@ -282,14 +288,8 @@ def _spread_bps(quote: Any) -> float | None:
         return None
 
 
-def elimination_reason_summary(eliminated: dict[str, str]) -> str:
-    reasons = Counter(eliminated.values())
-    return ",".join(f"{reason}={count}" for reason, count in sorted(reasons.items())) or "none"
-
-
 __all__ = [
     "UniversePreflightResult",
-    "elimination_reason_summary",
     "ensure_active_universes",
     "refresh_crypto_universe",
     "refresh_equity_universe",

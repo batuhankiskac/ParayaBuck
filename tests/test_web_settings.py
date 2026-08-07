@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -14,21 +15,14 @@ from parayabuck import runtime as runtime_module
 from parayabuck.web import server
 
 
-class _EngineManagerStub:
+class _CountingEngineManager(server.EngineManager):
     def __init__(self, root: Path) -> None:
+        super().__init__()
         self.config_path = root / "settings.yaml"
         self.env_path = root / ".env"
         self.engine_state = "running"
-        self.broker: Any = object()
-        self.log_queues: set[Any] = set()
         self.stop_calls = 0
         self.start_calls = 0
-
-    def get_credentials(self) -> tuple[str, str]:
-        return "existing-key", "existing-secret"
-
-    def has_active_runtime(self) -> bool:
-        return self.engine_state not in {"stopped", "error"}
 
     def stop_engine(self) -> None:
         self.stop_calls += 1
@@ -37,6 +31,13 @@ class _EngineManagerStub:
     def start_engine(self) -> None:
         self.start_calls += 1
         self.engine_state = "running"
+
+
+class _RestartFailureManagerStub(_CountingEngineManager):
+    def start_engine(self) -> None:
+        self.start_calls += 1
+        self.engine_state = "error"
+        raise TimeoutError("Alpaca timed out")
 
 
 def test_control_token_and_index_are_not_cached() -> None:
@@ -60,7 +61,7 @@ def test_control_token_and_index_are_not_cached() -> None:
     assert index_response.headers["cache-control"] == "no-store"
 
 
-class _RestartFailureManagerStub(_EngineManagerStub):
+class _RestartFailureManagerStub(_CountingEngineManager):
     def start_engine(self) -> None:
         self.start_calls += 1
         self.engine_state = "error"
@@ -80,7 +81,7 @@ def test_engine_manager_refuses_second_runtime(state: str) -> None:
 def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    manager = _EngineManagerStub(tmp_path)
+    manager = _CountingEngineManager(tmp_path)
     manager.config_path.write_text(
         yaml.safe_dump(
             {
@@ -169,6 +170,7 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
         start_calls = 0
         stop_calls = 0
         log_queues: set[Any] = set()
+        _log_queues_lock = threading.Lock()
 
         def should_auto_start(self) -> bool:
             return True
@@ -327,6 +329,7 @@ class _DeadWebSocket:
 class _WebSocketManagerStub:
     def __init__(self) -> None:
         self.log_queues: set[Any] = set()
+        self._log_queues_lock = threading.Lock()
         self.stream_connections: set[Any] = set()
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
@@ -337,6 +340,10 @@ class _WebSocketManagerStub:
 
     def is_paper_mode(self) -> bool:
         return True
+
+    def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
+        del kind
+        return not ticket or ticket == "valid-ticket"
 
 
 def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -> None:

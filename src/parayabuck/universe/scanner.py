@@ -12,6 +12,7 @@ from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Market
 from parayabuck.markets.sectors import sector_of
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.utils.io import atomic_write
 
 
 @dataclass(frozen=True)
@@ -60,7 +61,19 @@ class EquityUniverseScanner:
         selection_timestamp: datetime | None = None,
         pinned_symbols: tuple[str, ...] = (),
     ) -> ScannerResult:
+        """Deterministically select the equity stream universe.
+
+        Preconditions: candidates must be canonical, timestamps must be
+        timezone-aware, and pool membership (candidate file) is the caller's
+        responsibility. Reserved symbols (references, approved inverse ETFs,
+        runtime pins) are force-kept even when they fail a filter; pool
+        membership is enforced by ``validate_active_universe`` at load time.
+        """
         references = self.config.reference_symbols
+        if data_timestamp.tzinfo is None or (
+            selection_timestamp is not None and selection_timestamp.tzinfo is None
+        ):
+            raise ValueError("Scanner timestamps must be timezone-aware (UTC)")
         pinned = tuple(
             symbol
             for symbol in dict.fromkeys(
@@ -82,7 +95,11 @@ class EquityUniverseScanner:
             seen.add(symbol)
             reason = self._filter_reason(candidate)
             if reason:
-                eliminated[symbol] = reason
+                # Reserved symbols are force-kept (they are streamed
+                # regardless): reporting them as eliminated while they remain
+                # selected is contradictory output. Mirror the crypto scanner.
+                if symbol not in reserved:
+                    eliminated[symbol] = reason
                 continue
             sector = (candidate.economic_sector or sector_of(symbol) or "unknown").strip().lower()
             if sector in {"other", ""}:
@@ -175,14 +192,10 @@ class EquityUniverseScanner:
         )
 
     def persist(self, result: ScannerResult) -> None:
-        path = Path(self.config.active_universe_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(
+        atomic_write(
+            Path(self.config.active_universe_path),
             json.dumps(asdict(result), indent=2, sort_keys=True),
-            encoding="utf-8",
         )
-        temporary.replace(path)
 
     def _filter_reason(self, item: EquityCandidate) -> str | None:
         if not item.tradable or item.status.lower() != "active":
@@ -292,7 +305,12 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
         if len(selected) > config.maximum_stream_symbols:
             return (), "invalid"
         return selected, "success"
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        # Fail closed, but surface the parse error: a persistent "invalid"
+        # status is indistinguishable from rot without the underlying cause.
+        logging.getLogger("parayabuck.universe").warning(
+            "Active equity universe validation failed: %s", exc
+        )
         return (), "invalid"
 
 

@@ -13,6 +13,21 @@ WEIGHT_TOLERANCE = 1e-6
 MAX_WEIGHT = 1.0
 
 
+def _canonical_key(symbol: str) -> str:
+    """Best-effort canonical symbol key (unparseable symbols keep their raw form)."""
+    try:
+        return canonical_symbol(symbol)
+    except ValueError:
+        return symbol
+
+
+def _float_mapping(raw: dict[str, Any], key: str) -> dict[str, float]:
+    return {
+        str(symbol): float(value)
+        for symbol, value in dict(raw.get(key, {})).items()
+    }
+
+
 class RebalanceReason(StrEnum):
     INITIAL = "initial"
     SCHEDULED = "scheduled"
@@ -68,7 +83,9 @@ class TargetPortfolio:
             raise ValueError("Cash weight must be in [0, 1]")
         if not math.isfinite(self.risk_multiplier) or self.risk_multiplier < 0:
             raise ValueError("Risk multiplier must be non-negative")
-        if len({weight.symbol for weight in self.weights}) != len(self.weights):
+        if len({_canonical_key(weight.symbol) for weight in self.weights}) != len(
+            self.weights
+        ):
             raise ValueError("Target portfolio contains duplicate symbols")
         total = self.cash_weight + sum(weight.weight for weight in self.weights)
         if total > 1.0 + WEIGHT_TOLERANCE:
@@ -79,9 +96,16 @@ class TargetPortfolio:
         return sum(weight.weight for weight in self.weights)
 
     def weight_for(self, symbol: str, market: Market | None = None) -> float:
-        canonical = canonical_symbol(symbol, market)
+        try:
+            canonical = canonical_symbol(symbol, market)
+        except ValueError:
+            return 0.0
         for weight in self.weights:
-            if canonical_symbol(weight.symbol, market) == canonical:
+            try:
+                candidate = canonical_symbol(weight.symbol, market)
+            except ValueError:
+                continue
+            if candidate == canonical:
                 return weight.weight
         return 0.0
 
@@ -215,41 +239,15 @@ class PortfolioState:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> PortfolioState:
-        holdings = {
-            str(symbol): float(quantity)
-            for symbol, quantity in dict(raw.get("holdings", {})).items()
-        }
-        avg_prices = {
-            str(symbol): float(price)
-            for symbol, price in dict(raw.get("avg_prices", {})).items()
-        }
-        last_target = {
-            str(symbol): float(weight)
-            for symbol, weight in dict(raw.get("last_target", {})).items()
-        }
-        entry_fees = {
-            str(symbol): float(fee)
-            for symbol, fee in dict(raw.get("entry_fees", {})).items()
-        }
-        last_prices = {
-            str(symbol): float(price)
-            for symbol, price in dict(raw.get("last_prices", {})).items()
-        }
-        pending_target = {
-            str(symbol): float(weight)
-            for symbol, weight in dict(raw.get("pending_target", {})).items()
-        }
+        holdings = _float_mapping(raw, "holdings")
+        avg_prices = _float_mapping(raw, "avg_prices")
+        last_target = _float_mapping(raw, "last_target")
+        entry_fees = _float_mapping(raw, "entry_fees")
+        last_prices = _float_mapping(raw, "last_prices")
+        pending_target = _float_mapping(raw, "pending_target")
         raw_pending = raw.get("pending_orders", ())
-        pending_orders = tuple(
-            dict(item)
-            for item in raw_pending
-            if isinstance(item, dict)
-        )
-        raw_accumulators = raw.get("realized_pnl_accumulators", {})
-        realized_pnl_accumulators = {
-            str(symbol): float(value)
-            for symbol, value in dict(raw_accumulators).items()
-        }
+        pending_orders = tuple(dict(item) for item in raw_pending if isinstance(item, dict))
+        realized_pnl_accumulators = _float_mapping(raw, "realized_pnl_accumulators")
         last_rebalance = raw.get("last_rebalance_at")
         raw_cash = raw.get("cash")
         return cls(

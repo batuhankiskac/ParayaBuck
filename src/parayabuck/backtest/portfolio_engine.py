@@ -8,7 +8,9 @@ from enum import StrEnum
 from itertools import groupby
 from pathlib import Path
 
+from parayabuck.backtest.stats import sample_stddev
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
@@ -18,6 +20,9 @@ from parayabuck.portfolio.models import (
     TargetPortfolio,
 )
 from parayabuck.portfolio.universes import CRYPTO_UNIVERSE_VERSION, EQUITY_UNIVERSE_VERSION
+from parayabuck.utils.io import atomic_write
+
+log = get_logger("parayabuck.backtest.portfolio_engine")
 
 
 class OrderSide(StrEnum):
@@ -353,13 +358,10 @@ class PortfolioBacktestEngine:
     def save_state(self) -> None:
         if self.state_path is None:
             return
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.state_path.with_suffix(".tmp")
-        temporary.write_text(
+        atomic_write(
+            self.state_path,
             json.dumps(self.state.to_dict(), indent=2, ensure_ascii=False, sort_keys=True),
-            encoding="utf-8",
         )
-        temporary.replace(self.state_path)
 
     @staticmethod
     def load_state(path: str | Path) -> PortfolioState | None:
@@ -397,7 +399,8 @@ class PortfolioBacktestEngine:
                 created_at=datetime.fromisoformat(str(raw["created_at"])),
                 decision_timestamp=datetime.fromisoformat(str(raw["decision_timestamp"])),
             )
-        except (KeyError, ValueError):
+        except (KeyError, ValueError) as exc:
+            log.warning("Dropping malformed persisted pending order: %s", exc)
             return None
 
     def _ingest(self, bar: Bar) -> None:
@@ -794,8 +797,8 @@ class PortfolioBacktestEngine:
         ]
         downside = [value for value in returns if value < 0]
         mean_return = sum(returns) / len(returns) if returns else 0.0
-        std = self._stddev(returns)
-        downside_std = self._stddev(downside)
+        std = sample_stddev(returns)
+        downside_std = sample_stddev(downside)
         start_ts = curve_timestamps[0] if curve_timestamps else None
         end_ts = curve_timestamps[-1] if curve_timestamps else None
         duration_days = (
@@ -835,30 +838,44 @@ class PortfolioBacktestEngine:
             else 0.0
         )
         per_symbol = self._symbol_contributions()
-        # Excess returns are aligned BY DATE: if a benchmark bar is missing on
-        # a trading day (providers may differ by one session), index zipping
-        # would silently misalign the information-ratio series.
-        benchmark_returns_by_day: dict[tuple[int, int, int], float] = {}
-        for index, bar in enumerate(benchmark_bars):
-            if index == 0 or bar.close <= 0 or benchmark_bars[index - 1].close <= 0:
-                continue
+        # Excess returns are aligned BY DATE: each series is reduced to
+        # close-to-previous-trading-day returns keyed by date, so intraday
+        # runs (e.g. 1h crypto) never compare hourly portfolio moves against
+        # a return that pretends to be daily. Days missing from one series
+        # drop out of the excess series instead of misaligning it.
+        benchmark_closes_by_day: dict[tuple[int, int, int], float] = {}
+        for bar in benchmark_bars:
             day = (bar.timestamp.year, bar.timestamp.month, bar.timestamp.day)
-            benchmark_returns_by_day[day] = (
-                bar.close / benchmark_bars[index - 1].close - 1
-            )
+            benchmark_closes_by_day[day] = bar.close
+        portfolio_by_day: dict[tuple[int, int, int], float] = {}
+        for ts, value in zip(curve_timestamps, curve):
+            portfolio_by_day[(ts.year, ts.month, ts.day)] = value
         excess: list[float] = []
-        for index, curve_ts in enumerate(curve_timestamps):
-            if index == 0:
+        benchmark_days = sorted(benchmark_closes_by_day)
+        for index, day in enumerate(benchmark_days):
+            if index == 0 or day not in portfolio_by_day:
                 continue
-            day = (curve_ts.year, curve_ts.month, curve_ts.day)
-            benchmark = benchmark_returns_by_day.get(day)
-            if benchmark is None:
+            previous_day = benchmark_days[index - 1]
+            previous_portfolio = portfolio_by_day.get(previous_day)
+            if (
+                benchmark_closes_by_day[day] <= 0
+                or benchmark_closes_by_day[previous_day] <= 0
+                or previous_portfolio is None
+                or portfolio_by_day[day] <= 0
+            ):
                 continue
-            excess.append(returns[index - 1] - benchmark)
+            benchmark_return = (
+                benchmark_closes_by_day[day] / benchmark_closes_by_day[previous_day] - 1
+            )
+            portfolio_return = portfolio_by_day[day] / previous_portfolio - 1
+            excess.append(portfolio_return - benchmark_return)
         excess_mean = sum(excess) / len(excess) if excess else 0.0
-        excess_std = self._stddev(excess)
+        excess_std = sample_stddev(excess)
+        daily_periods_per_year = len(excess) / years if years > 0 else 0.0
         information_ratio = (
-            excess_mean / excess_std * annualizer if excess_std > 0 else 0.0
+            excess_mean / excess_std * math.sqrt(daily_periods_per_year)
+            if excess_std > 0
+            else 0.0
         )
         avg_cash_ratio = (
             sum(cash_ratios) / len(cash_ratios) if cash_ratios else 0.0
@@ -1066,14 +1083,6 @@ class PortfolioBacktestEngine:
                 )
             )
         return tuple(contributions)
-
-    @staticmethod
-    def _stddev(values: list[float]) -> float:
-        if len(values) < 2:
-            return 0.0
-        mean = sum(values) / len(values)
-        return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
-
 
 __all__ = [
     "OrderSide",

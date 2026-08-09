@@ -15,7 +15,6 @@ from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 
 class RuntimeMode(StrEnum):
     DISABLED = "disabled"
-    BACKTEST = "backtest"
     PAPER = "paper"
     LIVE = "live"
 
@@ -67,6 +66,7 @@ def _default_equity_strategy() -> MarketStrategyConfig:
             "top_n": 6,
             "max_single_weight": 0.10,
             "annual_volatility_target": 0.10,
+            "correlation_floor": 0.25,
             "rebalance_frequency": "weekly",
         },
     )
@@ -119,6 +119,10 @@ class BacktestConfig:
     spread_bps: float = 2.0
     commission: float = 0.0
     crypto_taker_fee_bps: float = 5.0
+    equity_taf_per_share: float = 0.0
+    equity_taf_cap: float = 0.0
+    equity_cat_per_share: float = 0.0
+    equity_sec_fee_rate: float = 0.0
     scanner_rebalance: str = "daily"
     output_dir: str = "reports"
     ranking_metric: str = "risk_adjusted"
@@ -130,6 +134,10 @@ class BacktestConfig:
             self.spread_bps,
             self.commission,
             self.crypto_taker_fee_bps,
+            self.equity_taf_per_share,
+            self.equity_taf_cap,
+            self.equity_cat_per_share,
+            self.equity_sec_fee_rate,
         )
         if self.initial_cash <= 0 or any(not math.isfinite(value) or value < 0 for value in costs):
             raise ValueError("Invalid backtest cash or cost configuration")
@@ -141,41 +149,24 @@ class BacktestConfig:
 
 @dataclass(frozen=True)
 class RiskLimits:
-    risk_per_trade_pct: float = 0.005
     max_position_pct: float = 0.10
     max_crypto_exposure_pct: float = 0.10
     max_crypto_position_pct: float = 0.05
     max_crypto_positions: int = 2
-    minimum_crypto_order_notional: float = 12.0
-    maximum_crypto_order_notional: float = 200_000.0
     cash_buffer_pct: float = 0.40
-    max_sector_exposure_pct: float = 0.25
     max_gross_exposure_pct: float = 0.60
     max_positions: int = 5
     daily_loss_limit_pct: float = 0.005
     max_drawdown_pct: float = 0.05
-    max_open_risk_pct: float = 0.015
-    minimum_risk_reward: float = 1.8
-    consecutive_loss_reduction_after: int = 3
-    volatility_targeting_enabled: bool = False
-    annualized_volatility_target: float = 0.08
-    minimum_volatility_scale: float = 0.25
-    maximum_volatility_scale: float = 1.0
 
     def __post_init__(self) -> None:
         ratios = (
-            self.risk_per_trade_pct,
             self.max_position_pct,
             self.max_crypto_exposure_pct,
             self.max_crypto_position_pct,
-            self.max_sector_exposure_pct,
             self.max_gross_exposure_pct,
             self.daily_loss_limit_pct,
             self.max_drawdown_pct,
-            self.max_open_risk_pct,
-            self.annualized_volatility_target,
-            self.minimum_volatility_scale,
-            self.maximum_volatility_scale,
         )
         if any(not math.isfinite(value) or value <= 0 or value > 1 for value in ratios):
             raise ValueError("Risk ratios must be in (0, 1]")
@@ -183,24 +174,13 @@ class RiskLimits:
             self.max_positions <= 0
             or self.max_crypto_positions <= 0
             or self.max_crypto_positions > self.max_positions
-            or self.minimum_crypto_order_notional <= 0
-            or self.maximum_crypto_order_notional <= self.minimum_crypto_order_notional
             or not 0 <= self.cash_buffer_pct < 1
-            or self.minimum_risk_reward <= 0
-            or self.consecutive_loss_reduction_after <= 0
-            or self.minimum_volatility_scale > self.maximum_volatility_scale
         ):
             raise ValueError("Invalid risk limits")
 
 
 @dataclass(frozen=True)
 class EngineConfig:
-    timeframe: str = "5m"
-    higher_timeframe: str = "1h"
-    warmup_bars: int = 250
-    ai_logging_enabled: bool = True
-    ai_log_path: str = "data/runtime/ai_decisions"
-    prediction_horizon_bars: int = 48
     manage_external_positions: bool = False
     event_grace_seconds: float = 5.0
     data_finalization_grace_seconds: float = 2.0
@@ -214,15 +194,6 @@ class EngineConfig:
     crypto_stop_cancel_poll_interval_seconds: float = 0.25
 
     def __post_init__(self) -> None:
-        supported = set(TIMEFRAME_MINUTES)
-        if self.timeframe not in supported or self.higher_timeframe not in supported:
-            raise ValueError("Unsupported timeframe")
-        if self.warmup_bars < 50:
-            raise ValueError("warmup_bars must be at least 50")
-        if self.prediction_horizon_bars <= 0:
-            raise ValueError("prediction_horizon_bars must be positive")
-        if TIMEFRAME_MINUTES[self.higher_timeframe] < TIMEFRAME_MINUTES[self.timeframe]:
-            raise ValueError("higher_timeframe must not be smaller than timeframe")
         if self.timing_capacity_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
 
@@ -326,6 +297,7 @@ class EquityScannerConfig:
 class EquityUniverseConfig:
     enabled: bool = True
     dynamic_selection_enabled: bool = True
+    allow_static_fallback_trading: bool = False
     maximum_stream_symbols: int = 30
     target_shortlist: int = 300
     reference_symbols: tuple[str, ...] = ("SPY",)
@@ -460,6 +432,7 @@ class CryptoScannerConfig:
 class CryptoUniverseConfig:
     enabled: bool = False
     dynamic_selection_enabled: bool = False
+    allow_static_fallback_trading: bool = False
     maximum_stream_symbols: int = 12
     pinned_symbols: tuple[str, ...] = ()
     trade_symbols: tuple[str, ...] = ()
@@ -548,8 +521,6 @@ class Config:
             raise ValueError("runtime.mode=live requires live.enabled=true")
         if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:
             raise ValueError("live.enabled=true requires runtime.mode=live")
-        if self.runtime.mode == RuntimeMode.BACKTEST:
-            raise ValueError("runtime.mode=backtest is CLI-only; use disabled, paper, or live")
 
     @property
     def symbols(self) -> tuple[str, ...]:
@@ -568,9 +539,45 @@ def load_config(config_path: str | None = None) -> Config:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     runtime_raw = dict(raw.get("runtime", {}))
     if "mode" in runtime_raw:
-        runtime_raw["mode"] = RuntimeMode(str(runtime_raw["mode"]).lower())
+        raw_mode = str(runtime_raw["mode"]).lower()
+        if raw_mode == "backtest":
+            raise ValueError("runtime.mode=backtest is CLI-only; use disabled, paper, or live")
+        runtime_raw["mode"] = RuntimeMode(raw_mode)
     engine_raw = dict(raw.get("engine", {}))
-    risk = RiskLimits(**dict(raw.get("risk", {})))
+    obsolete_engine = {
+        "timeframe",
+        "higher_timeframe",
+        "warmup_bars",
+        "ai_logging_enabled",
+        "ai_log_path",
+        "prediction_horizon_bars",
+    } & set(engine_raw)
+    if obsolete_engine:
+        raise ValueError(
+            "Obsolete engine timeframe settings must be removed: "
+            + ", ".join(sorted(obsolete_engine))
+            + "; use runtime execution/risk roles and strategy timeframes"
+        )
+    risk_raw = dict(raw.get("risk", {}))
+    obsolete_risk = {
+        "risk_per_trade_pct",
+        "minimum_crypto_order_notional",
+        "maximum_crypto_order_notional",
+        "max_sector_exposure_pct",
+        "max_open_risk_pct",
+        "minimum_risk_reward",
+        "consecutive_loss_reduction_after",
+        "volatility_targeting_enabled",
+        "annualized_volatility_target",
+        "minimum_volatility_scale",
+        "maximum_volatility_scale",
+    } & set(risk_raw)
+    if obsolete_risk:
+        raise ValueError(
+            "Obsolete risk settings have no portfolio effect and must be removed: "
+            + ", ".join(sorted(obsolete_risk))
+        )
+    risk = RiskLimits(**risk_raw)
     universe_raw = raw.get("universe")
     if universe_raw is None:
         legacy = tuple(raw.get("symbols", ()))

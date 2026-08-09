@@ -561,14 +561,13 @@ def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
     runtime._not_ready_symbols = {"AAPL", "DOG"}
     runtime._running = True
     runtime._state = "warming_up"
-    runtime.config = SimpleNamespace(timeframe="5m", higher_timeframe="1h", warmup_bars=250)
-
-    class Bars:
-        @staticmethod
-        def get(symbol: str, _timeframe: str) -> list[object]:
-            return [object()] * (250 if symbol == "AAPL" else 241)
-
-    runtime.market_state = SimpleNamespace(bars=Bars())
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.EQUITY,
+            strategy=SimpleNamespace(minimum_history_bars=250),
+            history={"AAPL": [object()] * 250, "DOG": [object()] * 241},
+        ),
+    )
 
     runtime._refresh_readiness()
 
@@ -582,9 +581,12 @@ def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
     runtime._not_ready_symbols = {"DOG"}
     runtime._running = True
     runtime._state = "warming_up"
-    runtime.config = SimpleNamespace(timeframe="5m", higher_timeframe="1h", warmup_bars=250)
-    runtime.market_state = SimpleNamespace(
-        bars=SimpleNamespace(get=lambda _symbol, _timeframe: [object()] * 241)
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.EQUITY,
+            strategy=SimpleNamespace(minimum_history_bars=250),
+            history={"DOG": [object()] * 241},
+        ),
     )
 
     runtime._refresh_readiness()
@@ -650,7 +652,7 @@ def test_crypto_gap_quarantines_only_affected_symbol_in_operational_state() -> N
     assert ingested == [("AVAX/USD", "BTC/USD")]
 
 
-def test_symbol_gap_check_covers_primary_and_higher_timeframes() -> None:
+def test_symbol_gap_check_covers_all_operational_timeframes() -> None:
     state = RuntimeMarketState(EngineConfig())
     state._not_ready.update({("AVAX/USD", "5m"), ("AVAX/USD", "1h")})
 
@@ -927,7 +929,7 @@ def test_direct_settings_call_cannot_auto_restart_into_live(
             {
                 "alpaca": {"paper": True, "stock_feed": "iex"},
                 "symbols": ["AAPL"],
-                "engine": {"timeframe": "5m", "higher_timeframe": "1h"},
+                "engine": {},
             }
         )
     )

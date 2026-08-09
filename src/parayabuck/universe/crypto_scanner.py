@@ -18,6 +18,7 @@ from parayabuck.markets.symbols import (
     is_stablecoin_pair,
     split_crypto_pair,
 )
+from parayabuck.universe.history import append_snapshot_history
 from parayabuck.utils.io import atomic_write
 
 CRYPTO_CATEGORIES = {
@@ -377,10 +378,12 @@ class CryptoUniverseScanner:
         )
 
     def persist(self, result: CryptoScannerResult) -> None:
+        payload = asdict(result)
         atomic_write(
             Path(self.config.active_universe_path),
-            json.dumps(asdict(result), indent=2, sort_keys=True),
+            json.dumps(payload, indent=2, sort_keys=True),
         )
+        append_snapshot_history(self.config.active_universe_path, payload)
 
     def _filter_reason(self, symbol: str, item: CryptoCandidate) -> str | None:
         try:

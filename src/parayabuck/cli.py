@@ -11,11 +11,17 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from parayabuck.backtest.product import load_csv_bars, optimize_grid, run_product_backtest
+from parayabuck.backtest.product import (
+    load_csv_bars,
+    load_csv_corporate_actions,
+    optimize_grid,
+    run_product_backtest,
+)
 from parayabuck.config import Config, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
+from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
@@ -23,6 +29,8 @@ from parayabuck.universe import (
     ensure_active_universes,
     load_active_crypto_symbols,
     load_active_symbols,
+    validate_active_crypto_universe,
+    validate_active_universe,
 )
 from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
 from parayabuck.universe.scanner import scanner_config_digest
@@ -65,6 +73,10 @@ def _add_backtest_arguments(
     parser.add_argument("--market", choices=("equity", "crypto"), default="equity")
     parser.add_argument("--strategy", default=None)
     parser.add_argument("--data", help="offline CSV containing OHLCV bars")
+    parser.add_argument(
+        "--corporate-actions",
+        help="optional CSV of explicit equity dividends (split-adjusted prices are expected)",
+    )
     parser.add_argument("--symbols", help="comma-separated download candidates")
     parser.add_argument("--candidate-limit", type=int, default=300)
     parser.add_argument("--start")
@@ -102,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
     bars = _load_bars(config, args, market, start, end)
+    corporate_actions = (
+        load_csv_corporate_actions(args.corporate_actions) if args.corporate_actions else None
+    )
     if args.command == "optimize":
         grid = _parse_grid(args.grid)
         parameters = _strategy_parameters(config, market, args.param)
@@ -118,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             oos_start=_date(args.oos_start) if args.oos_start else None,
             oos_end=_date(args.oos_end, end_of_day=True) if args.oos_end else None,
             output_dir=args.output_dir,
+            corporate_actions=corporate_actions,
         )
         print(json.dumps(payload, indent=2, default=str))
         return 0
@@ -135,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             initial_cash=args.initial_cash,
             output_dir=args.output_dir,
             cost_multiplier=multiplier,
+            corporate_actions=corporate_actions,
         )
         _print_summary(run.report.summary, run.output_dir)
     return 0
@@ -157,6 +174,28 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     hmac_secret = os.getenv(config.live.operator_approval_key_env, "")
     if not key or not secret:
         raise SystemExit("Live Alpaca credentials are required")
+    equity_universe = config.universe.equity
+    if (
+        config.strategy.equity.enabled
+        and equity_universe.enabled
+        and equity_universe.dynamic_selection_enabled
+    ):
+        _symbols, status = validate_active_universe(equity_universe)
+        if status != "success" and not equity_universe.allow_static_fallback_trading:
+            raise SystemExit(
+                f"Live authorization requires a valid dynamic equity universe; status={status}"
+            )
+    crypto_universe = config.universe.crypto
+    if (
+        config.strategy.crypto.enabled
+        and crypto_universe.enabled
+        and crypto_universe.dynamic_selection_enabled
+    ):
+        _symbols, status = validate_active_crypto_universe(crypto_universe)
+        if status != "success" and not crypto_universe.allow_static_fallback_trading:
+            raise SystemExit(
+                f"Live authorization requires a valid dynamic crypto universe; status={status}"
+            )
     broker = AlpacaBroker(key, secret, paper=False)
     broker.account()  # Read-only identity verification against the live endpoint.
     digests: list[str] = []
@@ -182,10 +221,10 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         digests.append(
             configuration_digest(
                 strategy,
-                tuple(symbols),
                 "live",
                 selection.maximum_allocation,
                 universe_version,
+                portfolio_risk_limits_from_config(config.risk),
             )
         )
     now = datetime.now(UTC)
@@ -270,7 +309,7 @@ def _candidate_symbols(
     if market == Market.EQUITY:
         source = Path(config.universe.equity.candidate_universe_path)
         payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
-        candidates = [str(symbol) for symbol in payload.get("symbols", ())]
+        candidates = [str(symbol) for symbol in payload.get("shortlist_symbols", ())]
         fallback = config.universe.equity.fallback_trade_symbols
         symbols = candidates or list(fallback)
         required = config.universe.equity.reference_symbols
@@ -280,8 +319,10 @@ def _candidate_symbols(
         candidates = [str(symbol) for symbol in payload.get("candidate_symbols", ())]
         symbols = candidates or list(config.universe.crypto.trade_symbols)
         required = config.universe.crypto.pinned_symbols
-    ordered = list(dict.fromkeys((*required, *sorted(symbols))))
-    return ordered[: max(len(required), limit)]
+    required_order = list(dict.fromkeys(required))
+    required_set = set(required_order)
+    candidates = [symbol for symbol in dict.fromkeys(symbols) if symbol not in required_set]
+    return [*required_order, *candidates[: max(0, limit)]]
 
 
 def _strategy_parameters(

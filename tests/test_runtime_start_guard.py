@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from parayabuck.config import RuntimeMode
+from parayabuck.config import Config, LiveConfig, RuntimeConfig, RuntimeMode
 from parayabuck.runtime import EngineRuntime
 
 
@@ -37,6 +37,29 @@ def test_paper_runtime_needs_no_research_approval() -> None:
 
 def test_live_runtime_requires_environment_confirmation(monkeypatch) -> None:
     monkeypatch.delenv("PARAYABUCK_ENABLE_LIVE", raising=False)
-    runtime = _runtime(mode=RuntimeMode.LIVE)
+    config = Config(
+        runtime=RuntimeConfig(mode=RuntimeMode.LIVE),
+        live=LiveConfig(enabled=True, hard_dollar_cap=1_000, operator_approval_path="approval"),
+    )
+    runtime = _runtime(mode=RuntimeMode.LIVE, app_config=config)
     with pytest.raises(RuntimeError, match="PARAYABUCK_ENABLE_LIVE=YES"):
         runtime.start()
+
+
+def test_live_runtime_start_requires_live_enabled() -> None:
+    runtime = _runtime(mode=RuntimeMode.LIVE, app_config=Config())
+    with pytest.raises(RuntimeError, match="live.enabled=true"):
+        runtime.start()
+
+
+def test_disabled_runtime_is_rejected_before_universe_or_broker(monkeypatch) -> None:
+    called = False
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("parayabuck.runtime.ensure_active_universes", forbidden)
+    with pytest.raises(RuntimeError, match="does not support runtime.mode=disabled"):
+        EngineRuntime("key", "secret", Config(runtime=RuntimeConfig(mode=RuntimeMode.DISABLED)))
+    assert not called

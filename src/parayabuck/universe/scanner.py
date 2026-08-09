@@ -4,14 +4,18 @@ import hashlib
 import json
 import logging
 import math
+import statistics
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from parayabuck.config import EquityUniverseConfig
-from parayabuck.core.models import Market
-from parayabuck.markets.sectors import sector_of
+from parayabuck.core.models import Bar, Market
+from parayabuck.features.indicators import true_ranges
+from parayabuck.markets.sectors import is_leveraged_or_inverse_equity, sector_of
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.universe.history import append_snapshot_history
 from parayabuck.utils.io import atomic_write
 
 
@@ -28,6 +32,61 @@ class EquityCandidate:
     status: str = "active"
     exchange: str = "NASDAQ"
     leveraged_or_inverse: bool = False
+
+
+def equity_candidate_from_bars(
+    symbol: str,
+    bars: Sequence[Bar],
+    *,
+    expected_bar_count: int,
+    economic_sector: str | None = None,
+    exchange: str = "NASDAQ",
+    tradable: bool = True,
+    status: str = "active",
+) -> EquityCandidate:
+    """Build production scanner metrics from a point-in-time daily-bar window."""
+    valid: list[Bar] = []
+    for bar in bars:
+        try:
+            values = tuple(
+                float(getattr(bar, field)) for field in ("high", "low", "close", "volume")
+            )
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if all(math.isfinite(value) for value in values) and values[2] > 0 and values[3] >= 0:
+            valid.append(bar)
+    ordered = sorted(valid, key=lambda bar: getattr(bar, "timestamp"))[-20:]
+    classified = is_leveraged_or_inverse_equity(symbol)
+    if not ordered:
+        return EquityCandidate(
+            symbol,
+            0,
+            0,
+            0,
+            0,
+            economic_sector=economic_sector,
+            exchange=exchange,
+            tradable=tradable,
+            status=status,
+            leveraged_or_inverse=classified,
+        )
+    price = float(getattr(ordered[-1], "close"))
+    dollar_volumes = [
+        float(getattr(bar, "close")) * float(getattr(bar, "volume")) for bar in ordered
+    ]
+    ranges = true_ranges(ordered)
+    return EquityCandidate(
+        symbol=symbol,
+        price=price,
+        median_dollar_volume_20d=statistics.median(dollar_volumes),
+        atr_pct=statistics.mean(ranges) / price if ranges and price > 0 else 0.0,
+        data_completeness=min(1.0, len(ordered) / max(1, expected_bar_count)),
+        economic_sector=economic_sector,
+        exchange=exchange,
+        tradable=tradable,
+        status=status,
+        leveraged_or_inverse=classified,
+    )
 
 
 @dataclass(frozen=True)
@@ -101,9 +160,9 @@ class EquityUniverseScanner:
                 if symbol not in reserved:
                     eliminated[symbol] = reason
                 continue
-            sector = (candidate.economic_sector or sector_of(symbol) or "unknown").strip().lower()
-            if sector in {"other", ""}:
-                sector = "unknown"
+            broker_sector = (candidate.economic_sector or "").strip().lower()
+            static_sector = sector_of(symbol).strip().lower()
+            sector = broker_sector or (static_sector if static_sector != "other" else "unknown")
             candidate_sector[symbol] = sector
             liquidity = min(1.0, math.log10(candidate.median_dollar_volume_20d) / 10)
             volatility_fit = max(
@@ -131,6 +190,11 @@ class EquityUniverseScanner:
                 "data_completeness": round(candidate.data_completeness * 25, 8),
                 "spread_quality": round(spread_quality * 10, 8),
                 "economic_sector": sector,
+                "sector_source": (
+                    "candidate_metadata"
+                    if broker_sector
+                    else ("explicit_static_map" if static_sector != "other" else "unavailable")
+                ),
             }
             scored.append((score, symbol, sector, breakdown))
 
@@ -192,10 +256,12 @@ class EquityUniverseScanner:
         )
 
     def persist(self, result: ScannerResult) -> None:
+        payload = asdict(result)
         atomic_write(
             Path(self.config.active_universe_path),
-            json.dumps(asdict(result), indent=2, sort_keys=True),
+            json.dumps(payload, indent=2, sort_keys=True),
         )
+        append_snapshot_history(self.config.active_universe_path, payload)
 
     def _filter_reason(self, item: EquityCandidate) -> str | None:
         if not item.tradable or item.status.lower() != "active":

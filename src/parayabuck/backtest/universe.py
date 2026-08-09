@@ -1,20 +1,39 @@
 from __future__ import annotations
 
 import hashlib
-import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
+from parayabuck.config import (
+    CryptoScannerConfig,
+    CryptoUniverseConfig,
+    EquityScannerConfig,
+    EquityUniverseConfig,
+)
 from parayabuck.core.models import Bar, Market
-from parayabuck.features.indicators import atr
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import timeframe_duration
+from parayabuck.universe.crypto_scanner import (
+    CryptoScannerResult,
+    CryptoUniverseScanner,
+    crypto_candidate_from_bars,
+)
+from parayabuck.universe.scanner import (
+    EquityUniverseScanner,
+    ScannerResult,
+    equity_candidate_from_bars,
+)
 
 
 @dataclass(frozen=True)
 class UniverseSnapshot:
     effective_at: datetime
     symbols: frozenset[str]
+    scanner_version: str = ""
+    config_digest: str = ""
+    candidate_count: int = 0
+    score_breakdown: dict[str, dict[str, float | str]] = field(default_factory=dict)
+    eliminated: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -39,6 +58,11 @@ class PointInTimeUniverse:
                 {
                     "effective_at": snapshot.effective_at.isoformat(),
                     "symbols": sorted(snapshot.symbols),
+                    "scanner_version": snapshot.scanner_version,
+                    "config_digest": snapshot.config_digest,
+                    "candidate_count": snapshot.candidate_count,
+                    "score_breakdown": snapshot.score_breakdown,
+                    "eliminated": snapshot.eliminated,
                 }
                 for snapshot in self.snapshots
             ],
@@ -52,58 +76,27 @@ def build_crypto_point_in_time_universe(
     lookback_days: int = 30,
     minimum_history_ratio: float = 0.80,
 ) -> PointInTimeUniverse:
-    """Re-select liquid spot pairs monthly using strictly trailing information."""
-    crypto = [bar for bar in bars if bar.market == Market.CRYPTO]
-    if not crypto or maximum_symbols <= 0:
-        return PointInTimeUniverse(Market.CRYPTO, (), "trailing_liquidity_atr_integrity_v1")
-    if not 0 < minimum_history_ratio <= 1:
-        raise ValueError("Minimum history ratio must be in (0, 1]")
-    timeframe = crypto[0].timeframe
-    if any(bar.timeframe != timeframe for bar in crypto):
-        raise ValueError("Point-in-time selection requires one timeframe")
-    first = min(bar.timestamp for bar in crypto)
-    last = max(bar.timestamp for bar in crypto)
-    rebalance = _next_month(first)
-    duration = timeframe_duration(timeframe)
-    expected = max(1, int(timedelta(days=lookback_days) / duration))
-    snapshots: list[UniverseSnapshot] = []
-    while rebalance <= last:
-        start = rebalance - timedelta(days=lookback_days)
-        by_symbol: dict[str, list[Bar]] = {}
-        for bar in crypto:
-            if start <= bar.timestamp < rebalance:
-                by_symbol.setdefault(canonical_symbol(bar.symbol, bar.market), []).append(bar)
-        ranked: list[tuple[float, str]] = []
-        for symbol, history in by_symbol.items():
-            ordered = sorted(history, key=lambda bar: bar.timestamp)
-            unique = {bar.timestamp for bar in ordered}
-            if len(unique) < expected * minimum_history_ratio:
-                continue
-            if any(
-                current.timestamp - previous.timestamp > duration * 3
-                for previous, current in zip(ordered, ordered[1:])
-            ):
-                continue
-            atr_value = atr(ordered, 14)
-            if atr_value is None or atr_value <= 0 or ordered[-1].close <= 0:
-                continue
-            dollar_volume = sum(bar.close * bar.volume for bar in ordered) / len(ordered)
-            if dollar_volume <= 0:
-                continue
-            volatility_penalty = max(1.0, atr_value / ordered[-1].close * 100)
-            ranked.append((dollar_volume / volatility_penalty, symbol))
-        ranked.sort(reverse=True)
-        snapshots.append(
-            UniverseSnapshot(
-                rebalance,
-                frozenset(symbol for _, symbol in ranked[:maximum_symbols]),
-            )
-        )
-        rebalance = _next_month(rebalance)
-    return PointInTimeUniverse(
-        Market.CRYPTO,
-        tuple(snapshots),
-        "monthly trailing 30d dollar-volume, ATR and continuity; no future bars",
+    """Compatibility wrapper using the production crypto scanner policy."""
+    scanner = CryptoScannerConfig(
+        lookback_days=lookback_days,
+        minimum_data_completeness=minimum_history_ratio,
+        minimum_median_dollar_volume=1.0,
+        minimum_atr_pct=0.001,
+    )
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
+        maximum_stream_symbols=maximum_symbols,
+        scanner=scanner,
+    )
+    return build_trailing_point_in_time_universe(
+        bars,
+        market=Market.CRYPTO,
+        maximum_symbols=maximum_symbols,
+        rebalance_frequency="monthly",
+        lookback_days=lookback_days,
+        minimum_history_ratio=minimum_history_ratio,
+        crypto_config=config,
     )
 
 
@@ -118,13 +111,10 @@ def build_trailing_point_in_time_universe(
     minimum_price: float = 0.0,
     minimum_dollar_volume: float = 0.0,
     pinned_symbols: tuple[str, ...] = (),
+    equity_config: EquityUniverseConfig | None = None,
+    crypto_config: CryptoUniverseConfig | None = None,
 ) -> PointInTimeUniverse:
-    """Build scanner-like snapshots using only information before each decision.
-
-    This is a practical point-in-time reconstruction from the supplied bars. Asset
-    metadata still comes from the candidate data source, so callers must separately
-    disclose any survivorship limitation in that source.
-    """
+    """Run the production scanner policy on strictly trailing historical metrics."""
     if maximum_symbols <= 0:
         raise ValueError("maximum_symbols must be positive")
     if rebalance_frequency not in {"daily", "weekly", "monthly"}:
@@ -161,36 +151,89 @@ def build_trailing_point_in_time_universe(
                 break
             if bar.timestamp >= start:
                 by_symbol.setdefault(canonical_symbol(bar.symbol, market), []).append(bar)
-        ranked: list[tuple[float, str]] = []
-        for symbol, history in by_symbol.items():
-            ordered = sorted(history, key=lambda item: item.timestamp)
-            if len({bar.timestamp for bar in ordered}) < expected * minimum_history_ratio:
-                continue
-            close = ordered[-1].close
-            if close < minimum_price or close <= 0:
-                continue
-            dollar_volumes = [bar.close * bar.volume for bar in ordered if bar.volume > 0]
-            if not dollar_volumes:
-                continue
-            liquidity = statistics.median(dollar_volumes)
-            if liquidity < minimum_dollar_volume:
-                continue
-            atr_value = atr(ordered, min(14, len(ordered)))
-            if atr_value is None or atr_value <= 0:
-                continue
-            volatility = atr_value / close
-            quality = liquidity / max(0.005, volatility)
-            ranked.append((quality, symbol))
-        ranked.sort(key=lambda item: (-item[0], item[1]))
-        chosen = list(pinned)
-        chosen.extend(symbol for _score, symbol in ranked if symbol not in chosen)
-        snapshots.append(UniverseSnapshot(timestamp, frozenset(chosen[:maximum_symbols])))
+        result: ScannerResult | CryptoScannerResult
+        if market == Market.EQUITY:
+            configured = equity_config or EquityUniverseConfig(
+                maximum_stream_symbols=maximum_symbols,
+                reference_symbols=(),
+                scanner=EquityScannerConfig(
+                    minimum_price=max(minimum_price, 0.01),
+                    minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
+                    minimum_data_completeness=minimum_history_ratio,
+                ),
+            )
+            equity_candidates = [
+                equity_candidate_from_bars(
+                    symbol,
+                    history,
+                    expected_bar_count=min(20, expected),
+                )
+                for symbol, history in sorted(by_symbol.items())
+            ]
+            result = EquityUniverseScanner(configured).scan(
+                equity_candidates,
+                data_timestamp=max(
+                    (bar.timestamp for history in by_symbol.values() for bar in history),
+                    default=timestamp - duration,
+                ),
+                selection_timestamp=timestamp,
+                pinned_symbols=pinned,
+            )
+        else:
+            configured_crypto = crypto_config or CryptoUniverseConfig(
+                enabled=True,
+                dynamic_selection_enabled=True,
+                maximum_stream_symbols=maximum_symbols,
+                pinned_symbols=pinned,
+                trade_symbols=pinned,
+                scanner=replace(
+                    CryptoScannerConfig(),
+                    lookback_days=lookback_days,
+                    minimum_data_completeness=minimum_history_ratio,
+                    minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
+                ),
+            )
+            btc_history = by_symbol.get("BTC/USD", [])
+            crypto_candidates = [
+                crypto_candidate_from_bars(
+                    symbol,
+                    history,
+                    expected_bar_count=expected,
+                    tradable=True,
+                    status="active",
+                    btc_bars=btc_history,
+                    spread_bps=None,
+                )
+                for symbol, history in sorted(by_symbol.items())
+            ]
+            result = CryptoUniverseScanner(configured_crypto).scan(
+                crypto_candidates,
+                data_timestamp=max(
+                    (bar.timestamp for history in by_symbol.values() for bar in history),
+                    default=timestamp - duration,
+                ),
+                selection_timestamp=timestamp,
+            )
+        if not result.selected_symbols and not result.candidate_symbols:
+            continue
+        snapshots.append(
+            UniverseSnapshot(
+                timestamp,
+                frozenset(result.selected_symbols),
+                result.scanner_version,
+                result.config_digest,
+                len(result.candidate_symbols),
+                result.score_breakdown,
+                result.eliminated,
+            )
+        )
     return PointInTimeUniverse(
         market,
         tuple(snapshots),
         (
-            f"{rebalance_frequency} trailing {lookback_days}d median dollar-volume, "
-            "ATR and completeness; inputs strictly precede snapshot"
+            f"{rebalance_frequency} production scanner policy on trailing {lookback_days}d "
+            "metrics; inputs strictly precede snapshot; historical spread and broad sector/"
+            "tradability metadata unavailable and explicitly degraded"
         ),
     )
 
@@ -219,6 +262,8 @@ def hash_point_in_time_universe(universe: PointInTimeUniverse) -> str:
         digest.update(b"\n")
         digest.update("|".join(sorted(snapshot.symbols)).encode())
         digest.update(b"\n")
+        digest.update(snapshot.scanner_version.encode())
+        digest.update(snapshot.config_digest.encode())
     return digest.hexdigest()
 
 
@@ -235,13 +280,6 @@ def verify_persisted_universe(
             "Universe snapshot hash mismatch: persisted "
             f"{expected_hash[:12]}... vs recomputed {recomputed[:12]}..."
         )
-
-
-def _next_month(value: datetime) -> datetime:
-    current = value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    absolute = current.year * 12 + current.month
-    year, month = divmod(absolute, 12)
-    return current.replace(year=year, month=month + 1)
 
 
 __all__ = [

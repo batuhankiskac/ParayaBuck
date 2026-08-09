@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from enum import StrEnum
 from itertools import groupby
@@ -25,6 +25,7 @@ from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
     TargetPortfolio,
+    TargetWeight,
 )
 from parayabuck.portfolio.universes import CRYPTO_UNIVERSE_VERSION, EQUITY_UNIVERSE_VERSION
 from parayabuck.utils.io import atomic_write
@@ -760,12 +761,49 @@ class PortfolioBacktestEngine:
         market = self.strategy.market
         previous = self._previous_timestamp[market]
         self._previous_timestamp[market] = timestamp
-        if not self.rebalance_policy.is_period_start(previous, timestamp):
-            return
+        scheduled = self.rebalance_policy.is_period_start(previous, timestamp)
         context = self._build_context(timestamp)
         if not self.strategy.supports(context):
             return
+        expected_symbols = self._universe_symbols(timestamp)
+        if expected_symbols is not None and any(
+            symbol not in context.history
+            or not context.history[symbol]
+            or context.history[symbol][-1].timestamp != timestamp
+            for symbol in expected_symbols
+        ):
+            log.warning(
+                "Historical strategy batch incomplete; decision skipped: timestamp=%s",
+                timestamp.isoformat(),
+            )
+            return
+        if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
+            return
         target = self.strategy.decide(context)
+        if not scheduled:
+            current_weights = {
+                position.symbol: (
+                    position.qty
+                    * self._last_price.get(position.symbol, position.avg_price)
+                    / max(context.equity, 1.0)
+                )
+                for position in self._positions.values()
+            }
+            reducing_weights = tuple(
+                TargetWeight(
+                    weight.symbol,
+                    min(weight.weight, current_weights.get(weight.symbol, 0.0)),
+                    "intermediate_risk_reduction_only",
+                )
+                for weight in target.weights
+                if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
+            )
+            target = replace(
+                target,
+                weights=reducing_weights,
+                cash_weight=1.0 - sum(weight.weight for weight in reducing_weights),
+                metadata={**target.metadata, "intermediate_risk_reduction": True},
+            )
         if self.risk_overlay is not None:
             risk = self.risk_overlay.apply(
                 target,

@@ -100,9 +100,34 @@ def diagonal_portfolio_volatility(
     )
 
 
+def conservative_portfolio_volatility(
+    weights: dict[str, float],
+    volatilities: dict[str, float],
+    *,
+    correlation_floor: float = 0.25,
+) -> float:
+    """Volatility estimate with a positive pairwise-correlation floor.
+
+    A short rolling covariance matrix is unstable for a changing scanner
+    universe. This deterministic shrinkage-style floor avoids the materially
+    optimistic zero-correlation assumption while remaining robust.
+    """
+    if not 0 <= correlation_floor <= 1:
+        raise ValueError("correlation_floor must be in [0, 1]")
+    exposures = [weight * volatilities.get(symbol, 0.0) for symbol, weight in weights.items()]
+    diagonal = sum(exposure**2 for exposure in exposures)
+    cross = sum(
+        2 * correlation_floor * exposures[left] * exposures[right]
+        for left in range(len(exposures))
+        for right in range(left + 1, len(exposures))
+    )
+    return math.sqrt(max(0.0, diagonal + cross))
+
+
 __all__ = [
     "annualize_period_volatility",
     "composite_momentum",
+    "conservative_portfolio_volatility",
     "diagonal_portfolio_volatility",
     "inverse_volatility_weights",
     "momentum_at",

@@ -29,7 +29,9 @@ class RuntimeMarketState:
             if allowed_trade_symbols is not None
             else None
         )
-        self.bars = BarStore(max(500, config.warmup_bars))
+        # Strategy warmup requirements are owned by PortfolioRuntime. This
+        # operational store keeps a generous rolling window for gap repair.
+        self.bars = BarStore(5000)
         self._not_ready: set[tuple[str, str]] = set()
 
     def seed(self, bars: list[Bar]) -> None:

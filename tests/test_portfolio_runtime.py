@@ -6,9 +6,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest
+from parayabuck.execution.portfolio import (
+    AssetTradingRules,
+    PortfolioOrderRequest,
+    PortfolioRiskLimits,
+)
 from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
-from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository
+from parayabuck.portfolio.runtime_service import (
+    PortfolioRuntime,
+    PortfolioStateRepository,
+    configuration_digest,
+)
 
 
 class _Broker:
@@ -87,6 +95,97 @@ def test_live_runtime_scales_allocation_to_hard_cap(tmp_path) -> None:
     result = runtime.process_closed_bars(_bars())
     assert result.risk is not None
     assert result.risk.gross_after <= 0.0100001
+
+
+def test_runtime_rejects_partial_strategy_batch_even_when_top_n_is_ready(tmp_path) -> None:
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    last_timestamp = max(bar.timestamp for bar in bars)
+
+    result = runtime.process_closed_bars(
+        [bar for bar in bars if not (bar.timestamp == last_timestamp and bar.symbol == "AAPL")]
+    )
+
+    assert result.status == "incomplete_strategy_batch"
+    assert not result.orders
+    assert not broker.submitted
+    next_timestamp = last_timestamp + timedelta(days=1)
+    next_batch = [
+        Bar(
+            next_timestamp,
+            symbol,
+            "1d",
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            1_000_000,
+            Market.EQUITY,
+        )
+        for symbol in EQUITY_UNIVERSE
+    ]
+    assert runtime.process_closed_bars(next_batch).status == "not_scheduled"
+
+
+def test_restart_restores_last_decision_boundary_without_extra_rebalance(tmp_path) -> None:
+    initial_bars = _bars()
+    first = _runtime(tmp_path, _Broker())
+    assert first.process_closed_bars(initial_bars).status == "submitted"
+    first.close()
+
+    restarted = _runtime(tmp_path, _Broker())
+    restarted.seed(initial_bars)
+    previous = max(bar.timestamp for bar in initial_bars)
+    next_timestamp = previous + timedelta(days=1)
+    next_bars = [
+        Bar(
+            next_timestamp,
+            symbol,
+            "1d",
+            110.0,
+            110.0,
+            110.0,
+            110.0,
+            1_000_000,
+            Market.EQUITY,
+        )
+        for symbol in EQUITY_UNIVERSE
+    ]
+
+    assert restarted.process_closed_bars(next_bars).status == "not_scheduled"
+
+
+def test_live_policy_digest_is_independent_of_ephemeral_active_symbols(tmp_path) -> None:
+    strategy = EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]})
+    limits = PortfolioRiskLimits()
+    first_runtime = PortfolioRuntime(
+        strategy,
+        EQUITY_UNIVERSE,
+        _Broker(),
+        PortfolioStateRepository(tmp_path / "first.sqlite3"),
+        mode="live",
+        maximum_allocation=0.50,
+        risk_limits=limits,
+        universe_version="scanner-policy",
+        live_dollar_cap=1_000,
+    )
+    second_runtime = PortfolioRuntime(
+        strategy,
+        EQUITY_UNIVERSE[:-1],
+        _Broker(),
+        PortfolioStateRepository(tmp_path / "second.sqlite3"),
+        mode="live",
+        maximum_allocation=0.50,
+        risk_limits=limits,
+        universe_version="scanner-policy",
+        live_dollar_cap=1_000,
+    )
+
+    assert first_runtime.configuration_digest == second_runtime.configuration_digest
+    assert first_runtime.configuration_digest != configuration_digest(
+        strategy, "live", 0.50, "changed-policy", limits
+    )
 
 
 def test_portfolio_fill_chain_is_idempotent_and_keeps_pnl_fee_slippage_separate(

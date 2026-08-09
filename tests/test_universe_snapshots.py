@@ -8,10 +8,22 @@ from parayabuck.backtest.universe import (
     PointInTimeUniverse,
     UniverseSnapshot,
     build_crypto_point_in_time_universe,
+    build_trailing_point_in_time_universe,
     hash_point_in_time_universe,
     verify_persisted_universe,
 )
+from parayabuck.config import (
+    CryptoScannerConfig,
+    CryptoUniverseConfig,
+    EquityScannerConfig,
+    EquityUniverseConfig,
+)
 from parayabuck.core.models import Bar, Market
+from parayabuck.universe.crypto_scanner import (
+    CryptoUniverseScanner,
+    crypto_candidate_from_bars,
+)
+from parayabuck.universe.scanner import EquityUniverseScanner, equity_candidate_from_bars
 
 
 def _crypto_bar(timestamp: datetime, symbol: str, close: float, volume: float) -> Bar:
@@ -89,3 +101,106 @@ def test_persisted_snapshot_records_round_trip() -> None:
     assert first_snapshot.symbols
     allowed = ("BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "LINK/USD")
     assert all(symbol in allowed for symbol in first_snapshot.symbols)
+
+
+def test_historical_equity_adapter_uses_same_production_scanner_policy() -> None:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    bars = [
+        Bar(
+            start + timedelta(days=day),
+            symbol,
+            "1d",
+            100,
+            102,
+            98,
+            100 + day * drift,
+            volume,
+            Market.EQUITY,
+        )
+        for day in range(30)
+        for symbol, drift, volume in (("AAA", 0.01, 100_000), ("ZZZ", 0.02, 2_000_000))
+    ]
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=1,
+        target_shortlist=1,
+        reference_symbols=(),
+        scanner=EquityScannerConfig(
+            minimum_price=1,
+            minimum_median_dollar_volume=1,
+            minimum_data_completeness=0.9,
+            minimum_atr_pct=0.001,
+        ),
+    )
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.EQUITY,
+        maximum_symbols=1,
+        lookback_days=30,
+        minimum_history_ratio=0.9,
+        equity_config=config,
+    )
+    snapshot = universe.snapshots[-1]
+    history = {
+        symbol: [
+            bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at
+        ]
+        for symbol in ("AAA", "ZZZ")
+    }
+    direct = EquityUniverseScanner(config).scan(
+        [
+            equity_candidate_from_bars(symbol, series, expected_bar_count=20)
+            for symbol, series in history.items()
+        ],
+        data_timestamp=max(bar.timestamp for series in history.values() for bar in series),
+        selection_timestamp=snapshot.effective_at,
+    )
+    assert snapshot.symbols == frozenset(direct.selected_symbols)
+    assert snapshot.scanner_version == direct.scanner_version
+
+
+def test_historical_crypto_adapter_uses_same_production_scanner_policy() -> None:
+    bars = _crypto_history(days=4)
+    scanner_config = CryptoScannerConfig(
+        lookback_days=2,
+        minimum_data_completeness=0.8,
+        minimum_median_dollar_volume=1,
+        minimum_atr_pct=0.001,
+    )
+    config = CryptoUniverseConfig(
+        enabled=True,
+        dynamic_selection_enabled=True,
+        maximum_stream_symbols=3,
+        scanner=scanner_config,
+    )
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.CRYPTO,
+        maximum_symbols=3,
+        lookback_days=2,
+        minimum_history_ratio=0.8,
+        crypto_config=config,
+    )
+    snapshot = universe.snapshots[-1]
+    history = {
+        symbol: [
+            bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at
+        ]
+        for symbol in {bar.symbol for bar in bars}
+    }
+    direct = CryptoUniverseScanner(config).scan(
+        [
+            crypto_candidate_from_bars(
+                symbol,
+                series,
+                expected_bar_count=48,
+                tradable=True,
+                status="active",
+                btc_bars=history["BTC/USD"],
+            )
+            for symbol, series in history.items()
+        ],
+        data_timestamp=max(bar.timestamp for series in history.values() for bar in series),
+        selection_timestamp=snapshot.effective_at,
+    )
+    assert snapshot.symbols == frozenset(direct.selected_symbols)
+    assert snapshot.scanner_version == direct.scanner_version

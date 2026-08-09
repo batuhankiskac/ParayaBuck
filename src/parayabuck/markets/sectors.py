@@ -52,6 +52,20 @@ _ECONOMIC_SECTORS = {
 _SECTOR_ETFS = {"XLK", "XLY", "XLP", "XLF", "XLV", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 _BROAD_MARKET_ETFS = {"SPY", "QQQ"}
 _INVERSE_EQUITY_ETFS = {"SH", "PSQ", "DOG"}
+_LEVERAGED_OR_INVERSE_ETFS = {
+    *_INVERSE_EQUITY_ETFS,
+    "SQQQ",
+    "SOXL",
+    "SOXS",
+    "SPXL",
+    "SPXS",
+    "SPXU",
+    "TECL",
+    "TECS",
+    "TQQQ",
+    "UPRO",
+    "UVXY",
+}
 
 
 @dataclass(frozen=True)
@@ -90,9 +104,18 @@ def is_inverse_equity(symbol: str) -> bool:
     return classify_instrument(symbol).instrument_category == "inverse_equity_etf"
 
 
+def is_leveraged_or_inverse_equity(symbol: str) -> bool:
+    """Deterministic explicit classification used when broker metadata lacks leverage."""
+    from parayabuck.core.models import Market
+    from parayabuck.markets.symbols import canonical_symbol
+
+    return canonical_symbol(symbol, Market.EQUITY) in _LEVERAGED_OR_INVERSE_ETFS
+
+
 __all__ = [
     "InstrumentClassification",
     "classify_instrument",
     "is_inverse_equity",
+    "is_leveraged_or_inverse_equity",
     "sector_of",
 ]

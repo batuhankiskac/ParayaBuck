@@ -16,14 +16,17 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
   -> historical broker / Alpaca paper / explicitly authorized Alpaca live
 ```
 
-There is one strategy interface (`PortfolioStrategy.decide`) and one target-to-
-order pipeline. Strategy code never receives credentials or submits orders.
-Scanner, strategy, execution, and risk cadences are independently configured.
+There is one strategy interface (`PortfolioStrategy.decide`) and one shared
+target/risk meaning. Historical fills use a deterministic simulator while
+paper/live orders use the broker planner. Strategy code never receives
+credentials or submits orders. Operational, risk-monitor, and strategy
+timeframes have explicit roles.
 
 The shipped strategies are deliberately limited to two:
 
 - `equity_dynamic_trend_1d_v1`: daily absolute trend, trailing momentum rank,
-  top-N selection, inverse-volatility sizing, and portfolio volatility target.
+  top-N selection, inverse-volatility sizing, and a conservative positive-
+  correlation-floor portfolio volatility target.
 - `crypto_cross_sectional_momentum_1h_v1`: hourly cross-sectional momentum,
   BTC regime filter, volatility filtering/sizing, and configurable 24/7 rebalance.
 
@@ -65,10 +68,13 @@ Crypto discovery starts from Alpaca-supported USD pairs, excludes stablecoins,
 inactive/non-tradable assets and poor data, then applies liquidity, spread,
 volatility, BTC-correlation, and category-concentration checks.
 
-Static symbols are fallback/allowlist/denylist inputs only. Every refresh writes
+Static symbols are fallback/allowlist/denylist inputs only. Static fallback
+trading during a dynamic-scanner failure is disabled unless explicitly enabled.
+Every refresh writes
 timestamps, candidates, selections, score breakdowns, elimination reasons,
-config digest, and managed-position pins. Open positions with portfolio order
-lineage are retained even when the latest rank excludes them.
+and config digest to both the latest snapshot and append-only history. The
+runtime separately records managed pins and warming members. Open positions and
+open-order symbols are retained even when the latest rank excludes them.
 
 ## Alpaca paper setup and operation
 
@@ -116,7 +122,14 @@ Offline:
 The historical universe is rebuilt only from information available at each
 snapshot. Signals use finalized closes and orders fill no earlier than the next
 bar open. Cash, fractional rules, fees, spreads, slippage, partial fills, market
-sessions, risk limits, max positions, exposure, and warmup are modeled.
+basic equity session validity (weekends and regular intraday hours), risk limits,
+max positions, exposure, and strategy-declared warmup are modeled. Exchange
+holiday correctness depends on the supplied/provider data calendar.
+
+Equity downloads use split-adjusted prices. Optional explicit dividend cash
+flows can be supplied with `--corporate-actions`; split actions are rejected in
+that mode to prevent double counting. Regulatory TAF/CAT/SEC assumptions are
+configurable under `backtest`.
 
 Each run writes `report.json`, summary/rebalance/fill/equity/drawdown CSVs, a
 historical-universe snapshot, and a SQLite run record. Reports include period,
@@ -129,7 +142,8 @@ security. Reports explicitly disclose this survivorship limitation.
 
 ## Optimizer and out-of-sample evaluation
 
-Grid search ranks risk-adjusted performance rather than raw return:
+Grid search uses `backtest.ranking_metric` (`risk_adjusted`, `sharpe`, `sortino`,
+or `calmar`) rather than raw return:
 
 ```bash
 .venv/bin/parayabuck optimize --market equity --data bars.csv \
@@ -138,7 +152,9 @@ Grid search ranks risk-adjusted performance rather than raw return:
   --oos-start 2025-01-01 --oos-end 2026-07-31
 ```
 
-The selected TRAIN parameters are evaluated once on OOS. Optimization JSON lists
+TRAIN and OOS windows must be ordered and non-overlapping. Trial runs stay
+in-memory without full report directories, grids are capped at 256 combinations,
+and the selected TRAIN parameters are evaluated once on OOS. Optimization JSON lists
 return, CAGR, Sharpe, Sortino, drawdown, profit factor, trades, ranking score, and
 the separate OOS result.
 
@@ -146,7 +162,7 @@ the separate OOS result.
 
 Risk has final authority over strategy targets. Controls include maximum account
 allocation, per-position and crypto caps, maximum gross exposure, cash buffer,
-sector exposure, maximum positions, daily loss, high-water drawdown, hard live
+maximum positions, daily loss, high-water drawdown, hard live
 dollar cap, duplicate decision/order protection, approved-universe enforcement,
 stale/gapped data halts, broker reconciliation, and persistent high-water state.
 
@@ -159,8 +175,8 @@ Live requires all of the following at the same time:
 3. a positive `live.hard_dollar_cap`
 4. live Alpaca credentials
 5. `PARAYABUCK_ENABLE_LIVE=YES`
-6. a short-lived HMAC approval bound to the live account, exact strategy/universe
-   configuration digests, and dollar cap
+6. a short-lived HMAC approval bound to the live account, exact strategy,
+   scanner-policy, risk-policy and allocation digests, and dollar cap
 7. a fresh Web UI account-suffix confirmation before start
 
 Create the signed file with a 32+ character secret in
@@ -171,8 +187,9 @@ Create the signed file with a 32+ character secret in
 ```
 
 This performs read-only live account verification; it does not place an order.
-Changing the account, strategy parameters, active universe, allocation, or mode
-invalidates the approval. Live activation is never performed automatically.
+Changing the account, strategy/scanner/risk policy, allocation, or mode
+invalidates the approval. Ordinary scanner membership changes do not. Live
+activation is never performed automatically.
 
 ## State, recovery, and incident accounting
 
@@ -198,7 +215,8 @@ docker run --rm --env-file .env -p 127.0.0.1:8000:8000 \
 ```
 
 The image runs non-root, stores state on mounts, handles SIGTERM cleanly, and has
-a `/healthz` health check. Keep the control console bound to loopback.
+a `/healthz` liveness check and `/readyz` readiness check. Keep the control
+console bound to loopback.
 
 ## Testing
 

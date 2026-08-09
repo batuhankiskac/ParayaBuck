@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import itertools
 import json
+import math
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,8 +19,12 @@ from parayabuck.backtest.universe import (
 )
 from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
-from parayabuck.execution.portfolio import PortfolioRiskLimits
+from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+
+_MAX_OPTIMIZATION_COMBINATIONS = 256
 
 
 @dataclass(frozen=True)
@@ -46,13 +51,19 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             market = Market(str(raw.get("market") or default_market.value).lower())
+            timeframe = str(raw.get("timeframe") or ("1h" if market == Market.CRYPTO else "1d"))
+            if market == Market.EQUITY:
+                if timestamp.weekday() >= 5:
+                    raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
+                if timeframe != "1d" and not is_regular_equity_time(timestamp):
+                    raise ValueError(
+                        f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}"
+                    )
             rows.append(
                 Bar(
                     timestamp=timestamp,
                     symbol=str(raw["symbol"]),
-                    timeframe=str(
-                        raw.get("timeframe") or ("1h" if market == Market.CRYPTO else "1d")
-                    ),
+                    timeframe=timeframe,
                     open=float(raw["open"]),
                     high=float(raw["high"]),
                     low=float(raw["low"]),
@@ -62,6 +73,38 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
                 )
             )
     return rows
+
+
+def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
+    """Load explicit dividend cash flows for split-adjusted equity price data."""
+    actions: list[CorporateAction] = []
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        required = {"timestamp", "symbol", "action_type", "value"}
+        if not required.issubset(reader.fieldnames or ()):
+            missing = sorted(required - set(reader.fieldnames or ()))
+            raise ValueError(
+                f"Corporate-action CSV is missing required columns: {', '.join(missing)}"
+            )
+        for raw in reader:
+            timestamp = datetime.fromisoformat(str(raw["timestamp"]).replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            action_type = CorporateActionType(str(raw["action_type"]).lower())
+            if action_type != CorporateActionType.DIVIDEND:
+                raise ValueError(
+                    "Product backtests use split-adjusted prices; only explicit dividend "
+                    "actions may be supplied"
+                )
+            actions.append(
+                CorporateAction(
+                    timestamp,
+                    str(raw["symbol"]),
+                    action_type,
+                    float(raw["value"]),
+                )
+            )
+    return actions
 
 
 def run_product_backtest(
@@ -77,6 +120,8 @@ def run_product_backtest(
     output_dir: str | None = None,
     cost_multiplier: float = 1.0,
     persist: bool = True,
+    persist_artifacts: bool = True,
+    corporate_actions: list[CorporateAction] | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -120,8 +165,10 @@ def run_product_backtest(
         minimum_price=minimum_price,
         minimum_dollar_volume=minimum_dollar_volume,
         pinned_symbols=pinned,
+        equity_config=(config.universe.equity if market == Market.EQUITY else None),
+        crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
     )
-    risk = _risk_limits(config)
+    risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
     engine = PortfolioBacktestEngine(
         strategy,
@@ -131,6 +178,10 @@ def run_product_backtest(
         spread_bps=config.backtest.spread_bps * cost_multiplier,
         commission=config.backtest.commission,
         crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps * cost_multiplier,
+        equity_taf_per_share=config.backtest.equity_taf_per_share,
+        equity_taf_cap=config.backtest.equity_taf_cap,
+        equity_cat_per_share=config.backtest.equity_cat_per_share,
+        equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
         benchmark_symbol=benchmark,
         universe=universe,
         universe_version=hash_point_in_time_universe(universe),
@@ -138,7 +189,7 @@ def run_product_backtest(
         maximum_allocation=selection.maximum_allocation,
     )
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
-    result = engine.run(filtered, warmup=warmup)
+    result = engine.run(filtered, warmup=warmup, corporate_actions=corporate_actions)
     report = build_portfolio_report(
         result,
         strategy_name=strategy.name,
@@ -149,9 +200,18 @@ def run_product_backtest(
             "market": market.value,
             "strategy_parameters": dict(strategy.parameter_tuple()),
             "fill_model": "decision on closed bar; next tradable bar open",
+            "price_adjustment_model": (
+                "split-adjusted execution/signal prices with explicit dividend cash flows; "
+                "callers must not supply split actions for already split-adjusted bars"
+                if market == Market.EQUITY
+                else "raw crypto prices; no corporate actions"
+            ),
             "cost_multiplier": cost_multiplier,
             "universe_hash": hash_point_in_time_universe(universe),
             "universe_methodology": universe.methodology,
+            "scanner_versions": sorted(
+                {snapshot.scanner_version for snapshot in universe.snapshots}
+            ),
             "survivorship_bias_limitation": (
                 "Candidate metadata may reflect currently supported Alpaca assets; historical "
                 "scanner membership is point-in-time within the supplied bar set, but delisted "
@@ -161,17 +221,18 @@ def run_product_backtest(
     )
     run_id = uuid4().hex
     destination = Path(output_dir or config.backtest.output_dir) / run_id
-    destination.mkdir(parents=True, exist_ok=True)
-    (destination / "report.json").write_text(
-        json.dumps(report.to_dict(), indent=2, sort_keys=True, allow_nan=False),
-        encoding="utf-8",
-    )
-    report.write_csvs(str(destination))
-    (destination / "universe.json").write_text(
-        json.dumps(universe.to_dict(), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    score = ranking_score(result)
+    if persist_artifacts:
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "report.json").write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True, allow_nan=False),
+            encoding="utf-8",
+        )
+        report.write_csvs(str(destination))
+        (destination / "universe.json").write_text(
+            json.dumps(universe.to_dict(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    score = ranking_score(result, config.backtest.ranking_metric)
     if persist:
         _persist_run(config.runtime.decision_db_path, run_id, strategy.name, report.summary, score)
     return ProductBacktestResult(run_id, result, report, universe, str(destination), score)
@@ -191,9 +252,17 @@ def optimize_grid(
     oos_start: datetime | None = None,
     oos_end: datetime | None = None,
     output_dir: str | None = None,
+    corporate_actions: list[CorporateAction] | None = None,
 ) -> dict[str, object]:
     if not grid or any(not values for values in grid.values()):
         raise ValueError("Optimization grid must contain at least one value per parameter")
+    _validate_optimization_windows(train_start, train_end, oos_start, oos_end)
+    combination_count = math.prod(len(values) for values in grid.values())
+    if combination_count > _MAX_OPTIMIZATION_COMBINATIONS:
+        raise ValueError(
+            f"Optimization grid has {combination_count} combinations; "
+            f"maximum is {_MAX_OPTIMIZATION_COMBINATIONS}"
+        )
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
@@ -211,6 +280,8 @@ def optimize_grid(
             initial_cash=initial_cash,
             output_dir=output_dir,
             persist=False,
+            persist_artifacts=False,
+            corporate_actions=corporate_actions,
         )
         result = run.result
         ranked.append(
@@ -228,7 +299,11 @@ def optimize_grid(
             }
         )
     ranked.sort(key=_optimization_sort_key)
-    payload: dict[str, object] = {"training_results": ranked, "ranking": "risk_adjusted"}
+    payload: dict[str, object] = {
+        "training_results": ranked,
+        "ranking": config.backtest.ranking_metric,
+        "combination_count": combination_count,
+    }
     if oos_start is not None and oos_end is not None:
         best = ranked[0]
         best_parameters = best["parameters"]
@@ -244,6 +319,7 @@ def optimize_grid(
             end=oos_end,
             initial_cash=initial_cash,
             output_dir=output_dir,
+            corporate_actions=corporate_actions,
         )
         payload["out_of_sample"] = {
             "parameters": best["parameters"],
@@ -268,7 +344,15 @@ def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:
     return -numeric_score, json.dumps(parameters, sort_keys=True)
 
 
-def ranking_score(result: PortfolioBacktestResult) -> float:
+def ranking_score(result: PortfolioBacktestResult, metric: str = "risk_adjusted") -> float:
+    if metric == "sharpe":
+        return result.sharpe
+    if metric == "sortino":
+        return result.sortino
+    if metric == "calmar":
+        return result.calmar
+    if metric != "risk_adjusted":
+        raise ValueError(f"Unsupported ranking metric: {metric}")
     trade_penalty = min(0.0, (len(result.closed_position_events) - 5) * 0.10)
     return (
         result.sharpe
@@ -279,20 +363,24 @@ def ranking_score(result: PortfolioBacktestResult) -> float:
     )
 
 
-def _risk_limits(config: Config) -> PortfolioRiskLimits:
-    risk = config.risk
-    return PortfolioRiskLimits(
-        daily_loss_limit=risk.daily_loss_limit_pct,
-        drawdown_halt=risk.max_drawdown_pct,
-        maximum_gross=risk.max_gross_exposure_pct,
-        maximum_equity=risk.max_gross_exposure_pct,
-        maximum_crypto=risk.max_crypto_exposure_pct,
-        maximum_equity_asset=risk.max_position_pct,
-        maximum_crypto_asset=risk.max_crypto_position_pct,
-        minimum_cash=risk.cash_buffer_pct,
-        maximum_positions=risk.max_positions,
-        maximum_crypto_positions=risk.max_crypto_positions,
-    )
+def _validate_optimization_windows(
+    train_start: datetime | None,
+    train_end: datetime | None,
+    oos_start: datetime | None,
+    oos_end: datetime | None,
+) -> None:
+    if (train_start is None) != (train_end is None):
+        raise ValueError("TRAIN requires both start and end")
+    if (oos_start is None) != (oos_end is None):
+        raise ValueError("OOS requires both start and end")
+    if oos_start is not None and (train_start is None or train_end is None):
+        raise ValueError("OOS evaluation requires an explicit TRAIN window")
+    if train_start is not None and train_end is not None and train_start >= train_end:
+        raise ValueError("TRAIN start must be before TRAIN end")
+    if oos_start is not None and oos_end is not None and oos_start >= oos_end:
+        raise ValueError("OOS start must be before OOS end")
+    if train_end is not None and oos_start is not None and train_end >= oos_start:
+        raise ValueError("TRAIN and OOS windows must not overlap")
 
 
 def _persist_run(

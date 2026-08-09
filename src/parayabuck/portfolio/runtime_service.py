@@ -201,6 +201,18 @@ class PortfolioStateRepository:
             ).fetchone()
         return row is not None
 
+    def latest_decision_timestamp(
+        self, configuration_digest: str, market: Market
+    ) -> datetime | None:
+        """Return the last persisted decision boundary for restart-safe scheduling."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT MAX(decision_timestamp) FROM portfolio_decisions
+                   WHERE configuration_digest = ? AND market = ?""",
+                (configuration_digest, market.value),
+            ).fetchone()
+        return datetime.fromisoformat(str(row[0])) if row and row[0] is not None else None
+
     def record_decision(
         self,
         session_id: str,
@@ -506,13 +518,15 @@ class PortfolioRuntime:
         self.risk_overlay = PortfolioRiskOverlay(risk_limits)
         self.planner = TargetToOrderPlanner()
         self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
-        self.previous_timestamp: datetime | None = None
         self.configuration_digest = configuration_digest(
             strategy,
-            self.symbols,
             mode,
             maximum_allocation,
             universe_version,
+            self.risk_overlay.limits,
+        )
+        self.previous_timestamp = repository.latest_decision_timestamp(
+            self.configuration_digest, self.market
         )
         self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
 
@@ -529,9 +543,32 @@ class PortfolioRuntime:
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
                 series.append(bar)
-        timestamps = {series[-1].timestamp for series in self.history.values() if series}
-        if len(timestamps) == 1:
-            self.previous_timestamp = next(iter(timestamps))
+        timestamp_sets = [
+            {bar.timestamp for bar in series} for series in self.history.values() if series
+        ]
+        if len(timestamp_sets) == len(self.history):
+            common_timestamps = set.intersection(*timestamp_sets)
+            if common_timestamps:
+                common_latest = max(common_timestamps)
+                self.previous_timestamp = max(
+                    filter(None, (self.previous_timestamp, common_latest))
+                )
+
+    def update_symbols(self, symbols: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Replace ephemeral members without changing the approved policy identity."""
+        updated = tuple(dict.fromkeys(canonical_symbol(symbol, self.market) for symbol in symbols))
+        if not updated:
+            raise ValueError("PortfolioRuntime requires an active universe")
+        current = set(self.symbols)
+        desired = set(updated)
+        added = tuple(sorted(desired - current))
+        removed = tuple(sorted(current - desired))
+        for symbol in added:
+            self.history[symbol] = []
+        for symbol in removed:
+            self.history.pop(symbol, None)
+        self.symbols = updated
+        return added, removed
 
     def process_closed_bars(self, bars: list[Bar]) -> PortfolioRuntimeResult:
         eligible = [
@@ -555,18 +592,30 @@ class PortfolioRuntime:
             if not series or series[-1].timestamp < bar.timestamp:
                 series.append(bar)
         scheduled = self.policy.is_period_start(self.previous_timestamp, timestamp)
+        # Receiving a timed-out partial batch explicitly skips that rebalance
+        # period. A later day must not turn it into a silent delayed rebalance.
         self.previous_timestamp = timestamp
+        warming_symbols = tuple(
+            sorted(
+                symbol
+                for symbol, series in self.history.items()
+                if len(series) < self.strategy.minimum_history_bars
+            )
+        )
+        missing_symbols = tuple(
+            sorted(
+                symbol
+                for symbol, series in self.history.items()
+                if not series or series[-1].timestamp != timestamp
+            )
+        )
+        if warming_symbols:
+            return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
+        if missing_symbols:
+            return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
+        ready_history = dict(self.history)
         if self.repository.has_decision(self.configuration_digest, timestamp, self.market):
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
-        ready_history = {
-            symbol: series
-            for symbol, series in self.history.items()
-            if len(series) >= self.strategy.minimum_history_bars
-            and series[-1].timestamp == timestamp
-        }
-        minimum_ready = max(1, min(len(self.symbols), self.strategy.param_int("top_n", 1)))
-        if len(ready_history) < minimum_ready:
-            return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
         account = self.broker.account()
         managed = {
             canonical_symbol(position.symbol, position.market)
@@ -693,10 +742,10 @@ def _decision_id(checksum: str, timestamp: datetime, market: Market) -> str:
 
 def configuration_digest(
     strategy: PortfolioStrategy,
-    symbols: tuple[str, ...],
     mode: str,
     maximum_allocation: float,
     universe_version: str,
+    risk_limits: PortfolioRiskLimits | None = None,
 ) -> str:
     import hashlib
 
@@ -705,10 +754,10 @@ def configuration_digest(
             "strategy": strategy.name,
             "version": strategy.version,
             "parameters": strategy.parameter_tuple(),
-            "symbols": symbols,
             "mode": mode,
             "maximum_allocation": maximum_allocation,
-            "universe_version": universe_version,
+            "scanner_policy_digest": universe_version,
+            "risk_limits": asdict(risk_limits or PortfolioRiskLimits()),
         },
         sort_keys=True,
         default=str,

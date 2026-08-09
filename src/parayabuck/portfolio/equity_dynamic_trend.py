@@ -7,7 +7,7 @@ from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.momentum import (
     annualize_period_volatility,
-    diagonal_portfolio_volatility,
+    conservative_portfolio_volatility,
     inverse_volatility_weights,
     momentum_at,
     realized_volatility,
@@ -46,6 +46,7 @@ class EquityDynamicTrend1dV1(PortfolioStrategy):
         top_n = self.param_int("top_n", 6)
         cap = self.param_float("max_single_weight", 0.10)
         target = self.param_float("annual_volatility_target", 0.10)
+        correlation_floor = self.param_float("correlation_floor", 0.25)
         frequency = self.param_str("rebalance_frequency", "weekly")
         if trend < 20 or momentum < 10 or volatility < 10:
             raise ValueError("Equity trend, momentum, and volatility windows are too short")
@@ -55,6 +56,8 @@ class EquityDynamicTrend1dV1(PortfolioStrategy):
             raise ValueError("max_single_weight must be in (0, 0.25]")
         if not 0 < target <= 0.25:
             raise ValueError("annual_volatility_target must be in (0, 0.25]")
+        if not 0 <= correlation_floor <= 1:
+            raise ValueError("correlation_floor must be in [0, 1]")
         if frequency not in {"weekly", "monthly"}:
             raise ValueError("rebalance_frequency must be weekly or monthly")
         excluded = self.parameters.get("exclude_symbols", ["SPY"])
@@ -70,6 +73,7 @@ class EquityDynamicTrend1dV1(PortfolioStrategy):
         top_n = self.param_int("top_n", 6)
         cap = self.param_float("max_single_weight", 0.10)
         volatility_target = self.param_float("annual_volatility_target", 0.10)
+        correlation_floor = self.param_float("correlation_floor", 0.25)
         excluded_raw = self.parameters.get("exclude_symbols", [context.benchmark_symbol])
         if not isinstance(excluded_raw, (list, tuple)):
             raise ValueError("exclude_symbols must be a list of symbols")
@@ -103,7 +107,11 @@ class EquityDynamicTrend1dV1(PortfolioStrategy):
         ranked.sort(key=lambda item: (-item[0], item[1]))
         selected = tuple(symbol for _score, symbol in ranked[:top_n])
         weights = dict(inverse_volatility_weights(selected, volatilities, maximum_weight=cap))
-        portfolio_volatility = diagonal_portfolio_volatility(weights, volatilities)
+        portfolio_volatility = conservative_portfolio_volatility(
+            weights,
+            volatilities,
+            correlation_floor=correlation_floor,
+        )
         risk_multiplier = (
             min(1.0, volatility_target / portfolio_volatility) if portfolio_volatility > 0 else 1.0
         )
@@ -129,6 +137,8 @@ class EquityDynamicTrend1dV1(PortfolioStrategy):
                 "qualified_symbols": len(ranked),
                 "selected_symbols": selected,
                 "hypothesis": "positive absolute trend plus relative momentum",
+                "volatility_estimator": "realized volatility with pairwise correlation floor",
+                "correlation_floor": correlation_floor,
             },
         )
 

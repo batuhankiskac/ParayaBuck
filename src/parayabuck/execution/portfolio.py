@@ -9,6 +9,7 @@ from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
+from parayabuck.config import RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
@@ -68,6 +69,22 @@ class PortfolioRiskLimits:
     minimum_cash: float = 0.40
     maximum_positions: int = 6
     maximum_crypto_positions: int = 3
+
+
+def portfolio_risk_limits_from_config(risk: RiskLimits) -> PortfolioRiskLimits:
+    """Single semantic mapping shared by backtest, paper, and live."""
+    return PortfolioRiskLimits(
+        daily_loss_limit=risk.daily_loss_limit_pct,
+        drawdown_halt=risk.max_drawdown_pct,
+        maximum_gross=risk.max_gross_exposure_pct,
+        maximum_equity=risk.max_gross_exposure_pct,
+        maximum_crypto=risk.max_crypto_exposure_pct,
+        maximum_equity_asset=risk.max_position_pct,
+        maximum_crypto_asset=risk.max_crypto_position_pct,
+        minimum_cash=risk.cash_buffer_pct,
+        maximum_positions=risk.max_positions,
+        maximum_crypto_positions=risk.max_crypto_positions,
+    )
 
 
 @dataclass(frozen=True)

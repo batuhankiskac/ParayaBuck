@@ -268,6 +268,8 @@ def test_persist_validate_and_fallback_rejections(tmp_path: Path) -> None:
     assert validate_active_crypto_universe(config) == (result.selected_symbols, "success")
     assert load_active_crypto_symbols(config) == result.selected_symbols
     assert not Path(config.active_universe_path + ".tmp").exists()
+    history_path = Path(config.active_universe_path + ".history.jsonl")
+    assert len(history_path.read_text(encoding="utf-8").splitlines()) == 1
     assert crypto_scanner_config_digest(config) == crypto_scanner_config_digest(replace(config))
 
     payload = json.loads(Path(config.active_universe_path).read_text())
@@ -323,7 +325,7 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(ai_logging_enabled=False),
+        engine=EngineConfig(),
         runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
         strategy=StrategyConfig(
             equity=replace(StrategyConfig().equity, enabled=False),
@@ -354,8 +356,6 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             pass
 
-    monkeypatch.setattr(runtime_module, "DecisionJournal", Sink)
-    monkeypatch.setattr(runtime_module, "AsyncDecisionJournal", Sink)
     monkeypatch.setattr(runtime_module, "ExecutionLedger", FakeLedger)
     monkeypatch.setattr(runtime_module, "AlpacaBroker", FakeBroker)
     monkeypatch.setattr(runtime_module, "RuntimeMarketState", FakeEngine)

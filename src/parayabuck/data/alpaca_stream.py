@@ -73,6 +73,13 @@ class AlpacaBarStream:
             target = updated_handler or handler
             await target(self._convert(raw, Market.CRYPTO, timeframe))
 
+        self._stock_handler = stock_handler
+        self._crypto_handler = crypto_handler
+        self._stock_updated_handler = stock_updated_handler
+        self._crypto_updated_handler = crypto_updated_handler
+        self._stock_symbols = set(stock_symbols)
+        self._crypto_symbols = set(crypto_symbols)
+
         if stock_symbols:
             self.stock.subscribe_bars(stock_handler, *stock_symbols)
             subscribe_updated = getattr(self.stock, "subscribe_updated_bars", None)
@@ -86,6 +93,61 @@ class AlpacaBarStream:
             subscribe_updated = getattr(self.crypto, "subscribe_updated_bars", None)
             if subscribe_updated is not None:
                 subscribe_updated(crypto_updated_handler, *crypto_symbols)
+
+    def update_subscriptions(
+        self, stock_symbols: list[str], crypto_symbols: list[str]
+    ) -> dict[str, tuple[str, ...]]:
+        """Atomically converge running streams on a newly approved symbol set."""
+        desired_stock = set(stock_symbols)
+        desired_crypto = set(crypto_symbols)
+        current_stock = set(getattr(self, "_stock_symbols", set()))
+        current_crypto = set(getattr(self, "_crypto_symbols", set()))
+        added_stock = tuple(sorted(desired_stock - current_stock))
+        removed_stock = tuple(sorted(current_stock - desired_stock))
+        added_crypto = tuple(sorted(desired_crypto - current_crypto))
+        removed_crypto = tuple(sorted(current_crypto - desired_crypto))
+
+        self._update_market_subscription(
+            self.stock,
+            added_stock,
+            removed_stock,
+            getattr(self, "_stock_handler"),
+            getattr(self, "_stock_updated_handler"),
+        )
+        self._update_market_subscription(
+            self.crypto,
+            added_crypto,
+            removed_crypto,
+            getattr(self, "_crypto_handler"),
+            getattr(self, "_crypto_updated_handler"),
+        )
+        self._stock_symbols = desired_stock
+        self._crypto_symbols = desired_crypto
+        return {
+            "added_stock": added_stock,
+            "removed_stock": removed_stock,
+            "added_crypto": added_crypto,
+            "removed_crypto": removed_crypto,
+        }
+
+    @staticmethod
+    def _update_market_subscription(
+        stream: Any,
+        added: tuple[str, ...],
+        removed: tuple[str, ...],
+        handler: Any,
+        updated_handler: Any,
+    ) -> None:
+        if added:
+            stream.subscribe_bars(handler, *added)
+            subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
+            if subscribe_updated is not None:
+                subscribe_updated(updated_handler, *added)
+        if removed:
+            stream.unsubscribe_bars(*removed)
+            unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
+            if unsubscribe_updated is not None:
+                unsubscribe_updated(*removed)
 
     def run_stock(self) -> None:
         self.stock.run()

@@ -302,6 +302,27 @@ document.addEventListener('DOMContentLoaded', () => {
             recent_fills: operations.recent_fills || [],
             last_decision: operations.last_decision || null,
             last_scanner_refresh: scanner.last_run_at || null,
+            next_scanner_refresh: scanner.next_refresh_at || null,
+            scanner_status: {
+                equity: scanner.equity_status || null,
+                crypto: scanner.crypto_status || null,
+                snapshot_equity: scanner.equity_snapshot_status || null,
+                snapshot_crypto: scanner.crypto_snapshot_status || null,
+                errors: scanner.refresh_errors || {}
+            },
+            scanner_counts: {
+                equity_candidates: scanner.equity_candidate_count || 0,
+                equity_shortlist: scanner.equity_shortlist_count || 0,
+                crypto_candidates: scanner.crypto_candidate_count || 0
+            },
+            warming_symbols: {
+                equity: equity.warming_symbols || [],
+                crypto: crypto.warming_symbols || []
+            },
+            managed_pins: {
+                equity: equity.managed_pins || [],
+                crypto: crypto.managed_pins || []
+            },
             last_reconciliation: statusData.runtime?.last_reconciliation_at || null,
             risk_status: statusData.runtime?.circuit_breaker_reason || 'ready'
         }, null, 2);

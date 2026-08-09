@@ -20,6 +20,7 @@ universe:
   equity:
     enabled: true
     dynamic_selection_enabled: true
+    allow_static_fallback_trading: false
     maximum_stream_symbols: 30
     target_shortlist: 300
     reference_symbols:
@@ -76,6 +77,7 @@ universe:
   crypto:
     enabled: true
     dynamic_selection_enabled: true
+    allow_static_fallback_trading: false
     maximum_stream_symbols: 12
     pinned_symbols:
     - BTC/USD
@@ -129,6 +131,7 @@ strategy:
       top_n: 6
       max_single_weight: 0.10
       annual_volatility_target: 0.10
+      correlation_floor: 0.25
       rebalance_frequency: weekly
       exclude_symbols: [SPY]
   crypto:
@@ -145,27 +148,25 @@ strategy:
       max_annualized_volatility_pct: 250.0
       max_single_weight: 0.05
 risk:
-  risk_per_trade_pct: 0.005
   max_position_pct: 0.1
   max_crypto_exposure_pct: 0.1
   max_crypto_position_pct: 0.05
   max_crypto_positions: 2
-  minimum_crypto_order_notional: 12
-  maximum_crypto_order_notional: 200000
   cash_buffer_pct: 0.40
-  max_sector_exposure_pct: 0.25
   max_gross_exposure_pct: 0.6
   max_positions: 6
   daily_loss_limit_pct: 0.005
   max_drawdown_pct: 0.05
-  minimum_risk_reward: 1.8
-  consecutive_loss_reduction_after: 3
 backtest:
   initial_cash: 100000
   slippage_bps: 2
   spread_bps: 2
   commission: 0
   crypto_taker_fee_bps: 5
+  equity_taf_per_share: 0
+  equity_taf_cap: 0
+  equity_cat_per_share: 0
+  equity_sec_fee_rate: 0
   scanner_rebalance: daily
   output_dir: reports
   ranking_metric: risk_adjusted
@@ -175,8 +176,6 @@ live:
   operator_approval_path: ""
   operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
 engine:
-  timeframe: 5m
-  higher_timeframe: 1h
   manage_external_positions: false
   event_grace_seconds: 5
   data_finalization_grace_seconds: 2
@@ -188,7 +187,3 @@ engine:
   crypto_emergency_exit_bps: 75
   crypto_stop_cancel_timeout_seconds: 5
   crypto_stop_cancel_poll_interval_seconds: 0.25
-  warmup_bars: 250
-  ai_logging_enabled: true
-  ai_log_path: data/runtime/ai_decisions
-  prediction_horizon_bars: 48

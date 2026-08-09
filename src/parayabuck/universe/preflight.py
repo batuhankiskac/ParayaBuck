@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-import statistics
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -16,7 +16,6 @@ from alpaca.trading.requests import GetAssetsRequest
 from parayabuck.config import Config
 from parayabuck.core.models import Market
 from parayabuck.data import AlpacaHistoricalData
-from parayabuck.features.indicators import true_ranges
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
@@ -28,6 +27,7 @@ from parayabuck.universe.scanner import (
     EquityCandidate,
     EquityUniverseScanner,
     ScannerResult,
+    equity_candidate_from_bars,
     validate_active_universe,
 )
 from parayabuck.utils.http import patch_session_timeout
@@ -125,6 +125,7 @@ def refresh_equity_universe(
     trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
+    started = time.monotonic()
     assets = trading.get_all_assets(
         GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
     )
@@ -146,6 +147,36 @@ def refresh_equity_universe(
         allowed[symbol] = asset
     if not allowed:
         raise ValueError("Alpaca returned no eligible active US equities")
+    reserved = {
+        *universe.reference_symbols,
+        *universe.inverse_trade_symbols,
+        *universe.allowlist_symbols,
+    }
+    cached_candidates: dict[str, EquityCandidate] = {}
+    refresh_symbols = set(allowed)
+    refresh_mode = "full"
+    try:
+        cached_payload = json.loads(source_path.read_text(encoding="utf-8"))
+        generated_at = datetime.fromisoformat(str(cached_payload["generated_at"]))
+        cache_age = datetime.now(UTC) - generated_at.astimezone(UTC)
+        raw_candidates = cached_payload.get("candidates", ())
+        if cache_age <= timedelta(days=7) and isinstance(raw_candidates, list):
+            for raw in raw_candidates:
+                if not isinstance(raw, dict):
+                    continue
+                candidate = EquityCandidate(**raw)
+                if candidate.symbol in allowed:
+                    cached_candidates[candidate.symbol] = candidate
+            previous_shortlist = {
+                str(symbol) for symbol in cached_payload.get("shortlist_symbols", ())
+            }
+            new_symbols = set(allowed) - set(cached_candidates)
+            incremental = (previous_shortlist | new_symbols | reserved) & set(allowed)
+            if cached_candidates and incremental:
+                refresh_symbols = incremental
+                refresh_mode = "incremental"
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        pass
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
@@ -154,18 +185,20 @@ def refresh_equity_universe(
     )
     end = datetime.now(UTC)
     start = end - timedelta(days=45)
-    discovered: list[EquityCandidate] = []
-    for batch in _chunks(sorted(allowed), 150):
+    refreshed_candidates: list[EquityCandidate] = []
+    historical_requests = 0
+    bars_downloaded = 0
+    for batch in _chunks(sorted(refresh_symbols), 150):
+        historical_requests += 1
         by_symbol = history.get_bars_batch(batch, "1d", start=start, end=end)
-        discovered.extend(
+        bars_downloaded += sum(len(items) for items in by_symbol.values())
+        refreshed_candidates.extend(
             _equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, []))
             for symbol in batch
         )
-    reserved = {
-        *universe.reference_symbols,
-        *universe.inverse_trade_symbols,
-        *universe.allowlist_symbols,
-    }
+    merged_candidates = dict(cached_candidates)
+    merged_candidates.update((candidate.symbol, candidate) for candidate in refreshed_candidates)
+    discovered = list(merged_candidates.values())
     ranked = sorted(
         discovered,
         key=lambda item: (-item.median_dollar_volume_20d, item.symbol),
@@ -186,6 +219,20 @@ def refresh_equity_universe(
     temporary.write_text(json.dumps(enriched, indent=2, sort_keys=True), encoding="utf-8")
     temporary.replace(source_path)
     scanner.persist(result)
+    log.info(
+        "Equity universe refresh metrics: assets_discovered=%d assets_eligible=%d "
+        "historical_requests=%d bars_downloaded=%d shortlist_size=%d selected_count=%d "
+        "refresh_mode=%s refreshed_assets=%d duration_seconds=%.3f",
+        len(assets),
+        len(allowed),
+        historical_requests,
+        bars_downloaded,
+        len(shortlist_symbols),
+        len(result.selected_symbols),
+        refresh_mode,
+        len(refresh_symbols),
+        time.monotonic() - started,
+    )
     return result
 
 
@@ -214,7 +261,18 @@ def refresh_crypto_universe(
         ):
             continue
         by_symbol[symbol] = asset
-    candidate_symbols = tuple(sorted({*by_symbol, *universe.pinned_symbols}))
+    invalid_pins = [
+        symbol
+        for symbol in universe.pinned_symbols
+        if symbol not in by_symbol
+        or not bool(getattr(by_symbol[symbol], "tradable", False))
+        or str(getattr(by_symbol[symbol], "status", "")).lower().split(".")[-1] != "active"
+    ]
+    if invalid_pins:
+        raise ValueError(
+            f"Configured crypto pins are not active/tradable: {','.join(invalid_pins)}"
+        )
+    candidate_symbols = tuple(sorted(by_symbol))
     if not candidate_symbols:
         raise ValueError("Alpaca returned no supported USD crypto pairs")
     history = AlpacaHistoricalData(
@@ -267,22 +325,10 @@ def _chunks(values: list[str], size: int = 8) -> list[list[str]]:
 
 
 def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandidate:
-    recent = bars[-20:]
-    if not recent:
-        return EquityCandidate(symbol, 0, 0, 0, 0)
-    dollar_volumes = [bar.close * bar.volume for bar in recent]
-    ranges = true_ranges(recent)
-    price = recent[-1].close
-    name = str(getattr(asset, "name", "")).lower()
-    leveraged = any(
-        marker in name for marker in ("2x", "3x", "-2x", "-3x", "ultra", "inverse", "bear", "short")
-    )
-    return EquityCandidate(
-        symbol=symbol,
-        price=price,
-        median_dollar_volume_20d=statistics.median(dollar_volumes),
-        atr_pct=(statistics.mean(ranges) / price if ranges and price > 0 else 0),
-        data_completeness=min(1.0, len(recent) / 20),
+    candidate = equity_candidate_from_bars(
+        symbol,
+        bars,
+        expected_bar_count=20,
         economic_sector=(
             str(getattr(asset, "sector", "") or getattr(asset, "economic_sector", "")).strip()
             or None
@@ -290,8 +336,8 @@ def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandida
         exchange=str(getattr(asset, "exchange", "")).split(".")[-1],
         tradable=bool(getattr(asset, "tradable", False)),
         status=str(getattr(asset, "status", "")).lower().split(".")[-1],
-        leveraged_or_inverse=leveraged,
     )
+    return candidate
 
 
 def _crypto_asset_symbol(asset: Any) -> str | None:

@@ -1042,6 +1042,33 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/readyz")
+async def readyz() -> JSONResponse:
+    """Configuration/runtime readiness, distinct from process liveness."""
+    try:
+        load_config(str(manager.config_path))
+        config_valid = True
+        config_error = None
+    except Exception as exc:
+        config_valid = False
+        config_error = str(exc)
+    runtime = getattr(manager, "runtime", None)
+    health = runtime.health() if runtime is not None and hasattr(runtime, "health") else None
+    runtime_expected = manager.current_engine_state() in {"starting", "running"}
+    trading_ready = bool(health and health.healthy)
+    ready = config_valid and (not runtime_expected or trading_ready)
+    return JSONResponse(
+        {
+            "ready": ready,
+            "config_valid": config_valid,
+            "trading_ready": trading_ready,
+            "runtime_expected": runtime_expected,
+            "error": config_error,
+        },
+        status_code=200 if ready else 503,
+    )
+
+
 @app.get("/api/control-token")
 async def get_control_token() -> JSONResponse:
     response = JSONResponse({"control_token": manager.control_token})
@@ -1077,9 +1104,11 @@ async def get_status() -> dict[str, Any]:
         # missing scanner key when the config cannot be loaded.
         result["scanner"] = {"last_run_at": None, "status": "error"}
     runtime = getattr(manager, "runtime", None)
+    runtime_refresh: dict[str, Any] = {}
     if runtime is not None and hasattr(runtime, "health"):
         health = runtime.health()
         result["runtime"] = asdict(health)
+        runtime_refresh = health.universe_refresh
         result["strategy_status"] = health.strategy_status
         repository = getattr(runtime, "_portfolio_repository", None)
         if repository is not None:
@@ -1128,12 +1157,27 @@ async def get_status() -> dict[str, Any]:
                 result["active_crypto_symbol_count"] = len(crypto_symbols)
             result["scanner"] = {
                 "last_run_at": active_payload.get("selection_timestamp"),
-                "status": validated_scanner_status,
-                "equity_status": validated_scanner_status,
-                "crypto_status": validated_crypto_scanner_status,
+                "status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
+                "equity_status": runtime_refresh.get("status", {}).get(
+                    "equity", validated_scanner_status
+                ),
+                "crypto_status": runtime_refresh.get("status", {}).get(
+                    "crypto", validated_crypto_scanner_status
+                ),
+                "equity_snapshot_status": validated_scanner_status,
+                "crypto_snapshot_status": validated_crypto_scanner_status,
                 "scanner_version": active_payload.get("scanner_version"),
                 "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
                 "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
+                "next_refresh_at": runtime_refresh.get("next_refresh_at"),
+                "refresh_errors": runtime_refresh.get("errors", {}),
+                "equity_candidate_count": len(active_payload.get("candidate_symbols", ())),
+                "equity_shortlist_count": len(
+                    candidate_payload.get("shortlist_symbols", ())
+                    if isinstance(candidate_payload, dict)
+                    else ()
+                ),
+                "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
             }
             result["universe"] = {
                 "equity": {

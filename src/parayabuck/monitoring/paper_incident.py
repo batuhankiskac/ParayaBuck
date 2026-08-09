@@ -58,12 +58,15 @@ class PaperIncidentSnapshot:
     cash_activities: tuple[BrokerCashActivityRecord, ...] = ()
     starting_equity: float | None = None
     ending_equity: float | None = None
+    starting_unrealized_pnl: float = 0.0
 
 
 @dataclass(frozen=True)
 class PaperIncidentReport:
     realized_pnl: float
     unrealized_pnl: float
+    starting_unrealized_pnl: float
+    unrealized_pnl_change: float
     slippage: float
     fees: float
     net_transfers: float
@@ -147,8 +150,9 @@ class PaperIncidentReconciler:
         ]
         fees = sum(fill.fee for fill in snapshot.fills)
         net_transfers = sum(activity.net_amount for activity in snapshot.cash_activities)
+        unrealized_change = unrealized - snapshot.starting_unrealized_pnl
         expected_ending = (
-            snapshot.starting_equity + realized + unrealized - fees + net_transfers
+            snapshot.starting_equity + realized + unrealized_change - fees + net_transfers
             if snapshot.starting_equity is not None
             else None
         )
@@ -160,6 +164,8 @@ class PaperIncidentReconciler:
         return PaperIncidentReport(
             realized_pnl=round(realized, 8),
             unrealized_pnl=round(unrealized, 8),
+            starting_unrealized_pnl=round(snapshot.starting_unrealized_pnl, 8),
+            unrealized_pnl_change=round(unrealized_change, 8),
             slippage=round(slippage, 8),
             fees=round(fees, 8),
             net_transfers=round(net_transfers, 8),
@@ -231,6 +237,7 @@ class PaperIncidentReconciler:
             ],
             "starting_equity": snapshot.starting_equity,
             "ending_equity": snapshot.ending_equity,
+            "starting_unrealized_pnl": snapshot.starting_unrealized_pnl,
             "expected_incident": expected,
         }
 

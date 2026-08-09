@@ -184,7 +184,7 @@ See [operations documentation](docs/operations.md) for backup/restore, Docker,
 restart recovery, and the paper incident command. Incident reports reconcile:
 
 ```text
-starting equity + realized PnL + unrealized PnL - fees + net transfers
+starting equity + realized PnL + change in unrealized PnL - fees + net transfers
 = expected ending equity
 actual ending equity - expected ending equity = residual
 ```

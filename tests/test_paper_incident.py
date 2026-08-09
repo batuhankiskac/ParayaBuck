@@ -60,6 +60,7 @@ def test_paper_incident_reconciliation_is_read_only_and_anonymized(tmp_path) -> 
     report = reconciler.reconcile(snapshot, database)
     assert report.realized_pnl == 10.0
     assert report.unrealized_pnl == -100
+    assert report.unrealized_pnl_change == -100
     assert report.net_transfers == 200
     assert report.expected_ending_equity == 10_109.8
     assert report.actual_ending_equity == 10_109.8
@@ -107,11 +108,36 @@ def test_incident_download_paginates_orders_and_fills(monkeypatch) -> None:
 
     monkeypatch.setattr(incident_cli, "_get", fake_get)
     assert len(incident_cli._all_orders("key", "secret", None)) == 501
-    assert len(incident_cli._all_fills("key", "secret")) == 101
+    assert len(incident_cli._all_fills("key", "secret", "2026-01-01T00:00:00Z")) == 101
     assert any("until" in params for path, params in calls if path == "/orders")
     assert any(
         "page_token" in params for path, params in calls if path == "/account/activities/FILL"
     )
+    assert all(
+        params["after"] == "2026-01-01T00:00:00Z"
+        for path, params in calls
+        if path == "/account/activities/FILL"
+    )
+
+
+def test_incident_equity_bridge_uses_unrealized_pnl_change(tmp_path) -> None:
+    database = tmp_path / "empty.sqlite3"
+    with sqlite3.connect(database):
+        pass
+    snapshot = PaperIncidentSnapshot(
+        orders=(),
+        fills=(),
+        positions=(BrokerPositionRecord("AAPL", 10, 100, 102),),
+        starting_equity=10_000,
+        ending_equity=10_005,
+        starting_unrealized_pnl=15,
+    )
+    report = PaperIncidentReconciler().reconcile(snapshot, database)
+    assert report.unrealized_pnl == 20
+    assert report.starting_unrealized_pnl == 15
+    assert report.unrealized_pnl_change == 5
+    assert report.expected_ending_equity == 10_005
+    assert report.equity_residual == 0
 
 
 def test_incident_download_paginates_relevant_cash_activities(monkeypatch) -> None:

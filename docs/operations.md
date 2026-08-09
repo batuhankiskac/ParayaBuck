@@ -34,12 +34,13 @@ cash journals automatically; `--net-transfers` is only an optional adjustment:
   --database data/runtime/parayabuck.sqlite3 \
   --after 2026-08-01T00:00:00Z \
   --starting-equity 100000 \
+  --starting-unrealized-pnl 0 \
   --net-transfers 0
 ```
 
-The report exposes realized and unrealized PnL, fees, transfers, expected ending
-equity, actual broker equity, and an unexplained residual. It also writes an
-anonymized replay fixture.
+The report exposes realized PnL, starting/ending/change in unrealized PnL, fees,
+transfers, expected ending equity, actual broker equity, and an unexplained
+residual. It also writes an anonymized replay fixture.
 
 ## Docker
 

@@ -80,13 +80,19 @@ def _all_orders(key: str, secret: str, after: str | None) -> list[dict[str, obje
     return sorted(result, key=lambda item: _instant(item.get("created_at")))
 
 
-def _all_fills(key: str, secret: str) -> list[dict[str, object]]:
+def _all_fills(
+    key: str,
+    secret: str,
+    after: str | None,
+) -> list[dict[str, object]]:
     """Read all fill activities using Alpaca's activity-id page token."""
     page_token: str | None = None
     seen: set[str] = set()
     result: list[dict[str, object]] = []
     while True:
         params: dict[str, object] = {"direction": "desc", "page_size": 100}
+        if after:
+            params["after"] = after
         if page_token:
             params["page_token"] = page_token
         page = _get("/account/activities/FILL", key=key, secret=secret, params=params)
@@ -153,10 +159,11 @@ def _snapshot(
     after: str | None,
     *,
     starting_equity: float | None = None,
+    starting_unrealized_pnl: float = 0.0,
     net_transfers: float = 0.0,
 ) -> PaperIncidentSnapshot:
     raw_orders = _all_orders(key, secret, after)
-    raw_fills = _all_fills(key, secret)
+    raw_fills = _all_fills(key, secret, after)
     raw_cash_activities = _all_cash_activities(key, secret, after)
     raw_positions = _get("/positions", key=key, secret=secret)
     raw_account = _get("/account", key=key, secret=secret)
@@ -229,6 +236,7 @@ def _snapshot(
         cash_activities,
         starting_equity,
         ending_equity,
+        starting_unrealized_pnl,
     )
 
 
@@ -241,6 +249,12 @@ def main(argv: list[str] | None = None) -> int:
         "--starting-equity",
         type=float,
         help="Broker equity at --after; enables the end-to-end equity residual",
+    )
+    parser.add_argument(
+        "--starting-unrealized-pnl",
+        type=float,
+        default=0.0,
+        help="Open-position unrealized PnL at --after (default: 0)",
     )
     parser.add_argument(
         "--net-transfers",
@@ -265,6 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         secret,
         args.after,
         starting_equity=args.starting_equity,
+        starting_unrealized_pnl=args.starting_unrealized_pnl,
         net_transfers=args.net_transfers,
     )
     reconciler = PaperIncidentReconciler()

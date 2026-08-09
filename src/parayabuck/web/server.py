@@ -90,8 +90,8 @@ class BacktestManager:
         days = int(payload.get("days") or 0)
         start = end - timedelta(days=days or int(payload.get("years") or 5) * 365)
         argv += ["--start", start.date().isoformat(), "--end", end.date().isoformat()]
-        max_symbols = payload.get("max_symbols")
-        if max_symbols:
+        max_symbols = payload.get("max_symbols") or 0
+        if max_symbols > 0:
             argv += ["--candidate-limit", str(int(max_symbols))]
         strategy = (payload.get("strategy") or "").strip()
         if strategy:
@@ -205,7 +205,6 @@ class EngineManager:
             self.config_path = Path("config/settings.yaml")
 
         self.broker: Any = None
-        self.engine: Any = None
         self.runtime: Any = None
         self.engine_state: str = "stopped"
         self.last_engine_error: str | None = None
@@ -360,17 +359,52 @@ class EngineManager:
 
         old_app = dict(cfg_raw.get("app", {}))
 
+        # Obsolete engine/risk keys from older Web saves would make the next
+        # load_config() reject the whole file. Strip them so saving settings
+        # heals previously corrupted configurations instead of preserving them.
+        obsolete_engine_keys = {
+            "timeframe",
+            "higher_timeframe",
+            "warmup_bars",
+            "ai_logging_enabled",
+            "ai_log_path",
+            "prediction_horizon_bars",
+        }
+        engine_raw = dict(cfg_raw.get("engine", {}))
+        for key in obsolete_engine_keys:
+            engine_raw.pop(key, None)
+        if engine_raw:
+            cfg_raw["engine"] = engine_raw
+        else:
+            cfg_raw.pop("engine", None)
+        obsolete_risk_keys = {
+            "risk_per_trade_pct",
+            "minimum_crypto_order_notional",
+            "maximum_crypto_order_notional",
+            "max_sector_exposure_pct",
+            "max_open_risk_pct",
+            "minimum_risk_reward",
+            "consecutive_loss_reduction_after",
+            "volatility_targeting_enabled",
+            "annualized_volatility_target",
+            "minimum_volatility_scale",
+            "maximum_volatility_scale",
+        }
+        risk_raw = dict(cfg_raw.get("risk", {}))
+        for key in obsolete_risk_keys:
+            risk_raw.pop(key, None)
+        cfg_raw["risk"] = risk_raw
+
         cfg_raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper_mode else "live"
+        cfg_raw.setdefault("runtime", {})["execution_timeframe"] = payload.execution_timeframe
         live = cfg_raw.setdefault("live", {})
         live["enabled"] = not payload.paper_mode
         live["hard_dollar_cap"] = payload.live_dollar_cap
         live["operator_approval_path"] = payload.live_operator_approval_path
-        engine = cfg_raw.setdefault("engine", {})
         strategy = cfg_raw.setdefault("strategy", {})
-        risk = cfg_raw.setdefault("risk", {})
+        risk = cfg_raw["risk"]
         risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
         risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
-        engine["timeframe"] = payload.timeframe
         strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
         strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
         cfg_raw["app"] = {
@@ -465,7 +499,6 @@ class EngineManager:
                 interrupted = self.engine_state == "stopping"
                 if not interrupted:
                     self.runtime = runtime
-                    self.engine = runtime.engine
                     self.broker = runtime.broker
                     self.engine_state = "running"
             if interrupted:
@@ -493,7 +526,6 @@ class EngineManager:
                     # connection and reports a misleading "stopped (degraded)".
                     if self.runtime is runtime:
                         self.runtime = None
-                        self.engine = None
                         self.broker = None
             self.invalidate_live_arming()
             raise
@@ -531,7 +563,6 @@ class EngineManager:
                 self.engine_state = "stopped"
                 self.last_engine_error = None
                 self.runtime = None
-                self.engine = None
                 self.broker = None
                 self.last_account = None
         self.invalidate_live_arming()
@@ -986,7 +1017,7 @@ class SettingsPayload(BaseModel):
     paper_mode: bool = Field(True, description="Paper mode toggle")
     daily_loss_limit_pct: float = Field(1.5, gt=0, le=10)
     max_drawdown_pct: float = Field(10.0, gt=0, le=30)
-    timeframe: Literal["5m"] = "5m"
+    execution_timeframe: Literal["5m"] = "5m"
     host: Literal["127.0.0.1", "localhost", "::1"] = "127.0.0.1"
     port: int = Field(8000, ge=1, le=65535)
     open_browser: bool = Field(True)
@@ -1018,7 +1049,9 @@ class BacktestPayload(BaseModel):
     years: int = Field(5, ge=1, le=30)
     days: int = Field(0, ge=0)
     symbols: str = ""
-    max_symbols: int = Field(40, ge=1, le=100)
+    # 0 (default) means the broad eligible universe; an explicit positive
+    # value caps the download set for resource-limited runs.
+    max_symbols: int = Field(0, ge=0, le=2000)
 
 
 # Routes
@@ -1054,7 +1087,10 @@ async def readyz() -> JSONResponse:
         config_error = str(exc)
     runtime = getattr(manager, "runtime", None)
     health = runtime.health() if runtime is not None and hasattr(runtime, "health") else None
-    runtime_expected = manager.current_engine_state() in {"starting", "running"}
+    # A runtime that exists (or is still transitioning) is expected to trade.
+    # degraded/halted/stopping runtimes must NOT be reported ready just
+    # because the config parses; /healthz already covers process liveness.
+    runtime_expected = manager.has_active_runtime()
     trading_ready = bool(health and health.healthy)
     ready = config_valid and (not runtime_expected or trading_ready)
     return JSONResponse(
@@ -1177,6 +1213,7 @@ async def get_status() -> dict[str, Any]:
                     if isinstance(candidate_payload, dict)
                     else ()
                 ),
+                "equity_sector_metadata_coverage": active_payload.get("sector_metadata_coverage"),
                 "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
             }
             result["universe"] = {
@@ -1324,7 +1361,7 @@ async def get_settings() -> dict[str, Any]:
         "paper_mode": manager.is_paper_mode(),
         "daily_loss_limit_pct": 100 * cfg_raw.get("risk", {}).get("daily_loss_limit_pct", 0.015),
         "max_drawdown_pct": 100 * cfg_raw.get("risk", {}).get("max_drawdown_pct", 0.10),
-        "timeframe": cfg_raw.get("engine", {}).get("timeframe", "5m"),
+        "timeframe": cfg_raw.get("runtime", {}).get("execution_timeframe", "5m"),
         "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
         "port": cfg_raw.get("app", {}).get("port", 8000),
         "open_browser": cfg_raw.get("app", {}).get("open_browser", True),

@@ -401,6 +401,38 @@ class PortfolioStateRepository:
             ).fetchall()
         return {str(row[0]) for row in rows}
 
+    def owned_symbols(self, market: Market | None = None) -> set[str]:
+        """Symbols the portfolio path still owns: net filled quantity > 0.
+
+        Ownership is computed from cumulative fills (buy minus sell) so a
+        partially or fully exited position loses ``managed`` status exactly
+        when its broker quantity reaches zero. This is the authoritative
+        portfolio-side input to the broker's unified managed-position view.
+        """
+        with self.store.lock:
+            if market is None:
+                rows = self.store.connection.execute(
+                    """
+                    SELECT symbol, market, side, cumulative_filled_quantity
+                    FROM portfolio_orders
+                    """
+                ).fetchall()
+            else:
+                rows = self.store.connection.execute(
+                    """
+                    SELECT symbol, market, side, cumulative_filled_quantity
+                    FROM portfolio_orders WHERE market = ?
+                    """,
+                    (market.value,),
+                ).fetchall()
+        net: dict[str, float] = {}
+        for symbol, _market, side, filled in rows:
+            filled_qty = float(filled or 0.0)
+            if filled_qty <= 0:
+                continue
+            net[symbol] = net.get(symbol, 0.0) + (filled_qty if str(side) == "buy" else -filled_qty)
+        return {symbol for symbol, quantity in net.items() if quantity > 1e-12}
+
     def operations_snapshot(self) -> dict[str, object]:
         with self.store.lock:
             last_decision = self.store.connection.execute(

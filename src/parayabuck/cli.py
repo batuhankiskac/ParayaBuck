@@ -78,7 +78,7 @@ def _add_backtest_arguments(
         help="optional CSV of explicit equity dividends (split-adjusted prices are expected)",
     )
     parser.add_argument("--symbols", help="comma-separated download candidates")
-    parser.add_argument("--candidate-limit", type=int, default=300)
+    parser.add_argument("--candidate-limit", type=int, default=None)
     parser.add_argument("--start")
     parser.add_argument("--end")
     parser.add_argument("--initial-cash", type=float, default=None)
@@ -269,7 +269,14 @@ def _load_bars(
         raise SystemExit("No candidate symbols are available")
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     end_at = end or datetime.now(UTC)
-    start_at = start or end_at - timedelta(days=5 * 365 if market == Market.EQUITY else 2 * 365)
+    if start is None:
+        start_at = end_at - timedelta(days=5 * 365 if market == Market.EQUITY else 2 * 365)
+    else:
+        # Download enough history before the requested evaluation start so the
+        # strategy warmup and the trailing scanner lookback have real bars.
+        # run_product_backtest splits warmup from the evaluation window.
+        warmup_days = _warmup_window_days(config, market)
+        start_at = start - timedelta(days=warmup_days)
     expected_per_symbol = max(
         1,
         int((end_at - start_at).total_seconds() / 86_400)
@@ -296,33 +303,67 @@ def _load_bars(
     return bars
 
 
+def _warmup_window_days(config: Config, market: Market) -> int:
+    """Calendar days of pre-start history for strategy and scanner warmup."""
+    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    strategy = portfolio_strategy_from(selection.name, selection.parameters)
+    lookback_days = 60 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
+    from parayabuck.markets.timeframes import timeframe_duration
+
+    # Strategy warmup is expressed in bars of the strategy timeframe (e.g. 150
+    # daily bars or 150 hourly bars); the scanner lookback is already calendar
+    # days and must not be scaled by the bar duration.
+    duration = timeframe_duration(selection.timeframe)
+    strategy_days = max(1, int((strategy.minimum_history_bars * duration).total_seconds() / 86_400))
+    return max(strategy_days, lookback_days)
+
+
 def _candidate_symbols(
     config: Config,
     market: Market,
     explicit: str | None,
-    limit: int,
+    limit: int | None,
 ) -> list[str]:
     if explicit:
         return list(
             dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip())
         )
     if market == Market.EQUITY:
-        source = Path(config.universe.equity.candidate_universe_path)
-        payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
-        candidates = [str(symbol) for symbol in payload.get("shortlist_symbols", ())]
-        fallback = config.universe.equity.fallback_trade_symbols
-        symbols = candidates or list(fallback)
-        required = config.universe.equity.reference_symbols
-    else:
-        source = Path(config.universe.crypto.active_universe_path)
-        payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
-        candidates = [str(symbol) for symbol in payload.get("candidate_symbols", ())]
-        symbols = candidates or list(config.universe.crypto.trade_symbols)
-        required = config.universe.crypto.pinned_symbols
+        # Always download the broad eligible universe. The historical Stage-A
+        # shortlist is applied per date inside the backtest universe builder,
+        # so 2022 liquidity cannot be hidden behind today's shortlist.
+        from alpaca.trading.client import TradingClient
+
+        from parayabuck.universe.preflight import eligible_equity_symbols
+
+        load_dotenv()
+        trading = TradingClient(
+            os.getenv("ALPACA_API_KEY", ""),
+            os.getenv("ALPACA_SECRET_KEY", ""),
+            paper=config.runtime.mode.value != "live",
+        )
+        if (session := getattr(trading, "_session", None)) is not None:
+            from parayabuck.utils.http import patch_session_timeout
+
+            patch_session_timeout(session, timeout=15.0)
+        eligible = eligible_equity_symbols(config, trading, limit=limit)
+        # Reference symbols are reserved by the scanner and must be present
+        # even when an explicit --candidate-limit excludes them alphabetically.
+        required_order = list(dict.fromkeys(config.universe.equity.reference_symbols))
+        required_set = set(required_order)
+        candidates = [symbol for symbol in dict.fromkeys(eligible) if symbol not in required_set]
+        if limit is not None:
+            candidates = candidates[: max(0, limit - len(required_order))]
+        return [*required_order, *candidates]
+    source = Path(config.universe.crypto.active_universe_path)
+    payload = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {}
+    candidates = [str(symbol) for symbol in payload.get("candidate_symbols", ())]
+    symbols = candidates or list(config.universe.crypto.trade_symbols)
+    required = config.universe.crypto.pinned_symbols
     required_order = list(dict.fromkeys(required))
     required_set = set(required_order)
     candidates = [symbol for symbol in dict.fromkeys(symbols) if symbol not in required_set]
-    return [*required_order, *candidates[: max(0, limit)]]
+    return [*required_order, *candidates[: max(0, limit or len(candidates))]]
 
 
 def _strategy_parameters(

@@ -34,6 +34,7 @@ class UniverseSnapshot:
     candidate_count: int = 0
     score_breakdown: dict[str, dict[str, float | str]] = field(default_factory=dict)
     eliminated: dict[str, str] = field(default_factory=dict)
+    sector_metadata_coverage: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -51,9 +52,16 @@ class PointInTimeUniverse:
         return canonical_symbol(symbol, market) in eligible[-1].symbols
 
     def to_dict(self) -> dict[str, object]:
+        coverage = (
+            sum(snapshot.sector_metadata_coverage for snapshot in self.snapshots)
+            / len(self.snapshots)
+            if self.snapshots
+            else 1.0
+        )
         return {
             "market": self.market.value,
             "methodology": self.methodology,
+            "sector_metadata_coverage": round(coverage, 6),
             "snapshots": [
                 {
                     "effective_at": snapshot.effective_at.isoformat(),
@@ -63,6 +71,7 @@ class PointInTimeUniverse:
                     "candidate_count": snapshot.candidate_count,
                     "score_breakdown": snapshot.score_breakdown,
                     "eliminated": snapshot.eliminated,
+                    "sector_metadata_coverage": snapshot.sector_metadata_coverage,
                 }
                 for snapshot in self.snapshots
             ],
@@ -111,16 +120,25 @@ def build_trailing_point_in_time_universe(
     minimum_price: float = 0.0,
     minimum_dollar_volume: float = 0.0,
     pinned_symbols: tuple[str, ...] = (),
+    target_shortlist: int | None = None,
     equity_config: EquityUniverseConfig | None = None,
     crypto_config: CryptoUniverseConfig | None = None,
 ) -> PointInTimeUniverse:
-    """Run the production scanner policy on strictly trailing historical metrics."""
+    """Run the production scanner policy on strictly trailing historical metrics.
+
+    ``target_shortlist`` mirrors the live equity pipeline's Stage-A gate: the
+    trailing median-dollar-volume leaders (up to the target) are the only
+    symbols that reach the scanner, so a broad downloaded universe is
+    evaluated exactly like the live market is.
+    """
     if maximum_symbols <= 0:
         raise ValueError("maximum_symbols must be positive")
     if rebalance_frequency not in {"daily", "weekly", "monthly"}:
         raise ValueError("rebalance_frequency must be daily, weekly, or monthly")
     if not 0 < minimum_history_ratio <= 1:
         raise ValueError("minimum_history_ratio must be in (0, 1]")
+    if target_shortlist is not None and target_shortlist < maximum_symbols:
+        raise ValueError("target_shortlist must cover the active universe")
     selected_bars = sorted(
         (bar for bar in bars if bar.market == market),
         key=lambda item: (item.timestamp, item.symbol),
@@ -162,13 +180,22 @@ def build_trailing_point_in_time_universe(
                     minimum_data_completeness=minimum_history_ratio,
                 ),
             )
+            shortlisted = sorted(by_symbol.items())
+            if target_shortlist is not None:
+                # Stage-A parity with the live pipeline: rank the trailing
+                # window by median dollar volume and admit only the top target
+                # before the production scanner runs.
+                shortlisted = sorted(
+                    shortlisted,
+                    key=lambda item: (-_median_dollar_volume(item[1]), item[0]),
+                )[:target_shortlist]
             equity_candidates = [
                 equity_candidate_from_bars(
                     symbol,
                     history,
                     expected_bar_count=min(20, expected),
                 )
-                for symbol, history in sorted(by_symbol.items())
+                for symbol, history in shortlisted
             ]
             result = EquityUniverseScanner(configured).scan(
                 equity_candidates,
@@ -225,6 +252,7 @@ def build_trailing_point_in_time_universe(
                 len(result.candidate_symbols),
                 result.score_breakdown,
                 result.eliminated,
+                getattr(result, "sector_metadata_coverage", 1.0),
             )
         )
     return PointInTimeUniverse(
@@ -232,10 +260,28 @@ def build_trailing_point_in_time_universe(
         tuple(snapshots),
         (
             f"{rebalance_frequency} production scanner policy on trailing {lookback_days}d "
-            "metrics; inputs strictly precede snapshot; historical spread and broad sector/"
-            "tradability metadata unavailable and explicitly degraded"
+            "metrics; inputs strictly precede snapshot; "
+            + (
+                f"Stage-A shortlist capped at {target_shortlist} symbols by trailing "
+                "median dollar volume; "
+                if target_shortlist is not None
+                else ""
+            )
+            + "historical spread and broad sector/tradability metadata unavailable "
+            "and explicitly degraded"
         ),
     )
+
+
+def _median_dollar_volume(bars: list[Bar]) -> float:
+    import statistics
+
+    values = [
+        float(bar.close) * float(bar.volume)
+        for bar in sorted(bars, key=lambda item: item.timestamp)[-20:]
+        if float(bar.volume) >= 0
+    ]
+    return statistics.median(values) if values else 0.0
 
 
 def _period_key(timestamp: datetime, frequency: str) -> tuple[int, ...]:

@@ -4,6 +4,7 @@ import json
 import math
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
@@ -88,6 +89,7 @@ class AlpacaBroker:
         *,
         manage_external_positions: bool = False,
         ledger: ExecutionLedger | None = None,
+        portfolio_owned_symbols: Callable[[], set[str]] | None = None,
         crypto_stop_limit_offset_bps: float = 25.0,
         crypto_emergency_exit_bps: float = 75.0,
         crypto_stop_cancel_timeout_seconds: float = 5.0,
@@ -102,6 +104,7 @@ class AlpacaBroker:
         self._asset_cache: dict[str, Any] = {}
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
+        self.portfolio_owned_symbols = portfolio_owned_symbols
         self._account_id = ""
         self.crypto_stop_limit_offset_bps = crypto_stop_limit_offset_bps
         self.crypto_emergency_exit_bps = crypto_emergency_exit_bps
@@ -144,6 +147,9 @@ class AlpacaBroker:
             ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         )
         managed_symbols = set(managed_positions)
+        portfolio_owned_provider = getattr(self, "portfolio_owned_symbols", None)
+        if portfolio_owned_provider is not None:
+            managed_symbols.update(portfolio_owned_provider())
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
@@ -511,6 +517,10 @@ class AlpacaBroker:
         """
         account = self.account()
         manage_external = bool(getattr(self, "manage_external_positions", True))
+        portfolio_owned_provider = getattr(self, "portfolio_owned_symbols", None)
+        portfolio_owned = (
+            portfolio_owned_provider() if portfolio_owned_provider is not None else set()
+        )
         ledger = self.ledger
         managed = (
             ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
@@ -535,7 +545,14 @@ class AlpacaBroker:
                 continue
             symbol = canonical_symbol(position.symbol, position.market)
             ownership = managed.get(symbol)
-            if ownership is None and not manage_external:
+            # Portfolio-owned crypto positions are bot exposure without a
+            # ledger lot: protect them with an emergency-exit stop so the
+            # position cannot ride to zero unguarded. Equity portfolio
+            # positions stay unprotected (their risk model is the overlay).
+            portfolio_owned_position = (
+                position.market == Market.CRYPTO and symbol in portfolio_owned
+            )
+            if ownership is None and not portfolio_owned_position and not manage_external:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
             broker_qty_is_fee_adjusted = False
@@ -571,9 +588,14 @@ class AlpacaBroker:
                 stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
-                # Backwards-compatible opt-in policy for explicitly managed
-                # external positions. Runtime defaults this off.
-                stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
+                # Portfolio-owned crypto exposure gets emergency-exit
+                # protection anchored to the configurable offset; the
+                # backwards-compatible opt-in policy covers explicitly
+                # managed external positions with fixed percentages.
+                if portfolio_owned_position:
+                    stop_pct = self.crypto_emergency_exit_bps / 10_000
+                else:
+                    stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
                 stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
                 total_qty = abs(position.qty)
             available_qty = (

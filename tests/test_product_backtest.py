@@ -70,6 +70,9 @@ def test_product_backtest_uses_production_strategy_risk_and_next_open_fills(tmp_
     assert (tmp_path / "reports" / run.run_id / "universe.json").exists()
     report = json.loads((tmp_path / "reports" / run.run_id / "report.json").read_text())
     assert "survivorship_bias_limitation" in report["summary"]
+    universe = json.loads((tmp_path / "reports" / run.run_id / "universe.json").read_text())
+    assert 0.0 <= universe["sector_metadata_coverage"] <= 1.0
+    assert universe["sector_metadata_coverage"] == report["summary"]["sector_metadata_coverage"]
 
 
 def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:
@@ -255,16 +258,13 @@ def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
         cli_module.load_csv_bars(csv_path, default_market=Market.EQUITY)
 
 
-def test_download_candidates_use_quality_shortlist_not_alphabetical_asset_list(tmp_path) -> None:
+def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(
+    tmp_path, monkeypatch
+) -> None:
     config = _config(tmp_path)
     candidate_path = tmp_path / "equity-candidates.json"
     candidate_path.write_text(
-        json.dumps(
-            {
-                "symbols": ["AAA", "BBB", "ZZZ"],
-                "shortlist_symbols": ["ZZZ"],
-            }
-        ),
+        json.dumps({"symbols": ["AAA", "BBB", "ZZZ"], "shortlist_symbols": ["ZZZ"]}),
         encoding="utf-8",
     )
     config = replace(
@@ -278,4 +278,106 @@ def test_download_candidates_use_quality_shortlist_not_alphabetical_asset_list(t
         ),
     )
 
-    assert cli_module._candidate_symbols(config, Market.EQUITY, None, 1) == ["SPY", "ZZZ"]
+    broad = ["AAA", "BBB", "ZZZ", "HISTORICAL_LIQUID", "SPY"]
+    monkeypatch.setattr(
+        "parayabuck.universe.preflight.eligible_equity_symbols",
+        lambda _config, trading, limit=None: broad if limit is None else broad[:limit],
+    )
+
+    # The historical candidate set is the broad eligible universe, never the
+    # current shortlist file: a symbol liquid in 2022 but absent today can
+    # still enter the historical Stage-A selection. Reference symbols are
+    # always retained even under an explicit cap.
+    assert cli_module._candidate_symbols(config, Market.EQUITY, None, None) == [
+        "SPY",
+        "AAA",
+        "BBB",
+        "ZZZ",
+        "HISTORICAL_LIQUID",
+    ]
+    assert cli_module._candidate_symbols(config, Market.EQUITY, None, 2) == ["SPY", "AAA"]
+    assert cli_module._candidate_symbols(config, Market.EQUITY, "AAPL,MSFT", None) == [
+        "AAPL",
+        "MSFT",
+    ]
+
+
+def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "parayabuck.universe.preflight.eligible_equity_symbols",
+        lambda _config, _trading, limit=None: ["SPY", "AAA"],
+    )
+    captured: dict[str, object] = {}
+
+    class FakeProvider:
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str,
+        ) -> dict[str, list[Bar]]:
+            captured.update(
+                symbols=tuple(symbols),
+                timeframe=timeframe,
+                start=start,
+                end=end,
+                adjustment=adjustment,
+            )
+            return {symbol: [] for symbol in symbols}
+
+    monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
+    args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
+    start = datetime(2022, 1, 1, tzinfo=UTC)
+    end = datetime(2022, 6, 1, tzinfo=UTC)
+
+    cli_module._load_bars(config, args, Market.EQUITY, start, end)
+
+    expected_warmup = timedelta(days=cli_module._warmup_window_days(config, Market.EQUITY))
+    assert captured["start"] == start - expected_warmup
+    assert captured["end"] == end
+    assert captured["adjustment"] == "splits"
+    assert captured["timeframe"] == "1d"
+    assert captured["symbols"] == ("SPY", "AAA")
+
+
+def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
+    tmp_path,
+) -> None:
+    config = _config(tmp_path)
+    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars, which
+    # also covers the 60d scanner lookback: the window is 61 days.
+    assert cli_module._warmup_window_days(config, Market.EQUITY) == 61
+
+
+def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
+    tmp_path,
+) -> None:
+    config = _config(tmp_path)
+    # For an intraday strategy the strategy-warmup term is measured in bars of
+    # that timeframe; the scanner lookback is calendar days and must still be
+    # covered in full.
+    from dataclasses import replace as _replace
+
+    from parayabuck.config import StrategyConfig
+
+    intraday = _replace(
+        config,
+        strategy=StrategyConfig(
+            equity=config.strategy.equity,
+            crypto=_replace(
+                config.strategy.crypto,
+                parameters={
+                    **config.strategy.crypto.parameters,
+                    "momentum_scheme": "7d",
+                    "rebalance_hours": 24,
+                },
+            ),
+        ),
+    )
+    lookback = intraday.universe.crypto.scanner.lookback_days
+    assert cli_module._warmup_window_days(intraday, Market.CRYPTO) >= lookback

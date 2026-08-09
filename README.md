@@ -119,6 +119,17 @@ Offline:
 .venv/bin/parayabuck backtest --market equity --data bars.csv
 ```
 
+Equity downloads default to the broad eligible universe (every active tradable
+US equity on the configured exchanges) rather than today's shortlist, so a
+symbol that was liquid in 2022 but absent from the current universe is still
+evaluated. Each historical snapshot then applies the same Stage-A shortlist
+(trailing median-dollar-volume leaders up to `universe.equity.target_shortlist`)
+before the production scanner runs, matching the live pipeline. Use
+`--candidate-limit N` to cap the download set for resource-limited runs, or
+`--symbols AAPL,MSFT` to download an explicit list. When `--start` is given,
+history before that date is downloaded automatically to cover strategy warmup
+and the trailing scanner lookback; evaluation starts exactly at `--start`.
+
 The historical universe is rebuilt only from information available at each
 snapshot. Signals use finalized closes and orders fill no earlier than the next
 bar open. Cash, fractional rules, fees, spreads, slippage, partial fills, market

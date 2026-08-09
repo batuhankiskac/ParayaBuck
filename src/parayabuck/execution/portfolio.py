@@ -160,16 +160,32 @@ class PortfolioRiskOverlay:
         for symbol in list(desired):
             desired[symbol] = min(desired[symbol], per_asset)
             current = current_weights.get(symbol, 0.0)
-            if halted:
-                desired[symbol] = min(desired[symbol], current)
-            # External quantities are exposure, never inventory this runtime
-            # is authorized to sell.
             external_weight = sum(
                 position.market_value / equity
                 for position in account.positions
                 if canonical_symbol(position.symbol, position.market) == symbol
                 and position.ownership != "managed"
+                and not position.is_flat
             )
+            managed_weight = sum(
+                position.market_value / equity
+                for position in account.positions
+                if canonical_symbol(position.symbol, position.market) == symbol
+                and position.ownership == "managed"
+                and not position.is_flat
+            )
+            if managed_weight <= 1e-12 and external_weight > 0:
+                # Purely external exposure: the bot neither owns nor may sell
+                # this symbol, so it is not tradable inventory at all. Keep it
+                # as immutable gross and drop it from the tradable target set;
+                # otherwise a strategy BUY could grow a manually opened
+                # position and consume a portfolio slot.
+                desired.pop(symbol)
+                continue
+            if halted:
+                desired[symbol] = min(desired[symbol], current)
+            # External quantities are exposure, never inventory this runtime
+            # is authorized to sell; for mixed positions keep the floor.
             desired[symbol] = max(desired[symbol], external_weight)
 
         position_limit = (
@@ -269,6 +285,11 @@ class TargetToOrderPlanner:
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
             delta = target_qty - current_qty
             if delta < 0 and position is not None and position.ownership != "managed":
+                continue
+            if delta > 0 and position is not None and position.ownership != "managed":
+                # Never grow a manually opened position; the risk overlay
+                # already excludes purely external symbols, this is defense
+                # in depth against an external-position BUY.
                 continue
             side = PortfolioOrderSide.BUY if delta > 0 else PortfolioOrderSide.SELL
             quantity = _floor_increment(abs(delta), rule.quantity_increment)

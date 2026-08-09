@@ -702,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
             live_trading_enabled: liveTradingCheck.checked,
             daily_loss_limit_pct: parseFloat(maxDailyLossInput.value),
             max_drawdown_pct: parseFloat(maxDrawdownInput.value),
-            timeframe: timeframeInput.value,
+            execution_timeframe: timeframeInput.value,
             host: hostInput.value.trim(),
             port: parseInt(portInput.value, 10),
             open_browser: openBrowserInput.checked,
@@ -826,7 +826,7 @@ document.addEventListener('DOMContentLoaded', () => {
             parameters,
             years: parseInt(btYears.value, 10) || 3,
             days: Number.isNaN(daysValue) ? 90 : daysValue,
-            max_symbols: parseInt(btMaxSymbols.value, 10) || 40,
+            max_symbols: parseInt(btMaxSymbols.value, 10) || 0,
             symbols: btSymbols.value.trim()
         };
         try {

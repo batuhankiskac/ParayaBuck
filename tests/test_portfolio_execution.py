@@ -136,6 +136,66 @@ def test_planner_skips_symbol_with_existing_open_order() -> None:
     assert orders == ()
 
 
+def test_overlay_removes_purely_external_symbol_from_tradable_target() -> None:
+    account = _account(
+        (
+            _position("SPY", 100, 100, ownership="external"),
+            _position("MSFT", 50, 100, ownership="managed"),
+        )
+    )
+    decision = PortfolioRiskOverlay().apply(
+        _target({"SPY": 0.30, "MSFT": 0.10, "QQQ": 0.10}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("SPY", "MSFT", "QQQ"),
+        maximum_allocation=0.50,
+        mode="paper",
+    )
+    weights = {weight.symbol: weight.weight for weight in decision.target.weights}
+    # A manually opened position is immutable gross, never tradable inventory:
+    # neither a BUY that grows it nor a SELL against it may be planned.
+    assert "SPY" not in weights
+    assert weights["MSFT"] == pytest.approx(0.10)
+    assert decision.gross_after >= 0.10  # external SPY still counted
+
+
+def test_planner_never_orders_a_purely_external_position() -> None:
+    account = _account(
+        (
+            _position("SPY", 100, 100, ownership="external"),
+            _position("IWM", 20, 100, ownership="external"),
+        )
+    )
+    orders = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.30, "QQQ": 0.05}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100, "QQQ": 100, "IWM": 100},
+        rules={symbol: _rule(symbol) for symbol in ("SPY", "QQQ", "IWM")},
+        approved_symbols=("SPY", "QQQ", "IWM"),
+    )
+    assert all(order.symbol != "SPY" for order in orders)
+    assert all(order.symbol != "IWM" for order in orders)
+    assert [order.symbol for order in orders] == ["QQQ"]
+    assert orders[0].side == PortfolioOrderSide.BUY
+
+
+def test_planner_sells_managed_position_when_target_drops_to_zero() -> None:
+    account = _account((_position("SPY", 100, 100, ownership="managed"),))
+    orders = TargetToOrderPlanner().plan(
+        _target({"QQQ": 0.05}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100, "QQQ": 100},
+        rules={symbol: _rule(symbol) for symbol in ("SPY", "QQQ")},
+        approved_symbols=("SPY", "QQQ"),
+    )
+    assert [order.symbol for order in orders] == ["SPY", "QQQ"]
+    sell = next(order for order in orders if order.symbol == "SPY")
+    assert sell.side == PortfolioOrderSide.SELL
+    assert sell.quantity == pytest.approx(100.0)
+
+
 def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
     payload = json.loads(
         (Path(__file__).parent / "fixtures" / "paper_loss_replay.json").read_text()

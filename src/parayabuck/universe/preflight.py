@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,7 +14,7 @@ from alpaca.trading.enums import AssetClass, AssetStatus
 from alpaca.trading.requests import GetAssetsRequest
 
 from parayabuck.config import Config
-from parayabuck.core.models import Market
+from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.universe.crypto_scanner import (
@@ -115,17 +115,15 @@ def ensure_active_universes(
     )
 
 
-def refresh_equity_universe(
-    config: Config,
-    api_key: str,
-    secret_key: str,
-) -> ScannerResult:
+def eligible_equity_assets(config: Config, trading: TradingClient) -> dict[str, Any]:
+    """All active, tradable US equities on the supported exchanges (symbol -> asset).
+
+    This is the broad download and scan pool: the point-in-time Stage-A
+    shortlist is applied per date inside the backtest universe builder, so a
+    symbol liquid in 2022 but absent from today's shortlist can still be
+    evaluated on historical data.
+    """
     universe = config.universe.equity
-    source_path = Path(universe.candidate_universe_path)
-    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
-    if (session := getattr(trading, "_session", None)) is not None:
-        patch_session_timeout(session, timeout=15.0)
-    started = time.monotonic()
     assets = trading.get_all_assets(
         GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
     )
@@ -147,33 +145,54 @@ def refresh_equity_universe(
         allowed[symbol] = asset
     if not allowed:
         raise ValueError("Alpaca returned no eligible active US equities")
+    return allowed
+
+
+def eligible_equity_symbols(
+    config: Config,
+    trading: TradingClient,
+    *,
+    limit: int | None = None,
+) -> list[str]:
+    """Sorted broad equity download set, optionally capped by an explicit limit."""
+    symbols = sorted(eligible_equity_assets(config, trading))
+    return symbols if limit is None else symbols[:limit]
+
+
+def refresh_equity_universe(
+    config: Config,
+    api_key: str,
+    secret_key: str,
+) -> ScannerResult:
+    universe = config.universe.equity
+    source_path = Path(universe.candidate_universe_path)
+    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
+    if (session := getattr(trading, "_session", None)) is not None:
+        patch_session_timeout(session, timeout=15.0)
+    started = time.monotonic()
+    allowed = eligible_equity_assets(config, trading)
     reserved = {
         *universe.reference_symbols,
         *universe.inverse_trade_symbols,
         *universe.allowlist_symbols,
     }
-    cached_candidates: dict[str, EquityCandidate] = {}
-    refresh_symbols = set(allowed)
+    cached_history: dict[str, list[tuple[str, float, float, float, float, float]]] = {}
     refresh_mode = "full"
     try:
         cached_payload = json.loads(source_path.read_text(encoding="utf-8"))
         generated_at = datetime.fromisoformat(str(cached_payload["generated_at"]))
         cache_age = datetime.now(UTC) - generated_at.astimezone(UTC)
-        raw_candidates = cached_payload.get("candidates", ())
-        if cache_age <= timedelta(days=7) and isinstance(raw_candidates, list):
-            for raw in raw_candidates:
-                if not isinstance(raw, dict):
-                    continue
-                candidate = EquityCandidate(**raw)
-                if candidate.symbol in allowed:
-                    cached_candidates[candidate.symbol] = candidate
-            previous_shortlist = {
-                str(symbol) for symbol in cached_payload.get("shortlist_symbols", ())
-            }
-            new_symbols = set(allowed) - set(cached_candidates)
-            incremental = (previous_shortlist | new_symbols | reserved) & set(allowed)
-            if cached_candidates and incremental:
-                refresh_symbols = incremental
+        raw_history = cached_payload.get("history")
+        if cache_age <= timedelta(days=7) and isinstance(raw_history, dict):
+            for symbol, rows in raw_history.items():
+                if isinstance(rows, list) and all(isinstance(row, list) for row in rows):
+                    cached_history[symbol] = rows
+            if cached_history:
+                # Rolling 20-day state cache: every eligible symbol keeps its
+                # last 20 daily bars locally, so each refresh only fetches the
+                # newest daily bars for the whole universe instead of redownloading
+                # 45 days. A symbol that became liquid today enters the shortlist
+                # tomorrow with fresh metrics, not in up to a week.
                 refresh_mode = "incremental"
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         pass
@@ -184,27 +203,79 @@ def refresh_equity_universe(
         data_delayed=config.alpaca.data_delayed,
     )
     end = datetime.now(UTC)
-    start = end - timedelta(days=45)
-    refreshed_candidates: list[EquityCandidate] = []
     historical_requests = 0
     bars_downloaded = 0
-    for batch in _chunks(sorted(refresh_symbols), 150):
-        historical_requests += 1
-        by_symbol = history.get_bars_batch(batch, "1d", start=start, end=end)
-        bars_downloaded += sum(len(items) for items in by_symbol.values())
-        refreshed_candidates.extend(
-            _equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, []))
-            for symbol in batch
-        )
-    merged_candidates = dict(cached_candidates)
-    merged_candidates.update((candidate.symbol, candidate) for candidate in refreshed_candidates)
-    discovered = list(merged_candidates.values())
+    by_symbol: dict[str, list[Bar]] = {}
+    if refresh_mode == "incremental":
+        missing_history = [symbol for symbol in sorted(allowed) if symbol not in cached_history]
+        if missing_history:
+            start = end - timedelta(days=45)
+            for batch in _chunks(missing_history, 150):
+                historical_requests += 1
+                downloaded = history.get_bars_batch(batch, "1d", start=start, end=end)
+                bars_downloaded += sum(len(items) for items in downloaded.values())
+                for symbol in batch:
+                    bars = downloaded.get(symbol, [])
+                    if bars:
+                        cached_history[symbol] = [_bar_to_tuple(bar) for bar in bars[-20:]]
+        # Fresh daily bars for the entire eligible universe (one shared
+        # trailing window keeps the request count to ~len/150 batches).
+        start = end - timedelta(days=10)
+        for batch in _chunks(sorted(allowed), 150):
+            historical_requests += 1
+            downloaded = history.get_bars_batch(batch, "1d", start=start, end=end)
+            bars_downloaded += sum(len(items) for items in downloaded.values())
+            for symbol in batch:
+                rows = cached_history.setdefault(symbol, [])
+                rows.extend(_bar_to_tuple(bar) for bar in downloaded.get(symbol, []))
+                rows.sort(key=lambda row: row[0])
+                unique: list[tuple[str, float, float, float, float, float]] = []
+                for row in rows:
+                    if unique and unique[-1][0] == row[0]:
+                        # Last write wins: a bar downloaded earlier for the
+                        # same day may be an intraday partial; the newer
+                        # download replaces it with the (near-)final bar.
+                        unique[-1] = row
+                    else:
+                        unique.append(row)
+                cached_history[symbol] = unique[-20:]
+                by_symbol[symbol] = _tuples_to_bars(symbol, unique[-20:])
+    else:
+        start = end - timedelta(days=45)
+        for batch in _chunks(sorted(allowed), 150):
+            historical_requests += 1
+            downloaded = history.get_bars_batch(batch, "1d", start=start, end=end)
+            bars_downloaded += sum(len(items) for items in downloaded.values())
+            for symbol in batch:
+                bars = downloaded.get(symbol, [])
+                by_symbol[symbol] = bars
+                if bars:
+                    cached_history[symbol] = [_bar_to_tuple(bar) for bar in bars[-20:]]
+    discovered = [
+        _equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, []))
+        for symbol in sorted(allowed)
+    ]
     ranked = sorted(
         discovered,
         key=lambda item: (-item.median_dollar_volume_20d, item.symbol),
     )
     shortlist_symbols = {item.symbol for item in ranked[: universe.target_shortlist]} | reserved
-    candidates = [item for item in discovered if item.symbol in shortlist_symbols]
+    quotes: dict[str, Any] = {}
+    try:
+        quotes = trading.get_latest_quotes(sorted(shortlist_symbols))
+    except Exception as exc:
+        log.warning(
+            "Equity latest quotes unavailable; neutral spread score will be used: %s",
+            exc,
+        )
+    candidates: list[EquityCandidate] = []
+    enriched_discovered: list[EquityCandidate] = []
+    for item in discovered:
+        spread = _spread_bps(quotes.get(item.symbol))
+        with_spread = item if spread is None else replace(item, spread_bps=spread)
+        enriched_discovered.append(with_spread)
+        if item.symbol in shortlist_symbols:
+            candidates.append(with_spread)
     scanner = EquityUniverseScanner(universe)
     result = scanner.scan(candidates, data_timestamp=end)
 
@@ -213,24 +284,28 @@ def refresh_equity_universe(
         "source": "Alpaca active tradable US equity assets",
         "symbols": sorted(allowed),
         "shortlist_symbols": sorted(shortlist_symbols),
-        "candidates": [asdict(item) for item in discovered],
+        "candidates": [asdict(item) for item in enriched_discovered],
+        "history": {
+            symbol: rows
+            for symbol, rows in sorted(cached_history.items())
+            if rows and symbol in allowed
+        },
     }
     temporary = source_path.with_suffix(source_path.suffix + ".tmp")
     temporary.write_text(json.dumps(enriched, indent=2, sort_keys=True), encoding="utf-8")
     temporary.replace(source_path)
     scanner.persist(result)
     log.info(
-        "Equity universe refresh metrics: assets_discovered=%d assets_eligible=%d "
+        "Equity universe refresh metrics: assets_eligible=%d "
         "historical_requests=%d bars_downloaded=%d shortlist_size=%d selected_count=%d "
         "refresh_mode=%s refreshed_assets=%d duration_seconds=%.3f",
-        len(assets),
         len(allowed),
         historical_requests,
         bars_downloaded,
         len(shortlist_symbols),
         len(result.selected_symbols),
         refresh_mode,
-        len(refresh_symbols),
+        len(by_symbol),
         time.monotonic() - started,
     )
     return result
@@ -324,6 +399,37 @@ def _chunks(values: list[str], size: int = 8) -> list[list[str]]:
     return [values[offset : offset + size] for offset in range(0, len(values), size)]
 
 
+def _bar_to_tuple(bar: Bar) -> tuple[str, float, float, float, float, float]:
+    return (
+        bar.timestamp.isoformat(),
+        float(bar.open),
+        float(bar.high),
+        float(bar.low),
+        float(bar.close),
+        float(bar.volume),
+    )
+
+
+def _tuples_to_bars(
+    symbol: str,
+    rows: list[tuple[str, float, float, float, float, float]],
+) -> list[Bar]:
+    return [
+        Bar(
+            datetime.fromisoformat(timestamp),
+            symbol,
+            "1d",
+            open_,
+            high,
+            low,
+            close,
+            volume,
+            Market.EQUITY,
+        )
+        for timestamp, open_, high, low, close, volume in rows
+    ]
+
+
 def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandidate:
     candidate = equity_candidate_from_bars(
         symbol,
@@ -362,6 +468,8 @@ def _spread_bps(quote: Any) -> float | None:
 
 __all__ = [
     "UniversePreflightResult",
+    "eligible_equity_assets",
+    "eligible_equity_symbols",
     "ensure_active_universes",
     "refresh_crypto_universe",
     "refresh_equity_universe",

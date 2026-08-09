@@ -101,6 +101,7 @@ class ScannerResult:
     config_digest: str
     sector_distribution: dict[str, int]
     status: str = "success"
+    sector_metadata_coverage: float = 1.0
 
 
 class EquityUniverseScanner:
@@ -147,6 +148,7 @@ class EquityUniverseScanner:
         scored: list[tuple[float, str, str, dict[str, float | str]]] = []
         seen: set[str] = set()
         candidate_sector: dict[str, str] = {}
+        sector_known = 0
         for candidate in candidates:
             symbol = canonical_symbol(candidate.symbol, Market.EQUITY)
             if symbol in seen:
@@ -164,6 +166,8 @@ class EquityUniverseScanner:
             static_sector = sector_of(symbol).strip().lower()
             sector = broker_sector or (static_sector if static_sector != "other" else "unknown")
             candidate_sector[symbol] = sector
+            if broker_sector or static_sector != "other":
+                sector_known += 1
             liquidity = min(1.0, math.log10(candidate.median_dollar_volume_20d) / 10)
             volatility_fit = max(
                 0.0,
@@ -243,6 +247,7 @@ class EquityUniverseScanner:
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
             breakdowns[symbol] = breakdown
         timestamp = (selection_timestamp or datetime.now(UTC)).astimezone(UTC)
+        coverage = sector_known / len(scored) if scored else 1.0
         return ScannerResult(
             selection_timestamp=timestamp.isoformat(),
             data_timestamp=data_timestamp.astimezone(UTC).isoformat(),
@@ -253,6 +258,7 @@ class EquityUniverseScanner:
             scanner_version=self.version,
             config_digest=self._config_digest(),
             sector_distribution=dict(sorted(sector_counts.items())),
+            sector_metadata_coverage=round(coverage, 6),
         )
 
     def persist(self, result: ScannerResult) -> None:

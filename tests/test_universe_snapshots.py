@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +16,7 @@ from parayabuck.backtest.universe import (
     verify_persisted_universe,
 )
 from parayabuck.config import (
+    Config,
     CryptoScannerConfig,
     CryptoUniverseConfig,
     EquityScannerConfig,
@@ -204,3 +208,326 @@ def test_historical_crypto_adapter_uses_same_production_scanner_policy() -> None
     )
     assert snapshot.symbols == frozenset(direct.selected_symbols)
     assert snapshot.scanner_version == direct.scanner_version
+
+
+def test_historical_stage_a_shortlist_admits_formerly_liquid_symbols() -> None:
+    """A symbol liquid in 2022 but absent from today's shortlist must still be
+    evaluated: the historical Stage-A shortlist is per-date trailing volume,
+    never the current candidate file."""
+    start = datetime(2022, 1, 1, tzinfo=UTC)
+    bars: list[Bar] = []
+    for day in range(60):
+        timestamp = start + timedelta(days=day)
+        bars.append(
+            Bar(
+                timestamp,
+                "OLD_LIQUID",
+                "1d",
+                100,
+                101,
+                99,
+                100,
+                5_000_000,
+                Market.EQUITY,
+            )
+        )
+        bars.append(
+            Bar(
+                timestamp,
+                "TODAY_LIQUID",
+                "1d",
+                100,
+                101,
+                99,
+                100,
+                5_000_000,
+                Market.EQUITY,
+            )
+        )
+        bars.append(
+            Bar(
+                timestamp,
+                "TINY",
+                "1d",
+                100,
+                101,
+                99,
+                100,
+                100,
+                Market.EQUITY,
+            )
+        )
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=2,
+        target_shortlist=2,
+        reference_symbols=(),
+        scanner=EquityScannerConfig(
+            minimum_price=1,
+            minimum_median_dollar_volume=1,
+            minimum_data_completeness=0.9,
+            minimum_atr_pct=0.001,
+            maximum_per_sector=2,
+        ),
+    )
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.EQUITY,
+        maximum_symbols=2,
+        rebalance_frequency="monthly",
+        lookback_days=40,
+        minimum_history_ratio=0.9,
+        target_shortlist=2,
+        equity_config=config,
+    )
+    snapshot = universe.snapshots[-1]
+    # TINY is in the downloaded set but fails the Stage-A volume gate; the
+    # scanner only ever saw the two liquid names.
+    assert snapshot.symbols == frozenset({"OLD_LIQUID", "TODAY_LIQUID"})
+    assert snapshot.candidate_count == 2
+    assert "TINY" not in snapshot.symbols
+    assert "Stage-A shortlist capped at 2 symbols" in universe.methodology
+
+
+def _equity_refresh_config(tmp_path: Path) -> Config:
+    from dataclasses import replace as _replace
+
+    base = Config()
+    equity = _replace(
+        EquityUniverseConfig(
+            maximum_stream_symbols=3,
+            target_shortlist=3,
+            reference_symbols=("SPY",),
+            scanner=EquityScannerConfig(
+                minimum_price=1,
+                minimum_median_dollar_volume=1,
+                minimum_data_completeness=0.9,
+                minimum_atr_pct=0.001,
+                maximum_per_sector=5,
+            ),
+        ),
+        candidate_universe_path=str(tmp_path / "equity_candidates.json"),
+        active_universe_path=str(tmp_path / "active_equity_universe.json"),
+    )
+    return _replace(
+        base,
+        universe=_replace(base.universe, equity=equity),
+    )
+
+
+def _daily_bars(end: datetime, days: int, symbol: str, volume: float) -> list[Bar]:
+    return [
+        Bar(
+            end - timedelta(days=days - 1 - index),
+            symbol,
+            "1d",
+            100,
+            101,
+            99,
+            100,
+            volume,
+            Market.EQUITY,
+        )
+        for index in range(days)
+    ]
+
+
+def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
+    tmp_path, monkeypatch
+) -> None:
+    from parayabuck.universe import preflight as preflight_module
+
+    config = _equity_refresh_config(tmp_path)
+    asset = SimpleNamespace(sector="technology", exchange="NASDAQ", tradable=True, status="active")
+    now = datetime.now(UTC)
+    cached_history = {
+        "AAA": [
+            (bar.timestamp.isoformat(), 100, 101, 99, 100, 5_000_000)
+            for bar in _daily_bars(now, 20, "AAA", 5_000_000)
+        ],
+        "BBB": [
+            (bar.timestamp.isoformat(), 100, 101, 99, 100, 1_000_000)
+            for bar in _daily_bars(now, 20, "BBB", 1_000_000)
+        ],
+    }
+    (tmp_path / "equity_candidates.json").write_text(
+        json.dumps(
+            {
+                "generated_at": now.isoformat(),
+                "symbols": ["AAA", "BBB"],
+                "shortlist_symbols": ["AAA", "BBB"],
+                "candidates": [],
+                "history": cached_history,
+            }
+        ),
+        encoding="utf-8",
+    )
+    windows: list[tuple[str, ...]] = []
+    quote_requests: list[tuple[str, ...]] = []
+
+    class FakeTrading:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
+            quote_requests.append(tuple(symbols))
+            return {
+                "AAA": SimpleNamespace(bid_price=99.5, ask_price=100.5),
+            }
+
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "raw",
+        ) -> dict[str, list[Bar]]:
+            windows.append((tuple(symbols), timeframe, start.isoformat(), end.isoformat()))
+            # "NEW" appears only in the incremental pass with a liquidity spike.
+            volume = 10_000_000 if "NEW" in symbols else 1_000_000
+            span = (end - start).days
+            bar_count = 20 if span > 30 else 3
+            return {symbol: _daily_bars(end, bar_count, symbol, volume) for symbol in symbols}
+
+    monkeypatch.setattr(
+        preflight_module,
+        "eligible_equity_assets",
+        lambda _c, _t: {"AAA": asset, "BBB": asset, "NEW": asset},
+    )
+    monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
+
+    result = preflight_module.refresh_equity_universe(config, "key", "secret")
+
+    # NEW had no cached history: it gets the full 45d backfill window first,
+    # then the shared incremental window covers every symbol.
+    full_calls = [w for w in windows if (now - datetime.fromisoformat(w[2])).days > 30]
+    assert any("NEW" in w[0] for w in full_calls)
+    delta_calls = [w for w in windows if (now - datetime.fromisoformat(w[2])).days <= 10]
+    assert all(("AAA" in w[0] or "BBB" in w[0] or "NEW" in w[0]) for w in delta_calls)
+    assert delta_calls
+
+    # "NEW" became liquid and enters the Stage-A shortlist the same refresh;
+    # the quote for AAA flowed into the candidate spread score.
+    assert "NEW" in result.selected_symbols
+    assert quote_requests
+    saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
+    saved_aaa = next(item for item in saved["candidates"] if item["symbol"] == "AAA")
+    assert saved_aaa["spread_bps"] == pytest.approx(100.0)
+    assert saved["history"].get("NEW")
+    assert result.sector_metadata_coverage == pytest.approx(1.0)
+
+
+def test_equity_refresh_full_mode_when_no_cache_and_neutral_spread(tmp_path, monkeypatch) -> None:
+    from parayabuck.universe import preflight as preflight_module
+
+    config = _equity_refresh_config(tmp_path)
+    asset = SimpleNamespace(sector=None, exchange="NASDAQ", tradable=True, status="active")
+    windows: list[tuple[str, ...]] = []
+
+    class FakeTrading:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
+            raise RuntimeError("quotes unavailable")
+
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "raw",
+        ) -> dict[str, list[Bar]]:
+            windows.append((tuple(symbols), start.isoformat(), end.isoformat()))
+            return {symbol: _daily_bars(end, 20, symbol, 5_000_000) for symbol in symbols}
+
+    monkeypatch.setattr(
+        preflight_module,
+        "eligible_equity_assets",
+        lambda _c, _t: {"AAA": asset, "BBB": asset},
+    )
+    monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
+
+    result = preflight_module.refresh_equity_universe(config, "key", "secret")
+
+    assert len(windows) == 1  # single full 45d pass for everything
+    saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
+    for item in saved["candidates"]:
+        assert item["spread_bps"] is None  # neutral spread score
+    assert result.sector_metadata_coverage == 0.0  # no sector metadata anywhere
+
+
+def test_rolling_cache_last_write_wins_for_same_day_bars(tmp_path, monkeypatch) -> None:
+    """A cached intraday partial bar must be replaced by the newer final bar
+    for the same day; the delta download is not wasted."""
+    from parayabuck.universe import preflight as preflight_module
+
+    config = _equity_refresh_config(tmp_path)
+    asset = SimpleNamespace(sector=None, exchange="NASDAQ", tradable=True, status="active")
+    now = datetime.now(UTC)
+    cached_rows = [
+        (now.isoformat(), 100, 101, 99, 100, 100_000),  # partial volume
+    ]
+    (tmp_path / "equity_candidates.json").write_text(
+        json.dumps(
+            {
+                "generated_at": now.isoformat(),
+                "symbols": ["AAA"],
+                "shortlist_symbols": ["AAA"],
+                "candidates": [],
+                "history": {"AAA": cached_rows},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeTrading:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
+            raise RuntimeError("no quotes")
+
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "raw",
+        ) -> dict[str, list[Bar]]:
+            return {
+                # Same timestamp as the cached partial bar, now with the final
+                # volume and a moved close.
+                "AAA": [Bar(now, "AAA", "1d", 100, 101, 99, 100.5, 9_000_000, Market.EQUITY)],
+            }
+
+    monkeypatch.setattr(preflight_module, "eligible_equity_assets", lambda _c, _t: {"AAA": asset})
+    monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
+
+    preflight_module.refresh_equity_universe(config, "key", "secret")
+
+    saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
+    rows = saved["history"]["AAA"]
+    day_rows = [row for row in rows if row[0] == now.isoformat()]
+    assert day_rows == [[now.isoformat(), 100.0, 101.0, 99.0, 100.5, 9_000_000.0]]
+    assert len(rows) == 1  # replaced, not duplicated

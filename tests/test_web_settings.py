@@ -85,19 +85,22 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     manager.config_path.write_text(
         yaml.safe_dump(
             {
-                "alpaca": {"paper": True},
                 "app": {
                     "host": "127.0.0.1",
                     "port": 8000,
                     "open_browser": True,
                     "log_level": "INFO",
                 },
-                "engine": {
-                    "timeframe": "15m",
-                    "risk": {
-                        "daily_loss_limit_pct": 0.015,
-                        "max_drawdown_pct": 0.10,
-                    },
+                "runtime": {
+                    "mode": "paper",
+                    "execution_timeframe": "5m",
+                    "risk_monitor_timeframe": "5m",
+                    "decision_db_path": "data/runtime/parayabuck.sqlite3",
+                    "scanner_refresh_hours": 24,
+                },
+                "risk": {
+                    "daily_loss_limit_pct": 0.015,
+                    "max_drawdown_pct": 0.10,
                 },
             }
         )
@@ -110,7 +113,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
                 paper_mode=True,
                 daily_loss_limit_pct=2.0,
                 max_drawdown_pct=12.0,
-                timeframe="5m",
+                execution_timeframe="5m",
                 host="127.0.0.1",
                 port=8000,
                 open_browser=True,
@@ -120,7 +123,9 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     )
 
     saved = yaml.safe_load(manager.config_path.read_text())
-    assert saved["engine"]["timeframe"] == "5m"
+    assert saved["runtime"]["mode"] == "paper"
+    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "engine" not in saved or "timeframe" not in saved["engine"]
     assert saved["risk"]["daily_loss_limit_pct"] == 0.02
     assert saved["risk"]["max_drawdown_pct"] == 0.12
     assert manager.stop_calls == 1
@@ -133,17 +138,89 @@ def test_settings_save_succeeds_when_automatic_restart_times_out(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     manager = _RestartFailureManagerStub(tmp_path)
-    manager.config_path.write_text(
-        yaml.safe_dump({"alpaca": {"paper": True}, "engine": {"risk": {}}})
-    )
+    manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}}))
     monkeypatch.setattr(server, "manager", manager)
 
-    result = asyncio.run(server.save_settings(server.SettingsPayload(timeframe="5m")))
+    result = asyncio.run(server.save_settings(server.SettingsPayload(execution_timeframe="5m")))
 
     assert result["status"] == "success"
     assert result["engine_restarted"] is False
     assert result["restart_error"] == "Alpaca timed out"
-    assert yaml.safe_load(manager.config_path.read_text())["engine"]["timeframe"] == "5m"
+    saved = yaml.safe_load(manager.config_path.read_text())
+    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "timeframe" not in saved.get("engine", {})
+
+
+def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manager = _CountingEngineManager(tmp_path)
+    manager.config_path.write_text(
+        yaml.safe_dump(
+            {
+                "runtime": {"mode": "paper"},
+                "risk": {"daily_loss_limit_pct": 0.015, "max_drawdown_pct": 0.10},
+                "engine": {"timeframe": "15m", "warmup_bars": 5},
+                "strategy": {"equity": {"enabled": True}},
+            }
+        )
+    )
+    monkeypatch.setattr(server, "manager", manager)
+
+    result = asyncio.run(
+        server.save_settings(
+            server.SettingsPayload(
+                paper_mode=True,
+                daily_loss_limit_pct=2.0,
+                max_drawdown_pct=12.0,
+                execution_timeframe="5m",
+            )
+        )
+    )
+
+    assert result["status"] == "success"
+    saved = yaml.safe_load(manager.config_path.read_text())
+    assert saved["runtime"]["execution_timeframe"] == "5m"
+    assert "timeframe" not in saved.get("engine", {})
+    assert "warmup_bars" not in saved.get("engine", {})
+
+
+def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    manager = _CountingEngineManager(tmp_path)
+    manager.config_path.write_text(
+        yaml.safe_dump(
+            {
+                "runtime": {"mode": "paper"},
+                "risk": {
+                    "daily_loss_limit_pct": 0.015,
+                    "max_drawdown_pct": 0.10,
+                    "volatility_targeting_enabled": True,
+                    "risk_per_trade_pct": 0.01,
+                },
+                "strategy": {"equity": {"enabled": True}},
+            }
+        )
+    )
+    monkeypatch.setattr(server, "manager", manager)
+
+    result = asyncio.run(
+        server.save_settings(
+            server.SettingsPayload(
+                paper_mode=True,
+                daily_loss_limit_pct=2.0,
+                max_drawdown_pct=12.0,
+                execution_timeframe="5m",
+            )
+        )
+    )
+
+    assert result["status"] == "success"
+    saved = yaml.safe_load(manager.config_path.read_text())
+    assert "volatility_targeting_enabled" not in saved["risk"]
+    assert "risk_per_trade_pct" not in saved["risk"]
+    assert saved["risk"]["daily_loss_limit_pct"] == 0.02
 
 
 def test_application_shutdown_stops_running_engine(monkeypatch: Any) -> None:
@@ -229,7 +306,6 @@ def test_web_engine_manager_uses_runtime(monkeypatch: Any) -> None:
     class FakeRuntime:
         def __init__(self, **kwargs: Any) -> None:
             calls.append("init")
-            self.engine = object()
             self.broker = object()
             self.is_running = True
 
@@ -259,7 +335,6 @@ def test_failed_runtime_start_does_not_leave_closed_runtime_exposed(
 ) -> None:
     class FailedRuntime:
         def __init__(self, **kwargs: Any) -> None:
-            self.engine = object()
             self.broker = object()
             self.stopped = False
 
@@ -285,7 +360,6 @@ def test_failed_runtime_start_does_not_leave_closed_runtime_exposed(
     assert manager.last_engine_error == "stream startup failed"
     assert manager.current_engine_state() == "error"
     assert manager.runtime is None
-    assert manager.engine is None
     assert manager.broker is None
 
 
@@ -509,3 +583,62 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     status = asyncio.run(server.get_status())
     assert status["strategy_status"] == "configuration_error"
     assert status["scanner"] == {"last_run_at": None, "status": "error"}
+
+
+def test_readyz_rejects_degraded_or_halted_runtime(monkeypatch: Any) -> None:
+    from types import SimpleNamespace
+
+    class DegradedManager:
+        config_path = None
+
+        def __init__(self, state: str) -> None:
+            self._state = state
+
+        def has_active_runtime(self) -> bool:
+            return True
+
+        def current_engine_state(self) -> str:
+            return self._state
+
+        @property
+        def runtime(self) -> Any:
+            health = SimpleNamespace(state=self._state, healthy=False)
+            return SimpleNamespace(health=lambda: health)
+
+    monkeypatch.setattr(server, "manager", DegradedManager("degraded"))
+    monkeypatch.setattr(server, "load_config", lambda _path: object())
+
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["ready"] is False
+    assert payload["runtime_expected"] is True
+    assert response.status_code == 503
+
+    monkeypatch.setattr(server, "manager", DegradedManager("halted"))
+    response = asyncio.run(server.readyz())
+    assert json.loads(response.body)["ready"] is False
+    assert response.status_code == 503
+
+
+def test_readyz_reports_ready_when_no_runtime_is_expected(monkeypatch: Any) -> None:
+    class StoppedManager:
+        config_path = None
+
+        def has_active_runtime(self) -> bool:
+            return False
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        @property
+        def runtime(self) -> Any:
+            return None
+
+    monkeypatch.setattr(server, "manager", StoppedManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: object())
+
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["ready"] is True
+    assert payload["runtime_expected"] is False
+    assert response.status_code == 200

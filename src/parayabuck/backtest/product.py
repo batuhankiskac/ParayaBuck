@@ -165,6 +165,7 @@ def run_product_backtest(
         minimum_price=minimum_price,
         minimum_dollar_volume=minimum_dollar_volume,
         pinned_symbols=pinned,
+        target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
         equity_config=(config.universe.equity if market == Market.EQUITY else None),
         crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
     )
@@ -209,6 +210,7 @@ def run_product_backtest(
             "cost_multiplier": cost_multiplier,
             "universe_hash": hash_point_in_time_universe(universe),
             "universe_methodology": universe.methodology,
+            "sector_metadata_coverage": universe.to_dict()["sector_metadata_coverage"],
             "scanner_versions": sorted(
                 {snapshot.scanner_version for snapshot in universe.snapshots}
             ),

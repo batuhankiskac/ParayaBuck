@@ -241,12 +241,14 @@ class EngineRuntime:
         database_path = config.runtime.decision_db_path
         self.store = SQLiteStore(database_path)
         self.ledger = ExecutionLedger(database_path, store=self.store)
+        self._portfolio_repository = PortfolioStateRepository(database_path, store=self.store)
         self.broker = AlpacaBroker(
             api_key,
             secret_key,
             paper=self.paper,
             manage_external_positions=self.config.manage_external_positions,
             ledger=self.ledger,
+            portfolio_owned_symbols=lambda: self._portfolio_repository.owned_symbols(),
             crypto_stop_limit_offset_bps=self.config.crypto_stop_limit_offset_bps,
             crypto_emergency_exit_bps=self.config.crypto_emergency_exit_bps,
             crypto_stop_cancel_timeout_seconds=self.config.crypto_stop_cancel_timeout_seconds,
@@ -254,7 +256,6 @@ class EngineRuntime:
                 self.config.crypto_stop_cancel_poll_interval_seconds
             ),
         )
-        self._portfolio_repository = PortfolioStateRepository(database_path, store=self.store)
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.market_state = RuntimeMarketState(
             self.config,
@@ -779,15 +780,22 @@ class EngineRuntime:
     ) -> dict[Market, dict[str, tuple[str, ...]]]:
         """Apply scanner changes while retaining every owned/open-order symbol."""
         account = self.broker.account()
+        account_id = self.broker.account_id or "unknown"
+        manage_external = bool(
+            getattr(getattr(self, "config", None), "manage_external_positions", False)
+        )
+        # Only bot-owned exposure is pinned: ledger lots, portfolio-owned
+        # positions (ownership == "managed"), and open portfolio orders.
+        # Manually opened external positions are not the runtime's inventory
+        # and must not consume stream slots unless the operator opted in.
         protected = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
-            if not position.is_flat
+            if not position.is_flat and (position.ownership == "managed" or manage_external)
         }
         protected.update(self.broker.open_portfolio_order_symbols())
         protected.update(
-            item.canonical_symbol
-            for item in self.ledger.managed_entries_for_account(self.broker.account_id or "unknown")
+            item.canonical_symbol for item in self.ledger.managed_entries_for_account(account_id)
         )
         applied: dict[Market, tuple[str, ...]] = {}
         changes: dict[Market, dict[str, tuple[str, ...]]] = {}
@@ -820,51 +828,119 @@ class EngineRuntime:
             applied[market] = selected
             changes[market] = {"added": added, "removed": removed}
 
-        self.stream.update_subscriptions(
-            sorted(
-                applied.get(
-                    Market.EQUITY,
-                    tuple(sorted(self._symbols_by_market[Market.EQUITY])),
-                )
-            ),
-            sorted(
-                applied.get(
-                    Market.CRYPTO,
-                    tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
-                )
-            ),
-        )
-        portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
-        with self._ingestion_lock, self._state_lock, portfolio_lock:
-            for market, selected in applied.items():
-                self._symbols_by_market[market] = set(selected)
-                for runtime in self._portfolio_runtimes:
-                    if runtime.market == market:
-                        runtime.update_symbols(selected)
-            self.symbols = sorted(
-                self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
-            )
-            self._expected_all_symbols = set(self.symbols)
-            added_all = {symbol for result in changes.values() for symbol in result["added"]}
-            removed_all = {symbol for result in changes.values() for symbol in result["removed"]}
-            self._not_ready_symbols.update(added_all)
-            self._not_ready_symbols.difference_update(removed_all)
-            if self.market_state.allowed_trade_symbols is not None:
-                references = set(self.app_config.universe.equity.reference_symbols)
-                self.market_state.allowed_trade_symbols = {
-                    *self._symbols_by_market[Market.CRYPTO],
-                    *(
-                        symbol
-                        for symbol in self._symbols_by_market[Market.EQUITY]
-                        if self.app_config.universe.equity.trade_reference_symbols
-                        or symbol not in references
-                    ),
-                }
+        if not any(result["added"] or result["removed"] for result in changes.values()):
+            log.info("Universe hot-swap produced no membership change; subscription kept")
+            return changes
 
+        # Fail-closed transactional transition: warmup the new members before
+        # the stream changes, then converge the stream, then commit runtime
+        # state. Any failure before the commit leaves the previous universe
+        # fully subscribed and stateful.
+        old_symbols = {
+            Market.EQUITY: tuple(sorted(self._symbols_by_market[Market.EQUITY])),
+            Market.CRYPTO: tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
+        }
         newly_added = sorted(symbol for result in changes.values() for symbol in result["added"])
-        if newly_added and self._historical is not None:
-            self._warmup_symbols(self._historical, newly_added, retry=False)
-            self._refresh_readiness()
+        removed_all = {symbol for result in changes.values() for symbol in result["removed"]}
+        state_lock = getattr(self, "_state_lock", threading.RLock())
+        with state_lock:
+            previous_not_ready = set(self._not_ready_symbols)
+            previous_allowed_trade = (
+                set(self.market_state.allowed_trade_symbols)
+                if self.market_state.allowed_trade_symbols is not None
+                else None
+            )
+        with state_lock:
+            self._not_ready_symbols.update(newly_added)
+        try:
+            if newly_added and self._historical is not None:
+                self._warmup_symbols(self._historical, newly_added, retry=False)
+        except Exception:
+            with state_lock:
+                self._not_ready_symbols = previous_not_ready
+            raise
+
+        try:
+            self.stream.update_subscriptions(
+                sorted(applied.get(Market.EQUITY, old_symbols[Market.EQUITY])),
+                sorted(applied.get(Market.CRYPTO, old_symbols[Market.CRYPTO])),
+            )
+        except Exception:
+            # The stream refused the new membership: the runtime state was
+            # never committed, so drop the warming marks again.
+            with state_lock:
+                self._not_ready_symbols = previous_not_ready
+            raise
+        portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
+        try:
+            with self._ingestion_lock, state_lock, portfolio_lock:
+                previous_by_market = {
+                    market: set(self._symbols_by_market[market]) for market in applied
+                }
+                previous_portfolio_symbols = {
+                    runtime.market: getattr(runtime, "symbols", ())
+                    for runtime in self._portfolio_runtimes
+                }
+                for market, selected in applied.items():
+                    self._symbols_by_market[market] = set(selected)
+                    for runtime in self._portfolio_runtimes:
+                        if runtime.market == market:
+                            runtime.update_symbols(selected)
+                self.symbols = sorted(
+                    self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
+                )
+                self._expected_all_symbols = set(self.symbols)
+                self._not_ready_symbols.difference_update(removed_all)
+                if self.market_state.allowed_trade_symbols is not None:
+                    references = set(self.app_config.universe.equity.reference_symbols)
+                    self.market_state.allowed_trade_symbols = {
+                        *self._symbols_by_market[Market.CRYPTO],
+                        *(
+                            symbol
+                            for symbol in self._symbols_by_market[Market.EQUITY]
+                            if self.app_config.universe.equity.trade_reference_symbols
+                            or symbol not in references
+                        ),
+                    }
+        except Exception:
+            # Commit failed after the stream converged: restore both the
+            # runtime state and the stream to the previous universe so the
+            # runtime never observes a half-applied membership.
+            log.exception("Universe hot-swap commit failed; rolling back")
+            with self._ingestion_lock, state_lock, portfolio_lock:
+                self._symbols_by_market.update(previous_by_market)
+                for market, previous in previous_portfolio_symbols.items():
+                    for runtime in self._portfolio_runtimes:
+                        if runtime.market == market:
+                            try:
+                                runtime.update_symbols(previous)
+                            except Exception:
+                                # A failed restore must not abort the rest of
+                                # the rollback; the symbol set is restored
+                                # below and the stream reverts regardless.
+                                log.exception(
+                                    "Portfolio runtime restore failed for %s", market.value
+                                )
+                self.symbols = sorted(
+                    self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
+                )
+                self._expected_all_symbols = set(self.symbols)
+                self._not_ready_symbols = previous_not_ready
+                if self.market_state.allowed_trade_symbols is not None:
+                    self.market_state.allowed_trade_symbols = (
+                        previous_allowed_trade
+                        if previous_allowed_trade is not None
+                        else self.market_state.allowed_trade_symbols
+                    )
+            try:
+                self.stream.update_subscriptions(
+                    list(old_symbols[Market.EQUITY]), list(old_symbols[Market.CRYPTO])
+                )
+            except Exception:
+                log.exception("Stream rollback after failed hot-swap commit also failed")
+            raise
+
+        self._refresh_readiness()
         log.info(
             "Universe hot-swap applied: %s",
             {
@@ -879,7 +955,14 @@ class EngineRuntime:
         account_id = self.broker.account_id or "unknown"
         entries = self.ledger.managed_entries_for_account(account_id)
         repository = getattr(self, "_portfolio_repository", None)
-        portfolio_symbols = repository.managed_symbols() if repository is not None else set()
+        # Only symbols still owned (net filled quantity > 0) or with an open
+        # portfolio order are pinned; a fully exited symbol stops consuming a
+        # stream slot.
+        portfolio_symbols = (
+            repository.owned_symbols() | self.broker.open_portfolio_order_symbols()
+            if repository is not None
+            else set()
+        )
         try:
             broker_positions = self.broker.account().positions
         except Exception:

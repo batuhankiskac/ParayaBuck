@@ -37,6 +37,11 @@ from parayabuck.core.models import (
     ProtectionState,
 )
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
+from parayabuck.execution.portfolio import (
+    AssetTradingRules,
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+)
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
@@ -136,9 +141,7 @@ class AlpacaBroker:
         positions: list[PositionSnapshot] = []
         ledger = self.ledger
         managed_positions = (
-            ledger.managed_for_account(self._account_id or "unknown")
-            if ledger is not None
-            else {}
+            ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         )
         managed_symbols = set(managed_positions)
         unrealized = 0.0
@@ -168,11 +171,7 @@ class AlpacaBroker:
                         if getattr(raw, "qty_available", None) is not None
                         else None
                     ),
-                    ownership=(
-                        "managed"
-                        if canonical in managed_symbols
-                        else "external"
-                    ),
+                    ownership=("managed" if canonical in managed_symbols else "external"),
                     stop_price=(
                         managed.current_stop or managed.original_stop
                         if managed is not None
@@ -211,6 +210,66 @@ class AlpacaBroker:
                 else 0.0
             ),
         )
+
+    def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
+        """Broker-authoritative increments introduced by Alpaca asset metadata."""
+        asset = self._asset(symbol)
+        if not bool(getattr(asset, "tradable", False)):
+            raise ValueError(f"Asset is not tradable: {symbol}")
+        minimum = float(getattr(asset, "min_order_size", None) or 0.000000001)
+        quantity_increment = float(getattr(asset, "min_trade_increment", None) or 0.000000001)
+        price_increment = float(
+            getattr(asset, "price_increment", None)
+            or (0.01 if market == Market.EQUITY else 0.000001)
+        )
+        minimum_notional = float(
+            getattr(asset, "min_order_notional", None) or (1.0 if market == Market.EQUITY else 10.0)
+        )
+        return AssetTradingRules(
+            canonical_symbol(symbol, market),
+            market,
+            minimum,
+            quantity_increment,
+            price_increment,
+            minimum_notional,
+        )
+
+    def open_portfolio_order_symbols(self) -> set[str]:
+        orders = self._client.get_orders(
+            GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
+        )
+        return {
+            canonical_symbol(str(self._field(order, "symbol", "")))
+            for order in orders or ()
+            if self._field(order, "symbol", "")
+        }
+
+    def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
+        """Submit one simple long/cash rebalance leg with ambiguity recovery."""
+        rules = self.asset_trading_rules(order.symbol, order.market)
+        quantity = Decimal(str(order.quantity))
+        increment = Decimal(str(rules.quantity_increment))
+        quantity = (quantity / increment).to_integral_value(rounding=ROUND_DOWN) * increment
+        if quantity < Decimal(str(rules.minimum_order_size)):
+            raise ValueError(f"Portfolio order is below minimum size: {order.symbol}")
+        if float(quantity) * order.reference_price < rules.minimum_order_notional:
+            raise ValueError(f"Portfolio order is below minimum notional: {order.symbol}")
+        if self._has_open_order(order.symbol):
+            raise ValueError(f"Open order already exists for {order.symbol}")
+        request = MarketOrderRequest(
+            symbol=order.symbol,
+            qty=float(quantity),
+            side=(OrderSide.BUY if order.side == PortfolioOrderSide.BUY else OrderSide.SELL),
+            time_in_force=(TimeInForce.GTC if order.market == Market.CRYPTO else TimeInForce.DAY),
+            client_order_id=order.client_order_id,
+        )
+        result = self._submit_with_recovery(request, order.client_order_id)
+        broker_order_id = str(self._field(result, "id", "") or "")
+        if not broker_order_id:
+            raise AmbiguousOrderState(
+                f"Alpaca order response has no id for {order.client_order_id}"
+            )
+        return broker_order_id
 
     def submit(self, intent: OrderIntent) -> tuple[OrderState, Fill | None]:
         """Submit an entry and drive it to a terminal synchronous outcome.
@@ -469,9 +528,7 @@ class AlpacaBroker:
         }
         if ledger is not None:
             self._reconcile_crypto_exit_state(ledger)
-            self._reconcile_stale_ledger_entries(
-                ledger, broker_symbols, fill_activities_reconciled
-            )
+            self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
@@ -511,9 +568,7 @@ class AlpacaBroker:
                         ownership.owned_qty,
                         abs(position.qty),
                     )
-                stop_price = (
-                    getattr(ownership, "current_stop", None) or ownership.original_stop
-                )
+                stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
                 total_qty = min(abs(position.qty), ownership.owned_qty)
             else:
                 # Backwards-compatible opt-in policy for explicitly managed
@@ -563,10 +618,7 @@ class AlpacaBroker:
                     required_qty,
                 )
             if has_protection:
-                if (
-                    ownership is not None
-                    and ledger is not None
-                ):
+                if ownership is not None and ledger is not None:
                     ledger.set_protection_state(
                         self._account_id or "unknown",
                         ownership.entry_client_order_id,
@@ -575,10 +627,7 @@ class AlpacaBroker:
                 continue
             mismatch = getattr(self, "_last_protection_mismatch", "missing")
             if mismatch in {"under", "over"}:
-                if (
-                    ownership is not None
-                    and ledger is not None
-                ):
+                if ownership is not None and ledger is not None:
                     ledger.set_protection_state(
                         self._account_id or "unknown",
                         ownership.entry_client_order_id,
@@ -619,10 +668,7 @@ class AlpacaBroker:
                 client_order_id=protective_client_id,
             )
             if not protected:
-                if (
-                    ownership is not None
-                    and ledger is not None
-                ):
+                if ownership is not None and ledger is not None:
                     ledger.set_protection_state(
                         self._account_id or "unknown",
                         ownership.entry_client_order_id,
@@ -636,10 +682,7 @@ class AlpacaBroker:
                 raise ProtectionReconciliationError(
                     f"Could not restore managed protection for {position.symbol}"
                 )
-            if (
-                ownership is not None
-                and ledger is not None
-            ):
+            if ownership is not None and ledger is not None:
                 ledger.set_protection_state(
                     self._account_id or "unknown",
                     ownership.entry_client_order_id,
@@ -694,9 +737,7 @@ class AlpacaBroker:
             # bracket leg filled while the trading stream was offline).
             # Keep the durable ownership ledger in sync instead of
             # repeatedly halting all reconciliation on a stale entry.
-            ledger.mark_position_closed(
-                self._account_id or "unknown", entry.entry_client_order_id
-            )
+            ledger.mark_position_closed(self._account_id or "unknown", entry.entry_client_order_id)
             log.warning(
                 "Stale managed ledger entry closed: market=%s symbol=%s "
                 "entry_client_order_id=%s managed_qty=%s "
@@ -997,9 +1038,7 @@ class AlpacaBroker:
         )
         if not protected:
             if self._has_protective_order(current.canonical_symbol, True, resolution.available_qty):
-                ledger.mark_manual_intervention(
-                    self._account_id, current.entry_client_order_id
-                )
+                ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
                 raise AmbiguousOrderState(
                     f"Protective stop exists while re-protection failed for "
                     f"{current.canonical_symbol}"
@@ -1306,9 +1345,7 @@ class AlpacaBroker:
 
         step = self._price_step(current.canonical_symbol, current.market, requested_stop)
         stop_price = self._round_to_step(requested_stop, step)
-        rounded_tighter = (
-            stop_price > active_stop if position_is_long else stop_price < active_stop
-        )
+        rounded_tighter = stop_price > active_stop if position_is_long else stop_price < active_stop
         if stop_price <= 0 or not rounded_tighter:
             return False
         request_values: dict[str, float] = {"stop_price": stop_price}
@@ -1764,9 +1801,7 @@ class AlpacaBroker:
                 if target_seen:
                     reason = "target"
                 else:
-                    emergency_price = active_stop * (
-                        1 - self.crypto_emergency_exit_bps / 10_000
-                    )
+                    emergency_price = active_stop * (1 - self.crypto_emergency_exit_bps / 10_000)
                     if observation.low <= emergency_price:
                         reason = "stop_failover"
                     elif observation.low <= active_stop and item.stop_state == "open":

@@ -237,9 +237,7 @@ class BacktestReport:
                     ]
                 )
         written.append(str(directory / "drawdowns.csv"))
-        with (directory / "score_deciles.csv").open(
-            "w", newline="", encoding="utf-8"
-        ) as handle:
+        with (directory / "score_deciles.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 [
@@ -629,8 +627,7 @@ def _score_monotonicity(trades: tuple[TradeRecord, ...]) -> dict[str, bool]:
         grouped.setdefault(item.strategy, []).append(item)
     return {
         strategy: all(
-            later.expectancy >= earlier.expectancy
-            for earlier, later in zip(items, items[1:])
+            later.expectancy >= earlier.expectancy for earlier, later in zip(items, items[1:])
         )
         for strategy, items in grouped.items()
     }

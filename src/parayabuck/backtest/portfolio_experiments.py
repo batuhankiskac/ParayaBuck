@@ -35,9 +35,7 @@ from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.base import PortfolioStrategy
 
-PortfolioEngineFactory = Callable[
-    [PortfolioStrategy, CostScenario], PortfolioBacktestEngine
-]
+PortfolioEngineFactory = Callable[[PortfolioStrategy, CostScenario], PortfolioBacktestEngine]
 
 
 @dataclass(frozen=True)
@@ -126,13 +124,14 @@ class PortfolioExperimentSpec:
             self.train_months,
             self.validation_months,
             self.outer_holdout_months,
-            self.embargo_bars,
             self.max_mechanism_trials,
             self.max_parameter_trials,
             self.max_holdout_finalists,
         )
         if any(value <= 0 for value in positive):
             raise ValueError("Experiment fold sizes and budgets must be positive")
+        if self.embargo_bars < 0:
+            raise ValueError("Experiment embargo cannot be negative")
         if self.max_holdout_finalists > self.max_parameter_trials:
             raise ValueError("Holdout finalist budget cannot exceed parameter budget")
         # The first grid dimension is the mechanism/ablation dimension; the
@@ -162,6 +161,10 @@ class PortfolioExperimentSpec:
                 slippage_bps=float(item["slippage_bps"]),
                 spread_bps=float(item["spread_bps"]),
                 taker_fee_bps=float(item.get("taker_fee_bps", 0.0)),
+                equity_taf_per_share=float(item.get("equity_taf_per_share", 0.0)),
+                equity_taf_cap=float(item.get("equity_taf_cap", 0.0)),
+                equity_cat_per_share=float(item.get("equity_cat_per_share", 0.0)),
+                equity_sec_fee_rate=float(item.get("equity_sec_fee_rate", 0.0)),
             )
             for item in raw.get("cost_scenarios", ())
         )
@@ -208,9 +211,7 @@ class PortfolioExperimentSpec:
                     "version": space.version,
                     "market": space.market.value,
                     "timeframe": space.timeframe,
-                    "parameter_grid": {
-                        name: list(values) for name, values in space.parameter_grid
-                    },
+                    "parameter_grid": {name: list(values) for name, values in space.parameter_grid},
                     "combinations": space.combinations,
                 }
                 for space in self.candidate_spaces
@@ -284,6 +285,13 @@ class PortfolioTrialResult:
     excess_return: float = 0.0
     information_ratio: float = 0.0
     cash_yield: float = 0.0
+    cash_hurdle_return: float = 0.0
+    benchmark_sharpe: float = 0.0
+    benchmark_max_drawdown: float = 0.0
+    benchmark_calmar: float = 0.0
+    return_gain_loss_ratio: float = 0.0
+    stress_return_gain_loss_ratio: float = 0.0
+    maximum_risk_contribution: float = 0.0
 
     @property
     def median_fold_calmar(self) -> float:
@@ -303,17 +311,24 @@ class PortfolioGate:
 
     market: Market
     minimum_oos_calendar_months: int = 60
-    minimum_oos_positions: int = 100
+    minimum_oos_positions: int = 0
     minimum_profit_factor: float = 1.15
-    minimum_sharpe: float = 0.75
+    minimum_sharpe: float = 0.80
+    minimum_sortino: float = 1.00
+    minimum_calmar: float = 0.50
     maximum_drawdown: float = 0.10
     minimum_deflated_sharpe_probability: float = 0.95
     maximum_pbo: float = 0.20
     minimum_positive_fold_ratio: float = 0.60
     minimum_positive_month_ratio: float = 0.60
     minimum_stress_profit_factor: float = 1.00
-    maximum_symbol_profit_concentration: float = 0.30
-    maximum_single_asset_weight: float = 0.50
+    maximum_symbol_profit_concentration: float = 1.00
+    maximum_single_asset_weight: float = 0.25
+    maximum_risk_contribution: float = 0.35
+    minimum_benchmark_sharpe_improvement: float = 0.10
+    maximum_benchmark_drawdown_ratio: float = 0.60
+    require_positive_cash_excess: bool = True
+    require_risk_adjusted_benchmark: bool = True
     require_parameter_plateau: bool = True
     require_regime_diversity: bool = True
 
@@ -331,9 +346,9 @@ class PortfolioGate:
             )
         return cls(
             market=market,
-            minimum_oos_calendar_months=0,
-            minimum_oos_positions=100,
-            maximum_drawdown=0.45,
+            minimum_oos_calendar_months=36,
+            minimum_oos_positions=0,
+            maximum_drawdown=0.10,
             minimum_positive_fold_ratio=0.60,
             minimum_positive_month_ratio=0.60,
             maximum_symbol_profit_concentration=0.30,
@@ -351,111 +366,83 @@ class PortfolioGate:
         failures: list[str] = []
         sample_ok = (
             trial.unique_oos_calendar_months >= self.minimum_oos_calendar_months
-            if self.market == Market.EQUITY
-            else trial.closed_positions >= self.minimum_oos_positions
+            and trial.closed_positions >= self.minimum_oos_positions
         )
         if not sample_ok:
             failures.append("insufficient_oos_sample")
-        if self.market == Market.EQUITY:
-            active_checks: list[tuple[bool, str]] = [
-                (trial.profit_factor >= self.minimum_profit_factor, "profit_factor_below_gate"),
-                (trial.aggregate_oos_sharpe >= self.minimum_sharpe, "sharpe_below_gate"),
-                (
-                    trial.aggregate_oos_max_drawdown <= self.maximum_drawdown,
-                    "drawdown_above_gate",
-                ),
-                (
-                    trial.deflated_sharpe_probability
-                    >= self.minimum_deflated_sharpe_probability,
-                    "deflated_sharpe_below_gate",
-                ),
-                (trial.probability_backtest_overfitting <= self.maximum_pbo, "pbo_above_gate"),
-                (
-                    trial.positive_fold_ratio >= self.minimum_positive_fold_ratio,
-                    "positive_fold_ratio_below_gate",
-                ),
-                (
-                    trial.positive_month_ratio >= self.minimum_positive_month_ratio,
-                    "positive_month_ratio_below_gate",
-                ),
-                (trial.stress_expectancy >= 0, "negative_stress_expectancy"),
-                (
-                    trial.stress_profit_factor >= self.minimum_stress_profit_factor,
-                    "stress_profit_factor_below_gate",
-                ),
-                (
-                    trial.maximum_concentration <= self.maximum_single_asset_weight,
-                    "single_asset_concentration",
-                ),
-            ]
-            if include_holdout_requirements:
-                active_checks.extend(
-                    (
-                        (not trial.holdout_missing, "holdout_missing"),
-                        (trial.holdout_evaluations == 1, "holdout_not_evaluated_exactly_once"),
-                    )
-                )
-            if self.require_parameter_plateau:
-                active_checks.append(
-                    (trial.neighborhood_robust, "parameter_neighborhood_not_robust")
-                )
-            if self.require_regime_diversity:
-                active_checks.append((trial.regime_diverse, "insufficient_regime_diversity"))
-        else:
-            active_checks = [
-                (trial.profit_factor >= self.minimum_profit_factor, "profit_factor_below_gate"),
-                (trial.aggregate_oos_sharpe >= self.minimum_sharpe, "sharpe_below_gate"),
-                (
-                    trial.aggregate_oos_max_drawdown <= self.maximum_drawdown,
-                    "drawdown_above_gate",
-                ),
-                (
-                    trial.deflated_sharpe_probability
-                    >= self.minimum_deflated_sharpe_probability,
-                    "deflated_sharpe_below_gate",
-                ),
-                (trial.probability_backtest_overfitting <= self.maximum_pbo, "pbo_above_gate"),
-                (
-                    trial.positive_fold_ratio >= self.minimum_positive_fold_ratio,
-                    "positive_fold_ratio_below_gate",
-                ),
-                (
-                    trial.positive_month_ratio >= self.minimum_positive_month_ratio,
-                    "positive_month_ratio_below_gate",
-                ),
-                (
-                    trial.stress_profit_factor >= self.minimum_stress_profit_factor,
-                    "stress_profit_factor_below_gate",
-                ),
-                (trial.stress_expectancy >= 0, "negative_stress_expectancy"),
-            ]
-            if self.require_parameter_plateau:
-                active_checks.append(
-                    (trial.neighborhood_robust, "parameter_neighborhood_not_robust")
-                )
-            if self.require_regime_diversity:
-                active_checks.append((trial.regime_diverse, "insufficient_regime_diversity"))
-            active_checks.append(
-                (
-                    trial.maximum_concentration <= self.maximum_single_asset_weight,
-                    "single_asset_concentration",
-                ),
+        benchmark_risk_adjusted = (
+            trial.aggregate_oos_sharpe
+            >= trial.benchmark_sharpe + self.minimum_benchmark_sharpe_improvement
+            or (
+                trial.benchmark_max_drawdown > 0
+                and trial.aggregate_oos_max_drawdown
+                <= trial.benchmark_max_drawdown * self.maximum_benchmark_drawdown_ratio
+                and trial.aggregate_oos_calmar >= trial.benchmark_calmar
             )
-            if include_holdout_requirements:
-                active_checks.extend(
-                    (
-                        (not trial.holdout_missing, "holdout_missing"),
-                        (trial.holdout_evaluations == 1, "holdout_not_evaluated_exactly_once"),
-                    )
+        )
+        active_checks: list[tuple[bool, str]] = [
+            (
+                trial.return_gain_loss_ratio >= self.minimum_profit_factor,
+                "return_gain_loss_ratio_below_gate",
+            ),
+            (trial.aggregate_oos_sharpe >= self.minimum_sharpe, "sharpe_below_gate"),
+            (trial.aggregate_oos_sortino >= self.minimum_sortino, "sortino_below_gate"),
+            (trial.aggregate_oos_calmar >= self.minimum_calmar, "calmar_below_gate"),
+            (
+                trial.aggregate_oos_max_drawdown <= self.maximum_drawdown,
+                "drawdown_above_gate",
+            ),
+            (
+                trial.deflated_sharpe_probability >= self.minimum_deflated_sharpe_probability,
+                "deflated_sharpe_below_gate",
+            ),
+            (trial.probability_backtest_overfitting <= self.maximum_pbo, "pbo_above_gate"),
+            (
+                trial.positive_fold_ratio >= self.minimum_positive_fold_ratio,
+                "positive_fold_ratio_below_gate",
+            ),
+            (
+                trial.positive_month_ratio >= self.minimum_positive_month_ratio,
+                "positive_month_ratio_below_gate",
+            ),
+            (
+                trial.stress_expectancy > 0,
+                "negative_stress_return",
+            ),
+            (
+                trial.stress_return_gain_loss_ratio >= self.minimum_stress_profit_factor,
+                "stress_return_gain_loss_ratio_below_gate",
+            ),
+            (
+                not self.require_positive_cash_excess
+                or trial.aggregate_oos_return > trial.cash_hurdle_return,
+                "cash_hurdle_not_beaten",
+            ),
+            (
+                not self.require_risk_adjusted_benchmark or benchmark_risk_adjusted,
+                "risk_adjusted_benchmark_not_beaten",
+            ),
+            (
+                trial.maximum_concentration <= self.maximum_single_asset_weight,
+                "single_asset_concentration",
+            ),
+            (
+                trial.maximum_risk_contribution <= self.maximum_risk_contribution,
+                "single_asset_risk_contribution",
+            ),
+        ]
+        if self.require_parameter_plateau:
+            active_checks.append((trial.neighborhood_robust, "parameter_neighborhood_not_robust"))
+        if self.require_regime_diversity:
+            active_checks.append((trial.regime_diverse, "insufficient_regime_diversity"))
+        if include_holdout_requirements:
+            active_checks.extend(
+                (
+                    (not trial.holdout_missing, "holdout_missing"),
+                    (trial.holdout_evaluations == 1, "holdout_not_evaluated_exactly_once"),
                 )
+            )
         failures.extend(reason for passed, reason in active_checks if not passed)
-        gross = [max(0.0, value) for _, value in trial.gross_profit_by_symbol]
-        gross_total = sum(gross)
-        if (
-            gross_total > 0
-            and max(gross) / gross_total > self.maximum_symbol_profit_concentration
-        ):
-            failures.append("single_symbol_profit_concentration")
         return GateDecision(not failures, tuple(failures))
 
     def evaluate_holdout(self, trial: PortfolioTrialResult) -> GateDecision:
@@ -468,16 +455,39 @@ class PortfolioGate:
             return GateDecision(False, ("holdout_missing",))
         holdout = trial.holdout_result
         stress = trial.holdout_stress_result
-        stress_pnls = tuple(stress.realized_pnls) if stress is not None else ()
-        stress_expectancy = sum(stress_pnls) / len(stress_pnls) if stress_pnls else 0.0
-        stress_pf = _profit_factor(stress_pnls)
+        holdout_returns = _curve_returns(holdout.equity_curve)
+        stress_returns = _curve_returns(stress.equity_curve) if stress is not None else ()
+        benchmark_ok = (
+            holdout.sharpe >= holdout.benchmark_sharpe + self.minimum_benchmark_sharpe_improvement
+            or (
+                holdout.benchmark_max_drawdown > 0
+                and holdout.max_drawdown
+                <= holdout.benchmark_max_drawdown * self.maximum_benchmark_drawdown_ratio
+                and holdout.calmar >= holdout.benchmark_calmar
+            )
+        )
         checks = (
             (holdout.sharpe >= self.minimum_sharpe, "holdout_sharpe_below_gate"),
+            (holdout.sortino >= self.minimum_sortino, "holdout_sortino_below_gate"),
+            (holdout.calmar >= self.minimum_calmar, "holdout_calmar_below_gate"),
             (holdout.max_drawdown <= self.maximum_drawdown, "holdout_drawdown_above_gate"),
-            (stress_expectancy >= 0, "holdout_negative_stress_expectancy"),
             (
-                stress_pf >= self.minimum_stress_profit_factor,
-                "holdout_stress_profit_factor_below_gate",
+                not self.require_positive_cash_excess
+                or holdout.total_return > holdout.cash_hurdle_return,
+                "holdout_cash_hurdle_not_beaten",
+            ),
+            (
+                not self.require_risk_adjusted_benchmark or benchmark_ok,
+                "holdout_risk_adjusted_benchmark_not_beaten",
+            ),
+            (sum(stress_returns) > 0, "holdout_negative_stress_return"),
+            (
+                _return_gain_loss_ratio(stress_returns) >= self.minimum_stress_profit_factor,
+                "holdout_stress_return_gain_loss_ratio_below_gate",
+            ),
+            (
+                _return_gain_loss_ratio(holdout_returns) >= self.minimum_profit_factor,
+                "holdout_return_gain_loss_ratio_below_gate",
             ),
         )
         failures = [reason for passed, reason in checks if not passed]
@@ -492,6 +502,7 @@ def run_portfolio_experiment(
     unlock_holdout: bool = False,
     universe_hash_verifier: Callable[[], None] | None = None,
     holdout_registry: HoldoutRegistry | None = None,
+    holdout_loader: Callable[[], list[Bar]] | None = None,
     trial_count_override: int | None = None,
     validation_gate: PortfolioGate | None = None,
 ) -> tuple[PortfolioTrialResult, ...]:
@@ -520,9 +531,7 @@ def run_portfolio_experiment(
         universe_hash_verifier()
     bounded = [bar for bar in bars if experiment.start <= bar.timestamp <= experiment.end]
     candidates = tuple(
-        strategy
-        for space in experiment.candidate_spaces
-        for strategy in space.iter_strategies()
+        strategy for space in experiment.candidate_spaces for strategy in space.iter_strategies()
     )[: experiment.max_parameter_trials]
     if not candidates:
         raise ValueError("Experiment has no concrete strategy candidates")
@@ -536,8 +545,12 @@ def run_portfolio_experiment(
                     f"Candidate strategy {strategy.name!r} does not match its "
                     f"candidate space ({space.market.value}, {space.timeframe})"
                 )
-    candidate_bars = [bar for bar in bounded if bar.market == market]
     holdout_start = outer_holdout_start(experiment.end, experiment.outer_holdout_months)
+    # Validation receives no holdout objects. The held-out partition can only
+    # enter memory through ``holdout_loader`` after the frozen candidate passes.
+    candidate_bars = [
+        bar for bar in bounded if bar.market == market and bar.timestamp < holdout_start
+    ]
     windows = calendar_fold_windows(
         candidate_bars,
         train_months=experiment.train_months,
@@ -549,30 +562,17 @@ def run_portfolio_experiment(
     if not windows:
         raise ValueError("Experiment has no validation window before the holdout")
     validation_start = windows[0].test_start
-    fingerprint: HoldoutFingerprint | None = None
-    holdout_bars: list[Bar] = []
     if unlock_holdout:
         if holdout_registry is None:
             raise ValueError(
                 "unlock_holdout requires a holdout_registry: without it the "
                 "once-only holdout evaluation lock would be silently bypassed"
             )
-        fingerprint = HoldoutFingerprint(
-            market=market,
-            timeframe=experiment.candidate_spaces[0].timeframe,
-            universe_snapshot_hash=experiment.universe_snapshot_hash,
-            holdout_start=holdout_start,
-            holdout_end=experiment.end,
-            adjustment=experiment.adjustment_policy,
-            source_provider=experiment.source_provider,
-        )
-        # Registry preflight MUST precede any access to the holdout bars.
-        holdout_registry.preflight(fingerprint, experiment.experiment_id)
-        holdout_bars = [
-            bar for bar in candidate_bars if holdout_start <= bar.timestamp <= experiment.end
-        ]
-        fingerprint = fingerprint.with_bar_hash(hash_bars(holdout_bars))
-        holdout_registry.begin_evaluation(fingerprint, experiment.experiment_id)
+        if holdout_loader is None:
+            raise ValueError(
+                "unlock_holdout requires a lazy holdout_loader; holdout bars "
+                "must not be passed in the validation collection"
+            )
     base_cost, stress_cost = _costs_for(market, experiment)
     evaluated: list[PortfolioTrialResult] = []
     block_returns: list[list[float]] = []
@@ -607,9 +607,7 @@ def run_portfolio_experiment(
             strategy,
             folds,
             stress_folds,
-            trials=trial_count_override
-            if trial_count_override is not None
-            else len(candidates),
+            trials=trial_count_override if trial_count_override is not None else len(candidates),
             market=market,
             gross_profit_by_symbol=tuple(sorted(gross_profit_by_symbol.items())),
             base_result=base_result,
@@ -655,26 +653,18 @@ def run_portfolio_experiment(
         )
         for trial in evaluated
     ]
-    holdout_attempted = fingerprint is not None
-    holdout_missing_any = False
     if unlock_holdout:
         frozen_id = experiment.frozen_candidate_trial_id
         if not frozen_id:
-            raise ValueError(
-                "unlock_holdout requires a preregistered frozen_candidate_trial_id"
-            )
+            raise ValueError("unlock_holdout requires a preregistered frozen_candidate_trial_id")
         if experiment.max_holdout_finalists != 1:
             raise ValueError(
-                "unlock_holdout requires max_holdout_finalists == 1 "
-                "(exactly one frozen finalist)"
+                "unlock_holdout requires max_holdout_finalists == 1 (exactly one frozen finalist)"
             )
-        frozen_trial = next(
-            (trial for trial in evaluated if trial.trial_id == frozen_id), None
-        )
+        frozen_trial = next((trial for trial in evaluated if trial.trial_id == frozen_id), None)
         if frozen_trial is None:
             raise ValueError(
-                f"frozen_candidate_trial_id {frozen_id!r} was not among the "
-                "evaluated candidates"
+                f"frozen_candidate_trial_id {frozen_id!r} was not among the evaluated candidates"
             )
         frozen_decision = frozen_trial.validation_gate_decision
         if frozen_decision is None or not frozen_decision.passed:
@@ -687,11 +677,33 @@ def run_portfolio_experiment(
         )
         if frozen_strategy is None:
             raise ValueError(f"No strategy matches frozen candidate {frozen_id!r}")
+        assert holdout_registry is not None
+        assert holdout_loader is not None
+        fingerprint = HoldoutFingerprint(
+            market=market,
+            timeframe=experiment.candidate_spaces[0].timeframe,
+            universe_snapshot_hash=experiment.universe_snapshot_hash,
+            holdout_start=holdout_start,
+            holdout_end=experiment.end,
+            adjustment=experiment.adjustment_policy,
+            source_provider=experiment.source_provider,
+        )
+        # Lock the structural holdout BEFORE invoking the loader. A loader
+        # failure therefore remains a terminal, auditable attempt.
+        holdout_registry.preflight(fingerprint, experiment.experiment_id)
+        holdout_registry.begin_evaluation(fingerprint, experiment.experiment_id)
         try:
+            loaded_holdout = holdout_loader()
+            holdout_bars = [
+                bar
+                for bar in loaded_holdout
+                if bar.market == market and holdout_start <= bar.timestamp <= experiment.end
+            ]
+            fingerprint = fingerprint.with_bar_hash(hash_bars(holdout_bars))
             finalist_trial = _evaluate_portfolio_holdout(
                 frozen_trial,
                 frozen_strategy,
-                candidate_bars,
+                [*candidate_bars, *holdout_bars],
                 experiment,
                 holdout_start,
                 base_cost,
@@ -700,21 +712,16 @@ def run_portfolio_experiment(
                 holdout_bars=holdout_bars,
             )
         except Exception as exc:
-            if fingerprint is not None and holdout_registry is not None:
-                holdout_registry.fail_evaluation(
-                    fingerprint,
-                    experiment.experiment_id,
-                    f"holdout_evaluation_error: {exc}",
-                )
+            holdout_registry.error_evaluation(
+                fingerprint,
+                experiment.experiment_id,
+                f"holdout_evaluation_error: {exc}",
+            )
             raise
-        holdout_missing_any = finalist_trial.holdout_missing
         evaluated = [
             finalist_trial if trial.trial_id == frozen_id else trial for trial in evaluated
         ]
-    if holdout_attempted:
-        assert holdout_registry is not None
-        assert fingerprint is not None
-        if holdout_missing_any:
+        if finalist_trial.holdout_missing:
             holdout_registry.fail_evaluation(
                 fingerprint,
                 experiment.experiment_id,
@@ -764,9 +771,7 @@ def _stitched_oos_series(
         # inject a phantom jump at every fold boundary whenever the fold
         # starts above the initial capital.
         previous_value = fold.starting_equity
-        for timestamp, equity in zip(
-            fold.curve_timestamps, fold.equity_curve, strict=True
-        ):
+        for timestamp, equity in zip(fold.curve_timestamps, fold.equity_curve, strict=True):
             if previous_value > 0:
                 returns.append(equity / previous_value - 1)
             curve.append(curve[-1] * (equity / previous_value) if previous_value > 0 else 1.0)
@@ -829,7 +834,7 @@ def _partition_monthly_folds(
         buckets.setdefault((timestamp.year, timestamp.month), []).append(index)
     annualizer = _annualizer_for(market, timeframe)
     folds: list[PortfolioBacktestResult] = []
-    for (year, month) in sorted(buckets):
+    for year, month in sorted(buckets):
         indices = buckets[(year, month)]
         # Pure intra-month partition of the continuous curve: the fold's
         # first bar IS its starting equity. No boundary value is prepended,
@@ -865,12 +870,16 @@ def _partition_monthly_folds(
         rebalances = tuple(
             record
             for record in result.rebalances
-            if (record.decision_timestamp.year, record.decision_timestamp.month)
-            == (year, month)
+            if (record.decision_timestamp.year, record.decision_timestamp.month) == (year, month)
         )
         events = tuple(
             event
             for event in result.realized_pnl_events
+            if (event[0].year, event[0].month) == (year, month)
+        )
+        full_close_events = tuple(
+            event
+            for event in result.closed_position_events
             if (event[0].year, event[0].month) == (year, month)
         )
         folds.append(
@@ -896,6 +905,7 @@ def _partition_monthly_folds(
                 curve_timestamps=tuple(month_ts),
                 realized_pnls=tuple(event[2] for event in events),
                 realized_pnl_events=events,
+                closed_position_events=full_close_events,
                 rebalances=rebalances,
                 fills=(),
                 weight_history=(),
@@ -909,7 +919,7 @@ def _partition_monthly_folds(
                 average_holdings_count=0.0,
                 average_cash_ratio=0.0,
                 rebalance_count=len(rebalances),
-                closed_positions=len(events),
+                closed_positions=len(full_close_events),
                 per_symbol=(),
                 maximum_concentration=0.0,
                 worst_month_return=0.0,
@@ -946,9 +956,7 @@ def _build_portfolio_trial(
         curve = list(base_result.equity_curve)
         timestamps = list(base_result.curve_timestamps)
         daily_returns = [
-            curve[i] / curve[i - 1] - 1
-            for i in range(1, len(curve))
-            if curve[i - 1] > 0
+            curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0
         ]
         aggregate_return = base_result.total_return
         max_drawdown = base_result.max_drawdown
@@ -1003,11 +1011,10 @@ def _build_portfolio_trial(
         aggregate_calmar = cagr / max_drawdown if max_drawdown > 0 else 0.0
         rebalance_count = sum(fold.rebalance_count for fold in folds)
         closed_positions = sum(fold.closed_positions for fold in folds)
-        maximum_concentration = max(
-            (fold.maximum_concentration for fold in folds), default=0.0
-        )
+        maximum_concentration = max((fold.maximum_concentration for fold in folds), default=0.0)
     monthly, monthly_serialized = _monthly_from_curve(curve, timestamps)
     unique_months = len(monthly)
+    yearly = _yearly_returns(curve, timestamps)
     # DSR uses the actual chronological OOS return series: skewness/kurtosis
     # come from the series itself, the observation count is the real number of
     # trading-day (equity) or hourly (crypto) returns, and the observed Sharpe
@@ -1016,10 +1023,19 @@ def _build_portfolio_trial(
     skewness = _skewness(daily_returns) if len(daily_returns) >= 8 else 0.0
     kurtosis = _kurtosis(daily_returns) if len(daily_returns) >= 8 else 3.0
     positive_fold_ratio = (
-        sum(fold.total_return > 0 for fold in folds) / len(folds) if folds else 0.0
+        sum(value > 0 for value in yearly.values()) / len(yearly) if yearly else 0.0
     )
     positive_month_ratio = (
         sum(1 for value in monthly.values() if value > 0) / len(monthly) if monthly else 0.0
+    )
+    stress_daily_returns = (
+        list(_curve_returns(stress_result.equity_curve)) if stress_result is not None else []
+    )
+    profit_factor = _return_gain_loss_ratio(tuple(daily_returns))
+    stress_pf = _return_gain_loss_ratio(tuple(stress_daily_returns))
+    expectancy = sum(daily_returns) / len(daily_returns) if daily_returns else 0.0
+    stress_expectancy = (
+        sum(stress_daily_returns) / len(stress_daily_returns) if stress_daily_returns else 0.0
     )
     return PortfolioTrialResult(
         trial_id=trial_id_for(strategy),
@@ -1068,12 +1084,53 @@ def _build_portfolio_trial(
         ),
         benchmark_return=base_result.benchmark_return if base_result is not None else 0.0,
         excess_return=base_result.excess_return if base_result is not None else 0.0,
-        information_ratio=(
-            base_result.information_ratio if base_result is not None else 0.0
-        ),
+        information_ratio=(base_result.information_ratio if base_result is not None else 0.0),
         cash_yield=base_result.cash_yield if base_result is not None else 0.0,
+        cash_hurdle_return=(base_result.cash_hurdle_return if base_result is not None else 0.0),
+        benchmark_sharpe=(base_result.benchmark_sharpe if base_result is not None else 0.0),
+        benchmark_max_drawdown=(
+            base_result.benchmark_max_drawdown if base_result is not None else 0.0
+        ),
+        benchmark_calmar=(base_result.benchmark_calmar if base_result is not None else 0.0),
+        return_gain_loss_ratio=profit_factor,
+        stress_return_gain_loss_ratio=stress_pf,
+        maximum_risk_contribution=(
+            base_result.maximum_risk_contribution
+            if base_result is not None
+            else maximum_concentration
+        ),
     )
 
+
+def _curve_returns(curve: tuple[float, ...] | list[float]) -> tuple[float, ...]:
+    return tuple(
+        curve[index] / curve[index - 1] - 1
+        for index in range(1, len(curve))
+        if curve[index - 1] > 0
+    )
+
+
+def _return_gain_loss_ratio(returns: tuple[float, ...]) -> float:
+    gains = sum(value for value in returns if value > 0)
+    losses = abs(sum(value for value in returns if value < 0))
+    if losses > 0:
+        return gains / losses
+    return math.inf if gains > 0 else 0.0
+
+
+def _yearly_returns(curve: list[float], timestamps: list[datetime]) -> dict[int, float]:
+    buckets: dict[int, list[float]] = {}
+    # Legacy stitched fixtures may prepend a boundary equity without a
+    # matching timestamp. Align from the right, as the final equity always
+    # corresponds to the final timestamp.
+    aligned_curve = curve[-len(timestamps) :] if timestamps else []
+    for timestamp, equity in zip(timestamps, aligned_curve, strict=True):
+        buckets.setdefault(timestamp.year, []).append(equity)
+    return {
+        year: values[-1] / values[0] - 1
+        for year, values in buckets.items()
+        if values and values[0] > 0
+    }
 
 
 def _skewness(values: list[float]) -> float:
@@ -1108,9 +1165,11 @@ def _evaluate_portfolio_holdout(
     # Warmup is the FULL pre-holdout history: indicators need every visible
     # bar, there is no model fitting that would require a purge/embargo.
     warmup = [bar for bar in bars if bar.timestamp < holdout_start]
-    holdout = holdout_bars if holdout_bars is not None else [
-        bar for bar in bars if holdout_start <= bar.timestamp <= experiment.end
-    ]
+    holdout = (
+        holdout_bars
+        if holdout_bars is not None
+        else [bar for bar in bars if holdout_start <= bar.timestamp <= experiment.end]
+    )
     if not warmup or not holdout:
         return replace(trial, holdout_evaluations=1, holdout_missing=True)
     base_result = engine_factory(strategy, base_cost).run(
@@ -1185,10 +1244,9 @@ def _mark_portfolio_plateaus(
                 continue
             mechanism_difference = False
             if mechanism_parameter:
-                mechanism_difference = (
-                    dict(candidate.parameters).get(mechanism_parameter)
-                    != dict(trial.parameters).get(mechanism_parameter)
-                )
+                mechanism_difference = dict(candidate.parameters).get(mechanism_parameter) != dict(
+                    trial.parameters
+                ).get(mechanism_parameter)
             qualifying.append(
                 {
                     "trial_id": candidate.trial_id,
@@ -1236,9 +1294,7 @@ def _regime_diversity(benchmark_bars: list[Bar]) -> bool:
     closes = [bar.close for bar in ordered]
     bear_episode = any(
         window[0] > 0 and window[-1] / window[0] - 1 < -0.10
-        for window in (
-            closes[index - 126 : index] for index in range(126, len(closes) + 1)
-        )
+        for window in (closes[index - 126 : index] for index in range(126, len(closes) + 1))
     )
     return negative_ratio >= 0.20 and bear_episode
 

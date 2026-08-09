@@ -4,7 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from parayabuck.backtest.portfolio_engine import OrderSide, PortfolioBacktestEngine
+from parayabuck.backtest.portfolio_engine import (
+    OrderSide,
+    PortfolioBacktestEngine,
+    equity_regulatory_fee,
+)
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
@@ -12,6 +16,29 @@ from parayabuck.portfolio.models import (
     TargetPortfolio,
     TargetWeight,
 )
+
+
+def test_equity_taf_cat_and_sec_fee_model() -> None:
+    buy = equity_regulatory_fee(
+        OrderSide.BUY,
+        100,
+        50,
+        taf_per_share=0.000195,
+        taf_cap=9.79,
+        cat_per_share=0.000003,
+        sec_fee_rate=0.00002060,
+    )
+    sell = equity_regulatory_fee(
+        OrderSide.SELL,
+        100,
+        50,
+        taf_per_share=0.000195,
+        taf_cap=9.79,
+        cat_per_share=0.000003,
+        sec_fee_rate=0.00002060,
+    )
+    assert buy == pytest.approx(0.0003)
+    assert sell == pytest.approx(0.1228)
 
 
 def _bar(timestamp: datetime, symbol: str, close: float, market: Market, volume: float) -> Bar:
@@ -147,9 +174,7 @@ def _equity_days(days: int, epoch: datetime) -> list[Bar]:
 def test_entry_fee_reduces_realized_pnl_on_full_and_partial_exits() -> None:
     epoch = datetime(2024, 1, 1, tzinfo=UTC)
     # Month 0: 60% SPY; month 1: 40%; month 2: 0% (partial then full exit).
-    strategy = _ScheduleStrategy(
-        {0: {"SPY": 0.6}, 1: {"SPY": 0.4}, 2: {}}, epoch
-    )
+    strategy = _ScheduleStrategy({0: {"SPY": 0.6}, 1: {"SPY": 0.4}, 2: {}}, epoch)
     engine = _engine(strategy, commission=2.0)
     result = engine.run(_equity_days(130, epoch), liquidate_at_end=True)
     assert result.closed_positions == 1
@@ -159,7 +184,10 @@ def test_entry_fee_reduces_realized_pnl_on_full_and_partial_exits() -> None:
     # Reconciled invariant: with everything liquidated, realized PnL equals
     # the equity change and absorbs the entry fee plus every fill fee.
     equity_change = result.ending_equity - result.starting_equity
-    assert result.realized_pnls[0] == pytest.approx(equity_change)
+    assert sum(result.realized_pnls) == pytest.approx(equity_change)
+    assert len(result.realized_pnls) == 2
+    assert len(result.closed_position_events) == 1
+    assert result.closed_position_events[0][2] == pytest.approx(equity_change)
     # The persisted state must agree with the economic result: realized PnL
     # is credited at every fill (partial AND full), exactly once.
     assert result.state.realized_pnl == pytest.approx(equity_change)
@@ -174,7 +202,7 @@ def test_entry_fee_reduces_realized_pnl_on_full_and_partial_exits() -> None:
         fill.qty * fill.fill_price for fill in result.fills if fill.side == OrderSide.BUY
     )
     manual = sell_proceeds - buy_cost - result.fee_total
-    assert result.realized_pnls[0] == pytest.approx(manual)
+    assert sum(result.realized_pnls) == pytest.approx(manual)
 
 
 def test_state_realized_pnl_matches_economic_realized_delta_at_every_fill() -> None:
@@ -201,9 +229,7 @@ def test_state_realized_pnl_matches_economic_realized_delta_at_every_fill() -> N
     # The full-exit run ends flat: realized PnL equals the total equity change.
     closed = _engine(strategy, commission=1.0)
     full = closed.run(_equity_days(200, epoch), liquidate_at_end=True)
-    assert full.state.realized_pnl == pytest.approx(
-        full.ending_equity - full.starting_equity
-    )
+    assert full.state.realized_pnl == pytest.approx(full.ending_equity - full.starting_equity)
     assert full.state.realized_pnl == pytest.approx(sum(full.realized_pnls))
 
 
@@ -242,7 +268,7 @@ def test_multiple_entries_use_average_price_and_full_exit_realizes_all() -> None
     average_price = result.state.avg_prices.get("SPY")
     assert average_price is None  # position fully closed
     equity_change = result.ending_equity - result.starting_equity
-    assert result.realized_pnls[0] == pytest.approx(equity_change)
+    assert sum(result.realized_pnls) == pytest.approx(equity_change)
 
 
 def test_crypto_taker_fee_applies_on_both_sides() -> None:
@@ -266,7 +292,37 @@ def test_crypto_taker_fee_applies_on_both_sides() -> None:
     sell_fee = sum(fill.fee for fill in result.fills if fill.side == OrderSide.SELL)
     assert buy_fee > 0 and sell_fee > 0
     equity_change = result.ending_equity - result.starting_equity
-    assert result.realized_pnls[0] == pytest.approx(equity_change)
+    assert sum(result.realized_pnls) == pytest.approx(equity_change)
+
+
+def test_partial_sell_is_realized_without_counting_a_full_close() -> None:
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy(
+        {0: {"SPY": 0.6}, 1: {"SPY": 0.4}},
+        epoch,
+        default_targets={"SPY": 0.4},
+    )
+    result = _engine(strategy).run(_equity_days(130, epoch), liquidate_at_end=False)
+    assert result.realized_pnl_events
+    assert result.closed_positions == 0
+    assert result.closed_position_events == ()
+    assert result.state.realized_pnl == pytest.approx(sum(result.realized_pnls))
+    assert "SPY" in result.state.holdings
+
+
+def test_terminal_close_reports_lifetime_pnl_after_partial_sell() -> None:
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    strategy = _ScheduleStrategy(
+        {0: {"SPY": 0.6}, 1: {"SPY": 0.4}},
+        epoch,
+        default_targets={"SPY": 0.4},
+    )
+    result = _engine(strategy, commission=1.0).run(_equity_days(130, epoch), liquidate_at_end=True)
+    lifetime = result.ending_equity - result.starting_equity
+    assert result.closed_positions == 1
+    assert len(result.realized_pnl_events) >= 2
+    assert result.closed_position_events[0][2] == pytest.approx(lifetime)
+    assert sum(result.realized_pnls) == pytest.approx(lifetime)
 
 
 def test_realized_plus_unrealized_reconciles_without_liquidation() -> None:
@@ -361,9 +417,7 @@ def test_restart_keeps_cash_and_never_reissues_filled_orders(tmp_path) -> None:
     # Idempotent client order ids: identical decisions produce identical ids.
     restart_ids = [fill.client_order_id for fill in restarted.fills]
     ref_ids = [
-        fill.client_order_id
-        for fill in reference.fills
-        if fill.timestamp >= bars[60].timestamp
+        fill.client_order_id for fill in reference.fills if fill.timestamp >= bars[60].timestamp
     ]
     assert restart_ids == ref_ids
 

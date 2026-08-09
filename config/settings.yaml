@@ -108,9 +108,18 @@ universe:
 engine:
   timeframe: 5m
   higher_timeframe: 1h
-  # Fail-closed: no portfolio strategy is approved for live trading until it
-  # passes the production gate AND this flag is explicitly set to true.
+  # Deprecated compatibility switch; true is rejected. Runtime activation
+  # requires immutable GREEN manifests and their separately configured hashes.
   approve_portfolio_strategy: false
+  approval_manifest_paths: []
+  approval_manifest_checksums: []
+  rollout_state_path: data/runtime/portfolio_rollout.json
+  # Optional in packaged deployments; when empty the runtime resolves git HEAD.
+  runtime_source_revision: ""
+  allow_live_portfolio_execution: false
+  live_portfolio_dollar_cap: 0
+  live_operator_approval_path: ""
+  live_operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
   trading_enabled: true
   equity_trading_enabled: true
   crypto_trading_enabled: false
@@ -147,11 +156,11 @@ engine:
     max_crypto_positions: 2
     minimum_crypto_order_notional: 12
     maximum_crypto_order_notional: 200000
-    cash_buffer_pct: 0.05
+    cash_buffer_pct: 0.40
     max_sector_exposure_pct: 0.25
     max_gross_exposure_pct: 0.6
     max_positions: 3
-    daily_loss_limit_pct: 0.01
-    max_drawdown_pct: 0.10
+    daily_loss_limit_pct: 0.005
+    max_drawdown_pct: 0.05
     minimum_risk_reward: 1.8
     consecutive_loss_reduction_after: 3

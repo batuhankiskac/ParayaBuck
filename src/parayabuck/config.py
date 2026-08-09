@@ -21,12 +21,12 @@ class RiskLimits:
     max_crypto_positions: int = 2
     minimum_crypto_order_notional: float = 12.0
     maximum_crypto_order_notional: float = 200_000.0
-    cash_buffer_pct: float = 0.05
+    cash_buffer_pct: float = 0.40
     max_sector_exposure_pct: float = 0.25
     max_gross_exposure_pct: float = 0.60
     max_positions: int = 5
-    daily_loss_limit_pct: float = 0.015
-    max_drawdown_pct: float = 0.10
+    daily_loss_limit_pct: float = 0.005
+    max_drawdown_pct: float = 0.05
     max_open_risk_pct: float = 0.015
     minimum_risk_reward: float = 1.8
     consecutive_loss_reduction_after: int = 3
@@ -105,10 +105,17 @@ class EngineConfig:
     # Reserved: the runtime does not currently filter crypto bars by volume
     # ratio; kept for settings.yaml compatibility.
     crypto_min_volume_bar_ratio: float = 0.5
-    # Portfolio-strategy approval: the runtime refuses to start until a
-    # portfolio strategy has passed the production gate AND this flag is
-    # explicitly set. Fail-closed by default: research_only status.
+    # Deprecated compatibility field. Setting it true is always an error: a
+    # boolean can never substitute for immutable validation/holdout evidence.
     approve_portfolio_strategy: bool = False
+    approval_manifest_paths: tuple[str, ...] = ()
+    approval_manifest_checksums: tuple[str, ...] = ()
+    rollout_state_path: str = "data/runtime/portfolio_rollout.json"
+    runtime_source_revision: str = ""
+    allow_live_portfolio_execution: bool = False
+    live_portfolio_dollar_cap: float = 0.0
+    live_operator_approval_path: str = ""
+    live_operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
     risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:
@@ -133,6 +140,21 @@ class EngineConfig:
             raise ValueError("Engine timing and capacity values must be positive")
         if self.max_new_positions_per_cycle != 1:
             raise ValueError("Only one new position per cycle is supported")
+        if self.approve_portfolio_strategy:
+            raise ValueError(
+                "approve_portfolio_strategy is deprecated and unsafe; configure "
+                "approval_manifest_paths plus approval_manifest_checksums"
+            )
+        if len(self.approval_manifest_paths) != len(self.approval_manifest_checksums):
+            raise ValueError("Every approval manifest requires one expected checksum")
+        if len(set(self.approval_manifest_paths)) != len(self.approval_manifest_paths):
+            raise ValueError("Approval manifest paths must be unique")
+        if self.live_portfolio_dollar_cap < 0:
+            raise ValueError("live_portfolio_dollar_cap must be non-negative")
+        if self.allow_live_portfolio_execution and self.live_portfolio_dollar_cap <= 0:
+            raise ValueError("Live portfolio execution requires a positive dollar cap")
+        if self.allow_live_portfolio_execution and not self.live_operator_approval_path:
+            raise ValueError("Live portfolio execution requires a signed operator approval")
         if self.live_trading_enabled:
             # Strategy selection happens in code; the legacy profile field is
             # accepted for settings.yaml compatibility but never validated.
@@ -441,6 +463,9 @@ def load_config(config_path: str | None = None) -> Config:
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     engine_raw = dict(raw.get("engine", {}))
+    for tuple_field in ("approval_manifest_paths", "approval_manifest_checksums"):
+        if tuple_field in engine_raw:
+            engine_raw[tuple_field] = tuple(engine_raw[tuple_field])
     risk = RiskLimits(**engine_raw.pop("risk", {}))
     universe_raw = raw.get("universe")
     if universe_raw is None:

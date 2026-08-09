@@ -5,7 +5,8 @@ import json
 import logging
 import math
 import statistics
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -512,6 +513,12 @@ def load_active_crypto_symbols(
     return ordered[: config.maximum_stream_symbols]
 
 
+def elimination_reason_summary(eliminated: Mapping[str, str]) -> str:
+    """Return deterministic reason counts for scanner CLI/audit output."""
+    counts = Counter(eliminated.values())
+    return ", ".join(f"{reason}={count}" for reason, count in sorted(counts.items())) or "none"
+
+
 __all__ = [
     "CRYPTO_CATEGORIES",
     "CryptoCandidate",
@@ -519,6 +526,7 @@ __all__ = [
     "CryptoUniverseScanner",
     "crypto_candidate_from_bars",
     "crypto_scanner_config_digest",
+    "elimination_reason_summary",
     "load_active_crypto_symbols",
     "validate_active_crypto_universe",
 ]

@@ -20,19 +20,54 @@ class CostScenario:
     slippage_bps: float
     spread_bps: float
     taker_fee_bps: float = 0.0
+    equity_taf_per_share: float = 0.0
+    equity_taf_cap: float = 0.0
+    equity_cat_per_share: float = 0.0
+    equity_sec_fee_rate: float = 0.0
 
     def __post_init__(self) -> None:
-        values = (self.slippage_bps, self.spread_bps, self.taker_fee_bps)
+        values = (
+            self.slippage_bps,
+            self.spread_bps,
+            self.taker_fee_bps,
+            self.equity_taf_per_share,
+            self.equity_taf_cap,
+            self.equity_cat_per_share,
+            self.equity_sec_fee_rate,
+        )
         if not self.name.strip() or any(not math.isfinite(value) or value < 0 for value in values):
             raise ValueError("Invalid cost scenario")
         if self.market == Market.EQUITY and self.taker_fee_bps:
             raise ValueError("Equity scenarios do not use crypto taker fees")
 
 
-EQUITY_BASE = CostScenario("equity_base", Market.EQUITY, 2.0, 4.0)
-EQUITY_STRESS = CostScenario("equity_stress", Market.EQUITY, 5.0, 10.0)
-CRYPTO_BASE = CostScenario("crypto_base", Market.CRYPTO, 2.0, 6.0, 5.0)
-CRYPTO_STRESS = CostScenario("crypto_stress", Market.CRYPTO, 5.0, 15.0, 10.0)
+EQUITY_BASE = CostScenario(
+    "equity_base",
+    Market.EQUITY,
+    2.0,
+    4.0,
+    0.0,
+    0.000195,
+    9.79,
+    0.000003,
+    0.00002060,
+)
+EQUITY_STRESS = CostScenario(
+    "equity_stress",
+    Market.EQUITY,
+    5.0,
+    10.0,
+    0.0,
+    0.000195,
+    9.79,
+    0.000003,
+    0.00002060,
+)
+# Tier-1 Alpaca taker fee (0-100k USD trailing 30-day volume) is 25 bps.
+# Stress doubles the fee and widens spread/slippage; a 5 bps base materially
+# understated the cost of the intended small paper/live account.
+CRYPTO_BASE = CostScenario("crypto_base", Market.CRYPTO, 2.0, 6.0, 25.0)
+CRYPTO_STRESS = CostScenario("crypto_stress", Market.CRYPTO, 8.0, 25.0, 50.0)
 DEFAULT_COST_SCENARIOS = (EQUITY_BASE, EQUITY_STRESS, CRYPTO_BASE, CRYPTO_STRESS)
 
 
@@ -105,8 +140,7 @@ class ProductionGate:
             (trial.sharpe >= self.minimum_sharpe, "sharpe_below_gate"),
             (trial.max_drawdown <= self.maximum_drawdown, "drawdown_above_gate"),
             (
-                trial.deflated_sharpe_probability
-                >= self.minimum_deflated_sharpe_probability,
+                trial.deflated_sharpe_probability >= self.minimum_deflated_sharpe_probability,
                 "deflated_sharpe_below_gate",
             ),
             (trial.probability_backtest_overfitting <= self.maximum_pbo, "pbo_above_gate"),
@@ -125,10 +159,7 @@ class ProductionGate:
         failures.extend(reason for passed, reason in checks if not passed)
         gross = [max(0.0, value) for _, value in trial.gross_profit_by_symbol]
         gross_total = sum(gross)
-        if (
-            gross_total > 0
-            and max(gross) / gross_total > self.maximum_symbol_profit_concentration
-        ):
+        if gross_total > 0 and max(gross) / gross_total > self.maximum_symbol_profit_concentration:
             failures.append("single_symbol_profit_concentration")
         return GateDecision(not failures, tuple(failures))
 
@@ -273,9 +304,7 @@ def probability_backtest_overfitting(
             sum(row[index] for index in in_sample) / half for row in trial_block_returns
         ]
         selected = max(range(len(train_scores)), key=train_scores.__getitem__)
-        out_scores = [
-            sum(row[index] for index in out_sample) / half for row in trial_block_returns
-        ]
+        out_scores = [sum(row[index] for index in out_sample) / half for row in trial_block_returns]
         selected_score = out_scores[selected]
         rank_value = sum(score <= selected_score for score in out_scores) / len(out_scores)
         if rank_value <= 0.5:

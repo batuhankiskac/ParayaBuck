@@ -1046,8 +1046,7 @@ class ExecutionLedger:
         ):
             return max(
                 0.0,
-                (average_fill_price * cumulative - previous_average * previous_filled)
-                / fill_delta,
+                (average_fill_price * cumulative - previous_average * previous_filled) / fill_delta,
             )
         return event.average_fill_price or previous_average or 0.0
 

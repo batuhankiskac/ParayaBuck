@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import inspect
 import json
 import os
 import subprocess
@@ -40,12 +41,15 @@ import time
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
+from uuid import uuid4
 
 import yaml
 from dotenv import load_dotenv
 
 from parayabuck.backtest.experiments import (
     CostScenario,
+    GateDecision,
     new_manifest,
     outer_holdout_start,
 )
@@ -59,15 +63,20 @@ from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestResult,
 )
 from parayabuck.backtest.portfolio_experiments import (
-    GateDecision,
     PortfolioExperimentSpec,
     PortfolioGate,
     PortfolioTrialResult,
     run_portfolio_experiment,
+    trial_id_for,
 )
 from parayabuck.backtest.portfolio_report import build_portfolio_report
+from parayabuck.backtest.research_program_registry import (
+    ResearchFamilyRegistration,
+    ResearchProgramRegistry,
+)
 from parayabuck.backtest.trial_ledger import LedgerTrial, TrialLedger
 from parayabuck.backtest.universe import (
+    PointInTimeUniverse,
     build_crypto_point_in_time_universe,
     hash_point_in_time_universe,
     verify_persisted_universe,
@@ -75,6 +84,11 @@ from parayabuck.backtest.universe import (
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
+from parayabuck.data.crypto_public import (
+    BinanceDailyArchive,
+    CoinbaseDailyCandles,
+    venue_close_deviation_bps,
+)
 from parayabuck.data.dataset_quality import (
     dataset_ready_for_production,
     evaluate_dataset_quality,
@@ -107,14 +121,18 @@ EQUITY_DATASET = "equity_etf_1d_v1"
 EQUITY_DATASET_CORRECTED = "equity_etf_1d_v1_corrected"
 EQUITY_DATASET_V2 = "equity_etf_1d_v2"
 CRYPTO_DATASET = "crypto_spot_1h_v1"
+CRYPTO_DAILY_DATASET = "crypto_core_1d_v1"
 EQUITY_EXPERIMENT = ROOT / "config" / "experiments" / "equity_dual_momentum_v1.yaml"
 TSM_EXPERIMENT = ROOT / "config" / "experiments" / "equity_tsm_1d_v1.yaml"
 V2_EQUITY_EXPERIMENT = ROOT / "config" / "experiments" / "equity_dual_momentum_v2.yaml"
 CRYPTO_EXPERIMENT = ROOT / "config" / "experiments" / "crypto_cross_sectional_1h_v1.yaml"
+VNEXT_EQUITY_EXPERIMENT = ROOT / "config" / "experiments" / "equity_covariance_trend_1d_v1.yaml"
+VNEXT_CRYPTO_EXPERIMENT = ROOT / "config" / "experiments" / "crypto_volatility_trend_1d_v1.yaml"
 CORRECTNESS_RERUN_ID = "equity_dual_momentum_v1_correctness_rerun"
 RERUN_V2_ID = "equity_dual_momentum_v2_correctness_rerun_2"
 STARTING_EQUITY = 100_000.0
 HOLDOUT_REGISTRY_PATH = ROOT / "data" / "runtime" / "portfolio_holdout_registry.json"
+FAMILY_REGISTRY_PATH = ROOT / "data" / "runtime" / "research_family_registry.json"
 
 # Research signal price adjustment: equity momentum uses dividend+split
 # adjusted (total-return) bars so distributions do not distort signals.
@@ -169,9 +187,7 @@ def _source_fingerprint(*, allow_dirty: bool = False) -> dict[str, str]:
     tracked_diff_hash = ""
     untracked_source_hash = ""
     if dirty:
-        tracked_diff_hash = hashlib.sha256(
-            _run("diff").encode("utf-8")
-        ).hexdigest()
+        tracked_diff_hash = hashlib.sha256(_run("diff").encode("utf-8")).hexdigest()
         untracked = _run("ls-files", "--others", "--exclude-standard").splitlines()
         contents: list[bytes] = []
         for relative in untracked:
@@ -236,9 +252,7 @@ def _preflight_research_quality(
     if manifest is None:
         raise SystemExit(f"Dataset bulunamadı: {dataset_id}")
     by_symbol = store.load_dataset(dataset_id)
-    report = evaluate_dataset_quality(
-        manifest, by_symbol, benchmark_symbol="SPY", market=market
-    )
+    report = evaluate_dataset_quality(manifest, by_symbol, benchmark_symbol="SPY", market=market)
     quality_dir = REPORTS_ROOT / "quality"
     quality_dir.mkdir(parents=True, exist_ok=True)
     (quality_dir / f"{dataset_id}.json").write_text(
@@ -246,16 +260,11 @@ def _preflight_research_quality(
         encoding="utf-8",
     )
     if not report.passed and not legacy_audit_bypass:
-        raise SystemExit(
-            f"Kalite kapısı BAŞARISIZ ({dataset_id}): " + ", ".join(report.failures)
-        )
+        raise SystemExit(f"Kalite kapısı BAŞARISIZ ({dataset_id}): " + ", ".join(report.failures))
     if report.passed:
         print(f"Dataset kalite kapısı: PASSED ({dataset_id})")
     else:
-        print(
-            f"Dataset kalite kapısı: AUDIT-BYPASS ({dataset_id}); "
-            "yalnız legacy audit amaçlı"
-        )
+        print(f"Dataset kalite kapısı: AUDIT-BYPASS ({dataset_id}); yalnız legacy audit amaçlı")
 
 
 def download_and_persist(
@@ -283,9 +292,7 @@ def download_and_persist(
             end=now,
             adjustment=EQUITY_DOWNLOAD_ADJUSTMENT,
         )
-        ok, reason = equity_provider.validate_coverage(
-            symbol, fetched, start=equity_start, end=now
-        )
+        ok, reason = equity_provider.validate_coverage(symbol, fetched, start=equity_start, end=now)
         if not ok:
             raise SystemExit(f"Equity coverage FAILED for {symbol}: {reason}")
         equity_bars.extend(fetched)
@@ -305,9 +312,7 @@ def download_and_persist(
             end=now,
             adjustment=CRYPTO_DOWNLOAD_ADJUSTMENT,
         )
-        ok, reason = crypto_provider.validate_coverage(
-            symbol, fetched, start=crypto_start, end=now
-        )
+        ok, reason = crypto_provider.validate_coverage(symbol, fetched, start=crypto_start, end=now)
         if not ok:
             raise SystemExit(f"Crypto coverage FAILED for {symbol}: {reason}")
         crypto_bars.extend(fetched)
@@ -337,8 +342,7 @@ def download_and_persist(
         adjustment=CRYPTO_DOWNLOAD_ADJUSTMENT,
         universe_version=CRYPTO_UNIVERSE_VERSION,
         notes=(
-            "execution-supported spot pairs; "
-            f"requested {crypto_days}d from {crypto_start.date()}"
+            f"execution-supported spot pairs; requested {crypto_days}d from {crypto_start.date()}"
         ),
         provider_metadata=crypto_provider_metadata,
     )
@@ -353,10 +357,105 @@ def download_and_persist(
         equity_manifest, equity_by_symbol, benchmark_symbol="SPY", market=Market.EQUITY
     )
     if not ready:
-        raise SystemExit(
-            "Equity dataset production quality gate FAILED: " + ", ".join(failures)
-        )
+        raise SystemExit("Equity dataset production quality gate FAILED: " + ", ".join(failures))
     print("Equity dataset quality gate: PASSED")
+
+
+def download_and_persist_public_crypto(
+    store: VersionedResearchStore,
+    *,
+    years: int,
+    validation_days: int = 30,
+) -> None:
+    """Persist BTC/ETH Coinbase history with checksum-backed Binance overlap."""
+    if years <= 0 or validation_days <= 0:
+        raise ValueError("Public crypto history and validation windows must be positive")
+    end = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = end - timedelta(days=years * 365)
+    coinbase = CoinbaseDailyCandles()
+    binance = BinanceDailyArchive()
+    api_key = os.getenv("ALPACA_API_KEY", "")
+    secret_key = os.getenv("ALPACA_SECRET_KEY", "")
+    if not api_key or not secret_key:
+        raise SystemExit("ALPACA_API_KEY / ALPACA_SECRET_KEY are required for recent venue overlap")
+    alpaca = AlpacaHistoricalData(api_key, secret_key, stock_feed="iex")
+    bars: list[Bar] = []
+    validation_notes: list[str] = []
+    for symbol in ("BTC/USD", "ETH/USD"):
+        primary = coinbase.daily_bars(symbol, start, end)
+        overlap_start = max(start, end - timedelta(days=validation_days))
+        secondary = [
+            binance.daily_bar(symbol, day.date())
+            for day in (
+                overlap_start + timedelta(days=offset)
+                for offset in range((end - overlap_start).days)
+            )
+        ]
+        primary_overlap = [bar for bar in primary if bar.timestamp >= overlap_start]
+        deviation = venue_close_deviation_bps(primary_overlap, secondary)
+        if deviation > 150:
+            raise SystemExit(
+                f"Coinbase/Binance venue deviation too large for {symbol}: {deviation:.2f} bps"
+            )
+        validation_notes.append(f"{symbol} max_close_deviation_bps={deviation:.4f}")
+        alpaca_recent = alpaca.get_bars(
+            symbol, "1d", start=overlap_start, end=end, adjustment="raw"
+        )
+        normalized_alpaca = [
+            Bar(
+                bar.timestamp.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0),
+                bar.symbol,
+                bar.timeframe,
+                bar.open,
+                bar.high,
+                bar.low,
+                bar.close,
+                bar.volume,
+                bar.market,
+            )
+            for bar in alpaca_recent
+        ]
+        alpaca_deviation = venue_close_deviation_bps(primary_overlap, normalized_alpaca)
+        if alpaca_deviation > 200:
+            raise SystemExit(
+                f"Coinbase/Alpaca venue deviation too large for {symbol}: "
+                f"{alpaca_deviation:.2f} bps"
+            )
+        validation_notes.append(f"{symbol} alpaca_max_close_deviation_bps={alpaca_deviation:.4f}")
+        bars.extend(primary)
+        print(f"  public crypto {symbol:<8} 1d: {len(primary):>5} bar")
+    metadata = ProviderMetadata(
+        provider_name="Coinbase Exchange + Binance checksum validation",
+        source_feed="coinbase_exchange_candles",
+        vendor_symbol=None,
+        adjustment_method="raw",
+        currency="USD",
+        timezone="UTC",
+        exchange_calendar="24/7",
+        downloaded_at=datetime.now(UTC),
+        provider_version="coinbase-rest-v1/binance-daily-checksum-v1",
+        research_provider_differs_from_execution=True,
+        notes="; ".join(validation_notes),
+    )
+    manifest = store.save_dataset(
+        CRYPTO_DAILY_DATASET,
+        bars,
+        timeframe="1d",
+        source_feed=metadata.source_feed,
+        adjustment="raw",
+        universe_version="crypto_core_btc_eth_v1",
+        notes=(
+            "Primary Coinbase pagination with strict daily gap checks; secondary "
+            "Binance daily archives accepted only with published SHA-256 checksums"
+        ),
+        provider_metadata=metadata,
+    )
+    print(
+        f"Public crypto dataset: {manifest.dataset_id} "
+        f"{manifest.start.date()} -> {manifest.end.date()} "
+        f"hash={manifest.data_hash[:12]}..."
+    )
+    alpaca.close()
 
 
 def download_and_persist_v2(
@@ -393,11 +492,17 @@ def download_and_persist_v2(
     iex_bars: dict[str, list[Bar]] = {}
     for symbol in equity_symbols:
         historical = sip_provider.fetch_bars(
-            symbol, "1d", start=datetime(2016, 1, 1, tzinfo=UTC), end=sip_end,
+            symbol,
+            "1d",
+            start=datetime(2016, 1, 1, tzinfo=UTC),
+            end=sip_end,
             adjustment=EQUITY_DOWNLOAD_ADJUSTMENT,
         )
         recent = iex_provider.fetch_bars(
-            symbol, "1d", start=overlap_start, end=now,
+            symbol,
+            "1d",
+            start=overlap_start,
+            end=now,
             adjustment=EQUITY_DOWNLOAD_ADJUSTMENT,
         )
         ok_historical, reason_historical = sip_provider.validate_coverage(
@@ -415,10 +520,7 @@ def download_and_persist_v2(
             raise SystemExit(f"IEX coverage FAILED for {symbol}: {reason_recent}")
         sip_bars[symbol] = historical
         iex_bars[symbol] = recent
-        print(
-            f"  equity {symbol:<5} 1d: sip={len(historical):>5} "
-            f"iex={len(recent):>5} bar"
-        )
+        print(f"  equity {symbol:<5} 1d: sip={len(historical):>5} iex={len(recent):>5} bar")
         time.sleep(0.2)
 
     # Splice reconciliation: Dec-2025 returns must agree between the two feeds.
@@ -438,9 +540,7 @@ def download_and_persist_v2(
                 f"{symbol}: max abs return diff {report.max_abs_return_diff:.4f}"
             )
     if splice_failures:
-        raise SystemExit(
-            "Equity v2 splice reconciliation FAILED: " + "; ".join(splice_failures)
-        )
+        raise SystemExit("Equity v2 splice reconciliation FAILED: " + "; ".join(splice_failures))
     print("Splice reconciliation (Dec-2025 SIP vs IEX): PASSED")
 
     merged: list[Bar] = []
@@ -487,30 +587,63 @@ def download_and_persist_v2(
         manifest, by_symbol, benchmark_symbol=benchmark_symbol, market=Market.EQUITY
     )
     if not ready:
-        raise SystemExit(
-            "Equity v2 dataset production quality gate FAILED: " + ", ".join(failures)
-        )
+        raise SystemExit("Equity v2 dataset production quality gate FAILED: " + ", ".join(failures))
     print("Equity v2 dataset quality gate: PASSED")
     _write_v2_reconciliation_report(store, by_symbol, manifest)
     return None
 
 
-
 def _dsr_trial_count_override(
     ledger: TrialLedger,
-    dataset_hash: str,
-    experiment_id: str,
-    new_trials: int,
+    research_program_id: str,
+    candidate_trial_ids: set[str],
 ) -> int:
-    """DSR trial budget for a run: prior ledger hypotheses + this run's new
-    candidates, WITHOUT double-counting when the same experiment id was
-    already recorded by a previous run (record/backfill are idempotent, so
-    only the delta of new trials is added)."""
-    already = 0
-    for entry in ledger.entries_for(dataset_hash):
-        if str(entry.get("experiment_id", "")) == experiment_id:
-            already += 1
-    return int(ledger.trial_count(dataset_hash)) + max(0, new_trials - already)
+    """Count hypotheses across a research program, independent of run names.
+
+    Changing an experiment label or refreshing an overlapping dataset can no
+    longer reset the multiple-testing penalty.
+    """
+    existing = {
+        str(entry.get("trial_id", "")) for entry in ledger.entries_for_program(research_program_id)
+    }
+    return len(existing | candidate_trial_ids)
+
+
+def _research_program_id(spec: PortfolioExperimentSpec, dataset_id: str) -> str:
+    configured = str(spec.metadata.get("research_program_id", "")).strip()
+    if configured:
+        return configured
+    market = spec.candidate_spaces[0].market.value
+    return f"{market}_portfolio_legacy:{dataset_id}"
+
+
+def _candidate_trial_ids(spec: PortfolioExperimentSpec) -> set[str]:
+    return {
+        trial_id_for(strategy)
+        for space in spec.candidate_spaces
+        for strategy in space.iter_strategies()
+    }
+
+
+def _register_family_budget(spec: PortfolioExperimentSpec) -> None:
+    program_id = str(spec.metadata.get("research_program_id", "")).strip()
+    if not program_id:
+        return
+    preregistered_at = datetime.fromisoformat(str(spec.metadata.get("preregistered_at", "")))
+    hypothesis = str(spec.metadata.get("economic_hypothesis", "")).strip()
+    if not hypothesis:
+        raise ValueError("A vNext family requires a preregistered economic hypothesis")
+    maximum = int(str(spec.metadata.get("maximum_families_per_12_months", 3)))
+    ResearchProgramRegistry(FAMILY_REGISTRY_PATH).register(
+        ResearchFamilyRegistration(
+            research_program_id=program_id,
+            market=spec.candidate_spaces[0].market.value,
+            family_name=spec.candidate_spaces[0].name,
+            economic_hypothesis=hypothesis,
+            preregistered_at=preregistered_at,
+        ),
+        maximum_families=maximum,
+    )
 
 
 def _ledger_backfill_for_dataset(
@@ -532,8 +665,8 @@ def _ledger_backfill_for_dataset(
     if not nested_root.exists():
         return 0
     added = 0
-    for directory in sorted(nested_root.iterdir()):
-        manifest_path = directory / "manifest.json"
+    for manifest_path in sorted(nested_root.rglob("manifest.json")):
+        directory = manifest_path.parent
         results_path = directory / "trial_results.json"
         if not manifest_path.exists() or not results_path.exists():
             continue
@@ -557,19 +690,22 @@ def _ledger_backfill_for_dataset(
         )
         if not trials:
             continue
-        before = ledger.trial_count(dataset_hash)
+        metadata = report_manifest.get("metadata", {})
+        program_id = (
+            str(metadata.get("research_program_id", "")) if isinstance(metadata, dict) else ""
+        ) or f"legacy:{dataset_id}"
+        before = ledger.trial_count_for_program(program_id)
         ledger.backfill_from_reports(
             dataset_id=dataset_id,
             dataset_hash=dataset_hash,
-            experiment_id=directory.name,
+            experiment_id=str(report_manifest.get("experiment_id", directory.name)),
             trials=trials,
+            research_program_id=program_id,
+            dataset_lineage=(dataset_id,),
         )
-        added += ledger.trial_count(dataset_hash) - before
+        added += ledger.trial_count_for_program(program_id) - before
     if added:
-        print(
-            f"Trial ledger: {added} önceki hipotez geri yüklendi "
-            f"({dataset_id}); toplam DSR sayısı = {ledger.trial_count(dataset_hash)}"
-        )
+        print(f"Trial ledger: {added} önceki hipotez geri yüklendi ({dataset_id})")
     return added
 
 
@@ -581,11 +717,7 @@ def _write_rerun_v2_decision(
 ) -> None:
     """Persist the final decision artifact for the corrected v2 rerun."""
     frozen = next(
-        (
-            trial
-            for trial in trials
-            if trial.trial_id == spec.frozen_candidate_trial_id
-        ),
+        (trial for trial in trials if trial.trial_id == spec.frozen_candidate_trial_id),
         None,
     )
     frozen = frozen or trials[0] if trials else None
@@ -678,7 +810,6 @@ def _report_dataset_id(report_manifest: dict[str, object], directory_name: str) 
     return ""
 
 
-
 def _register_holdout_contamination(
     store: VersionedResearchStore,
     registry: HoldoutRegistry,
@@ -727,8 +858,7 @@ def _register_holdout_contamination(
     registry.fail_evaluation(
         fingerprint,
         experiment_note,
-        "contaminated_by_full_sample_baseline; "
-        "legacy audit dataset; permanently locked",
+        "contaminated_by_full_sample_baseline; legacy audit dataset; permanently locked",
     )
     print(
         f"Legacy holdout contamination kaydı: {dataset_id} "
@@ -772,9 +902,7 @@ def _write_v2_reconciliation_report(
                 "mean_abs_return_diff": report.mean_abs_return_diff,
                 "max_abs_return_diff": report.max_abs_return_diff,
                 "abnormal_day_count": len(report.abnormal_days),
-                "likely_corporate_action_days": [
-                    item for item in report.abnormal_days if item[3]
-                ],
+                "likely_corporate_action_days": [item for item in report.abnormal_days if item[3]],
                 "unexplained_days": [item for item in report.abnormal_days if not item[3]],
             }
         )
@@ -805,8 +933,7 @@ def _verify_persisted_snapshot_hash(
     universe = PointInTimeUniverse(
         Market.CRYPTO,
         tuple(
-            UniverseSnapshot(record.effective_at, frozenset(record.symbols))
-            for record in records
+            UniverseSnapshot(record.effective_at, frozenset(record.symbols)) for record in records
         ),
         methodology,
     )
@@ -816,14 +943,15 @@ def _verify_persisted_snapshot_hash(
 def load_research_data(
     store: VersionedResearchStore,
     equity_dataset: str,
+    crypto_dataset: str = CRYPTO_DATASET,
 ) -> tuple[dict[str, list[Bar]], dict[str, list[Bar]]]:
-    if store.manifest(equity_dataset) is None or store.manifest(CRYPTO_DATASET) is None:
+    if store.manifest(equity_dataset) is None or store.manifest(crypto_dataset) is None:
         raise SystemExit(
             "Araştırma verisi yok. Önce 'python scripts/run_portfolio_research.py --download' "
             "çalıştırın."
         )
     equity = store.load_dataset(equity_dataset)
-    crypto = store.load_dataset(CRYPTO_DATASET)
+    crypto = store.load_dataset(crypto_dataset)
     return equity, crypto
 
 
@@ -891,6 +1019,10 @@ def make_engine(
         slippage_bps=cost.slippage_bps,
         spread_bps=cost.spread_bps,
         crypto_taker_fee_bps=cost.taker_fee_bps,
+        equity_taf_per_share=cost.equity_taf_per_share,
+        equity_taf_cap=cost.equity_taf_cap,
+        equity_cat_per_share=cost.equity_cat_per_share,
+        equity_sec_fee_rate=cost.equity_sec_fee_rate,
         benchmark_symbol="SPY" if strategy.market == Market.EQUITY else "BTC/USD",
         max_participation_pct=0.10,
         turnover_band=0.005,
@@ -914,6 +1046,7 @@ def run_baseline(
 
 def write_baseline_report(
     strategy_name: str,
+    strategy: PortfolioStrategy,
     result: PortfolioBacktestResult,
     bars: list[Bar],
     cost: CostScenario,
@@ -921,12 +1054,12 @@ def write_baseline_report(
     locked_holdout_start: datetime,
     dataset_id: str,
     source_fingerprint: dict[str, str] | None = None,
-) -> None:
-    directory = REPORTS_ROOT / "baseline" / strategy_name
-    directory.mkdir(parents=True, exist_ok=True)
-    report = build_portfolio_report(
-        result, strategy_name=strategy_name, strategy_version="1.0.0"
+) -> Path:
+    directory = _immutable_run_directory(
+        REPORTS_ROOT / "baseline" / strategy_name,
+        code_revision,
     )
+    report = build_portfolio_report(result, strategy_name=strategy_name, strategy_version="1.0.0")
     (directory / "report.json").write_text(
         json.dumps(report.to_dict(), indent=2, allow_nan=False, ensure_ascii=False),
         encoding="utf-8",
@@ -955,6 +1088,22 @@ def write_baseline_report(
     manifest_payload = {**asdict(manifest), "created_at": manifest.created_at.isoformat()}
     if source_fingerprint is not None:
         manifest_payload["source_fingerprint"] = source_fingerprint
+    strategy_source = inspect.getsourcefile(type(strategy))
+    if strategy_source is None:
+        raise RuntimeError(f"Strategy source unavailable: {strategy.name}")
+    manifest_payload.update(
+        {
+            "run_id": directory.name,
+            "source_commit": code_revision,
+            "strategy_module_hashes": {
+                strategy.name: hashlib.sha256(Path(strategy_source).read_bytes()).hexdigest()
+            },
+            "candidate_parameters": [dict(strategy.parameters)],
+            "dataset_hashes": [manifest.data_hash],
+            "gate_policy_version": "portfolio-conservative-v1",
+        }
+    )
+    manifest_payload["manifest_checksum"] = _payload_checksum(manifest_payload)
     (directory / "manifest.json").write_text(
         json.dumps(
             manifest_payload,
@@ -966,6 +1115,7 @@ def write_baseline_report(
         encoding="utf-8",
     )
     print(f"Baseline raporu: {directory}")
+    return directory
 
 
 def write_cost_comparison(
@@ -973,9 +1123,8 @@ def write_cost_comparison(
     stress: PortfolioBacktestResult,
     cost: CostScenario,
     strategy_name: str,
+    directory: Path,
 ) -> None:
-    directory = REPORTS_ROOT / "cost_comparison"
-    directory.mkdir(parents=True, exist_ok=True)
     payload = {
         "strategy": strategy_name,
         "base_cost": {
@@ -1009,7 +1158,7 @@ def write_cost_comparison(
             "sharpe_drag": base.sharpe - stress.sharpe,
         },
     }
-    path = directory / f"{strategy_name}.json"
+    path = directory / "cost_comparison.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Maliyet karşılaştırması: {path}")
 
@@ -1033,6 +1182,7 @@ def run_nested(
     ledger: TrialLedger | None = None,
 ) -> tuple[PortfolioExperimentSpec, tuple[PortfolioTrialResult, ...]]:
     spec = PortfolioExperimentSpec.from_file(experiment_path)
+    _register_family_budget(spec)
     spec = replace(
         spec,
         source_provider=source_provider,
@@ -1044,36 +1194,46 @@ def run_nested(
         EQUITY_UNIVERSE_VERSION if market == Market.EQUITY else CRYPTO_UNIVERSE_VERSION
     )
 
-    def factory(
-        strategy: PortfolioStrategy, cost: CostScenario
-    ) -> PortfolioBacktestEngine:
+    def factory(strategy: PortfolioStrategy, cost: CostScenario) -> PortfolioBacktestEngine:
         return make_engine(strategy, cost, universe, universe_version)
 
     def verifier() -> None:
         if universe is not None and spec.universe_snapshot_hash:
-            verify_persisted_universe(universe, spec.universe_snapshot_hash)
+            verify_persisted_universe(
+                cast(PointInTimeUniverse, universe), spec.universe_snapshot_hash
+            )
             if spec.candidate_spaces[0].market == Market.CRYPTO:
-                _verify_persisted_snapshot_hash(
-                    store, CRYPTO_DATASET, spec.universe_snapshot_hash
-                )
+                _verify_persisted_snapshot_hash(store, CRYPTO_DATASET, spec.universe_snapshot_hash)
 
     trial_count_override: int | None = None
+    research_program_id = _research_program_id(spec, dataset_id)
     if ledger is not None:
         dataset_manifest = store.manifest(dataset_id)
         dataset_hash = dataset_manifest.data_hash if dataset_manifest is not None else ""
         _ledger_backfill_for_dataset(ledger, store, dataset_id)
-        new_trials = sum(space.combinations for space in spec.candidate_spaces)
         trial_count_override = _dsr_trial_count_override(
-            ledger, dataset_hash, spec.experiment_id, new_trials
+            ledger, research_program_id, _candidate_trial_ids(spec)
         )
     registry = HoldoutRegistry(HOLDOUT_REGISTRY_PATH)
+    holdout_start = outer_holdout_start(spec.end, spec.outer_holdout_months)
+    validation_bars = [bar for bar in bars if bar.timestamp < holdout_start]
+
+    def load_holdout() -> list[Bar]:
+        partitions = store.load_dataset(
+            dataset_id,
+            start=holdout_start,
+            end=spec.end,
+        )
+        return [bar for partition in partitions.values() for bar in partition]
+
     trials = run_portfolio_experiment(
-        bars,
+        validation_bars,
         spec,
         factory,
         unlock_holdout=unlock_holdout,
         universe_hash_verifier=verifier,
         holdout_registry=registry,
+        holdout_loader=load_holdout if unlock_holdout else None,
         trial_count_override=trial_count_override,
     )
     if ledger is not None:
@@ -1084,8 +1244,44 @@ def run_nested(
             dataset_hash=dataset_hash,
             experiment_id=spec.experiment_id,
             trials=trials,
+            research_program_id=research_program_id,
+            dataset_lineage=(dataset_id,),
         )
     return spec, trials
+
+
+def _immutable_run_directory(root: Path, code_revision: str) -> Path:
+    run_id = (
+        f"{datetime.now(UTC):%Y%m%dT%H%M%S%fZ}-{code_revision[:10] or 'unknown'}-{uuid4().hex[:8]}"
+    )
+    directory = root / run_id
+    directory.mkdir(parents=True, exist_ok=False)
+    return directory
+
+
+def _strategy_module_hashes(spec: PortfolioExperimentSpec) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for space in spec.candidate_spaces:
+        strategy = next(iter(space.iter_strategies()), None)
+        if strategy is None:
+            continue
+        source = inspect.getsourcefile(type(strategy))
+        if source is None:
+            raise RuntimeError(f"Strategy source unavailable: {strategy.name}")
+        hashes[strategy.name] = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+    return hashes
+
+
+def _payload_checksum(payload: dict[str, object]) -> str:
+    unsigned = {key: value for key, value in payload.items() if key != "manifest_checksum"}
+    return hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+    ).hexdigest()
 
 
 def write_nested_reports(
@@ -1095,9 +1291,11 @@ def write_nested_reports(
     code_revision: str,
     dataset_id: str,
     source_fingerprint: dict[str, str] | None = None,
-) -> None:
-    directory = REPORTS_ROOT / "nested" / spec.experiment_id
-    directory.mkdir(parents=True, exist_ok=True)
+) -> Path:
+    directory = _immutable_run_directory(
+        REPORTS_ROOT / "nested" / spec.experiment_id,
+        code_revision,
+    )
     finalists = [
         trial for trial in trials if trial.holdout_evaluations and not trial.holdout_missing
     ]
@@ -1107,6 +1305,7 @@ def write_nested_reports(
         holdout_decision = trial.holdout_gate_decision
         # For holdout-evaluated finalists the combined decision is reported:
         # validation AND holdout must both pass for the production gate.
+        combined: GateDecision | None
         if holdout_decision is not None and validation is not None:
             combined = GateDecision(
                 validation.passed and holdout_decision.passed,
@@ -1143,8 +1342,7 @@ def write_nested_reports(
                 "cash_yield": trial.cash_yield,
                 "profit_factor": (
                     trial.profit_factor
-                    if trial.profit_factor is not None
-                    and trial.profit_factor != float("inf")
+                    if trial.profit_factor is not None and trial.profit_factor != float("inf")
                     else None
                 ),
                 "aggregate_oos_sharpe": trial.aggregate_oos_sharpe,
@@ -1189,7 +1387,12 @@ def write_nested_reports(
         json.dumps(payload, indent=2, allow_nan=False, ensure_ascii=False), encoding="utf-8"
     )
     finalist = finalists[0] if finalists else None
-    metadata: dict[str, object] = {"trial_count": len(trials), "dataset_id": dataset_id}
+    metadata: dict[str, object] = {
+        "trial_count": len(trials),
+        "dataset_id": dataset_id,
+        "research_program_id": _research_program_id(spec, dataset_id),
+        "gate_policy_version": "portfolio-conservative-v1",
+    }
     if finalist is not None:
         metadata["holdout_finalist_trial_id"] = finalist.trial_id
         metadata["holdout_finalist_parameters"] = dict(finalist.parameters)
@@ -1206,6 +1409,17 @@ def write_nested_reports(
     manifest_payload = {**asdict(manifest), "created_at": manifest.created_at.isoformat()}
     if source_fingerprint is not None:
         manifest_payload["source_fingerprint"] = source_fingerprint
+    manifest_payload.update(
+        {
+            "run_id": directory.name,
+            "source_commit": code_revision,
+            "strategy_module_hashes": _strategy_module_hashes(spec),
+            "candidate_parameters": [dict(trial.parameters) for trial in trials],
+            "dataset_hashes": [manifest.data_hash],
+            "gate_policy_version": "portfolio-conservative-v1",
+        }
+    )
+    manifest_payload["manifest_checksum"] = _payload_checksum(manifest_payload)
     (directory / "manifest.json").write_text(
         json.dumps(
             manifest_payload,
@@ -1217,7 +1431,7 @@ def write_nested_reports(
         encoding="utf-8",
     )
     print(f"Nested raporları: {directory}")
-    return
+    return directory
 
 
 def render_gate_table(
@@ -1252,8 +1466,7 @@ def render_gate_table(
         )
     lines.append("")
     lines.append(
-        "Hüküm: holdout açılmadan gate sonucu verilmez; "
-        "`--unlock-holdout` yalnız bir kez."
+        "Hüküm: holdout açılmadan gate sonucu verilmez; `--unlock-holdout` yalnız bir kez."
     )
     return "\n".join(lines)
 
@@ -1278,6 +1491,17 @@ def main(argv: list[str] | None = None) -> int:
             "equity_etf_1d_v2 üret: SIP feed, dividend+split ayarlı, "
             "kalite kapısı + reconciliation raporu"
         ),
+    )
+    parser.add_argument(
+        "--download-public-crypto",
+        action="store_true",
+        help="Coinbase BTC/ETH daily history + Binance checksum + Alpaca overlap",
+    )
+    parser.add_argument(
+        "--crypto-years",
+        type=int,
+        default=10,
+        help="public BTC/ETH daily history length (default: 10 years)",
     )
     parser.add_argument(
         "--equity-years",
@@ -1327,8 +1551,7 @@ def main(argv: list[str] | None = None) -> int:
         "--equity-dataset",
         default="auto",
         help=(
-            "equity dataset id "
-            "(auto|equity_etf_1d_v1|equity_etf_1d_v1_corrected|equity_etf_1d_v2)"
+            "equity dataset id (auto|equity_etf_1d_v1|equity_etf_1d_v1_corrected|equity_etf_1d_v2)"
         ),
     )
     parser.add_argument(
@@ -1339,6 +1562,11 @@ def main(argv: list[str] | None = None) -> int:
             "equity_dual_momentum_v2.yaml (frozen aday + diagnostic ablasyon) ile "
             "çalıştır"
         ),
+    )
+    parser.add_argument(
+        "--vnext",
+        action="store_true",
+        help="run preregistered equity/crypto vNext families (when not suspended)",
     )
     parser.add_argument(
         "--skip-equity",
@@ -1364,6 +1592,7 @@ def main(argv: list[str] | None = None) -> int:
         (
             args.download,
             args.download_v2,
+            args.download_public_crypto,
             args.baseline,
             args.nested,
             args.rerun,
@@ -1444,6 +1673,9 @@ def main(argv: list[str] | None = None) -> int:
             crypto_days=args.crypto_days,
         )
 
+    if args.download_public_crypto:
+        download_and_persist_public_crypto(store, years=args.crypto_years)
+
     equity_dataset = args.equity_dataset
     if equity_dataset == "auto":
         if store.manifest(EQUITY_DATASET_V2) is not None:
@@ -1459,7 +1691,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             raise SystemExit("Equity dataset bulunamadı")
 
-    equity_by_symbol, crypto_by_symbol = load_research_data(store, equity_dataset)
+    crypto_dataset = CRYPTO_DAILY_DATASET if args.vnext else CRYPTO_DATASET
+    equity_by_symbol, crypto_by_symbol = load_research_data(store, equity_dataset, crypto_dataset)
     equity_bars = [bar for bars in equity_by_symbol.values() for bar in bars]
     crypto_bars = [bar for bars in crypto_by_symbol.values() for bar in bars]
     if not equity_bars:
@@ -1467,16 +1700,19 @@ def main(argv: list[str] | None = None) -> int:
     if not crypto_bars:
         raise SystemExit("Crypto araştırma verisi boş")
 
-    crypto_universe, universe_snapshot_hash = persist_crypto_universe_snapshots(
-        store,
-        crypto_bars,
-        maximum_symbols=config.universe.crypto.maximum_stream_symbols,
-    )
+    if args.vnext:
+        crypto_universe, universe_snapshot_hash = None, ""
+    else:
+        crypto_universe, universe_snapshot_hash = persist_crypto_universe_snapshots(
+            store,
+            crypto_bars,
+            maximum_symbols=config.universe.crypto.maximum_stream_symbols,
+        )
     equity_adjustment, equity_provider_name = _dataset_adjustment_and_provider(
         store, equity_dataset
     )
     crypto_adjustment, crypto_provider_name = _dataset_adjustment_and_provider(
-        store, CRYPTO_DATASET
+        store, crypto_dataset
     )
 
     if args.baseline or args.rerun or args.rerun_v2 or args.nested:
@@ -1489,7 +1725,9 @@ def main(argv: list[str] | None = None) -> int:
             legacy_audit_bypass=equity_dataset == EQUITY_DATASET,
         )
         if not (args.skip_crypto or args.v2 or args.rerun_v2):
-            crypto_probe = PortfolioExperimentSpec.from_file(CRYPTO_EXPERIMENT)
+            crypto_probe = PortfolioExperimentSpec.from_file(
+                VNEXT_CRYPTO_EXPERIMENT if args.vnext else CRYPTO_EXPERIMENT
+            )
             if crypto_probe.suspended:
                 reason = crypto_probe.metadata.get("suspend_reason", "")
                 print(
@@ -1516,8 +1754,8 @@ def main(argv: list[str] | None = None) -> int:
                 CostScenario("equity_stress", Market.EQUITY, 5.0, 10.0),
             ),
             Market.CRYPTO: (
-                CostScenario("crypto_base", Market.CRYPTO, 2.0, 6.0, 5.0),
-                CostScenario("crypto_stress", Market.CRYPTO, 5.0, 15.0, 10.0),
+                CostScenario("crypto_base", Market.CRYPTO, 2.0, 6.0, 25.0),
+                CostScenario("crypto_stress", Market.CRYPTO, 8.0, 25.0, 50.0),
             ),
         }
         equity_locked = _locked_holdout_start(EQUITY_EXPERIMENT)
@@ -1526,9 +1764,7 @@ def main(argv: list[str] | None = None) -> int:
             tuple[str, PortfolioStrategy, list[Bar], object | None, str, datetime, str]
         ] = []
         if not args.skip_equity:
-            pre_holdout_equity = [
-                bar for bar in equity_bars if bar.timestamp < equity_locked
-            ]
+            pre_holdout_equity = [bar for bar in equity_bars if bar.timestamp < equity_locked]
             if len(pre_holdout_equity) != len(equity_bars):
                 print(
                     f"Baseline: {len(equity_bars) - len(pre_holdout_equity)} bar "
@@ -1569,18 +1805,12 @@ def main(argv: list[str] | None = None) -> int:
                     + (f" — {reason}" if reason else "")
                 )
             else:
-                pre_holdout_crypto = [
-                    bar for bar in crypto_bars if bar.timestamp < crypto_locked
-                ]
+                pre_holdout_crypto = [bar for bar in crypto_bars if bar.timestamp < crypto_locked]
                 baseline_specs.append(
                     (
                         "crypto_cross_sectional_momentum_1h_v1",
                         CryptoCrossSectionalMomentum1hV1(
-                            dict(
-                                BASELINE_PARAMETERS[
-                                    "crypto_cross_sectional_momentum_1h_v1"
-                                ]
-                            )
+                            dict(BASELINE_PARAMETERS["crypto_cross_sectional_momentum_1h_v1"])
                         ),
                         pre_holdout_crypto,
                         crypto_universe,
@@ -1594,13 +1824,21 @@ def main(argv: list[str] | None = None) -> int:
             base_cost, stress_cost = scenarios[market]
             print(f"\n=== BASELINE: {name} ({base_cost.name}, pre-holdout) ===")
             result, _engine = run_baseline(strategy, bars, base_cost, universe, universe_version)
-            write_baseline_report(
-                name, result, bars, base_cost, code_revision, locked, dataset_id
+            output_dir = write_baseline_report(
+                name,
+                strategy,
+                result,
+                bars,
+                base_cost,
+                code_revision,
+                locked,
+                dataset_id,
+                fingerprint,
             )
             stress_result, _stress_engine = run_baseline(
                 strategy, bars, stress_cost, universe, universe_version
             )
-            write_cost_comparison(result, stress_result, base_cost, name)
+            write_cost_comparison(result, stress_result, base_cost, name, output_dir)
             report = build_portfolio_report(result, strategy_name=name, strategy_version="1.0.0")
             print(report.render_text())
 
@@ -1622,20 +1860,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         market = spec.candidate_spaces[0].market
 
-        def factory(
-            strategy: PortfolioStrategy, cost: CostScenario
-        ) -> PortfolioBacktestEngine:
+        def factory(strategy: PortfolioStrategy, cost: CostScenario) -> PortfolioBacktestEngine:
             return make_engine(strategy, cost, None, EQUITY_UNIVERSE_VERSION)
 
         print(f"\n=== CORRECTNESS RERUN: {CORRECTNESS_RERUN_ID} ===")
         equity_manifest = store.manifest(equity_dataset)
         equity_hash = equity_manifest.data_hash if equity_manifest is not None else ""
         _ledger_backfill_for_dataset(ledger, store, equity_dataset)
-        new_trials = sum(
-            space.combinations for space in spec.candidate_spaces
-        )
+        research_program_id = _research_program_id(spec, equity_dataset)
         trial_count_override = _dsr_trial_count_override(
-            ledger, equity_hash, spec.experiment_id, new_trials
+            ledger, research_program_id, _candidate_trial_ids(spec)
         )
         trials = run_portfolio_experiment(
             equity_bars,
@@ -1649,13 +1883,14 @@ def main(argv: list[str] | None = None) -> int:
             dataset_hash=equity_hash,
             experiment_id=spec.experiment_id,
             trials=trials,
+            research_program_id=research_program_id,
+            dataset_lineage=(equity_dataset,),
         )
-        write_nested_reports(
+        output_dir = write_nested_reports(
             spec, trials, equity_bars, code_revision, equity_dataset, fingerprint
         )
         gate = PortfolioGate.for_market(market)
         table = render_gate_table(spec, trials, gate)
-        output_dir = REPORTS_ROOT / "nested" / spec.experiment_id
         (output_dir / "gate_table.md").write_text(table, encoding="utf-8")
         print(table)
 
@@ -1682,18 +1917,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         market = spec.candidate_spaces[0].market
 
-        def factory(
-            strategy: PortfolioStrategy, cost: CostScenario
-        ) -> PortfolioBacktestEngine:
+        def factory(strategy: PortfolioStrategy, cost: CostScenario) -> PortfolioBacktestEngine:
             return make_engine(strategy, cost, None, EQUITY_UNIVERSE_VERSION)
 
         print(f"\n=== CORRECTNESS RERUN v2: {RERUN_V2_ID} ===")
         equity_manifest = store.manifest(equity_dataset)
         equity_hash = equity_manifest.data_hash if equity_manifest is not None else ""
         _ledger_backfill_for_dataset(ledger, store, equity_dataset)
-        new_trials = sum(space.combinations for space in spec.candidate_spaces)
+        research_program_id = _research_program_id(spec, equity_dataset)
         trial_count_override = _dsr_trial_count_override(
-            ledger, equity_hash, spec.experiment_id, new_trials
+            ledger, research_program_id, _candidate_trial_ids(spec)
         )
         trials = run_portfolio_experiment(
             equity_bars,
@@ -1707,35 +1940,67 @@ def main(argv: list[str] | None = None) -> int:
             dataset_hash=equity_hash,
             experiment_id=spec.experiment_id,
             trials=trials,
+            research_program_id=research_program_id,
+            dataset_lineage=(equity_dataset,),
         )
-        write_nested_reports(
+        output_dir = write_nested_reports(
             spec, trials, equity_bars, code_revision, equity_dataset, fingerprint
         )
         gate = PortfolioGate.for_market(market)
         table = render_gate_table(spec, trials, gate)
-        output_dir = REPORTS_ROOT / "nested" / spec.experiment_id
         (output_dir / "gate_table.md").write_text(table, encoding="utf-8")
         print(table)
         _write_rerun_v2_decision(trials, spec, gate, equity_dataset)
 
     if args.nested:
-        equity_experiment_path = V2_EQUITY_EXPERIMENT if args.v2 else EQUITY_EXPERIMENT
+        equity_experiment_path = (
+            VNEXT_EQUITY_EXPERIMENT
+            if args.vnext
+            else V2_EQUITY_EXPERIMENT
+            if args.v2
+            else EQUITY_EXPERIMENT
+        )
         if args.v2 and equity_dataset != EQUITY_DATASET_V2:
             raise SystemExit(
                 "--v2, equity_etf_1d_v2 datasetiyle kullanılmalı "
                 "(--equity-dataset equity_etf_1d_v2)"
             )
-        experiments = [
-            (equity_experiment_path, equity_bars, None, equity_adjustment, equity_provider_name),
-            (TSM_EXPERIMENT, equity_bars, None, equity_adjustment, equity_provider_name),
-            (
-                CRYPTO_EXPERIMENT,
-                crypto_bars,
-                crypto_universe,
-                crypto_adjustment,
-                crypto_provider_name,
-            ),
-        ]
+        experiments = (
+            [
+                (
+                    equity_experiment_path,
+                    equity_bars,
+                    None,
+                    equity_adjustment,
+                    equity_provider_name,
+                ),
+                (
+                    VNEXT_CRYPTO_EXPERIMENT,
+                    crypto_bars,
+                    None,
+                    crypto_adjustment,
+                    crypto_provider_name,
+                ),
+            ]
+            if args.vnext
+            else [
+                (
+                    equity_experiment_path,
+                    equity_bars,
+                    None,
+                    equity_adjustment,
+                    equity_provider_name,
+                ),
+                (TSM_EXPERIMENT, equity_bars, None, equity_adjustment, equity_provider_name),
+                (
+                    CRYPTO_EXPERIMENT,
+                    crypto_bars,
+                    crypto_universe,
+                    crypto_adjustment,
+                    crypto_provider_name,
+                ),
+            ]
+        )
         if args.skip_equity:
             experiments = [item for item in experiments if "equity" not in item[0].name]
         if args.skip_crypto or args.v2:
@@ -1752,9 +2017,7 @@ def main(argv: list[str] | None = None) -> int:
                     + (f" — {reason}" if reason else "")
                 )
                 continue
-            active_experiments.append(
-                (experiment_path, bars, universe, adjustment, provider_name)
-            )
+            active_experiments.append((experiment_path, bars, universe, adjustment, provider_name))
         for experiment_path, bars, universe, adjustment, provider_name in active_experiments:
             print(f"\n=== NESTED: {experiment_path.name} ===")
             is_crypto_experiment = "crypto" in experiment_path.name
@@ -1764,19 +2027,18 @@ def main(argv: list[str] | None = None) -> int:
                 store=store,
                 universe=universe,
                 unlock_holdout=args.unlock_holdout,
-                dataset_id=equity_dataset if not is_crypto_experiment else CRYPTO_DATASET,
+                dataset_id=equity_dataset if not is_crypto_experiment else crypto_dataset,
                 adjustment=adjustment,
                 source_provider=provider_name,
                 universe_snapshot_hash=universe_snapshot_hash if is_crypto_experiment else "",
                 ledger=ledger,
             )
-            report_dataset_id = CRYPTO_DATASET if is_crypto_experiment else equity_dataset
-            write_nested_reports(
+            report_dataset_id = crypto_dataset if is_crypto_experiment else equity_dataset
+            output_dir = write_nested_reports(
                 spec, trials, bars, code_revision, report_dataset_id, fingerprint
             )
             gate = PortfolioGate.for_market(spec.candidate_spaces[0].market)
             table = render_gate_table(spec, trials, gate)
-            output_dir = REPORTS_ROOT / "nested" / spec.experiment_id
             (output_dir / "gate_table.md").write_text(table, encoding="utf-8")
             print(table)
 

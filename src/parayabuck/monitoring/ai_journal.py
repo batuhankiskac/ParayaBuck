@@ -550,9 +550,7 @@ class AIDecisionJournal:
                     record = PredictionRecord(**item)
                 except (TypeError, ValueError, KeyError) as exc:
                     self._quarantine(self._open_path)
-                    log.error(
-                        "AI journal open-predictions schema drift; state reset: %s", exc
-                    )
+                    log.error("AI journal open-predictions schema drift; state reset: %s", exc)
                     self._open = {}
                     return
                 self._open[record.signal_id] = record

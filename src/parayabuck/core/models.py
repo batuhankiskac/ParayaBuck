@@ -231,9 +231,7 @@ class Signal:
             raise ValueError("Minimum risk/reward must be finite and positive")
         if self.reentry_cooldown_bars < 0:
             raise ValueError("Re-entry cooldown cannot be negative")
-        if self.normalized_expected_r is not None and not math.isfinite(
-            self.normalized_expected_r
-        ):
+        if self.normalized_expected_r is not None and not math.isfinite(self.normalized_expected_r):
             raise ValueError("Normalized expected R must be finite")
 
 

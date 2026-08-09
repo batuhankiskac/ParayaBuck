@@ -214,6 +214,8 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
         minimum_oos_calendar_months=1,
         minimum_profit_factor=0.0,
         minimum_sharpe=0.0,
+        minimum_sortino=-1.0,
+        minimum_calmar=-1.0,
         maximum_drawdown=1.0,
         minimum_deflated_sharpe_probability=0.0,
         maximum_pbo=1.0,
@@ -222,6 +224,10 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
         minimum_stress_profit_factor=0.0,
         maximum_symbol_profit_concentration=1.0,
         maximum_single_asset_weight=1.0,
+        maximum_risk_contribution=1.0,
+        minimum_benchmark_sharpe_improvement=-100.0,
+        require_positive_cash_excess=False,
+        require_risk_adjusted_benchmark=False,
         require_parameter_plateau=False,
         require_regime_diversity=False,
     )
@@ -232,6 +238,7 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
         unlock_holdout=True,
         holdout_registry=registry,
         validation_gate=permissive,
+        holdout_loader=lambda: bars,
     )
     finalist = next(t for t in first if t.holdout_evaluations == 1)
     assert not finalist.holdout_missing
@@ -261,6 +268,7 @@ def test_registry_locks_holdout_across_experiment_runs(tmp_path: Path) -> None:
             unlock_holdout=True,
             holdout_registry=registry,
             validation_gate=permissive,
+            holdout_loader=lambda: bars,
         )
 
 

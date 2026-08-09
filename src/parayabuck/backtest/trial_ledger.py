@@ -1,11 +1,9 @@
-"""Global portfolio trial ledger keyed by dataset hash.
+"""Global portfolio trial ledger keyed by research program and hypothesis.
 
-Deflation (DSR) must count EVERY hypothesis tried on the same dataset within
-the same research program, not just the candidates of the current experiment
-run: a new experiment id must never be able to reset the multiple-testing
-count. The ledger is keyed by the dataset's data hash, so different datasets
-never contaminate each other's counts, and entries are deduplicated by
-(dataset hash, trial id, experiment id) so re-runs do not inflate the count.
+Deflation (DSR) counts every distinct hypothesis tried in a research program.
+Changing experiment ids or extending a dataset cannot reset the count. Dataset
+hashes and lineage remain recorded for provenance, but deduplication is by
+``(research_program_id, strategy_family, trial_id)``.
 
 Writes are serialized with an exclusive OS file lock (like the holdout
 registry) so concurrent research processes cannot race the read-modify-write.
@@ -74,7 +72,7 @@ class TrialLedger:
     def _persist(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "version": 1,
+            "version": 2,
             "entries": self._entries,
         }
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -91,26 +89,29 @@ class TrialLedger:
         dataset_hash: str,
         experiment_id: str,
         trials: tuple[PortfolioTrialResult | LedgerTrial, ...],
+        research_program_id: str = "",
+        dataset_lineage: tuple[str, ...] = (),
     ) -> int:
         """Record every candidate of a run; returns the new cumulative count.
 
-        Idempotent per (dataset hash, trial id, experiment id): re-running
-        the same experiment never double-counts.
+        Idempotent per research program, strategy family, and hypothesis.
         """
         with self._locked():
             now = datetime.now(UTC).isoformat()
+            program_id = research_program_id or dataset_id
+            lineage = tuple(dict.fromkeys((*dataset_lineage, dataset_id)))
             existing: set[tuple[str, str, str]] = {
                 (
-                    str(entry["dataset_hash"]),
+                    str(entry.get("research_program_id", entry.get("dataset_id", ""))),
+                    str(entry.get("strategy_family", entry.get("strategy_name", ""))),
                     str(entry["trial_id"]),
-                    str(entry["experiment_id"]),
                 )
                 for entry in self._entries
             }
             added = 0
             for trial in trials:
                 fields = _trial_fields(trial)
-                key = (dataset_hash, fields.trial_id, experiment_id)
+                key = (program_id, fields.strategy_name, fields.trial_id)
                 if key in existing:
                     continue
                 self._entries.append(
@@ -122,6 +123,9 @@ class TrialLedger:
                         "strategy_version": fields.strategy_version,
                         "parameters": dict(fields.parameters),
                         "experiment_id": experiment_id,
+                        "research_program_id": program_id,
+                        "strategy_family": fields.strategy_name,
+                        "dataset_lineage": list(lineage),
                         "evaluated_at": now,
                     }
                 )
@@ -129,21 +133,33 @@ class TrialLedger:
                 added += 1
             if added:
                 self._persist()
-            return self.trial_count(dataset_hash)
+            return self.trial_count_for_program(program_id)
 
     def trial_count(self, dataset_hash: str) -> int:
-        """Cumulative distinct hypotheses tried on this dataset hash."""
+        """Compatibility query for entries observed on an exact data hash."""
         return sum(
-            1
-            for entry in self._entries
-            if str(entry.get("dataset_hash", "")) == dataset_hash
+            1 for entry in self._entries if str(entry.get("dataset_hash", "")) == dataset_hash
         )
 
     def entries_for(self, dataset_hash: str) -> tuple[dict[str, object], ...]:
         return tuple(
+            entry for entry in self._entries if str(entry.get("dataset_hash", "")) == dataset_hash
+        )
+
+    def trial_count_for_program(self, research_program_id: str) -> int:
+        return sum(
+            1
+            for entry in self._entries
+            if str(entry.get("research_program_id", entry.get("dataset_id", "")))
+            == research_program_id
+        )
+
+    def entries_for_program(self, research_program_id: str) -> tuple[dict[str, object], ...]:
+        return tuple(
             entry
             for entry in self._entries
-            if str(entry.get("dataset_hash", "")) == dataset_hash
+            if str(entry.get("research_program_id", entry.get("dataset_id", "")))
+            == research_program_id
         )
 
     def backfill_from_reports(
@@ -153,6 +169,8 @@ class TrialLedger:
         dataset_hash: str,
         experiment_id: str,
         trials: tuple[PortfolioTrialResult | LedgerTrial, ...],
+        research_program_id: str = "",
+        dataset_lineage: tuple[str, ...] = (),
     ) -> int:
         """Backfill previously-run candidates into the ledger.
 
@@ -164,6 +182,8 @@ class TrialLedger:
             dataset_hash=dataset_hash,
             experiment_id=experiment_id,
             trials=trials,
+            research_program_id=research_program_id,
+            dataset_lineage=dataset_lineage,
         )
 
 

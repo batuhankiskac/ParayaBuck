@@ -116,7 +116,9 @@ def test_missing_weekday_is_an_unexplained_gap() -> None:
     mid = next(
         timestamp
         for timestamp in timestamps
-        if timestamp.month == 1 and timestamp.day >= 10 and timestamp.weekday() < 5
+        if timestamp.month == 1
+        and timestamp.day >= 10
+        and timestamp.weekday() < 5
         and timestamp + timedelta(days=1) in timestamps
     )
     bars = [bar for bar in bars if bar.timestamp != mid]
@@ -169,9 +171,7 @@ def test_invalid_ohlc_and_naive_timestamps_fail() -> None:
     start = datetime(2024, 1, 1, tzinfo=UTC)
     bars = _full_dataset_bars(start, 30)
     bad = _raw_bar(start + timedelta(days=8), 100.0, 90.0, 95.0, 98.0)
-    naive = _raw_bar(
-        (start + timedelta(days=9)).replace(tzinfo=None), 100.0, 101.0, 99.0, 100.0
-    )
+    naive = _raw_bar((start + timedelta(days=9)).replace(tzinfo=None), 100.0, 101.0, 99.0, 100.0)
     report = evaluate_symbol_quality(
         [*bars, bad, naive],
         timeframe="1d",
@@ -330,8 +330,6 @@ def test_calendar_matches_actual_v2_dataset_bars() -> None:
     sessions = nyse_sessions(datetime(2016, 1, 1).date(), datetime(2026, 12, 31).date())
     for symbol, bars in by_symbol.items():
         non_sessions = [
-            bar.timestamp.date().isoformat()
-            for bar in bars
-            if bar.timestamp.date() not in sessions
+            bar.timestamp.date().isoformat() for bar in bars if bar.timestamp.date() not in sessions
         ]
         assert not non_sessions, f"{symbol} has bars outside the calendar: {non_sessions[:5]}"

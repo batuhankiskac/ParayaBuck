@@ -74,9 +74,9 @@ def _fold(
         worst_month_return=-0.01,
         worst_year_return=-0.01,
         positive_month_ratio=0.5,
-        state=__import__(
-            "parayabuck.portfolio.models", fromlist=["PortfolioState"]
-        ).PortfolioState(strategy_name="t", strategy_version="1"),
+        state=__import__("parayabuck.portfolio.models", fromlist=["PortfolioState"]).PortfolioState(
+            strategy_name="t", strategy_version="1"
+        ),
     )
 
 
@@ -164,9 +164,7 @@ def test_plateau_excludes_self_and_requires_five_real_neighbors() -> None:
     def strategy(parameters: dict[str, object]) -> EquityEtfDualMomentumV1:
         return EquityEtfDualMomentumV1(parameters)
 
-    def trial_with(
-        parameters: dict[str, object], profitable: bool
-    ) -> PortfolioTrialResult:
+    def trial_with(parameters: dict[str, object], profitable: bool) -> PortfolioTrialResult:
         fold = _fold(
             datetime(2024, 1, 1, tzinfo=UTC),
             [105_000.0] if profitable else [95_000.0],
@@ -186,9 +184,7 @@ def test_plateau_excludes_self_and_requires_five_real_neighbors() -> None:
         trial_with(
             {**base, "absolute_filter": "positive_momentum", "volatility_window": 20}, False
         ),
-        trial_with(
-            {**base, "absolute_filter": "excess_over_cash", "volatility_window": 20}, False
-        ),
+        trial_with({**base, "absolute_filter": "excess_over_cash", "volatility_window": 20}, False),
         trial_with({**base, "volatility_window": 60}, False),
     ]
     # A distant candidate (distance 3) must never count toward the plateau.
@@ -205,9 +201,7 @@ def test_plateau_excludes_self_and_requires_five_real_neighbors() -> None:
     marked = _mark_portfolio_plateaus(candidates, "momentum_scheme")
     center_marked = next(item for item in marked if item.trial_id == center.trial_id)
     # Candidate itself is never in its own neighborhood report.
-    assert all(
-        item["trial_id"] != center.trial_id for item in center_marked.neighborhood_report
-    )
+    assert all(item["trial_id"] != center.trial_id for item in center_marked.neighborhood_report)
     # Only two profitable neighbors: not a plateau (five needed).
     assert len(center_marked.neighborhood_report) == 2
     assert not center_marked.neighborhood_robust
@@ -218,9 +212,7 @@ def test_plateau_needs_five_qualifying_neighbors() -> None:
     def strategy(parameters: dict[str, object]) -> EquityEtfDualMomentumV1:
         return EquityEtfDualMomentumV1(parameters)
 
-    def trial_with(
-        parameters: dict[str, object], profitable: bool
-    ) -> PortfolioTrialResult:
+    def trial_with(parameters: dict[str, object], profitable: bool) -> PortfolioTrialResult:
         fold = _fold(
             datetime(2024, 1, 1, tzinfo=UTC),
             [105_000.0] if profitable else [95_000.0],

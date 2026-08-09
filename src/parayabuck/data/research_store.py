@@ -73,9 +73,7 @@ class ProviderMetadata:
         if not self.adjustment_method or self.adjustment_method.lower() == "unknown":
             raise ValueError("Adjustment method must be explicit, not unknown")
         if self.adjustment_method not in KNOWN_ADJUSTMENTS:
-            raise ValueError(
-                f"Unsupported adjustment method: {self.adjustment_method}"
-            )
+            raise ValueError(f"Unsupported adjustment method: {self.adjustment_method}")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -214,9 +212,7 @@ class DatasetManifest:
             input_duplicate_bars=input_duplicate_bars,
             conflicting_duplicate_bars=conflicting_duplicate_bars,
             provider_metadata=(
-                ProviderMetadata.from_dict(raw_provider)
-                if isinstance(raw_provider, dict)
-                else None
+                ProviderMetadata.from_dict(raw_provider) if isinstance(raw_provider, dict) else None
             ),
             notes=str(raw.get("notes", "")),
         )
@@ -371,20 +367,15 @@ class VersionedResearchStore:
         if not dataset_id.strip():
             raise ValueError("Dataset id is required")
         if adjustment not in KNOWN_ADJUSTMENTS:
-            raise ValueError(
-                f"Adjustment must be one of {KNOWN_ADJUSTMENTS}; got {adjustment!r}"
-            )
-        if provider_metadata is not None and (
-            provider_metadata.adjustment_method != adjustment
-        ):
+            raise ValueError(f"Adjustment must be one of {KNOWN_ADJUSTMENTS}; got {adjustment!r}")
+        if provider_metadata is not None and (provider_metadata.adjustment_method != adjustment):
             raise ValueError(
                 "Provider adjustment_method does not match dataset adjustment: "
                 f"{provider_metadata.adjustment_method!r} vs {adjustment!r}"
             )
         if any(bar.timeframe != timeframe for bar in bars):
             raise ValueError(
-                "All bars must use the dataset timeframe "
-                f"({timeframe!r}); got mixed timeframes"
+                f"All bars must use the dataset timeframe ({timeframe!r}); got mixed timeframes"
             )
         # Duplicate/conflict policy is enforced before any directory is created:
         # a conflicting duplicate must never leave a half-written dataset behind.
@@ -393,9 +384,7 @@ class VersionedResearchStore:
             details = ", ".join(
                 f"{symbol}={count}" for symbol, count in sorted(conflicting.items())
             )
-            raise ValueError(
-                "Conflicting duplicate bars detected; dataset not written: " + details
-            )
+            raise ValueError("Conflicting duplicate bars detected; dataset not written: " + details)
         directory = self.dataset_dir(dataset_id)
         format_name = "parquet" if PARQUET_AVAILABLE else "csv_gz"
         by_symbol: dict[str, list[Bar]] = {}
@@ -426,9 +415,7 @@ class VersionedResearchStore:
                 start=min(timestamps),
                 end=max(timestamps),
                 symbols=tuple(sorted(by_symbol)),
-                bars_per_symbol={
-                    symbol: len(bars_list) for symbol, bars_list in by_symbol.items()
-                },
+                bars_per_symbol={symbol: len(bars_list) for symbol, bars_list in by_symbol.items()},
                 data_hash=hash_dataset(canonical_bars),
                 duplicate_bars={symbol: 0 for symbol in by_symbol},
                 input_duplicate_bars=input_duplicates,
@@ -437,9 +424,7 @@ class VersionedResearchStore:
                 notes=notes,
             )
             (temporary / MANIFEST_FILENAME).write_text(
-                json.dumps(
-                    manifest.to_dict(), indent=2, sort_keys=True, ensure_ascii=False
-                ),
+                json.dumps(manifest.to_dict(), indent=2, sort_keys=True, ensure_ascii=False),
                 encoding="utf-8",
             )
             backup = (

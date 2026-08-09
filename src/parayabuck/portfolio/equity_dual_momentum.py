@@ -135,9 +135,7 @@ class EquityEtfDualMomentumV1(PortfolioStrategy):
             if not context.in_universe(symbol):
                 continue
             closes = context.closes(symbol)
-            if not _absolute_filter_passes(
-                closes, filter_name, risk_free_annual=risk_free_annual
-            ):
+            if not _absolute_filter_passes(closes, filter_name, risk_free_annual=risk_free_annual):
                 continue
             score = _momentum_score(closes, scheme)
             if not math.isfinite(score) or score <= 0:
@@ -179,9 +177,7 @@ class EquityEtfDualMomentumV1(PortfolioStrategy):
                 RebalanceReason.SCHEDULED,
                 risk_multiplier=scale,
             )
-        return self._portfolio(
-            context, tuple(weights.items()), weights, RebalanceReason.SCHEDULED
-        )
+        return self._portfolio(context, tuple(weights.items()), weights, RebalanceReason.SCHEDULED)
 
     def _portfolio(
         self,

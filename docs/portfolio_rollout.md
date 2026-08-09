@@ -1,43 +1,31 @@
-# Portfolio Rollout — durum
+# Portfolio Rollout
 
-Tarih: 2026-08-05
-Statü: **HAZIR DEĞİL — research RED nedeniyle rollout bağlantısı yok**
+Tarih: 2026-08-08
+Statü: **ALTYAPI UYGULANDI — rollout başlamadı**
 
-`src/parayabuck/execution/rollout.py` yalnızca değerlendirme fonksiyonu ve
-state modellerini içerir; var olması rollout altyapısının hazır olduğu
-anlamına gelmez. Canlı/paper/shadow brokerlarına bağlanmadı.
+`RolloutController` ve approval-gated `PortfolioRuntime` aynı execution yoluna
+bağlıdır. Geçerli GREEN manifest bulunmadığı için sayaçlar henüz başlamaz.
 
-## Tasarım sözleşmesi (§12)
+## Aşamalar
 
-- Rollout state kalıcı saklanır; stage transition audit log'u tutulur.
-- `evaluate_rollout` PortfolioRuntime giriş kapısına bağlanır.
-- `halt_new_entries` yalnız yeni/artan exposure BUY emirlerini engeller;
-  risk azaltan SELL ve koruyucu çıkışlar çalışmaya devam eder.
-- Slippage: expected order bazında; realized broker fill − reference price;
-  notional-weighted aggregate. Shadow'da counterfactual fill (next-tradable
-  quote/open) kaydı.
-- `expected_slippage=0` fakat fill varsa fail-closed / data-quality halt.
-- Operational error shadow ve paper geçişlerini de engeller.
-- `risk_per_trade_pct` yerine: exposure multiplier, maximum target
-  allocation, canary portfolio scale.
-- Canary %10 veya önceden tanımlı küçük exposure multiplier ile başlar;
-  normal hedefe yalnız minimum canary işlem + operasyonel hatasızlık sonrası.
-- Sıra: Shadow ≥30 gün → Paper ≥90 gün ve ≥50 fill → Canary ≥30
-  rebalance-fill → Live.
-- Kill switch: realized slippage > expected ×1,5; rolling performans sınırı;
-  validated drawdown ×1,5; reconciliation problemi; duplicate order/
-  idempotency; stale data; universe snapshot uyuşmazlığı; operational error.
+1. Shadow: en az 30 gün; hedef ve emirler SQLite'a kaydolur, broker submit yoktur.
+2. Paper: en az 90 gün ve aktive edilen her sleeve için en az 50 fill.
+3. Canary: doğrulanmış hedeflerin %10'u; live hesapta ayrıca HMAC imzalı operator
+   approval ve açık dolar cap gerekir.
+4. Live: otomatik geçiş yoktur; operator approval/expiry/account/manifest/cap her
+   başlangıçta yeniden doğrulanır.
 
-## Mevcut rollout.py durumu
+Duplicate order, state divergence veya çözümsüz reconciliation sayılarından biri
+sıfır değilse hiçbir stage ilerleyemez. Günlük kayıp/drawdown haltında yeni veya
+artan exposure reddedilir; satış ve diğer risk azaltıcı emirler çalışmaya devam eder.
 
-- `RolloutStage`, `RolloutPolicy`, `RolloutState`, `evaluate_rollout` var.
-- Eksik: kalıcılık, audit log, PortfolioRuntime bağlantısı, broker
-  entegrasyonu, slippage hesabı, canary exposure scale.
-- `RolloutPolicy` hâlâ `initial_canary_risk_pct`/`normal_risk_pct` alanları
-  taşıyor (risk_per_trade stili) — exposure multiplier / canary scale
-  alanlarına geçiş yapılmadı.
+Paper sonuçları market impact, queue position, latency slippage, tüm regulatory
+fee davranışı ve temettü zamanlamasını eksiksiz temsil etmez. Paper geçişi strateji
+kârlılık garantisi veya live güvenliği kanıtı değildir.
 
-## Bloklayıcı
+## Operasyon kanıtı
 
-Research RED (`docs/equity_dual_momentum_v2_results.md`): strateji
-arşivlendi; rollout altyapısına bağlanacak onaylı strateji yok.
+Her karar manifest checksum, runtime session, dataset timestamp, target, risk
+kararı, client/broker order ID ve fill activity ID ile izlenir. Persist edilen fill
+kayıtlarında realized/unrealized PnL, fee ve slippage ayrı alanlardır. Rollout
+evidence dosyası stage başlangıcı, fill sayıları ve operasyon olaylarını taşır.

@@ -51,8 +51,7 @@ class WarmupCache:
         if pk_name is None:
             return set()
         return {
-            row[2]
-            for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()
+            row[2] for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()
         }
 
     def _migrate_legacy_schema(self) -> None:
@@ -63,9 +62,7 @@ class WarmupCache:
         key does not include the market can silently collide across markets,
         so the table is rebuilt whenever the primary key is missing it.
         """
-        columns = {
-            row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()
-        }
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
         if "adjustment" in columns and "market" in self._primary_key_columns():
             return
         with self._lock:

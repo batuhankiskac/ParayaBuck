@@ -146,9 +146,7 @@ class BacktestBroker:
                 stop_price=p.stop,
                 initial_risk=p.initial_risk,
                 bars_held=p.bars_held,
-                trailing_stop=(
-                    p.stop if p.active_stop_reason == EXIT_TRAILING_STOP else None
-                ),
+                trailing_stop=(p.stop if p.active_stop_reason == EXIT_TRAILING_STOP else None),
                 highest_high=p.highest_high,
                 lowest_low=p.lowest_low,
                 pending_trailing_stop=p.pending_stop,
@@ -432,9 +430,7 @@ class BacktestBroker:
             ((position.highest_high or position.avg_price) - position.avg_price)
             / position.initial_risk
             if position.direction == Direction.LONG
-            else (
-                position.avg_price - (position.lowest_low or position.avg_price)
-            )
+            else (position.avg_price - (position.lowest_low or position.avg_price))
             / position.initial_risk
         )
         candidates: list[tuple[float, str]] = []
@@ -485,16 +481,12 @@ class BacktestBroker:
         entry_fee_fraction = position.entry_fee / entry_notional if entry_notional > 0 else 0.0
         adverse_fraction = (self.slippage_bps + self.spread_bps / 2) / 10_000
         fee_fraction = (
-            self.crypto_taker_fee_bps / 10_000
-            if position.market == Market.CRYPTO
-            else 0.0
+            self.crypto_taker_fee_bps / 10_000 if position.market == Market.CRYPTO else 0.0
         )
         if position.direction == Direction.LONG:
             denominator = max(1e-9, 1 - adverse_fraction - fee_fraction)
             return position.avg_price * (1 + entry_fee_fraction) / denominator
-        return position.avg_price * (1 - entry_fee_fraction) / (
-            1 + adverse_fraction + fee_fraction
-        )
+        return position.avg_price * (1 - entry_fee_fraction) / (1 + adverse_fraction + fee_fraction)
 
     def _exit_price(self, position: _Position, bar: Bar) -> tuple[float, str] | None:
         long = position.direction == Direction.LONG

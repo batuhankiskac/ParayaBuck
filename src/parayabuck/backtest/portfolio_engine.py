@@ -3,19 +3,20 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from itertools import groupby
 from pathlib import Path
 
 from parayabuck.backtest.stats import sample_stddev
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import (
     CashRateObservation,
     CorporateAction,
     CorporateActionType,
     MarketDataset,
 )
+from parayabuck.execution.portfolio import PortfolioRiskLimits, PortfolioRiskOverlay
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext
@@ -231,6 +232,8 @@ class PortfolioBacktestEngine:
         state: PortfolioState | None = None,
         state_path: str | None = None,
         cash_rate_annualized: float = 0.0,
+        risk_limits: PortfolioRiskLimits | None = None,
+        maximum_allocation: float = 1.0,
     ) -> None:
         from parayabuck.portfolio.base import PortfolioStrategy
 
@@ -246,6 +249,8 @@ class PortfolioBacktestEngine:
             raise ValueError("Turnover band must be in [0, 1)")
         if minimum_order_notional < 0:
             raise ValueError("Minimum order notional must be non-negative")
+        if not 0 < maximum_allocation <= 1:
+            raise ValueError("Maximum allocation must be in (0, 1]")
         cost_inputs = (
             slippage_bps,
             spread_bps,
@@ -280,6 +285,8 @@ class PortfolioBacktestEngine:
         )
         self.state_path = Path(state_path) if state_path else None
         self.cash_rate_annualized = float(cash_rate_annualized)
+        self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
+        self.maximum_allocation = maximum_allocation
         self.state = state or PortfolioState(
             strategy_name=strategy.name, strategy_version=strategy.version
         )
@@ -304,6 +311,9 @@ class PortfolioBacktestEngine:
         self._universe_history: list[tuple[datetime, tuple[str, ...]]] = []
         self._holdings_history: list[tuple[int, float, float]] = []
         self._rebalance_number = self.state.rebalance_count
+        self._peak_equity = starting_equity
+        self._day_start_equity = starting_equity
+        self._account_day: date | None = None
         if self.state.last_rebalance_at is not None:
             # Period detection resumes from the last decision so a restart in
             # the middle of a month does not fire an unscheduled rebalance.
@@ -756,9 +766,49 @@ class PortfolioBacktestEngine:
         if not self.strategy.supports(context):
             return
         target = self.strategy.decide(context)
+        if self.risk_overlay is not None:
+            risk = self.risk_overlay.apply(
+                target,
+                self._account_snapshot(timestamp),
+                market=self.strategy.market,
+                approved_symbols=tuple(context.history),
+                maximum_allocation=self.maximum_allocation,
+                mode="backtest",
+            )
+            target = risk.target
         self._rebalance_number += 1
         self._apply_target(target)
         self._record_rebalance(target)
+
+    def _account_snapshot(self, timestamp: datetime) -> AccountSnapshot:
+        equity = self._equity()
+        day = timestamp.date()
+        if self._account_day != day:
+            self._account_day = day
+            self._day_start_equity = equity
+        self._peak_equity = max(self._peak_equity, equity)
+        positions = tuple(
+            PositionSnapshot(
+                symbol=position.symbol,
+                qty=position.qty,
+                avg_price=position.avg_price,
+                current_price=self._last_price.get(position.symbol, position.avg_price),
+                market=position.market,
+                qty_available=position.qty,
+                ownership="managed",
+            )
+            for position in self._positions.values()
+        )
+        return AccountSnapshot(
+            cash=self._cash,
+            equity=equity,
+            peak_equity=self._peak_equity,
+            daily_pnl=equity - self._day_start_equity,
+            positions=positions,
+            realized_pnl=self.state.realized_pnl,
+            unrealized_pnl=sum(position.unrealized_pnl for position in positions),
+            fees=sum(fill.fee for fill in self._fills),
+        )
 
     def _build_context(self, timestamp: datetime) -> PortfolioContext:
         history: dict[str, tuple[Bar, ...]] = {}

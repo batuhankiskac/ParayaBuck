@@ -11,7 +11,6 @@ from enum import StrEnum
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.portfolio.approval import ApprovalStage
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 
@@ -67,7 +66,8 @@ class PortfolioRiskLimits:
     maximum_equity_asset: float = 0.10
     maximum_crypto_asset: float = 0.05
     minimum_cash: float = 0.40
-    canary_multiplier: float = 0.10
+    maximum_positions: int = 6
+    maximum_crypto_positions: int = 3
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class PortfolioRiskOverlay:
         market: Market,
         approved_symbols: tuple[str, ...],
         maximum_allocation: float,
-        stage: ApprovalStage,
+        mode: str,
     ) -> RiskOverlayDecision:
         equity = account.equity
         if equity <= 0:
@@ -133,10 +133,8 @@ class PortfolioRiskOverlay:
         desired = {
             canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights
         }
-        if stage == ApprovalStage.CANARY:
-            desired = {
-                symbol: weight * self.limits.canary_multiplier for symbol, weight in desired.items()
-            }
+        if mode not in {"backtest", "paper", "live"}:
+            raise ValueError(f"Unsupported portfolio execution mode: {mode}")
         per_asset = (
             self.limits.maximum_crypto_asset
             if market == Market.CRYPTO
@@ -156,6 +154,23 @@ class PortfolioRiskOverlay:
                 and position.ownership != "managed"
             )
             desired[symbol] = max(desired[symbol], external_weight)
+
+        position_limit = (
+            self.limits.maximum_crypto_positions
+            if market == Market.CRYPTO
+            else self.limits.maximum_positions
+        )
+        kept_symbols = {
+            symbol
+            for symbol, _weight in sorted(desired.items(), key=lambda item: (-item[1], item[0]))[
+                :position_limit
+            ]
+        }
+        if len(desired) > len(kept_symbols):
+            desired = {
+                symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols
+            }
+            halted_reasons.append("position_count_limit")
 
         sleeve_limit = (
             self.limits.maximum_crypto if market == Market.CRYPTO else self.limits.maximum_equity

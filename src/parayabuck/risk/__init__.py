@@ -1,3 +1,3 @@
-from parayabuck.risk.manager import RiskDecision, RiskManager
+from parayabuck.risk.state import RiskState
 
-__all__ = ["RiskDecision", "RiskManager"]
+__all__ = ["RiskState"]

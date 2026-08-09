@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -106,6 +107,103 @@ def build_crypto_point_in_time_universe(
     )
 
 
+def build_trailing_point_in_time_universe(
+    bars: list[Bar],
+    *,
+    market: Market,
+    maximum_symbols: int,
+    rebalance_frequency: str = "daily",
+    lookback_days: int = 60,
+    minimum_history_ratio: float = 0.80,
+    minimum_price: float = 0.0,
+    minimum_dollar_volume: float = 0.0,
+    pinned_symbols: tuple[str, ...] = (),
+) -> PointInTimeUniverse:
+    """Build scanner-like snapshots using only information before each decision.
+
+    This is a practical point-in-time reconstruction from the supplied bars. Asset
+    metadata still comes from the candidate data source, so callers must separately
+    disclose any survivorship limitation in that source.
+    """
+    if maximum_symbols <= 0:
+        raise ValueError("maximum_symbols must be positive")
+    if rebalance_frequency not in {"daily", "weekly", "monthly"}:
+        raise ValueError("rebalance_frequency must be daily, weekly, or monthly")
+    if not 0 < minimum_history_ratio <= 1:
+        raise ValueError("minimum_history_ratio must be in (0, 1]")
+    selected_bars = sorted(
+        (bar for bar in bars if bar.market == market),
+        key=lambda item: (item.timestamp, item.symbol),
+    )
+    if not selected_bars:
+        return PointInTimeUniverse(market, (), "trailing_scanner_v1")
+    timeframes = {bar.timeframe for bar in selected_bars}
+    if len(timeframes) != 1:
+        raise ValueError("Point-in-time selection requires one timeframe")
+    timeframe = next(iter(timeframes))
+    duration = timeframe_duration(timeframe)
+    expected = max(1, int(timedelta(days=lookback_days) / duration))
+    timestamps = sorted({bar.timestamp for bar in selected_bars})
+    snapshots: list[UniverseSnapshot] = []
+    previous_period: tuple[int, ...] | None = None
+    pinned = tuple(dict.fromkeys(canonical_symbol(symbol, market) for symbol in pinned_symbols))
+    if len(pinned) > maximum_symbols:
+        raise ValueError("Pinned symbols exceed point-in-time universe capacity")
+    for timestamp in timestamps:
+        period = _period_key(timestamp, rebalance_frequency)
+        if period == previous_period:
+            continue
+        previous_period = period
+        start = timestamp - timedelta(days=lookback_days)
+        by_symbol: dict[str, list[Bar]] = {}
+        for bar in selected_bars:
+            if bar.timestamp >= timestamp:
+                break
+            if bar.timestamp >= start:
+                by_symbol.setdefault(canonical_symbol(bar.symbol, market), []).append(bar)
+        ranked: list[tuple[float, str]] = []
+        for symbol, history in by_symbol.items():
+            ordered = sorted(history, key=lambda item: item.timestamp)
+            if len({bar.timestamp for bar in ordered}) < expected * minimum_history_ratio:
+                continue
+            close = ordered[-1].close
+            if close < minimum_price or close <= 0:
+                continue
+            dollar_volumes = [bar.close * bar.volume for bar in ordered if bar.volume > 0]
+            if not dollar_volumes:
+                continue
+            liquidity = statistics.median(dollar_volumes)
+            if liquidity < minimum_dollar_volume:
+                continue
+            atr_value = atr(ordered, min(14, len(ordered)))
+            if atr_value is None or atr_value <= 0:
+                continue
+            volatility = atr_value / close
+            quality = liquidity / max(0.005, volatility)
+            ranked.append((quality, symbol))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        chosen = list(pinned)
+        chosen.extend(symbol for _score, symbol in ranked if symbol not in chosen)
+        snapshots.append(UniverseSnapshot(timestamp, frozenset(chosen[:maximum_symbols])))
+    return PointInTimeUniverse(
+        market,
+        tuple(snapshots),
+        (
+            f"{rebalance_frequency} trailing {lookback_days}d median dollar-volume, "
+            "ATR and completeness; inputs strictly precede snapshot"
+        ),
+    )
+
+
+def _period_key(timestamp: datetime, frequency: str) -> tuple[int, ...]:
+    if frequency == "daily":
+        return timestamp.year, timestamp.month, timestamp.day
+    if frequency == "weekly":
+        year, week, _weekday = timestamp.isocalendar()
+        return year, week
+    return timestamp.year, timestamp.month
+
+
 def hash_point_in_time_universe(universe: PointInTimeUniverse) -> str:
     """Deterministic hash of methodology + snapshot boundaries and members.
 
@@ -150,6 +248,7 @@ __all__ = [
     "PointInTimeUniverse",
     "UniverseSnapshot",
     "build_crypto_point_in_time_universe",
+    "build_trailing_point_in_time_universe",
     "hash_point_in_time_universe",
     "verify_persisted_universe",
 ]

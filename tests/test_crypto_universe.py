@@ -58,7 +58,7 @@ def test_new_universe_is_canonical_and_crypto_does_not_count_toward_iex(
                     "trade_symbols": ["btcusd", "ETH/USD"],
                 },
             },
-            "engine": {"crypto_trading_enabled": False},
+            "strategy": {"crypto": {"enabled": False}},
         },
     )
     config = load_config(str(path))
@@ -100,9 +100,9 @@ def test_disabled_market_needs_no_symbols(tmp_path: Path) -> None:
                 },
                 "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
             },
-            "engine": {
-                "equity_trading_enabled": False,
-                "crypto_trading_enabled": True,
+            "strategy": {
+                "equity": {"enabled": False},
+                "crypto": {"enabled": True},
             },
         },
     )

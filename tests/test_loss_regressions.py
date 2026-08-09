@@ -195,7 +195,7 @@ def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Pa
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.ledger = ledger
     runtime.broker = SimpleNamespace(account_id="acct")
-    runtime.engine = SimpleNamespace(risk=RiskStub())
+    runtime._consecutive_losses = 2
     runtime._circuit_breaker_reason = None
     account = AccountSnapshot(
         cash=10_000,
@@ -206,7 +206,7 @@ def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Pa
     )
 
     runtime._persist_risk_state(account)
-    runtime.engine.risk.consecutive_losses = 3
+    runtime._consecutive_losses = 3
     runtime._persist_risk_state(account)
     recovered_loss = AccountSnapshot(
         cash=9_950,

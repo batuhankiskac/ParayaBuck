@@ -28,8 +28,8 @@ dependencies = [
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
-parayabuck = "parayabuck.web.app:main"
-parayabuck-backtest = "parayabuck.backtest.cli:main"
+parayabuck = "parayabuck.cli:main"
+parayabuck-backtest = "parayabuck.cli:backtest_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

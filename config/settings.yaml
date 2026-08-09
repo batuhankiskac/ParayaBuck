@@ -4,8 +4,13 @@ app:
   open_browser: true
   auto_start_engine: true
   log_level: INFO
+runtime:
+  mode: paper
+  execution_timeframe: 5m
+  risk_monitor_timeframe: 5m
+  decision_db_path: data/runtime/parayabuck.sqlite3
+  scanner_refresh_hours: 24
 alpaca:
-  paper: true
   data_delayed: false
   stock_feed: iex
 data:
@@ -16,6 +21,7 @@ universe:
     enabled: true
     dynamic_selection_enabled: true
     maximum_stream_symbols: 30
+    target_shortlist: 300
     reference_symbols:
     - SPY
     trade_reference_symbols: false
@@ -46,6 +52,9 @@ universe:
     - SH
     - PSQ
     - DOG
+    allowlist_symbols: []
+    denylist_symbols: []
+    supported_exchanges: [NASDAQ, NYSE, ARCA, AMEX, BATS]
     inverse_trade_symbols:
     - SH
     - PSQ
@@ -90,6 +99,8 @@ universe:
     - RENDER/USD
     - ONDO/USD
     - HYPE/USD
+    allowlist_symbols: []
+    denylist_symbols: []
     active_universe_path: data/runtime/active_crypto_universe.json
     active_universe_max_age_hours: 12
     require_scanner_config_digest_match: true
@@ -105,62 +116,79 @@ universe:
       maximum_per_category: 3
       maximum_meme_symbols: 1
       maximum_high_beta_symbols: 2
+strategy:
+  equity:
+    enabled: true
+    name: equity_dynamic_trend_1d_v1
+    timeframe: 1d
+    maximum_allocation: 0.50
+    parameters:
+      trend_window: 150
+      momentum_window: 60
+      volatility_window: 20
+      top_n: 6
+      max_single_weight: 0.10
+      annual_volatility_target: 0.10
+      rebalance_frequency: weekly
+      exclude_symbols: [SPY]
+  crypto:
+    enabled: false
+    name: crypto_cross_sectional_momentum_1h_v1
+    timeframe: 1h
+    maximum_allocation: 0.10
+    parameters:
+      momentum_scheme: 7d
+      rebalance_hours: 24
+      top_n: 3
+      volatility_window: 72
+      btc_regime_lookback_hours: 168
+      max_annualized_volatility_pct: 250.0
+      max_single_weight: 0.05
+risk:
+  risk_per_trade_pct: 0.005
+  max_position_pct: 0.1
+  max_crypto_exposure_pct: 0.1
+  max_crypto_position_pct: 0.05
+  max_crypto_positions: 2
+  minimum_crypto_order_notional: 12
+  maximum_crypto_order_notional: 200000
+  cash_buffer_pct: 0.40
+  max_sector_exposure_pct: 0.25
+  max_gross_exposure_pct: 0.6
+  max_positions: 6
+  daily_loss_limit_pct: 0.005
+  max_drawdown_pct: 0.05
+  minimum_risk_reward: 1.8
+  consecutive_loss_reduction_after: 3
+backtest:
+  initial_cash: 100000
+  slippage_bps: 2
+  spread_bps: 2
+  commission: 0
+  crypto_taker_fee_bps: 5
+  scanner_rebalance: daily
+  output_dir: reports
+  ranking_metric: risk_adjusted
+live:
+  enabled: false
+  hard_dollar_cap: 0
+  operator_approval_path: ""
+  operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
 engine:
   timeframe: 5m
   higher_timeframe: 1h
-  # Deprecated compatibility switch; true is rejected. Runtime activation
-  # requires immutable GREEN manifests and their separately configured hashes.
-  approve_portfolio_strategy: false
-  approval_manifest_paths: []
-  approval_manifest_checksums: []
-  rollout_state_path: data/runtime/portfolio_rollout.json
-  # Optional in packaged deployments; when empty the runtime resolves git HEAD.
-  runtime_source_revision: ""
-  allow_live_portfolio_execution: false
-  live_portfolio_dollar_cap: 0
-  live_operator_approval_path: ""
-  live_operator_approval_key_env: PARAYABUCK_OPERATOR_APPROVAL_KEY
-  trading_enabled: true
-  equity_trading_enabled: true
-  crypto_trading_enabled: false
-  live_trading_enabled: false
   manage_external_positions: false
-  reject_stale_signals: true
   event_grace_seconds: 5
   data_finalization_grace_seconds: 2
-  maximum_signal_age_seconds: 20
   maximum_queue_age_seconds: 30
-  account_snapshot_ttl_seconds: 15
   account_poll_interval_seconds: 15
   maximum_account_age_for_entry_seconds: 30
   event_queue_capacity: 1024
-  max_new_positions_per_cycle: 1
   crypto_stop_limit_offset_bps: 25
   crypto_emergency_exit_bps: 75
   crypto_stop_cancel_timeout_seconds: 5
   crypto_stop_cancel_poll_interval_seconds: 0.25
-  strategy_profile: equity_5m_v1
-  allow_short: false
-  crypto_min_volume_bar_ratio: 0.5
-  minimum_signal_score: 65.0
   warmup_bars: 250
-  decision_db_path: data/runtime/parayabuck.sqlite3
   ai_logging_enabled: true
   ai_log_path: data/runtime/ai_decisions
   prediction_horizon_bars: 48
-  risk:
-    risk_per_trade_pct: 0.005
-    max_position_pct: 0.1
-    max_crypto_exposure_pct: 0.1
-    max_crypto_position_pct: 0.05
-    max_crypto_positions: 2
-    minimum_crypto_order_notional: 12
-    maximum_crypto_order_notional: 200000
-    cash_buffer_pct: 0.40
-    max_sector_exposure_pct: 0.25
-    max_gross_exposure_pct: 0.6
-    max_positions: 3
-    daily_loss_limit_pct: 0.005
-    max_drawdown_pct: 0.05
-    minimum_risk_reward: 1.8
-    consecutive_loss_reduction_after: 3

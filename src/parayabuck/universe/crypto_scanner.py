@@ -181,6 +181,7 @@ class CryptoScannerResult:
     selection_timestamp: str
     data_timestamp: str
     selected_symbols: tuple[str, ...]
+    candidate_symbols: tuple[str, ...]
     score_breakdown: dict[str, dict[str, float | str]]
     eliminated: dict[str, str]
     category_distribution: dict[str, int]
@@ -231,7 +232,10 @@ class CryptoUniverseScanner:
             if symbol in seen:
                 raise ValueError(f"Duplicate canonical crypto scanner candidate: {symbol}")
             seen.add(symbol)
-            if symbol not in self.config.trade_symbols and symbol not in reserved:
+            if symbol in self.config.denylist_symbols:
+                eliminated[symbol] = "denylist"
+                continue
+            if self.config.allowlist_symbols and symbol not in self.config.allowlist_symbols:
                 eliminated[symbol] = "outside_candidate_pool"
                 continue
             reason = self._filter_reason(symbol, item)
@@ -364,6 +368,7 @@ class CryptoUniverseScanner:
             selection_timestamp=timestamp.isoformat(),
             data_timestamp=data_timestamp.astimezone(UTC).isoformat(),
             selected_symbols=tuple(selected),
+            candidate_symbols=tuple(sorted(seen)),
             score_breakdown=breakdowns,
             eliminated=dict(sorted(eliminated.items())),
             category_distribution=dict(sorted(categories.items())),
@@ -467,7 +472,17 @@ def validate_active_crypto_universe(
             return (), "invalid"
         if not set(config.pinned_symbols).issubset(selected):
             return (), "missing_pins"
-        if not set(selected).issubset(config.trade_symbols):
+        raw_candidates = payload.get("candidate_symbols")
+        if not isinstance(raw_candidates, list):
+            return (), "invalid"
+        candidates = {canonical_symbol(str(item), Market.CRYPTO) for item in raw_candidates}
+        managed_pins = {
+            symbol
+            for symbol in selected
+            if isinstance(payload.get("score_breakdown", {}).get(symbol), dict)
+            and payload["score_breakdown"][symbol].get("selection_role") == "managed_position"
+        }
+        if not set(selected).issubset(candidates | set(config.pinned_symbols) | managed_pins):
             return (), "outside_candidate_pool"
         if any(
             split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol)

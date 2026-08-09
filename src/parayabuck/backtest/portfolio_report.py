@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +10,30 @@ from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestResult,
     RebalanceRecord,
 )
-from parayabuck.backtest.report import MONTH_NAMES, _as_float, _benchmark_yearly_returns
 from parayabuck.core.models import Bar
+
+MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    return float(value) if isinstance(value, (int, float)) else default
+
+
+def _benchmark_yearly_returns(benchmark_bars: Sequence[Bar] | None) -> dict[int, float]:
+    if not benchmark_bars:
+        return {}
+    by_year: dict[int, list[float]] = {}
+    for bar in sorted(benchmark_bars, key=lambda item: item.timestamp):
+        by_year.setdefault(bar.timestamp.year, []).append(bar.close)
+    returns: dict[int, float] = {}
+    previous_close: float | None = None
+    for year in sorted(by_year):
+        closes = by_year[year]
+        anchor = previous_close if previous_close is not None else closes[0]
+        returns[year] = closes[-1] / anchor - 1 if anchor > 0 else 0.0
+        previous_close = closes[-1]
+    return returns
+
 
 ROLLING_BETA_WINDOW_DAYS = 63
 
@@ -28,6 +51,7 @@ class PortfolioReport:
     rolling_beta: tuple[float, ...]
     per_symbol: tuple[dict[str, object], ...]
     equity_curve: tuple[tuple[str, float], ...]
+    drawdowns: tuple[tuple[str, float], ...]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -59,6 +83,10 @@ class PortfolioReport:
             "equity_curve": [
                 {"timestamp": timestamp, "equity": equity}
                 for timestamp, equity in self.equity_curve
+            ],
+            "drawdowns": [
+                {"timestamp": timestamp, "drawdown": drawdown}
+                for timestamp, drawdown in self.drawdowns
             ],
         }
 
@@ -171,6 +199,11 @@ class PortfolioReport:
             writer.writerow(["timestamp", "equity"])
             writer.writerows(self.equity_curve)
         written.append(str(directory / "equity_curve.csv"))
+        with (directory / "drawdowns.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["timestamp", "drawdown"])
+            writer.writerows(self.drawdowns)
+        written.append(str(directory / "drawdowns.csv"))
         return written
 
     def render_text(self) -> str:
@@ -278,6 +311,23 @@ def build_portfolio_report(
     strategy_name: str,
     strategy_version: str,
 ) -> PortfolioReport:
+    closed_pnls = [pnl for _timestamp, _symbol, pnl in result.closed_position_events]
+    wins = [pnl for pnl in closed_pnls if pnl > 0]
+    losses = [pnl for pnl in closed_pnls if pnl < 0]
+    gross_profit = sum(wins)
+    gross_loss = abs(sum(losses))
+    maximum_exposure = max(
+        (sum(weights.values()) for _timestamp, weights in result.weight_history),
+        default=0.0,
+    )
+    maximum_positions = max(
+        (
+            sum(1 for weight in weights.values() if weight > 0)
+            for _timestamp, weights in result.weight_history
+        ),
+        default=0,
+    )
+    holding_hours = _average_holding_hours(result)
     summary = {
         "strategy_name": strategy_name,
         "strategy_version": strategy_version,
@@ -313,6 +363,19 @@ def build_portfolio_report(
         "positive_month_ratio": result.positive_month_ratio,
         "realized_pnl_count": len(result.realized_pnls),
         "realized_pnl_total": sum(result.realized_pnls),
+        "number_of_trades": len(closed_pnls),
+        "win_rate": len(wins) / len(closed_pnls) if closed_pnls else 0.0,
+        "average_win": sum(wins) / len(wins) if wins else 0.0,
+        "average_loss": sum(losses) / len(losses) if losses else 0.0,
+        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else None,
+        "expectancy": sum(closed_pnls) / len(closed_pnls) if closed_pnls else 0.0,
+        "best_trade": max(closed_pnls, default=0.0),
+        "worst_trade": min(closed_pnls, default=0.0),
+        "average_holding_hours": holding_hours,
+        "average_exposure": 1.0 - result.average_cash_ratio,
+        "maximum_exposure": maximum_exposure,
+        "average_positions": result.average_holdings_count,
+        "maximum_positions": maximum_positions,
     }
     fills: list[dict[str, object]] = [
         {
@@ -380,6 +443,11 @@ def build_portfolio_report(
         (timestamp.isoformat(), equity)
         for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True)
     )
+    peak = result.starting_equity
+    drawdowns: list[tuple[str, float]] = []
+    for timestamp, equity in equity_curve:
+        peak = max(peak, equity)
+        drawdowns.append((timestamp, (peak - equity) / peak if peak > 0 else 0.0))
     return PortfolioReport(
         summary=summary,
         rebalances=result.rebalances,
@@ -392,7 +460,26 @@ def build_portfolio_report(
         rolling_beta=beta_series,
         per_symbol=tuple(per_symbol),
         equity_curve=equity_curve,
+        drawdowns=tuple(drawdowns),
     )
+
+
+def _average_holding_hours(result: PortfolioBacktestResult) -> float:
+    quantities: dict[str, float] = {}
+    opened_at: dict[str, datetime] = {}
+    durations: list[float] = []
+    for fill in sorted(result.fills, key=lambda item: (item.timestamp, item.symbol)):
+        current = quantities.get(fill.symbol, 0.0)
+        if fill.side.value == "buy":
+            if current <= 1e-12:
+                opened_at[fill.symbol] = fill.timestamp
+            quantities[fill.symbol] = current + fill.qty
+            continue
+        remaining = max(0.0, current - fill.qty)
+        quantities[fill.symbol] = remaining
+        if remaining <= 1e-12 and fill.symbol in opened_at:
+            durations.append((fill.timestamp - opened_at.pop(fill.symbol)).total_seconds() / 3600)
+    return sum(durations) / len(durations) if durations else 0.0
 
 
 def _flat_monthly(result: PortfolioBacktestResult) -> dict[tuple[int, int], float]:

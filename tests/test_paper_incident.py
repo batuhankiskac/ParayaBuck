@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import scripts.reconcile_paper_incident as incident_cli
 from parayabuck.monitoring.paper_incident import (
+    BrokerCashActivityRecord,
     BrokerFillRecord,
     BrokerOrderRecord,
     BrokerPositionRecord,
@@ -51,11 +52,18 @@ def test_paper_incident_reconciliation_is_read_only_and_anonymized(tmp_path) -> 
             ),
         ),
         positions=(BrokerPositionRecord("BTC/USD", 0.1, 50_000, 49_000),),
+        cash_activities=(BrokerCashActivityRecord("deposit", "CSD", 200, now),),
+        starting_equity=10_000,
+        ending_equity=10_109.8,
     )
     reconciler = PaperIncidentReconciler()
     report = reconciler.reconcile(snapshot, database)
     assert report.realized_pnl == 10.0
     assert report.unrealized_pnl == -100
+    assert report.net_transfers == 200
+    assert report.expected_ending_equity == 10_109.8
+    assert report.actual_ending_equity == 10_109.8
+    assert report.equity_residual == 0
     assert report.manual_exit_order_ids == ("manual-sell",)
     assert report.external_position_symbols == ("BTC/USD",)
     assert report.local_closed_positions_with_zero_pnl == 1
@@ -104,3 +112,31 @@ def test_incident_download_paginates_orders_and_fills(monkeypatch) -> None:
     assert any(
         "page_token" in params for path, params in calls if path == "/account/activities/FILL"
     )
+
+
+def test_incident_download_paginates_relevant_cash_activities(monkeypatch) -> None:
+    first_page = [
+        {"id": f"cash-{index}", "date": "2026-01-02", "net_amount": "1"} for index in range(100)
+    ]
+    second_page = [{"id": "cash-older", "date": "2026-01-01", "net_amount": "-2"}]
+    calls: list[dict[str, object]] = []
+
+    def fake_get(
+        path: str,
+        *,
+        key: str,
+        secret: str,
+        params: dict[str, object] | None = None,
+    ) -> object:
+        del key, secret
+        assert path == "/account/activities"
+        actual = params or {}
+        calls.append(actual)
+        return second_page if "page_token" in actual else first_page
+
+    monkeypatch.setattr(incident_cli, "_get", fake_get)
+    activities = incident_cli._all_cash_activities("key", "secret", "2026-01-01T00:00:00Z")
+    assert len(activities) == 101
+    assert calls[0]["activity_types"] == "CSD,CSW,ACATC,JNLC"
+    assert calls[0]["after"] == "2026-01-01T00:00:00Z"
+    assert "page_token" in calls[1]

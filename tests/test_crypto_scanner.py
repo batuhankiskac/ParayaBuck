@@ -17,6 +17,8 @@ from parayabuck.config import (
     CryptoUniverseConfig,
     EngineConfig,
     EquityUniverseConfig,
+    RuntimeConfig,
+    StrategyConfig,
     UniverseConfig,
 )
 from parayabuck.core.models import Market
@@ -321,11 +323,11 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(
-            equity_trading_enabled=False,
-            crypto_trading_enabled=True,
-            ai_logging_enabled=False,
-            decision_db_path=str(tmp_path / "runtime.sqlite3"),
+        engine=EngineConfig(ai_logging_enabled=False),
+        runtime=RuntimeConfig(decision_db_path=str(tmp_path / "runtime.sqlite3")),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
         ),
     )
 
@@ -356,8 +358,7 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
     monkeypatch.setattr(runtime_module, "AsyncDecisionJournal", Sink)
     monkeypatch.setattr(runtime_module, "ExecutionLedger", FakeLedger)
     monkeypatch.setattr(runtime_module, "AlpacaBroker", FakeBroker)
-    monkeypatch.setattr(runtime_module, "TradingEngine", FakeEngine)
-    monkeypatch.setattr(runtime_module, "ExecutionCoordinator", Sink)
+    monkeypatch.setattr(runtime_module, "RuntimeMarketState", FakeEngine)
     monkeypatch.setattr(runtime_module, "AlpacaBarStream", Sink)
     monkeypatch.setattr(runtime_module, "AlpacaTradingUpdateStream", Sink)
     monkeypatch.setattr(runtime_module, "TimeframeAggregator", Sink)
@@ -365,7 +366,7 @@ def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
     runtime = EngineRuntime("key", "secret", config)
     active = set(load_active_crypto_symbols(crypto))
     assert runtime._symbols_by_market[Market.CRYPTO] == active
-    assert runtime.engine.allowed_trade_symbols == active
+    assert runtime.market_state.allowed_trade_symbols == active
     assert set(crypto.trade_symbols) - active
 
 
@@ -383,7 +384,7 @@ def test_runtime_managed_crypto_pin_replaces_unmanaged_capacity_member(tmp_path:
         Market.EQUITY: set(),
         Market.CRYPTO: {"BTC/USD", "ETH/USD", "ADA/USD"},
     }
-    runtime.engine = SimpleNamespace(allowed_trade_symbols={"BTC/USD", "ETH/USD", "ADA/USD"})
+    runtime.market_state = SimpleNamespace(allowed_trade_symbols={"BTC/USD", "ETH/USD", "ADA/USD"})
     runtime._not_ready_symbols = set()
 
     runtime._pin_managed_symbols()
@@ -393,7 +394,7 @@ def test_runtime_managed_crypto_pin_replaces_unmanaged_capacity_member(tmp_path:
         "ETH/USD",
         "SOL/USD",
     }
-    assert runtime.engine.allowed_trade_symbols == {
+    assert runtime.market_state.allowed_trade_symbols == {
         "BTC/USD",
         "ETH/USD",
         "SOL/USD",
@@ -413,7 +414,11 @@ def test_asset_api_failure_preserves_previous_success(tmp_path: Path, monkeypatc
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(equity_trading_enabled=False),
+        engine=EngineConfig(),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
+        ),
     )
 
     class FailingTradingClient:
@@ -449,7 +454,11 @@ def test_historical_api_failure_preserves_previous_success(
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(equity_trading_enabled=False),
+        engine=EngineConfig(),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
+        ),
     )
 
     class TradingClient:
@@ -527,7 +536,11 @@ def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(equity_trading_enabled=False),
+        engine=EngineConfig(),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
+        ),
     )
 
     def fail(*_args: object) -> None:
@@ -565,7 +578,11 @@ def test_startup_preflight_skips_api_when_active_file_is_valid(
             ),
             crypto=crypto,
         ),
-        engine=EngineConfig(equity_trading_enabled=False),
+        engine=EngineConfig(),
+        strategy=StrategyConfig(
+            equity=replace(StrategyConfig().equity, enabled=False),
+            crypto=replace(StrategyConfig().crypto, enabled=True),
+        ),
     )
 
     def unexpected(*_args: object) -> None:

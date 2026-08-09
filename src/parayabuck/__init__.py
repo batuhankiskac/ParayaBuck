@@ -10,7 +10,6 @@ from parayabuck.config import (
     UniverseConfig,
     load_config,
 )
-from parayabuck.engine import TradingEngine
 
 __all__ = [
     "Config",
@@ -19,7 +18,6 @@ __all__ = [
     "EquityScannerConfig",
     "EquityUniverseConfig",
     "RiskLimits",
-    "TradingEngine",
     "UniverseConfig",
     "load_config",
 ]

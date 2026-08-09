@@ -67,34 +67,38 @@
                 <span>Canlı sistem özeti</span>
             </div>
             <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
-            <span class="system-time">5 dk strateji</span>
+            <span class="system-time">bağımsız strateji zaman dilimleri</span>
         </section>
 
         <main class="dashboard-content">
+            <section class="panel" aria-label="Operasyon durumu">
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">OPERASYON</span>
+                        <h2>Strateji, evren ve emir durumu</h2>
+                    </div>
+                </div>
+                <pre id="operationsDetail" class="terminal-view">Operasyon durumu yükleniyor…</pre>
+            </section>
             <section class="panel backtest-panel" aria-label="Backtest çalıştırıcı">
                 <div class="panel-header">
                     <div>
-                        <span class="eyebrow">ARAŞTIRMA</span>
+                        <span class="eyebrow">DOĞRULAMA</span>
                         <h2>Backtest çalıştır</h2>
-                        <p>Tek tıkla canlı motorun aynı strateji ve risk motoruyla geçmiş veride test eder; her koşu reports/ altına manifestiyle yazılır.</p>
+                        <p>Üretimdeki strateji, risk katmanı ve maliyet modelini geçmiş veride çalıştırır; raporlar ve tarihsel evren anlık görüntüleri reports/ altına yazılır.</p>
                     </div>
                     <span id="backtestStateBadge" class="count-badge">beklemede</span>
                 </div>
                 <div class="backtest-body">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="btProfile">Profil</label>
-                            <select id="btProfile">
-                                <option value="live" selected>Live (5m + 1h) — canlıya en yakın</option>
-                                <option value="auto">Otomatik (pencereye göre)</option>
-                                <option value="deep">Deep (1d)</option>
-                            </select>
+                            <label for="btStrategy">Strateji (boş = ayar)</label>
+                            <input type="text" id="btStrategy" placeholder="equity_dynamic_trend_1d_v1">
                         </div>
                         <div class="form-group">
                             <label for="btMarket">Piyasa</label>
                             <select id="btMarket">
-                                <option value="both">Borsa + Kripto</option>
-                                <option value="equity">Borsa</option>
+                                <option value="equity" selected>Borsa</option>
                                 <option value="crypto">Kripto</option>
                             </select>
                         </div>
@@ -113,6 +117,10 @@
                         <div class="form-group form-wide">
                             <label for="btSymbols">Semboller (boş = universe)</label>
                             <input type="text" id="btSymbols" placeholder="AAPL,MSFT,BTC/USD">
+                        </div>
+                        <div class="form-group form-wide">
+                            <label for="btParameters">Parametreler (JSON, boş = ayar)</label>
+                            <input type="text" id="btParameters" placeholder='{"top_n": 12, "momentum_window": 126}'>
                         </div>
                     </div>
                     <div class="backtest-options">

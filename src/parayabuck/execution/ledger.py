@@ -17,7 +17,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.risk.manager import RiskState
+from parayabuck.risk.state import RiskState
 from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 log = get_logger("parayabuck.execution.ledger")

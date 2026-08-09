@@ -13,7 +13,6 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskOverlay,
     TargetToOrderPlanner,
 )
-from parayabuck.portfolio.approval import ApprovalStage
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 NOW = datetime(2026, 8, 8, tzinfo=UTC)
@@ -75,7 +74,7 @@ def test_risk_overlay_enforces_account_sleeve_asset_and_cash_caps() -> None:
         market=Market.EQUITY,
         approved_symbols=("SPY", "QQQ", "IWM"),
         maximum_allocation=0.50,
-        stage=ApprovalStage.PAPER,
+        mode="paper",
     )
     assert all(weight.weight <= 0.10 for weight in decision.target.weights)
     assert sum(weight.weight for weight in decision.target.weights) <= 0.50
@@ -90,7 +89,7 @@ def test_daily_loss_halt_allows_reductions_but_forbids_increases() -> None:
         market=Market.EQUITY,
         approved_symbols=("SPY", "QQQ"),
         maximum_allocation=0.50,
-        stage=ApprovalStage.PAPER,
+        mode="paper",
     )
     assert decision.halted
     weights = {weight.symbol: weight.weight for weight in decision.target.weights}
@@ -165,7 +164,7 @@ def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
         market=Market.EQUITY,
         approved_symbols=(raw_position["symbol"], "NEW"),
         maximum_allocation=0.50,
-        stage=ApprovalStage.PAPER,
+        mode="paper",
     )
     weights = {weight.symbol: weight.weight for weight in decision.target.weights}
     assert decision.halted

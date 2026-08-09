@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from parayabuck.core.models import Market
 
-# Permanent point-in-time universe for equity research: broad and sector SPDR
-# ETFs with long histories. Individual stocks are excluded from main research
+# Legacy fixture universe retained only for deterministic accounting tests: broad and sector SPDR
+# ETFs with long histories. Individual stocks are excluded from this fixture
 # because no point-in-time constituent source exists.
 EQUITY_ETF_UNIVERSE: tuple[str, ...] = (
     "SPY",
@@ -30,7 +30,7 @@ EQUITY_UNIVERSE_VERSION = "permanent_etf_core_v1"
 CRYPTO_UNIVERSE_VERSION = "crypto_trailing_liquidity_v1"
 
 # Crypto spot pairs actually supported by the execution broker (Alpaca). Only
-# these may enter the point-in-time research universe.
+# these may enter the point-in-time fixture universe.
 EXECUTION_SUPPORTED_CRYPTO = (
     "BTC/USD",
     "ETH/USD",

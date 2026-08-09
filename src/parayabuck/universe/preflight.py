@@ -122,24 +122,30 @@ def refresh_equity_universe(
 ) -> ScannerResult:
     universe = config.universe.equity
     source_path = Path(universe.candidate_universe_path)
-    payload = json.loads(source_path.read_text(encoding="utf-8"))
-    configured = {str(item).upper() for item in payload.get("symbols", ()) if isinstance(item, str)}
-    if not configured:
-        configured = set(universe.fallback_trade_symbols)
-    if not configured:
-        raise ValueError("Equity candidate universe is empty")
-
-    trading = TradingClient(api_key, secret_key, paper=config.alpaca.paper)
+    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
     assets = trading.get_all_assets(
         GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
     )
-    allowed = {
-        str(asset.symbol): asset
-        for asset in assets
-        if str(asset.symbol) in configured and bool(getattr(asset, "tradable", False))
-    }
+    allowed: dict[str, Any] = {}
+    allowlist = set(universe.allowlist_symbols)
+    denylist = set(universe.denylist_symbols)
+    for asset in assets:
+        symbol = str(getattr(asset, "symbol", "")).strip().upper()
+        exchange = str(getattr(asset, "exchange", "")).upper().split(".")[-1]
+        if (
+            not symbol
+            or "/" in symbol
+            or not bool(getattr(asset, "tradable", False))
+            or exchange not in universe.supported_exchanges
+            or symbol in denylist
+            or (allowlist and symbol not in allowlist)
+        ):
+            continue
+        allowed[symbol] = asset
+    if not allowed:
+        raise ValueError("Alpaca returned no eligible active US equities")
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
@@ -148,21 +154,33 @@ def refresh_equity_universe(
     )
     end = datetime.now(UTC)
     start = end - timedelta(days=45)
-    candidates: list[EquityCandidate] = []
-    for batch in _chunks(sorted(allowed)):
+    discovered: list[EquityCandidate] = []
+    for batch in _chunks(sorted(allowed), 150):
         by_symbol = history.get_bars_batch(batch, "1d", start=start, end=end)
-        candidates.extend(
+        discovered.extend(
             _equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, []))
             for symbol in batch
         )
+    reserved = {
+        *universe.reference_symbols,
+        *universe.inverse_trade_symbols,
+        *universe.allowlist_symbols,
+    }
+    ranked = sorted(
+        discovered,
+        key=lambda item: (-item.median_dollar_volume_20d, item.symbol),
+    )
+    shortlist_symbols = {item.symbol for item in ranked[: universe.target_shortlist]} | reserved
+    candidates = [item for item in discovered if item.symbol in shortlist_symbols]
     scanner = EquityUniverseScanner(universe)
     result = scanner.scan(candidates, data_timestamp=end)
 
     enriched = {
         "generated_at": end.isoformat(),
-        "source": "Alpaca active tradable US equity assets + repository fallback",
-        "symbols": sorted(configured),
-        "candidates": [asdict(item) for item in candidates],
+        "source": "Alpaca active tradable US equity assets",
+        "symbols": sorted(allowed),
+        "shortlist_symbols": sorted(shortlist_symbols),
+        "candidates": [asdict(item) for item in discovered],
     }
     temporary = source_path.with_suffix(source_path.suffix + ".tmp")
     temporary.write_text(json.dumps(enriched, indent=2, sort_keys=True), encoding="utf-8")
@@ -177,17 +195,28 @@ def refresh_crypto_universe(
     secret_key: str,
 ) -> CryptoScannerResult:
     universe = config.universe.crypto
-    trading = TradingClient(api_key, secret_key, paper=config.alpaca.paper)
+    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
     assets = trading.get_all_assets(
         GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE)
     )
-    by_symbol = {
-        symbol: asset
-        for asset in assets
-        if (symbol := _crypto_asset_symbol(asset)) is not None and symbol in universe.trade_symbols
-    }
+    by_symbol: dict[str, Any] = {}
+    allowlist = set(universe.allowlist_symbols)
+    denylist = set(universe.denylist_symbols)
+    for asset in assets:
+        symbol = _crypto_asset_symbol(asset)
+        if (
+            symbol is None
+            or not symbol.endswith("/USD")
+            or symbol in denylist
+            or (allowlist and symbol not in allowlist)
+        ):
+            continue
+        by_symbol[symbol] = asset
+    candidate_symbols = tuple(sorted({*by_symbol, *universe.pinned_symbols}))
+    if not candidate_symbols:
+        raise ValueError("Alpaca returned no supported USD crypto pairs")
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
@@ -197,14 +226,14 @@ def refresh_crypto_universe(
     end = datetime.now(UTC)
     start = end - timedelta(days=universe.scanner.lookback_days)
     bars = history.get_bars_batch(
-        list(universe.trade_symbols),
+        list(candidate_symbols),
         universe.scanner.historical_timeframe,
         start=start,
         end=end,
     )
     quotes: dict[str, Any] = {}
     try:
-        quotes = history.get_latest_crypto_quotes(list(universe.trade_symbols))
+        quotes = history.get_latest_crypto_quotes(list(candidate_symbols))
     except Exception as exc:
         log.warning(
             "Crypto latest quotes unavailable; neutral spread score will be used: %s",
@@ -214,7 +243,7 @@ def refresh_crypto_universe(
     expected = universe.scanner.lookback_days * 24
     btc_bars = bars.get("BTC/USD", [])
     candidates = []
-    for symbol in universe.trade_symbols:
+    for symbol in candidate_symbols:
         asset = by_symbol.get(symbol)
         candidates.append(
             crypto_candidate_from_bars(

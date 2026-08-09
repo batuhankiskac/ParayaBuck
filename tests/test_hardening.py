@@ -16,7 +16,6 @@ import pytest
 import yaml
 from fastapi import HTTPException
 
-from parayabuck.backtest.broker import BacktestBroker
 from parayabuck.config import EngineConfig
 from parayabuck.core.models import (
     AccountSnapshot,
@@ -33,12 +32,12 @@ from parayabuck.core.models import (
 )
 from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
-from parayabuck.engine import TradingEngine
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.sectors import classify_instrument, is_inverse_equity, sector_of
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
+from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.web import server
 from tests.helpers import apply_entry_fill
 
@@ -440,36 +439,26 @@ def test_warmup_symbol_batches_stay_below_alpaca_row_limit() -> None:
     assert [symbol for batch in batches for symbol in batch] == symbols
 
 
-def test_partial_ranking_universe_is_evaluated_after_grace_period(
+def test_partial_primary_batch_updates_market_state_without_legacy_decision(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
     bar = _bar(timestamp)
-    evaluated: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    ingested: list[tuple[str, ...]] = []
 
     class Engine:
         entry_halt_reason = None
         has_data_gaps = False
 
         def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            ingested.append(tuple(bar.symbol for bar in bars))
             return SimpleNamespace(
                 bars=tuple(bars),
                 mutations=(SimpleNamespace(value="inserted"),),
             )
 
-        def evaluate_timestamp(
-            self,
-            _timestamp: datetime,
-            symbols: list[str],
-            _account: AccountSnapshot,
-            *,
-            missing_symbols: tuple[str, ...],
-        ) -> Any:
-            evaluated.append((tuple(symbols), missing_symbols))
-            return SimpleNamespace(orders=())
-
-    runtime.engine = Engine()
+    runtime.market_state = Engine()
     runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
     runtime._historical = None
     runtime._warming_up = False
@@ -483,22 +472,24 @@ def test_partial_ranking_universe_is_evaluated_after_grace_period(
 
     runtime._process_timestamp(timestamp, {"AAPL": bar}, {"AAPL", "MSFT"})
 
-    assert evaluated == [(("AAPL",), ("MSFT",))]
+    assert ingested == [("AAPL",)]
     assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
 
 
-def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
+def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    evaluated: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    ingested: list[tuple[str, ...]] = []
     corrections: list[str] = []
-    first_evaluated = threading.Event()
+    first_ingested = threading.Event()
 
     class Engine:
         entry_halt_reason = None
         has_data_gaps = False
 
         def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            ingested.append(tuple(bar.symbol for bar in bars))
+            first_ingested.set()
             return SimpleNamespace(
                 bars=tuple(bars),
                 mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
@@ -507,19 +498,7 @@ def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
         def ingest_corrections(self, bars: list[Bar]) -> Any:
             corrections.extend(bar.symbol for bar in bars)
 
-        def evaluate_timestamp(
-            self,
-            _timestamp: datetime,
-            symbols: list[str],
-            _account: AccountSnapshot,
-            *,
-            missing_symbols: tuple[str, ...],
-        ) -> Any:
-            evaluated.append((tuple(symbols), missing_symbols))
-            first_evaluated.set()
-            return SimpleNamespace(orders=())
-
-    runtime.engine = Engine()
+    runtime.market_state = Engine()
     runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
     runtime.config = SimpleNamespace(
         event_grace_seconds=0.0,
@@ -555,12 +534,12 @@ def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
         runtime._events.put_market_event(
             _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
         )
-        assert first_evaluated.wait(5)
+        assert first_ingested.wait(5)
         runtime._events.put_market_event(
             _Event("primary", _bar(timestamp, "MSFT"), datetime.now(UTC))
         )
         deadline = time.monotonic() + 5
-        while len(evaluated) < 2 and time.monotonic() < deadline:
+        while len(ingested) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
         runtime._events.put_market_event(
             _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
@@ -572,7 +551,7 @@ def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
         runtime._running = False
         thread.join(timeout=5)
 
-    assert evaluated == [(("AAPL",), ("MSFT",)), (("MSFT",), ())]
+    assert ingested == [("AAPL",), ("MSFT",)]
     assert corrections == ["AAPL"]
 
 
@@ -589,7 +568,7 @@ def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
         def get(symbol: str, _timeframe: str) -> list[object]:
             return [object()] * (250 if symbol == "AAPL" else 241)
 
-    runtime.engine = SimpleNamespace(bars=Bars())
+    runtime.market_state = SimpleNamespace(bars=Bars())
 
     runtime._refresh_readiness()
 
@@ -604,7 +583,7 @@ def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
     runtime._running = True
     runtime._state = "warming_up"
     runtime.config = SimpleNamespace(timeframe="5m", higher_timeframe="1h", warmup_bars=250)
-    runtime.engine = SimpleNamespace(
+    runtime.market_state = SimpleNamespace(
         bars=SimpleNamespace(get=lambda _symbol, _timeframe: [object()] * 241)
     )
 
@@ -614,13 +593,12 @@ def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
     assert runtime._state == "warming_up"
 
 
-def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> None:
+def test_crypto_gap_quarantines_only_affected_symbol_in_operational_state() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     timestamp = datetime(2025, 1, 2, 6, 0, tzinfo=UTC)
     btc = Bar(timestamp, "BTC/USD", "5m", 100, 101, 99, 100, 10, Market.CRYPTO)
     avax = Bar(timestamp, "AVAX/USD", "5m", 40, 41, 39, 40, 10, Market.CRYPTO)
-    evaluated: list[tuple[str, ...]] = []
-    created_orders: list[OrderIntent] = []
+    ingested: list[tuple[str, ...]] = []
 
     class Engine:
         entry_halt_reason = None
@@ -637,37 +615,13 @@ def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> N
             return any(candidate == symbol for candidate, _timeframe in self._not_ready)
 
         def ingest_closed_bars(self, bars: list[Bar]) -> Any:
+            ingested.append(tuple(sorted(bar.symbol for bar in bars)))
             return SimpleNamespace(
                 bars=tuple(sorted(bars, key=lambda bar: bar.symbol)),
                 mutations=tuple(SimpleNamespace(value="inserted") for _bar in bars),
             )
 
-        def evaluate_timestamp(
-            self,
-            _timestamp: datetime,
-            symbols: list[str],
-            _account: AccountSnapshot,
-            *,
-            missing_symbols: tuple[str, ...],
-        ) -> Any:
-            del missing_symbols
-            evaluated.append(tuple(symbols))
-            order = OrderIntent(
-                signal_id="btc-signal",
-                symbol="BTC/USD",
-                market=Market.CRYPTO,
-                direction=Direction.LONG,
-                qty=0.1,
-                entry_price=100,
-                stop_price=95,
-                target_price=110,
-                strategy="test",
-            )
-            created_orders.append(order)
-            self.orders.orders[order.client_order_id] = SimpleNamespace(state=OrderState.ACCEPTED)
-            return SimpleNamespace(orders=(order,))
-
-    runtime.engine = Engine()
+    runtime.market_state = Engine()
     runtime.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0))
     runtime.config = SimpleNamespace(
         maximum_queue_age_seconds=30,
@@ -693,19 +647,15 @@ def test_crypto_gap_quarantines_only_affected_symbol_and_allows_btc_order() -> N
     )
 
     assert runtime._entry_readiness_reasons(Market.CRYPTO) == ()
-    assert evaluated == [("BTC/USD",)]
-    assert [order.symbol for order in created_orders] == ["BTC/USD"]
+    assert ingested == [("AVAX/USD", "BTC/USD")]
 
 
 def test_symbol_gap_check_covers_primary_and_higher_timeframes() -> None:
-    engine = TradingEngine(
-        SimpleNamespace(),
-        EngineConfig(),
-    )
-    engine._not_ready.update({("AVAX/USD", "5m"), ("AVAX/USD", "1h")})
+    state = RuntimeMarketState(EngineConfig())
+    state._not_ready.update({("AVAX/USD", "5m"), ("AVAX/USD", "1h")})
 
-    assert engine.has_data_gaps_for_symbol("AVAX/USD")
-    assert not engine.has_data_gaps_for_symbol("BTC/USD")
+    assert state.has_data_gaps_for_symbol("AVAX/USD")
+    assert not state.has_data_gaps_for_symbol("BTC/USD")
 
 
 def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> None:
@@ -732,7 +682,7 @@ def test_blocking_trade_update_worker_stays_healthy_while_thread_is_alive() -> N
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.engine = SimpleNamespace(
+    runtime.market_state = SimpleNamespace(
         has_data_gaps_for_market=lambda _market: False,
         has_data_gaps_for_symbol=lambda _symbol: False,
     )
@@ -765,7 +715,7 @@ def test_stale_crypto_stream_event_degrades_runtime() -> None:
     runtime._events = SimpleNamespace(qsize=lambda: 0)
     runtime._dropped_events = 0
     runtime._coalesced_events = 0
-    runtime.engine = SimpleNamespace(
+    runtime.market_state = SimpleNamespace(
         has_data_gaps_for_market=lambda _market: False,
         has_data_gaps_for_symbol=lambda _symbol: False,
     )
@@ -810,20 +760,10 @@ def test_equity_hour_buckets_anchor_at_0930_new_york_across_dst() -> None:
 
 
 def test_account_failure_does_not_drop_ingested_bar() -> None:
-    class FailingBroker:
-        def account(self) -> AccountSnapshot:
-            raise TimeoutError("account unavailable")
-
-        def submit(self, _order: OrderIntent) -> Any:
-            raise AssertionError("must not submit")
-
-        def reconcile(self) -> None:
-            return
-
-    engine = TradingEngine(FailingBroker(), EngineConfig())
+    state = RuntimeMarketState(EngineConfig())
     bar = _bar(datetime.now(UTC))
-    assert engine.process_cycle([bar]) == []
-    assert engine.bars.get("AAPL", "5m") == [bar]
+    state.ingest_closed_bars([bar])
+    assert state.bars.get("AAPL", "5m") == [bar]
 
 
 def test_external_position_is_not_modified_by_default() -> None:
@@ -945,71 +885,6 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     )
     broker.reconcile()
     assert submitted == [pytest.approx(0.01)]
-
-
-def test_backtest_checks_stop_on_entry_bar_and_gap_price() -> None:
-    broker = BacktestBroker(10_000, slippage_bps=0)
-    created = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    order = OrderIntent(
-        "signal",
-        "AAPL",
-        Market.EQUITY,
-        Direction.LONG,
-        10,
-        100,
-        95,
-        110,
-        "test",
-        created_at=created,
-    )
-    broker.submit(order)
-    gap_bar = Bar(
-        created + timedelta(minutes=5),
-        "AAPL",
-        "5m",
-        94,
-        96,
-        93,
-        95,
-        100,
-        Market.EQUITY,
-    )
-    broker.advance(gap_bar)
-    assert broker.realized_pnls == [0]  # entry and emergency stop both fill at the gap open
-    assert "AAPL" not in broker.positions
-
-
-def test_backtest_emits_insufficient_cash_reason_and_rejects_short() -> None:
-    broker = BacktestBroker(10)
-    created = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)
-    expensive = OrderIntent(
-        "signal",
-        "AAPL",
-        Market.EQUITY,
-        Direction.LONG,
-        1,
-        100,
-        95,
-        110,
-        "test",
-        created_at=created,
-    )
-    broker.submit(expensive)
-    broker.advance(_bar(created + timedelta(minutes=5)))
-    assert broker.order_rejections[expensive.client_order_id] == "insufficient_cash"
-    short = OrderIntent(
-        "short",
-        "AAPL",
-        Market.EQUITY,
-        Direction.SHORT,
-        1,
-        100,
-        105,
-        90,
-        "test",
-    )
-    with pytest.raises(ValueError, match="Short execution is disabled"):
-        broker.submit(short)
 
 
 def test_atomic_credentials_preserve_unmanaged_fields_and_never_touch_example(
@@ -1253,7 +1128,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime._running = True
     runtime._state = "halted"
     runtime._market_entry_halts = {Market.EQUITY: "equity_reason", Market.CRYPTO: None}
-    runtime.engine = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
     reconciled: list[bool] = []
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
@@ -1269,7 +1144,6 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
 
     assert reconciled == [True]
     assert runtime._circuit_breaker_reason is None
-    assert runtime.engine.entry_halt_reason is None
     assert runtime._state == "running"
     assert persisted == [account]
     # Operator reset must also clear market-level entry halts; previously a
@@ -1284,7 +1158,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime._events = SimpleNamespace(empty=lambda: True)
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
-    runtime.engine = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
+    runtime.market_state = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (

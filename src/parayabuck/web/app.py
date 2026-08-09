@@ -26,7 +26,8 @@ def main() -> None:
     setup_logging(level=os.getenv("LOG_LEVEL", str(app_config.get("log_level", "INFO"))))
 
     host = os.getenv("HOST", str(app_config.get("host", "127.0.0.1")))
-    if host not in {"127.0.0.1", "localhost", "::1"}:
+    container_bind = os.getenv("PARAYABUCK_CONTAINER") == "YES" and host == "0.0.0.0"
+    if host not in {"127.0.0.1", "localhost", "::1"} and not container_bind:
         raise ValueError(
             "ParayaBuck may only bind to loopback addresses because its trading "
             "control API is intentionally local-only."

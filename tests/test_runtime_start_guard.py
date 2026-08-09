@@ -4,12 +4,13 @@ import threading
 
 import pytest
 
+from parayabuck.config import RuntimeMode
 from parayabuck.runtime import EngineRuntime
 
 
 def _runtime(**attrs: object) -> EngineRuntime:
     runtime = object.__new__(EngineRuntime)
-    runtime.strategy_status = "research_only_no_approved_portfolio_strategy"
+    runtime.mode = RuntimeMode.PAPER  # type: ignore[attr-defined]
     runtime._running = False  # type: ignore[attr-defined]
     runtime._state = "stopped"  # type: ignore[attr-defined]
     runtime._stop_event = threading.Event()  # type: ignore[attr-defined]
@@ -18,28 +19,24 @@ def _runtime(**attrs: object) -> EngineRuntime:
     return runtime
 
 
-def test_runtime_start_refused_without_approved_strategy() -> None:
-    runtime = _runtime()
-    with pytest.raises(RuntimeError, match="no approved portfolio strategy"):
+def test_runtime_start_refused_when_disabled() -> None:
+    runtime = _runtime(mode=RuntimeMode.DISABLED)
+    with pytest.raises(RuntimeError, match="runtime.mode is disabled"):
         runtime.start()
 
 
-def test_runtime_start_guard_uses_status_not_just_state() -> None:
-    # The status field alone must never be a guard: start() must refuse.
-    runtime = _runtime(strategy_status="research_only_no_approved_portfolio_strategy")
-    with pytest.raises(RuntimeError, match="research_only"):
-        runtime.start()
-
-
-def test_runtime_start_allowed_when_strategy_approved() -> None:
+def test_paper_runtime_needs_no_research_approval() -> None:
     class FakeBroker:
         def reconcile(self) -> None:
-            raise RuntimeError("reached broker reconcile (guard passed)")
+            raise RuntimeError("reached broker reconcile")
 
-    runtime = _runtime(
-        strategy_status="approved:equity/shadow",
-        approval_manifests=(object(),),
-        broker=FakeBroker(),
-    )
+    runtime = _runtime(broker=FakeBroker())
     with pytest.raises(RuntimeError, match="reached broker reconcile"):
+        runtime.start()
+
+
+def test_live_runtime_requires_environment_confirmation(monkeypatch) -> None:
+    monkeypatch.delenv("PARAYABUCK_ENABLE_LIVE", raising=False)
+    runtime = _runtime(mode=RuntimeMode.LIVE)
+    with pytest.raises(RuntimeError, match="PARAYABUCK_ENABLE_LIVE=YES"):
         runtime.start()

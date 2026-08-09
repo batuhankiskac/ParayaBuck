@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,132 @@ from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+
+
+class RuntimeMode(StrEnum):
+    DISABLED = "disabled"
+    BACKTEST = "backtest"
+    PAPER = "paper"
+    LIVE = "live"
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    mode: RuntimeMode = RuntimeMode.PAPER
+    execution_timeframe: str = "5m"
+    risk_monitor_timeframe: str = "5m"
+    decision_db_path: str = "data/runtime/parayabuck.sqlite3"
+    scanner_refresh_hours: float = 24.0
+
+    def __post_init__(self) -> None:
+        if self.execution_timeframe not in TIMEFRAME_MINUTES:
+            raise ValueError("runtime.execution_timeframe is unsupported")
+        if self.risk_monitor_timeframe not in TIMEFRAME_MINUTES:
+            raise ValueError("runtime.risk_monitor_timeframe is unsupported")
+        if self.scanner_refresh_hours <= 0:
+            raise ValueError("runtime.scanner_refresh_hours must be positive")
+
+
+@dataclass(frozen=True)
+class MarketStrategyConfig:
+    enabled: bool
+    name: str
+    timeframe: str
+    maximum_allocation: float
+    parameters: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("strategy name must not be empty")
+        if self.timeframe not in TIMEFRAME_MINUTES:
+            raise ValueError(f"Unsupported strategy timeframe: {self.timeframe}")
+        if not 0 < self.maximum_allocation <= 1:
+            raise ValueError("strategy maximum_allocation must be in (0, 1]")
+
+
+def _default_equity_strategy() -> MarketStrategyConfig:
+    return MarketStrategyConfig(
+        enabled=True,
+        name="equity_dynamic_trend_1d_v1",
+        timeframe="1d",
+        maximum_allocation=0.50,
+        parameters={
+            "trend_window": 150,
+            "momentum_window": 60,
+            "volatility_window": 20,
+            "top_n": 6,
+            "max_single_weight": 0.10,
+            "annual_volatility_target": 0.10,
+            "rebalance_frequency": "weekly",
+        },
+    )
+
+
+def _default_crypto_strategy() -> MarketStrategyConfig:
+    return MarketStrategyConfig(
+        enabled=False,
+        name="crypto_cross_sectional_momentum_1h_v1",
+        timeframe="1h",
+        maximum_allocation=0.10,
+        parameters={
+            "momentum_scheme": "7d",
+            "rebalance_hours": 24,
+            "top_n": 3,
+            "volatility_window": 72,
+            "btc_regime_lookback_hours": 168,
+            "max_annualized_volatility_pct": 250.0,
+            "max_single_weight": 0.05,
+        },
+    )
+
+
+@dataclass(frozen=True)
+class StrategyConfig:
+    equity: MarketStrategyConfig = field(default_factory=_default_equity_strategy)
+    crypto: MarketStrategyConfig = field(default_factory=_default_crypto_strategy)
+
+
+@dataclass(frozen=True)
+class LiveConfig:
+    enabled: bool = False
+    hard_dollar_cap: float = 0.0
+    operator_approval_path: str = ""
+    operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
+
+    def __post_init__(self) -> None:
+        if self.hard_dollar_cap < 0:
+            raise ValueError("live.hard_dollar_cap must be non-negative")
+        if self.enabled and self.hard_dollar_cap <= 0:
+            raise ValueError("Enabled live mode requires a positive hard dollar cap")
+        if self.enabled and not self.operator_approval_path:
+            raise ValueError("Enabled live mode requires an operator approval file")
+
+
+@dataclass(frozen=True)
+class BacktestConfig:
+    initial_cash: float = 100_000.0
+    slippage_bps: float = 2.0
+    spread_bps: float = 2.0
+    commission: float = 0.0
+    crypto_taker_fee_bps: float = 5.0
+    scanner_rebalance: str = "daily"
+    output_dir: str = "reports"
+    ranking_metric: str = "risk_adjusted"
+
+    def __post_init__(self) -> None:
+        costs = (
+            self.initial_cash,
+            self.slippage_bps,
+            self.spread_bps,
+            self.commission,
+            self.crypto_taker_fee_bps,
+        )
+        if self.initial_cash <= 0 or any(not math.isfinite(value) or value < 0 for value in costs):
+            raise ValueError("Invalid backtest cash or cost configuration")
+        if self.scanner_rebalance not in {"daily", "weekly", "monthly"}:
+            raise ValueError("backtest.scanner_rebalance must be daily, weekly, or monthly")
+        if self.ranking_metric not in {"risk_adjusted", "sharpe", "sortino", "calmar"}:
+            raise ValueError("Unsupported backtest ranking metric")
 
 
 @dataclass(frozen=True)
@@ -70,103 +197,40 @@ class RiskLimits:
 class EngineConfig:
     timeframe: str = "5m"
     higher_timeframe: str = "1h"
-    minimum_signal_score: float = 65.0
     warmup_bars: int = 250
-    decision_db_path: str = "data/runtime/parayabuck.sqlite3"
     ai_logging_enabled: bool = True
     ai_log_path: str = "data/runtime/ai_decisions"
     prediction_horizon_bars: int = 48
-    trading_enabled: bool = True
-    equity_trading_enabled: bool = True
-    crypto_trading_enabled: bool = False
-    live_trading_enabled: bool = False
     manage_external_positions: bool = False
-    reject_stale_signals: bool = True
     event_grace_seconds: float = 5.0
     data_finalization_grace_seconds: float = 2.0
-    maximum_signal_age_seconds: float = 20.0
     maximum_queue_age_seconds: float = 30.0
-    # Reserved fields: accepted from settings.yaml for schema stability but
-    # not consumed by the engine. The runtime uses account_poll_interval /
-    # maximum_account_age_for_entry and the universe scanners' own ratios.
-    account_snapshot_ttl_seconds: float = 15.0
     account_poll_interval_seconds: float = 15.0
     maximum_account_age_for_entry_seconds: float = 30.0
     event_queue_capacity: int = 1024
-    max_new_positions_per_cycle: int = 1
     crypto_stop_limit_offset_bps: float = 25.0
     crypto_emergency_exit_bps: float = 75.0
     crypto_stop_cancel_timeout_seconds: float = 5.0
     crypto_stop_cancel_poll_interval_seconds: float = 0.25
-    # Reserved: no longer used to select a strategy profile (strategies are
-    # composed in code), but kept for settings.yaml compatibility.
-    strategy_profile: str = "equity_5m_v1"
-    allow_short: bool = False
-    # Reserved: the runtime does not currently filter crypto bars by volume
-    # ratio; kept for settings.yaml compatibility.
-    crypto_min_volume_bar_ratio: float = 0.5
-    # Deprecated compatibility field. Setting it true is always an error: a
-    # boolean can never substitute for immutable validation/holdout evidence.
-    approve_portfolio_strategy: bool = False
-    approval_manifest_paths: tuple[str, ...] = ()
-    approval_manifest_checksums: tuple[str, ...] = ()
-    rollout_state_path: str = "data/runtime/portfolio_rollout.json"
-    runtime_source_revision: str = ""
-    allow_live_portfolio_execution: bool = False
-    live_portfolio_dollar_cap: float = 0.0
-    live_operator_approval_path: str = ""
-    live_operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
-    risk: RiskLimits = field(default_factory=RiskLimits)
 
     def __post_init__(self) -> None:
         supported = set(TIMEFRAME_MINUTES)
         if self.timeframe not in supported or self.higher_timeframe not in supported:
             raise ValueError("Unsupported timeframe")
-        if (
-            not math.isfinite(self.minimum_signal_score)
-            or not 0 <= self.minimum_signal_score <= 100
-            or self.warmup_bars < 50
-        ):
-            raise ValueError("Invalid signal score or warmup")
+        if self.warmup_bars < 50:
+            raise ValueError("warmup_bars must be at least 50")
         if self.prediction_horizon_bars <= 0:
             raise ValueError("prediction_horizon_bars must be positive")
-        if not math.isfinite(self.crypto_min_volume_bar_ratio) or not (
-            0 < self.crypto_min_volume_bar_ratio <= 1
-        ):
-            raise ValueError("crypto_min_volume_bar_ratio must be in (0, 1]")
         if TIMEFRAME_MINUTES[self.higher_timeframe] < TIMEFRAME_MINUTES[self.timeframe]:
             raise ValueError("higher_timeframe must not be smaller than timeframe")
         if self.timing_capacity_values_invalid:
             raise ValueError("Engine timing and capacity values must be positive")
-        if self.max_new_positions_per_cycle != 1:
-            raise ValueError("Only one new position per cycle is supported")
-        if self.approve_portfolio_strategy:
-            raise ValueError(
-                "approve_portfolio_strategy is deprecated and unsafe; configure "
-                "approval_manifest_paths plus approval_manifest_checksums"
-            )
-        if len(self.approval_manifest_paths) != len(self.approval_manifest_checksums):
-            raise ValueError("Every approval manifest requires one expected checksum")
-        if len(set(self.approval_manifest_paths)) != len(self.approval_manifest_paths):
-            raise ValueError("Approval manifest paths must be unique")
-        if self.live_portfolio_dollar_cap < 0:
-            raise ValueError("live_portfolio_dollar_cap must be non-negative")
-        if self.allow_live_portfolio_execution and self.live_portfolio_dollar_cap <= 0:
-            raise ValueError("Live portfolio execution requires a positive dollar cap")
-        if self.allow_live_portfolio_execution and not self.live_operator_approval_path:
-            raise ValueError("Live portfolio execution requires a signed operator approval")
-        if self.live_trading_enabled:
-            # Strategy selection happens in code; the legacy profile field is
-            # accepted for settings.yaml compatibility but never validated.
-            if self.trading_enabled and (self.timeframe != "5m" or self.higher_timeframe != "1h"):
-                raise ValueError("Broker trading is enabled only for the validated 5m + 1h profile")
 
     @property
     def timing_capacity_values_invalid(self) -> bool:
         float_values = (
             self.event_grace_seconds,
             self.data_finalization_grace_seconds,
-            self.maximum_signal_age_seconds,
             self.maximum_queue_age_seconds,
             self.account_poll_interval_seconds,
             self.maximum_account_age_for_entry_seconds,
@@ -179,7 +243,6 @@ class EngineConfig:
             any(not math.isfinite(value) for value in float_values)
             or self.event_grace_seconds <= 0
             or self.data_finalization_grace_seconds < 0
-            or self.maximum_signal_age_seconds <= 0
             or self.maximum_queue_age_seconds <= 0
             or self.account_poll_interval_seconds <= 0
             or self.maximum_account_age_for_entry_seconds <= 0
@@ -212,7 +275,6 @@ class AppConfig:
 
 @dataclass(frozen=True)
 class AlpacaConfig:
-    paper: bool = True
     data_delayed: bool = False
     stock_feed: str = "iex"
 
@@ -265,8 +327,12 @@ class EquityUniverseConfig:
     enabled: bool = True
     dynamic_selection_enabled: bool = True
     maximum_stream_symbols: int = 30
+    target_shortlist: int = 300
     reference_symbols: tuple[str, ...] = ("SPY",)
     fallback_trade_symbols: tuple[str, ...] = ()
+    allowlist_symbols: tuple[str, ...] = ()
+    denylist_symbols: tuple[str, ...] = ()
+    supported_exchanges: tuple[str, ...] = ("NASDAQ", "NYSE", "ARCA", "AMEX", "BATS")
     inverse_trade_symbols: tuple[str, ...] = ()
     candidate_universe_path: str = "data/universe/equity_candidates.json"
     active_universe_path: str = "data/runtime/active_equity_universe.json"
@@ -285,12 +351,18 @@ class EquityUniverseConfig:
         inverse = tuple(
             canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols
         )
+        allowlist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.allowlist_symbols)
+        denylist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.denylist_symbols)
         if len(set(references)) != len(references):
             raise ValueError("universe.equity.reference_symbols must be unique")
         if len(set(fallback)) != len(fallback):
             raise ValueError("universe.equity.fallback_trade_symbols must be unique")
         if len(set(inverse)) != len(inverse):
             raise ValueError("universe.equity.inverse_trade_symbols must be unique")
+        if len(set(allowlist)) != len(allowlist) or len(set(denylist)) != len(denylist):
+            raise ValueError("Equity allowlist and denylist symbols must be unique")
+        if set(allowlist) & set(denylist):
+            raise ValueError("Equity allowlist and denylist must not overlap")
         if not set(inverse).issubset(fallback):
             raise ValueError(
                 "universe.equity.inverse_trade_symbols must be included in fallback_trade_symbols"
@@ -306,6 +378,10 @@ class EquityUniverseConfig:
             )
         if self.maximum_stream_symbols <= 0:
             raise ValueError("universe.equity.maximum_stream_symbols must be positive")
+        if self.target_shortlist < self.maximum_stream_symbols:
+            raise ValueError("universe.equity.target_shortlist must cover the active universe")
+        if not self.supported_exchanges:
+            raise ValueError("universe.equity.supported_exchanges must not be empty")
         if self.active_universe_max_age_hours <= 0:
             raise ValueError("universe.equity.active_universe_max_age_hours must be positive")
         if len(references) > self.maximum_stream_symbols:
@@ -313,6 +389,13 @@ class EquityUniverseConfig:
         object.__setattr__(self, "reference_symbols", references)
         object.__setattr__(self, "fallback_trade_symbols", fallback)
         object.__setattr__(self, "inverse_trade_symbols", inverse)
+        object.__setattr__(self, "allowlist_symbols", allowlist)
+        object.__setattr__(self, "denylist_symbols", denylist)
+        object.__setattr__(
+            self,
+            "supported_exchanges",
+            tuple(dict.fromkeys(exchange.upper() for exchange in self.supported_exchanges)),
+        )
 
     @property
     def configured_stream_symbols(self) -> tuple[str, ...]:
@@ -380,6 +463,8 @@ class CryptoUniverseConfig:
     maximum_stream_symbols: int = 12
     pinned_symbols: tuple[str, ...] = ()
     trade_symbols: tuple[str, ...] = ()
+    allowlist_symbols: tuple[str, ...] = ()
+    denylist_symbols: tuple[str, ...] = ()
     active_universe_path: str = "data/runtime/active_crypto_universe.json"
     active_universe_max_age_hours: float = 12.0
     require_scanner_config_digest_match: bool = True
@@ -390,10 +475,16 @@ class CryptoUniverseConfig:
 
         symbols = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.trade_symbols)
         pinned = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.pinned_symbols)
+        allowlist = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.allowlist_symbols)
+        denylist = tuple(canonical_symbol(item, Market.CRYPTO) for item in self.denylist_symbols)
         if len(set(symbols)) != len(symbols):
             raise ValueError("universe.crypto.trade_symbols must be canonical and unique")
         if len(set(pinned)) != len(pinned):
             raise ValueError("universe.crypto.pinned_symbols must be canonical and unique")
+        if len(set(allowlist)) != len(allowlist) or len(set(denylist)) != len(denylist):
+            raise ValueError("Crypto allowlist and denylist symbols must be unique")
+        if set(allowlist) & set(denylist):
+            raise ValueError("Crypto allowlist and denylist must not overlap")
         if any(symbol.split("/", 1)[1] != "USD" for symbol in (*symbols, *pinned)):
             raise ValueError("Crypto universe symbols must use USD quote pairs")
         if any(is_stablecoin_pair(symbol) for symbol in (*symbols, *pinned)):
@@ -408,6 +499,8 @@ class CryptoUniverseConfig:
             raise ValueError("universe.crypto.active_universe_max_age_hours must be positive")
         object.__setattr__(self, "trade_symbols", symbols)
         object.__setattr__(self, "pinned_symbols", pinned)
+        object.__setattr__(self, "allowlist_symbols", allowlist)
+        object.__setattr__(self, "denylist_symbols", denylist)
 
 
 @dataclass(frozen=True)
@@ -419,9 +512,14 @@ class UniverseConfig:
 @dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     alpaca: AlpacaConfig = field(default_factory=AlpacaConfig)
     data: DataConfig = field(default_factory=DataConfig)
     universe: UniverseConfig = field(default_factory=UniverseConfig)
+    strategy: StrategyConfig = field(default_factory=StrategyConfig)
+    risk: RiskLimits = field(default_factory=RiskLimits)
+    backtest: BacktestConfig = field(default_factory=BacktestConfig)
+    live: LiveConfig = field(default_factory=LiveConfig)
     engine: EngineConfig = field(default_factory=EngineConfig)
 
     def __post_init__(self) -> None:
@@ -442,10 +540,16 @@ class Config:
                 "Configured equity reference and fallback symbols exceed "
                 "universe.equity.maximum_stream_symbols"
             )
-        if self.engine.equity_trading_enabled and not self.universe.equity.enabled:
-            raise ValueError("equity_trading_enabled requires universe.equity.enabled")
-        if self.engine.crypto_trading_enabled and not self.universe.crypto.enabled:
-            raise ValueError("crypto_trading_enabled requires universe.crypto.enabled")
+        if self.strategy.equity.enabled and not self.universe.equity.enabled:
+            raise ValueError("Enabled equity strategy requires universe.equity.enabled")
+        if self.strategy.crypto.enabled and not self.universe.crypto.enabled:
+            raise ValueError("Enabled crypto strategy requires universe.crypto.enabled")
+        if self.runtime.mode == RuntimeMode.LIVE and not self.live.enabled:
+            raise ValueError("runtime.mode=live requires live.enabled=true")
+        if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:
+            raise ValueError("live.enabled=true requires runtime.mode=live")
+        if self.runtime.mode == RuntimeMode.BACKTEST:
+            raise ValueError("runtime.mode=backtest is CLI-only; use disabled, paper, or live")
 
     @property
     def symbols(self) -> tuple[str, ...]:
@@ -462,11 +566,11 @@ def load_config(config_path: str | None = None) -> Config:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    runtime_raw = dict(raw.get("runtime", {}))
+    if "mode" in runtime_raw:
+        runtime_raw["mode"] = RuntimeMode(str(runtime_raw["mode"]).lower())
     engine_raw = dict(raw.get("engine", {}))
-    for tuple_field in ("approval_manifest_paths", "approval_manifest_checksums"):
-        if tuple_field in engine_raw:
-            engine_raw[tuple_field] = tuple(engine_raw[tuple_field])
-    risk = RiskLimits(**engine_raw.pop("risk", {}))
+    risk = RiskLimits(**dict(raw.get("risk", {})))
     universe_raw = raw.get("universe")
     if universe_raw is None:
         legacy = tuple(raw.get("symbols", ()))
@@ -488,7 +592,6 @@ def load_config(config_path: str | None = None) -> Config:
             enabled=bool(crypto),
             trade_symbols=tuple(crypto),
         )
-        engine_raw.setdefault("equity_trading_enabled", bool(equities))
     else:
         universe_dict = dict(universe_raw)
         equity_raw = dict(universe_dict.get("equity", {}))
@@ -497,25 +600,75 @@ def load_config(config_path: str | None = None) -> Config:
         crypto_raw = dict(universe_dict.get("crypto", {}))
         scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
         crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
+    strategy_raw = dict(raw.get("strategy", {}))
+    default_strategy = StrategyConfig()
+    equity_strategy = MarketStrategyConfig(
+        **{
+            **{
+                "enabled": (
+                    default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled
+                ),
+                "name": default_strategy.equity.name,
+                "timeframe": default_strategy.equity.timeframe,
+                "maximum_allocation": default_strategy.equity.maximum_allocation,
+                "parameters": default_strategy.equity.parameters,
+            },
+            **dict(strategy_raw.get("equity", {})),
+        }
+    )
+    crypto_strategy = MarketStrategyConfig(
+        **{
+            **{
+                "enabled": (
+                    default_strategy.crypto.enabled
+                    if "crypto" in strategy_raw
+                    else crypto_universe.enabled
+                ),
+                "name": default_strategy.crypto.name,
+                "timeframe": default_strategy.crypto.timeframe,
+                "maximum_allocation": default_strategy.crypto.maximum_allocation,
+                "parameters": default_strategy.crypto.parameters,
+            },
+            **dict(strategy_raw.get("crypto", {})),
+        }
+    )
+    alpaca_raw = dict(raw.get("alpaca", {}))
+    legacy_paper = alpaca_raw.pop("paper", None)
+    if legacy_paper is False:
+        raise ValueError(
+            "alpaca.paper=false is unsafe and no longer supported; configure "
+            "runtime.mode=live plus live.enabled and live safety controls"
+        )
     return Config(
         app=AppConfig(**raw.get("app", {})),
-        alpaca=AlpacaConfig(**raw.get("alpaca", {})),
+        runtime=RuntimeConfig(**runtime_raw),
+        alpaca=AlpacaConfig(**alpaca_raw),
         data=DataConfig(**raw.get("data", {})),
         universe=UniverseConfig(equity=equity, crypto=crypto_universe),
-        engine=EngineConfig(risk=risk, **engine_raw),
+        strategy=StrategyConfig(equity_strategy, crypto_strategy),
+        risk=risk,
+        backtest=BacktestConfig(**dict(raw.get("backtest", {}))),
+        live=LiveConfig(**dict(raw.get("live", {}))),
+        engine=EngineConfig(**engine_raw),
     )
 
 
 __all__ = [
     "AlpacaConfig",
     "AppConfig",
+    "BacktestConfig",
     "Config",
     "CryptoScannerConfig",
     "CryptoUniverseConfig",
     "DataConfig",
     "EngineConfig",
     "EquityUniverseConfig",
+    "LiveConfig",
+    "MarketStrategyConfig",
     "RiskLimits",
+    "RuntimeConfig",
+    "RuntimeMode",
+    "StrategyConfig",
     "UniverseConfig",
     "load_config",
 ]

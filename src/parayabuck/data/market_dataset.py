@@ -1,4 +1,4 @@
-"""Point-in-time research bundle with separate signal and execution series."""
+"""Point-in-time backtest bundle with separate signal and execution series."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class DatasetLineage:
 
 @dataclass(frozen=True)
 class MarketDataset:
-    """Immutable dual-price-series input for portfolio research.
+    """Immutable dual-price-series input for portfolio simulation.
 
     ``signal_bars`` may be total-return adjusted. ``executable_bars`` must be
     raw/split-aware prices suitable for quantity, cash, and fill accounting.

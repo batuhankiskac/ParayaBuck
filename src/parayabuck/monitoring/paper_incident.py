@@ -43,10 +43,21 @@ class BrokerPositionRecord:
 
 
 @dataclass(frozen=True)
+class BrokerCashActivityRecord:
+    activity_id: str
+    activity_type: str
+    net_amount: float
+    occurred_at: datetime
+
+
+@dataclass(frozen=True)
 class PaperIncidentSnapshot:
     orders: tuple[BrokerOrderRecord, ...]
     fills: tuple[BrokerFillRecord, ...]
     positions: tuple[BrokerPositionRecord, ...] = ()
+    cash_activities: tuple[BrokerCashActivityRecord, ...] = ()
+    starting_equity: float | None = None
+    ending_equity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,10 @@ class PaperIncidentReport:
     unrealized_pnl: float
     slippage: float
     fees: float
+    net_transfers: float
+    expected_ending_equity: float | None
+    actual_ending_equity: float | None
+    equity_residual: float | None
     manual_exit_order_ids: tuple[str, ...]
     external_position_symbols: tuple[str, ...]
     broker_orders_missing_locally: tuple[str, ...]
@@ -130,11 +145,29 @@ class PaperIncidentReconciler:
             for position in local_positions
             if str(position.get("status") or "") == "closed"
         ]
+        fees = sum(fill.fee for fill in snapshot.fills)
+        net_transfers = sum(activity.net_amount for activity in snapshot.cash_activities)
+        expected_ending = (
+            snapshot.starting_equity + realized + unrealized - fees + net_transfers
+            if snapshot.starting_equity is not None
+            else None
+        )
+        residual = (
+            snapshot.ending_equity - expected_ending
+            if snapshot.ending_equity is not None and expected_ending is not None
+            else None
+        )
         return PaperIncidentReport(
             realized_pnl=round(realized, 8),
             unrealized_pnl=round(unrealized, 8),
             slippage=round(slippage, 8),
-            fees=round(sum(fill.fee for fill in snapshot.fills), 8),
+            fees=round(fees, 8),
+            net_transfers=round(net_transfers, 8),
+            expected_ending_equity=(
+                round(expected_ending, 8) if expected_ending is not None else None
+            ),
+            actual_ending_equity=snapshot.ending_equity,
+            equity_residual=round(residual, 8) if residual is not None else None,
             manual_exit_order_ids=manual,
             external_position_symbols=tuple(
                 sorted(
@@ -188,6 +221,16 @@ class PaperIncidentReconciler:
                 for fill in snapshot.fills
             ],
             "positions": [asdict(position) for position in snapshot.positions],
+            "cash_activities": [
+                {
+                    **asdict(activity),
+                    "activity_id": token(activity.activity_id),
+                    "occurred_at": activity.occurred_at.isoformat(),
+                }
+                for activity in snapshot.cash_activities
+            ],
+            "starting_equity": snapshot.starting_equity,
+            "ending_equity": snapshot.ending_equity,
             "expected_incident": expected,
         }
 
@@ -264,6 +307,7 @@ def _fill_accounting(
 
 
 __all__ = [
+    "BrokerCashActivityRecord",
     "BrokerFillRecord",
     "BrokerOrderRecord",
     "BrokerPositionRecord",

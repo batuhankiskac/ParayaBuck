@@ -74,7 +74,7 @@ class ExitPolicy:
 
     Dynamic stops are calculated from completed bars and become active on the
     following bar.  The policy deliberately excludes partial take-profit rules
-    so the first research surface stays small and auditable.
+    so the portfolio surface stays small and auditable.
     """
 
     policy_id: str = "fixed"

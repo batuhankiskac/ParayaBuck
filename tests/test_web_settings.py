@@ -121,8 +121,8 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
 
     saved = yaml.safe_load(manager.config_path.read_text())
     assert saved["engine"]["timeframe"] == "5m"
-    assert saved["engine"]["risk"]["daily_loss_limit_pct"] == 0.02
-    assert saved["engine"]["risk"]["max_drawdown_pct"] == 0.12
+    assert saved["risk"]["daily_loss_limit_pct"] == 0.02
+    assert saved["risk"]["max_drawdown_pct"] == 0.12
     assert manager.stop_calls == 1
     assert manager.start_calls == 1
     assert result["engine_restarted"] is True
@@ -434,7 +434,7 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(
     assert status["scanner"]["crypto_status"] == "success"
 
 
-def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
+def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
     from parayabuck.web import server
 
     class StaticManager:
@@ -452,12 +452,12 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
         def is_paper_mode(self) -> bool:
             return True
 
-    def make_config(approved: bool) -> object:
-        engine = type(
-            "Engine",
-            (),
-            {"approval_manifest_paths": ("approval.json",) if approved else ()},
+    def make_config(enabled: bool) -> object:
+        selection = type(
+            "Selection", (), {"enabled": enabled, "name": "equity_dynamic_trend_1d_v1"}
         )()
+        disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
+        strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
         universe = type(
             "Universe",
             (),
@@ -470,16 +470,16 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
                 "crypto": type("Crypto", (), {"active_universe_path": "crypto.json"})(),
             },
         )()
-        return type("Config", (), {"engine": engine, "universe": universe})()
+        return type("Config", (), {"strategy": strategy, "universe": universe})()
 
     monkeypatch.setattr(server, "manager", StaticManager())
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
-    approved = asyncio.run(server.get_status())
-    assert approved["strategy_status"] == "configured_manifest_pending_runtime_verification"
+    configured = asyncio.run(server.get_status())
+    assert configured["strategy_status"] == "configured:equity/equity_dynamic_trend_1d_v1"
 
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
-    research_only = asyncio.run(server.get_status())
-    assert research_only["strategy_status"] == "research_only_no_approved_portfolio_strategy"
+    disabled = asyncio.run(server.get_status())
+    assert disabled["strategy_status"] == "configured:"
 
 
 def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
@@ -507,5 +507,5 @@ def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(server, "load_config", _raise)
     status = asyncio.run(server.get_status())
-    assert status["strategy_status"] == "research_only_no_approved_portfolio_strategy"
+    assert status["strategy_status"] == "configuration_error"
     assert status["scanner"] == {"last_run_at": None, "status": "error"}

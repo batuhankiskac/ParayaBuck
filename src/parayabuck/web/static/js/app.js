@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const marketStatusText = document.getElementById('marketStatusText');
+    const operationsDetail = document.getElementById('operationsDetail');
 
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -75,12 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const backtestStateBadge = document.getElementById('backtestStateBadge');
     const backtestSummary = document.getElementById('backtestSummary');
     const backtestProgress = document.getElementById('backtestProgress');
-    const btProfile = document.getElementById('btProfile');
+    const btStrategy = document.getElementById('btStrategy');
     const btMarket = document.getElementById('btMarket');
     const btYears = document.getElementById('btYears');
     const btDays = document.getElementById('btDays');
     const btMaxSymbols = document.getElementById('btMaxSymbols');
     const btSymbols = document.getElementById('btSymbols');
+    const btParameters = document.getElementById('btParameters');
 
     // Settings Modal Elements
     const settingsModal = document.getElementById('settingsModal');
@@ -265,12 +267,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `${statusData.runtime.state}${statusData.runtime.healthy ? '' : ' (degraded)'}`
             : statusData.state;
         const strategyStatus = statusData.strategy_status || '';
-        const strategyLabel =
-            strategyStatus.startsWith('approved:')
-                ? 'STRATEJİ ONAYLI'
-                : strategyStatus === 'configured_manifest_pending_runtime_verification'
-                  ? 'MANİFEST DOĞRULAMA BEKLİYOR'
-                  : 'ARAŞTIRMA MODU (strateji onayı yok)';
+        const strategyLabel = strategyStatus.startsWith('configured:')
+            ? `STRATEJİ ${strategyStatus.slice('configured:'.length)}`
+            : strategyStatus === 'configuration_error'
+              ? 'STRATEJİ AYAR HATASI'
+              : strategyStatus || 'STRATEJİ DEVRE DIŞI';
         const scanner = statusData.scanner || {};
         const equityScanner = scanner.equity_status || scanner.status || 'not_run';
         const cryptoScanner = scanner.crypto_status || 'not_run';
@@ -284,6 +285,26 @@ document.addEventListener('DOMContentLoaded', () => {
             `Aday ${statusData.candidate_universe_size ?? 0} · ` +
             `Scanner E ${equityScanner} · C ${cryptoScanner}` +
             (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
+        const universe = statusData.universe || {};
+        const operations = statusData.operations || {};
+        operationsDetail.textContent = JSON.stringify({
+            mode: statusData.paper ? 'PAPER' : 'LIVE',
+            strategies: statusData.runtime?.strategies || [],
+            active_universe: {
+                equity: universe.equity?.symbols || [],
+                crypto: universe.crypto?.symbols || []
+            },
+            universe_scores: {
+                equity: universe.equity?.scores || {},
+                crypto: universe.crypto?.scores || {}
+            },
+            pending_orders: operations.pending_orders || [],
+            recent_fills: operations.recent_fills || [],
+            last_decision: operations.last_decision || null,
+            last_scanner_refresh: scanner.last_run_at || null,
+            last_reconciliation: statusData.runtime?.last_reconciliation_at || null,
+            risk_status: statusData.runtime?.circuit_breaker_reason || 'ready'
+        }, null, 2);
     };
 
     let statusRefreshInFlight = false;
@@ -765,9 +786,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     backtestRunBtn.addEventListener('click', async () => {
         const daysValue = parseInt(btDays.value, 10);
+        let parameters = {};
+        if (btParameters.value.trim()) {
+            try {
+                parameters = JSON.parse(btParameters.value);
+            } catch (_) {
+                alert('Parametreler geçerli bir JSON nesnesi olmalıdır.');
+                return;
+            }
+            if (!parameters || Array.isArray(parameters) || typeof parameters !== 'object') {
+                alert('Parametreler bir JSON nesnesi olmalıdır.');
+                return;
+            }
+        }
         const payload = {
-            profile: btProfile.value,
             market: btMarket.value,
+            strategy: btStrategy.value.trim(),
+            parameters,
             years: parseInt(btYears.value, 10) || 3,
             days: Number.isNaN(daysValue) ? 90 : daysValue,
             max_symbols: parseInt(btMaxSymbols.value, 10) || 40,
@@ -781,7 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await responsePayload(res);
             if (!res.ok) throw new Error(data.detail || 'Backtest başlatılamadı');
-            appendLog(`Backtest başladı: ${data.run_id} (${btProfile.value} profil, ${payload.days || payload.years * 365} gün)`, 'info');
+            appendLog(`Backtest başladı: ${data.run_id} (${payload.market}, ${payload.days || payload.years * 365} gün)`, 'info');
             await refreshBacktestStatus();
         } catch (err) {
             alert('Hata: ' + err.message);

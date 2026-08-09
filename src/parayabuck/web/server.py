@@ -37,12 +37,7 @@ log = get_logger("parayabuck.web.server")
 
 
 class BacktestManager:
-    """Runs the backtest CLI in a background thread with live progress.
-
-    Every run writes its own output directory (``reports/<run_id>/``) with
-    ``report.json`` and ``run_manifest.json``, so the web UI can show the same
-    manifest the CLI produces and reproduce any run.
-    """
+    """Runs the production-strategy backtest CLI in a background thread."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -56,7 +51,7 @@ class BacktestManager:
         self.error: str | None = None
         self.progress: list[str] = []
         self.summary: dict[str, Any] | None = None
-        self.manifest: dict[str, Any] | None = None
+        self.universe: dict[str, Any] | None = None
 
     @property
     def is_running(self) -> bool:
@@ -74,7 +69,7 @@ class BacktestManager:
             self.finished_at = None
             self.error = None
             self.summary = None
-            self.manifest = None
+            self.universe = None
             self.progress = []
             argv = self._build_argv(payload, self.output_dir)
             self._thread = self._thread_factory(
@@ -85,35 +80,30 @@ class BacktestManager:
 
     @staticmethod
     def _build_argv(payload: dict[str, Any], output_dir: str) -> list[str]:
-        argv = ["--no-monte-carlo", "--output-dir", output_dir]
-        profile = payload.get("profile") or "auto"
-        if profile != "auto":
-            argv += ["--profile", profile]
-        market = payload.get("market") or "both"
+        argv = ["backtest", "--output-dir", output_dir]
+        market = payload.get("market") or "equity"
         argv += ["--market", market]
         symbols = (payload.get("symbols") or "").strip()
         if symbols:
             argv += ["--symbols", symbols]
-        days = payload.get("days")
-        if days:
-            argv += ["--days", str(int(days))]
-        else:
-            argv += ["--years", str(int(payload.get("years") or 10))]
+        end = datetime.now(UTC)
+        days = int(payload.get("days") or 0)
+        start = end - timedelta(days=days or int(payload.get("years") or 5) * 365)
+        argv += ["--start", start.date().isoformat(), "--end", end.date().isoformat()]
         max_symbols = payload.get("max_symbols")
         if max_symbols:
-            argv += ["--max-symbols", str(int(max_symbols))]
-        adjustment = payload.get("adjustment")
-        if adjustment in {"raw", "splits", "all"}:
-            argv += ["--adjustment", adjustment]
-        # The legacy signal simulation is retired; the web backtest page is a
-        # data-quality/legacy fixture run and must say so in its manifest.
-        argv.append("--legacy-fixture-mode")
+            argv += ["--candidate-limit", str(int(max_symbols))]
+        strategy = (payload.get("strategy") or "").strip()
+        if strategy:
+            argv += ["--strategy", strategy]
+        for name, value in sorted(dict(payload.get("parameters") or {}).items()):
+            argv += ["--param", f"{name}={json.dumps(value)}"]
         return argv
 
     def _run(self, argv: list[str]) -> None:
         import contextlib
 
-        from parayabuck.backtest import cli as backtest_cli
+        from parayabuck import cli as product_cli
 
         error: str | None = None
         try:
@@ -121,7 +111,7 @@ class BacktestManager:
                 contextlib.redirect_stdout(self._stream()),
                 contextlib.redirect_stderr(self._stream()),
             ):
-                backtest_cli.main(argv)
+                product_cli.main(argv)
         except SystemExit as exc:
             # The CLI raises SystemExit(reason) for user-facing failures;
             # losing the reason hides the actual error behind a generic
@@ -151,10 +141,11 @@ class BacktestManager:
 
     def _finish(self, error: str | None) -> None:
         summary: dict[str, Any] | None = None
-        manifest: dict[str, Any] | None = None
+        universe: dict[str, Any] | None = None
         if error is None:
-            report_path = Path(self.output_dir) / "report.json"
-            manifest_path = Path(self.output_dir) / "run_manifest.json"
+            reports = sorted(Path(self.output_dir).glob("*/report.json"))
+            report_path = reports[-1] if reports else Path(self.output_dir) / "report.json"
+            universe_path = report_path.with_name("universe.json")
             try:
                 if not report_path.exists():
                     error = (
@@ -164,15 +155,15 @@ class BacktestManager:
                 else:
                     raw = json.loads(report_path.read_text(encoding="utf-8"))
                     summary = raw.get("summary")
-                if manifest_path.exists():
-                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if universe_path.exists():
+                    universe = json.loads(universe_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 error = f"Rapor okunamadı: {exc}"
         with self._lock:
             self.state = "error" if error else "done"
             self.error = error
             self.summary = summary
-            self.manifest = manifest
+            self.universe = universe
             self.finished_at = datetime.now(UTC).isoformat()
         log.info("Web backtest finished: %s (%s)", self.run_id, self.state)
 
@@ -188,7 +179,7 @@ class BacktestManager:
                 "error": self.error,
                 "progress": list(self.progress[-60:]),
                 "summary": self.summary,
-                "manifest": self.manifest,
+                "universe": self.universe,
             }
 
 
@@ -247,7 +238,13 @@ class EngineManager:
                     return cached[1]
                 with open(self.config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f) or {}
-                paper = bool(cfg.get("alpaca", {}).get("paper", True))
+                runtime_mode = cfg.get("runtime", {}).get("mode")
+                if runtime_mode is None and cfg.get("alpaca", {}).get("paper") is False:
+                    # A legacy live configuration must never be silently shown
+                    # as paper while the operator migrates to runtime.mode.
+                    paper = False
+                else:
+                    paper = str(runtime_mode or "paper").lower() != "live"
                 self._paper_mode_cache = (modified_ns, paper)
                 return paper
         except (OSError, yaml.YAMLError) as exc:
@@ -271,11 +268,15 @@ class EngineManager:
                 else {}
             )
             app_config = (raw or {}).get("app", {})
-            alpaca_config = (raw or {}).get("alpaca", {})
+            runtime_config = (raw or {}).get("runtime", {})
+            legacy_live = (
+                "mode" not in runtime_config and (raw or {}).get("alpaca", {}).get("paper") is False
+            )
             key, secret = self.get_credentials()
             return bool(
                 app_config.get("auto_start_engine", True)
-                and alpaca_config.get("paper", True)
+                and str(runtime_config.get("mode", "paper")).lower() == "paper"
+                and not legacy_live
                 and key
                 and secret
                 and not self.security_warning
@@ -359,15 +360,19 @@ class EngineManager:
 
         old_app = dict(cfg_raw.get("app", {}))
 
-        cfg_raw.setdefault("alpaca", {})["paper"] = payload.paper_mode
+        cfg_raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper_mode else "live"
+        live = cfg_raw.setdefault("live", {})
+        live["enabled"] = not payload.paper_mode
+        live["hard_dollar_cap"] = payload.live_dollar_cap
+        live["operator_approval_path"] = payload.live_operator_approval_path
         engine = cfg_raw.setdefault("engine", {})
-        risk = engine.setdefault("risk", {})
+        strategy = cfg_raw.setdefault("strategy", {})
+        risk = cfg_raw.setdefault("risk", {})
         risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
         risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         engine["timeframe"] = payload.timeframe
-        engine["equity_trading_enabled"] = payload.equity_trading_enabled
-        engine["crypto_trading_enabled"] = payload.crypto_trading_enabled
-        engine["live_trading_enabled"] = payload.live_trading_enabled
+        strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
+        strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
         cfg_raw["app"] = {
             "host": payload.host.strip() or "127.0.0.1",
             "port": payload.port,
@@ -441,12 +446,13 @@ class EngineManager:
             if warning:
                 raise ValueError(warning)
             cfg = load_config(str(self.config_path))
-            if not cfg.alpaca.paper and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+            live_mode = cfg.runtime.mode.value == "live"
+            if live_mode and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise ValueError(
                     "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
                     "before starting the application."
                 )
-            if not cfg.alpaca.paper:
+            if live_mode:
                 self._require_valid_live_arm(key, secret, consume=True)
             from parayabuck.runtime import EngineRuntime
 
@@ -464,7 +470,7 @@ class EngineManager:
                     self.engine_state = "running"
             if interrupted:
                 raise RuntimeError("Engine start was interrupted by a stop request")
-            if not cfg.alpaca.paper:
+            if live_mode:
                 self.invalidate_live_arming()
             log.info("ParayaBuck engine started from Web UI")
 
@@ -589,6 +595,8 @@ class EngineManager:
                                 "direction": "LONG" if p.qty > 0 else "SHORT",
                                 "qty": abs(p.qty),
                                 "avg_price": p.avg_price,
+                                "current_price": p.current_price,
+                                "market_value": p.market_value,
                                 "unrealized_pnl": p.unrealized_pnl,
                                 "ownership": p.ownership,
                                 "protection_state": (
@@ -621,6 +629,9 @@ class EngineManager:
                     "unrealized_pnl": acct.unrealized_pnl,
                     "fees": acct.fees,
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
+                    "gross_exposure": sum(
+                        position.market_value for position in acct.positions if not position.is_flat
+                    ),
                     "positions": positions_list,
                     "account_suffix": getattr(self.broker, "account_suffix", ""),
                     "snapshot_at": datetime.now(UTC).isoformat(),
@@ -752,7 +763,7 @@ class EngineManager:
     @staticmethod
     def _digest_config(raw: dict[str, Any], *, paper: bool) -> str:
         raw = json.loads(json.dumps(raw))
-        raw.setdefault("alpaca", {})["paper"] = paper
+        raw.setdefault("runtime", {})["mode"] = "paper" if paper else "live"
         encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
@@ -984,6 +995,8 @@ class SettingsPayload(BaseModel):
     equity_trading_enabled: bool = True
     crypto_trading_enabled: bool = False
     live_trading_enabled: bool = False
+    live_dollar_cap: float = Field(0.0, ge=0)
+    live_operator_approval_path: str = ""
 
 
 class ModePayload(BaseModel):
@@ -999,13 +1012,13 @@ class WebSocketTicketPayload(BaseModel):
 
 
 class BacktestPayload(BaseModel):
-    profile: Literal["auto", "live", "deep"] = "auto"
-    market: Literal["both", "equity", "crypto"] = "both"
-    years: int = Field(10, ge=1, le=30)
+    market: Literal["equity", "crypto"] = "equity"
+    strategy: str = ""
+    parameters: dict[str, object] = Field(default_factory=dict)
+    years: int = Field(5, ge=1, le=30)
     days: int = Field(0, ge=0)
     symbols: str = ""
     max_symbols: int = Field(40, ge=1, le=100)
-    adjustment: Literal["raw", "splits", "all"] = "splits"
 
 
 # Routes
@@ -1021,6 +1034,12 @@ async def serve_index(request: Request) -> HTMLResponse:
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Process liveness endpoint; runtime readiness remains visible in /api/status."""
+    return {"status": "ok"}
 
 
 @app.get("/api/control-token")
@@ -1042,18 +1061,18 @@ async def get_status() -> dict[str, Any]:
         "active_equity_symbol_count": 0,
         "active_crypto_symbol_count": 0,
     }
-    # One config load per status poll: the YAML is parsed once and shared by
-    # the approval state and the universe section below.
+    # One config load per status poll: strategy and universe state share it.
     cfg: Any = None
     try:
         cfg = load_config(str(manager.config_path))
-        result["strategy_status"] = (
-            "configured_manifest_pending_runtime_verification"
-            if cfg.engine.approval_manifest_paths
-            else "research_only_no_approved_portfolio_strategy"
-        )
+        configured = []
+        if cfg.strategy.equity.enabled:
+            configured.append(f"equity/{cfg.strategy.equity.name}")
+        if cfg.strategy.crypto.enabled:
+            configured.append(f"crypto/{cfg.strategy.crypto.name}")
+        result["strategy_status"] = "configured:" + ",".join(configured)
     except Exception:
-        result["strategy_status"] = "research_only_no_approved_portfolio_strategy"
+        result["strategy_status"] = "configuration_error"
         # Mirror the universe-section failure state so consumers never see a
         # missing scanner key when the config cannot be loaded.
         result["scanner"] = {"last_run_at": None, "status": "error"}
@@ -1062,6 +1081,9 @@ async def get_status() -> dict[str, Any]:
         health = runtime.health()
         result["runtime"] = asdict(health)
         result["strategy_status"] = health.strategy_status
+        repository = getattr(runtime, "_portfolio_repository", None)
+        if repository is not None:
+            result["operations"] = repository.operations_snapshot()
         result["active_equity_symbol_count"] = len(
             getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
         )
@@ -1112,6 +1134,18 @@ async def get_status() -> dict[str, Any]:
                 "scanner_version": active_payload.get("scanner_version"),
                 "crypto_last_run_at": active_crypto_payload.get("selection_timestamp"),
                 "crypto_scanner_version": active_crypto_payload.get("scanner_version"),
+            }
+            result["universe"] = {
+                "equity": {
+                    "symbols": list(active_payload.get("selected_symbols", ())),
+                    "scores": active_payload.get("score_breakdown", {}),
+                    "eliminated": active_payload.get("eliminated", {}),
+                },
+                "crypto": {
+                    "symbols": list(active_crypto_payload.get("selected_symbols", ())),
+                    "scores": active_crypto_payload.get("score_breakdown", {}),
+                    "eliminated": active_crypto_payload.get("eliminated", {}),
+                },
             }
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             result["scanner"] = {"last_run_at": None, "status": "error"}
@@ -1180,7 +1214,9 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
         if manager.config_path.exists():
             with open(manager.config_path, encoding="utf-8") as f:
                 raw = yaml.safe_load(f) or {}
-        raw.setdefault("alpaca", {})["paper"] = payload.paper
+        raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper else "live"
+        if not payload.paper:
+            raw.setdefault("live", {})["enabled"] = True
         _atomic_write(
             manager.config_path,
             yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),
@@ -1242,18 +1278,22 @@ async def get_settings() -> dict[str, Any]:
         "secret_key": "",
         "has_credentials": bool(key and secret),
         "paper_mode": manager.is_paper_mode(),
-        "daily_loss_limit_pct": 100
-        * cfg_raw.get("engine", {}).get("risk", {}).get("daily_loss_limit_pct", 0.015),
-        "max_drawdown_pct": 100
-        * cfg_raw.get("engine", {}).get("risk", {}).get("max_drawdown_pct", 0.10),
+        "daily_loss_limit_pct": 100 * cfg_raw.get("risk", {}).get("daily_loss_limit_pct", 0.015),
+        "max_drawdown_pct": 100 * cfg_raw.get("risk", {}).get("max_drawdown_pct", 0.10),
         "timeframe": cfg_raw.get("engine", {}).get("timeframe", "5m"),
         "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
         "port": cfg_raw.get("app", {}).get("port", 8000),
         "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
         "log_level": cfg_raw.get("app", {}).get("log_level", "INFO"),
-        "equity_trading_enabled": cfg_raw.get("engine", {}).get("equity_trading_enabled", True),
-        "crypto_trading_enabled": cfg_raw.get("engine", {}).get("crypto_trading_enabled", False),
-        "live_trading_enabled": cfg_raw.get("engine", {}).get("live_trading_enabled", False),
+        "equity_trading_enabled": cfg_raw.get("strategy", {})
+        .get("equity", {})
+        .get("enabled", True),
+        "crypto_trading_enabled": cfg_raw.get("strategy", {})
+        .get("crypto", {})
+        .get("enabled", False),
+        "live_trading_enabled": cfg_raw.get("live", {}).get("enabled", False),
+        "live_dollar_cap": cfg_raw.get("live", {}).get("hard_dollar_cap", 0.0),
+        "live_operator_approval_path": cfg_raw.get("live", {}).get("operator_approval_path", ""),
     }
 
 
@@ -1328,7 +1368,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Settings could not be saved") from None
 
 
-# Backtest (tek tık) — same CLI, background thread, manifest per run
+# Backtest (tek tık) — same production CLI and historical universe policy.
 @app.post("/api/backtest/run")
 async def run_backtest(payload: BacktestPayload) -> dict[str, Any]:
     try:

@@ -13,6 +13,7 @@ import requests
 from dotenv import load_dotenv
 
 from parayabuck.monitoring.paper_incident import (
+    BrokerCashActivityRecord,
     BrokerFillRecord,
     BrokerOrderRecord,
     BrokerPositionRecord,
@@ -109,10 +110,56 @@ def _all_fills(key: str, secret: str) -> list[dict[str, object]]:
     )
 
 
-def _snapshot(key: str, secret: str, after: str | None) -> PaperIncidentSnapshot:
+def _all_cash_activities(
+    key: str,
+    secret: str,
+    after: str | None,
+) -> list[dict[str, object]]:
+    """Read external cash movements that affect the equity reconciliation."""
+    page_token: str | None = None
+    seen: set[str] = set()
+    result: list[dict[str, object]] = []
+    while True:
+        params: dict[str, object] = {
+            "activity_types": "CSD,CSW,ACATC,JNLC",
+            "direction": "desc",
+            "page_size": 100,
+        }
+        if after:
+            params["after"] = after
+        if page_token:
+            params["page_token"] = page_token
+        page = _get("/account/activities", key=key, secret=secret, params=params)
+        if not isinstance(page, list):
+            raise RuntimeError("Alpaca cash activities response is not a list")
+        records = [item for item in page if isinstance(item, dict)]
+        for item in records:
+            identifier = str(item.get("id", ""))
+            if identifier and identifier not in seen:
+                seen.add(identifier)
+                result.append(item)
+        if len(records) < 100:
+            break
+        next_token = str(records[-1].get("id", "")) if records else ""
+        if not next_token or next_token == page_token:
+            raise RuntimeError("Alpaca cash activity pagination did not advance")
+        page_token = next_token
+    return sorted(result, key=lambda item: _instant(item.get("date")))
+
+
+def _snapshot(
+    key: str,
+    secret: str,
+    after: str | None,
+    *,
+    starting_equity: float | None = None,
+    net_transfers: float = 0.0,
+) -> PaperIncidentSnapshot:
     raw_orders = _all_orders(key, secret, after)
     raw_fills = _all_fills(key, secret)
+    raw_cash_activities = _all_cash_activities(key, secret, after)
     raw_positions = _get("/positions", key=key, secret=secret)
+    raw_account = _get("/account", key=key, secret=secret)
     if not isinstance(raw_positions, list):
         raise RuntimeError("Alpaca positions response is not a list")
     orders = tuple(
@@ -153,7 +200,36 @@ def _snapshot(key: str, secret: str, after: str | None) -> PaperIncidentSnapshot
         for item in raw_positions
         if isinstance(item, dict)
     )
-    return PaperIncidentSnapshot(orders, fills, positions)
+    ending_equity = (
+        float(str(raw_account.get("equity", 0) or 0)) if isinstance(raw_account, dict) else None
+    )
+    cash_activities = tuple(
+        BrokerCashActivityRecord(
+            activity_id=str(item.get("id", "")),
+            activity_type=str(item.get("activity_type", "")),
+            net_amount=float(str(item.get("net_amount", 0) or 0)),
+            occurred_at=_instant(item.get("date")),
+        )
+        for item in raw_cash_activities
+        if isinstance(item, dict)
+    )
+    if net_transfers:
+        cash_activities += (
+            BrokerCashActivityRecord(
+                activity_id="operator-supplied-net-transfers",
+                activity_type="operator_adjustment",
+                net_amount=net_transfers,
+                occurred_at=datetime.now(UTC),
+            ),
+        )
+    return PaperIncidentSnapshot(
+        orders,
+        fills,
+        positions,
+        cash_activities,
+        starting_equity,
+        ending_equity,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -161,6 +237,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", required=True)
     parser.add_argument("--after", help="ISO-8601 start time for order history")
+    parser.add_argument(
+        "--starting-equity",
+        type=float,
+        help="Broker equity at --after; enables the end-to-end equity residual",
+    )
+    parser.add_argument(
+        "--net-transfers",
+        type=float,
+        default=0.0,
+        help="Optional adjustment added to cash movements downloaded from Alpaca",
+    )
     parser.add_argument("--report", default="reports/paper_incident/report.json")
     parser.add_argument("--fixture", default="tests/fixtures/paper_incident_replay.json")
     parser.add_argument(
@@ -173,7 +260,13 @@ def main(argv: list[str] | None = None) -> int:
     secret = os.getenv("ALPACA_SECRET_KEY", "")
     if not key or not secret:
         raise SystemExit("ALPACA_API_KEY and ALPACA_SECRET_KEY are required")
-    snapshot = _snapshot(key, secret, args.after)
+    snapshot = _snapshot(
+        key,
+        secret,
+        args.after,
+        starting_equity=args.starting_equity,
+        net_transfers=args.net_transfers,
+    )
     reconciler = PaperIncidentReconciler()
     report = reconciler.reconcile(snapshot, args.database)
     report_path = Path(args.report)

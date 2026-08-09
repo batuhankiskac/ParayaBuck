@@ -6,6 +6,7 @@ from parayabuck.monitoring.ai_journal import (
 from parayabuck.monitoring.async_journal import AsyncDecisionJournal
 from parayabuck.monitoring.journal import DecisionJournal
 from parayabuck.monitoring.paper_incident import (
+    BrokerCashActivityRecord,
     BrokerFillRecord,
     BrokerOrderRecord,
     BrokerPositionRecord,
@@ -19,6 +20,7 @@ __all__ = [
     "AsyncDecisionJournal",
     "DecisionJournal",
     "BrokerFillRecord",
+    "BrokerCashActivityRecord",
     "BrokerOrderRecord",
     "BrokerPositionRecord",
     "PaperIncidentReconciler",

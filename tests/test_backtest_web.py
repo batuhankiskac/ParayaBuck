@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from typing import Any
 
 import pytest
@@ -10,13 +11,13 @@ from parayabuck.web import server
 
 def _payload(**overrides: Any) -> dict[str, Any]:
     values = {
-        "profile": "live",
         "market": "equity",
+        "strategy": "equity_dynamic_trend_1d_v1",
+        "parameters": {"top_n": 8},
         "years": 3,
         "days": 90,
         "symbols": "AAPL",
         "max_symbols": 5,
-        "adjustment": "splits",
     }
     values.update(overrides)
     return values
@@ -46,13 +47,14 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
     assert response["run_id"].startswith("web-")
 
     argv = thread_box["kwargs"]["args"][0]
-    assert argv[0] == "--no-monte-carlo"
+    assert argv[0] == "backtest"
     assert "--output-dir" in argv
     assert argv[argv.index("--output-dir") + 1] == server.backtest_manager.output_dir
-    assert "--profile" in argv and argv[argv.index("--profile") + 1] == "live"
-    assert "--days" in argv and argv[argv.index("--days") + 1] == "90"
+    assert "--start" in argv and "--end" in argv
     assert "--market" in argv and argv[argv.index("--market") + 1] == "equity"
     assert "--symbols" in argv and argv[argv.index("--symbols") + 1] == "AAPL"
+    assert "--strategy" in argv
+    assert "--param" in argv and argv[argv.index("--param") + 1] == "top_n=8"
 
     status = asyncio.run(server.backtest_status())
     assert status["state"] in {"running", "idle", "done"}
@@ -79,11 +81,14 @@ def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:
 def test_backtest_argv_zero_days_uses_years() -> None:
     manager = server.BacktestManager()
     argv = manager._build_argv(
-        {"profile": "auto", "market": "equity", "days": 0, "years": 10},
+        {"market": "equity", "days": 0, "years": 10},
         "/tmp/out",
     )
-    assert "--days" not in argv
-    assert "--years" in argv and argv[argv.index("--years") + 1] == "10"
+    assert "--start" in argv and "--end" in argv
+    start = argv[argv.index("--start") + 1]
+    end = argv[argv.index("--end") + 1]
+    window_days = (date.fromisoformat(end) - date.fromisoformat(start)).days
+    assert 3648 <= window_days <= 3650
 
 
 def test_backtest_manager_stream_captures_progress() -> None:

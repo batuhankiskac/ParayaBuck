@@ -1,11 +1,11 @@
-"""Approval-gated portfolio decision runtime shared by shadow and broker stages."""
+"""Production portfolio decision runtime shared by paper and live execution."""
 
 from __future__ import annotations
 
 import json
 import threading
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -14,22 +14,16 @@ from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
+    PortfolioRiskLimits,
     PortfolioRiskOverlay,
     RiskOverlayDecision,
     TargetToOrderPlanner,
 )
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import rebalance_policy_for
-from parayabuck.portfolio.approval import (
-    CURRENT_GATE_POLICY_VERSION,
-    ApprovalError,
-    ApprovalStage,
-    StrategyApprovalManifest,
-)
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.storage import SQLiteStore
-from parayabuck.utils.io import atomic_write
 
 
 class PortfolioRuntimeBroker(Protocol):
@@ -43,35 +37,37 @@ class PortfolioRuntimeBroker(Protocol):
 
 
 class PortfolioDecisionService:
-    """Build a strategy context exclusively from finalized approved bars."""
+    """Build a strategy context exclusively from finalized point-in-time bars."""
 
     def build_context(
         self,
-        manifest: StrategyApprovalManifest,
         strategy: PortfolioStrategy,
         history: dict[str, list[Bar]],
         account: AccountSnapshot,
         decision_timestamp: datetime,
+        *,
+        universe: object | None,
+        universe_version: str,
     ) -> PortfolioContext:
         if any(
             not series or series[-1].timestamp != decision_timestamp for series in history.values()
         ):
-            raise ApprovalError("Portfolio context requires a complete closed-bar batch")
+            raise ValueError("Portfolio context requires a complete closed-bar batch")
         return PortfolioContext(
             decision_timestamp=decision_timestamp,
-            market=manifest.market,
+            market=strategy.market,
             timeframe=strategy.timeframe,
             history={symbol: tuple(series) for symbol, series in history.items()},
-            universe=None,
-            universe_version="approval:" + manifest.checksum[:12],
+            universe=universe,
+            universe_version=universe_version,
             equity=account.equity,
             holdings={
                 canonical_symbol(position.symbol, position.market): position.qty
                 for position in account.positions
-                if position.market == manifest.market
+                if position.market == strategy.market
             },
             prices={symbol: series[-1].close for symbol, series in history.items()},
-            benchmark_symbol="BTC/USD" if manifest.market == Market.CRYPTO else "SPY",
+            benchmark_symbol="BTC/USD" if strategy.market == Market.CRYPTO else "SPY",
         )
 
 
@@ -98,15 +94,15 @@ class PortfolioStateRepository:
                 """
                 CREATE TABLE IF NOT EXISTS portfolio_runtime_sessions (
                     session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL,
-                    manifest_checksum TEXT NOT NULL, stage TEXT NOT NULL,
+                    configuration_digest TEXT NOT NULL, mode TEXT NOT NULL,
                     started_at TEXT NOT NULL, ended_at TEXT, status TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS portfolio_decisions (
                     decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
-                    manifest_checksum TEXT NOT NULL, decision_timestamp TEXT NOT NULL,
+                    configuration_digest TEXT NOT NULL, decision_timestamp TEXT NOT NULL,
                     market TEXT NOT NULL, strategy_name TEXT NOT NULL,
                     target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
-                    UNIQUE(manifest_checksum, decision_timestamp, market),
+                    UNIQUE(configuration_digest, decision_timestamp, market),
                     FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
                 );
                 CREATE TABLE IF NOT EXISTS portfolio_orders (
@@ -133,6 +129,30 @@ class PortfolioStateRepository:
                 );
                 """
             )
+            session_columns = {
+                str(row[1])
+                for row in self.store.connection.execute(
+                    "PRAGMA table_info(portfolio_runtime_sessions)"
+                )
+            }
+            if "manifest_checksum" in session_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN "
+                    "manifest_checksum TO configuration_digest"
+                )
+            if "stage" in session_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN stage TO mode"
+                )
+            decision_columns = {
+                str(row[1])
+                for row in self.store.connection.execute("PRAGMA table_info(portfolio_decisions)")
+            }
+            if "manifest_checksum" in decision_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_decisions RENAME COLUMN "
+                    "manifest_checksum TO configuration_digest"
+                )
             columns = {
                 str(row[1])
                 for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")
@@ -147,18 +167,18 @@ class PortfolioStateRepository:
                     "ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL"
                 )
 
-    def begin_session(self, account_id: str, manifest_checksum: str, stage: ApprovalStage) -> str:
+    def begin_session(self, account_id: str, configuration_digest: str, mode: str) -> str:
         session_id = uuid4().hex
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
                 """INSERT INTO portfolio_runtime_sessions(
-                    session_id, account_id, manifest_checksum, stage, started_at, status
+                    session_id, account_id, configuration_digest, mode, started_at, status
                 ) VALUES (?, ?, ?, ?, ?, 'running')""",
                 (
                     session_id,
                     account_id,
-                    manifest_checksum,
-                    stage.value,
+                    configuration_digest,
+                    mode,
                     datetime.now(UTC).isoformat(),
                 ),
             )
@@ -172,34 +192,34 @@ class PortfolioStateRepository:
                 (datetime.now(UTC).isoformat(), status, session_id),
             )
 
-    def has_decision(self, manifest_checksum: str, timestamp: datetime, market: Market) -> bool:
+    def has_decision(self, configuration_digest: str, timestamp: datetime, market: Market) -> bool:
         with self.store.lock:
             row = self.store.connection.execute(
                 """SELECT 1 FROM portfolio_decisions
-                   WHERE manifest_checksum = ? AND decision_timestamp = ? AND market = ?""",
-                (manifest_checksum, timestamp.isoformat(), market.value),
+                   WHERE configuration_digest = ? AND decision_timestamp = ? AND market = ?""",
+                (configuration_digest, timestamp.isoformat(), market.value),
             ).fetchone()
         return row is not None
 
     def record_decision(
         self,
         session_id: str,
-        manifest_checksum: str,
+        configuration_digest: str,
         target: TargetPortfolio,
         risk: RiskOverlayDecision,
         market: Market,
     ) -> str:
-        decision_id = _decision_id(manifest_checksum, target.decision_timestamp, market)
+        decision_id = _decision_id(configuration_digest, target.decision_timestamp, market)
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_decisions(
-                    decision_id, session_id, manifest_checksum, decision_timestamp,
+                    decision_id, session_id, configuration_digest, decision_timestamp,
                     market, strategy_name, target_json, risk_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     decision_id,
                     session_id,
-                    manifest_checksum,
+                    configuration_digest,
                     target.decision_timestamp.isoformat(),
                     market.value,
                     target.strategy_name,
@@ -361,119 +381,147 @@ class PortfolioStateRepository:
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
 
+    def managed_symbols(self) -> set[str]:
+        """Symbols with portfolio-order lineage, used to pin broker positions."""
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                "SELECT DISTINCT symbol FROM portfolio_orders"
+            ).fetchall()
+        return {str(row[0]) for row in rows}
+
+    def operations_snapshot(self) -> dict[str, object]:
+        with self.store.lock:
+            last_decision = self.store.connection.execute(
+                """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
+                   FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"""
+            ).fetchone()
+            pending = self.store.connection.execute(
+                """SELECT client_order_id, symbol, market, side, quantity, status, created_at
+                   FROM portfolio_orders
+                   WHERE status NOT IN ('filled', 'canceled', 'cancelled', 'rejected', 'expired')
+                   ORDER BY created_at DESC LIMIT 25"""
+            ).fetchall()
+            fills = self.store.connection.execute(
+                """SELECT activity_id, client_order_id, occurred_at, quantity, price, fee,
+                          realized_pnl, unrealized_pnl, slippage
+                   FROM portfolio_fills ORDER BY occurred_at DESC LIMIT 25"""
+            ).fetchall()
+        return {
+            "last_decision": (
+                {
+                    "timestamp": str(last_decision[0]),
+                    "strategy": str(last_decision[1]),
+                    "market": str(last_decision[2]),
+                    "target": json.loads(str(last_decision[3])),
+                    "risk": json.loads(str(last_decision[4])),
+                }
+                if last_decision is not None
+                else None
+            ),
+            "pending_orders": [
+                dict(
+                    zip(
+                        (
+                            "client_order_id",
+                            "symbol",
+                            "market",
+                            "side",
+                            "quantity",
+                            "status",
+                            "created_at",
+                        ),
+                        row,
+                        strict=True,
+                    )
+                )
+                for row in pending
+            ],
+            "recent_fills": [
+                dict(
+                    zip(
+                        (
+                            "activity_id",
+                            "client_order_id",
+                            "occurred_at",
+                            "quantity",
+                            "price",
+                            "fee",
+                            "realized_pnl",
+                            "unrealized_pnl",
+                            "slippage",
+                        ),
+                        row,
+                        strict=True,
+                    )
+                )
+                for row in fills
+            ],
+        }
+
     def close(self) -> None:
         if self._owns_store:
             self.store.acquire()
             self.store.release()
 
 
-@dataclass(frozen=True)
-class RolloutEvidence:
-    stage: ApprovalStage
-    started_at: datetime
-    fills_by_market: dict[str, int]
-    duplicate_orders: int = 0
-    state_divergences: int = 0
-    unresolved_reconciliations: int = 0
-    operator_live_approval: bool = False
-    live_dollar_cap: float = 0.0
-
-
-class RolloutController:
-    def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
-
-    def save(self, evidence: RolloutEvidence) -> None:
-        payload = asdict(evidence)
-        payload["stage"] = evidence.stage.value
-        payload["started_at"] = evidence.started_at.isoformat()
-        atomic_write(self.path, json.dumps(payload, indent=2, sort_keys=True))
-
-    def load(self) -> RolloutEvidence | None:
-        if not self.path.exists():
-            return None
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        return RolloutEvidence(
-            stage=ApprovalStage(str(raw["stage"])),
-            started_at=datetime.fromisoformat(str(raw["started_at"])),
-            fills_by_market={
-                str(key): int(value) for key, value in dict(raw.get("fills_by_market", {})).items()
-            },
-            duplicate_orders=int(raw.get("duplicate_orders", 0)),
-            state_divergences=int(raw.get("state_divergences", 0)),
-            unresolved_reconciliations=int(raw.get("unresolved_reconciliations", 0)),
-            operator_live_approval=bool(raw.get("operator_live_approval", False)),
-            live_dollar_cap=float(raw.get("live_dollar_cap", 0.0)),
-        )
-
-    def can_advance(self, evidence: RolloutEvidence, now: datetime) -> tuple[bool, str]:
-        if any(
-            (
-                evidence.duplicate_orders,
-                evidence.state_divergences,
-                evidence.unresolved_reconciliations,
-            )
-        ):
-            return False, "operational_incidents_present"
-        elapsed = now - evidence.started_at
-        if evidence.stage == ApprovalStage.SHADOW:
-            return (elapsed >= timedelta(days=30), "shadow_requires_30_days")
-        if evidence.stage == ApprovalStage.PAPER:
-            enough_fills = bool(evidence.fills_by_market) and all(
-                count >= 50 for count in evidence.fills_by_market.values()
-            )
-            return (
-                elapsed >= timedelta(days=90) and enough_fills,
-                "paper_requires_90_days_and_50_fills_per_sleeve",
-            )
-        if evidence.stage == ApprovalStage.CANARY:
-            allowed = evidence.operator_live_approval and evidence.live_dollar_cap > 0
-            return allowed, "live_requires_operator_approval_and_positive_cap"
-        return False, "live_has_no_automatic_advance"
-
-
 class PortfolioRuntime:
     def __init__(
         self,
-        manifest: StrategyApprovalManifest,
+        strategy: PortfolioStrategy,
+        symbols: tuple[str, ...],
         broker: PortfolioRuntimeBroker,
         repository: PortfolioStateRepository,
         *,
+        mode: str,
+        maximum_allocation: float,
+        risk_limits: PortfolioRiskLimits | None = None,
+        universe: object | None = None,
+        universe_version: str = "runtime",
         account_id: str = "unknown",
-        allow_live_execution: bool = False,
         live_dollar_cap: float = 0.0,
     ) -> None:
-        if not manifest.checksum or manifest.checksum != manifest.calculated_checksum():
-            raise ApprovalError("PortfolioRuntime requires a signed approval manifest")
-        if manifest.approval_status != "green" or manifest.archived:
-            raise ApprovalError("PortfolioRuntime requires an active GREEN manifest")
-        if manifest.gate_policy_version != CURRENT_GATE_POLICY_VERSION:
-            raise ApprovalError("PortfolioRuntime refuses a stale gate policy")
-        if manifest.expires_at <= datetime.now(UTC):
-            raise ApprovalError("PortfolioRuntime refuses an expired manifest")
-        self.manifest = manifest
-        self.strategy: PortfolioStrategy = manifest.instantiate_strategy()
+        if mode not in {"paper", "live"}:
+            raise ValueError("PortfolioRuntime mode must be paper or live")
+        if not symbols:
+            raise ValueError("PortfolioRuntime requires an active universe")
+        if not 0 < maximum_allocation <= 1:
+            raise ValueError("maximum_allocation must be in (0, 1]")
+        if mode == "live" and live_dollar_cap <= 0:
+            raise ValueError("Live portfolio execution requires a positive hard dollar cap")
+        self.strategy = strategy
+        self.market = strategy.market
+        self.symbols = tuple(
+            dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in symbols)
+        )
         self.broker = broker
         self.repository = repository
-        self.allow_live_execution = allow_live_execution
+        self.mode = mode
+        self.maximum_allocation = maximum_allocation
         self.live_dollar_cap = live_dollar_cap
+        self.universe = universe
+        self.universe_version = universe_version
         self.account_id = account_id
         self.policy = rebalance_policy_for(self.strategy)
         self.decision_service = PortfolioDecisionService()
-        self.risk_overlay = PortfolioRiskOverlay()
+        self.risk_overlay = PortfolioRiskOverlay(risk_limits)
         self.planner = TargetToOrderPlanner()
-        self.history: dict[str, list[Bar]] = {symbol: [] for symbol in manifest.symbols}
+        self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
         self.previous_timestamp: datetime | None = None
-        self.session_id = repository.begin_session(
-            account_id, manifest.checksum, manifest.approved_stage
+        self.configuration_digest = configuration_digest(
+            strategy,
+            self.symbols,
+            mode,
+            maximum_allocation,
+            universe_version,
         )
+        self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
 
     def seed(self, bars: list[Bar]) -> None:
         """Seed only closed, approved bars without producing a decision."""
         for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol)):
             symbol = canonical_symbol(bar.symbol, bar.market)
             if (
-                bar.market != self.manifest.market
+                bar.market != self.market
                 or bar.timeframe != self.strategy.timeframe
                 or symbol not in self.history
             ):
@@ -489,7 +537,7 @@ class PortfolioRuntime:
         eligible = [
             bar
             for bar in bars
-            if bar.market == self.manifest.market
+            if bar.market == self.market
             and bar.timeframe == self.strategy.timeframe
             and canonical_symbol(bar.symbol, bar.market) in self.history
         ]
@@ -501,8 +549,6 @@ class PortfolioRuntime:
             for bar in eligible
             if bar.timestamp == timestamp
         }
-        if batch_symbols != set(self.manifest.symbols):
-            return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_batch")
         for bar in sorted(eligible, key=lambda item: (item.timestamp, item.symbol)):
             symbol = canonical_symbol(bar.symbol, bar.market)
             series = self.history[symbol]
@@ -510,14 +556,29 @@ class PortfolioRuntime:
                 series.append(bar)
         scheduled = self.policy.is_period_start(self.previous_timestamp, timestamp)
         self.previous_timestamp = timestamp
-        if self.repository.has_decision(self.manifest.checksum, timestamp, self.manifest.market):
+        if self.repository.has_decision(self.configuration_digest, timestamp, self.market):
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
-        if any(
-            len(self.history[symbol]) < self.strategy.minimum_history_bars
-            for symbol in self.manifest.symbols
-        ):
+        ready_history = {
+            symbol: series
+            for symbol, series in self.history.items()
+            if len(series) >= self.strategy.minimum_history_bars
+            and series[-1].timestamp == timestamp
+        }
+        minimum_ready = max(1, min(len(self.symbols), self.strategy.param_int("top_n", 1)))
+        if len(ready_history) < minimum_ready:
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
         account = self.broker.account()
+        managed = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if position.market == self.market
+            and not position.is_flat
+            and position.ownership == "managed"
+        }
+        if not managed.issubset(batch_symbols):
+            return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
+        if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
+            return PortfolioRuntimeResult(None, None, None, (), (), "benchmark_not_ready")
         persisted_high_water = self.repository.high_water(self.account_id)
         account = replace(
             account,
@@ -525,11 +586,12 @@ class PortfolioRuntime:
         )
         self.repository.update_high_water(self.account_id, account.equity)
         context = self.decision_service.build_context(
-            self.manifest,
             self.strategy,
-            self.history,
+            ready_history,
             account,
             timestamp,
+            universe=self.universe,
+            universe_version=self.universe_version,
         )
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
@@ -540,7 +602,7 @@ class PortfolioRuntime:
                     position.market_value / account.equity
                 )
                 for position in account.positions
-                if position.market == self.manifest.market and not position.is_flat
+                if position.market == self.market and not position.is_flat
             }
             reducing_weights = tuple(
                 TargetWeight(
@@ -558,47 +620,41 @@ class PortfolioRuntime:
                 metadata={**raw_target.metadata, "intermediate_risk_reduction": True},
             )
         if any(
-            canonical_symbol(weight.symbol, self.manifest.market) not in self.manifest.symbols
+            canonical_symbol(weight.symbol, self.market) not in self.symbols
             for weight in raw_target.weights
         ):
-            raise ApprovalError("Strategy emitted a symbol outside the approved universe")
-        maximum_allocation = self.manifest.maximum_allocation
-        if self.manifest.approved_stage in {
-            ApprovalStage.CANARY,
-            ApprovalStage.LIVE,
-        }:
-            if not self.allow_live_execution or self.live_dollar_cap <= 0:
-                raise ApprovalError("Canary/live execution is disabled without operator cap")
+            raise ValueError("Strategy emitted a symbol outside the active universe")
+        maximum_allocation = self.maximum_allocation
+        if self.mode == "live":
             maximum_allocation = min(
                 maximum_allocation, self.live_dollar_cap / max(1.0, account.equity)
             )
         risk = self.risk_overlay.apply(
             raw_target,
             account,
-            market=self.manifest.market,
-            approved_symbols=self.manifest.symbols,
+            market=self.market,
+            approved_symbols=self.symbols,
             maximum_allocation=maximum_allocation,
-            stage=self.manifest.approved_stage,
+            mode=self.mode,
         )
         rules = {
-            symbol: self.broker.asset_trading_rules(symbol, self.manifest.market)
-            for symbol in self.manifest.symbols
+            symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols
         }
         planned = self.planner.plan(
             risk.target,
             account,
-            market=self.manifest.market,
+            market=self.market,
             prices=context.prices,
             rules=rules,
-            approved_symbols=self.manifest.symbols,
+            approved_symbols=self.symbols,
             open_order_symbols=self.broker.open_portfolio_order_symbols(),
         )
         decision_id = self.repository.record_decision(
             self.session_id,
-            self.manifest.checksum,
+            self.configuration_digest,
             risk.target,
             risk,
-            self.manifest.market,
+            self.market,
         )
         orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
@@ -606,9 +662,6 @@ class PortfolioRuntime:
         )
         submitted: list[str] = []
         for order in orders:
-            if self.manifest.approved_stage == ApprovalStage.SHADOW:
-                self.repository.record_order(order, "shadow_planned")
-                continue
             self.repository.record_order(order, "submitting")
             try:
                 broker_order_id = self.broker.submit_portfolio_order(order)
@@ -623,9 +676,7 @@ class PortfolioRuntime:
             risk,
             orders,
             tuple(submitted),
-            "shadow_planned"
-            if self.manifest.approved_stage == ApprovalStage.SHADOW
-            else "submitted",
+            "submitted",
         )
 
     def close(self, status: str = "stopped") -> None:
@@ -640,12 +691,36 @@ def _decision_id(checksum: str, timestamp: datetime, market: Market) -> str:
     ).hexdigest()[:24]
 
 
+def configuration_digest(
+    strategy: PortfolioStrategy,
+    symbols: tuple[str, ...],
+    mode: str,
+    maximum_allocation: float,
+    universe_version: str,
+) -> str:
+    import hashlib
+
+    payload = json.dumps(
+        {
+            "strategy": strategy.name,
+            "version": strategy.version,
+            "parameters": strategy.parameter_tuple(),
+            "symbols": symbols,
+            "mode": mode,
+            "maximum_allocation": maximum_allocation,
+            "universe_version": universe_version,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 __all__ = [
+    "configuration_digest",
     "PortfolioRuntime",
     "PortfolioRuntimeBroker",
     "PortfolioRuntimeResult",
     "PortfolioDecisionService",
     "PortfolioStateRepository",
-    "RolloutController",
-    "RolloutEvidence",
 ]

@@ -65,19 +65,19 @@ def test_active_configs_do_not_reference_legacy_strategies() -> None:
 
 
 def test_cli_no_longer_exposes_legacy_strategy_options() -> None:
-    from parayabuck.backtest.cli import USAGE
+    from parayabuck.cli import _parser
 
-    assert "--sweep" not in USAGE
-    assert "--experiment-spec" not in USAGE
-    assert "stock_trend_pullback" not in USAGE
+    usage = _parser().format_help()
+    assert "--sweep" not in usage
+    assert "--experiment-spec" not in usage
+    assert "stock_trend_pullback" not in usage
 
 
 def test_new_strategies_are_registered() -> None:
     registered = set(supported_portfolio_strategies())
     assert {
-        "equity_etf_dual_momentum_v1",
+        "equity_dynamic_trend_1d_v1",
         "crypto_cross_sectional_momentum_1h_v1",
-        "equity_time_series_momentum_1d_v1",
     } <= registered
 
 
@@ -136,30 +136,7 @@ def test_web_backtest_payload_no_longer_carries_sweep_flags() -> None:
     assert "walk_forward_optimize" not in fields
 
 
-def test_runtime_reports_research_only_strategy_status() -> None:
+def test_runtime_reports_operational_strategy_status() -> None:
     from parayabuck.runtime import RuntimeHealth
 
-    assert "research_only" in RuntimeHealth.strategy_status
-
-
-def test_legacy_simulation_requires_fixture_flag() -> None:
-    import subprocess
-
-    repo = Path(__file__).resolve().parents[1]
-    env = {"PATH": "/usr/bin:/bin"}
-    process = subprocess.run(
-        [
-            str(repo / ".venv" / "bin" / "python"),
-            "-c",
-            (
-                "import sys; sys.argv=['run_backtest.py','--symbols','AAPL']; "
-                "from parayabuck.backtest import cli; cli.main()"
-            ),
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=repo,
-    )
-    assert process.returncode != 0
-    assert "retired" in process.stderr or "retired" in process.stdout
+    assert RuntimeHealth.strategy_status == "configured"

@@ -103,6 +103,8 @@ def _permissive_gate() -> PortfolioGate:
         minimum_oos_calendar_months=1,
         minimum_profit_factor=0.0,
         minimum_sharpe=0.0,
+        minimum_sortino=-1.0,
+        minimum_calmar=-1.0,
         maximum_drawdown=1.0,
         minimum_deflated_sharpe_probability=0.0,
         maximum_pbo=1.0,
@@ -111,6 +113,10 @@ def _permissive_gate() -> PortfolioGate:
         minimum_stress_profit_factor=0.0,
         maximum_symbol_profit_concentration=1.0,
         maximum_single_asset_weight=1.0,
+        maximum_risk_contribution=1.0,
+        minimum_benchmark_sharpe_improvement=-100.0,
+        require_positive_cash_excess=False,
+        require_risk_adjusted_benchmark=False,
         require_parameter_plateau=False,
         require_regime_diversity=False,
     )
@@ -130,12 +136,15 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate(
     frozen_id = trial_id_for(strategies[0])
     unknown_id = "f" * 16
     assert frozen_id != unknown_id
-    spec = replace(
-        _spec(), max_holdout_finalists=1, frozen_candidate_trial_id=frozen_id
-    )
+    spec = replace(_spec(), max_holdout_finalists=1, frozen_candidate_trial_id=frozen_id)
     trials = run_portfolio_experiment(
-        _bars(), spec, _factory, unlock_holdout=True,
-        validation_gate=_permissive_gate(), holdout_registry=_registry(tmp_path, "open"),
+        _bars(),
+        spec,
+        _factory,
+        unlock_holdout=True,
+        validation_gate=_permissive_gate(),
+        holdout_registry=_registry(tmp_path, "open"),
+        holdout_loader=_bars,
     )
     evaluated = [trial for trial in trials if trial.holdout_evaluations == 1]
     assert len(evaluated) == 1
@@ -144,23 +153,35 @@ def test_holdout_opens_only_for_preregistered_frozen_candidate(
     # A trial id that is not among the evaluated candidates is rejected.
     with pytest.raises(ValueError, match="not among"):
         run_portfolio_experiment(
-            _bars(), replace(spec, frozen_candidate_trial_id=unknown_id), _factory,
-            unlock_holdout=True, validation_gate=_permissive_gate(),
+            _bars(),
+            replace(spec, frozen_candidate_trial_id=unknown_id),
+            _factory,
+            unlock_holdout=True,
+            validation_gate=_permissive_gate(),
             holdout_registry=_registry(tmp_path, "unknown"),
+            holdout_loader=_bars,
         )
     # A missing preregistration is rejected too.
     with pytest.raises(ValueError, match="preregistered"):
         run_portfolio_experiment(
-            _bars(), replace(spec, frozen_candidate_trial_id=None), _factory,
-            unlock_holdout=True, validation_gate=_permissive_gate(),
+            _bars(),
+            replace(spec, frozen_candidate_trial_id=None),
+            _factory,
+            unlock_holdout=True,
+            validation_gate=_permissive_gate(),
             holdout_registry=_registry(tmp_path, "no_frozen"),
+            holdout_loader=_bars,
         )
     # Opening the holdout without a registry must refuse: it would silently
     # bypass the once-only holdout evaluation lock.
     with pytest.raises(ValueError, match="holdout_registry"):
         run_portfolio_experiment(
-            _bars(), spec, _factory, unlock_holdout=True,
+            _bars(),
+            spec,
+            _factory,
+            unlock_holdout=True,
             validation_gate=_permissive_gate(),
+            holdout_loader=_bars,
         )
     # Opening the holdout appends the holdout result only; validation folds
     # themselves must be byte-identical to the locked run.
@@ -184,11 +205,25 @@ def test_holdout_unlock_rejected_when_frozen_candidate_fails_gate(
     )
     # The strict production gate fails every synthetic candidate on sample
     # size, so the holdout must stay locked and the run must refuse.
+    loader_calls = 0
+
+    def forbidden_loader() -> list[Bar]:
+        nonlocal loader_calls
+        loader_calls += 1
+        return _bars()
+
+    registry = _registry(tmp_path, "gate")
     with pytest.raises(ValueError, match="validation gate"):
         run_portfolio_experiment(
-            _bars(), spec, _factory, unlock_holdout=True,
-            holdout_registry=_registry(tmp_path, "gate"),
+            _bars(),
+            spec,
+            _factory,
+            unlock_holdout=True,
+            holdout_registry=registry,
+            holdout_loader=forbidden_loader,
         )
+    assert loader_calls == 0
+    assert not registry.path.exists()
 
 
 def test_all_trials_share_pbo_computation() -> None:
@@ -204,9 +239,7 @@ def test_same_data_spec_seed_produce_identical_trials() -> None:
     second = run_portfolio_experiment(_bars(), spec, _factory)
     assert [
         (t.trial_id, t.median_fold_sharpe, t.calmar, t.total_rebalance_months) for t in first
-    ] == [
-        (t.trial_id, t.median_fold_sharpe, t.calmar, t.total_rebalance_months) for t in second
-    ]
+    ] == [(t.trial_id, t.median_fold_sharpe, t.calmar, t.total_rebalance_months) for t in second]
 
 
 def test_embargo_never_exceeds_fold_boundary() -> None:
@@ -276,13 +309,18 @@ def test_portfolio_gate_passes_with_full_evidence() -> None:
         stress_expectancy=1.0,
         stress_realized_pnls=(1.0,),
         gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0), ("XLE", 100.0), ("XLK", 100.0)),
-        maximum_concentration=0.4,
+        maximum_concentration=0.2,
         regime_diverse=True,
         aggregate_oos_sharpe=0.9,
+        aggregate_oos_sortino=1.2,
+        aggregate_oos_calmar=1.0,
         aggregate_oos_max_drawdown=0.05,
         aggregate_oos_return=0.3,
         neighborhood_robust=True,
         holdout_evaluations=1,
+        return_gain_loss_ratio=1.3,
+        stress_return_gain_loss_ratio=1.1,
+        maximum_risk_contribution=0.3,
     )
     decision = gate.evaluate(trial)
     assert decision.passed, decision.failures
@@ -293,15 +331,17 @@ def test_equity_and_crypto_use_distinct_gate_thresholds() -> None:
     crypto = PortfolioGate.for_market(Market.CRYPTO)
     assert equity.minimum_oos_calendar_months == 60
     assert equity.minimum_oos_positions == 0
-    assert crypto.minimum_oos_positions == 100
+    assert crypto.minimum_oos_positions == 0
+    assert crypto.minimum_oos_calendar_months == 36
     assert crypto.minimum_positive_month_ratio == 0.60
     assert equity.minimum_positive_fold_ratio == 0.60
     assert equity.maximum_drawdown == 0.10
-    assert equity.maximum_drawdown < crypto.maximum_drawdown
-    assert equity.maximum_symbol_profit_concentration == 0.30
+    assert crypto.maximum_drawdown == 0.10
+    assert equity.maximum_single_asset_weight == 0.25
+    assert equity.maximum_risk_contribution == 0.35
 
 
-def test_equity_gate_requires_profit_factor() -> None:
+def test_equity_gate_requires_return_gain_loss_ratio() -> None:
     gate = PortfolioGate.for_market(Market.EQUITY)
     from parayabuck.backtest.portfolio_experiments import PortfolioTrialResult
 
@@ -327,17 +367,22 @@ def test_equity_gate_requires_profit_factor() -> None:
         stress_expectancy=1.0,
         stress_realized_pnls=(1.0,),
         gross_profit_by_symbol=(("SPY", 100.0), ("QQQ", 100.0)),
-        maximum_concentration=0.4,
+        maximum_concentration=0.2,
         regime_diverse=True,
         aggregate_oos_sharpe=0.9,
+        aggregate_oos_sortino=1.2,
+        aggregate_oos_calmar=1.0,
         aggregate_oos_max_drawdown=0.05,
         aggregate_oos_return=0.3,
         neighborhood_robust=True,
         holdout_evaluations=1,
+        return_gain_loss_ratio=1.1,
+        stress_return_gain_loss_ratio=1.1,
+        maximum_risk_contribution=0.3,
     )
     decision = gate.evaluate(trial)
     assert not decision.passed
-    assert "profit_factor_below_gate" in decision.failures
+    assert "return_gain_loss_ratio_below_gate" in decision.failures
 
 
 def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
@@ -352,27 +397,32 @@ def test_crypto_gate_requires_fold_ratio_and_regime_diversity() -> None:
         fold_results=(),
         market=Market.CRYPTO,
         total_rebalance_months=0,
-        unique_oos_calendar_months=0,
+        unique_oos_calendar_months=40,
         closed_positions=150,
         profit_factor=1.3,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
         probability_backtest_overfitting=0.1,
-        max_drawdown=0.3,
+        max_drawdown=0.08,
         positive_fold_ratio=0.4,  # below 0.60
         positive_month_ratio=0.7,
         stress_profit_factor=1.1,
         stress_expectancy=1.0,
         stress_realized_pnls=(1.0,),
         gross_profit_by_symbol=(("BTC/USD", 100.0), ("ETH/USD", 100.0)),
-        maximum_concentration=0.4,
+        maximum_concentration=0.2,
         regime_diverse=False,  # regime diversity is required for crypto too
         aggregate_oos_sharpe=0.9,
-        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_sortino=1.2,
+        aggregate_oos_calmar=1.0,
+        aggregate_oos_max_drawdown=0.08,
         aggregate_oos_return=0.3,
         neighborhood_robust=True,
         holdout_evaluations=1,
+        return_gain_loss_ratio=1.3,
+        stress_return_gain_loss_ratio=1.1,
+        maximum_risk_contribution=0.3,
     )
     decision = gate.evaluate(trial)
     assert not decision.passed
@@ -398,14 +448,14 @@ def test_crypto_gate_passes_when_requirements_met() -> None:
         fold_results=(),
         market=Market.CRYPTO,
         total_rebalance_months=12,
-        unique_oos_calendar_months=0,
+        unique_oos_calendar_months=40,
         closed_positions=150,
         profit_factor=1.3,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
         probability_backtest_overfitting=0.1,
-        max_drawdown=0.3,
+        max_drawdown=0.08,
         positive_fold_ratio=0.8,
         positive_month_ratio=0.7,
         stress_profit_factor=1.1,
@@ -418,13 +468,18 @@ def test_crypto_gate_passes_when_requirements_met() -> None:
             ("XRP/USD", 60.0),
             ("ADA/USD", 60.0),
         ),
-        maximum_concentration=0.4,
+        maximum_concentration=0.2,
         regime_diverse=True,
         aggregate_oos_sharpe=0.9,
-        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_sortino=1.2,
+        aggregate_oos_calmar=1.0,
+        aggregate_oos_max_drawdown=0.08,
         aggregate_oos_return=0.3,
         neighborhood_robust=True,
         holdout_evaluations=1,
+        return_gain_loss_ratio=1.3,
+        stress_return_gain_loss_ratio=1.1,
+        maximum_risk_contribution=0.3,
     )
     decision = gate.evaluate(trial)
     assert decision.passed
@@ -444,14 +499,14 @@ def test_crypto_gate_honors_require_flags() -> None:
         fold_results=(),
         market=Market.CRYPTO,
         total_rebalance_months=12,
-        unique_oos_calendar_months=0,
+        unique_oos_calendar_months=40,
         closed_positions=150,
         profit_factor=1.3,
         calmar=1.0,
         expectancy=5.0,
         deflated_sharpe_probability=0.96,
         probability_backtest_overfitting=0.1,
-        max_drawdown=0.3,
+        max_drawdown=0.08,
         positive_fold_ratio=0.8,
         positive_month_ratio=0.7,
         stress_profit_factor=1.1,
@@ -464,20 +519,26 @@ def test_crypto_gate_honors_require_flags() -> None:
             ("XRP/USD", 60.0),
             ("ADA/USD", 60.0),
         ),
-        maximum_concentration=0.4,
+        maximum_concentration=0.2,
         regime_diverse=False,
         aggregate_oos_sharpe=0.9,
-        aggregate_oos_max_drawdown=0.3,
+        aggregate_oos_sortino=1.2,
+        aggregate_oos_calmar=1.0,
+        aggregate_oos_max_drawdown=0.08,
         aggregate_oos_return=0.3,
         neighborhood_robust=False,
         holdout_evaluations=1,
+        return_gain_loss_ratio=1.3,
+        stress_return_gain_loss_ratio=1.1,
+        maximum_risk_contribution=0.3,
     )
     strict = PortfolioGate.for_market(Market.CRYPTO)
     assert not strict.evaluate(PortfolioTrialResult(**base)).passed
     relaxed = PortfolioGate(
         market=Market.CRYPTO,
-        minimum_oos_positions=100,
-        maximum_drawdown=0.45,
+        minimum_oos_calendar_months=36,
+        minimum_oos_positions=0,
+        maximum_drawdown=0.10,
         minimum_positive_fold_ratio=0.60,
         minimum_positive_month_ratio=0.60,
         maximum_symbol_profit_concentration=0.30,
@@ -567,9 +628,7 @@ def test_monthly_folds_are_contiguous_partitions_of_one_continuous_run() -> None
     # Calendar-month boundaries, strictly increasing, no overlaps or gaps.
     months = [(fold.start_date[:7], fold.end_date[:7]) for fold in folds]
     assert all(start <= end for start, end in months)
-    assert all(
-        previous[1] < current[0] for previous, current in zip(months, months[1:])
-    )
+    assert all(previous[1] < current[0] for previous, current in zip(months, months[1:]))
     # Exact partition of the continuous book: the folds split the run's
     # rebalances and realized events without inventing any (a liquidation at
     # every fold end would add events and break this identity).
@@ -580,11 +639,7 @@ def test_monthly_folds_are_contiguous_partitions_of_one_continuous_run() -> None
     # a synthetic 0.0 as the first return even though the book is moving.
     first = folds[0]
     curve = list(first.equity_curve)
-    returns = [
-        curve[i] / curve[i - 1] - 1
-        for i in range(1, len(curve))
-        if curve[i - 1] > 0
-    ]
+    returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
     assert returns and returns[0] != 0.0
 
 
@@ -644,6 +699,4 @@ def test_suspended_flag_round_trips_through_spec_serialization(tmp_path: Path) -
     loaded = PortfolioExperimentSpec.from_file(path)
     assert loaded.suspended is True
     assert loaded.to_dict()["suspended"] is True
-    assert PortfolioExperimentSpec.from_file(
-        path
-    ).to_dict()["suspended"] is True
+    assert PortfolioExperimentSpec.from_file(path).to_dict()["suspended"] is True

@@ -48,9 +48,7 @@ class PortfolioReport:
                 {"timestamp": timestamp, "symbols": list(symbols)}
                 for timestamp, symbols in self.universe_history
             ],
-            "monthly_returns": {
-                str(year): months for year, months in self.monthly_returns.items()
-            },
+            "monthly_returns": {str(year): months for year, months in self.monthly_returns.items()},
             "yearly_returns": [
                 {"year": year, "return_pct": return_pct, "benchmark_pct": benchmark_pct}
                 for year, return_pct, benchmark_pct in self.yearly_returns
@@ -156,9 +154,7 @@ class PortfolioReport:
         written.append(str(directory / "monthly_returns.csv"))
         with (directory / "per_symbol.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(
-                ["symbol", "market", "realized_pnl", "fees", "final_weight"]
-            )
+            writer.writerow(["symbol", "market", "realized_pnl", "fees", "final_weight"])
             for contribution in self.per_symbol:
                 writer.writerow(
                     [
@@ -181,12 +177,9 @@ class PortfolioReport:
         summary = self.summary
         lines = ["=" * 78, "PORTFOLIO BACKTEST RAPORU", "=" * 78]
         lines.append(
-            f"Strateji: {summary.get('strategy_name', '')} "
-            f"v{summary.get('strategy_version', '')}"
+            f"Strateji: {summary.get('strategy_name', '')} v{summary.get('strategy_version', '')}"
         )
-        lines.append(
-            f"Periyot: {summary.get('start_date', '')} -> {summary.get('end_date', '')}"
-        )
+        lines.append(f"Periyot: {summary.get('start_date', '')} -> {summary.get('end_date', '')}")
         lines.append("")
         lines.append("-- ÖZET --")
         lines.append(f"  Toplam Getiri : {_as_float(summary.get('total_return')) * 100:.2f}%")
@@ -195,15 +188,19 @@ class PortfolioReport:
             f"({summary.get('benchmark_symbol', '')})"
         )
         lines.append(f"  Excess        : {_as_float(summary.get('excess_return')) * 100:.2f}%")
-        lines.append(f"  Brüt / Net    : {_as_float(summary.get('gross_return')) * 100:.2f}% / "
-                     f"{_as_float(summary.get('net_return')) * 100:.2f}%")
+        lines.append(
+            f"  Brüt / Net    : {_as_float(summary.get('gross_return')) * 100:.2f}% / "
+            f"{_as_float(summary.get('net_return')) * 100:.2f}%"
+        )
         lines.append(f"  Max Drawdown  : {_as_float(summary.get('max_drawdown')) * 100:.2f}%")
         lines.append(
             f"  Sharpe / Sortino / Calmar: {_as_float(summary.get('sharpe')):.2f} / "
             f"{_as_float(summary.get('sortino')):.2f} / {_as_float(summary.get('calmar')):.2f}"
         )
-        lines.append(f"  CAGR          : {_as_float(summary.get('cagr')) * 100:.2f}%  "
-                     f"Volatilite: {_as_float(summary.get('annualized_volatility')) * 100:.2f}%")
+        lines.append(
+            f"  CAGR          : {_as_float(summary.get('cagr')) * 100:.2f}%  "
+            f"Volatilite: {_as_float(summary.get('annualized_volatility')) * 100:.2f}%"
+        )
         lines.append("")
         lines.append("-- MALİYETLER --")
         lines.append(
@@ -457,9 +454,7 @@ def _benchmark_monthly_returns(benchmark_bars: tuple[Bar, ...]) -> dict[tuple[in
 
 def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
     benchmark_bars = sorted(result.benchmark_bars, key=lambda bar: bar.timestamp)
-    benchmark_by_date: dict[datetime, float] = {
-        bar.timestamp: bar.close for bar in benchmark_bars
-    }
+    benchmark_by_date: dict[datetime, float] = {bar.timestamp: bar.close for bar in benchmark_bars}
     portfolio_by_date: dict[datetime, float] = {}
     for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True):
         portfolio_by_date[timestamp] = equity
@@ -486,9 +481,9 @@ def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
             (p - mean_portfolio) * (b - mean_benchmark)
             for p, b in zip(portfolio_window, benchmark_window, strict=True)
         ) / len(portfolio_window)
-        benchmark_variance = sum(
-            (value - mean_benchmark) ** 2 for value in benchmark_window
-        ) / len(benchmark_window)
+        benchmark_variance = sum((value - mean_benchmark) ** 2 for value in benchmark_window) / len(
+            benchmark_window
+        )
         if benchmark_variance > 0:
             betas.append(covariance / benchmark_variance)
     return tuple(betas)

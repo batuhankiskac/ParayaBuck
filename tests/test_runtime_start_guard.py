@@ -37,7 +37,8 @@ def test_runtime_start_allowed_when_strategy_approved() -> None:
             raise RuntimeError("reached broker reconcile (guard passed)")
 
     runtime = _runtime(
-        strategy_status="approved_for_live",
+        strategy_status="approved:equity/shadow",
+        approval_manifests=(object(),),
         broker=FakeBroker(),
     )
     with pytest.raises(RuntimeError, match="reached broker reconcile"):

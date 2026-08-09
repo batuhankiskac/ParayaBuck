@@ -1048,8 +1048,8 @@ async def get_status() -> dict[str, Any]:
     try:
         cfg = load_config(str(manager.config_path))
         result["strategy_status"] = (
-            "approved_for_live"
-            if cfg.engine.approve_portfolio_strategy
+            "configured_manifest_pending_runtime_verification"
+            if cfg.engine.approval_manifest_paths
             else "research_only_no_approved_portfolio_strategy"
         )
     except Exception:
@@ -1061,6 +1061,7 @@ async def get_status() -> dict[str, Any]:
     if runtime is not None and hasattr(runtime, "health"):
         health = runtime.health()
         result["runtime"] = asdict(health)
+        result["strategy_status"] = health.strategy_status
         result["active_equity_symbol_count"] = len(
             getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
         )
@@ -1078,9 +1079,7 @@ async def get_status() -> dict[str, Any]:
                 else []
             )
             active_payload = (
-                json.loads(active_path.read_text(encoding="utf-8"))
-                if active_path.exists()
-                else {}
+                json.loads(active_path.read_text(encoding="utf-8")) if active_path.exists() else {}
             )
             active_crypto_payload = (
                 json.loads(active_crypto_path.read_text(encoding="utf-8"))

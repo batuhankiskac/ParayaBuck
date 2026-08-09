@@ -266,9 +266,11 @@ document.addEventListener('DOMContentLoaded', () => {
             : statusData.state;
         const strategyStatus = statusData.strategy_status || '';
         const strategyLabel =
-            strategyStatus === 'approved_for_live'
+            strategyStatus.startsWith('approved:')
                 ? 'STRATEJİ ONAYLI'
-                : 'ARAŞTIRMA MODU (strateji onayı yok)';
+                : strategyStatus === 'configured_manifest_pending_runtime_verification'
+                  ? 'MANİFEST DOĞRULAMA BEKLİYOR'
+                  : 'ARAŞTIRMA MODU (strateji onayı yok)';
         const scanner = statusData.scanner || {};
         const equityScanner = scanner.equity_status || scanner.status || 'not_run';
         const cryptoScanner = scanner.crypto_status || 'not_run';

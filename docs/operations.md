@@ -5,7 +5,8 @@
 Production hardening tamamlanıp paper chaos testleri onaylanana kadar:
 
 - `paper: true`
-- `timeframe: 5m`
+- onay manifesti yokken `timeframe: 5m`; vNext shadow başladığında manifestle
+  aynı olacak şekilde `timeframe: 1d`
 - `higher_timeframe: 1h`
 - `stock_feed: iex`
 - `crypto_trading_enabled: false`
@@ -35,6 +36,12 @@ ayrıca engeller.
 7. Startup reconciliation, warmup readiness, data gap, queue age ve TradingStream health
    durumlarının temiz olmasını bekle.
 8. Önce shadow, ardından yalnızca equity paper rollout uygula.
+
+Runtime'ı aktive etmek için deprecated boolean kullanılmaz. GREEN manifest yolu ve
+beklenen checksum birlikte ayarlanır. Live/canary için bunlara ek olarak HMAC imzalı
+operator approval dosyası, `allow_live_portfolio_execution=true` ve pozitif dolar
+cap zorunludur. Operator HMAC anahtarı yalnız
+`PARAYABUCK_OPERATOR_APPROVAL_KEY` environment secret'ında tutulur.
 
 ## Market bazlı runtime ve sembol evreni
 

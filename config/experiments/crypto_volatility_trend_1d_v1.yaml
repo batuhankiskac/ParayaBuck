@@ -1,0 +1,53 @@
+experiment_id: crypto_volatility_trend_1d_v1
+start: 2016-01-01T00:00:00Z
+end: 2027-08-09T00:00:00Z
+universe_version: crypto_btc_eth_v1
+universe: [BTC/USD, ETH/USD]
+
+train_months: 24
+validation_months: 12
+outer_holdout_months: 12
+embargo_bars: 0
+max_mechanism_trials: 6
+max_parameter_trials: 4
+max_holdout_finalists: 1
+seed: 7
+frozen_candidate_trial_id: 059936e155ff1aed
+cash_rate_annualized: 0.04
+source_provider: coinbase_primary_binance_daily_crosscheck_alpaca_overlap
+adjustment_policy: raw
+suspended: true
+
+cost_scenarios:
+  - {name: crypto_base, market: crypto, slippage_bps: 2, spread_bps: 6, taker_fee_bps: 25}
+  - {name: crypto_stress, market: crypto, slippage_bps: 8, spread_bps: 25, taker_fee_bps: 50}
+
+candidate_spaces:
+  - name: crypto_volatility_trend_1d_v1
+    version: 1.0.0
+    market: crypto
+    timeframe: 1d
+    parameter_grid:
+      trend_window: [180, 200]
+      covariance_window: [60]
+      annual_volatility_target: [0.06, 0.08]
+      max_single_weight: [0.05]
+      max_crypto_weight: [0.10]
+      rebalance_hours: [168]
+
+metadata:
+  research_program_id: crypto_portfolio_vnext_2026
+  family_number: 1
+  maximum_families_per_12_months: 3
+  preregistered_at: 2026-08-08T00:00:00Z
+  economic_hypothesis: independent BTC and ETH absolute trend with volatility targeting limits crypto sleeve tail exposure
+  cash_hurdle_policy: preregistered 4% conservative fallback; final approval requires point-in-time 3-month T-bill series in ResearchBundle
+  forward_holdout_starts: 2026-08-09T00:00:00Z
+  suspend_reason: forward holdout does not mature before 2027-08-09
+  canonical_parameters:
+    trend_window: 200
+    covariance_window: 60
+    annual_volatility_target: 0.08
+    max_single_weight: 0.05
+    max_crypto_weight: 0.10
+    rebalance_hours: 168

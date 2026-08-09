@@ -52,14 +52,10 @@ def test_universe_hash_differs_for_different_methodology_or_members() -> None:
     universe = build_crypto_point_in_time_universe(history, maximum_symbols=3)
     base_hash = hash_point_in_time_universe(universe)
     # Same snapshot members, different market label -> different hash.
-    relabeled = PointInTimeUniverse(
-        Market.EQUITY, universe.snapshots, universe.methodology
-    )
+    relabeled = PointInTimeUniverse(Market.EQUITY, universe.snapshots, universe.methodology)
     assert hash_point_in_time_universe(relabeled) != base_hash
     # Different methodology text -> different hash.
-    other_method = PointInTimeUniverse(
-        universe.market, universe.snapshots, "other_methodology"
-    )
+    other_method = PointInTimeUniverse(universe.market, universe.snapshots, "other_methodology")
     assert hash_point_in_time_universe(other_method) != base_hash
     # Different snapshot membership -> different hash.
     changed_members = (
@@ -68,9 +64,7 @@ def test_universe_hash_differs_for_different_methodology_or_members() -> None:
             frozenset({"BTC/USD", "ETH/USD"}),
         ),
     )
-    different = PointInTimeUniverse(
-        Market.CRYPTO, changed_members, universe.methodology
-    )
+    different = PointInTimeUniverse(Market.CRYPTO, changed_members, universe.methodology)
     assert hash_point_in_time_universe(different) != base_hash
 
 

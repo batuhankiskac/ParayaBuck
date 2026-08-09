@@ -39,9 +39,7 @@ from parayabuck.data.research_store import (
 from parayabuck.markets.symbols import canonical_symbol
 
 EXCHANGE_PACKAGE = "pandas-market-calendars"
-EXCHANGE_CALENDAR_NAME = (
-    f"{EXCHANGE_PACKAGE}=={_package_version(EXCHANGE_PACKAGE)} NYSE"
-)
+EXCHANGE_CALENDAR_NAME = f"{EXCHANGE_PACKAGE}=={_package_version(EXCHANGE_PACKAGE)} NYSE"
 _CALENDAR = _market_calendars.get_calendar("NYSE")
 
 # Equity production research requires a dividend-adjusted (total-return)
@@ -237,10 +235,14 @@ def evaluate_symbol_quality(
             invalid_ohlc += 1
         if bar.close <= 0:
             nonpositive_close += 1
-    gap_days = max(
-        (_unexplained_gap_trading_days(previous.timestamp.date(), current.timestamp.date()))
-        for previous, current in zip(ordered, ordered[1:])
-    ) if len(ordered) > 1 else 0
+    gap_days = (
+        max(
+            (_unexplained_gap_trading_days(previous.timestamp.date(), current.timestamp.date()))
+            for previous, current in zip(ordered, ordered[1:])
+        )
+        if len(ordered) > 1
+        else 0
+    )
     stale = (data_end - end) > timedelta(days=max_stale_terminal_days)
     if coverage < minimum_coverage_ratio:
         failures.append("coverage_below_threshold")
@@ -356,9 +358,7 @@ def evaluate_dataset_quality(
         min((bar.timestamp for bar in benchmark_bars), default=data_start).date(),
         data_end.date(),
     )
-    benchmark_coverage = (
-        len(benchmark_bars) / benchmark_expected if benchmark_expected > 0 else 0.0
-    )
+    benchmark_coverage = len(benchmark_bars) / benchmark_expected if benchmark_expected > 0 else 0.0
     if (
         canonical_symbol(benchmark_symbol, market) not in by_symbol
         or benchmark_coverage < MIN_BENCHMARK_COVERAGE_RATIO

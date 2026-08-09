@@ -63,17 +63,14 @@ def fit_score_calibration(
     fitted = tuple(
         ScoreBin(
             maximum_score=max(trade.entry_score for trade in bucket),
-            expected_r=sum(
-                trade.pnl / (trade.initial_risk * trade.qty) for trade in bucket
-            )
+            expected_r=sum(trade.pnl / (trade.initial_risk * trade.qty) for trade in bucket)
             / len(bucket),
             observations=len(bucket),
         )
         for bucket in buckets
     )
     monotonic = all(
-        later.expected_r >= earlier.expected_r
-        for earlier, later in zip(fitted, fitted[1:])
+        later.expected_r >= earlier.expected_r for earlier, later in zip(fitted, fitted[1:])
     )
     return ScoreCalibration(strategy, fitted, monotonic)
 

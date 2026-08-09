@@ -148,9 +148,9 @@ python scripts/run_portfolio_research.py --baseline
 python scripts/run_portfolio_research.py --nested
 ```
 
-Portföy düzeyinde strateji araştırması (kalıcı ETF evreninde dual momentum,
-1h kripto cross-sectional momentum, günlük time-series momentum) kilitli outer
-holdout ve production gate ile yürütülür. Araştırma durumu:
+Portföy düzeyinde strateji araştırması değiştirilemez run manifestleri, lazy
+forward holdout ve research-program düzeyinde deneme sayacıyla yürütülür.
+Araştırma durumu:
 
 - **Strateji durumu: RESEARCH ONLY — onaylı canlı strateji yok.** Runtime
   fail-closed'dur (`strategy_status=research_only_no_approved_portfolio_strategy`)
@@ -168,6 +168,16 @@ holdout ve production gate ile yürütülür. Araştırma durumu:
   return −%133). Aynı veride yeni 6_1 varyantı taranmaz.
 - Eski tekil sembol alpha katmanının kaldırılması:
   [`docs/strategy_migration_2026-08-04.md`](docs/strategy_migration_2026-08-04.md).
+- Equity vNext (`SPY, QQQ, IWM, IEF, SHY, GLD`) bağımsız absolute trend,
+  covariance-aware risk budgeting ve %8 vol target uygular. Crypto vNext yalnız
+  `BTC/USD, ETH/USD`, bağımsız trend/vol bilgisi, haftalık rebalance, varlık başına
+  %5 ve toplam %10 cap kullanır. İki deney de yeni forward holdout olgunlaşana
+  kadar askıdadır; sonuç görülmeden eşik gevşetilemez.
+- Approval-gated runtime, risk overlay, target planner, SQLite fill lineage ve
+  shadow/paper/canary rollout yolu uygulanmıştır. `approve_portfolio_strategy`
+  deprecated ve `true` değeri hatadır; aktivasyon GREEN manifest + ayrı checksum
+  gerektirir. Canary/live ayrıca account/manifest/cap'e HMAC bağlı operator onayı
+  olmadan açılamaz.
 
 Alpaca modunda `--profile` belirtilmezse pencere otomatik karar verir: pencere
 `EQUITY_MAX_DAYS["5m"]` (120 işlem günü) içindeyse canlı profili (5m + 1h), daha

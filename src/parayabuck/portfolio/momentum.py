@@ -86,12 +86,8 @@ def inverse_volatility_weights(
     if total <= 0:
         return ()
     weights = {symbol: value / total for symbol, value in raw.items()}
-    capped = {
-        symbol: min(value, maximum_weight) for symbol, value in weights.items()
-    }
-    normalized = tuple(
-        sorted(capped.items(), key=lambda item: item[0])
-    )
+    capped = {symbol: min(value, maximum_weight) for symbol, value in weights.items()}
+    normalized = tuple(sorted(capped.items(), key=lambda item: item[0]))
     return normalized
 
 

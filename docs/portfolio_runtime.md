@@ -1,65 +1,54 @@
-# PortfolioRuntime — durum
+# PortfolioRuntime
 
-Tarih: 2026-08-05
-Statü: **TASARIM HAZIR — UYGULANMADI (research RED)**
+Tarih: 2026-08-08
+Statü: **UYGULANDI — geçerli GREEN manifest olmadığı için fail-closed**
 
-Faz 3 (PortfolioRuntime) yalnız düzeltilmiş araştırma sonucu yeterliyse
-uygulanır (§11). `equity_dual_momentum_v2` sonucu RED olduğundan runtime
-uygulanmamıştır; bu doküman tasarım sözleşmesini ve bloklayıcıyı kaydeder.
+Runtime yazılım yolu equity ve crypto için tamamlandı. Bunun işlem yapabilmesi,
+stratejinin onaylandığı anlamına gelmez: repository içinde şu anda GREEN approval
+manifest yoktur ve yeni vNext deneyleri forward holdout olgunlaşana kadar askıdadır.
 
-## Sorumluluklar (tasarım sözleşmesi)
+## Aktivasyon sözleşmesi
 
-- Canlı kapanmış barlardan `PortfolioContext` kurmak (geçmişe bakış
-  kapanmış barlarla sınırlı).
-- `RebalancePolicy`'ye göre `decide` çağırmak; karar aynı kapanışta değil
-  sonraki tradable session'da fill olur.
-- `TargetPortfolio`'yu mevcut broker pozisyonlarıyla (tek gerçek kaynak)
-  karşılaştırmak; hedef ağırlık → nominal → delta → `OrderIntent`.
-- Satış/risk azaltan emirleri alışlardan önce işlemek.
-- `ExecutionBroker`, `ExecutionCoordinator`, `OrderStateMachine`,
-  `RiskManager`, ledger'ı yeniden kullanmak.
-- Deterministik client order id (`IdempotencyKeyFactory`):
-  `{strategy}-{version}-{decision_ts}-{symbol}-{side}-{rebalance_n}`.
-- Duplicate rebalance engelleme; partial fill + açık order mutabakatı.
-- State'i SQLite/ledger içinde atomik saklamak (`PortfolioState` v2:
-  cash, holdings, avg_prices, entry_fees, realized_pnl, last_prices,
-  last_target, last_rebalance, pending_target, pending_orders, watermark,
-  universe_snapshot_id, schema_version).
-- Restart sonrası target/order/position parity; kesintisiz ve restartlı
-  koşular aynı qty/cash/equity/order id/fill üretmeli. `liquidate_at_end`
-  sonrası state'ten holdings/pending temizlenir ve cash güncellenir —
-  restart phantom pozisyon diriltemez. Kısmi exit sonrası restart için
-  pozisyon başına realized accumulator da state'e persist edilir.
-- `EngineRuntime.start()` fail-closed: `strategy_status` üretim gate'ini
-  geçip açıkça allowlist'e alınmış bir stratejiyi onaylamadan
-  (`approved_for_live`) runtime BAŞLAMAZ; status alanı tek başına koruma
-  değildir.
-- Onay mekanizması: `config/settings.yaml` → `engine.approve_portfolio_strategy`
-  (varsayılan `false`). Strateji production gate'ini geçmeden bu bayrak
-  asla `true` yapılmaz; `true` yapılırsa `strategy_status=approved_for_live`
-  olur ve runtime başlatılabilir. `/api/status` `strategy_status` alanını
-  runtime çalışmasa bile döndürür; UI "ARAŞTIRMA MODU (strateji onayı yok)"
-  gösterir — jenerik hata yerine bilgi.
-- Market holiday ve first-trading-day takvimi.
-## Ortak saf bileşenler (backtest + runtime)
+- `engine.approve_portfolio_strategy=true` artık hata üretir. Boolean yetkilendirme
+  olarak kullanılamaz.
+- Her sleeve için `approval_manifest_paths` ve ayrı
+  `approval_manifest_checksums` gerekir.
+- Manifest; GREEN durumu, expiry, source commit, strateji import yolu/modül hash'i,
+  sabit parametreler, approved universe, dataset hash'leri ve validation/holdout
+  kayıtlarını bağlar.
+- Eksik, değiştirilmiş, expired, archived, farklı commit'e ait veya yanlış modül
+  hash'li manifest runtime oluşturulmadan reddedilir.
+- Paper credentials yalnız shadow/paper manifestlerini; live credentials yalnız
+  shadow/canary/live manifestlerini kabul eder.
+- Canary/live ayrıca HMAC imzalı, account ve manifest setine bağlı kısa ömürlü
+  `LiveOperatorApproval`, config arming ve pozitif dolar cap gerektirir.
+- Manifest evreni scanner veya restart sırasında genişletilmez. Bot dışı
+  pozisyonlar account risk bütçesinden düşer fakat runtime tarafından satılmaz.
 
-- `PortfolioDecisionService` — planlanmadı (strateji reddi).
-- `TargetToOrderPlanner` — planlanmadı.
-- `WeightCalculator` — planlanmadı.
-- `IdempotencyKeyFactory` — **uygulandı** (`src/parayabuck/portfolio/idempotency.py`,
-  backtest'te aktif).
-- `RebalanceScheduler` — planlanmadı.
+## Uygulanan bileşenler
 
-## Backtest tarafındaki durum
+- `PortfolioDecisionService`: yalnız tamamlanmış ve eksiksiz bar batch'inden
+  `PortfolioContext` oluşturur.
+- `TargetToOrderPlanner`: broker pozisyonu ve açık emirleri hedef delta ile
+  uzlaştırır; satışları alışlardan önce sıralar; asset metadata increment/minimum
+  kurallarını uygular.
+- `PortfolioRiskOverlay`: günlük %0,5 kayıp, persist edilmiş high-water'dan %5
+  drawdown, %60 gross, %50 equity, %10 crypto, varlık ve %40 cash limitleri.
+- `PortfolioStateRepository`: session → decision → target/risk → order → fill
+  zincirini idempotent SQLite kayıtlarıyla tutar; PnL, fee ve slippage ayrıdır.
+- `PortfolioRuntime`: backtest ile aynı strategy scheduler semantiğini kullanır;
+  shadow'da emir kaydeder fakat broker'a yazmaz, paper'da aynı planner çıktısını
+  submit eder, canary'yi %10 ölçekler.
+- Belirsiz submit yanıtı kör retry edilmez; `client_order_id` ile broker
+  reconciliation yapılmadan order yeniden gönderilmez.
 
-`PortfolioBacktestEngine` şu anda: entry fee dahil realized PnL, state v2 +
-restart parity, deterministik order id, rebalance raporu
-(pre_trade/signed/post_fill/drift/unfilled/expected+realized turnover),
-karar→fill ayrımı. Runtime adaptörü için gereken ortak saf bileşenler
-henüz yok.
+Runtime timeframe'i manifest stratejisinin timeframe'iyle aynı olmalıdır. İlk vNext
+equity ve crypto stratejileri `1d` kullanır. Equity günlük barı normal seans kapandıktan
+sonra; crypto günlük barı UTC rollover sonrasında final olur. Emir en erken sonraki
+tradable olayda gerçekleşir.
 
-## Bloklayıcı
+## Mevcut güvenli sonuç
 
-`docs/equity_dual_momentum_v2_results.md` — validation RED. Strateji
-arşivlendi; pristine holdout ve yeterli araştırma kanıtı olmadan runtime'a
-geçilmez.
+Yazılım uygulanmıştır fakat aktivasyon kanıtı yoktur. Bu nedenle `/api/status`
+`research_only_no_approved_portfolio_strategy` döndürür ve `EngineRuntime.start()`
+broker reconciliation öncesinde durur. Onay çıkmaması geçerli bir sonuçtur.

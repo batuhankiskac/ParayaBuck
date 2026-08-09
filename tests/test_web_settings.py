@@ -453,7 +453,11 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
             return True
 
     def make_config(approved: bool) -> object:
-        engine = type("Engine", (), {"approve_portfolio_strategy": approved})()
+        engine = type(
+            "Engine",
+            (),
+            {"approval_manifest_paths": ("approval.json",) if approved else ()},
+        )()
         universe = type(
             "Universe",
             (),
@@ -463,9 +467,7 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
                     (),
                     {"candidate_universe_path": "c.json", "active_universe_path": "a.json"},
                 )(),
-                "crypto": type(
-                    "Crypto", (), {"active_universe_path": "crypto.json"}
-                )(),
+                "crypto": type("Crypto", (), {"active_universe_path": "crypto.json"})(),
             },
         )()
         return type("Config", (), {"engine": engine, "universe": universe})()
@@ -473,7 +475,7 @@ def test_status_reports_strategy_approval_state(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "manager", StaticManager())
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
     approved = asyncio.run(server.get_status())
-    assert approved["strategy_status"] == "approved_for_live"
+    assert approved["strategy_status"] == "configured_manifest_pending_runtime_verification"
 
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
     research_only = asyncio.run(server.get_status())

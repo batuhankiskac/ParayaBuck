@@ -96,9 +96,7 @@ class _FixedTargetStrategy(PortfolioStrategy):
             raise ValueError("fixed targets exceed 1")
 
     def decide(self, context: PortfolioContext) -> TargetPortfolio:
-        weights = tuple(
-            TargetWeight(symbol, weight) for symbol, weight in self._targets.items()
-        )
+        weights = tuple(TargetWeight(symbol, weight) for symbol, weight in self._targets.items())
         return TargetPortfolio(
             strategy_name=self.name,
             strategy_version=self.version,
@@ -160,6 +158,20 @@ def test_decision_bar_close_cannot_be_used_as_same_bar_fill() -> None:
     assert first.fill_price == pytest.approx(100.899 * (1 + 4 / 10_000))
 
 
+def test_open_fill_capacity_uses_only_volume_known_at_decision() -> None:
+    strategy = _FixedTargetStrategy({"SPY": 0.5})
+    engine = _equity_engine(strategy)
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    bars = [
+        _equity_bar(start, "SPY", 100.0, volume=100.0),
+        # This future completed-session volume must not make the opening fill
+        # larger. Ten percent of the only known volume is ten shares.
+        _equity_bar(start + timedelta(days=1), "SPY", 100.0, volume=9_000_000.0),
+    ]
+    result = engine.run(bars, liquidate_at_end=False)
+    assert result.fills[0].qty == pytest.approx(10.0)
+
+
 def test_momentum_lookback_never_sees_future_bars() -> None:
     seen: list[tuple[datetime, int]] = []
 
@@ -183,10 +195,7 @@ def test_monthly_rebalance_uses_first_bar_of_calendar_month() -> None:
     strategy = _FixedTargetStrategy({"SPY": 1.0})
     engine = _equity_engine(strategy)
     start = datetime(2025, 1, 15, tzinfo=UTC)
-    bars = [
-        _equity_bar(start + timedelta(days=index), "SPY", 100.0 + index)
-        for index in range(60)
-    ]
+    bars = [_equity_bar(start + timedelta(days=index), "SPY", 100.0 + index) for index in range(60)]
     result = engine.run(bars, liquidate_at_end=False)
     decisions = [record.decision_timestamp for record in result.rebalances]
     assert decisions
@@ -231,11 +240,7 @@ def test_sell_before_buy_order_keeps_cash_non_negative() -> None:
             super().__init__({})
 
         def decide(self, context: PortfolioContext) -> TargetPortfolio:
-            targets = (
-                {"SPY": 0.50, "QQQ": 0.45}
-                if self._first
-                else {"SPY": 0.0, "QQQ": 0.95}
-            )
+            targets = {"SPY": 0.50, "QQQ": 0.45} if self._first else {"SPY": 0.0, "QQQ": 0.95}
             weights = tuple(TargetWeight(s, w) for s, w in targets.items())
             return TargetPortfolio(
                 strategy_name=self.name,
@@ -268,25 +273,20 @@ def test_sell_before_buy_order_keeps_cash_non_negative() -> None:
     result = engine.run(bars, liquidate_at_end=False)
     # Sells at the second rebalance must execute before buys at the same
     # timestamp, so the cash raised by the SPY exit funds the QQQ add.
-    february_fills = [
-        fill for fill in result.fills if fill.timestamp.month == 2
-    ]
+    february_fills = [fill for fill in result.fills if fill.timestamp.month == 2]
     assert february_fills
     assert february_fills[0].side == OrderSide.SELL
     assert any(fill.side == OrderSide.BUY for fill in february_fills)
-    assert min(
-        fill.qty * fill.fill_price for fill in february_fills if fill.side == OrderSide.BUY
-    ) > 0
+    assert (
+        min(fill.qty * fill.fill_price for fill in february_fills if fill.side == OrderSide.BUY) > 0
+    )
 
 
 def test_turnover_band_blocks_small_orders() -> None:
     strategy = _FixedTargetStrategy({"SPY": 0.51})
     engine = _equity_engine(strategy, turnover_band=0.02)
     start = datetime(2025, 1, 1, tzinfo=UTC)
-    bars = [
-        _equity_bar(start + timedelta(days=index), "SPY", 100.0)
-        for index in range(60)
-    ]
+    bars = [_equity_bar(start + timedelta(days=index), "SPY", 100.0) for index in range(60)]
     result = engine.run(bars, liquidate_at_end=False)
     assert len(result.fills) == 1  # only the first buy; rebalancing to 0.51 is banded
 
@@ -324,8 +324,7 @@ def test_zero_volume_and_missing_bars_are_safe() -> None:
     engine = _equity_engine(strategy)
     start = datetime(2025, 1, 1, tzinfo=UTC)
     bars = [
-        _equity_bar(start + timedelta(days=index), "SPY", 100.0, volume=0.0)
-        for index in range(5)
+        _equity_bar(start + timedelta(days=index), "SPY", 100.0, volume=0.0) for index in range(5)
     ]
     result = engine.run(bars, liquidate_at_end=False)
     assert result.fills == ()
@@ -349,6 +348,7 @@ def test_restart_with_persisted_state_continues_without_duplicate_orders(
     bars = _equity_series(200, {"SPY": 0.0004, "QQQ": 0.0005, "XLE": 0.0001})
     split = 120
     state_path = str(tmp_path / "portfolio_state.json")
+
     def strategy() -> _FixedTargetStrategy:
         return _FixedTargetStrategy({"SPY": 0.5, "QQQ": 0.45})
 
@@ -416,8 +416,14 @@ def test_higher_volatility_asset_receives_lower_weight() -> None:
             low = close * (1 - amplitude)
             bars.append(
                 Bar(
-                    timestamp, symbol, "1d",
-                    low + (high - low) * 0.5, high, low, close, 5_000_000,
+                    timestamp,
+                    symbol,
+                    "1d",
+                    low + (high - low) * 0.5,
+                    high,
+                    low,
+                    close,
+                    5_000_000,
                     Market.EQUITY,
                 )
             )
@@ -471,9 +477,7 @@ def test_risk_off_regime_closes_crypto_positions() -> None:
         for symbol in ("BTC/USD", "ETH/USD"):
             close = 100 * (1 + drift) ** index
             bars.append(_crypto_bar(timestamp, symbol, close))
-    strategy = CryptoCrossSectionalMomentum1hV1(
-        {"rebalance_hours": 24, "momentum_scheme": "7d"}
-    )
+    strategy = CryptoCrossSectionalMomentum1hV1({"rebalance_hours": 24, "momentum_scheme": "7d"})
     engine = PortfolioBacktestEngine(
         strategy,
         RebalancePolicy(Market.CRYPTO, "hours:24"),
@@ -503,9 +507,7 @@ def test_future_liquid_coin_cannot_enter_historical_universe() -> None:
         bars.append(_crypto_bar(timestamp, "ETH/USD", 100.0, volume=eth_volume))
     universe = build_crypto_point_in_time_universe(bars, maximum_symbols=1)
 
-    strategy = CryptoCrossSectionalMomentum1hV1(
-        {"rebalance_hours": 24, "momentum_scheme": "7d"}
-    )
+    strategy = CryptoCrossSectionalMomentum1hV1({"rebalance_hours": 24, "momentum_scheme": "7d"})
     engine = PortfolioBacktestEngine(
         strategy,
         RebalancePolicy(Market.CRYPTO, "hours:24"),
@@ -596,3 +598,19 @@ def test_information_ratio_aligns_benchmark_by_trading_day() -> None:
     result = engine.run(bars, warmup=warmup, liquidate_at_end=False)
     assert result.information_ratio == pytest.approx(0.0, abs=1e-9)
     assert set(EQUITY_ETF_UNIVERSE) >= {"SPY", "QQQ", "IWM", "XLK"}
+
+
+def test_benchmark_return_is_full_window_not_last_day() -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = [
+        _equity_bar(start + timedelta(days=index), "SPY", 100.0 * (1.001**index))
+        for index in range(60)
+    ]
+    engine = _equity_engine(_FixedTargetStrategy({"SPY": 1.0}))
+    result = engine.run(bars, liquidate_at_end=False)
+    expected = 1.001**59 - 1
+    assert result.benchmark_return == pytest.approx(expected, rel=1e-9)
+    assert result.benchmark_return > 0.05
+    assert result.excess_return == pytest.approx(
+        result.total_return - result.benchmark_return, abs=1e-9
+    )

@@ -42,9 +42,14 @@ from pathlib import Path
 from parayabuck.core.models import Market
 
 STATE_PENDING = "pending"
-STATE_COMPLETE = "complete"
+STATE_PASSED = "passed"
+# Backward-compatible public name; new records use the explicit terminal
+# vocabulary passed/failed/error.
+STATE_COMPLETE = STATE_PASSED
 STATE_FAILED = "failed"
+STATE_ERROR = "error"
 STATE_AUDITED = "audited"
+_LEGACY_COMPLETE = "complete"
 
 
 @dataclass(frozen=True)
@@ -137,8 +142,7 @@ class HoldoutRegistry:
                 evaluated_at = datetime.fromisoformat(str(item.get("evaluated_at", "")))
             except ValueError as exc:
                 raise ValueError(
-                    "Holdout registry contains a record with an invalid "
-                    f"evaluated_at: {item!r}"
+                    f"Holdout registry contains a record with an invalid evaluated_at: {item!r}"
                 ) from exc
             loaded.append(
                 HoldoutEvaluationRecord(
@@ -157,7 +161,7 @@ class HoldoutRegistry:
     def _persist(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "version": 2,
+            "version": 3,
             "records": [asdict(record) for record in self._records],
         }
         temporary = self.path.with_suffix(".tmp")
@@ -169,9 +173,7 @@ class HoldoutRegistry:
 
     def records_for(self, structural_digest: str) -> tuple[HoldoutEvaluationRecord, ...]:
         return tuple(
-            record
-            for record in self._records
-            if record.structural_digest == structural_digest
+            record for record in self._records if record.structural_digest == structural_digest
         )
 
     @contextmanager
@@ -219,12 +221,16 @@ class HoldoutRegistry:
                 self._persist()
             return expired
 
-    def _preflight_unlocked(
-        self, fingerprint: HoldoutFingerprint, experiment_id: str
-    ) -> None:
+    def _preflight_unlocked(self, fingerprint: HoldoutFingerprint, experiment_id: str) -> None:
         digest = fingerprint.structural_digest()
         for record in self.records_for(digest):
-            if record.state in (STATE_PENDING, STATE_COMPLETE, STATE_FAILED):
+            if record.state in (
+                STATE_PENDING,
+                STATE_PASSED,
+                STATE_FAILED,
+                STATE_ERROR,
+                _LEGACY_COMPLETE,
+            ):
                 raise HoldoutLockedError(
                     f"Holdout already used by experiment {record.experiment_id!r} "
                     f"(state={record.state}); reopening requires an explicit "
@@ -236,7 +242,7 @@ class HoldoutRegistry:
         with self._locked():
             self._preflight_unlocked(fingerprint, experiment_id)
 
-    def begin_evaluation(self, fingerprint: HoldoutFingerprint, experiment_id: str) -> None:
+    def begin_evaluation(self, fingerprint: HoldoutFingerprint, experiment_id: str) -> str:
         """Mark the holdout as pending; duplicates a pending/complete lock."""
         with self._locked():
             self._preflight_unlocked(fingerprint, experiment_id)
@@ -251,6 +257,7 @@ class HoldoutRegistry:
             )
             self._records.append(record)
             self._persist()
+            return record.record_id
 
     def recover_holdout(
         self,
@@ -274,7 +281,7 @@ class HoldoutRegistry:
                 for record in self._records
                 if record.structural_digest == digest
                 and record.experiment_id == experiment_id
-                and record.state in (STATE_PENDING, STATE_FAILED)
+                and record.state in (STATE_PENDING, STATE_FAILED, STATE_ERROR)
             ]
             if not matches:
                 raise HoldoutLockedError(
@@ -306,10 +313,31 @@ class HoldoutRegistry:
                 structural_digest=record.structural_digest,
                 full_digest=fingerprint.full_digest(),
                 experiment_id=experiment_id,
-                state=STATE_COMPLETE,
+                state=STATE_PASSED,
                 evaluated_at=datetime.now(UTC),
                 data_hash=data_hash,
                 notes="holdout evaluated once; locked forever",
+            )
+            self._replace_record(updated)
+
+    def error_evaluation(
+        self,
+        fingerprint: HoldoutFingerprint,
+        experiment_id: str,
+        reason: str,
+    ) -> None:
+        """Finish an evaluation that could not produce a valid gate result."""
+        with self._locked():
+            record = self._mutable_record(fingerprint, experiment_id)
+            updated = HoldoutEvaluationRecord(
+                record_id=record.record_id,
+                structural_digest=record.structural_digest,
+                full_digest=fingerprint.full_digest(),
+                experiment_id=experiment_id,
+                state=STATE_ERROR,
+                evaluated_at=datetime.now(UTC),
+                data_hash=record.data_hash,
+                notes=reason,
             )
             self._replace_record(updated)
 
@@ -367,6 +395,8 @@ __all__ = [
     "HoldoutRegistry",
     "STATE_AUDITED",
     "STATE_COMPLETE",
+    "STATE_ERROR",
     "STATE_FAILED",
     "STATE_PENDING",
+    "STATE_PASSED",
 ]

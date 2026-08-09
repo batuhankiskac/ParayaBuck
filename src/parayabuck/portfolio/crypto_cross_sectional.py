@@ -78,9 +78,7 @@ class CryptoCrossSectionalMomentum1hV1(PortfolioStrategy):
         top_n = self.param_int("top_n", 3)
         volatility_window = self.param_int("volatility_window", 72)
         btc_lookback = self.param_int("btc_regime_lookback_hours", 168)
-        max_annualized_volatility_pct = self.param_float(
-            "max_annualized_volatility_pct", 250.0
-        )
+        max_annualized_volatility_pct = self.param_float("max_annualized_volatility_pct", 250.0)
         max_single_weight = self.param_float("max_single_weight", 0.5)
 
         btc_closes = context.closes("BTC/USD")
@@ -110,9 +108,7 @@ class CryptoCrossSectionalMomentum1hV1(PortfolioStrategy):
             return self._cash_portfolio(context, RebalanceReason.SCHEDULED, "no_candidates")
 
         weights = dict(
-            inverse_volatility_weights(
-                selected, volatilities, maximum_weight=max_single_weight
-            )
+            inverse_volatility_weights(selected, volatilities, maximum_weight=max_single_weight)
         )
         if not weights:
             return self._cash_portfolio(context, RebalanceReason.SCHEDULED, "no_weights")

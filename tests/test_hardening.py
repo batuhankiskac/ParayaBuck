@@ -536,9 +536,7 @@ def test_late_bar_for_symbol_missing_from_closed_batch_is_evaluated() -> None:
     runtime._entry_readiness_reasons = lambda _market=None: ()
     runtime._engine_has_symbol_gap = lambda _symbol: False
     runtime._expected_all_symbols = {"AAPL", "MSFT"}
-    runtime._workers = {
-        "pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))
-    }
+    runtime._workers = {"pb-decisions": WorkerHealth(datetime.now(UTC), datetime.now(UTC))}
     runtime._events = _EventQueue(4096)
     runtime._event_stats_lock = threading.Lock()
     runtime._oldest_received_at = None

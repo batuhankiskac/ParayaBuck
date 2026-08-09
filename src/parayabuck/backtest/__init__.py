@@ -1,3 +1,7 @@
+from parayabuck.backtest.combined_gate import (
+    CombinedPortfolioGateResult,
+    evaluate_combined_portfolio,
+)
 from parayabuck.backtest.engine import BacktestEngine, BacktestResult
 from parayabuck.backtest.experiments import (
     CostScenario,
@@ -41,6 +45,7 @@ __all__ = [
     "BacktestResult",
     "CalendarFoldWindow",
     "CostScenario",
+    "CombinedPortfolioGateResult",
     "ExperimentManifest",
     "GateDecision",
     "OrderSide",
@@ -67,4 +72,5 @@ __all__ = [
     "new_manifest",
     "rolling_out_of_sample",
     "run_portfolio_experiment",
+    "evaluate_combined_portfolio",
 ]

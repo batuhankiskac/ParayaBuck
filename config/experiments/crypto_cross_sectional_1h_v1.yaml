@@ -30,12 +30,12 @@ cost_scenarios:
     market: crypto
     slippage_bps: 2
     spread_bps: 6
-    taker_fee_bps: 5
+    taker_fee_bps: 25
   - name: crypto_stress
     market: crypto
-    slippage_bps: 5
-    spread_bps: 15
-    taker_fee_bps: 10
+    slippage_bps: 8
+    spread_bps: 25
+    taker_fee_bps: 50
 
 candidate_spaces:
   - name: crypto_cross_sectional_momentum_1h_v1

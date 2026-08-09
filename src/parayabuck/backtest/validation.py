@@ -90,9 +90,7 @@ def calendar_fold_windows(
         train_start = _add_months(validation_start, -train_months)
         train_end = validation_start - embargo
         if train_end > train_start:
-            windows.append(
-                CalendarFoldWindow(train_start, train_end, validation_start, test_end)
-            )
+            windows.append(CalendarFoldWindow(train_start, train_end, validation_start, test_end))
         validation_start = _add_months(validation_start, test_months)
     return tuple(windows)
 
@@ -116,9 +114,7 @@ def calendar_rolling_out_of_sample(
         outer_holdout_months=outer_holdout_months,
         embargo=embargo,
     ):
-        warmup = [
-            bar for bar in ordered if window.train_start <= bar.timestamp < window.train_end
-        ]
+        warmup = [bar for bar in ordered if window.train_start <= bar.timestamp < window.train_end]
         test = [bar for bar in ordered if window.test_start <= bar.timestamp < window.test_end]
         if not warmup or not test:
             continue

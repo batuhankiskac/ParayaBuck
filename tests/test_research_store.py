@@ -147,9 +147,7 @@ def test_dataset_save_is_atomic_and_resaves_cleanly(tmp_path: Path) -> None:
     )
     assert store.manifest("equity_v1") == first
     # No temporary/backup siblings may remain after a successful save.
-    leftovers = [
-        entry.name for entry in tmp_path.iterdir() if entry.name.startswith(".")
-    ]
+    leftovers = [entry.name for entry in tmp_path.iterdir() if entry.name.startswith(".")]
     assert leftovers == []
     # Re-saving over an existing dataset replaces it cleanly.
     second_bars = [

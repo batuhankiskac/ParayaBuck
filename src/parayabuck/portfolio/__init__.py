@@ -3,6 +3,8 @@ from __future__ import annotations
 from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMomentum1hV1
+from parayabuck.portfolio.crypto_volatility_trend import CryptoVolatilityTrend1dV1
+from parayabuck.portfolio.equity_covariance_trend import EquityCovarianceTrend1dV1
 from parayabuck.portfolio.equity_dual_momentum import EquityEtfDualMomentumV1
 from parayabuck.portfolio.equity_tsm import EquityTimeSeriesMomentum1dV1
 from parayabuck.portfolio.models import (
@@ -17,6 +19,8 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityEtfDualMomentumV1.name: EquityEtfDualMomentumV1,
     CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
     EquityTimeSeriesMomentum1dV1.name: EquityTimeSeriesMomentum1dV1,
+    EquityCovarianceTrend1dV1.name: EquityCovarianceTrend1dV1,
+    CryptoVolatilityTrend1dV1.name: CryptoVolatilityTrend1dV1,
 }
 
 
@@ -45,7 +49,9 @@ def rebalance_policy_for(
     """
     if strategy.market == Market.CRYPTO:
         merged = dict(parameters or strategy.parameters)
-        hours_value = merged.get("rebalance_hours", 24)
+        hours_value = merged.get(
+            "rebalance_hours", getattr(strategy, "default_rebalance_hours", 24)
+        )
         if not isinstance(hours_value, (int, float)):
             raise ValueError("rebalance_hours must be numeric")
         hours = int(hours_value)
@@ -59,6 +65,8 @@ def rebalance_policy_for(
 
 __all__ = [
     "CryptoCrossSectionalMomentum1hV1",
+    "CryptoVolatilityTrend1dV1",
+    "EquityCovarianceTrend1dV1",
     "EquityEtfDualMomentumV1",
     "EquityTimeSeriesMomentum1dV1",
     "PortfolioContext",

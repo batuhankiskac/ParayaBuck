@@ -74,6 +74,10 @@ class PortfolioStrategy(ABC):
         longest = max((len(bars) for bars in context.history.values()), default=0)
         return longest >= self.minimum_history_bars
 
+    def requires_intermediate_risk_rebalance(self, context: PortfolioContext) -> bool:
+        """Whether a non-scheduled decision may only reduce portfolio risk."""
+        return False
+
     # -- typed parameter access (values are validated in _validate_parameters)
 
     def param_str(self, name: str, default: str) -> str:

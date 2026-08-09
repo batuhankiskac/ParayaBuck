@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 import queue
+import subprocess
 import threading
 import time
 from collections import deque
@@ -41,6 +43,16 @@ from parayabuck.markets.timeframes import (
     is_regular_equity_time,
 )
 from parayabuck.monitoring import AIDecisionJournal, AsyncDecisionJournal, DecisionJournal
+from parayabuck.portfolio.approval import (
+    ApprovalError,
+    ApprovalStage,
+    LiveOperatorApproval,
+    StrategyApprovalManifest,
+)
+from parayabuck.portfolio.runtime_service import (
+    PortfolioRuntime,
+    PortfolioStateRepository,
+)
 from parayabuck.risk.manager import RiskState
 from parayabuck.storage import SQLiteStore
 from parayabuck.universe import (
@@ -48,6 +60,7 @@ from parayabuck.universe import (
     load_active_crypto_symbols,
     load_active_symbols,
 )
+from parayabuck.universe.preflight import UniversePreflightResult
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
@@ -77,6 +90,7 @@ class RuntimeHealth:
     workers: dict[str, dict[str, object]]
     markets: dict[str, dict[str, object]]
     strategy_status: str = "research_only_no_approved_portfolio_strategy"
+    strategy_manifests: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -175,17 +189,55 @@ class EngineRuntime:
         self.secret_key = secret_key
         self.app_config = config
         self.config = config.engine
-        self.universe_preflight = ensure_active_universes(config, api_key, secret_key)
-        active_equities = (
-            load_active_symbols(config.universe.equity, log_rejection=False)
-            if config.universe.equity.enabled
-            else ()
+        source_revision = _source_revision(self.config.runtime_source_revision)
+        self.approval_manifests = tuple(
+            StrategyApprovalManifest.load_verified(
+                path,
+                expected_checksum=checksum,
+                current_source_revision=source_revision,
+            )
+            for path, checksum in zip(
+                self.config.approval_manifest_paths,
+                self.config.approval_manifest_checksums,
+                strict=True,
+            )
         )
-        active_crypto = (
-            load_active_crypto_symbols(config.universe.crypto, log_rejection=False)
-            if config.universe.crypto.enabled
-            else ()
-        )
+        if len({manifest.market for manifest in self.approval_manifests}) != len(
+            self.approval_manifests
+        ):
+            raise ApprovalError("Only one approval manifest per market sleeve is allowed")
+        if any(
+            manifest.instantiate_strategy().timeframe != self.config.timeframe
+            for manifest in self.approval_manifests
+        ):
+            raise ApprovalError("Every approved strategy timeframe must match engine.timeframe")
+        self._validate_manifest_account_mode()
+        if getattr(self, "approval_manifests", ()):
+            self.universe_preflight = UniversePreflightResult("manifest_locked", "manifest_locked")
+            active_equities = tuple(
+                symbol
+                for manifest in self.approval_manifests
+                if manifest.market == Market.EQUITY
+                for symbol in manifest.symbols
+            )
+            active_crypto = tuple(
+                symbol
+                for manifest in self.approval_manifests
+                if manifest.market == Market.CRYPTO
+                for symbol in manifest.symbols
+            )
+        else:
+            self.universe_preflight = ensure_active_universes(config, api_key, secret_key)
+            active_equities = (
+                load_active_symbols(config.universe.equity, log_rejection=False)
+                if config.universe.equity.enabled
+                else ()
+            )
+            active_crypto = (
+                load_active_crypto_symbols(config.universe.crypto, log_rejection=False)
+                if config.universe.crypto.enabled
+                else ()
+            )
         self._active_crypto_symbols = active_crypto
         self.symbols = [canonical_symbol(symbol) for symbol in (*active_equities, *active_crypto)]
         self._symbols_by_market = {
@@ -193,20 +245,20 @@ class EngineRuntime:
             Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
         }
         self._market_enabled = {
-            Market.EQUITY: config.universe.equity.enabled,
-            Market.CRYPTO: config.universe.crypto.enabled,
+            Market.EQUITY: bool(self._symbols_by_market[Market.EQUITY]),
+            Market.CRYPTO: bool(self._symbols_by_market[Market.CRYPTO]),
         }
         self._market_entry_halts: dict[Market, str | None] = {
             Market.EQUITY: None,
             Market.CRYPTO: None,
         }
-        # Fail-closed: no portfolio strategy is approved for live trading yet.
-        # The runtime is research-only; no UI path may report an active
-        # strategy until the production gate passes AND the operator sets
-        # engine.approve_portfolio_strategy=true in the configuration.
         self.strategy_status = (
-            "approved_for_live"
-            if config.engine.approve_portfolio_strategy
+            "approved:"
+            + ",".join(
+                f"{manifest.market.value}/{manifest.approved_stage.value}"
+                for manifest in self.approval_manifests
+            )
+            if self.approval_manifests
             else "research_only_no_approved_portfolio_strategy"
         )
         self.paper = config.alpaca.paper
@@ -230,6 +282,10 @@ class EngineRuntime:
                 self.config.crypto_stop_cancel_poll_interval_seconds
             ),
         )
+        self._portfolio_repository = PortfolioStateRepository(
+            self.config.decision_db_path, store=self.store
+        )
+        self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.ai_journal = None
         if self.config.ai_logging_enabled:
             try:
@@ -303,6 +359,28 @@ class EngineRuntime:
         self._warming_up = False
         self._not_ready_symbols: set[str] = set(self.symbols)
         self._historical: AlpacaHistoricalData | None = None
+
+    def _validate_manifest_account_mode(self) -> None:
+        stages = {manifest.approved_stage for manifest in self.approval_manifests}
+        if self.app_config.alpaca.paper:
+            invalid = stages - {ApprovalStage.SHADOW, ApprovalStage.PAPER}
+            if invalid:
+                raise ApprovalError("Paper credentials accept only shadow or paper manifests")
+            return
+        invalid = stages - {
+            ApprovalStage.SHADOW,
+            ApprovalStage.CANARY,
+            ApprovalStage.LIVE,
+        }
+        if invalid:
+            raise ApprovalError("Live credentials refuse paper-stage manifests")
+        if stages & {ApprovalStage.CANARY, ApprovalStage.LIVE} and (
+            not self.config.allow_live_portfolio_execution
+            or self.config.live_portfolio_dollar_cap <= 0
+        ):
+            raise ApprovalError(
+                "Canary/live manifests require explicit live execution and a dollar cap"
+            )
 
     @property
     def is_running(self) -> bool:
@@ -435,6 +513,16 @@ class EngineRuntime:
             workers={name: asdict(item) for name, item in workers.items()},
             markets=market_health,
             strategy_status=getattr(self, "strategy_status", "research_only"),
+            strategy_manifests=tuple(
+                {
+                    "checksum": manifest.checksum,
+                    "market": manifest.market.value,
+                    "stage": manifest.approved_stage.value,
+                    "strategy": manifest.strategy_name,
+                    "expires_at": manifest.expires_at.isoformat(),
+                }
+                for manifest in getattr(self, "approval_manifests", ())
+            ),
         )
 
     def start(self) -> None:
@@ -442,16 +530,13 @@ class EngineRuntime:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
             raise RuntimeError("Previous runtime workers did not stop; process restart required")
-        # Fail-closed: no portfolio strategy is approved for live trading, so
-        # the runtime refuses to start instead of reporting a research-only
-        # status while trading. The status alone is never a guard.
-        if self.strategy_status != "approved_for_live":
+        # Fail closed on the verified manifest objects themselves. A mutable
+        # status label is telemetry and can never authorize broker writes.
+        if not getattr(self, "approval_manifests", ()):
             raise RuntimeError(
                 "Runtime start refused: no approved portfolio strategy "
                 f"(strategy_status={self.strategy_status!r}); "
-                "a strategy must pass the production gate and the operator "
-                "must set engine.approve_portfolio_strategy=true in "
-                "config/settings.yaml before any live/paper trading"
+                "configure a GREEN approval manifest and its expected checksum"
             )
         self._stop_event.clear()
         self._state = "starting"
@@ -465,6 +550,36 @@ class EngineRuntime:
             )
             self._state = "halted"
             raise
+        authorized_live_cap = 0.0
+        live_stages = {manifest.approved_stage for manifest in self.approval_manifests} & {
+            ApprovalStage.CANARY,
+            ApprovalStage.LIVE,
+        }
+        if not self.paper and live_stages:
+            secret = os.getenv(self.config.live_operator_approval_key_env, "")
+            approval = LiveOperatorApproval.load_verified(
+                self.config.live_operator_approval_path,
+                secret=secret,
+                account_id=self.broker.account_id or "unknown",
+                manifest_checksums=tuple(manifest.checksum for manifest in self.approval_manifests),
+            )
+            authorized_live_cap = min(
+                self.config.live_portfolio_dollar_cap,
+                approval.maximum_dollar_exposure,
+            )
+        self._portfolio_runtimes = tuple(
+            PortfolioRuntime(
+                manifest,
+                self.broker,
+                self._portfolio_repository,
+                account_id=self.broker.account_id or "unknown",
+                allow_live_execution=(
+                    not self.paper and self.config.allow_live_portfolio_execution
+                ),
+                live_dollar_cap=authorized_live_cap,
+            )
+            for manifest in self.approval_manifests
+        )
         with self._state_lock:
             self._pin_managed_symbols()
         self._restore_persistent_state()
@@ -541,6 +656,16 @@ class EngineRuntime:
 
     def _pin_managed_symbols(self) -> None:
         """Keep managed positions observable even after scanner/config removal."""
+        if getattr(self, "approval_manifests", ()):
+            # Broker account snapshots still count outside positions against
+            # risk, but a manifest-locked stream universe is never expanded.
+            self.symbols = sorted(
+                self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
+            )
+            self._expected_all_symbols = set(self.symbols)
+            if self.engine.allowed_trade_symbols is not None:
+                self.engine.allowed_trade_symbols = set(self.symbols)
+            return
         account_id = self.broker.account_id or "unknown"
         entries = self.ledger.managed_entries_for_account(account_id)
         equity_pins = tuple(
@@ -654,6 +779,8 @@ class EngineRuntime:
                     log.warning("Session close warning during stop: %s", exc)
         if not self._journal_closed:
             try:
+                for runtime in getattr(self, "_portfolio_runtimes", ()):
+                    runtime.close("stopped")
                 # Give in-flight stream-thread writes a moment to land before
                 # the SQLite connections below are released.
                 time.sleep(0.25)
@@ -678,6 +805,9 @@ class EngineRuntime:
                     self._last_account_at = datetime.now(UTC)
                     worker.last_event_at = self._last_account_at
                     worker.last_error = None
+                    self._portfolio_repository.update_high_water(
+                        self.broker.account_id or "unknown", account.equity
+                    )
                     self._persist_risk_state(account)
                 except Exception as exc:
                     worker.last_error = str(exc)
@@ -717,7 +847,7 @@ class EngineRuntime:
             # the ledger. An unhandled exception here can kill the stream
             # worker (or run unobserved inside the SDK loop), degrading the
             # whole runtime. Escalate to a halt instead of failing silently.
-            with self._state_lock:
+            with getattr(self, "_state_lock", threading.RLock()):
                 self._state = "halted"
                 self._circuit_breaker_reason = "trade_update_callback_failure"
             log.exception(
@@ -728,6 +858,30 @@ class EngineRuntime:
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         account_id = self.broker.account_id or "unknown"
+        portfolio_repository = getattr(self, "_portfolio_repository", None)
+        if portfolio_repository is not None and portfolio_repository.has_order(
+            update.client_order_id
+        ):
+            account = await asyncio.to_thread(self.broker.account)
+            await asyncio.to_thread(
+                portfolio_repository.apply_trade_update,
+                client_order_id=update.client_order_id,
+                broker_order_id=update.broker_order_id,
+                status=update.event,
+                cumulative_filled_quantity=update.filled_qty,
+                average_fill_price=update.average_fill_price,
+                occurred_at=update.timestamp,
+                activity_id=(
+                    update.activity_id
+                    or f"{update.client_order_id}:{update.event}:{update.timestamp.isoformat()}"
+                ),
+                fee=update.fee,
+                realized_pnl=account.realized_pnl,
+                unrealized_pnl=account.unrealized_pnl,
+            )
+            self._last_account_at = datetime.now(UTC)
+            self._persist_risk_state(account)
+            return
         event = ExecutionEvent(
             account_id=account_id,
             client_order_id=update.client_order_id,
@@ -1016,12 +1170,8 @@ class EngineRuntime:
                     ):
                         batch = processed_batches.get(item.bar.timestamp)
                         if batch is not None and item.bar.symbol not in batch:
-                            processed_batches[item.bar.timestamp] = batch | {
-                                item.bar.symbol
-                            }
-                            expected: set[str] = getattr(
-                                self, "_expected_all_symbols", set()
-                            )
+                            processed_batches[item.bar.timestamp] = batch | {item.bar.symbol}
+                            expected: set[str] = getattr(self, "_expected_all_symbols", set())
                             self._process_timestamp(
                                 item.bar.timestamp,
                                 {item.bar.symbol: item.bar},
@@ -1090,8 +1240,7 @@ class EngineRuntime:
                 with self._event_stats_lock:
                     pending_oldest = min(
                         (
-                            datetime.now(UTC)
-                            - timedelta(seconds=max(0.0, now_mono - seen))
+                            datetime.now(UTC) - timedelta(seconds=max(0.0, now_mono - seen))
                             for seen in first_seen.values()
                         ),
                         default=None,
@@ -1180,6 +1329,24 @@ class EngineRuntime:
             self._circuit_breaker_reason = None
         if self._circuit_breaker_reason is not None:
             return
+        portfolio_bars = list(ready_bars.values())
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            try:
+                portfolio_result = portfolio_runtime.process_closed_bars(portfolio_bars)
+            except Exception as exc:
+                self._circuit_breaker_reason = "portfolio_runtime_failure"
+                self._state = "halted"
+                log.exception("Approval-gated portfolio runtime failed closed: %s", exc)
+                return
+            if portfolio_result.orders:
+                log.info(
+                    "Portfolio decision: manifest=%s market=%s status=%s orders=%d submitted=%d",
+                    portfolio_runtime.manifest.checksum[:12],
+                    portfolio_runtime.manifest.market.value,
+                    portfolio_result.status,
+                    len(portfolio_result.orders),
+                    len(portfolio_result.submitted_order_ids),
+                )
         result = self.engine.evaluate_timestamp(
             timestamp,
             list(ready_bars),
@@ -1243,10 +1410,10 @@ class EngineRuntime:
         return tuple(reasons)
 
     def _engine_has_market_gap(self, market: Market) -> bool:
-        return self.engine.has_data_gaps_for_market(market)
+        return bool(self.engine.has_data_gaps_for_market(market))
 
     def _engine_has_symbol_gap(self, symbol: str) -> bool:
-        return self.engine.has_data_gaps_for_symbol(symbol)
+        return bool(self.engine.has_data_gaps_for_symbol(symbol))
 
     def _repair_gap(self, bar: Bar) -> None:
         history = self._historical
@@ -1475,27 +1642,35 @@ class EngineRuntime:
             [symbol for symbol in symbols if is_crypto(symbol)],
         )
         for timeframe in {self.config.timeframe, self.config.higher_timeframe}:
+            requested_bars = max(
+                self.config.warmup_bars,
+                *(
+                    runtime.strategy.minimum_history_bars + 5
+                    for runtime in self._portfolio_runtimes
+                    if runtime.strategy.timeframe == timeframe
+                ),
+            )
             for group in groups:
                 for symbol_batch in _symbol_batches(group):
                     try:
                         batched = history.get_bars_batch(
                             symbol_batch,
                             timeframe,
-                            start=_warmup_start(
-                                symbol_batch[0], timeframe, self.config.warmup_bars
-                            ),
+                            start=_warmup_start(symbol_batch[0], timeframe, requested_bars),
                         )
                         with self._ingestion_lock:
                             for symbol in symbol_batch:
                                 bars = batched.get(symbol, [])
                                 self.engine.seed(bars[-self.config.warmup_bars :])
-                                if len(bars) < self.config.warmup_bars:
+                                for runtime in self._portfolio_runtimes:
+                                    runtime.seed(bars[-requested_bars:])
+                                if len(bars) < requested_bars:
                                     log.warning(
                                         "Warmup not ready %s %s: %d/%d bars",
                                         symbol,
                                         timeframe,
                                         len(bars),
-                                        self.config.warmup_bars,
+                                        requested_bars,
                                     )
                     except Exception as exc:
                         log.warning(
@@ -1519,8 +1694,24 @@ def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
     bars_per_day = (1440 if is_crypto(symbol) else 390) / minutes
     trading_days = bars * 1.5 / max(1, bars_per_day)
     calendar_days = trading_days if is_crypto(symbol) else trading_days * 1.5
-    days = max(2, min(180, math.ceil(calendar_days)))
+    days = max(2, min(3650, math.ceil(calendar_days)))
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def _source_revision(explicit: str) -> str:
+    if explicit.strip():
+        return explicit.strip()
+    try:
+        completed = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return completed.stdout.strip()
 
 
 __all__ = ["EngineRuntime"]

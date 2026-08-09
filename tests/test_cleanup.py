@@ -110,9 +110,7 @@ def test_active_docs_and_web_do_not_reference_legacy_strategies() -> None:
     skip = set(_ALLOWED_LEGACY_DOCS) | {"docs/research_summary_2026-08-04.md"}
     offenders = _scan_paths(repo / "docs", (".md",), skip=skip)
     assert offenders == []
-    web_offenders = _scan_paths(
-        repo / "src" / "parayabuck" / "web", (".html", ".js"), skip=set()
-    )
+    web_offenders = _scan_paths(repo / "src" / "parayabuck" / "web", (".html", ".js"), skip=set())
     assert web_offenders == []
 
 

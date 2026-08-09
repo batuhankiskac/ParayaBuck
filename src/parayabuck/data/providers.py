@@ -31,6 +31,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.alpaca import AlpacaHistoricalData
 from parayabuck.data.research_store import ProviderMetadata, VersionedResearchStore
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import weekday_count
 
 # Stooq vendor symbols for the permanent ETF research universe.
 STOOQ_SYMBOL_MAP: dict[str, str] = {
@@ -165,7 +166,14 @@ class AlpacaResearchDataProvider(ResearchDataProvider):
             return False, "no bars returned"
         ordered = sorted(bars, key=lambda bar: bar.timestamp)
         if ordered[0].timestamp > start + timedelta(days=30):
-            return False, f"coverage starts late: {ordered[0].timestamp.date()}"
+            # A late listing is legitimate. Reject only a late AND sparse
+            # response here; the listing-aware dataset-quality gate remains
+            # authoritative for full-window completeness.
+            span_days = (ordered[-1].timestamp - ordered[0].timestamp).days + 1
+            if span_days > 0 and len(ordered) < 0.5 * weekday_count(
+                ordered[0].timestamp, ordered[-1].timestamp
+            ):
+                return False, f"coverage starts late: {ordered[0].timestamp.date()}"
         return True, "ok"
 
 
@@ -283,9 +291,7 @@ class ExternalAdjustedDailyProvider(ResearchDataProvider):
         if timeframe != "1d":
             raise ValueError("ExternalAdjustedDailyProvider only serves 1d bars")
         if adjustment not in self.adjustment_capabilities():
-            raise ValueError(
-                f"Provider does not support adjustment {adjustment!r}"
-            )
+            raise ValueError(f"Provider does not support adjustment {adjustment!r}")
         vendor = self._symbol_map.get(canonical_symbol(symbol))
         if vendor is None:
             raise ValueError(f"No vendor symbol mapping for {symbol}")
@@ -473,15 +479,11 @@ def reconcile_providers(
         diff = abs(primary[day] - reference[day])
         if diff > maximum_tolerated_abs_return_diff:
             flat_side = min(abs(primary[day]), abs(reference[day])) < 0.0005
-            abnormal.append(
-                (day.isoformat(), primary[day], reference[day], flat_side)
-            )
+            abnormal.append((day.isoformat(), primary[day], reference[day], flat_side))
     abnormal.sort(key=lambda item: item[1:], reverse=True)
     # A day is tolerated only when one side is flat (a corporate action the
     # other feed already adjusted); an unexplained move of both sides fails.
-    passed = len(common) >= 20 and all(
-        flag for _day, _ra, _rb, flag in abnormal
-    )
+    passed = len(common) >= 20 and all(flag for _day, _ra, _rb, flag in abnormal)
     return ProviderReconciliationReport(
         provider_a,
         provider_b,

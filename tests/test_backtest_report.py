@@ -131,8 +131,7 @@ def test_report_by_symbol_breakdown() -> None:
 
 def test_report_includes_strategy_score_deciles_and_regimes() -> None:
     trades = tuple(
-        replace(_trade(2025, float(index - 5)), entry_score=50 + index)
-        for index in range(1, 11)
+        replace(_trade(2025, float(index - 5)), entry_score=50 + index) for index in range(1, 11)
     )
     report = build_report(_result(), curve_timestamps=_timestamps(), trades=trades)
     assert len(report.score_deciles) == 10

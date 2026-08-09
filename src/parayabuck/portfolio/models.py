@@ -22,10 +22,7 @@ def _canonical_key(symbol: str) -> str:
 
 
 def _float_mapping(raw: dict[str, Any], key: str) -> dict[str, float]:
-    return {
-        str(symbol): float(value)
-        for symbol, value in dict(raw.get(key, {})).items()
-    }
+    return {str(symbol): float(value) for symbol, value in dict(raw.get(key, {})).items()}
 
 
 class RebalanceReason(StrEnum):
@@ -83,9 +80,7 @@ class TargetPortfolio:
             raise ValueError("Cash weight must be in [0, 1]")
         if not math.isfinite(self.risk_multiplier) or self.risk_multiplier < 0:
             raise ValueError("Risk multiplier must be non-negative")
-        if len({_canonical_key(weight.symbol) for weight in self.weights}) != len(
-            self.weights
-        ):
+        if len({_canonical_key(weight.symbol) for weight in self.weights}) != len(self.weights):
             raise ValueError("Target portfolio contains duplicate symbols")
         total = self.cash_weight + sum(weight.weight for weight in self.weights)
         if total > 1.0 + WEIGHT_TOLERANCE:
@@ -143,8 +138,10 @@ class RebalancePolicy:
     frequency: str = "monthly"
 
     def __post_init__(self) -> None:
-        if self.frequency != "monthly" and self.frequency != "weekly" and not (
-            self.frequency.startswith("hours:")
+        if (
+            self.frequency != "monthly"
+            and self.frequency != "weekly"
+            and not (self.frequency.startswith("hours:"))
         ):
             raise ValueError(f"Unsupported rebalance frequency: {self.frequency}")
         if self.frequency.startswith("hours:"):

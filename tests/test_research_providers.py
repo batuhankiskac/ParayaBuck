@@ -51,9 +51,7 @@ def _stooq_provider(close_by_day: dict[str, float]) -> ExternalAdjustedDailyProv
 
 
 def test_external_provider_parses_adjusted_daily_bars() -> None:
-    provider = _stooq_provider(
-        {"2020-01-02": 100.0, "2020-01-03": 101.0, "2020-01-06": 102.0}
-    )
+    provider = _stooq_provider({"2020-01-02": 100.0, "2020-01-03": 101.0, "2020-01-06": 102.0})
     start = datetime(2020, 1, 1, tzinfo=UTC)
     end = datetime(2020, 1, 31, tzinfo=UTC)
     bars = provider.fetch_bars("SPY", "1d", start, end, "adjusted")
@@ -172,14 +170,8 @@ def test_reconciliation_uses_trading_dates_and_tolerates_flat_side() -> None:
         closes_b[index] = closes_b[index - 1] * closes_a[index] / closes_a[index - 1]
     # Feed A timestamps at 04:00 UTC, feed B at 05:00 UTC: dates must still
     # match and the flat-side day must be tolerated.
-    a = [
-        _bar(day.replace(hour=4), close)
-        for day, close in zip(days, closes_a)
-    ]
-    b = [
-        _bar(day.replace(hour=5), close)
-        for day, close in zip(days, closes_b)
-    ]
+    a = [_bar(day.replace(hour=4), close) for day, close in zip(days, closes_a)]
+    b = [_bar(day.replace(hour=5), close) for day, close in zip(days, closes_b)]
     report = reconcile_providers("SPY", a, b, provider_a="a", provider_b="b")
     assert report.overlapping_days == 39
     assert report.passed

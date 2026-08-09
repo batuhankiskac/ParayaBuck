@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "description": "Anonymized representative replay of the approximately $800 paper loss",
+  "account": {
+    "cash": 50000.0,
+    "equity": 99200.0,
+    "peak_equity": 100000.0,
+    "daily_pnl": -800.0
+  },
+  "managed_position": {
+    "symbol": "ASSET-1",
+    "quantity": 100.0,
+    "average_price": 100.0,
+    "current_price": 98.0,
+    "market_value": 9800.0
+  },
+  "proposed_increase": 0.10
+}

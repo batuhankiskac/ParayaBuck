@@ -43,9 +43,7 @@ class UniversePreflightResult:
     crypto_refreshed: bool = False
 
 
-def _refresh_with_retry(
-    refresh: Callable[[], object], name: str
-) -> bool:
+def _refresh_with_retry(refresh: Callable[[], object], name: str) -> bool:
     """Run one universe refresh with a single retry on transient failures.
 
     Returns True when the refresh succeeded. Failures surface through the
@@ -60,8 +58,7 @@ def _refresh_with_retry(
             return True
         except Exception as exc:
             log.warning(
-                "Automatic %s universe scan attempt %d failed; "
-                "fallback=configured error=%s",
+                "Automatic %s universe scan attempt %d failed; fallback=configured error=%s",
                 name,
                 attempt + 1,
                 exc,

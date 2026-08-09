@@ -34,7 +34,7 @@ def _trial(trial_id: str, experiment_id: str = "e1") -> PortfolioTrialResult:
     )
 
 
-def test_ledger_counts_cumulative_hypotheses_per_dataset_hash(tmp_path: Path) -> None:
+def test_ledger_counts_distinct_hypotheses_per_research_program(tmp_path: Path) -> None:
     ledger = TrialLedger(tmp_path / "ledger.json")
     trials_a = (_trial("t1"), _trial("t2"))
     count = ledger.record_trials(
@@ -42,6 +42,7 @@ def test_ledger_counts_cumulative_hypotheses_per_dataset_hash(tmp_path: Path) ->
         dataset_hash="hash-v2",
         experiment_id="exp-1",
         trials=trials_a,
+        research_program_id="equity-program",
     )
     assert count == 2
     # A second experiment on the SAME dataset adds to the cumulative count.
@@ -50,6 +51,7 @@ def test_ledger_counts_cumulative_hypotheses_per_dataset_hash(tmp_path: Path) ->
         dataset_hash="hash-v2",
         experiment_id="exp-2",
         trials=(_trial("t3"), _trial("t4")),
+        research_program_id="equity-program",
     )
     assert count == 4
     # Re-running the same experiment must NOT double-count.
@@ -58,16 +60,20 @@ def test_ledger_counts_cumulative_hypotheses_per_dataset_hash(tmp_path: Path) ->
         dataset_hash="hash-v2",
         experiment_id="exp-1",
         trials=trials_a,
+        research_program_id="equity-program",
     )
     assert count == 4
-    # A different dataset hash has its own independent count.
+    # Extending/re-hashing the dataset cannot reset or duplicate a hypothesis.
     count = ledger.record_trials(
-        dataset_id="crypto_spot_1h_v1",
-        dataset_hash="hash-crypto",
+        dataset_id="equity_etf_1d_v3",
+        dataset_hash="hash-v3",
         experiment_id="exp-3",
-        trials=(_trial("t5"),),
+        trials=(_trial("t1"), _trial("t5")),
+        research_program_id="equity-program",
+        dataset_lineage=("equity_etf_1d_v2",),
     )
-    assert count == 1
+    assert count == 5
+    assert ledger.trial_count_for_program("equity-program") == 5
     assert ledger.trial_count("hash-v2") == 4
 
 

@@ -39,14 +39,24 @@ def test_loads_single_application_config(tmp_path: Path) -> None:
     assert config.engine.approve_portfolio_strategy is False
 
 
-def test_approve_portfolio_strategy_flag_parses_from_yaml(tmp_path: Path) -> None:
+def test_deprecated_approve_portfolio_strategy_flag_is_rejected(tmp_path: Path) -> None:
     raw = _settings()
     raw["engine"]["approve_portfolio_strategy"] = True
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
 
-    config = load_config(str(path))
-    assert config.engine.approve_portfolio_strategy is True
+    with pytest.raises(ValueError, match="deprecated and unsafe"):
+        load_config(str(path))
+
+
+def test_manifest_paths_require_one_separate_checksum(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["engine"]["approval_manifest_paths"] = ["approval.json"]
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match="expected checksum"):
+        load_config(str(path))
 
 
 def test_rejects_duplicate_symbols(tmp_path: Path) -> None:

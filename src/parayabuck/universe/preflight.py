@@ -262,7 +262,7 @@ def refresh_equity_universe(
     shortlist_symbols = {item.symbol for item in ranked[: universe.target_shortlist]} | reserved
     quotes: dict[str, Any] = {}
     try:
-        quotes = trading.get_latest_quotes(sorted(shortlist_symbols))
+        quotes = history.get_latest_stock_quotes(sorted(shortlist_symbols))
     except Exception as exc:
         log.warning(
             "Equity latest quotes unavailable; neutral spread score will be used: %s",

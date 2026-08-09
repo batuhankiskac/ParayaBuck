@@ -308,13 +308,17 @@ def _warmup_window_days(config: Config, market: Market) -> int:
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(selection.name, selection.parameters)
     lookback_days = 60 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
-    from parayabuck.markets.timeframes import timeframe_duration
+    from parayabuck.markets.timeframes import bars_to_calendar_days
 
     # Strategy warmup is expressed in bars of the strategy timeframe (e.g. 150
-    # daily bars or 150 hourly bars); the scanner lookback is already calendar
-    # days and must not be scaled by the bar duration.
-    duration = timeframe_duration(selection.timeframe)
-    strategy_days = max(1, int((strategy.minimum_history_bars * duration).total_seconds() / 86_400))
+    # daily bars); the scanner lookback is already calendar days and must not
+    # be scaled by the bar duration. Bars are converted to a calendar span
+    # through the number of trading sessions, not 1 bar == 1 calendar day.
+    strategy_days = bars_to_calendar_days(
+        "SPY" if market == Market.EQUITY else "BTC/USD",
+        selection.timeframe,
+        strategy.minimum_history_bars,
+    )
     return max(strategy_days, lookback_days)
 
 

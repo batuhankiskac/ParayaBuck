@@ -89,7 +89,9 @@ class AlpacaBroker:
         *,
         manage_external_positions: bool = False,
         ledger: ExecutionLedger | None = None,
-        portfolio_owned_symbols: Callable[[], set[str]] | None = None,
+        portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
+        portfolio_stop_recorded: (Callable[[str, Market, float, str], None] | None) = None,
+        portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,
         crypto_emergency_exit_bps: float = 75.0,
         crypto_stop_cancel_timeout_seconds: float = 5.0,
@@ -104,7 +106,9 @@ class AlpacaBroker:
         self._asset_cache: dict[str, Any] = {}
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
-        self.portfolio_owned_symbols = portfolio_owned_symbols
+        self.portfolio_owned_quantities = portfolio_owned_quantities
+        self.portfolio_stop_recorded = portfolio_stop_recorded
+        self.portfolio_flat_reconciled = portfolio_flat_reconciled
         self._account_id = ""
         self.crypto_stop_limit_offset_bps = crypto_stop_limit_offset_bps
         self.crypto_emergency_exit_bps = crypto_emergency_exit_bps
@@ -146,10 +150,10 @@ class AlpacaBroker:
         managed_positions = (
             ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         )
-        managed_symbols = set(managed_positions)
-        portfolio_owned_provider = getattr(self, "portfolio_owned_symbols", None)
+        owned_quantities: dict[str, float] = {}
+        portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
         if portfolio_owned_provider is not None:
-            managed_symbols.update(portfolio_owned_provider())
+            owned_quantities = portfolio_owned_provider() or {}
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
@@ -165,10 +169,22 @@ class AlpacaBroker:
             )
             canonical = canonical_symbol(str(raw.symbol), market)
             managed = managed_positions.get(canonical)
+            raw_qty = float(raw.qty)
+            managed_qty = min(abs(raw_qty), float(owned_quantities.get(canonical, 0.0)))
+            if managed is not None:
+                managed_qty = abs(raw_qty)
+            external_qty = abs(raw_qty) - managed_qty
+            ownership = (
+                "managed"
+                if managed_qty > 1e-12 and external_qty <= 1e-12
+                else "mixed"
+                if managed_qty > 1e-12
+                else "external"
+            )
             positions.append(
                 PositionSnapshot(
                     symbol=canonical,
-                    qty=float(raw.qty),
+                    qty=raw_qty,
                     avg_price=float(raw.avg_entry_price),
                     current_price=current_price,
                     market=market,
@@ -177,7 +193,8 @@ class AlpacaBroker:
                         if getattr(raw, "qty_available", None) is not None
                         else None
                     ),
-                    ownership=("managed" if canonical in managed_symbols else "external"),
+                    ownership=ownership,
+                    managed_qty=managed_qty,
                     stop_price=(
                         managed.current_stop or managed.original_stop
                         if managed is not None
@@ -517,9 +534,9 @@ class AlpacaBroker:
         """
         account = self.account()
         manage_external = bool(getattr(self, "manage_external_positions", True))
-        portfolio_owned_provider = getattr(self, "portfolio_owned_symbols", None)
+        portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
         portfolio_owned = (
-            portfolio_owned_provider() if portfolio_owned_provider is not None else set()
+            set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
         )
         ledger = self.ledger
         managed = (
@@ -536,6 +553,21 @@ class AlpacaBroker:
             for position in account.positions
             if not position.is_flat
         }
+        if portfolio_owned and (
+            flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)
+        ):
+            # A portfolio symbol with no broker position and no open order is
+            # stale: a missed stop fill (stream downtime) or a manual sell
+            # would otherwise leave the repository claiming managed ownership
+            # of a position that no longer exists.
+            open_order_symbols = self.open_portfolio_order_symbols()
+            for symbol in portfolio_owned:
+                if symbol in broker_symbols or symbol in open_order_symbols:
+                    continue
+                flat_reconciler(
+                    symbol,
+                    Market.CRYPTO if is_crypto(symbol) else Market.EQUITY,
+                )
         if ledger is not None:
             self._reconcile_crypto_exit_state(ledger)
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
@@ -594,10 +626,14 @@ class AlpacaBroker:
                 # managed external positions with fixed percentages.
                 if portfolio_owned_position:
                     stop_pct = self.crypto_emergency_exit_bps / 10_000
+                    # A portfolio-owned position may be mixed with manual
+                    # inventory: only the managed quantity is protected, so an
+                    # emergency stop can never consume the user's own units.
+                    total_qty = min(abs(position.qty), position.managed_qty)
                 else:
                     stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
+                    total_qty = abs(position.qty)
                 stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
-                total_qty = abs(position.qty)
             available_qty = (
                 abs(position.qty_available) if position.qty_available is not None else total_qty
             )
@@ -679,9 +715,11 @@ class AlpacaBroker:
             protective_client_id = (
                 f"{ownership.entry_client_order_id}-stop-{uuid4().hex[:8]}"
                 if ownership is not None
+                else f"parayabuck-stop-{uuid4().hex}"
+                if portfolio_owned_position
                 else None
             )
-            protected = self._submit_stop(
+            accepted_id = self._submit_stop(
                 position.symbol,
                 position.market,
                 qty,
@@ -689,7 +727,18 @@ class AlpacaBroker:
                 is_long,
                 client_order_id=protective_client_id,
             )
-            if not protected:
+            if (
+                accepted_id is not None
+                and portfolio_owned_position
+                and (stop_recorder := getattr(self, "portfolio_stop_recorded", None)) is not None
+            ):
+                # Portfolio-owned positions have no ledger lot; their stop is
+                # booked in the portfolio repository so the fill lifecycle can
+                # release ownership when the position is flat. The retry path
+                # may have accepted a different client order id; record the
+                # accepted one so the fill is attributed to the SELL leg.
+                stop_recorder(position.symbol, position.market, qty, accepted_id)
+            if accepted_id is None:
                 if ownership is not None and ledger is not None:
                     ledger.set_protection_state(
                         self._account_id or "unknown",
@@ -1058,7 +1107,7 @@ class AlpacaBroker:
             True,
             client_order_id=client_id,
         )
-        if not protected:
+        if protected is None:
             if self._has_protective_order(current.canonical_symbol, True, resolution.available_qty):
                 ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
                 raise AmbiguousOrderState(
@@ -1293,13 +1342,16 @@ class AlpacaBroker:
         if qty <= 0:
             log.error("Protective stop has no available quantity for %s", intent.symbol)
             return False
-        return self._submit_stop(
-            intent.symbol,
-            intent.market,
-            qty,
-            stop,
-            intent.direction == Direction.LONG,
-            client_order_id=f"{intent.client_order_id}-stop",
+        return (
+            self._submit_stop(
+                intent.symbol,
+                intent.market,
+                qty,
+                stop,
+                intent.direction == Direction.LONG,
+                client_order_id=f"{intent.client_order_id}-stop",
+            )
+            is not None
         )
 
     def protect_recovered_crypto_entry(self, intent: OrderIntent) -> bool:
@@ -1531,7 +1583,13 @@ class AlpacaBroker:
         stop_price: float,
         position_is_long: bool,
         client_order_id: str | None = None,
-    ) -> bool:
+    ) -> str | None:
+        """Submit a protective stop and return the accepted client order id.
+
+        The retry path accepts a different client order id than the one that
+        failed; callers that book the stop (e.g. the portfolio repository)
+        must use the returned id so a later fill is attributed to it.
+        """
         client_order_id = client_order_id or f"parayabuck-stop-{uuid4().hex}"
         side = OrderSide.SELL if position_is_long else OrderSide.BUY
         step = self._price_step(symbol, market, stop_price)
@@ -1555,7 +1613,7 @@ class AlpacaBroker:
                 qty,
                 stop_price,
             )
-            return False
+            return None
         try:
             if market == Market.CRYPTO:
                 offset = Decimal(
@@ -1576,7 +1634,7 @@ class AlpacaBroker:
                         symbol,
                         limit_price,
                     )
-                    return False
+                    return None
                 request: Any = StopLimitOrderRequest(
                     symbol=symbol,
                     qty=qty_number,
@@ -1607,7 +1665,7 @@ class AlpacaBroker:
                         client_order_id,
                         broker_id,
                     )
-            return True
+            return client_order_id
         except AmbiguousOrderState:
             log.critical(
                 "Stop submit ambiguous: market=%s symbol=%s order_client_id=%s "
@@ -1648,13 +1706,13 @@ class AlpacaBroker:
                                 retry_client_order_id,
                                 broker_id,
                             )
-                        return True
+                        return retry_client_order_id
                     except AmbiguousOrderState:
                         raise
                     except Exception as retry_exc:
                         exc = retry_exc
             log.error("Protective stop failed for %s: %s", symbol, exc)
-            return False
+            return None
 
     def _round_qty_down(self, symbol: str, qty: float) -> float:
         step = self._qty_step(symbol)

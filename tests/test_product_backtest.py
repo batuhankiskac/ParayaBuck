@@ -349,9 +349,10 @@ def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     tmp_path,
 ) -> None:
     config = _config(tmp_path)
-    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars, which
-    # also covers the 60d scanner lookback: the window is 61 days.
-    assert cli_module._warmup_window_days(config, Market.EQUITY) == 61
+    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars. 61
+    # daily bars span ~94 calendar days (sessions per calendar day, not one
+    # bar per calendar day), which also covers the 60d scanner lookback.
+    assert cli_module._warmup_window_days(config, Market.EQUITY) == 94
 
 
 def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
@@ -381,3 +382,15 @@ def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
     )
     lookback = intraday.universe.crypto.scanner.lookback_days
     assert cli_module._warmup_window_days(intraday, Market.CRYPTO) >= lookback
+
+
+def test_bars_to_calendar_days_scales_by_session_density() -> None:
+    from parayabuck.markets.timeframes import bars_to_calendar_days
+
+    # Equity daily bars need more calendar days than bars.
+    assert bars_to_calendar_days("SPY", "1d", 61) == 94
+    assert bars_to_calendar_days("SPY", "1d", 150) > 150
+    # Intraday equity fits several sessions per calendar day.
+    assert bars_to_calendar_days("SPY", "1h", 150) < 60
+    # Crypto trades 24/7: the span is close to bars / 24.
+    assert bars_to_calendar_days("BTC/USD", "1h", 150) == 7

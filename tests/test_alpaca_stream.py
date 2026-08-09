@@ -51,3 +51,79 @@ def test_runtime_subscription_update_adds_and_removes_exact_symbols() -> None:
     }
     assert stream.stock.unsubscriptions == [("AAPL",)]
     assert stream.crypto.unsubscriptions == [("BTC/USD",)]
+
+
+class _ExplodingFakeStream(_FakeStream):
+    def __init__(self) -> None:
+        super().__init__()
+        self.explode = False
+
+    def subscribe_bars(self, handler: Any, *symbols: str) -> None:
+        if self.explode:
+            raise RuntimeError("websocket rejected subscription")
+        self.subscriptions.append((handler, symbols))
+
+    def unsubscribe_bars(self, *symbols: str) -> None:
+        self.unsubscriptions.append(symbols)
+
+
+def test_update_subscriptions_rolls_back_stock_membership_when_crypto_fails() -> None:
+    """A failed crypto change must not leave the stock socket membership and
+    the local bookkeeping out of sync; the whole update is rolled back."""
+    stream = AlpacaBarStream.__new__(AlpacaBarStream)
+    stock = _FakeStream()
+    crypto = _ExplodingFakeStream()
+    stream.stock = stock
+    stream.crypto = crypto
+
+    async def handler(_bar: Any) -> None:
+        pass
+
+    stream.subscribe(["AAPL", "MSFT"], ["BTC/USD"], handler)
+
+    import pytest
+
+    crypto.explode = True
+    with pytest.raises(RuntimeError, match="websocket rejected subscription"):
+        stream.update_subscriptions(["MSFT", "NVDA"], ["ETH/USD"])
+
+    # The stock change (added NVDA, removed AAPL) was rolled back.
+    assert stock.unsubscriptions == [("AAPL",), ("NVDA",)]
+    assert ("AAPL",) in [symbols for _, symbols in stock.subscriptions]
+    assert stream._stock_symbols == {"AAPL", "MSFT"}
+    assert stream._crypto_symbols == {"BTC/USD"}
+
+
+class _UpdatedBarFakeStream(_FakeStream):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_updated = False
+
+    def subscribe_updated_bars(self, handler: Any, *symbols: str) -> None:
+        if self.fail_updated:
+            raise RuntimeError("updated-bars subscription rejected")
+
+
+def test_update_subscriptions_rolls_back_partial_stock_subscribe() -> None:
+    """If the updated-bars leg fails after the plain subscription was
+    accepted, the added symbols must be unsubscribed again before raising."""
+    stream = AlpacaBarStream.__new__(AlpacaBarStream)
+    stock = _UpdatedBarFakeStream()
+    crypto = _FakeStream()
+    stream.stock = stock
+    stream.crypto = crypto
+
+    async def handler(_bar: Any) -> None:
+        pass
+
+    stream.subscribe(["AAPL"], ["BTC/USD"], handler)
+
+    import pytest
+
+    stock.fail_updated = True
+    with pytest.raises(RuntimeError, match="updated-bars subscription rejected"):
+        stream.update_subscriptions(["AAPL", "NVDA"], ["BTC/USD"])
+
+    assert ("NVDA",) in stock.unsubscriptions
+    assert stream._stock_symbols == {"AAPL"}
+    assert stream._crypto_symbols == {"BTC/USD"}

@@ -4,6 +4,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.data.alpaca_stream")
 
 BarHandler = Callable[[Bar], Awaitable[None]]
 
@@ -97,7 +100,14 @@ class AlpacaBarStream:
     def update_subscriptions(
         self, stock_symbols: list[str], crypto_symbols: list[str]
     ) -> dict[str, tuple[str, ...]]:
-        """Atomically converge running streams on a newly approved symbol set."""
+        """Atomically converge running streams on a newly approved symbol set.
+
+        Stock and crypto memberships are applied in order. If the second
+        operation fails, the first is rolled back (re-subscribing the removed
+        symbols and unsubscribing the added ones) before the error propagates,
+        so socket membership and local bookkeeping never diverge and callers
+        can safely assume "the subscription call raised -> nothing changed".
+        """
         desired_stock = set(stock_symbols)
         desired_crypto = set(crypto_symbols)
         current_stock = set(getattr(self, "_stock_symbols", set()))
@@ -107,20 +117,49 @@ class AlpacaBarStream:
         added_crypto = tuple(sorted(desired_crypto - current_crypto))
         removed_crypto = tuple(sorted(current_crypto - desired_crypto))
 
-        self._update_market_subscription(
-            self.stock,
-            added_stock,
-            removed_stock,
-            getattr(self, "_stock_handler"),
-            getattr(self, "_stock_updated_handler"),
-        )
-        self._update_market_subscription(
-            self.crypto,
-            added_crypto,
-            removed_crypto,
-            getattr(self, "_crypto_handler"),
-            getattr(self, "_crypto_updated_handler"),
-        )
+        stock_handler = getattr(self, "_stock_handler")
+        stock_updated_handler = getattr(self, "_stock_updated_handler")
+        crypto_handler = getattr(self, "_crypto_handler")
+        crypto_updated_handler = getattr(self, "_crypto_updated_handler")
+        applied: list[tuple[object, tuple[str, ...], tuple[str, ...], Any, Any]] = []
+        try:
+            self._update_market_subscription(
+                self.stock,
+                added_stock,
+                removed_stock,
+                stock_handler,
+                stock_updated_handler,
+            )
+            applied.append(
+                (
+                    self.stock,
+                    added_stock,
+                    removed_stock,
+                    stock_handler,
+                    stock_updated_handler,
+                )
+            )
+            self._update_market_subscription(
+                self.crypto,
+                added_crypto,
+                removed_crypto,
+                crypto_handler,
+                crypto_updated_handler,
+            )
+            applied.append(
+                (self.crypto, added_crypto, removed_crypto, crypto_handler, crypto_updated_handler)
+            )
+        except Exception:
+            # Roll back every completed market in reverse order: re-subscribe
+            # what was unsubscribed and unsubscribe what was added.
+            for stream, added, removed, handler, updated_handler in reversed(applied):
+                try:
+                    self._update_market_subscription(
+                        stream, removed, added, handler, updated_handler
+                    )
+                except Exception:
+                    log.exception("Rollback of stream subscription change failed")
+            raise
         self._stock_symbols = desired_stock
         self._crypto_symbols = desired_crypto
         return {
@@ -142,12 +181,40 @@ class AlpacaBarStream:
             stream.subscribe_bars(handler, *added)
             subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
             if subscribe_updated is not None:
-                subscribe_updated(updated_handler, *added)
+                try:
+                    subscribe_updated(updated_handler, *added)
+                except Exception:
+                    # The plain subscription is already live; leave the socket
+                    # and the local bookkeeping consistent before re-raising.
+                    try:
+                        stream.unsubscribe_bars(*added)
+                    except Exception:
+                        log.exception("Rollback of a partial subscription failed")
+                    unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
+                    if unsubscribe_updated is not None:
+                        try:
+                            unsubscribe_updated(*added)
+                        except Exception:
+                            log.exception("Rollback of a partial updated subscription failed")
+                    raise
         if removed:
             stream.unsubscribe_bars(*removed)
             unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
             if unsubscribe_updated is not None:
-                unsubscribe_updated(*removed)
+                try:
+                    unsubscribe_updated(*removed)
+                except Exception:
+                    try:
+                        stream.subscribe_bars(handler, *removed)
+                    except Exception:
+                        log.exception("Rollback of a partial unsubscription failed")
+                    subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
+                    if subscribe_updated is not None:
+                        try:
+                            subscribe_updated(updated_handler, *removed)
+                        except Exception:
+                            log.exception("Rollback of a partial updated unsubscription failed")
+                    raise
 
     def run_stock(self) -> None:
         self.stock.run()

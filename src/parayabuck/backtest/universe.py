@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -157,18 +158,31 @@ def build_trailing_point_in_time_universe(
     pinned = tuple(dict.fromkeys(canonical_symbol(symbol, market) for symbol in pinned_symbols))
     if len(pinned) > maximum_symbols:
         raise ValueError("Pinned symbols exceed point-in-time universe capacity")
+    # Single forward pass with a rolling per-symbol window: every bar enters
+    # the trailing window once and leaves it once, so a multi-year broad
+    # universe stays O(bars) instead of O(timestamps * bars).
+    window: dict[str, deque[Bar]] = {}
+    add_index = 0
+    total = len(selected_bars)
     for timestamp in timestamps:
         period = _period_key(timestamp, rebalance_frequency)
+        cutoff = timestamp - timedelta(days=lookback_days)
+        while add_index < total and selected_bars[add_index].timestamp < timestamp:
+            bar = selected_bars[add_index]
+            add_index += 1
+            if bar.timestamp < cutoff:
+                continue
+            window.setdefault(canonical_symbol(bar.symbol, market), deque()).append(bar)
         if period == previous_period:
             continue
         previous_period = period
-        start = timestamp - timedelta(days=lookback_days)
-        by_symbol: dict[str, list[Bar]] = {}
-        for bar in selected_bars:
-            if bar.timestamp >= timestamp:
-                break
-            if bar.timestamp >= start:
-                by_symbol.setdefault(canonical_symbol(bar.symbol, market), []).append(bar)
+        for symbol, series in window.items():
+            while series and series[0].timestamp < cutoff:
+                series.popleft()
+        window = {symbol: series for symbol, series in window.items() if series}
+        by_symbol: dict[str, list[Bar]] = {
+            symbol: list(series) for symbol, series in window.items()
+        }
         result: ScannerResult | CryptoScannerResult
         if market == Market.EQUITY:
             configured = equity_config or EquityUniverseConfig(

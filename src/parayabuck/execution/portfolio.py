@@ -134,7 +134,7 @@ class PortfolioRiskOverlay:
             if not position.is_flat
             and (
                 canonical_symbol(position.symbol, position.market) not in approved
-                or position.ownership != "managed"
+                or position.external_qty > 1e-12
             )
         )
         immutable_sleeve = sum(
@@ -144,7 +144,7 @@ class PortfolioRiskOverlay:
             and position.market == market
             and (
                 canonical_symbol(position.symbol, position.market) not in approved
-                or position.ownership != "managed"
+                or position.external_qty > 1e-12
             )
         )
         desired = {
@@ -161,17 +161,17 @@ class PortfolioRiskOverlay:
             desired[symbol] = min(desired[symbol], per_asset)
             current = current_weights.get(symbol, 0.0)
             external_weight = sum(
-                position.market_value / equity
+                abs(position.external_qty) * position.current_price / equity
                 for position in account.positions
                 if canonical_symbol(position.symbol, position.market) == symbol
-                and position.ownership != "managed"
+                and position.external_qty > 1e-12
                 and not position.is_flat
             )
             managed_weight = sum(
-                position.market_value / equity
+                abs(position.managed_qty) * position.current_price / equity
                 for position in account.positions
                 if canonical_symbol(position.symbol, position.market) == symbol
-                and position.ownership == "managed"
+                and position.managed_qty > 1e-12
                 and not position.is_flat
             )
             if managed_weight <= 1e-12 and external_weight > 0:
@@ -282,11 +282,16 @@ class TargetToOrderPlanner:
                 continue
             position = positions.get(symbol)
             current_qty = position.qty if position is not None else 0.0
+            managed_qty = position.managed_qty if position is not None else 0.0
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
             delta = target_qty - current_qty
-            if delta < 0 and position is not None and position.ownership != "managed":
-                continue
-            if delta > 0 and position is not None and position.ownership != "managed":
+            if delta < 0:
+                # The bot may only sell its own (managed) units; manual
+                # inventory in a mixed position is never a sellable source.
+                delta = -min(abs(delta), managed_qty)
+                if abs(delta) <= 1e-12:
+                    continue
+            if delta > 0 and position is not None and managed_qty <= 1e-12:
                 # Never grow a manually opened position; the risk overlay
                 # already excludes purely external symbols, this is defense
                 # in depth against an external-position BUY.

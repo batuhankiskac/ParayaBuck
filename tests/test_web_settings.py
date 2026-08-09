@@ -4,6 +4,7 @@ import asyncio
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -76,6 +77,30 @@ def test_engine_manager_refuses_second_runtime(state: str) -> None:
 
     with pytest.raises(ValueError, match=f"already {state}"):
         manager.start_engine()
+
+
+def test_reset_safety_lock_does_not_deadlock_on_state_lock() -> None:
+    """reset_safety_lock acquires _state_lock and then calls
+    current_engine_state(), which re-acquires it. A non-reentrant lock would
+    deadlock; the manager must complete the reset within a bounded time."""
+    manager = server.EngineManager()
+    manager.engine_state = "halted"
+    manager.runtime = SimpleNamespace(
+        health=lambda: SimpleNamespace(state="halted"),
+        reset_safety_lock=lambda: None,
+    )
+    manager.broker = None
+
+    result: dict[str, object] = {"done": False}
+
+    def run() -> None:
+        manager.reset_safety_lock()
+        result["done"] = True
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join(timeout=5.0)
+    assert result["done"], "reset_safety_lock deadlocked on the state lock"
 
 
 def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(

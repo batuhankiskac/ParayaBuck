@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 import os
 import queue
 import subprocess
@@ -35,7 +34,6 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
-    TIMEFRAME_MINUTES,
     is_regular_equity_time,
 )
 from parayabuck.portfolio import portfolio_strategy_from
@@ -248,7 +246,24 @@ class EngineRuntime:
             paper=self.paper,
             manage_external_positions=self.config.manage_external_positions,
             ledger=self.ledger,
-            portfolio_owned_symbols=lambda: self._portfolio_repository.owned_symbols(),
+            portfolio_owned_quantities=lambda: self._portfolio_repository.owned_quantities(
+                self.broker.account_id or "unknown"
+            ),
+            portfolio_stop_recorded=lambda symbol, market, qty, client_order_id: (
+                self._portfolio_repository.record_protective_order(
+                    self.broker.account_id or "unknown",
+                    client_order_id,
+                    symbol,
+                    market,
+                    qty,
+                )
+            ),
+            portfolio_flat_reconciled=lambda symbol, market: (
+                self._portfolio_repository.clear_stale_ownership(
+                    self.broker.account_id or "unknown", symbol, market
+                )
+                or None
+            ),
             crypto_stop_limit_offset_bps=self.config.crypto_stop_limit_offset_bps,
             crypto_emergency_exit_bps=self.config.crypto_emergency_exit_bps,
             crypto_stop_cancel_timeout_seconds=self.config.crypto_stop_cancel_timeout_seconds,
@@ -694,28 +709,84 @@ class EngineRuntime:
         worker = self._workers["pb-universe-refresh"]
         worker.alive = True
         interval = self.app_config.runtime.scanner_refresh_hours * 3600
-        next_refresh = time.monotonic() + interval
-        self._next_universe_refresh_at = datetime.now(UTC) + timedelta(seconds=interval)
+        next_interval = time.monotonic() + interval
+        next_equity = self._next_equity_refresh_at(datetime.now(UTC))
+        self._next_universe_refresh_at = self._next_universe_deadline(next_interval, next_equity)
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
-                remaining = next_refresh - time.monotonic()
-                if remaining > 0:
-                    self._stop_event.wait(min(5.0, remaining))
-                    continue
-                try:
-                    self._refresh_runtime_universes()
-                    worker.last_event_at = datetime.now(UTC)
-                    worker.last_error = None
-                except Exception as exc:
-                    worker.last_error = str(exc)
-                    log.exception("Scheduled universe refresh failed")
-                next_refresh = time.monotonic() + interval
-                self._next_universe_refresh_at = datetime.now(UTC) + timedelta(seconds=interval)
+                now_mono = time.monotonic()
+                now = datetime.now(UTC)
+                interval_due = now_mono >= next_interval
+                equity_due = next_equity is not None and now >= next_equity
+                if interval_due or equity_due:
+                    try:
+                        if interval_due:
+                            # Crypto trades 24/7: keep a fixed cadence.
+                            self._refresh_runtime_universes(Market.CRYPTO)
+                            worker.last_event_at = datetime.now(UTC)
+                            worker.last_error = None
+                        if equity_due:
+                            # Equity refreshes pre-market only, after the
+                            # previous session's data is final, so a mid-session
+                            # partial daily bar can never change the universe.
+                            self._refresh_runtime_universes(Market.EQUITY)
+                            worker.last_event_at = datetime.now(UTC)
+                            worker.last_error = None
+                    except Exception as exc:
+                        worker.last_error = str(exc)
+                        log.exception("Scheduled universe refresh failed")
+                    finally:
+                        # Advance the deadlines even when the refresh failed:
+                        # a stuck past deadline would otherwise busy-spin the
+                        # loop and hammer Alpaca during an outage.
+                        if interval_due:
+                            next_interval = now_mono + interval
+                        if equity_due:
+                            next_equity = self._next_equity_refresh_at(now)
+                        self._next_universe_refresh_at = self._next_universe_deadline(
+                            next_interval, next_equity
+                        )
+                remaining = next_interval - now_mono
+                if next_equity is not None:
+                    remaining = min(remaining, (next_equity - now).total_seconds())
+                self._stop_event.wait(min(5.0, max(0.0, remaining)))
         finally:
             worker.alive = False
 
-    def _refresh_runtime_universes(self) -> None:
+    @staticmethod
+    def _next_universe_deadline(next_interval: float, next_equity: datetime | None) -> datetime:
+        interval_remaining = max(0.0, next_interval - time.monotonic())
+        interval_deadline = datetime.now(UTC) + timedelta(seconds=interval_remaining)
+        if next_equity is None:
+            return interval_deadline
+        return min(interval_deadline, next_equity)
+
+    def _next_equity_refresh_at(self, now: datetime) -> datetime | None:
+        """Next pre-market slot (06:00 ET) with the prior session finalized.
+
+        ``None`` when the equity universe is not dynamically refreshed, so the
+        loop never waits on a market that is not running.
+        """
+        equity_config = self.app_config.universe.equity
+        if not (equity_config.enabled and equity_config.dynamic_selection_enabled):
+            return None
+        local = now.astimezone(NEW_YORK)
+        premarket = local.replace(hour=6, minute=0, second=0, microsecond=0)
+        if local.weekday() < 5 and local < premarket:
+            return premarket.astimezone(UTC)
+        days_ahead = 1
+        while (local + timedelta(days=days_ahead)).weekday() >= 5:
+            days_ahead += 1
+        return (premarket + timedelta(days=days_ahead)).astimezone(UTC)
+
+    def _refresh_runtime_universes(self, target: Market | None = None) -> None:
+        """Refresh the scanner universes, optionally for one market only.
+
+        ``target=None`` refreshes every enabled dynamic universe (startup and
+        backfill paths); the scheduled loop passes a single market so equity
+        can run on a pre-market cadence while crypto keeps its own interval.
+        """
         desired: dict[Market, tuple[str, ...]] = {}
 
         def refresh_one(market: Market, operation: Callable[[], tuple[str, ...]]) -> None:
@@ -746,7 +817,11 @@ class EngineRuntime:
                     self._market_entry_halts[market] = "invalid_dynamic_universe"
 
         equity_config = self.app_config.universe.equity
-        if equity_config.enabled and equity_config.dynamic_selection_enabled:
+        if (
+            target in {None, Market.EQUITY}
+            and equity_config.enabled
+            and equity_config.dynamic_selection_enabled
+        ):
 
             def refresh_equity() -> tuple[str, ...]:
                 refresh_equity_universe(self.app_config, self.api_key, self.secret_key)
@@ -754,7 +829,11 @@ class EngineRuntime:
 
             refresh_one(Market.EQUITY, refresh_equity)
         crypto_config = self.app_config.universe.crypto
-        if crypto_config.enabled and crypto_config.dynamic_selection_enabled:
+        if (
+            target in {None, Market.CRYPTO}
+            and crypto_config.enabled
+            and crypto_config.dynamic_selection_enabled
+        ):
 
             def refresh_crypto() -> tuple[str, ...]:
                 refresh_crypto_universe(self.app_config, self.api_key, self.secret_key)
@@ -785,13 +864,13 @@ class EngineRuntime:
             getattr(getattr(self, "config", None), "manage_external_positions", False)
         )
         # Only bot-owned exposure is pinned: ledger lots, portfolio-owned
-        # positions (ownership == "managed"), and open portfolio orders.
+        # positions (managed quantity > 0), and open portfolio orders.
         # Manually opened external positions are not the runtime's inventory
         # and must not consume stream slots unless the operator opted in.
         protected = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
-            if not position.is_flat and (position.ownership == "managed" or manage_external)
+            if not position.is_flat and (position.managed_qty > 1e-12 or manage_external)
         }
         protected.update(self.broker.open_portfolio_order_symbols())
         protected.update(
@@ -852,9 +931,15 @@ class EngineRuntime:
             )
         with state_lock:
             self._not_ready_symbols.update(newly_added)
+        staged: dict[tuple[str, str], list[Bar]] = {}
         try:
             if newly_added and self._historical is not None:
-                self._warmup_symbols(self._historical, newly_added, retry=False)
+                staged = (
+                    self._warmup_symbols(
+                        self._historical, newly_added, retry=False, staged_only=True
+                    )
+                    or {}
+                )
         except Exception:
             with state_lock:
                 self._not_ready_symbols = previous_not_ready
@@ -886,6 +971,16 @@ class EngineRuntime:
                     for runtime in self._portfolio_runtimes:
                         if runtime.market == market:
                             runtime.update_symbols(selected)
+                # New members were staged during warmup but could only be
+                # seeded now that the runtimes include them; seeding inside
+                # this transaction keeps the transition atomic.
+                for (symbol, timeframe), bars in staged.items():
+                    self.market_state.seed(bars)
+                    for runtime in self._portfolio_runtimes:
+                        if runtime.strategy.timeframe == timeframe and (
+                            is_crypto(symbol) == (runtime.market == Market.CRYPTO)
+                        ):
+                            runtime.seed(bars)
                 self.symbols = sorted(
                     self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
                 )
@@ -959,7 +1054,7 @@ class EngineRuntime:
         # portfolio order are pinned; a fully exited symbol stops consuming a
         # stream slot.
         portfolio_symbols = (
-            repository.owned_symbols() | self.broker.open_portfolio_order_symbols()
+            repository.owned_symbols(account_id) | self.broker.open_portfolio_order_symbols()
             if repository is not None
             else set()
         )
@@ -1912,7 +2007,17 @@ class EngineRuntime:
         symbols: list[str],
         *,
         retry: bool,
-    ) -> None:
+        staged_only: bool = False,
+    ) -> dict[tuple[str, str], list[Bar]] | None:
+        """Download warmup history for ``symbols``.
+
+        With ``staged_only`` the bars are returned without seeding: the
+        caller (universe hot-swap) commits the membership first and seeds
+        afterwards so the new symbols' strategy history is never silently
+        dropped. Otherwise bars are seeded into the market state and every
+        matching portfolio runtime under the ingestion and portfolio locks.
+        """
+        staged: dict[tuple[str, str], list[Bar]] = {}
         groups = (
             (Market.EQUITY, [symbol for symbol in symbols if not is_crypto(symbol)]),
             (Market.CRYPTO, [symbol for symbol in symbols if is_crypto(symbol)]),
@@ -1939,20 +2044,23 @@ class EngineRuntime:
                             timeframe,
                             start=_warmup_start(symbol_batch[0], timeframe, requested_bars),
                         )
-                        with self._ingestion_lock, self._portfolio_lock:
-                            for symbol in symbol_batch:
-                                bars = batched.get(symbol, [])
-                                self.market_state.seed(bars[-requested_bars:])
-                                for runtime in self._portfolio_runtimes:
-                                    runtime.seed(bars[-requested_bars:])
-                                if len(bars) < requested_bars:
-                                    log.warning(
-                                        "Warmup not ready %s %s: %d/%d bars",
-                                        symbol,
-                                        timeframe,
-                                        len(bars),
-                                        requested_bars,
-                                    )
+                        for symbol in symbol_batch:
+                            bars = batched.get(symbol, [])
+                            if staged_only:
+                                staged[(symbol, timeframe)] = bars[-requested_bars:]
+                            else:
+                                with self._ingestion_lock, self._portfolio_lock:
+                                    self.market_state.seed(bars[-requested_bars:])
+                                    for runtime in self._portfolio_runtimes:
+                                        runtime.seed(bars[-requested_bars:])
+                            if len(bars) < requested_bars:
+                                log.warning(
+                                    "Warmup not ready %s %s: %d/%d bars",
+                                    symbol,
+                                    timeframe,
+                                    len(bars),
+                                    requested_bars,
+                                )
                     except Exception as exc:
                         log.warning(
                             "Warmup%s batch skipped %s symbols=%d: %s",
@@ -1961,6 +2069,7 @@ class EngineRuntime:
                             len(symbol_batch),
                             exc,
                         )
+        return staged or None
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
@@ -1971,11 +2080,9 @@ def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:
 
 
 def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
-    minutes = TIMEFRAME_MINUTES[timeframe]
-    bars_per_day = (1440 if is_crypto(symbol) else 390) / minutes
-    trading_days = bars * 1.5 / max(1, bars_per_day)
-    calendar_days = trading_days if is_crypto(symbol) else trading_days * 1.5
-    days = max(2, min(3650, math.ceil(calendar_days)))
+    from parayabuck.markets.timeframes import bars_to_calendar_days
+
+    days = bars_to_calendar_days(symbol, timeframe, bars)
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 

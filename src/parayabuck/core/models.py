@@ -278,6 +278,11 @@ class PositionSnapshot:
     market: Market
     qty_available: float | None = None
     ownership: str = "external"
+    # Quantity of this position owned (and therefore sellable) by the managed
+    # portfolio path. The remainder is manual/external inventory that the bot
+    # must never sell; a single managed/external flag cannot express a mixed
+    # position where a user owns part of the same lot.
+    managed_qty: float = 0.0
     stop_price: float | None = None
     initial_risk: float | None = None
     bars_held: int = 0
@@ -289,6 +294,10 @@ class PositionSnapshot:
     @property
     def is_flat(self) -> bool:
         return self.qty == 0
+
+    @property
+    def external_qty(self) -> float:
+        return abs(self.qty) - self.managed_qty
 
     @property
     def market_value(self) -> float:

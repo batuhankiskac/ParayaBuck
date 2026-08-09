@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -41,9 +42,29 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
+def bars_to_calendar_days(symbol: str, timeframe: str, bars: int) -> int:
+    """Calendar span needed to collect ``bars`` of ``timeframe`` history.
+
+    Equity bars only exist on regular trading sessions: 61 daily bars do not
+    fit in 61 calendar days. The span derives from bars produced per calendar
+    day (sessions per day scaled by the ~5/7 trading-day density for equity,
+    plus a holiday buffer) instead of treating 1 bar as 1 calendar day.
+    """
+    minutes = TIMEFRAME_MINUTES[timeframe]
+    if "/" in symbol:
+        bars_per_day = 1440 / minutes
+        multiplier = 1.05
+    else:
+        bars_per_session = (390 / minutes) if minutes < 1440 else 1
+        bars_per_day = bars_per_session * 5 / 7
+        multiplier = 1.1
+    return max(2, math.ceil(bars / max(0.01, bars_per_day) * multiplier))
+
+
 __all__ = [
     "NEW_YORK",
     "TIMEFRAME_MINUTES",
+    "bars_to_calendar_days",
     "is_regular_equity_time",
     "timeframe_duration",
     "weekday_count",

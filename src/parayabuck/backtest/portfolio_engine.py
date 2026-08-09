@@ -834,6 +834,7 @@ class PortfolioBacktestEngine:
                 market=position.market,
                 qty_available=position.qty,
                 ownership="managed",
+                managed_qty=position.qty,
             )
             for position in self._positions.values()
         )

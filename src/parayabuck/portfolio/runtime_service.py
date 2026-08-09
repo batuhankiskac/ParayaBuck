@@ -19,11 +19,14 @@ from parayabuck.execution.portfolio import (
     RiskOverlayDecision,
     TargetToOrderPlanner,
 )
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import rebalance_policy_for
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.storage import SQLiteStore
+
+log = get_logger("parayabuck.portfolio.runtime_service")
 
 
 class PortfolioRuntimeBroker(Protocol):
@@ -269,6 +272,110 @@ class PortfolioStateRepository:
                 (status, broker_order_id, client_order_id),
             )
 
+    def record_protective_order(
+        self,
+        account_id: str,
+        client_order_id: str,
+        symbol: str,
+        market: Market,
+        quantity: float,
+    ) -> None:
+        """Record a protective/emergency stop for a portfolio-owned position.
+
+        The stop is inserted as a SELL leg under the owning entry's decision,
+        so a later fill flows through ``apply_trade_update`` and decrements
+        the net owned quantity exactly like a planned exit. Without this, a
+        stop fill would leave the repository claiming ownership of a flat
+        broker position forever.
+        """
+        with self.store.lock, self.store.connection:
+            lineage = self._latest_entry_lineage(account_id, symbol, market)
+            if lineage is None:
+                # No portfolio entry lineage: booking a SELL leg would violate
+                # the decision foreign key and could grant managed ownership
+                # without a matching buy. The stop itself is already accepted
+                # broker-side; ownership release for it is a reconcile concern.
+                log.error(
+                    "Protective stop for %s has no portfolio entry lineage; "
+                    "ownership bookkeeping skipped",
+                    symbol,
+                )
+                return
+            decision_id, reference_price = lineage
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_orders(
+                    client_order_id, decision_id, symbol, market, side, quantity,
+                    reference_price, status, created_at
+                ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 'submitted', ?)""",
+                (
+                    client_order_id,
+                    decision_id,
+                    symbol,
+                    market.value,
+                    quantity,
+                    reference_price,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def clear_stale_ownership(self, account_id: str, symbol: str, market: Market) -> float:
+        """Book a filled SELL leg for the owned quantity when the broker holds
+        no position: a missed stop fill (stream downtime, manual sell) leaves
+        the repository claiming a managed position that no longer exists, and
+        nothing else ever zeroes it. Idempotent: returns the cleared quantity
+        (0.0 when nothing is owned anymore)."""
+        owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
+        if owned <= 1e-12:
+            return 0.0
+        with self.store.lock, self.store.connection:
+            lineage = self._latest_entry_lineage(account_id, symbol, market)
+            if lineage is None:
+                return 0.0
+            decision_id, reference_price = lineage
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_orders(
+                    client_order_id, decision_id, symbol, market, side, quantity,
+                    reference_price, status, cumulative_filled_quantity, created_at
+                ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 'filled', ?, ?)""",
+                (
+                    f"pbp-reconcile-{uuid4().hex}",
+                    decision_id,
+                    symbol,
+                    market.value,
+                    owned,
+                    reference_price,
+                    owned,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+        log.warning(
+            "Cleared stale portfolio ownership: account=%s symbol=%s qty=%s "
+            "(no broker position found)",
+            account_id,
+            symbol,
+            owned,
+        )
+        return owned
+
+    def _latest_entry_lineage(
+        self, account_id: str, symbol: str, market: Market
+    ) -> tuple[str, float] | None:
+        """Decision id and reference price of the most recent BUY entry row."""
+        row = self.store.connection.execute(
+            """
+            SELECT o.decision_id, o.reference_price FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE o.symbol = ? AND o.market = ? AND o.side = 'buy'
+              AND s.account_id = ?
+            ORDER BY o.created_at DESC LIMIT 1
+            """,
+            (symbol, market.value, account_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row[0]), float(row[1] or 0.0)
+
     def has_order(self, client_order_id: str) -> bool:
         with self.store.lock:
             row = self.store.connection.execute(
@@ -401,7 +508,39 @@ class PortfolioStateRepository:
             ).fetchall()
         return {str(row[0]) for row in rows}
 
-    def owned_symbols(self, market: Market | None = None) -> set[str]:
+    def owned_quantities(
+        self, account_id: str = "unknown", market: Market | None = None
+    ) -> dict[str, float]:
+        """Net filled quantity per symbol for one account.
+
+        Orders are attributed to an account through the persisted
+        decision/session lineage, so a stale paper session can never mark
+        symbols as owned for a different (live) account.
+        """
+        query = """
+            SELECT o.symbol, o.market, o.side, o.cumulative_filled_quantity
+            FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ?
+        """
+        params: tuple[object, ...] = (account_id,)
+        if market is not None:
+            query += " AND o.market = ?"
+            params = (account_id, market.value)
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+        net: dict[str, float] = {}
+        for symbol, _market, side, filled in rows:
+            filled_qty = float(filled or 0.0)
+            if filled_qty <= 0:
+                continue
+            net[str(symbol)] = net.get(str(symbol), 0.0) + (
+                filled_qty if str(side) == "buy" else -filled_qty
+            )
+        return {symbol: quantity for symbol, quantity in net.items() if quantity > 1e-12}
+
+    def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.
 
         Ownership is computed from cumulative fills (buy minus sell) so a
@@ -409,29 +548,7 @@ class PortfolioStateRepository:
         when its broker quantity reaches zero. This is the authoritative
         portfolio-side input to the broker's unified managed-position view.
         """
-        with self.store.lock:
-            if market is None:
-                rows = self.store.connection.execute(
-                    """
-                    SELECT symbol, market, side, cumulative_filled_quantity
-                    FROM portfolio_orders
-                    """
-                ).fetchall()
-            else:
-                rows = self.store.connection.execute(
-                    """
-                    SELECT symbol, market, side, cumulative_filled_quantity
-                    FROM portfolio_orders WHERE market = ?
-                    """,
-                    (market.value,),
-                ).fetchall()
-        net: dict[str, float] = {}
-        for symbol, _market, side, filled in rows:
-            filled_qty = float(filled or 0.0)
-            if filled_qty <= 0:
-                continue
-            net[symbol] = net.get(symbol, 0.0) + (filled_qty if str(side) == "buy" else -filled_qty)
-        return {symbol for symbol, quantity in net.items() if quantity > 1e-12}
+        return set(self.owned_quantities(account_id, market))
 
     def operations_snapshot(self) -> dict[str, object]:
         with self.store.lock:
@@ -654,7 +771,7 @@ class PortfolioRuntime:
             for position in account.positions
             if position.market == self.market
             and not position.is_flat
-            and position.ownership == "managed"
+            and position.managed_qty > 1e-12
         }
         if not managed.issubset(batch_symbols):
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")

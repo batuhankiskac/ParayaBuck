@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from alpaca.data.enums import Adjustment, DataFeed
 from alpaca.data.historical import CryptoHistoricalDataClient, StockHistoricalDataClient
-from alpaca.data.requests import CryptoBarsRequest, CryptoLatestQuoteRequest, StockBarsRequest
+from alpaca.data.requests import (
+    CryptoBarsRequest,
+    CryptoLatestQuoteRequest,
+    StockBarsRequest,
+    StockLatestQuoteRequest,
+)
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from parayabuck.core.models import Bar, Market
@@ -31,6 +37,10 @@ _TIMEFRAMES = {
 # window — a fresh last bar alone is not enough, otherwise a cache holding
 # only the tail of the window silently serves as if it were complete data.
 MIN_CACHE_COVERAGE_PCT = 0.60
+
+# Alpaca caps a single bars response at 10,000 rows; windows spanning more
+# rows are split into multiple time-bounded requests.
+_MAX_ROWS_PER_REQUEST = 10_000
 
 
 class AlpacaHistoricalData:
@@ -82,6 +92,23 @@ class AlpacaHistoricalData:
             canonical, []
         )
 
+    def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, Any]:
+        """Latest NBBO quotes through the market-data client.
+
+        Latest quotes are served by ``StockHistoricalDataClient``, not the
+        trading client; using the trading client here silently degrades every
+        equity scan to a neutral spread score.
+        """
+        if not symbols:
+            return {}
+        response: Any = self._stock_client.get_stock_latest_quote(
+            StockLatestQuoteRequest(
+                symbol_or_symbols=[canonical_symbol(symbol) for symbol in symbols],
+                feed=self._stock_feed,
+            )
+        )
+        return dict(response or {})
+
     def get_bars_batch(
         self,
         symbols: list[str],
@@ -107,13 +134,77 @@ class AlpacaHistoricalData:
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             expected_rows = int((end_at - start_at).total_seconds() // 60 // minutes)
-            if expected_rows > 10_000:
-                raise ValueError(
-                    f"Request window spans ~{expected_rows} {timeframe} bars; "
-                    "Alpaca caps responses at 10,000 rows and the result would "
-                    "be silently truncated. Split the window or use a larger timeframe."
+            if expected_rows > _MAX_ROWS_PER_REQUEST:
+                # Alpaca caps responses at 10,000 rows and silently truncates
+                # beyond it. Split the date window into row-bounded chunks so
+                # long crypto/equity histories download completely.
+                return self._fetch_chunked_windows(
+                    symbols,
+                    timeframe,
+                    start_at,
+                    end_at,
+                    minutes,
+                    adjustment,
+                    markets.pop(),
                 )
-        market = markets.pop()
+        else:
+            markets.pop()
+        return self._fetch_window(
+            symbols,
+            timeframe,
+            start_at,
+            end_at,
+            adjustment,
+            markets.pop(),
+        )
+
+    def _fetch_chunked_windows(
+        self,
+        symbols: list[str],
+        timeframe: str,
+        start_at: datetime,
+        end_at: datetime,
+        minutes: int,
+        adjustment: str,
+        market: Market,
+    ) -> dict[str, list[Bar]]:
+        span = (end_at - start_at).total_seconds()
+        expected_rows = span // 60 // minutes
+        chunk_count = max(1, math.ceil(expected_rows / _MAX_ROWS_PER_REQUEST))
+        chunk_seconds = span / chunk_count
+        overlap = timedelta(minutes=minutes)
+        merged: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
+        for index in range(chunk_count):
+            chunk_start = start_at + timedelta(seconds=index * chunk_seconds)
+            chunk_end = start_at + timedelta(seconds=(index + 1) * chunk_seconds)
+            if index > 0:
+                chunk_start = max(start_at, chunk_start - overlap)
+            chunk_end = min(end_at, chunk_end)
+            if chunk_end <= chunk_start:
+                continue
+            for symbol, bars in self._fetch_window(
+                symbols,
+                timeframe,
+                chunk_start,
+                chunk_end,
+                adjustment,
+                market,
+            ).items():
+                merged[symbol].extend(bars)
+        for symbol in symbols:
+            deduped = {bar.timestamp: bar for bar in merged[symbol]}
+            merged[symbol] = [deduped[key] for key in sorted(deduped)]
+        return merged
+
+    def _fetch_window(
+        self,
+        symbols: list[str],
+        timeframe: str,
+        start_at: datetime,
+        end_at: datetime,
+        adjustment: str,
+        market: Market,
+    ) -> dict[str, list[Bar]]:
         if market == Market.EQUITY and str(self._stock_feed).lower().split(".")[-1] == "iex":
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
         feed_name = (
@@ -153,7 +244,7 @@ class AlpacaHistoricalData:
                         timeframe=_TIMEFRAMES[timeframe],
                         start=start_at,
                         end=end_at,
-                        limit=10_000,
+                        limit=_MAX_ROWS_PER_REQUEST,
                     )
                 )
             else:
@@ -163,7 +254,7 @@ class AlpacaHistoricalData:
                         timeframe=_TIMEFRAMES[timeframe],
                         start=start_at,
                         end=end_at,
-                        limit=10_000,
+                        limit=_MAX_ROWS_PER_REQUEST,
                         feed=self._stock_feed,
                         adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
                     )

@@ -60,6 +60,7 @@ def _position(
         market=market,
         qty_available=qty,
         ownership=ownership,
+        managed_qty=qty if ownership == "managed" else 0.0,
     )
 
 
@@ -210,6 +211,7 @@ def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
         market=Market.EQUITY,
         qty_available=raw_position["quantity"],
         ownership="managed",
+        managed_qty=raw_position["quantity"],
     )
     account = AccountSnapshot(
         cash=raw_account["cash"],

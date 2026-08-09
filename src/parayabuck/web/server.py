@@ -216,7 +216,9 @@ class EngineManager:
             set()
         )
         self._log_queues_lock = threading.Lock()
-        self._state_lock = threading.Lock()
+        # Reentrant: reset_safety_lock and current_engine_state may be invoked
+        # while the state lock is already held by the caller.
+        self._state_lock = threading.RLock()
         self.control_token = secrets.token_urlsafe(32)
         self._live_request_suffix: str | None = None
         self._live_armed = False

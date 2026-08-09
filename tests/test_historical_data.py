@@ -114,6 +114,58 @@ def _crypto_history(cache_bars: list[Bar]) -> Any:
     return history
 
 
+def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> None:
+    """A window spanning more than 10k bars must be split into multiple
+    time-bounded requests instead of being rejected or silently truncated."""
+    import pandas as pd
+
+    import parayabuck.data.alpaca as alpaca_module
+
+    end = datetime(2026, 1, 1, tzinfo=UTC)
+    start = end - timedelta(days=730)  # 2 years of hourly bars: >10k rows
+    requests: list[tuple[datetime, datetime]] = []
+
+    class FakeCryptoClient:
+        def get_crypto_bars(self, request: Any) -> Any:
+            requests.append((request.start, request.end))
+            frames = []
+            timestamp = request.start
+            while timestamp < request.end:
+                frames.append(
+                    {
+                        "timestamp": timestamp,
+                        "symbol": "BTC/USD",
+                        "open": 100.0,
+                        "high": 101.0,
+                        "low": 99.0,
+                        "close": 100.0,
+                        "volume": 1000.0,
+                    }
+                )
+                timestamp += timedelta(hours=1)
+            return SimpleNamespace(df=pd.DataFrame(frames))
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "iex"
+    history._stock_client = None
+    history._crypto_client = FakeCryptoClient()
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+
+    bars = history.get_bars_batch(["BTC/USD"], "1h", start=start, end=end)
+
+    assert len(requests) > 1, "long window must be chunked"
+    for request_start, request_end in requests:
+        rows = (request_end - request_start).total_seconds() / 3600
+        assert rows <= 10_000 + 1, "every chunk must stay row-bounded"
+    expected = int((end - start).total_seconds() // 3600)
+    result = bars["BTC/USD"]
+    assert len(result) == expected, "no bars may be lost or duplicated by chunking"
+    assert len({bar.timestamp for bar in result}) == expected
+
+
 def test_incomplete_cache_is_not_used_as_api_fallback() -> None:
     end = datetime.now(UTC)
     start = end - timedelta(days=30)

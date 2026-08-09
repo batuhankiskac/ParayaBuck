@@ -331,6 +331,153 @@ def _daily_bars(end: datetime, days: int, symbol: str, volume: float) -> list[Ba
     ]
 
 
+def test_incremental_universe_matches_naive_trailing_windows_per_snapshot() -> None:
+    """The rolling-window builder must produce byte-identical snapshots to a
+    naive per-timestamp reconstruction of the trailing window."""
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    bars: list[Bar] = []
+    # Three symbols with different liquidity profiles, including one with a
+    # mid-series gap so eviction is exercised.
+    for day in range(120):
+        timestamp = start + timedelta(days=day)
+        if day < 50 or day >= 80:
+            close = 100 + day * 0.01
+            bars.append(
+                Bar(
+                    timestamp,
+                    "GAPPY",
+                    "1d",
+                    close - 1,
+                    close + 2,
+                    close - 2,
+                    close,
+                    2_000_000,
+                    Market.EQUITY,
+                )
+            )
+        close = 100 + day * 0.02
+        bars.append(
+            Bar(
+                timestamp,
+                "AAA",
+                "1d",
+                close - 1,
+                close + 2,
+                close - 2,
+                close,
+                5_000_000,
+                Market.EQUITY,
+            )
+        )
+        close = 100 + day * 0.03
+        bars.append(
+            Bar(
+                timestamp,
+                "ZZZ",
+                "1d",
+                close - 1,
+                close + 2,
+                close - 2,
+                close,
+                500_000,
+                Market.EQUITY,
+            )
+        )
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=1,
+        target_shortlist=1,
+        reference_symbols=(),
+        scanner=EquityScannerConfig(
+            minimum_price=1,
+            minimum_median_dollar_volume=1,
+            minimum_data_completeness=0.8,
+            minimum_atr_pct=0.001,
+        ),
+    )
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.EQUITY,
+        maximum_symbols=1,
+        lookback_days=60,
+        minimum_history_ratio=0.8,
+        equity_config=config,
+    )
+    assert len(universe.snapshots) > 10, "daily rebalance must produce many snapshots"
+    for snapshot in universe.snapshots:
+        cutoff = snapshot.effective_at - timedelta(days=60)
+        by_symbol: dict[str, list[Bar]] = {}
+        for bar in bars:
+            if bar.timestamp >= snapshot.effective_at:
+                break
+            if bar.timestamp >= cutoff:
+                by_symbol.setdefault(bar.symbol, []).append(bar)
+        shortlisted = sorted(by_symbol.items())[:1]
+        candidates = [
+            equity_candidate_from_bars(symbol, history, expected_bar_count=20)
+            for symbol, history in shortlisted
+        ]
+        direct = EquityUniverseScanner(config).scan(
+            candidates,
+            data_timestamp=max(
+                (bar.timestamp for history in by_symbol.values() for bar in history),
+                default=snapshot.effective_at - timedelta(days=1),
+            ),
+            selection_timestamp=snapshot.effective_at,
+            pinned_symbols=(),
+        )
+        assert snapshot.symbols == frozenset(direct.selected_symbols), (
+            f"snapshot mismatch at {snapshot.effective_at}"
+        )
+
+
+def test_incremental_universe_handles_wide_datasets_without_rescanning() -> None:
+    """A broad multi-year universe must build in linear time: a wide dataset
+    completes well within a bound that the old per-timestamp full rescan
+    (hundreds of thousands of window iterations) would exceed."""
+    import time
+
+    start = datetime(2021, 1, 1, tzinfo=UTC)
+    symbols = tuple(f"SYM{i:03d}" for i in range(60))
+    bars = [
+        Bar(
+            start + timedelta(days=day),
+            symbol,
+            "1d",
+            100 + day * 0.001 - 1,
+            100 + day * 0.001 + 2,
+            100 + day * 0.001 - 2,
+            100 + day * 0.001,
+            2_000_000,
+            Market.EQUITY,
+        )
+        for day in range(1200)
+        for symbol in symbols
+    ]
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=8,
+        target_shortlist=8,
+        reference_symbols=(),
+        scanner=EquityScannerConfig(
+            minimum_price=1,
+            minimum_median_dollar_volume=1,
+            minimum_data_completeness=0.5,
+            minimum_atr_pct=0.001,
+        ),
+    )
+    began = time.monotonic()
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.EQUITY,
+        maximum_symbols=8,
+        lookback_days=60,
+        minimum_history_ratio=0.5,
+        equity_config=config,
+    )
+    elapsed = time.monotonic() - began
+    assert universe.snapshots, "wide dataset must produce snapshots"
+    assert elapsed < 30.0, f"incremental builder too slow: {elapsed:.1f}s"
+
+
 def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
     tmp_path, monkeypatch
 ) -> None:
@@ -368,15 +515,15 @@ def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
             quote_requests.append(tuple(symbols))
             return {
                 "AAA": SimpleNamespace(bid_price=99.5, ask_price=100.5),
             }
-
-    class FakeHistory:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
 
         def get_bars_batch(
             self,
@@ -434,12 +581,12 @@ def test_equity_refresh_full_mode_when_no_cache_and_neutral_spread(tmp_path, mon
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
-            raise RuntimeError("quotes unavailable")
-
     class FakeHistory:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
+
+        def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
+            raise RuntimeError("quotes unavailable")
 
         def get_bars_batch(
             self,
@@ -498,12 +645,12 @@ def test_rolling_cache_last_write_wins_for_same_day_bars(tmp_path, monkeypatch) 
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        def get_latest_quotes(self, symbols: list[str]) -> dict[str, object]:
-            raise RuntimeError("no quotes")
-
     class FakeHistory:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
+
+        def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
+            raise RuntimeError("no quotes")
 
         def get_bars_batch(
             self,

@@ -4,6 +4,9 @@ import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
+
+import pytest
 
 import parayabuck.runtime as runtime_module
 from parayabuck.config import Config
@@ -66,7 +69,7 @@ def test_hot_swap_pins_positions_and_open_orders_within_stream_capacity() -> Non
                 ),
             ),
         ),
-        open_portfolio_order_symbols=lambda: {"QQQ"},
+        portfolio_open_order_symbols=lambda: {"QQQ"},
     )
     runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: [])
     updated: list[tuple[str, ...]] = []
@@ -137,7 +140,7 @@ def test_hot_swap_does_not_pin_external_positions_by_default() -> None:
             0.0,
             positions=(PositionSnapshot("AAPL", 1, 100, 100, Market.EQUITY, ownership="external"),),
         ),
-        open_portfolio_order_symbols=lambda: set(),
+        portfolio_open_order_symbols=lambda: set(),
     )
     runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: [])
     runtime._portfolio_runtimes = ()
@@ -329,7 +332,7 @@ def _hot_swap_runtime(equity_symbols: set[str]) -> EngineRuntime:
     runtime.broker = SimpleNamespace(
         account_id="account",
         account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0.0, positions=()),
-        open_portfolio_order_symbols=lambda: set(),
+        portfolio_open_order_symbols=lambda: set(),
     )
     runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: [])
     runtime._portfolio_runtimes = ()
@@ -491,3 +494,246 @@ def test_hot_swap_commit_failure_restores_stream_and_state() -> None:
         (["MSFT", "NVDA", "SPY", "TSLA"], []),
         (["OLD", "SPY"], []),
     ]
+
+
+def _crypto_disabled_config(tmp_path) -> Config:
+    base = Config()
+    return replace(
+        base,
+        runtime=replace(base.runtime, decision_db_path=str(tmp_path / "runtime.sqlite3")),
+        universe=replace(
+            base.universe,
+            crypto=replace(
+                base.universe.crypto,
+                enabled=True,
+                dynamic_selection_enabled=True,
+            ),
+        ),
+    )
+
+
+def test_disabled_crypto_strategy_without_positions_streams_nothing(tmp_path, monkeypatch) -> None:
+    """Crypto strategy disabled + no managed crypto: universe discovery stays
+    enabled but no crypto market-data stream or observation membership."""
+    monkeypatch.setattr(
+        runtime_module,
+        "ensure_active_universes",
+        lambda config, api_key, secret_key: SimpleNamespace(
+            equity_status="success", crypto_status="success"
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_symbols",
+        lambda config, log_rejection=True: ("SPY", "AAPL"),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_crypto_symbols",
+        lambda config, log_rejection=True: ("BTC/USD", "ETH/USD", "SOL/USD"),
+    )
+    runtime = EngineRuntime("key", "secret", _crypto_disabled_config(tmp_path))
+    assert runtime._strategy_enabled[Market.CRYPTO] is False
+    assert runtime._symbols_by_market[Market.CRYPTO] == set()
+    assert runtime._market_enabled[Market.CRYPTO] is False
+    # No crypto strategy runtime is configured.
+    assert all(strategy.market != Market.CRYPTO for strategy, _s, _c in runtime._strategy_specs)
+    runtime._portfolio_repository.close()
+
+
+def test_disabled_crypto_strategy_with_managed_position_stays_protected(
+    tmp_path, monkeypatch
+) -> None:
+    """Crypto strategy disabled BUT a managed crypto position exists: the
+    position remains in the observation membership so it is monitored and
+    protected."""
+    from parayabuck.execution.portfolio import (
+        PortfolioOrderRequest,
+        PortfolioOrderSide,
+        RiskOverlayDecision,
+    )
+    from parayabuck.portfolio.models import TargetPortfolio
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    monkeypatch.setattr(
+        runtime_module,
+        "ensure_active_universes",
+        lambda config, api_key, secret_key: SimpleNamespace(
+            equity_status="success", crypto_status="success"
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_symbols",
+        lambda config, log_rejection=True: ("SPY", "AAPL"),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_crypto_symbols",
+        lambda config, log_rejection=True: ("BTC/USD", "ETH/USD"),
+    )
+    runtime = EngineRuntime("key", "secret", _crypto_disabled_config(tmp_path))
+    assert runtime._symbols_by_market[Market.CRYPTO] == set()
+    # Seed a managed crypto position through the repository ("unknown" account
+    # is what the runtime resolves before the first broker account() call).
+    repo: PortfolioStateRepository = runtime._portfolio_repository
+    session = repo.begin_session("unknown", "digest", "paper")
+    timestamp = datetime(2026, 8, 1, tzinfo=UTC)
+    target = TargetPortfolio(
+        strategy_name="crypto",
+        strategy_version="1",
+        decision_timestamp=timestamp,
+        weights=(),
+        cash_weight=1.0,
+    )
+    repo.record_decision(
+        session,
+        "unknown",
+        "digest",
+        target,
+        RiskOverlayDecision(target, False, (), 0.0, 0.0),
+        Market.CRYPTO,
+    )
+    repo.record_order(
+        PortfolioOrderRequest(
+            client_order_id="pbp-crypto-entry",
+            decision_id=repo.store.connection.execute(
+                "SELECT decision_id FROM portfolio_decisions LIMIT 1"
+            ).fetchone()[0],
+            symbol="BTC/USD",
+            market=Market.CRYPTO,
+            side=PortfolioOrderSide.BUY,
+            quantity=0.5,
+            reference_price=100000.0,
+            decision_timestamp=timestamp,
+            strategy_name="crypto",
+            strategy_version="1",
+            risk_reducing=False,
+        ),
+        "submitted",
+    )
+    repo.apply_trade_update(
+        client_order_id="pbp-crypto-entry",
+        broker_order_id="broker-entry",
+        status="fill",
+        cumulative_filled_quantity=0.5,
+        average_fill_price=100000.0,
+        occurred_at=timestamp,
+        activity_id="activity-entry",
+        fee=0.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+    # Replace the network broker with a fake holding the managed position.
+    runtime.broker = SimpleNamespace(
+        account_id="unknown",
+        account=lambda: AccountSnapshot(
+            100_000,
+            100_000,
+            100_000,
+            0.0,
+            positions=(
+                PositionSnapshot(
+                    "BTC/USD",
+                    0.5,
+                    100000,
+                    100000,
+                    Market.CRYPTO,
+                    qty_available=0.5,
+                    ownership="managed",
+                    managed_qty=0.5,
+                ),
+            ),
+        ),
+        portfolio_open_order_symbols=lambda: set(),
+    )
+    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda account_id: [])
+    runtime._pin_managed_symbols()
+    assert "BTC/USD" in runtime._symbols_by_market[Market.CRYPTO]
+    assert runtime._market_enabled[Market.CRYPTO] is True
+    assert "BTC/USD" in runtime._managed_pin_symbols
+    # Configured (strategy) pins are NOT streamed: only the managed pin.
+    assert "ETH/USD" not in runtime._symbols_by_market[Market.CRYPTO]
+    repo.close()
+
+
+def test_hot_swap_rollback_failure_halts_entries_and_resyncs() -> None:
+    """If the stream rollback itself fails after a hot-swap error, the socket
+    membership is unknown: entries halt for the market and the stream is
+    forced to reconnect from the authoritative desired membership."""
+    runtime = _hot_swap_runtime({"SPY", "OLD"})
+    runtime._warmup_symbols = lambda _history, symbols, *, retry, staged_only=False: None
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._resync_pending = False
+
+    class _UnknownStateStream:
+        rollback_failed = True
+
+        def clear_rollback_failure(self) -> None:
+            self.rollback_failed = False
+
+        def update_subscriptions(self, stocks: list[str], crypto: list[str]) -> None:
+            if self.rollback_failed:
+                raise RuntimeError("websocket refused subscription (rollback failed)")
+            self.calls.append((list(stocks), list(crypto)))
+
+    failing = _UnknownStateStream()
+    failing.calls = []
+    runtime.stream = failing
+    with pytest.raises(RuntimeError, match="websocket refused"):
+        runtime._apply_runtime_universes({Market.EQUITY: ("SPY", "MSFT", "NVDA", "TSLA")})
+
+    # Membership was never committed; entries halt with an unknown-socket state.
+    assert runtime._symbols_by_market[Market.EQUITY] == {"SPY", "OLD"}
+    assert runtime._market_entry_halts[Market.EQUITY] == "subscription_state_unknown"
+    assert runtime._resync_pending is True
+    # A subsequent resync reconnects from the authoritative membership.
+    runtime._symbols_by_market[Market.EQUITY] = {"SPY", "MSFT"}
+    runtime._resync_stream_if_needed()
+    assert runtime._resync_pending is False
+    assert runtime._market_entry_halts[Market.EQUITY] is None
+    assert failing.calls == [(["MSFT", "SPY"], [])]
+
+
+def test_update_subscriptions_marks_rollback_failure_when_rollback_leg_fails() -> None:
+    """A rollback leg failure must flag the socket state as unknown so the
+    runtime never assumes the previous subscription survived."""
+    import pytest as _pytest
+
+    from parayabuck.data.alpaca_stream import AlpacaBarStream
+
+    class _FailingRollbackStream:
+        def __init__(self) -> None:
+            self.subscribe_calls = 0
+
+        def subscribe_bars(self, handler: Any, *symbols: str) -> None:
+            self.subscribe_calls += 1
+            # Call 1: initial subscribe. Call 2: forward leg (added NVDA).
+            # Call 3: rollback re-subscribe of the removed AAPL -> fails.
+            if self.subscribe_calls == 3:
+                raise RuntimeError("rollback subscribe rejected")
+
+        def unsubscribe_bars(self, *symbols: str) -> None:
+            pass
+
+    stream = AlpacaBarStream.__new__(AlpacaBarStream)
+    stream.stock = _FailingRollbackStream()
+
+    class _FailingCrypto:
+        def subscribe_bars(self, handler: Any, *symbols: str) -> None:
+            raise RuntimeError("crypto subscribe rejected")
+
+        def unsubscribe_bars(self, *symbols: str) -> None:
+            pass
+
+    stream.crypto = _FailingCrypto()
+
+    async def handler(_bar: Any) -> None:
+        pass
+
+    stream.subscribe(["AAPL"], [], handler)
+    # The crypto market fails after the stock market applied its change; the
+    # stock rollback then also fails -> the socket state is unknown.
+    with _pytest.raises(RuntimeError, match="crypto subscribe rejected"):
+        stream.update_subscriptions(["NVDA"], ["BTC/USD"])
+    assert stream.rollback_failed is True

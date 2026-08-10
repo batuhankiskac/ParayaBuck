@@ -119,7 +119,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
                 "runtime": {
                     "mode": "paper",
                     "execution_timeframe": "5m",
-                    "risk_monitor_timeframe": "5m",
+                    "market_state_timeframe": "5m",
                     "decision_db_path": "data/runtime/parayabuck.sqlite3",
                     "scanner_refresh_hours": 24,
                 },
@@ -667,3 +667,95 @@ def test_readyz_reports_ready_when_no_runtime_is_expected(monkeypatch: Any) -> N
     assert payload["ready"] is True
     assert payload["runtime_expected"] is False
     assert response.status_code == 200
+
+
+def test_account_snapshot_exposes_mixed_ownership(monkeypatch: Any, tmp_path: Path) -> None:
+    """The operator account snapshot exposes total/managed/external quantity
+    and the ownership state for every position."""
+    from parayabuck.web.server import EngineManager
+
+    manager = EngineManager()
+    manager.config_path = tmp_path / "settings.yaml"
+    manager.broker = SimpleNamespace(
+        account_id="acct",
+        account_suffix="1234",
+        account=lambda: SimpleNamespace(
+            equity=100000.0,
+            cash=90000.0,
+            last_equity=100000.0,
+            id="acct",
+        ),
+    )
+    from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
+
+    manager.runtime = SimpleNamespace(
+        ledger=None,
+    )
+    broker = SimpleNamespace(
+        account_id="acct",
+        account_suffix="1234",
+        account=lambda: AccountSnapshot(
+            cash=88000.0,
+            equity=100000.0,
+            peak_equity=100000.0,
+            daily_pnl=0.0,
+            positions=(
+                PositionSnapshot(
+                    "AAPL",
+                    120,
+                    100,
+                    100,
+                    Market.EQUITY,
+                    qty_available=120,
+                    ownership="mixed",
+                    managed_qty=20,
+                ),
+                PositionSnapshot(
+                    "MSFT",
+                    50,
+                    100,
+                    100,
+                    Market.EQUITY,
+                    qty_available=50,
+                    ownership="managed",
+                    managed_qty=50,
+                ),
+            ),
+        ),
+    )
+    manager.broker = broker
+    snapshot = manager._refresh_account_snapshot()
+    aapl = next(p for p in snapshot["positions"] if p["symbol"] == "AAPL")
+    assert aapl["total_qty"] == 120
+    assert aapl["managed_qty"] == 20
+    assert aapl["external_qty"] == 100
+    assert aapl["ownership_state"] == "mixed"
+    msft = next(p for p in snapshot["positions"] if p["symbol"] == "MSFT")
+    assert msft["managed_qty"] == 50
+    assert msft["external_qty"] == 0
+    assert msft["ownership_state"] == "managed"
+
+
+def test_operations_snapshot_surfaces_reconciliation_anomalies(tmp_path: Path) -> None:
+    """Reconciliation anomalies (ownership adjustments) are operator-visible
+    through the account-scoped operations snapshot."""
+    from parayabuck.core.models import Market
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    repo.record_ownership_adjustment(
+        "acct",
+        "BTC/USD",
+        Market.CRYPTO,
+        0.5,
+        kind="stale_ownership_clear",
+        note="broker flat, no real fill found",
+    )
+    snapshot = repo.operations_snapshot("acct")
+    anomalies = snapshot["reconciliation_anomalies"]
+    assert len(anomalies) == 1
+    assert anomalies[0]["symbol"] == "BTC/USD"
+    assert anomalies[0]["outstanding_quantity"] == pytest.approx(0.5)
+    assert anomalies[0]["kind"] == "stale_ownership_clear"
+    # A different account never sees the anomaly.
+    assert repo.operations_snapshot("other")["reconciliation_anomalies"] == []

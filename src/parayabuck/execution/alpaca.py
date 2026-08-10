@@ -96,6 +96,10 @@ class AlpacaBroker:
         manage_external_positions: bool = False,
         ledger: ExecutionLedger | None = None,
         portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
+        portfolio_open_orders: Callable[[], object] | None = None,
+        portfolio_fill_recovered: (
+            Callable[[str, str, float, float, datetime, str, float], None] | None
+        ) = None,
         portfolio_stop_recorded: (Callable[[str, Market, float, str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,
@@ -113,6 +117,8 @@ class AlpacaBroker:
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
         self.portfolio_owned_quantities = portfolio_owned_quantities
+        self.portfolio_open_orders = portfolio_open_orders
+        self.portfolio_fill_recovered = portfolio_fill_recovered
         self.portfolio_stop_recorded = portfolio_stop_recorded
         self.portfolio_flat_reconciled = portfolio_flat_reconciled
         self._account_id = ""
@@ -177,20 +183,34 @@ class AlpacaBroker:
             canonical = canonical_symbol(str(raw.symbol), market)
             managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
-            owned_qty = float(owned_quantities.get(canonical, 0.0))
+            ledger_owned = float(managed.owned_qty) if managed is not None else 0.0
+            repo_owned = float(owned_quantities.get(canonical, 0.0))
+            # The portfolio repository is the canonical ownership system. The
+            # legacy ledger may still hold recovery positions; positive
+            # ownership in BOTH systems on one symbol is an explicit
+            # reconciliation invariant and must never be resolved by guessing
+            # which quantity is real.
+            if ledger_owned > 1e-12 and repo_owned > 1e-12:
+                raise OwnershipDriftError(
+                    "Dual ownership lineage for "
+                    f"{canonical}: ledger managed qty={ledger_owned} and "
+                    f"portfolio managed qty={repo_owned} are both positive; "
+                    "reconciliation is required before trading resumes"
+                )
+            total_owned = ledger_owned + repo_owned
             fee_reserve = (
                 float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
             )
             if (
                 managed is None
-                and owned_qty > 1e-12
+                and total_owned > 1e-12
                 and abs(raw_qty) > 1e-12
-                and abs(raw_qty) + max(1e-9, owned_qty * 1e-8) < owned_qty * fee_reserve
+                and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned * fee_reserve
             ):
-                drift_candidates.append((canonical, owned_qty, raw_qty, market))
-            managed_qty = min(abs(raw_qty), owned_qty)
-            if managed is not None:
-                managed_qty = abs(raw_qty)
+                drift_candidates.append((canonical, total_owned, raw_qty, market))
+            # Actual owned quantities decide managed inventory: a ledger
+            # record alone never makes the whole broker position managed.
+            managed_qty = min(abs(raw_qty), total_owned)
             external_qty = abs(raw_qty) - managed_qty
             ownership = (
                 "managed"
@@ -226,12 +246,16 @@ class AlpacaBroker:
                 )
             )
         if drift_candidates:
-            # Fail-closed by default, but a symbol with a working open order
-            # is mid-exit: the bot is actively selling, so the shortfall is
-            # attributable to that flow, not to manual inventory.
-            open_order_symbols = self.open_portfolio_order_symbols()
-            for canonical, owned_qty, raw_qty, _market in drift_candidates:
-                if canonical in open_order_symbols:
+            # Fail-closed: a working open order exempts the shortfall only
+            # when it is a managed portfolio SELL (risk-reducing exit) from
+            # this account's repository with enough remaining quantity to
+            # explain the discrepancy. A manual BUY/SELL or any unrelated
+            # open order never suppresses ownership drift.
+            repo_orders = self._portfolio_open_order_map()
+            for canonical, owned_qty, raw_qty, market in drift_candidates:
+                if self._open_order_explains_drift(
+                    canonical, owned_qty, raw_qty, market, repo_orders
+                ):
                     continue
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: repository managed "
@@ -287,7 +311,13 @@ class AlpacaBroker:
             minimum_notional,
         )
 
-    def open_portfolio_order_symbols(self) -> set[str]:
+    def all_open_order_symbols(self) -> set[str]:
+        """Broker-wide open order symbols (managed and manual).
+
+        This is deliberately NOT the portfolio view: submission guards and
+        the planner skip any symbol with a working order, managed or not,
+        because the bot must not stack orders onto an existing flow.
+        """
         orders = self._client.get_orders(
             GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
         )
@@ -296,6 +326,174 @@ class AlpacaBroker:
             for order in orders or ()
             if self._field(order, "symbol", "")
         }
+
+    def _reconcile_stale_portfolio_ownership(self, symbol: str, market: Market) -> bool:
+        """Resolve one stale portfolio symbol against real broker state.
+
+        Returns True when the symbol is handled (real fill recovered, or an
+        order is genuinely still working at the broker) and False when the
+        caller should record an ownership adjustment.
+
+        The race this handles: the broker filled a stop while the
+        TradingStream update was delayed, the broker became flat, and the
+        repository still claims ownership with a non-terminal exit order.
+        """
+        provider = getattr(self, "portfolio_open_orders", None)
+        if provider is None:
+            return False
+        orders = [
+            order
+            for order in provider() or ()
+            if str(getattr(order, "symbol", "")) == symbol
+            and getattr(order, "market", None) in {None, market}
+            and str(getattr(order, "side", "")).lower() == "sell"
+        ]
+        if not orders:
+            return False
+        for order in orders:
+            client_order_id = str(getattr(order, "client_order_id", ""))
+            broker_order_id = str(getattr(order, "broker_order_id", ""))
+            if not client_order_id:
+                continue
+            broker_order = self._fetch_broker_order(client_order_id, broker_order_id)
+            if broker_order is None:
+                # No information at the broker about this order; do not guess.
+                continue
+            status = self._normalized_field(broker_order, "status")
+            if status == "filled":
+                recovered = self._fill_from_broker_order(
+                    broker_order, client_order_id, broker_order_id
+                )
+                if recovered is not None:
+                    if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
+                        fill_recovered(*recovered)
+                    return True
+                continue
+            if status not in {
+                "canceled",
+                "cancelled",
+                "rejected",
+                "expired",
+                "done_for_day",
+            }:
+                # The exit is genuinely still working at the broker; keep
+                # ownership until it completes.
+                return True
+            # The order died without filling: fall through to the adjustment.
+        return False
+
+    def _fetch_broker_order(self, client_order_id: str, broker_order_id: str) -> Any | None:
+        """Resolve one repo order at Alpaca. A 404/unknown order is ``None``;
+        network failures propagate so reconciliation never guesses."""
+        get_by_client = getattr(self._client, "get_order_by_client_id", None)
+        if get_by_client is not None:
+            try:
+                order = get_by_client(client_order_id)
+            except Exception as exc:
+                if getattr(exc, "status_code", None) != 404:
+                    raise
+                order = None
+            if order is not None:
+                return order
+        if broker_order_id:
+            get_by_id = getattr(self._client, "get_order_by_id", None)
+            if get_by_id is not None:
+                try:
+                    return get_by_id(broker_order_id)
+                except Exception as exc:
+                    if getattr(exc, "status_code", None) != 404:
+                        raise
+        return None
+
+    def _fill_from_broker_order(
+        self, order: Any, client_order_id: str, broker_order_id: str
+    ) -> tuple[str, str, float, float, datetime, str, float] | None:
+        """Extract the real fill from a filled Alpaca order."""
+        filled_qty = float(
+            self._field(order, "filled_qty", 0) or self._field(order, "cumulative_qty", 0) or 0
+        )
+        avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
+        if filled_qty <= 0 or avg_price <= 0:
+            return None
+        filled_at_raw = self._field(
+            order, "filled_at", self._field(order, "submitted_at", datetime.now(UTC).isoformat())
+        )
+        occurred_at = datetime.fromisoformat(str(filled_at_raw))
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=UTC)
+        return (
+            client_order_id,
+            str(self._field(order, "id", "") or broker_order_id),
+            filled_qty,
+            avg_price,
+            occurred_at,
+            f"{client_order_id}:recovered:{filled_qty}",
+            0.0,
+        )
+
+    def portfolio_open_order_symbols(self) -> set[str]:
+        """Symbols with a non-terminal order owned by the portfolio path.
+
+        Repository/account-aware: manual broker orders never appear here, so
+        they cannot pin universe slots or suppress ownership drift.
+        """
+        provider = getattr(self, "portfolio_open_orders", None)
+        if provider is None:
+            return set()
+        orders = provider() or ()
+        return {
+            canonical_symbol(str(getattr(order, "symbol", "")))
+            for order in orders
+            if getattr(order, "symbol", "")
+        }
+
+    def _portfolio_open_order_map(self) -> dict[str, list[object]]:
+        """Open portfolio orders grouped by canonical symbol (SELL legs)."""
+        provider = getattr(self, "portfolio_open_orders", None)
+        if provider is None:
+            return {}
+        grouped: dict[str, list[object]] = {}
+        for order in provider() or ():
+            symbol = str(getattr(order, "symbol", ""))
+            if not symbol or str(getattr(order, "side", "")).lower() != "sell":
+                continue
+            market = getattr(order, "market", None)
+            canonical = canonical_symbol(symbol, market)
+            grouped.setdefault(canonical, []).append(order)
+        return grouped
+
+    @staticmethod
+    def _open_order_explains_drift(
+        canonical: str,
+        owned_qty: float,
+        raw_qty: float,
+        market: Market,
+        orders_by_symbol: dict[str, list[object]],
+    ) -> bool:
+        """Whether a working managed SELL can explain the ownership shortfall.
+
+        The exemption requires a closing/risk-reducing SELL that belongs to
+        the current portfolio repository/account, on the same symbol, with a
+        remaining quantity large enough to cover the discrepancy. Anything
+        else — a manual order, a BUY, or an under-sized SELL — keeps the
+        drift fail-closed.
+        """
+        fee_reserve = (
+            float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+        )
+        shortfall = max(0.0, owned_qty * fee_reserve - abs(raw_qty))
+        if shortfall <= 1e-12:
+            return False
+        for order in orders_by_symbol.get(canonical, ()):
+            order_market = getattr(order, "market", None)
+            if order_market is not None and order_market != market:
+                continue
+            quantity = float(getattr(order, "quantity", 0.0) or 0.0)
+            filled = float(getattr(order, "cumulative_filled_quantity", 0.0) or 0.0)
+            remaining = max(0.0, quantity - filled)
+            if remaining >= shortfall - max(1e-9, shortfall * 1e-8):
+                return True
+        return False
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
         """Submit one simple long/cash rebalance leg with ambiguity recovery."""
@@ -586,18 +784,21 @@ class AlpacaBroker:
         if portfolio_owned and (
             flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)
         ):
-            # A portfolio symbol with no broker position and no open order is
-            # stale: a missed stop fill (stream downtime) or a manual sell
-            # would otherwise leave the repository claiming managed ownership
-            # of a position that no longer exists.
-            open_order_symbols = self.open_portfolio_order_symbols()
+            # A portfolio symbol with no broker position is stale: a missed
+            # stop fill (stream downtime) or a manual sell would otherwise
+            # leave the repository claiming managed ownership of a position
+            # that no longer exists. Query Alpaca order history before doing
+            # anything: recover the real fill at its actual price when it
+            # exists, keep ownership when an order is genuinely still working,
+            # and only otherwise record an explicit reconciliation anomaly —
+            # never a synthetic precise fill at an invented price.
             for symbol in portfolio_owned:
-                if symbol in broker_symbols or symbol in open_order_symbols:
+                if symbol in broker_symbols:
                     continue
-                flat_reconciler(
-                    symbol,
-                    Market.CRYPTO if is_crypto(symbol) else Market.EQUITY,
-                )
+                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+                if self._reconcile_stale_portfolio_ownership(symbol, market):
+                    continue
+                flat_reconciler(symbol, market)
         if ledger is not None:
             self._reconcile_crypto_exit_state(ledger)
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)

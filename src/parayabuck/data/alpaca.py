@@ -62,7 +62,38 @@ class AlpacaHistoricalData:
             self._stock_feed = DataFeed(feed)
         except ValueError as exc:
             raise ValueError(f"Unsupported Alpaca stock feed: {feed}") from exc
+        self._configured_stock_feed = str(self._stock_feed).lower().split(".")[-1]
+        # Set when a configured SIP historical feed hits an entitlement error
+        # and the client degrades to IEX for the rest of the process. Bars and
+        # latest quotes are gated separately by Alpaca: the quote endpoint has
+        # its own entitlement, so a quote-only failure must not downgrade bar
+        # coverage.
+        self._sip_fallback_active = False
+        self._sip_quote_fallback_active = False
         self._cache = WarmupCache()
+
+    def feed_status(self) -> dict[str, object]:
+        """Configured and effective equity historical feed for reporting."""
+        bars_effective = "iex" if self._sip_fallback_active else self._configured_stock_feed
+        quote_effective = (
+            "iex"
+            if self._sip_quote_fallback_active or self._sip_fallback_active
+            else self._configured_stock_feed
+        )
+        return {
+            "configured": self._configured_stock_feed,
+            "effective": bars_effective,
+            "quote_effective": quote_effective,
+            "sip_fallback_active": self._sip_fallback_active,
+            "sip_quote_fallback_active": self._sip_quote_fallback_active,
+            "note": (
+                "IEX prints reflect one exchange, not the consolidated SIP/NBBO "
+                "tape; liquidity and spread proxies derived from IEX data are "
+                "conservative estimates of full-market conditions."
+                if self._sip_fallback_active or self._configured_stock_feed == "iex"
+                else "SIP consolidates the national market system tape."
+            ),
+        }
 
     def close(self) -> None:
         """Release HTTP session pools and the local cache connection."""
@@ -97,16 +128,40 @@ class AlpacaHistoricalData:
 
         Latest quotes are served by ``StockHistoricalDataClient``, not the
         trading client; using the trading client here silently degrades every
-        equity scan to a neutral spread score.
+        equity scan to a neutral spread score. The quote endpoint has a
+        separate SIP entitlement from historical bars: when the configured
+        SIP feed is not entitled, the request falls back to IEX once and is
+        labeled by ``feed_status`` instead of failing the whole scan.
         """
         if not symbols:
             return {}
-        response: Any = self._stock_client.get_stock_latest_quote(
-            StockLatestQuoteRequest(
-                symbol_or_symbols=[canonical_symbol(symbol) for symbol in symbols],
-                feed=self._stock_feed,
+        try:
+            quote_feed = (
+                DataFeed("iex")
+                if self._sip_quote_fallback_active or self._sip_fallback_active
+                else self._stock_feed
             )
-        )
+            response: Any = self._stock_client.get_stock_latest_quote(
+                StockLatestQuoteRequest(
+                    symbol_or_symbols=[canonical_symbol(symbol) for symbol in symbols],
+                    feed=quote_feed,
+                )
+            )
+        except Exception as exc:
+            if (
+                not getattr(self, "_sip_quote_fallback_active", False)
+                and not getattr(self, "_sip_fallback_active", False)
+                and self._effective_stock_feed_name == "sip"
+                and self._is_entitlement_error(exc)
+            ):
+                log.warning(
+                    "SIP latest-quote entitlement unavailable (%s); degrading "
+                    "to IEX quotes (bar coverage keeps its configured feed)",
+                    exc,
+                )
+                self._sip_quote_fallback_active = True
+                return self.get_latest_stock_quotes(symbols)
+            raise
         return dict(response or {})
 
     def get_bars_batch(
@@ -133,7 +188,13 @@ class AlpacaHistoricalData:
             raise ValueError("Request window must end after it starts")
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
-            expected_rows = int((end_at - start_at).total_seconds() // 60 // minutes)
+            # Alpaca caps a single bars response at 10,000 ROWS total, across
+            # every symbol in the request. Splitting by per-symbol rows would
+            # silently truncate a multi-symbol batch (e.g. 10 symbols x 2,400
+            # daily bars) to 1,000 bars per symbol, leaving incomplete
+            # histories for the whole backtest. Chunk by the TOTAL expected
+            # rows instead.
+            expected_rows = len(symbols) * int((end_at - start_at).total_seconds() // 60 // minutes)
             if expected_rows > _MAX_ROWS_PER_REQUEST:
                 # Alpaca caps responses at 10,000 rows and silently truncates
                 # beyond it. Split the date window into row-bounded chunks so
@@ -169,14 +230,24 @@ class AlpacaHistoricalData:
         market: Market,
     ) -> dict[str, list[Bar]]:
         span = (end_at - start_at).total_seconds()
-        expected_rows = span // 60 // minutes
+        expected_rows = len(symbols) * (span // 60 // minutes)
         chunk_count = max(1, math.ceil(expected_rows / _MAX_ROWS_PER_REQUEST))
-        chunk_seconds = span / chunk_count
+        # Align chunk boundaries to whole timeframe steps: real bars are
+        # emitted on the timeframe grid, so fractional boundaries would
+        # interleave two time grids across adjacent chunks.
+        step_seconds = minutes * 60
+        chunk_seconds = max(step_seconds, int(span / chunk_count // step_seconds) * step_seconds)
         overlap = timedelta(minutes=minutes)
         merged: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         for index in range(chunk_count):
             chunk_start = start_at + timedelta(seconds=index * chunk_seconds)
-            chunk_end = start_at + timedelta(seconds=(index + 1) * chunk_seconds)
+            # The last chunk absorbs the remainder of the window so the
+            # floored chunk size never leaves a data tail unfetched.
+            chunk_end = (
+                end_at
+                if index == chunk_count - 1
+                else start_at + timedelta(seconds=(index + 1) * chunk_seconds)
+            )
             if index > 0:
                 chunk_start = max(start_at, chunk_start - overlap)
             chunk_end = min(end_at, chunk_end)
@@ -196,6 +267,36 @@ class AlpacaHistoricalData:
             merged[symbol] = [deduped[key] for key in sorted(deduped)]
         return merged
 
+    @property
+    def _effective_stock_feed_name(self) -> str:
+        configured = getattr(self, "_configured_stock_feed", "")
+        if not configured:
+            configured = str(self._stock_feed).lower().split(".")[-1]
+        if getattr(self, "_sip_fallback_active", False):
+            return "iex"
+        return configured
+
+    @staticmethod
+    def _is_entitlement_error(exc: Exception) -> bool:
+        """Best-effort detection of an Alpaca market-data entitlement error.
+
+        Entitlement failures surface as API errors mentioning feed/SIP/
+        entitlement; anything ambiguous is NOT treated as an entitlement
+        problem so real outages still propagate to the caller.
+        """
+        message = f"{exc}".lower()
+        return any(
+            token in message
+            for token in (
+                "entitlement",
+                "not entitled",
+                "unauthorized feed",
+                "feed.",
+                "sip",
+                "data feed",
+            )
+        )
+
     def _fetch_window(
         self,
         symbols: list[str],
@@ -205,11 +306,9 @@ class AlpacaHistoricalData:
         adjustment: str,
         market: Market,
     ) -> dict[str, list[Bar]]:
-        if market == Market.EQUITY and str(self._stock_feed).lower().split(".")[-1] == "iex":
+        if market == Market.EQUITY and self._effective_stock_feed_name == "iex":
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
-        feed_name = (
-            "crypto" if market == Market.CRYPTO else str(self._stock_feed).lower().split(".")[-1]
-        )
+        feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
         cached = {
             symbol: [
                 bar
@@ -260,6 +359,32 @@ class AlpacaHistoricalData:
                     )
                 )
         except Exception as exc:
+            # A configured SIP entitlement that the account does not have is a
+            # common paper-account situation: degrade to the IEX historical
+            # feed instead of failing every warmup/scanner request. The
+            # fallback is sticky for the process and surfaced via feed_status()
+            # so reports can label the data coverage honestly.
+            if (
+                market == Market.EQUITY
+                and not self._sip_fallback_active
+                and self._configured_stock_feed == "sip"
+                and self._is_entitlement_error(exc)
+            ):
+                log.warning(
+                    "SIP historical entitlement unavailable (%s); degrading to "
+                    "IEX historical feed for the rest of this process",
+                    exc,
+                )
+                self._stock_feed = DataFeed("iex")
+                self._sip_fallback_active = True
+                return self._fetch_window(
+                    symbols,
+                    timeframe,
+                    start_at,
+                    end_at,
+                    adjustment,
+                    market,
+                )
             if len(fresh_cached) == len(symbols) and all(
                 self._cache_covers_window(bars, market, timeframe, start_at, end_at)
                 for bars in fresh_cached.values()

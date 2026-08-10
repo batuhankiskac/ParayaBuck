@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from alpaca.trading.enums import TimeInForce
 
-from parayabuck.config import EquityUniverseConfig
+from parayabuck.config import Config, EquityUniverseConfig
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -195,6 +195,8 @@ def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Pa
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.ledger = ledger
     runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.app_config = Config()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
     runtime._consecutive_losses = 2
     runtime._circuit_breaker_reason = None
     account = AccountSnapshot(

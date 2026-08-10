@@ -257,10 +257,17 @@ def build_trailing_point_in_time_universe(
             )
         if not result.selected_symbols and not result.candidate_symbols:
             continue
+        # The scanner reserves references/inverse ETFs unconditionally (matching
+        # the live pipeline), but a reserved symbol without bars in this
+        # window cannot be evaluated or traded: drop it so the decision gate
+        # never blocks on data the run does not have.
+        selected = tuple(symbol for symbol in result.selected_symbols if symbol in by_symbol)
+        if not selected and not result.candidate_symbols:
+            continue
         snapshots.append(
             UniverseSnapshot(
                 timestamp,
-                frozenset(result.selected_symbols),
+                frozenset(selected),
                 result.scanner_version,
                 result.config_digest,
                 len(result.candidate_symbols),

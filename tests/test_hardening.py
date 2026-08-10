@@ -927,7 +927,7 @@ def test_direct_settings_call_cannot_auto_restart_into_live(
     manager.config_path.write_text(
         yaml.safe_dump(
             {
-                "alpaca": {"stock_feed": "iex"},
+                "alpaca": {"stock_stream_feed": "iex", "stock_historical_feed": "sip"},
                 "runtime": {"mode": "paper", "execution_timeframe": "5m"},
                 "symbols": ["AAPL"],
             }

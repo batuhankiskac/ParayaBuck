@@ -50,10 +50,16 @@ durable state:
 ```bash
 docker run --name parayabuck --restart unless-stopped \
   --env-file .env -p 127.0.0.1:8000:8000 \
-  -v "$PWD/data:/app/data" -v "$PWD/reports:/app/reports" \
+  -v "$PWD/config:/app/config" -v "$PWD/data:/app/data" \
+  -v "$PWD/reports:/app/reports" \
   parayabuck
 ```
 
-The container runs as a non-root user, handles SIGTERM through Uvicorn lifespan
-shutdown, and exposes `/healthz` for liveness. `/api/status` contains detailed
-runtime readiness and should remain private.
+`/app/config`, `/app/data` and `/app/reports` are volumes: runtime settings
+saved from the operator UI, the SQLite runtime database, universe state and
+backtest reports persist across container recreation and upgrades. An empty
+`/app/config` volume is seeded from the image's default settings on first
+start. The image installs the same locked dependencies CI tests against and
+runs as a non-root user, handles SIGTERM through Uvicorn lifespan shutdown,
+and exposes `/healthz` for liveness plus `/readyz` for readiness.
+`/api/status` contains detailed runtime readiness and should remain private.

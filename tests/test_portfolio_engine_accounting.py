@@ -8,8 +8,10 @@ from parayabuck.backtest.portfolio_engine import (
     OrderSide,
     PortfolioBacktestEngine,
     equity_regulatory_fee,
+    session_date_for,
 )
 from parayabuck.core.models import Bar, Market
+from parayabuck.execution.portfolio import PortfolioRiskLimits
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import (
     RebalancePolicy,
@@ -112,6 +114,7 @@ def _engine(
     crypto_taker_fee_bps: float = 0.0,
     state_path: str | None = None,
     state=None,
+    risk_limits=None,
 ) -> PortfolioBacktestEngine:
     frequency = "hours:24" if strategy.market == Market.CRYPTO else "monthly"
     return PortfolioBacktestEngine(
@@ -128,6 +131,7 @@ def _engine(
         minimum_order_notional=10.0,
         state_path=state_path,
         state=state,
+        risk_limits=risk_limits,
     )
 
 
@@ -477,3 +481,209 @@ def test_restart_after_liquidated_run_does_not_resurrect_positions(tmp_path) -> 
     restarted = restarted_engine.run([], liquidate_at_end=False)
     assert restarted.state.holdings == {}
     assert restarted.state.cash == pytest.approx(first.state.cash)
+
+
+class _DailyRiskStrategy(PortfolioStrategy):
+    """Fixed target that decides on every bar (intermediate risk allowed)."""
+
+    name = "daily_risk"
+    version = "1.0.0"
+    market = Market.EQUITY
+    timeframe = "1d"
+    minimum_history_bars = 1
+
+    def __init__(self, symbol: str, weight: float, market: Market = Market.EQUITY) -> None:
+        self._symbol = symbol
+        self._weight = weight
+        self.market = market
+        self.timeframe = "1h" if market == Market.CRYPTO else "1d"
+        super().__init__()
+
+    def _validate_parameters(self) -> None:
+        return None
+
+    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+        return TargetPortfolio(
+            strategy_name=self.name,
+            strategy_version=self.version,
+            decision_timestamp=context.decision_timestamp,
+            weights=(TargetWeight(self._symbol, self._weight),),
+            cash_weight=1.0 - self._weight,
+            universe_version="test",
+        )
+
+    def requires_intermediate_risk_rebalance(self, context: PortfolioContext) -> bool:
+        return True
+
+
+def _risk_limits() -> PortfolioRiskLimits:
+    return PortfolioRiskLimits(
+        daily_loss_limit=0.005,
+        drawdown_halt=0.05,
+        maximum_gross=0.60,
+        maximum_equity=0.50,
+        maximum_equity_asset=0.60,
+        minimum_cash=0.0,
+        maximum_positions=6,
+    )
+
+
+def test_daily_loss_limit_triggers_on_single_day_drop() -> None:
+    """A one-day equity loss beyond the configured daily limit halts entries."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = [
+        _bar(epoch + timedelta(days=0), "SPY", 100.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=1), "SPY", 100.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=2), "SPY", 97.0, Market.EQUITY, 5_000_000),
+    ]
+    strategy = _DailyRiskStrategy("SPY", 0.6)
+    engine = _engine(strategy, risk_limits=_risk_limits())
+    result = engine.run(bars, liquidate_at_end=False)
+    # The day-2 decision bought 500 shares at the day-1 open; day-3 closes 3%
+    # lower on that position, a ~1.5% equity loss that is past the 0.5%
+    # daily-loss limit. The day-start equity must be the previous session's
+    # closing equity (100 030), not the post-close equity of the loss day.
+    snapshot = engine._account_snapshot(bars[-1].timestamp)
+    assert snapshot.daily_pnl == pytest.approx(500.0 * (97.0 - 100.0), abs=10.0)
+    assert snapshot.daily_pnl / snapshot.equity <= -0.01
+    # The decision on the loss day is halted by the overlay: the target is
+    # capped at the current weight instead of re-buying the full 60%.
+    last = result.rebalances[-1]
+    assert last.risk_overlay_halted
+    assert "daily_loss_limit" in last.risk_overlay_reasons
+    current_weight = 500.0 * 97.0 / snapshot.equity
+    assert dict(last.target_weights)["SPY"] == pytest.approx(current_weight, abs=1e-9)
+    assert last.signed_trade_weights == ()
+
+
+def test_high_water_between_rebalances_feeds_later_drawdown() -> None:
+    """Equity that peaks between scheduled rebalances feeds the drawdown halt."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    # Month 0: target 60% SPY (capped at the 50% sleeve). Month 1: target 90%.
+    # Prices rise to 115 mid-month then fall back to 100 before the next
+    # decision: the peak is 107 530, so the later drawdown is ~7% and the
+    # portfolio_drawdown_halt must cap the next decision.
+    bars = [
+        _bar(epoch + timedelta(days=0), "SPY", 100.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=1), "SPY", 115.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=2), "SPY", 112.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=3), "SPY", 100.0, Market.EQUITY, 5_000_000),
+        _bar(epoch + timedelta(days=31), "SPY", 100.0, Market.EQUITY, 5_000_000),
+    ]
+    strategy = _ScheduleStrategy({0: {"SPY": 0.6}, 1: {"SPY": 0.9}}, epoch)
+    engine = _engine(strategy, risk_limits=_risk_limits())
+    result = engine.run(bars, liquidate_at_end=False)
+    # The mid-month peak must have been recorded even though no decision
+    # happened between week 1 and the next month: equity peaked right after
+    # the entry filled (at the next bar's open) and the close rose.
+    first_fill = result.fills[0]
+    expected_peak = 100_000.0 + first_fill.qty * (bars[1].close - first_fill.fill_price)
+    assert engine._peak_equity == pytest.approx(expected_peak)
+    assert engine._peak_equity > 100_000.0
+    # The next-month decision wanted 90% but drawdown > 5% caps it at the
+    # current weight, so no BUY order is planned.
+    assert len(result.rebalances) == 2
+    month_one = result.rebalances[1]
+    assert month_one.risk_overlay_halted
+    assert "portfolio_drawdown_halt" in month_one.risk_overlay_reasons
+    assert dict(month_one.target_weights)["SPY"] == pytest.approx(0.5, abs=1e-9)
+    assert month_one.signed_trade_weights == ()
+
+
+def test_weekly_strategy_risk_state_updates_on_non_rebalance_days() -> None:
+    """A weekly strategy still tracks daily PnL and high water between weeks."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    # Week 1: Mon 100, Tue 110, Wed 108, Thu 120, Fri 90. Week 2: Mon 88.
+    session_days = [
+        datetime(2024, 1, 1),
+        datetime(2024, 1, 2),
+        datetime(2024, 1, 3),
+        datetime(2024, 1, 4),
+        datetime(2024, 1, 5),
+        datetime(2024, 1, 8),
+    ]
+    closes = [100.0, 110.0, 108.0, 120.0, 90.0, 88.0]
+    bars = [
+        _bar(day.replace(tzinfo=UTC), "SPY", close, Market.EQUITY, 5_000_000)
+        for day, close in zip(session_days, closes, strict=True)
+    ]
+    strategy = _ScheduleStrategy({0: {"SPY": 0.6}, 1: {"SPY": 0.9}}, epoch)
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(strategy.market, "weekly"),
+        starting_equity=100_000.0,
+        slippage_bps=2.0,
+        spread_bps=4.0,
+        benchmark_symbol="SPY",
+        max_participation_pct=0.10,
+        turnover_band=0.005,
+        minimum_order_notional=10.0,
+        risk_limits=_risk_limits(),
+    )
+    result = engine.run(bars, liquidate_at_end=False)
+    # Thursday's close (120) set the high water; Friday's drop to 90 must be
+    # measured from Thursday's equity, not from a stale rebalance-day value.
+    first_fill = result.fills[0]
+    cash_after_entry = 100_000.0 - first_fill.qty * first_fill.fill_price
+    assert engine._peak_equity == pytest.approx(cash_after_entry + first_fill.qty * 120.0)
+    # Only week-start decisions are scheduled for this strategy, so the week-1
+    # rise and Friday crash were tracked purely by the per-bar risk lifecycle.
+    assert len(result.rebalances) == 2
+    # The week-2 decision is capped: the ~14% daily loss and ~14% drawdown
+    # from Thursday's peak both halt entries, so the 90% target cannot buy.
+    week_two = result.rebalances[1]
+    assert week_two.risk_overlay_halted
+    assert "daily_loss_limit" in week_two.risk_overlay_reasons
+    assert "portfolio_drawdown_halt" in week_two.risk_overlay_reasons
+    assert dict(week_two.target_weights)["SPY"] == pytest.approx(
+        first_fill.qty * 88.0 / (cash_after_entry + first_fill.qty * 88.0), abs=1e-9
+    )
+    assert week_two.signed_trade_weights == ()
+    # The day-start equity after the run is Friday's closing equity: the new
+    # session (week 2 Monday) started from the previous session's close.
+    assert engine._day_start_equity == pytest.approx(cash_after_entry + first_fill.qty * 90.0)
+    snapshot = engine._account_snapshot(bars[-1].timestamp)
+    assert snapshot.daily_pnl == pytest.approx(first_fill.qty * (88.0 - 90.0), abs=10.0)
+
+
+def test_session_date_for_equity_uses_new_york_trading_date() -> None:
+    """Equity session dates follow New York, not UTC."""
+    # 2024-07-04 01:00 UTC is 2024-07-03 21:00 ET: the UTC day is the 4th but
+    # the trading session belongs to the 3rd.
+    late_utc = datetime(2024, 7, 4, 1, 0, tzinfo=UTC)
+    assert session_date_for(late_utc, Market.EQUITY) == datetime(2024, 7, 3).date()
+    assert session_date_for(late_utc, Market.CRYPTO) == datetime(2024, 7, 4).date()
+
+
+def test_crypto_daily_reset_uses_utc_boundary() -> None:
+    """Crypto daily-loss resets at the UTC calendar boundary (documented)."""
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = [
+        _bar(epoch + timedelta(hours=index), "BTC/USD", 100.0, Market.CRYPTO, 100_000)
+        for index in range(48)
+    ]
+    bars[25] = _bar(epoch + timedelta(hours=25), "BTC/USD", 89.0, Market.CRYPTO, 100_000)
+    strategy = _DailyRiskStrategy("BTC/USD", 0.6, market=Market.CRYPTO)
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(strategy.market, "hours:24"),
+        starting_equity=100_000.0,
+        slippage_bps=2.0,
+        spread_bps=4.0,
+        benchmark_symbol="BTC/USD",
+        max_participation_pct=0.10,
+        turnover_band=0.005,
+        minimum_order_notional=10.0,
+        risk_limits=_risk_limits(),
+    )
+    result = engine.run(bars, liquidate_at_end=False)
+    # The crypto sleeve caps the position at 5% (50 units at $100). Hour 25
+    # falls on the second UTC day; its day-start is hour 24's equity, so the
+    # >11% drop at hour 25 registers as a daily loss past the 0.5% limit and
+    # halts the hour-25 decision. If the day-start had been reset to the
+    # post-close equity of hour 25 itself, no daily loss would register.
+    decision_at_25 = next(
+        record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp
+    )
+    assert decision_at_25.risk_overlay_halted
+    assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons

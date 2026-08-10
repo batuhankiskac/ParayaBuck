@@ -180,6 +180,7 @@ def run_product_backtest(
     persist_artifacts: bool = True,
     corporate_actions: list[CorporateAction] | None = None,
     universe: PointInTimeUniverse | None = None,
+    data_feed: str | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -215,6 +216,7 @@ def run_product_backtest(
         equity_taf_cap=config.backtest.equity_taf_cap,
         equity_cat_per_share=config.backtest.equity_cat_per_share,
         equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
+        equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
         benchmark_symbol=benchmark,
         universe=universe,
         universe_version=hash_point_in_time_universe(universe),
@@ -246,6 +248,18 @@ def run_product_backtest(
             "scanner_versions": sorted(
                 {snapshot.scanner_version for snapshot in universe.snapshots}
             ),
+            "data_feed": (
+                data_feed
+                if data_feed
+                else "offline csv (feed unknown; downloader used the configured historical feed)"
+            ),
+            "data_feed_note": (
+                "IEX historical data reflects one exchange's prints, not the "
+                "consolidated SIP/NBBO tape; liquidity, spread and volume "
+                "proxies derived from IEX understate full-market conditions."
+                if (data_feed or "").lower() == "iex"
+                else "SIP consolidates the national market system tape."
+            ),
             "survivorship_bias_limitation": (
                 "Candidate metadata may reflect currently supported Alpaca assets; historical "
                 "scanner membership is point-in-time within the supplied bar set, but delisted "
@@ -256,9 +270,15 @@ def run_product_backtest(
                 "equity_taf_cap": config.backtest.equity_taf_cap,
                 "equity_cat_per_share": config.backtest.equity_cat_per_share,
                 "equity_sec_fee_rate": config.backtest.equity_sec_fee_rate,
+                "equity_use_effective_dated_fees": config.backtest.equity_use_effective_dated_fees,
                 "note": (
-                    "regulatory fees are fixed-rate estimates; verify the rates in force "
-                    "at the trade date before using results as a cost proxy"
+                    "SEC Section 31, FINRA TAF and CAT fees are approximated per "
+                    "trade date from the official rate schedules when "
+                    "equity_use_effective_dated_fees is enabled; otherwise the "
+                    "configured fixed current regulatory rates are used. Either "
+                    "way this is a fixed-rate approximation, not exact "
+                    "historical fees — verify the rates in force at the trade "
+                    "date before using results as a cost proxy."
                 ),
             },
         }

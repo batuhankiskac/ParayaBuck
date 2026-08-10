@@ -19,6 +19,7 @@ from parayabuck.data.market_dataset import (
 from parayabuck.execution.portfolio import PortfolioRiskLimits, PortfolioRiskOverlay
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import NEW_YORK
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
 from parayabuck.portfolio.models import (
@@ -99,6 +100,11 @@ class RebalanceRecord:
     universe_snapshot_id: str
     equity_at_decision: float
     rebalance_number: int
+    # Risk-overlay outcome at this decision: whether the overlay halted
+    # (daily-loss/drawdown breach) and which limit tripped. The record stays
+    # observable so reports can explain why a target was capped.
+    risk_overlay_halted: bool = False
+    risk_overlay_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,6 +176,19 @@ def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
     return slippage_bps + spread_bps / 2
 
 
+def session_date_for(timestamp: datetime, market: Market) -> date:
+    """Trading-session date used for daily-loss risk accounting.
+
+    Equity uses the New York trading date: a regular session can run past the
+    UTC midnight boundary, and resetting daily PnL at UTC midnight would split
+    one session across two days. Crypto trades 24/7 with no session close, so
+    the UTC calendar date is the explicit daily reset boundary for crypto.
+    """
+    if market == Market.EQUITY:
+        return timestamp.astimezone(NEW_YORK).date()
+    return timestamp.date()
+
+
 def equity_regulatory_fee(
     side: OrderSide,
     quantity: float,
@@ -223,6 +242,7 @@ class PortfolioBacktestEngine:
         equity_taf_cap: float = 0.0,
         equity_cat_per_share: float = 0.0,
         equity_sec_fee_rate: float = 0.0,
+        equity_use_effective_dated_fees: bool = False,
         benchmark_symbol: str = "SPY",
         max_participation_pct: float = 0.10,
         liquidity_lookback_bars: int = 20,
@@ -275,6 +295,7 @@ class PortfolioBacktestEngine:
         self.equity_taf_cap = equity_taf_cap
         self.equity_cat_per_share = equity_cat_per_share
         self.equity_sec_fee_rate = equity_sec_fee_rate
+        self.equity_use_effective_dated_fees = equity_use_effective_dated_fees
         self.benchmark_symbol = benchmark_symbol
         self.max_participation_pct = max_participation_pct
         self.liquidity_lookback_bars = liquidity_lookback_bars
@@ -312,9 +333,14 @@ class PortfolioBacktestEngine:
         self._universe_history: list[tuple[datetime, tuple[str, ...]]] = []
         self._holdings_history: list[tuple[int, float, float]] = []
         self._rebalance_number = self.state.rebalance_count
+        # Explicit daily-loss/high-water lifecycle. day-start equity is the
+        # previous session's closing equity, never the current post-close
+        # equity; the risk state advances on every processed bar so drawdown
+        # and daily PnL stay live between scheduled rebalances.
         self._peak_equity = starting_equity
         self._day_start_equity = starting_equity
-        self._account_day: date | None = None
+        self._last_observed_equity = starting_equity
+        self._risk_session_date: date | None = None
         if self.state.last_rebalance_at is not None:
             # Period detection resumes from the last decision so a restart in
             # the middle of a month does not fire an unscheduled rebalance.
@@ -419,6 +445,10 @@ class PortfolioBacktestEngine:
             self._fill_cycle(cycle)
             for bar in cycle:
                 self._last_price[canonical_symbol(bar.symbol, bar.market)] = bar.close
+            # Advance the daily-loss/high-water lifecycle on every bar, not
+            # only when the strategy rebalances: a weekly strategy must still
+            # measure drawdown and daily PnL from the bars between decisions.
+            self._update_risk_state(cycle[0].timestamp)
             self._decide(cycle[0].timestamp)
             curve.append(self._equity())
             curve_timestamps.append(cycle[0].timestamp)
@@ -640,6 +670,37 @@ class PortfolioBacktestEngine:
         window = known[-self.liquidity_lookback_bars :]
         return sum(window) / len(window) if window else 0.0
 
+    def _equity_fee(
+        self, side: OrderSide, quantity: float, price: float, trade_date: date
+    ) -> float:
+        """Regulatory fee for one equity fill at the trade date.
+
+        With effective-dated fees the SEC/TAF/CAT rates follow the official
+        schedule; otherwise the configured flat rates apply.
+        """
+        if self.equity_use_effective_dated_fees:
+            from parayabuck.backtest.regulatory_fees import rates_for_trade_date
+
+            rates = rates_for_trade_date(trade_date)
+            return equity_regulatory_fee(
+                side,
+                quantity,
+                price,
+                taf_per_share=rates.taf_per_share,
+                taf_cap=rates.taf_cap,
+                cat_per_share=rates.cat_per_share,
+                sec_fee_rate=rates.sec_fee_rate,
+            )
+        return equity_regulatory_fee(
+            side,
+            quantity,
+            price,
+            taf_per_share=self.equity_taf_per_share,
+            taf_cap=self.equity_taf_cap,
+            cat_per_share=self.equity_cat_per_share,
+            sec_fee_rate=self.equity_sec_fee_rate,
+        )
+
     def _fill_side(self, bar: Bar, side: OrderSide) -> None:
         symbol = canonical_symbol(bar.symbol, bar.market)
         remaining: list[PortfolioOrder] = []
@@ -667,15 +728,7 @@ class PortfolioBacktestEngine:
             if order.market == Market.CRYPTO:
                 fee += fillable * fill_price * self.crypto_taker_fee_bps / 10_000
             else:
-                fee += equity_regulatory_fee(
-                    side,
-                    fillable,
-                    fill_price,
-                    taf_per_share=self.equity_taf_per_share,
-                    taf_cap=self.equity_taf_cap,
-                    cat_per_share=self.equity_cat_per_share,
-                    sec_fee_rate=self.equity_sec_fee_rate,
-                )
+                fee += self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
             filled_qty = fillable
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
@@ -818,13 +871,32 @@ class PortfolioBacktestEngine:
         self._apply_target(target)
         self._record_rebalance(target)
 
-    def _account_snapshot(self, timestamp: datetime) -> AccountSnapshot:
+    def _update_risk_state(self, timestamp: datetime) -> None:
+        """Advance the daily-loss/high-water lifecycle for one processed bar.
+
+        Called for every bar cycle (not only when a strategy rebalances) so
+        the peak equity and the session-day start equity track the portfolio
+        between scheduled decisions. When the trading-session date rolls over,
+        the day-start equity becomes the last equity observed in the previous
+        session — that is the previous session's closing equity, never the
+        current post-close equity.
+        """
         equity = self._equity()
-        day = timestamp.date()
-        if self._account_day != day:
-            self._account_day = day
-            self._day_start_equity = equity
+        session = session_date_for(timestamp, self.strategy.market)
+        if self._risk_session_date != session:
+            self._day_start_equity = self._last_observed_equity
+            self._risk_session_date = session
+        self._last_observed_equity = equity
         self._peak_equity = max(self._peak_equity, equity)
+
+    def _account_snapshot(self, timestamp: datetime) -> AccountSnapshot:
+        """Observational snapshot of the portfolio for the risk overlay.
+
+        This never mutates risk state: daily-loss and high-water bookkeeping
+        live in the explicit ``_update_risk_state`` lifecycle, which runs on
+        every bar regardless of whether a decision happens here.
+        """
+        equity = self._equity()
         positions = tuple(
             PositionSnapshot(
                 symbol=position.symbol,
@@ -941,6 +1013,12 @@ class PortfolioBacktestEngine:
                 if abs(weight - self._current_pre_trade_weights.get(symbol, 0.0)) > 1e-9
             )
         )
+        raw_reasons = target.metadata.get("risk_overlay_reasons", ())
+        overlay_reasons = (
+            tuple(str(item) for item in raw_reasons)
+            if isinstance(raw_reasons, (tuple, list))
+            else ()
+        )
         self._rebalances.append(
             RebalanceRecord(
                 decision_timestamp=decision,
@@ -963,6 +1041,8 @@ class PortfolioBacktestEngine:
                 universe_snapshot_id=target.universe_snapshot_id,
                 equity_at_decision=self._equity(),
                 rebalance_number=self._rebalance_number,
+                risk_overlay_halted=bool(target.metadata.get("risk_overlay_halted", False)),
+                risk_overlay_reasons=overlay_reasons,
             )
         )
         self._weight_history.append(
@@ -1014,15 +1094,7 @@ class PortfolioBacktestEngine:
         if position.market == Market.CRYPTO:
             fee += position.qty * exit_price * self.crypto_taker_fee_bps / 10_000
         else:
-            fee += equity_regulatory_fee(
-                OrderSide.SELL,
-                position.qty,
-                exit_price,
-                taf_per_share=self.equity_taf_per_share,
-                taf_cap=self.equity_taf_cap,
-                cat_per_share=self.equity_cat_per_share,
-                sec_fee_rate=self.equity_sec_fee_rate,
-            )
+            fee += self._equity_fee(OrderSide.SELL, position.qty, exit_price, bar.timestamp.date())
         realized_delta = (exit_price - position.avg_price) * position.qty - position.entry_fee - fee
         lifetime_realized = position.realized_pnl_accumulator + realized_delta
         self._cash += position.qty * exit_price - fee
@@ -1336,6 +1408,8 @@ class PortfolioBacktestEngine:
                     universe_snapshot_id=record.universe_snapshot_id,
                     equity_at_decision=equity,
                     rebalance_number=record.rebalance_number,
+                    risk_overlay_halted=record.risk_overlay_halted,
+                    risk_overlay_reasons=record.risk_overlay_reasons,
                 )
             )
         return tuple(enriched)

@@ -278,3 +278,132 @@ def test_full_cache_is_used_when_api_returns_empty() -> None:
     history = _empty_crypto_history(full)
     result = history.get_bars_batch(["BTC/USD"], "5m", start=start, end=end)
     assert result == {"BTC/USD": full}
+
+
+def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
+    """A SIP entitlement error degrades the historical feed to IEX once and
+    labels the fallback so reports can describe the data coverage honestly."""
+    import parayabuck.data.alpaca as alpaca_module
+
+    calls: list[tuple[str, str]] = []
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "sip"
+    history._configured_stock_feed = "sip"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._stock_client = SimpleNamespace(
+        get_stock_bars=lambda request: (
+            calls.append(("sip", str(request.feed)))
+            or (_ for _ in ()).throw(
+                RuntimeError("Insufficient data privileges: feed=sip is not entitled")
+            )
+        )
+    )
+    history._crypto_client = None
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+
+    end = datetime(2026, 8, 5, 20, 0, tzinfo=UTC)
+    with pytest.raises(RuntimeError, match="not entitled"):
+        history.get_bars_batch(["AAPL"], "1d", start=end - timedelta(days=30), end=end)
+    # Entitlement failures are detected and the fallback engages.
+    assert history._sip_fallback_active
+    assert history.feed_status()["effective"] == "iex"
+    assert history.feed_status()["sip_fallback_active"] is True
+    assert "not the consolidated" in history.feed_status()["note"]
+    # Non-entitlement failures never trigger the fallback.
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._stock_client.get_stock_bars = lambda request: (_ for _ in ()).throw(
+        ConnectionError("connection reset")
+    )
+    with pytest.raises(ConnectionError, match="connection reset"):
+        history.get_bars_batch(["AAPL"], "1d", start=end - timedelta(days=30), end=end)
+    assert history._sip_fallback_active is False
+
+
+def test_feed_status_labels_iex_coverage_honestly() -> None:
+    import parayabuck.data.alpaca as alpaca_module
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "iex"
+    history._configured_stock_feed = "iex"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    status = history.feed_status()
+    assert status["configured"] == "iex"
+    assert status["effective"] == "iex"
+    assert "not the consolidated SIP/NBBO" in status["note"]
+
+
+def test_batch_download_chunks_by_total_rows_not_per_symbol(monkeypatch: Any) -> None:
+    """Alpaca caps a bars response at 10,000 rows TOTAL. A multi-symbol batch
+    spanning years must be split by total expected rows, otherwise every
+    symbol in the batch is silently truncated to 1,000 bars."""
+    import parayabuck.data.alpaca as alpaca_module
+
+    requests: list[tuple[object, object]] = []
+
+    class CappedClient:
+        def get_stock_bars(self, request: object) -> Any:
+            requests.append((getattr(request, "start", None), getattr(request, "end", None)))
+            return SimpleNamespace(df=__import__("pandas").DataFrame())
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "sip"
+    history._configured_stock_feed = "sip"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._stock_client = CappedClient()
+    history._crypto_client = None
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+    start = datetime(2019, 5, 1, tzinfo=UTC)
+    end = datetime(2026, 7, 31, tzinfo=UTC)
+    # 12 symbols x ~2650 daily rows = ~31,800 total rows -> at least 4 chunks.
+    history.get_bars_batch([f"SYM{i}" for i in range(12)], "1d", start=start, end=end)
+    assert len(requests) >= 4
+    # Chunks are time-bounded so each stays under the 10,000-row cap.
+    for chunk_start, chunk_end in requests:
+        rows = int((chunk_end - chunk_start).total_seconds() // 86400)
+        assert rows * 12 <= 10_000
+
+
+def test_sip_quote_entitlement_failure_falls_back_to_iex_quotes_only(monkeypatch: Any) -> None:
+    """A SIP latest-quote entitlement failure degrades quotes to IEX without
+    downgrading the historical bar feed (Alpaca gates the two separately)."""
+    import parayabuck.data.alpaca as alpaca_module
+
+    quote_calls: list[object] = []
+
+    class QuoteFailingClient:
+        def get_stock_latest_quote(self, request: object) -> Any:
+            quote_calls.append(request)
+            if len(quote_calls) == 1:
+                raise RuntimeError("subscription does not permit querying recent SIP data")
+            return {"AAPL": object()}
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "sip"
+    history._configured_stock_feed = "sip"
+    history._sip_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._sip_quote_fallback_active = False
+    history._stock_client = QuoteFailingClient()
+    history._crypto_client = None
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+
+    quotes = history.get_latest_stock_quotes(["AAPL"])
+    assert "AAPL" in quotes
+    assert history._sip_quote_fallback_active is True
+    assert history._sip_fallback_active is False
+    # The bar feed keeps its configured SIP coverage.
+    assert history.feed_status()["effective"] == "sip"
+    assert history.feed_status()["quote_effective"] == "iex"

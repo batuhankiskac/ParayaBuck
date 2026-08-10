@@ -46,7 +46,7 @@ def test_new_universe_is_canonical_and_crypto_does_not_count_toward_iex(
     _write_config(
         path,
         {
-            "alpaca": {"paper": True, "stock_feed": "iex"},
+            "alpaca": {"paper": True, "stock_stream_feed": "iex", "stock_historical_feed": "sip"},
             "universe": {
                 "equity": {
                     "reference_symbols": ["spy"],
@@ -72,7 +72,7 @@ def test_iex_rejects_reference_plus_trade_symbols_over_limit(tmp_path: Path) -> 
     _write_config(
         path,
         {
-            "alpaca": {"paper": True, "stock_feed": "iex"},
+            "alpaca": {"paper": True, "stock_stream_feed": "iex", "stock_historical_feed": "sip"},
             "universe": {
                 "equity": {
                     "reference_symbols": ["SPY"],

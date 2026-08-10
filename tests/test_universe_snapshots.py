@@ -519,6 +519,14 @@ def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
+        def feed_status(self) -> dict[str, object]:
+            return {
+                "configured": "sip",
+                "effective": "sip",
+                "sip_fallback_active": False,
+                "note": "",
+            }
+
         def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
             quote_requests.append(tuple(symbols))
             return {
@@ -585,6 +593,14 @@ def test_equity_refresh_full_mode_when_no_cache_and_neutral_spread(tmp_path, mon
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
+        def feed_status(self) -> dict[str, object]:
+            return {
+                "configured": "sip",
+                "effective": "sip",
+                "sip_fallback_active": False,
+                "note": "",
+            }
+
         def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
             raise RuntimeError("quotes unavailable")
 
@@ -648,6 +664,14 @@ def test_rolling_cache_last_write_wins_for_same_day_bars(tmp_path, monkeypatch) 
     class FakeHistory:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
+
+        def feed_status(self) -> dict[str, object]:
+            return {
+                "configured": "sip",
+                "effective": "sip",
+                "sip_fallback_active": False,
+                "note": "",
+            }
 
         def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
             raise RuntimeError("no quotes")

@@ -14,7 +14,7 @@ BarHandler = Callable[[Bar], Awaitable[None]]
 class AlpacaBarStream:
     """Thin Alpaca WebSocket adapter. REST is intentionally not used for polling."""
 
-    def __init__(self, api_key: str, secret_key: str, stock_feed: str = "iex") -> None:
+    def __init__(self, api_key: str, secret_key: str, stock_stream_feed: str = "iex") -> None:
         from alpaca.data.enums import DataFeed
         from alpaca.data.live import CryptoDataStream, StockDataStream
 
@@ -31,7 +31,7 @@ class AlpacaBarStream:
         self.stock = StockDataStream(
             api_key,
             secret_key,
-            feed=DataFeed(stock_feed),
+            feed=DataFeed(stock_stream_feed),
             websocket_params=websocket_params,
         )
         self.crypto = CryptoDataStream(
@@ -39,6 +39,18 @@ class AlpacaBarStream:
             secret_key,
             websocket_params=websocket_params,
         )
+        # Set when a subscription rollback leg fails: the socket membership is
+        # then UNKNOWN and callers must halt entries and force a reconnect
+        # from the authoritative desired membership instead of assuming the
+        # previous state survived.
+        self._rollback_failed = False
+
+    @property
+    def rollback_failed(self) -> bool:
+        return self._rollback_failed
+
+    def clear_rollback_failure(self) -> None:
+        self._rollback_failed = False
 
     @staticmethod
     def _convert(raw: Any, market: Market, timeframe: str) -> Bar:
@@ -149,17 +161,20 @@ class AlpacaBarStream:
             applied.append(
                 (self.crypto, added_crypto, removed_crypto, crypto_handler, crypto_updated_handler)
             )
-        except Exception:
+        except Exception as original:
             # Roll back every completed market in reverse order: re-subscribe
-            # what was unsubscribed and unsubscribe what was added.
+            # what was unsubscribed and unsubscribe what was added. If a
+            # rollback leg fails the socket state is unknown; callers must
+            # halt entries and force a reconnect instead of trusting it.
             for stream, added, removed, handler, updated_handler in reversed(applied):
                 try:
                     self._update_market_subscription(
                         stream, removed, added, handler, updated_handler
                     )
                 except Exception:
+                    self._rollback_failed = True
                     log.exception("Rollback of stream subscription change failed")
-            raise
+            raise original
         self._stock_symbols = desired_stock
         self._crypto_symbols = desired_crypto
         return {

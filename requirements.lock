@@ -17,6 +17,7 @@ mypy==2.3.0
 mypy_extensions==1.1.0
 numpy==2.5.1
 packaging==26.2
+pandas-market-calendars==5.4.0
 pandas==3.0.3
 pathspec==1.1.1
 pluggy==1.6.0

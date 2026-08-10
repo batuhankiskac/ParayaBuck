@@ -14,7 +14,7 @@ def _settings() -> dict[str, object]:
     return {
         "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
         "runtime": {"mode": "paper"},
-        "alpaca": {"stock_feed": "iex"},
+        "alpaca": {"stock_stream_feed": "iex", "stock_historical_feed": "sip"},
         "symbols": ["AAPL", "BTC/USD"],
         "engine": {},
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
@@ -72,7 +72,7 @@ def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path)
 
     config = load_config(str(path))
     assert config.runtime.execution_timeframe == "5m"
-    assert config.runtime.risk_monitor_timeframe == "5m"
+    assert config.runtime.market_state_timeframe == "5m"
     assert config.strategy.equity.timeframe == "1d"
 
 

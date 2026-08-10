@@ -386,11 +386,19 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             const rows = positions.map((position) => {
                 const row = document.createElement('tr');
+                const ownershipTag = position.ownership_state === 'managed'
+                    ? ' (M)'
+                    : position.ownership_state === 'mixed'
+                        ? ' (M+E)'
+                        : ' (external)';
+                const qtyLabel = position.managed_qty != null && position.external_qty != null
+                    ? `${position.total_qty} = ${position.managed_qty}M + ${position.external_qty}E`
+                    : String(position.qty);
                 const values = [
-                    `${position.symbol}${position.ownership === 'external' ? ' (external)' : ''}`,
+                    `${position.symbol}${ownershipTag}`,
                     position.market || '-',
                     position.direction || '-',
-                    position.qty,
+                    qtyLabel,
                     `$${Number(position.avg_price).toFixed(2)}`,
                     formatPnl(position.unrealized_pnl),
                     position.manual_intervention_required

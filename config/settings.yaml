@@ -7,12 +7,17 @@ app:
 runtime:
   mode: paper
   execution_timeframe: 5m
-  risk_monitor_timeframe: 5m
+  market_state_timeframe: 5m
   decision_db_path: data/runtime/parayabuck.sqlite3
   scanner_refresh_hours: 24
 alpaca:
   data_delayed: false
-  stock_feed: iex
+  # Live Basic streaming: IEX exchange prints only (NOT the consolidated
+  # SIP/NBBO tape). SIP real-time streaming requires a paid entitlement.
+  stock_stream_feed: iex
+  # Historical bars/quotes: SIP for consolidated coverage where the account
+  # entitlement allows; falls back to IEX gracefully otherwise.
+  stock_historical_feed: sip
 data:
   equity_session: regular
   include_extended_hours: false
@@ -162,14 +167,18 @@ backtest:
   slippage_bps: 2
   spread_bps: 2
   commission: 0
-  crypto_taker_fee_bps: 5
-  # Current SEC/TAF/CAT regulatory fee estimates (per share or per dollar of
-  # proceeds). These are order-fee estimates, not execution slippage; keep
-  # them updated with the rates in force at the trade date.
-  equity_taf_per_share: 0.000166
-  equity_taf_cap: 7.27
-  equity_cat_per_share: 0.00013
-  equity_sec_fee_rate: 0.0000278
+  # Crypto market orders pay Alpaca's tier-1 taker fee (0.25% = 25 bps) for a
+  # low-volume account; the tier helper in backtest/regulatory_fees.py models
+  # higher volume tiers.
+  crypto_taker_fee_bps: 25
+  # Equity regulatory fees use the effective-dated schedule by trade date
+  # (SEC Section 31, FINRA TAF, CAT NMS Plan). The fixed values below are the
+  # 2026 rates and only apply when effective-dated fees are disabled.
+  equity_use_effective_dated_fees: true
+  equity_taf_per_share: 0.000195
+  equity_taf_cap: 9.79
+  equity_cat_per_share: 0.000003
+  equity_sec_fee_rate: 0.0000206
   scanner_rebalance: daily
   output_dir: reports
   ranking_metric: risk_adjusted

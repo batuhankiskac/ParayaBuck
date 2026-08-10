@@ -89,6 +89,7 @@ class RuntimeHealth:
     strategies: tuple[dict[str, object], ...] = ()
     last_reconciliation_at: str | None = None
     universe_refresh: dict[str, object] = field(default_factory=dict)
+    entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -200,19 +201,40 @@ class EngineRuntime:
             if config.universe.crypto.enabled
             else ()
         )
-        self._active_crypto_symbols = active_crypto
-        self.symbols = [canonical_symbol(symbol) for symbol in (*active_equities, *active_crypto)]
+        self._active_crypto_symbols = active_crypto if config.strategy.crypto.enabled else ()
+        # Live observation membership is driven by the enabled strategies'
+        # universe symbols plus managed-position/open-order pins. A market
+        # whose strategy is disabled streams nothing from scanner discovery
+        # (which stays enabled independently); pins are added later by
+        # _pin_managed_symbols when managed inventory exists.
+        self._strategy_enabled: dict[Market, bool] = {
+            Market.EQUITY: bool(config.strategy.equity.enabled and active_equities),
+            Market.CRYPTO: bool(config.strategy.crypto.enabled and active_crypto),
+        }
+        self.symbols = [
+            canonical_symbol(symbol)
+            for symbol in (
+                *(active_equities if self._strategy_enabled[Market.EQUITY] else ()),
+                *(active_crypto if self._strategy_enabled[Market.CRYPTO] else ()),
+            )
+        ]
         self._symbols_by_market = {
-            Market.EQUITY: {symbol for symbol in self.symbols if not is_crypto(symbol)},
+            Market.EQUITY: ({symbol for symbol in self.symbols if not is_crypto(symbol)}),
             Market.CRYPTO: {symbol for symbol in self.symbols if is_crypto(symbol)},
         }
-        self._market_enabled = {
-            Market.EQUITY: bool(self._symbols_by_market[Market.EQUITY]),
-            Market.CRYPTO: bool(self._symbols_by_market[Market.CRYPTO]),
-        }
+        self._market_enabled = dict(self._strategy_enabled)
         self._market_entry_halts: dict[Market, str | None] = {
             Market.EQUITY: self._initial_universe_halt(Market.EQUITY),
             Market.CRYPTO: self._initial_universe_halt(Market.CRYPTO),
+        }
+        # Entry-risk latch: reacts to daily-loss/drawdown/account-freshness
+        # breaches on the account-poll cadence. A latched market still runs
+        # decisions, but only risk-reducing SELLs may be planned; entries are
+        # blocked. Ownership drift is stricter: it halts the runtime outright
+        # (a broken ownership model must not be traded against at all).
+        self._entry_risk_latch: dict[Market, str | None] = {
+            Market.EQUITY: None,
+            Market.CRYPTO: None,
         }
         strategy_specs = []
         for market, selection, symbols in (
@@ -250,6 +272,10 @@ class EngineRuntime:
             portfolio_owned_quantities=lambda: self._portfolio_repository.owned_quantities(
                 self.broker.account_id or "unknown"
             ),
+            portfolio_open_orders=lambda: self._portfolio_repository.open_orders(
+                self.broker.account_id or "unknown"
+            ),
+            portfolio_fill_recovered=self._recover_portfolio_fill,
             portfolio_stop_recorded=lambda symbol, market, qty, client_order_id, reference_price: (
                 self._portfolio_repository.record_protective_order(
                     self.broker.account_id or "unknown",
@@ -287,7 +313,7 @@ class EngineRuntime:
             },
         )
         self._consecutive_losses = 0
-        self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_feed)
+        self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
         self.trading_updates = AlpacaTradingUpdateStream(
             api_key, secret_key, self.paper, self._on_trade_update
         )
@@ -296,7 +322,7 @@ class EngineRuntime:
         }
         required_timeframes = {
             self.app_config.runtime.execution_timeframe,
-            self.app_config.runtime.risk_monitor_timeframe,
+            self.app_config.runtime.market_state_timeframe,
             *self._strategy_timeframes,
         }
         self.aggregators = {
@@ -336,6 +362,10 @@ class EngineRuntime:
         self._last_universe_refresh_at: datetime | None = None
         self._next_universe_refresh_at: datetime | None = None
         self._managed_pin_symbols: set[str] = set()
+        # Set when a hot-swap rollback failed and the socket membership is
+        # unknown; cleared after a successful reconnect from the authoritative
+        # desired membership.
+        self._resync_pending = False
         self._last_portfolio_status: dict[Market, str] = {}
         self._universe_refresh_status: dict[str, str] = {
             Market.EQUITY.value: self.universe_preflight.equity_status,
@@ -543,6 +573,10 @@ class EngineRuntime:
                 "next_refresh_at": (
                     next_universe_refresh.isoformat() if next_universe_refresh is not None else None
                 ),
+            },
+            entry_risk_latch={
+                market.value: reason
+                for market, reason in getattr(self, "_entry_risk_latch", {}).items()
             },
         )
 
@@ -782,6 +816,29 @@ class EngineRuntime:
             days_ahead += 1
         return (premarket + timedelta(days=days_ahead)).astimezone(UTC)
 
+    def _resync_stream_if_needed(self) -> None:
+        """Re-converge the live stream from the authoritative membership.
+
+        Called after a hot-swap rollback failure (socket state unknown) so the
+        stream is forced back to the desired observation membership. Clears
+        the subscription-state-unknown entry halt on success; keeps it on
+        failure so entries stay blocked.
+        """
+        if not getattr(self, "_resync_pending", False):
+            return
+        clear = getattr(self.stream, "clear_rollback_failure", None)
+        if clear is not None:
+            clear()
+        self.stream.update_subscriptions(
+            sorted(self._symbols_by_market[Market.EQUITY]),
+            sorted(self._symbols_by_market[Market.CRYPTO]),
+        )
+        self._resync_pending = False
+        for market in list(self._market_entry_halts):
+            if self._market_entry_halts.get(market) == "subscription_state_unknown":
+                self._market_entry_halts[market] = None
+        log.warning("Stream membership reconnected from the authoritative desired set")
+
     def _refresh_runtime_universes(self, target: Market | None = None) -> None:
         """Refresh the scanner universes, optionally for one market only.
 
@@ -789,6 +846,15 @@ class EngineRuntime:
         backfill paths); the scheduled loop passes a single market so equity
         can run on a pre-market cadence while crypto keeps its own interval.
         """
+        if getattr(self, "_resync_pending", False):
+            try:
+                self._resync_stream_if_needed()
+            except Exception as exc:
+                log.error(
+                    "Stream resync failed; subscription state stays unknown and "
+                    "entries stay halted: %s",
+                    exc,
+                )
         desired: dict[Market, tuple[str, ...]] = {}
 
         def refresh_one(market: Market, operation: Callable[[], tuple[str, ...]]) -> None:
@@ -867,19 +933,21 @@ class EngineRuntime:
         )
         # Only bot-owned exposure is pinned: ledger lots, portfolio-owned
         # positions (managed quantity > 0), and open portfolio orders.
-        # Manually opened external positions are not the runtime's inventory
-        # and must not consume stream slots unless the operator opted in.
+        # Manually opened external positions and manual open orders are not
+        # the runtime's inventory and must not consume stream slots unless
+        # the operator opted in.
         protected = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
             if not position.is_flat and (position.managed_qty > 1e-12 or manage_external)
         }
-        protected.update(self.broker.open_portfolio_order_symbols())
+        protected.update(self.broker.portfolio_open_order_symbols())
         protected.update(
             item.canonical_symbol for item in self.ledger.managed_entries_for_account(account_id)
         )
         applied: dict[Market, tuple[str, ...]] = {}
         changes: dict[Market, dict[str, tuple[str, ...]]] = {}
+        strategy_enabled = getattr(self, "_strategy_enabled", {})
         for market, requested in desired_by_market.items():
             current = self._symbols_by_market[market]
             market_protected = tuple(
@@ -889,12 +957,21 @@ class EngineRuntime:
             )
             if market == Market.EQUITY:
                 equity_config = self.app_config.universe.equity
-                configured_pins = equity_config.reference_symbols
+                # Reference symbols are strategy inputs; with the strategy
+                # disabled, scanner discovery stays enabled but observation
+                # keeps only the managed/protection pins.
+                configured_pins = (
+                    equity_config.reference_symbols if strategy_enabled.get(market, True) else ()
+                )
                 maximum_symbols = equity_config.maximum_stream_symbols
             else:
                 crypto_config = self.app_config.universe.crypto
-                configured_pins = crypto_config.pinned_symbols
+                configured_pins = (
+                    crypto_config.pinned_symbols if strategy_enabled.get(market, True) else ()
+                )
                 maximum_symbols = crypto_config.maximum_stream_symbols
+            if not strategy_enabled.get(market, True):
+                requested = ()
             reserved = tuple(dict.fromkeys((*configured_pins, *market_protected)))
             if len(reserved) > maximum_symbols:
                 raise RuntimeError(f"Protected {market.value} symbols exceed stream capacity")
@@ -957,6 +1034,20 @@ class EngineRuntime:
             # never committed, so drop the warming marks again.
             with state_lock:
                 self._not_ready_symbols = previous_not_ready
+            if getattr(self.stream, "rollback_failed", False):
+                # The rollback itself failed: the socket membership is UNKNOWN.
+                # Never claim the previous subscription survived. Halt entries
+                # for every touched market and force a reconnect from the
+                # authoritative desired membership on the next refresh/reset.
+                log.critical(
+                    "Stream rollback failed after a hot-swap error; socket "
+                    "membership is unknown. Halting entries until the stream "
+                    "reconnects from the authoritative membership."
+                )
+                with state_lock:
+                    for market in applied:
+                        self._market_entry_halts[market] = "subscription_state_unknown"
+                self._resync_pending = True
             raise
         portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
         try:
@@ -1035,6 +1126,13 @@ class EngineRuntime:
                 )
             except Exception:
                 log.exception("Stream rollback after failed hot-swap commit also failed")
+                # The socket membership is now unknown: halt entries for the
+                # touched markets and force a reconnect from the authoritative
+                # desired membership instead of claiming the old state holds.
+                with state_lock:
+                    for market in applied:
+                        self._market_entry_halts[market] = "subscription_state_unknown"
+                self._resync_pending = True
             raise
 
         self._refresh_readiness()
@@ -1047,6 +1145,31 @@ class EngineRuntime:
         )
         return changes
 
+    def _recover_portfolio_fill(
+        self,
+        client_order_id: str,
+        broker_order_id: str,
+        filled_qty: float,
+        avg_price: float,
+        occurred_at: datetime,
+        activity_id: str,
+        fee: float,
+    ) -> None:
+        """Book a real fill recovered from Alpaca order history at its actual
+        price (see AlpacaBroker._reconcile_stale_portfolio_ownership)."""
+        self._portfolio_repository.apply_trade_update(
+            client_order_id=client_order_id,
+            broker_order_id=broker_order_id,
+            status="filled",
+            cumulative_filled_quantity=filled_qty,
+            average_fill_price=avg_price,
+            occurred_at=occurred_at,
+            activity_id=activity_id,
+            fee=fee,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+        )
+
     def _pin_managed_symbols(self) -> None:
         """Keep managed positions observable even after scanner/config removal."""
         account_id = self.broker.account_id or "unknown"
@@ -1054,9 +1177,9 @@ class EngineRuntime:
         repository = getattr(self, "_portfolio_repository", None)
         # Only symbols still owned (net filled quantity > 0) or with an open
         # portfolio order are pinned; a fully exited symbol stops consuming a
-        # stream slot.
+        # stream slot. Manual broker orders are never pins.
         portfolio_symbols = (
-            repository.owned_symbols(account_id) | self.broker.open_portfolio_order_symbols()
+            repository.owned_symbols(account_id) | self.broker.portfolio_open_order_symbols()
             if repository is not None
             else set()
         )
@@ -1087,9 +1210,16 @@ class EngineRuntime:
             )
         )
         self._managed_pin_symbols = {*equity_pins, *crypto_pins}
+        strategy_enabled = getattr(self, "_strategy_enabled", {})
         if equity_pins:
             maximum = self.app_config.universe.equity.maximum_stream_symbols
-            references = self.app_config.universe.equity.reference_symbols
+            # Reference symbols are strategy inputs; a disabled equity
+            # strategy only needs the managed pins themselves.
+            references = (
+                self.app_config.universe.equity.reference_symbols
+                if strategy_enabled.get(Market.EQUITY, True)
+                else ()
+            )
             ordered = tuple(
                 dict.fromkeys(
                     (*references, *equity_pins, *sorted(self._symbols_by_market[Market.EQUITY]))
@@ -1112,7 +1242,12 @@ class EngineRuntime:
             tuple(sorted(self._symbols_by_market[Market.CRYPTO])),
         )
         if crypto_config.dynamic_selection_enabled:
-            reserved = tuple(dict.fromkeys((*crypto_config.pinned_symbols, *crypto_pins)))
+            # Configured crypto pins belong to the crypto strategy; with the
+            # strategy disabled only managed positions are observed.
+            configured_pins = (
+                crypto_config.pinned_symbols if strategy_enabled.get(Market.CRYPTO, True) else ()
+            )
+            reserved = tuple(dict.fromkeys((*configured_pins, *crypto_pins)))
             if len(reserved) > crypto_config.maximum_stream_symbols:
                 raise RuntimeError(
                     "Configured and managed crypto pins exceed maximum_stream_symbols"
@@ -1124,6 +1259,13 @@ class EngineRuntime:
             active_crypto = tuple(dict.fromkeys((*current_crypto, *crypto_pins)))
         self._active_crypto_symbols = active_crypto
         self._symbols_by_market[Market.CRYPTO] = set(active_crypto)
+        # A market with pins is observed (and protected) even when its
+        # strategy is disabled; health reporting and worker requirements
+        # follow the actual observation membership.
+        self._market_enabled = getattr(self, "_market_enabled", {})
+        for candidate_market, symbols in self._symbols_by_market.items():
+            if symbols:
+                self._market_enabled[candidate_market] = True
         if self.market_state.allowed_trade_symbols is not None:
             self.market_state.allowed_trade_symbols = {
                 symbol
@@ -1227,12 +1369,81 @@ class EngineRuntime:
                         self.broker.account_id or "unknown", account.equity
                     )
                     self._persist_risk_state(account)
+                except OwnershipDriftError:
+                    # Ownership drift is not a transient broker/API error: the
+                    # broker holds fewer shares than the repository claims as
+                    # managed. Halt the runtime, persist the safety state and
+                    # keep entries blocked instead of logging and continuing
+                    # until the next strategy decision.
+                    self._halt_for_ownership_drift()
                 except Exception as exc:
+                    # Temporary broker/API errors are retried on the next
+                    # poll; only drift escalates to a runtime halt here.
                     worker.last_error = str(exc)
                     log.warning("Account refresh failed: %s", exc)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
         finally:
             worker.alive = False
+
+    def _evaluate_entry_risk_latch(self, account: AccountSnapshot) -> None:
+        """Re-evaluate the entry-risk latch from the latest account state.
+
+        Daily loss and drawdown breach limits latch entries (SELL-only
+        decisions still run); the latch clears when the condition recovers.
+        Account freshness is enforced by the readiness gate on the same data.
+        """
+        equity = max(1e-9, account.equity)
+        daily_loss = max(0.0, -account.daily_pnl / equity)
+        breach: str | None = None
+        if daily_loss >= self.app_config.risk.daily_loss_limit_pct:
+            breach = "daily_loss_limit"
+        elif account.drawdown_pct >= self.app_config.risk.max_drawdown_pct:
+            breach = "portfolio_drawdown_halt"
+        self._entry_risk_latch = {
+            market: (breach if breach is not None else None) for market in self._entry_risk_latch
+        }
+
+    def _halt_for_ownership_drift(self) -> None:
+        """Fail closed on ownership drift from the account-polling loop.
+
+        Runtime state becomes halted, the circuit breaker records
+        ``ownership_drift`` and the safety state is persisted so a restart
+        resumes the halt until an operator reconciles the inventory. Ownership
+        drift halts orders entirely: a broken ownership model must not be
+        traded against even with risk-reducing sells.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            self._state = "halted"
+        self._circuit_breaker_reason = "ownership_drift"
+        self._entry_risk_latch = {
+            market: "ownership_drift" for market in getattr(self, "_entry_risk_latch", {})
+        }
+        self._persist_safety_state("ownership_drift")
+        log.critical("Ownership drift detected; runtime halted and safety state persisted")
+
+    def _persist_safety_state(self, reason: str) -> None:
+        """Persist the halted circuit-breaker reason with the last known
+        risk numbers when a fresh account snapshot is unavailable."""
+        with getattr(self, "_risk_state_lock", threading.Lock()):
+            account_id = self.broker.account_id or "unknown"
+            today = datetime.now(UTC).date()
+            previous = self.ledger.load_risk_state(account_id, today)
+            if previous is None:
+                return
+            self.ledger.save_risk_state(
+                RiskState(
+                    account_id=account_id,
+                    session_date=today,
+                    day_start_equity=previous.day_start_equity,
+                    peak_equity=previous.peak_equity,
+                    realized_pnl=previous.realized_pnl,
+                    unrealized_pnl=previous.unrealized_pnl,
+                    fees=previous.fees,
+                    consecutive_losses=previous.consecutive_losses,
+                    circuit_breaker_reason=reason,
+                    updated_at=datetime.now(UTC),
+                )
+            )
 
     def _restore_persistent_state(self) -> None:
         account_id = self.broker.account_id or "unknown"
@@ -1244,6 +1455,7 @@ class EngineRuntime:
             "ledger_mismatch",
             "post_fill_risk_violation",
             "final_market_event_queue_overflow",
+            "ownership_drift",
         }
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
@@ -1408,7 +1620,7 @@ class EngineRuntime:
                 continue
             if timeframe == self.app_config.runtime.execution_timeframe:
                 self._put_event("primary", closed)
-            elif timeframe == self.app_config.runtime.risk_monitor_timeframe:
+            elif timeframe == self.app_config.runtime.market_state_timeframe:
                 self._put_event("higher", closed)
             if timeframe in self._strategy_timeframes:
                 self._put_event("portfolio", closed)
@@ -1659,7 +1871,7 @@ class EngineRuntime:
             for bar in bars:
                 if timeframe == self.app_config.runtime.execution_timeframe:
                     self._put_event("primary", bar)
-                elif timeframe == self.app_config.runtime.risk_monitor_timeframe:
+                elif timeframe == self.app_config.runtime.market_state_timeframe:
                     self._put_event("higher", bar)
                 if timeframe in self._strategy_timeframes:
                     self._put_event("portfolio", bar)
@@ -1718,9 +1930,15 @@ class EngineRuntime:
                 continue
             if self._entry_readiness_reasons(portfolio_runtime.market):
                 continue
+            # An entry-risk latch (daily loss / drawdown / account freshness)
+            # must not freeze the whole decision: risk-reducing SELL exits
+            # still run, only entries are blocked.
+            entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             try:
                 with self._portfolio_lock:
-                    portfolio_result = portfolio_runtime.process_closed_bars(relevant)
+                    portfolio_result = portfolio_runtime.process_closed_bars(
+                        relevant, entry_latch=entry_latch
+                    )
             except OwnershipDriftError:
                 self._circuit_breaker_reason = "ownership_drift"
                 self._state = "halted"
@@ -1907,6 +2125,7 @@ class EngineRuntime:
                     elif realized_delta > 0:
                         current_losses = 0
             self._consecutive_losses = current_losses
+            self._evaluate_entry_risk_latch(account)
             self.ledger.save_risk_state(
                 RiskState(
                     account_id=account_id,
@@ -1940,7 +2159,10 @@ class EngineRuntime:
                 self._circuit_breaker_reason = "reconciliation_failed"
             except OwnershipDriftError:
                 log.exception("Portfolio ownership drift detected; entries halted")
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._state = "halted"
                 self._circuit_breaker_reason = "ownership_drift"
+                self._persist_safety_state("ownership_drift")
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
                 self._circuit_breaker_reason = "protection_failure"
@@ -1992,6 +2214,11 @@ class EngineRuntime:
             raise ValueError("Market event queue must drain before resetting the safety lock")
         if self.market_state.has_data_gaps or self._not_ready_symbols:
             raise ValueError("All symbol data must be ready before resetting the safety lock")
+        if getattr(self, "_resync_pending", False):
+            try:
+                self._resync_stream_if_needed()
+            except Exception as exc:
+                raise ValueError(f"Stream membership cannot be reconnected: {exc}") from exc
         with self._reconcile_lock:
             self.broker.reconcile()
             self._last_reconciliation_at = datetime.now(UTC)
@@ -2006,6 +2233,9 @@ class EngineRuntime:
             if market_halts is not None:
                 market_halts[Market.EQUITY] = None
                 market_halts[Market.CRYPTO] = None
+            self._entry_risk_latch = {
+                market: None for market in getattr(self, "_entry_risk_latch", {})
+            }
             self._persist_risk_state(account)
         if self._running and self._state == "halted":
             self._state = "running"
@@ -2015,7 +2245,7 @@ class EngineRuntime:
         history = AlpacaHistoricalData(
             self.api_key,
             self.secret_key,
-            stock_feed=self.app_config.alpaca.stock_feed,
+            stock_feed=self.app_config.alpaca.stock_historical_feed,
             data_delayed=self.app_config.alpaca.data_delayed,
         )
         self._historical = history
@@ -2054,7 +2284,7 @@ class EngineRuntime:
                 ]
                 operational = timeframe in {
                     self.app_config.runtime.execution_timeframe,
-                    self.app_config.runtime.risk_monitor_timeframe,
+                    self.app_config.runtime.market_state_timeframe,
                 }
                 if not strategy_requirements and not operational:
                     continue

@@ -10,6 +10,7 @@ from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderSide,
+    PortfolioRiskLimits,
     PortfolioRiskOverlay,
     TargetToOrderPlanner,
 )
@@ -270,3 +271,137 @@ def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
     assert "daily_loss_limit" in decision.reasons
     assert "NEW" not in weights
     assert weights[raw_position["symbol"]] <= position.market_value / account.equity
+
+
+def _mixed_position(
+    symbol: str, total_qty: float, managed_qty: float, price: float = 100.0
+) -> PositionSnapshot:
+    return PositionSnapshot(
+        symbol=symbol,
+        qty=total_qty,
+        avg_price=price,
+        current_price=price,
+        market=Market.EQUITY,
+        qty_available=total_qty,
+        ownership="mixed",
+        managed_qty=managed_qty,
+    )
+
+
+def test_risk_overlay_counts_external_exposure_exactly_once() -> None:
+    """AAPL external $10k + managed $2k on a $100k account: the external
+    exposure is counted exactly once in gross_after."""
+    overlay = PortfolioRiskOverlay(
+        PortfolioRiskLimits(maximum_equity_asset=0.25, maximum_equity=0.5)
+    )
+    account = _account(
+        (_mixed_position("AAPL", 120, 20),),
+    )
+    decision = overlay.apply(
+        _target({"AAPL": 0.02, "QQQ": 0.20}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("AAPL", "QQQ"),
+        maximum_allocation=0.50,
+        mode="paper",
+    )
+    weights = {weight.symbol: weight.weight for weight in decision.target.weights}
+    # The external floor keeps the total AAPL target at 0.10.
+    assert weights["AAPL"] == pytest.approx(0.10)
+    assert weights["QQQ"] == pytest.approx(0.20)
+    # gross_after = external 0.10 + managed 0.20; external is not double counted.
+    assert decision.gross_after == pytest.approx(0.30)
+    assert decision.gross_before == pytest.approx(0.12)
+    assert decision.target.cash_weight == pytest.approx(0.70)
+    # The managed portion of the target is exactly QQQ's 0.20.
+    assert decision.target.metadata["risk_overlay_managed_exposure"] == pytest.approx(0.20)
+
+
+def test_risk_overlay_caps_managed_exposure_not_external() -> None:
+    """maximum_allocation caps the managed sleeve; external stays immutable."""
+    overlay = PortfolioRiskOverlay(
+        PortfolioRiskLimits(maximum_equity_asset=0.5, maximum_equity=0.6)
+    )
+    account = _account(
+        (_mixed_position("AAPL", 130, 30),),
+    )
+    decision = overlay.apply(
+        _target({"AAPL": 0.30, "QQQ": 0.30}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("AAPL", "QQQ"),
+        maximum_allocation=0.40,
+        mode="paper",
+    )
+    assert "exposure_scaled_to_limit" in decision.reasons
+    weights = {weight.symbol: weight.weight for weight in decision.target.weights}
+    # Managed desired 0.50 is scaled to the managed limit 0.40: AAPL 0.24
+    # (0.10 of it external), QQQ 0.24.
+    assert weights["AAPL"] == pytest.approx(0.24)
+    assert weights["QQQ"] == pytest.approx(0.24)
+    # Actual expected account gross: AAPL total 0.24 + QQQ 0.24.
+    assert decision.gross_after == pytest.approx(0.48)
+    assert decision.target.metadata["risk_overlay_managed_exposure"] == pytest.approx(0.38)
+
+
+def test_gross_after_matches_expected_account_gross_for_mixed_inventory() -> None:
+    """gross_after equals the true expected account gross after rebalancing."""
+    account = _account(
+        (_mixed_position("AAPL", 120, 20),),
+    )
+    decision = PortfolioRiskOverlay().apply(
+        _target({"AAPL": 0.02, "QQQ": 0.20, "IWM": 0.20}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("AAPL", "QQQ", "IWM"),
+        maximum_allocation=0.50,
+        mode="paper",
+    )
+    weights = {weight.symbol: weight.weight for weight in decision.target.weights}
+    # AAPL total target is floored at the external 0.10.
+    assert weights["AAPL"] == pytest.approx(0.10)
+    expected_gross = weights["AAPL"] + weights["QQQ"] + weights["IWM"]
+    assert decision.gross_after == pytest.approx(expected_gross)
+    assert decision.gross_after <= 0.6
+
+
+def test_planner_never_sells_external_units_of_a_mixed_position() -> None:
+    """The planner may sell only managed units; external inventory is never
+    a sell source even when the target is below the external holding."""
+    account = _account(
+        (_mixed_position("AAPL", 120, 20),),
+    )
+    planner = TargetToOrderPlanner()
+    # Strategy wants AAPL at 0.05 total, below the 0.10 external floor: the
+    # overlay floors the target, the planner sells exactly the managed 20.
+    floor = PortfolioRiskOverlay().apply(
+        _target({"AAPL": 0.05}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("AAPL",),
+        maximum_allocation=0.50,
+        mode="paper",
+    )
+    orders = planner.plan(
+        floor.target,
+        account,
+        market=Market.EQUITY,
+        prices={"AAPL": 100},
+        rules={"AAPL": _rule("AAPL")},
+        approved_symbols=("AAPL",),
+    )
+    assert len(orders) == 1
+    assert orders[0].side == PortfolioOrderSide.SELL
+    assert orders[0].quantity == pytest.approx(20.0)
+    # A target at exactly the external floor also sells only the managed lot.
+    orders_flat = planner.plan(
+        _target({"AAPL": 0.10}),
+        account,
+        market=Market.EQUITY,
+        prices={"AAPL": 100},
+        rules={"AAPL": _rule("AAPL")},
+        approved_symbols=("AAPL",),
+    )
+    assert len(orders_flat) == 1
+    assert orders_flat[0].side == PortfolioOrderSide.SELL
+    assert orders_flat[0].quantity == pytest.approx(20.0)

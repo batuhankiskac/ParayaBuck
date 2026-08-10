@@ -19,8 +19,10 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
 There is one strategy interface (`PortfolioStrategy.decide`) and one shared
 target/risk meaning. Historical fills use a deterministic simulator while
 paper/live orders use the broker planner. Strategy code never receives
-credentials or submits orders. Operational, risk-monitor, and strategy
-timeframes have explicit roles.
+credentials or submits orders. Operational, market-state observation, and
+strategy timeframes have explicit roles; an entry-risk latch (daily loss,
+drawdown, account freshness) blocks entries while risk-reducing exits keep
+flowing.
 
 The shipped strategies are deliberately limited to two:
 
@@ -139,8 +141,19 @@ holiday correctness depends on the supplied/provider data calendar.
 
 Equity downloads use split-adjusted prices. Optional explicit dividend cash
 flows can be supplied with `--corporate-actions`; split actions are rejected in
-that mode to prevent double counting. Regulatory TAF/CAT/SEC assumptions are
-configurable under `backtest`.
+that mode to prevent double counting. Equity regulatory fees (SEC Section 31,
+FINRA TAF, CAT NMS Plan) follow an effective-dated schedule by trade date by
+default (fixed 2026-rate fallbacks are configurable under `backtest`); the
+schedule is an approximation, never exact historical fees, and reports say so.
+Crypto backtests default to Alpaca's tier-1 taker rate (25 bps) because crypto
+execution uses market orders.
+
+Data feed terminology: `alpaca.stock_historical_feed` (default `sip`) drives
+historical downloads and falls back to `iex` gracefully when the account lacks
+the SIP entitlement; `alpaca.stock_stream_feed` (default `iex`) drives live
+Basic streaming. IEX prints reflect one exchange, not the consolidated
+SIP/NBBO tape, so liquidity/spread proxies derived from IEX understate
+full-market conditions; backtest and scanner reports label the feed used.
 
 Each run writes `report.json`, summary/rebalance/fill/equity/drawdown CSVs, a
 historical-universe snapshot, and a SQLite run record. Reports include period,
@@ -222,12 +235,18 @@ actual ending equity - expected ending equity = residual
 ```bash
 docker build -t parayabuck .
 docker run --rm --env-file .env -p 127.0.0.1:8000:8000 \
-  -v "$PWD/data:/app/data" -v "$PWD/reports:/app/reports" parayabuck
+  -v "$PWD/config:/app/config" -v "$PWD/data:/app/data" \
+  -v "$PWD/reports:/app/reports" parayabuck
 ```
 
-The image runs non-root, stores state on mounts, handles SIGTERM cleanly, and has
-a `/healthz` liveness check and `/readyz` readiness check. Keep the control
-console bound to loopback.
+The image installs the same locked dependencies CI tests against
+(`requirements.lock`, then `pip install . --no-deps`) and runs non-root.
+`/app/config`, `/app/data` and `/app/reports` are volumes: settings saved from
+the operator UI, decisions/orders/fills in SQLite, and backtest reports all
+survive container recreation (an empty config volume is seeded from the
+image's default settings on first start). The container handles SIGTERM
+cleanly and exposes a `/healthz` liveness check and `/readyz` readiness
+check. Keep the control console bound to loopback.
 
 ## Testing
 

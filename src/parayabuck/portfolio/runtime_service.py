@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -26,6 +27,27 @@ from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.storage import SQLiteStore
 
+# Alpaca order states stored by the repository: canonical statuses written by
+# record_order/update_order plus raw TradingStream event names written by
+# apply_trade_update ("fill", "partial_fill"). An order is terminal once it
+# cannot fill any more quantity.
+_TERMINAL_ORDER_STATUSES = frozenset(
+    {
+        "filled",
+        "canceled",
+        "cancelled",
+        "expired",
+        "rejected",
+        "done_for_day",
+        "fill",
+    }
+)
+
+
+def is_terminal_order_status(status: str) -> bool:
+    return str(status).lower() in _TERMINAL_ORDER_STATUSES
+
+
 log = get_logger("parayabuck.portfolio.runtime_service")
 
 
@@ -34,7 +56,7 @@ class PortfolioRuntimeBroker(Protocol):
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules: ...
 
-    def open_portfolio_order_symbols(self) -> set[str]: ...
+    def all_open_order_symbols(self) -> set[str]: ...
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str: ...
 
@@ -72,6 +94,22 @@ class PortfolioDecisionService:
             prices={symbol: series[-1].close for symbol, series in history.items()},
             benchmark_symbol="BTC/USD" if strategy.market == Market.CRYPTO else "SPY",
         )
+
+
+@dataclass(frozen=True)
+class OpenPortfolioOrder:
+    """One non-terminal portfolio order attributed to an account."""
+
+    client_order_id: str
+    symbol: str
+    market: Market
+    side: str
+    quantity: float
+    cumulative_filled_quantity: float
+
+    @property
+    def remaining_quantity(self) -> float:
+        return max(0.0, self.quantity - self.cumulative_filled_quantity)
 
 
 @dataclass(frozen=True)
@@ -131,6 +169,17 @@ class PortfolioStateRepository:
                     account_id TEXT PRIMARY KEY, equity REAL NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS portfolio_ownership_adjustments (
+                    adjustment_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    kind TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    consumed_quantity REAL NOT NULL DEFAULT 0
+                );
                 """
             )
             session_columns = {
@@ -177,9 +226,29 @@ class PortfolioStateRepository:
                     "ALTER TABLE portfolio_orders ADD COLUMN "
                     "cumulative_filled_quantity REAL NOT NULL DEFAULT 0"
                 )
+                # Legacy databases kept fills in portfolio_fills while the
+                # orders table had no cumulative quantity. Restore the real
+                # bookkeeping instead of leaving migrated orders at zero.
+                self.store.connection.execute(
+                    """UPDATE portfolio_orders
+                       SET cumulative_filled_quantity = COALESCE((
+                           SELECT SUM(f.quantity) FROM portfolio_fills f
+                           WHERE f.client_order_id = portfolio_orders.client_order_id
+                       ), 0)
+                       WHERE cumulative_filled_quantity = 0"""
+                )
             if "average_fill_price" not in columns:
                 self.store.connection.execute(
                     "ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL"
+                )
+                self.store.connection.execute(
+                    """UPDATE portfolio_orders
+                       SET average_fill_price = (
+                           SELECT SUM(f.quantity * f.price) / NULLIF(SUM(f.quantity), 0)
+                           FROM portfolio_fills f
+                           WHERE f.client_order_id = portfolio_orders.client_order_id
+                       )
+                       WHERE average_fill_price IS NULL"""
                 )
 
     def _rebuild_decisions_unique_constraint(self) -> None:
@@ -396,43 +465,99 @@ class PortfolioStateRepository:
             )
 
     def clear_stale_ownership(self, account_id: str, symbol: str, market: Market) -> float:
-        """Book a filled SELL leg for the owned quantity when the broker holds
-        no position: a missed stop fill (stream downtime, manual sell) leaves
-        the repository claiming a managed position that no longer exists, and
-        nothing else ever zeroes it. Idempotent: returns the cleared quantity
-        (0.0 when nothing is owned anymore)."""
+        """Record an explicit ownership reconciliation adjustment when the
+        broker holds no position and no real fill could be recovered.
+
+        This never books a synthetic precise SELL fill at an invented price:
+        an unknown exit is an anomaly, not a normal trading fill. The
+        adjustment reduces owned quantity and can be consumed later by a real
+        fill arriving after reconciliation (stream downtime race). Idempotent:
+        returns the adjusted quantity (0.0 when nothing is owned anymore)."""
         owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
         if owned <= 1e-12:
             return 0.0
-        with self.store.lock, self.store.connection:
-            lineage = self._latest_entry_lineage(account_id, symbol, market)
-            if lineage is None:
-                return 0.0
-            decision_id, reference_price = lineage
-            self.store.connection.execute(
-                """INSERT OR IGNORE INTO portfolio_orders(
-                    client_order_id, decision_id, symbol, market, side, quantity,
-                    reference_price, status, cumulative_filled_quantity, created_at
-                ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 'filled', ?, ?)""",
-                (
-                    f"pbp-reconcile-{uuid4().hex}",
-                    decision_id,
-                    symbol,
-                    market.value,
-                    owned,
-                    reference_price,
-                    owned,
-                    datetime.now(UTC).isoformat(),
-                ),
-            )
+        self.record_ownership_adjustment(
+            account_id,
+            symbol,
+            market,
+            owned,
+            kind="stale_ownership_clear",
+            note="broker position absent and no real fill found in activity history",
+        )
         log.warning(
-            "Cleared stale portfolio ownership: account=%s symbol=%s qty=%s "
+            "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s "
             "(no broker position found)",
             account_id,
             symbol,
             owned,
         )
         return owned
+
+    def record_ownership_adjustment(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        quantity: float,
+        *,
+        kind: str,
+        note: str = "",
+    ) -> None:
+        """Persist an explicit ownership reconciliation adjustment/anomaly."""
+        if not kind.strip():
+            raise ValueError("Adjustment kind is required")
+        if not math.isfinite(quantity) or quantity <= 0:
+            raise ValueError("Adjustment quantity must be finite and positive")
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_ownership_adjustments(
+                    adjustment_id, account_id, symbol, market, quantity, kind,
+                    note, created_at, consumed_quantity
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+                (
+                    uuid4().hex,
+                    account_id,
+                    symbol,
+                    market.value,
+                    quantity,
+                    kind,
+                    note,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def _consume_ownership_adjustments_tx(
+        self, account_id: str, symbol: str, market: Market, sell_delta: float
+    ) -> None:
+        """Consume pending stale-clear adjustments up to a real SELL fill.
+
+        The race: broker stop fills while the stream is delayed; reconcile
+        sees a flat broker and records an adjustment; the real fill arrives
+        late. The real fill is the ground truth, so it cancels the provisional
+        adjustment instead of booking a second SELL on top of it."""
+        if sell_delta <= 0:
+            return
+        remaining = float(sell_delta)
+        rows = self.store.connection.execute(
+            """SELECT adjustment_id, quantity, consumed_quantity
+               FROM portfolio_ownership_adjustments
+               WHERE account_id = ? AND symbol = ? AND market = ? AND kind = 'stale_ownership_clear'
+                 AND consumed_quantity < quantity
+               ORDER BY created_at""",
+            (account_id, symbol, market.value),
+        ).fetchall()
+        for adjustment_id, quantity, consumed in rows:
+            if remaining <= 1e-12:
+                break
+            capacity = float(quantity) - float(consumed)
+            consume = min(capacity, remaining)
+            self.store.connection.execute(
+                """UPDATE portfolio_ownership_adjustments
+                   SET consumed_quantity = consumed_quantity + ?
+                   WHERE adjustment_id = ?""",
+                (consume, str(adjustment_id)),
+            )
+            remaining -= consume
 
     def _latest_entry_lineage(
         self, account_id: str, symbol: str, market: Market
@@ -461,6 +586,45 @@ class PortfolioStateRepository:
             ).fetchone()
         return row is not None
 
+    def open_orders(
+        self, account_id: str = "unknown", market: Market | None = None
+    ) -> tuple[OpenPortfolioOrder, ...]:
+        """Non-terminal portfolio orders attributed to one account.
+
+        Orders are attributed through the persisted decision/session lineage,
+        so manual/external broker orders can never appear here: a manual
+        order must not suppress ownership drift or consume universe pins.
+        """
+        query = """
+            SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                   o.cumulative_filled_quantity
+            FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ? AND o.status NOT IN (
+                'filled', 'canceled', 'cancelled', 'rejected', 'expired',
+                'done_for_day', 'fill'
+            )
+        """
+        params: tuple[object, ...] = (account_id,)
+        if market is not None:
+            query += " AND o.market = ?"
+            params = (account_id, market.value)
+        query += " ORDER BY o.created_at"
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+        return tuple(
+            OpenPortfolioOrder(
+                client_order_id=str(row[0]),
+                symbol=str(row[1]),
+                market=Market(str(row[2])),
+                side=str(row[3]),
+                quantity=float(row[4] or 0.0),
+                cumulative_filled_quantity=float(row[5] or 0.0),
+            )
+            for row in rows
+        )
+
     def apply_trade_update(
         self,
         *,
@@ -477,8 +641,12 @@ class PortfolioStateRepository:
     ) -> bool:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
-                """SELECT cumulative_filled_quantity, reference_price, side
-                   FROM portfolio_orders WHERE client_order_id = ?""",
+                """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
+                          s.account_id
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE o.client_order_id = ?""",
                 (client_order_id,),
             ).fetchone()
             if row is None:
@@ -487,6 +655,7 @@ class PortfolioStateRepository:
             fill_delta = max(0.0, cumulative_filled_quantity - previous)
             reference = float(row[1] or 0.0)
             side = str(row[2])
+            account_id = str(row[3])
             self.store.connection.execute(
                 """UPDATE portfolio_orders SET status = ?, broker_order_id = ?,
                    cumulative_filled_quantity = ?, average_fill_price = ?
@@ -519,6 +688,21 @@ class PortfolioStateRepository:
                         slippage,
                     ),
                 )
+                if side == "sell":
+                    # A real SELL fill proves the sale that a stale-clear
+                    # adjustment assumed; consume the adjustment instead of
+                    # booking a second SELL on top of it.
+                    symbol = self.store.connection.execute(
+                        "SELECT symbol, market FROM portfolio_orders WHERE client_order_id = ?",
+                        (client_order_id,),
+                    ).fetchone()
+                    if symbol is not None:
+                        self._consume_ownership_adjustments_tx(
+                            account_id,
+                            str(symbol[0]),
+                            Market(str(symbol[1])),
+                            fill_delta,
+                        )
         return True
 
     def record_fill(
@@ -577,14 +761,6 @@ class PortfolioStateRepository:
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
 
-    def managed_symbols(self) -> set[str]:
-        """Symbols with portfolio-order lineage, used to pin broker positions."""
-        with self.store.lock:
-            rows = self.store.connection.execute(
-                "SELECT DISTINCT symbol FROM portfolio_orders"
-            ).fetchall()
-        return {str(row[0]) for row in rows}
-
     def owned_quantities(
         self, account_id: str = "unknown", market: Market | None = None
     ) -> dict[str, float]:
@@ -607,6 +783,13 @@ class PortfolioStateRepository:
             params = (account_id, market.value)
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
+            adjustments = self.store.connection.execute(
+                """SELECT symbol, SUM(quantity - consumed_quantity)
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND consumed_quantity < quantity
+                   GROUP BY symbol""",
+                (account_id,),
+            ).fetchall()
         net: dict[str, float] = {}
         for symbol, _market, side, filled in rows:
             filled_qty = float(filled or 0.0)
@@ -614,6 +797,20 @@ class PortfolioStateRepository:
                 continue
             net[str(symbol)] = net.get(str(symbol), 0.0) + (
                 filled_qty if str(side) == "buy" else -filled_qty
+            )
+        for symbol, adjusted in adjustments:
+            net[str(symbol)] = net.get(str(symbol), 0.0) - float(adjusted or 0.0)
+        # Negative net ownership is an invariant violation, never something to
+        # silently filter out: it means more quantity left the account than
+        # was ever booked as owned (double-sell, misattributed fill, or an
+        # adjustment that a real fill later contradicted).
+        negative = {symbol: quantity for symbol, quantity in net.items() if quantity < -1e-9}
+        if negative:
+            raise RuntimeError(
+                "Negative net portfolio ownership (invariant violation): "
+                + ", ".join(
+                    f"{symbol}={quantity:.6f}" for symbol, quantity in sorted(negative.items())
+                )
             )
         return {symbol: quantity for symbol, quantity in net.items() if quantity > 1e-12}
 
@@ -627,31 +824,72 @@ class PortfolioStateRepository:
         """
         return set(self.owned_quantities(account_id, market))
 
-    def operations_snapshot(self, account_id: str | None = None) -> dict[str, object]:
+    def ownership_adjustments(self, account_id: str = "unknown") -> tuple[dict[str, object], ...]:
+        """Outstanding ownership reconciliation adjustments/anomalies."""
         with self.store.lock:
-            if account_id is None:
-                last_decision = self.store.connection.execute(
-                    """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
-                       FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"""
-                ).fetchone()
-            else:
-                last_decision = self.store.connection.execute(
-                    """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
-                       FROM portfolio_decisions
-                       WHERE account_id = ?
-                       ORDER BY decision_timestamp DESC LIMIT 1""",
-                    (account_id,),
-                ).fetchone()
+            rows = self.store.connection.execute(
+                """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
+                          kind, note, created_at
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND consumed_quantity < quantity
+                   ORDER BY created_at""",
+                (account_id,),
+            ).fetchall()
+        return tuple(
+            {
+                "adjustment_id": str(row[0]),
+                "symbol": str(row[1]),
+                "market": str(row[2]),
+                "quantity": float(row[3]),
+                "consumed_quantity": float(row[4]),
+                "outstanding_quantity": float(row[3]) - float(row[4]),
+                "kind": str(row[5]),
+                "note": str(row[6]),
+                "created_at": str(row[7]),
+            }
+            for row in rows
+        )
+
+    def operations_snapshot(self, account_id: str) -> dict[str, object]:
+        """Operator-facing snapshot scoped to one account.
+
+        Every section (last decision, pending orders, recent fills) is
+        attributed through the persisted fills -> orders -> decisions ->
+        sessions -> account lineage, so switching credentials can never show
+        another account's fills or orders.
+        """
+        with self.store.lock:
+            last_decision = self.store.connection.execute(
+                """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
+                   FROM portfolio_decisions
+                   WHERE account_id = ?
+                   ORDER BY decision_timestamp DESC LIMIT 1""",
+                (account_id,),
+            ).fetchone()
             pending = self.store.connection.execute(
-                """SELECT client_order_id, symbol, market, side, quantity, status, created_at
-                   FROM portfolio_orders
-                   WHERE status NOT IN ('filled', 'canceled', 'cancelled', 'rejected', 'expired')
-                   ORDER BY created_at DESC LIMIT 25"""
+                """SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                          o.status, o.created_at
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ?
+                     AND o.status NOT IN (
+                         'filled', 'canceled', 'cancelled', 'rejected', 'expired',
+                         'done_for_day', 'fill'
+                     )
+                   ORDER BY o.created_at DESC LIMIT 25""",
+                (account_id,),
             ).fetchall()
             fills = self.store.connection.execute(
-                """SELECT activity_id, client_order_id, occurred_at, quantity, price, fee,
-                          realized_pnl, unrealized_pnl, slippage
-                   FROM portfolio_fills ORDER BY occurred_at DESC LIMIT 25"""
+                """SELECT f.activity_id, f.client_order_id, f.occurred_at, f.quantity,
+                          f.price, f.fee, f.realized_pnl, f.unrealized_pnl, f.slippage
+                   FROM portfolio_fills f
+                   JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ?
+                   ORDER BY f.occurred_at DESC LIMIT 25""",
+                (account_id,),
             ).fetchall()
         return {
             "last_decision": (
@@ -703,6 +941,7 @@ class PortfolioStateRepository:
                 )
                 for row in fills
             ],
+            "reconciliation_anomalies": list(self.ownership_adjustments(account_id)),
         }
 
     def close(self) -> None:
@@ -805,7 +1044,9 @@ class PortfolioRuntime:
         self.symbols = updated
         return added, removed
 
-    def process_closed_bars(self, bars: list[Bar]) -> PortfolioRuntimeResult:
+    def process_closed_bars(
+        self, bars: list[Bar], *, entry_latch: str | None = None
+    ) -> PortfolioRuntimeResult:
         eligible = [
             bar
             for bar in bars
@@ -882,6 +1123,39 @@ class PortfolioRuntime:
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         raw_target = self.strategy.decide(context)
+        if entry_latch is not None:
+            # Entry-risk latch: the strategy may propose anything, but the
+            # runtime may only reduce risk. Cap every target at the current
+            # weight so the planner emits SELL orders only; entries stay
+            # blocked while protective/risk-reducing exits keep flowing.
+            current_weights = {
+                canonical_symbol(position.symbol, position.market): (
+                    position.market_value / account.equity
+                )
+                for position in account.positions
+                if position.market == self.market and not position.is_flat
+            }
+            raw_target = replace(
+                raw_target,
+                weights=tuple(
+                    TargetWeight(
+                        weight.symbol,
+                        min(weight.weight, current_weights.get(weight.symbol, 0.0)),
+                        "entry_risk_latch_reduction",
+                    )
+                    for weight in raw_target.weights
+                    if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
+                ),
+                cash_weight=1.0
+                - sum(
+                    min(weight.weight, current_weights.get(weight.symbol, 0.0))
+                    for weight in raw_target.weights
+                ),
+                metadata={
+                    **raw_target.metadata,
+                    "entry_risk_latch": entry_latch,
+                },
+            )
         if not scheduled:
             current_weights = {
                 canonical_symbol(position.symbol, position.market): (
@@ -941,7 +1215,7 @@ class PortfolioRuntime:
             prices=context.prices,
             rules=rules,
             approved_symbols=self.symbols,
-            open_order_symbols=self.broker.open_portfolio_order_symbols(),
+            open_order_symbols=self.broker.all_open_order_symbols(),
             decision_id=decision_id,
         )
         decision_id = self.repository.record_decision(

@@ -23,15 +23,15 @@ class RuntimeMode(StrEnum):
 class RuntimeConfig:
     mode: RuntimeMode = RuntimeMode.PAPER
     execution_timeframe: str = "5m"
-    risk_monitor_timeframe: str = "5m"
+    market_state_timeframe: str = "5m"
     decision_db_path: str = "data/runtime/parayabuck.sqlite3"
     scanner_refresh_hours: float = 24.0
 
     def __post_init__(self) -> None:
         if self.execution_timeframe not in TIMEFRAME_MINUTES:
             raise ValueError("runtime.execution_timeframe is unsupported")
-        if self.risk_monitor_timeframe not in TIMEFRAME_MINUTES:
-            raise ValueError("runtime.risk_monitor_timeframe is unsupported")
+        if self.market_state_timeframe not in TIMEFRAME_MINUTES:
+            raise ValueError("runtime.market_state_timeframe is unsupported")
         if self.scanner_refresh_hours <= 0:
             raise ValueError("runtime.scanner_refresh_hours must be positive")
 
@@ -118,11 +118,19 @@ class BacktestConfig:
     slippage_bps: float = 2.0
     spread_bps: float = 2.0
     commission: float = 0.0
-    crypto_taker_fee_bps: float = 5.0
-    equity_taf_per_share: float = 0.0
-    equity_taf_cap: float = 0.0
-    equity_cat_per_share: float = 0.0
-    equity_sec_fee_rate: float = 0.0
+    # Crypto execution uses market orders: a low-volume account pays Alpaca's
+    # tier-1 taker rate of 0.25% (25 bps), not a 5 bps limit-order cost.
+    crypto_taker_fee_bps: float = 25.0
+    # 2026 regulatory rates (SEC Section 31 $20.60/$1M from 2026-04-04, FINRA
+    # TAF $0.000195/share cap $9.79 from 2026-01-01, CAT 2026-1 + Historical
+    # Assessment 1A $0.000003/share). These are fallbacks for fixed-rate mode;
+    # the effective-dated schedule is the default and tracks the official
+    # rate changes by trade date.
+    equity_taf_per_share: float = 0.000195
+    equity_taf_cap: float = 9.79
+    equity_cat_per_share: float = 0.000003
+    equity_sec_fee_rate: float = 0.0000206
+    equity_use_effective_dated_fees: bool = True
     scanner_rebalance: str = "daily"
     output_dir: str = "reports"
     ranking_metric: str = "risk_adjusted"
@@ -247,11 +255,22 @@ class AppConfig:
 @dataclass(frozen=True)
 class AlpacaConfig:
     data_delayed: bool = False
-    stock_feed: str = "iex"
+    # Real-time Basic stock stream feed. IEX is the free default and reflects
+    # IEX exchange prints only, NOT the full consolidated (SIP/NBBO) tape.
+    stock_stream_feed: str = "iex"
+    # Historical stock bar/quote feed. SIP offers consolidated coverage where
+    # the account data entitlement allows it; the client falls back to IEX
+    # gracefully when the entitlement is missing.
+    stock_historical_feed: str = "sip"
 
     def __post_init__(self) -> None:
-        if self.stock_feed not in {"iex", "sip", "delayed_sip"}:
-            raise ValueError("alpaca.stock_feed must be iex, sip, or delayed_sip")
+        for name in ("stock_stream_feed", "stock_historical_feed"):
+            if getattr(self, name) not in {"iex", "sip", "delayed_sip"}:
+                raise ValueError(f"alpaca.{name} must be iex, sip, or delayed_sip")
+        # delayed_sip is a historical-feed concept only; live Basic streaming
+        # cannot consume it.
+        if self.stock_stream_feed == "delayed_sip":
+            raise ValueError("alpaca.stock_stream_feed must be iex or sip")
 
 
 @dataclass(frozen=True)
@@ -498,7 +517,7 @@ class Config:
     def __post_init__(self) -> None:
         if not self.symbols:
             raise ValueError("At least one enabled market symbol must be configured")
-        if self.alpaca.stock_feed == "iex" and (
+        if self.alpaca.stock_stream_feed == "iex" and (
             self.universe.equity.maximum_stream_symbols > 30
             or len(self.universe.equity.configured_stream_symbols) > 30
         ):

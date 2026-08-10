@@ -216,22 +216,48 @@ class PortfolioRiskOverlay:
         sleeve_limit = (
             self.limits.maximum_crypto if market == Market.CRYPTO else self.limits.maximum_equity
         )
-        allocation_limit = min(
-            maximum_allocation,
-            sleeve_limit,
-            self.limits.maximum_gross - immutable_gross,
-            1.0 - self.limits.minimum_cash - immutable_gross,
+        # Internally separate the three exposure layers: immutable external
+        # inventory (never sellable), managed desired exposure (mutable by the
+        # planner) and the total desired account exposure (external + managed
+        # + unapproved). maximum_allocation caps the MANAGED sleeve only;
+        # maximum_gross and the cash buffer apply to the TOTAL account
+        # exposure, with the external layer counted exactly once.
+        external_in_desired = sum(
+            abs(position.external_qty) * position.current_price / equity
+            for position in account.positions
+            if not position.is_flat
+            and position.external_qty > 1e-12
+            and canonical_symbol(position.symbol, position.market) in desired
         )
-        mutable_limit = max(0.0, allocation_limit - immutable_sleeve)
-        desired_total = sum(desired.values())
-        if desired_total > mutable_limit and desired_total > 0:
-            scale = mutable_limit / desired_total
+        managed_desired = max(0.0, sum(desired.values()) - external_in_desired)
+        managed_limit = max(
+            0.0,
+            min(
+                maximum_allocation,
+                sleeve_limit - immutable_sleeve,
+                self.limits.maximum_gross - immutable_gross,
+                1.0 - self.limits.minimum_cash - immutable_gross,
+            ),
+        )
+        if managed_desired > managed_limit and managed_desired > 0:
+            scale = managed_limit / managed_desired
             desired = {symbol: weight * scale for symbol, weight in desired.items()}
             halted_reasons.append("exposure_scaled_to_limit")
         weights = tuple(
             TargetWeight(symbol, weight, "portfolio_risk_overlay")
             for symbol, weight in sorted(desired.items())
             if weight > 1e-12
+        )
+        # gross_after is the actual expected account gross: immutable external
+        # exposure plus the managed weights. The external floor carried inside
+        # the target weights must not be counted a second time.
+        weight_symbols = {weight.symbol for weight in weights}
+        external_in_weights = sum(
+            abs(position.external_qty) * position.current_price / equity
+            for position in account.positions
+            if not position.is_flat
+            and position.external_qty > 1e-12
+            and canonical_symbol(position.symbol, position.market) in weight_symbols
         )
         adjusted = replace(
             target,
@@ -241,14 +267,19 @@ class PortfolioRiskOverlay:
                 **target.metadata,
                 "risk_overlay_reasons": tuple(halted_reasons),
                 "risk_overlay_halted": halted,
+                "risk_overlay_managed_exposure": sum(weight.weight for weight in weights)
+                - external_in_weights,
             },
+        )
+        gross_after = (
+            immutable_gross + sum(weight.weight for weight in weights) - external_in_weights
         )
         return RiskOverlayDecision(
             adjusted,
             halted,
             tuple(halted_reasons),
             gross_before,
-            immutable_gross + sum(weight.weight for weight in weights),
+            gross_after,
         )
 
 

@@ -611,12 +611,9 @@ class EngineManager:
                 acct = self.broker.account()
                 managed: dict[str, Any] = {}
                 runtime = self.runtime
-                if (
-                    runtime is not None
-                    and hasattr(runtime, "ledger")
-                    and bool(self.broker.account_id)
-                ):
-                    managed = runtime.ledger.managed_for_account(self.broker.account_id)
+                runtime_ledger = getattr(runtime, "ledger", None)
+                if runtime_ledger is not None and bool(self.broker.account_id):
+                    managed = runtime_ledger.managed_for_account(self.broker.account_id)
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
@@ -626,7 +623,11 @@ class EngineManager:
                                 "symbol": p.symbol,
                                 "market": p.market.value,
                                 "direction": "LONG" if p.qty > 0 else "SHORT",
+                                "total_qty": abs(p.qty),
                                 "qty": abs(p.qty),
+                                "managed_qty": p.managed_qty,
+                                "external_qty": p.external_qty,
+                                "ownership_state": p.ownership,
                                 "avg_price": p.avg_price,
                                 "current_price": p.current_price,
                                 "market_value": p.market_value,
@@ -713,23 +714,28 @@ class EngineManager:
         from parayabuck.execution.alpaca import AlpacaBroker
 
         live_broker = AlpacaBroker(key, secret, paper=False)
-        live_broker.account()
-        suffix = live_broker.account_suffix
-        if not suffix:
-            raise ValueError("Alpaca account identity could not be verified")
-        now = datetime.now(UTC)
-        self._pending_live_arm = LiveArmToken(
-            account_id=live_broker.account_id,
-            account_suffix=suffix,
-            credential_fingerprint=self._credential_fingerprint(key, secret),
-            config_digest=self._config_digest(paper=False),
-            issued_at=now,
-            expires_at=now + timedelta(minutes=2),
-        )
-        self._live_request_suffix = suffix
-        self._live_armed = False
-        self._live_arm_token = None
-        return suffix
+        try:
+            live_broker.account()
+            suffix = live_broker.account_suffix
+            if not suffix:
+                raise ValueError("Alpaca account identity could not be verified")
+            now = datetime.now(UTC)
+            self._pending_live_arm = LiveArmToken(
+                account_id=live_broker.account_id,
+                account_suffix=suffix,
+                credential_fingerprint=self._credential_fingerprint(key, secret),
+                config_digest=self._config_digest(paper=False),
+                issued_at=now,
+                expires_at=now + timedelta(minutes=2),
+            )
+            self._live_request_suffix = suffix
+            self._live_armed = False
+            self._live_arm_token = None
+            return suffix
+        finally:
+            # Temporary live-credential verification sessions must never leak:
+            # close the broker's HTTP session pool before returning.
+            live_broker.close()
 
     def confirm_live_arming(self, phrase: str) -> None:
         pending = self._pending_live_arm
@@ -1152,6 +1158,8 @@ async def get_status() -> dict[str, Any]:
         if repository is not None:
             account_id = getattr(runtime.broker, "account_id", None) or "unknown"
             result["operations"] = repository.operations_snapshot(account_id)
+            result["ownership_drift_active"] = health.circuit_breaker_reason == "ownership_drift"
+            result["reconciliation_anomalies"] = list(repository.ownership_adjustments(account_id))
         result["active_equity_symbol_count"] = len(
             getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
         )

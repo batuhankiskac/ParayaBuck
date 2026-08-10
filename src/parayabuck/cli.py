@@ -152,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             cost_multiplier=multiplier,
             corporate_actions=corporate_actions,
+            data_feed=config.alpaca.stock_historical_feed,
         )
         _print_summary(run.report.summary, run.output_dir)
     return 0
@@ -197,7 +198,13 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
                 f"Live authorization requires a valid dynamic crypto universe; status={status}"
             )
     broker = AlpacaBroker(key, secret, paper=False)
-    broker.account()  # Read-only identity verification against the live endpoint.
+    try:
+        broker.account()  # Read-only identity verification against the live endpoint.
+        account_suffix = broker.account_suffix
+        account_id = broker.account_id or ""
+    finally:
+        # Temporary live-credential verification sessions must be closed.
+        broker.close()
     digests: list[str] = []
     for market, selection, symbols, universe_version in (
         (
@@ -230,7 +237,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     now = datetime.now(UTC)
     approval = LiveOperatorApproval(
         operator_id=args.operator,
-        account_id=broker.account_id or "",
+        account_id=account_id,
         configuration_digests=tuple(digests),
         maximum_dollar_exposure=config.live.hard_dollar_cap,
         approved_at=now,
@@ -243,7 +250,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         mode=0o600,
     )
     print(
-        f"Live approval written for account ...{broker.account_suffix}; "
+        f"Live approval written for account ...{account_suffix}; "
         f"expires {approval.expires_at.isoformat()}"
     )
     return 0
@@ -286,7 +293,7 @@ def _load_bars(
     provider = AlpacaHistoricalData(
         key,
         secret,
-        stock_feed=config.alpaca.stock_feed,
+        stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
     bars: list[Bar] = []
@@ -351,9 +358,20 @@ def _candidate_symbols(
 
             patch_session_timeout(session, timeout=15.0)
         eligible = eligible_equity_symbols(config, trading, limit=limit)
-        # Reference symbols are reserved by the scanner and must be present
-        # even when an explicit --candidate-limit excludes them alphabetically.
-        required_order = list(dict.fromkeys(config.universe.equity.reference_symbols))
+        # The scanner reserves references, approved inverse ETFs and pinned
+        # symbols in every snapshot: those must be present even when an
+        # explicit --candidate-limit excludes them alphabetically, otherwise
+        # the backtest gate cannot evaluate a period at all.
+        equity_config = config.universe.equity
+        required_order = list(
+            dict.fromkeys(
+                (
+                    *equity_config.reference_symbols,
+                    *equity_config.inverse_trade_symbols,
+                    *equity_config.fallback_trade_symbols,
+                )
+            )
+        )
         required_set = set(required_order)
         candidates = [symbol for symbol in dict.fromkeys(eligible) if symbol not in required_set]
         if limit is not None:

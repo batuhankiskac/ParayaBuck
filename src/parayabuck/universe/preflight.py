@@ -199,7 +199,7 @@ def refresh_equity_universe(
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
-        stock_feed=config.alpaca.stock_feed,
+        stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
     end = datetime.now(UTC)
@@ -282,6 +282,7 @@ def refresh_equity_universe(
     enriched = {
         "generated_at": end.isoformat(),
         "source": "Alpaca active tradable US equity assets",
+        "feed": history.feed_status(),
         "symbols": sorted(allowed),
         "shortlist_symbols": sorted(shortlist_symbols),
         "candidates": [asdict(item) for item in enriched_discovered],
@@ -353,7 +354,7 @@ def refresh_crypto_universe(
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
-        stock_feed=config.alpaca.stock_feed,
+        stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
     end = datetime.now(UTC)

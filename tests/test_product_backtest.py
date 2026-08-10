@@ -249,6 +249,7 @@ def test_equity_product_passes_regulatory_fees_to_execution_engine(tmp_path) -> 
         config,
         backtest=replace(
             config.backtest,
+            equity_use_effective_dated_fees=False,
             equity_taf_per_share=0.0002,
             equity_taf_cap=10.0,
             equity_cat_per_share=0.00003,
@@ -322,8 +323,11 @@ def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(
 
     # The historical candidate set is the broad eligible universe, never the
     # current shortlist file: a symbol liquid in 2022 but absent today can
-    # still enter the historical Stage-A selection. Reference symbols are
-    # always retained even under an explicit cap.
+    # still enter the historical Stage-A selection. Scanner-reserved symbols
+    # (references, approved inverse ETFs, fallback symbols) are always
+    # retained even under an explicit cap, because the point-in-time scanner
+    # reserves them in every snapshot and the backtest gate needs their bars.
+    # The default _config universe only reserves its reference symbol.
     assert cli_module._candidate_symbols(config, Market.EQUITY, None, None) == [
         "SPY",
         "AAA",
@@ -385,10 +389,13 @@ def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     tmp_path,
 ) -> None:
     config = _config(tmp_path)
-    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars. 61
-    # daily bars span ~94 calendar days (sessions per calendar day, not one
-    # bar per calendar day), which also covers the 60d scanner lookback.
-    assert cli_module._warmup_window_days(config, Market.EQUITY) == 94
+    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars. The
+    # warmup window counts REAL NYSE sessions (holiday-aware), so it spans
+    # more calendar days than bars: at least the no-holiday Mon-Fri minimum
+    # (ceil(61*7/5)=86) and bounded by a plausible holiday count.
+    days = cli_module._warmup_window_days(config, Market.EQUITY)
+    assert 86 <= days <= 120
+    assert days >= config.universe.equity.scanner.minimum_data_completeness  # sanity
 
 
 def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
@@ -423,10 +430,55 @@ def test_warmup_window_never_shrinks_below_scanner_lookback_for_intraday(
 def test_bars_to_calendar_days_scales_by_session_density() -> None:
     from parayabuck.markets.timeframes import bars_to_calendar_days
 
-    # Equity daily bars need more calendar days than bars.
-    assert bars_to_calendar_days("SPY", "1d", 61) == 94
+    # Equity daily bars need more calendar days than bars: at least the
+    # no-holiday Mon-Fri density (61*7/5=86), never fewer.
+    daily_61 = bars_to_calendar_days("SPY", "1d", 61)
+    assert 86 <= daily_61 <= 120
     assert bars_to_calendar_days("SPY", "1d", 150) > 150
     # Intraday equity fits several sessions per calendar day.
     assert bars_to_calendar_days("SPY", "1h", 150) < 60
     # Crypto trades 24/7: the span is close to bars / 24.
     assert bars_to_calendar_days("BTC/USD", "1h", 150) == 7
+    assert bars_to_calendar_days("BTC/USD", "1d", 61) == 65
+
+
+def test_reserved_symbols_without_bars_do_not_block_periods(tmp_path) -> None:
+    """A scanner-reserved symbol (reference/inverse/fallback) that has no bars
+    in a period must be dropped from that snapshot instead of making the
+    decision gate fail-closed for the whole run."""
+    from parayabuck.backtest.universe import build_trailing_point_in_time_universe
+
+    config = _config(tmp_path)
+    bars = _bars(days=40)
+    # Configure an inverse symbol that the scanner reserves but that has no
+    # bars in the supplied set.
+    config = replace(
+        config,
+        universe=replace(
+            config.universe,
+            equity=replace(
+                config.universe.equity,
+                inverse_trade_symbols=("SH",),
+                fallback_trade_symbols=("AAPL", "SH"),
+            ),
+        ),
+    )
+    assert "SH" not in {bar.symbol for bar in bars}
+    universe = build_trailing_point_in_time_universe(
+        bars,
+        market=Market.EQUITY,
+        maximum_symbols=config.universe.equity.maximum_stream_symbols,
+        rebalance_frequency=config.backtest.scanner_rebalance,
+        lookback_days=20,
+        minimum_history_ratio=config.universe.equity.scanner.minimum_data_completeness,
+        minimum_price=config.universe.equity.scanner.minimum_price,
+        minimum_dollar_volume=config.universe.equity.scanner.minimum_median_dollar_volume,
+        pinned_symbols=config.universe.equity.reference_symbols,
+        target_shortlist=config.universe.equity.target_shortlist,
+        equity_config=config.universe.equity,
+    )
+    assert universe.snapshots
+    for snapshot in universe.snapshots:
+        # The bar-less reserved symbol never appears in a snapshot.
+        assert "SH" not in snapshot.symbols
+        assert all(symbol in {bar.symbol for bar in bars} for symbol in snapshot.symbols)

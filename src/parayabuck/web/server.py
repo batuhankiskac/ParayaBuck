@@ -1150,7 +1150,8 @@ async def get_status() -> dict[str, Any]:
         result["strategy_status"] = health.strategy_status
         repository = getattr(runtime, "_portfolio_repository", None)
         if repository is not None:
-            result["operations"] = repository.operations_snapshot()
+            account_id = getattr(runtime.broker, "account_id", None) or "unknown"
+            result["operations"] = repository.operations_snapshot(account_id)
         result["active_equity_symbol_count"] = len(
             getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
         )

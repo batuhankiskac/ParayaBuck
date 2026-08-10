@@ -10,7 +10,7 @@ from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
 from parayabuck.config import RiskLimits
-from parayabuck.core.models import AccountSnapshot, Market
+from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
@@ -128,8 +128,16 @@ class PortfolioRiskOverlay:
             halted_reasons.append("portfolio_drawdown_halt")
         halted = bool(halted_reasons)
 
+        # Only the external portion of a mixed position is immutable: the
+        # managed quantity remains mutable inventory the bot may rebalance.
+        # Unapproved symbols are fully immutable (the bot holds no claim).
+        def immutable_value(position: PositionSnapshot) -> float:
+            if canonical_symbol(position.symbol, position.market) not in approved:
+                return position.market_value
+            return abs(position.external_qty) * position.current_price
+
         immutable_gross = sum(
-            position.market_value / equity
+            immutable_value(position) / equity
             for position in account.positions
             if not position.is_flat
             and (
@@ -138,7 +146,7 @@ class PortfolioRiskOverlay:
             )
         )
         immutable_sleeve = sum(
-            position.market_value / equity
+            immutable_value(position) / equity
             for position in account.positions
             if not position.is_flat
             and position.market == market
@@ -255,7 +263,15 @@ class TargetToOrderPlanner:
         rules: dict[str, AssetTradingRules],
         approved_symbols: tuple[str, ...],
         open_order_symbols: set[str] | None = None,
+        decision_id: str | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
+        """Build rebalance orders from a target.
+
+        ``decision_id`` is the account-local, configuration-scoped decision
+        identity from the runtime repository; when provided it seeds the
+        client order ids so that two configurations sharing a strategy name,
+        version and timestamp never produce the same broker idempotency key.
+        """
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
         open_symbols = {
             canonical_symbol(symbol, market) for symbol in (open_order_symbols or set())
@@ -269,7 +285,7 @@ class TargetToOrderPlanner:
             canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights
         }
         symbols = approved & (set(target_weights) | set(positions))
-        decision_id = _decision_id(target)
+        decision_id = decision_id or _decision_id(target)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
             if symbol in open_symbols:

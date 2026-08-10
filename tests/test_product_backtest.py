@@ -96,6 +96,42 @@ def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:
     assert len(list((tmp_path / "reports").glob("*/report.json"))) == 1
 
 
+def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) -> None:
+    """The point-in-time universe depends only on the bar set and scanner
+    policy, never on strategy parameters: the optimizer must build it once
+    per window and reuse it for every combination."""
+    import parayabuck.backtest.product as product_module
+
+    config = _config(tmp_path)
+    start = datetime(2023, 1, 1, tzinfo=UTC)
+    bars = _bars()
+    real_build = product_module.build_product_universe
+    builds: list[str] = []
+
+    def counting_build(*args, **kwargs):
+        builds.append(kwargs.get("end").isoformat())
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(product_module, "build_product_universe", counting_build)
+
+    optimize_grid(
+        config,
+        bars,
+        market=Market.EQUITY,
+        grid={"momentum_window": [20, 30, 40]},
+        train_start=start + timedelta(days=100),
+        train_end=start + timedelta(days=299),
+        oos_start=start + timedelta(days=300),
+        oos_end=start + timedelta(days=419),
+    )
+
+    # One build for the TRAIN window (shared by 3 trials) + one for OOS.
+    assert builds == [
+        (start + timedelta(days=299)).isoformat(),
+        (start + timedelta(days=419)).isoformat(),
+    ]
+
+
 @pytest.mark.parametrize(
     ("metric", "expected"),
     (("sharpe", 1.0), ("sortino", 2.0), ("calmar", 3.0)),

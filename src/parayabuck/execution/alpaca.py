@@ -62,6 +62,12 @@ class ProtectionReconciliationError(RuntimeError):
     pass
 
 
+class OwnershipDriftError(ProtectionReconciliationError):
+    """The broker holds fewer shares than the portfolio repository claims as
+    managed. With mixed inventory the remaining shares cannot be attributed to
+    the bot safely, so entries halt until an operator reconciles manually."""
+
+
 @dataclass(frozen=True)
 class CryptoPriceObservation:
     symbol: str
@@ -90,7 +96,7 @@ class AlpacaBroker:
         manage_external_positions: bool = False,
         ledger: ExecutionLedger | None = None,
         portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
-        portfolio_stop_recorded: (Callable[[str, Market, float, str], None] | None) = None,
+        portfolio_stop_recorded: (Callable[[str, Market, float, str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,
         crypto_emergency_exit_bps: float = 75.0,
@@ -157,6 +163,7 @@ class AlpacaBroker:
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
+        drift_candidates: list[tuple[str, float, float, Market]] = []
         for raw in raw_positions:
             current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
@@ -170,7 +177,18 @@ class AlpacaBroker:
             canonical = canonical_symbol(str(raw.symbol), market)
             managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
-            managed_qty = min(abs(raw_qty), float(owned_quantities.get(canonical, 0.0)))
+            owned_qty = float(owned_quantities.get(canonical, 0.0))
+            fee_reserve = (
+                float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+            )
+            if (
+                managed is None
+                and owned_qty > 1e-12
+                and abs(raw_qty) > 1e-12
+                and abs(raw_qty) + max(1e-9, owned_qty * 1e-8) < owned_qty * fee_reserve
+            ):
+                drift_candidates.append((canonical, owned_qty, raw_qty, market))
+            managed_qty = min(abs(raw_qty), owned_qty)
             if managed is not None:
                 managed_qty = abs(raw_qty)
             external_qty = abs(raw_qty) - managed_qty
@@ -207,6 +225,18 @@ class AlpacaBroker:
                     ),
                 )
             )
+        if drift_candidates:
+            # Fail-closed by default, but a symbol with a working open order
+            # is mid-exit: the bot is actively selling, so the shortfall is
+            # attributable to that flow, not to manual inventory.
+            open_order_symbols = self.open_portfolio_order_symbols()
+            for canonical, owned_qty, raw_qty, _market in drift_candidates:
+                if canonical in open_order_symbols:
+                    continue
+                raise OwnershipDriftError(
+                    f"Ownership drift for {canonical}: repository managed "
+                    f"qty={owned_qty} exceeds broker position qty={raw_qty}"
+                )
         old_peak = self._peak_equity
         self._peak_equity = max(self._peak_equity, equity)
         if self._peak_equity != old_peak:
@@ -736,8 +766,11 @@ class AlpacaBroker:
                 # booked in the portfolio repository so the fill lifecycle can
                 # release ownership when the position is flat. The retry path
                 # may have accepted a different client order id; record the
-                # accepted one so the fill is attributed to the SELL leg.
-                stop_recorder(position.symbol, position.market, qty, accepted_id)
+                # accepted one so the fill is attributed to the SELL leg. The
+                # stop trigger price is the slippage reference: attributing an
+                # entry price instead would book the whole entry-to-stop loss
+                # as execution slippage.
+                stop_recorder(position.symbol, position.market, qty, accepted_id, stop_price)
             if accepted_id is None:
                 if ownership is not None and ledger is not None:
                     ledger.set_protection_state(

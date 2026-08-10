@@ -17,6 +17,54 @@ class _FakeStream:
         self.unsubscriptions.append(symbols)
 
 
+class _RemoveLegFakeStream(_FakeStream):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_unsubscribe_updated = False
+        self.updated_subscriptions: list[tuple[str, ...]] = []
+        self.updated_unsubscriptions: list[tuple[str, ...]] = []
+
+    def subscribe_updated_bars(self, handler: Any, *symbols: str) -> None:
+        self.updated_subscriptions.append(symbols)
+
+    def unsubscribe_updated_bars(self, *symbols: str) -> None:
+        if self.fail_unsubscribe_updated:
+            self.fail_unsubscribe_updated = False
+            raise RuntimeError("updated unsubscribe rejected")
+        self.updated_unsubscriptions.append(symbols)
+
+
+def test_update_subscriptions_rolls_back_added_leg_when_remove_leg_fails() -> None:
+    """Within one market: if the removed symbols' updated-bars leg fails
+    after the added symbols were already subscribed, the added symbols must
+    be unsubscribed again; otherwise the socket diverges from the local
+    bookkeeping and no outer rollback covers this market."""
+    stream = AlpacaBarStream.__new__(AlpacaBarStream)
+    stock = _RemoveLegFakeStream()
+    crypto = _FakeStream()
+    stream.stock = stock
+    stream.crypto = crypto
+
+    async def handler(_bar: Any) -> None:
+        pass
+
+    stream.subscribe(["AAPL", "MSFT"], [], handler)
+
+    import pytest
+
+    stock.fail_unsubscribe_updated = True
+    with pytest.raises(RuntimeError, match="updated unsubscribe rejected"):
+        stream.update_subscriptions(["MSFT", "NVDA"], [])
+
+    # NVDA (added) must be unsubscribed again: plain and updated legs.
+    assert ("NVDA",) in stock.unsubscriptions
+    assert ("NVDA",) in stock.updated_unsubscriptions
+    # AAPL (removed) must be re-subscribed: plain and updated legs.
+    assert ("AAPL",) in [symbols for _, symbols in stock.subscriptions]
+    assert ("AAPL",) in stock.updated_subscriptions
+    assert stream._stock_symbols == {"AAPL", "MSFT"}
+
+
 def test_crypto_subscription_preserves_alpaca_pair_symbols() -> None:
     stream = AlpacaBarStream.__new__(AlpacaBarStream)
     stream.stock = _FakeStream()

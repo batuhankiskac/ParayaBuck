@@ -197,6 +197,43 @@ def test_planner_sells_managed_position_when_target_drops_to_zero() -> None:
     assert sell.quantity == pytest.approx(100.0)
 
 
+def test_planner_client_order_id_is_scoped_to_decision_identity() -> None:
+    """Two configurations that share a strategy name, version and timestamp
+    must never produce the same client order id: the broker idempotency key
+    must be derived from the account-local decision identity."""
+    account = _account((_position("SPY", 0, 100, ownership="managed"),))
+    orders_a = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.10}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={symbol: _rule(symbol) for symbol in ("SPY",)},
+        approved_symbols=("SPY",),
+        decision_id="decision-aaa",
+    )
+    orders_b = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.10}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={symbol: _rule(symbol) for symbol in ("SPY",)},
+        approved_symbols=("SPY",),
+        decision_id="decision-bbb",
+    )
+    orders_again = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.10}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={symbol: _rule(symbol) for symbol in ("SPY",)},
+        approved_symbols=("SPY",),
+        decision_id="decision-aaa",
+    )
+    assert orders_a and orders_b
+    assert orders_a[0].client_order_id != orders_b[0].client_order_id
+    assert orders_again[0].client_order_id == orders_a[0].client_order_id
+
+
 def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
     payload = json.loads(
         (Path(__file__).parent / "fixtures" / "paper_loss_replay.json").read_text()

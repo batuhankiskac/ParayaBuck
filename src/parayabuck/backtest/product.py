@@ -107,6 +107,63 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
     return actions
 
 
+def build_product_universe(
+    config: Config,
+    bars: list[Bar],
+    *,
+    market: Market,
+    end: datetime | None = None,
+    timeframe: str | None = None,
+) -> PointInTimeUniverse:
+    """Build the point-in-time scanner universe for a product backtest.
+
+    The universe depends only on the bar set and scanner configuration, never
+    on strategy parameters, so optimizer trials can build it once and reuse
+    it across every parameter combination. ``timeframe`` defaults to the
+    configured strategy's timeframe and must be passed when a run overrides
+    the strategy.
+    """
+    selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    strategy = portfolio_strategy_from(selection.name, selection.parameters)
+    available = [
+        bar
+        for bar in bars
+        if bar.market == market
+        and bar.timeframe == (timeframe or strategy.timeframe)
+        and (end is None or bar.timestamp <= end)
+    ]
+    if market == Market.EQUITY:
+        equity_universe = config.universe.equity
+        pinned = equity_universe.reference_symbols
+        maximum_symbols = equity_universe.maximum_stream_symbols
+        lookback_days = 60
+        minimum_price = equity_universe.scanner.minimum_price
+        minimum_history_ratio = equity_universe.scanner.minimum_data_completeness
+        minimum_dollar_volume = equity_universe.scanner.minimum_median_dollar_volume
+    else:
+        crypto_universe = config.universe.crypto
+        pinned = crypto_universe.pinned_symbols
+        maximum_symbols = crypto_universe.maximum_stream_symbols
+        lookback_days = crypto_universe.scanner.lookback_days
+        minimum_price = 0.0
+        minimum_history_ratio = crypto_universe.scanner.minimum_data_completeness
+        minimum_dollar_volume = crypto_universe.scanner.minimum_median_dollar_volume
+    return build_trailing_point_in_time_universe(
+        available,
+        market=market,
+        maximum_symbols=maximum_symbols,
+        rebalance_frequency=config.backtest.scanner_rebalance,
+        lookback_days=lookback_days,
+        minimum_history_ratio=minimum_history_ratio,
+        minimum_price=minimum_price,
+        minimum_dollar_volume=minimum_dollar_volume,
+        pinned_symbols=pinned,
+        target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
+        equity_config=(config.universe.equity if market == Market.EQUITY else None),
+        crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
+    )
+
+
 def run_product_backtest(
     config: Config,
     bars: list[Bar],
@@ -122,6 +179,7 @@ def run_product_backtest(
     persist: bool = True,
     persist_artifacts: bool = True,
     corporate_actions: list[CorporateAction] | None = None,
+    universe: PointInTimeUniverse | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -139,36 +197,10 @@ def run_product_backtest(
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
     if not filtered:
         raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
-    if market == Market.EQUITY:
-        equity_universe = config.universe.equity
-        pinned = equity_universe.reference_symbols
-        maximum_symbols = equity_universe.maximum_stream_symbols
-        lookback_days = 60
-        minimum_price = equity_universe.scanner.minimum_price
-        minimum_history_ratio = equity_universe.scanner.minimum_data_completeness
-        minimum_dollar_volume = equity_universe.scanner.minimum_median_dollar_volume
-    else:
-        crypto_universe = config.universe.crypto
-        pinned = crypto_universe.pinned_symbols
-        maximum_symbols = crypto_universe.maximum_stream_symbols
-        lookback_days = crypto_universe.scanner.lookback_days
-        minimum_price = 0.0
-        minimum_history_ratio = crypto_universe.scanner.minimum_data_completeness
-        minimum_dollar_volume = crypto_universe.scanner.minimum_median_dollar_volume
-    universe = build_trailing_point_in_time_universe(
-        available,
-        market=market,
-        maximum_symbols=maximum_symbols,
-        rebalance_frequency=config.backtest.scanner_rebalance,
-        lookback_days=lookback_days,
-        minimum_history_ratio=minimum_history_ratio,
-        minimum_price=minimum_price,
-        minimum_dollar_volume=minimum_dollar_volume,
-        pinned_symbols=pinned,
-        target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
-        equity_config=(config.universe.equity if market == Market.EQUITY else None),
-        crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
-    )
+    if universe is None:
+        universe = build_product_universe(
+            config, bars, market=market, end=end, timeframe=strategy.timeframe
+        )
     risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
     engine = PortfolioBacktestEngine(
@@ -219,6 +251,16 @@ def run_product_backtest(
                 "scanner membership is point-in-time within the supplied bar set, but delisted "
                 "assets cannot be reconstructed when the provider omits them."
             ),
+            "regulatory_fee_model": {
+                "equity_taf_per_share": config.backtest.equity_taf_per_share,
+                "equity_taf_cap": config.backtest.equity_taf_cap,
+                "equity_cat_per_share": config.backtest.equity_cat_per_share,
+                "equity_sec_fee_rate": config.backtest.equity_sec_fee_rate,
+                "note": (
+                    "regulatory fees are fixed-rate estimates; verify the rates in force "
+                    "at the trade date before using results as a cost proxy"
+                ),
+            },
         }
     )
     run_id = uuid4().hex
@@ -268,6 +310,10 @@ def optimize_grid(
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
+    # The historical universe depends only on the bar set and scanner policy,
+    # never on strategy parameters: build it once per window and reuse it for
+    # every combination instead of rebuilding (and re-ranking) it per trial.
+    train_universe = build_product_universe(config, bars, market=market, end=train_end)
     ranked: list[dict[str, object]] = []
     for values in itertools.product(*(grid[key] for key in keys)):
         parameters = {**baseline, **dict(zip(keys, values, strict=True))}
@@ -284,6 +330,7 @@ def optimize_grid(
             persist=False,
             persist_artifacts=False,
             corporate_actions=corporate_actions,
+            universe=train_universe,
         )
         result = run.result
         ranked.append(
@@ -311,6 +358,7 @@ def optimize_grid(
         best_parameters = best["parameters"]
         if not isinstance(best_parameters, dict):
             raise TypeError("Optimization parameters must be a mapping")
+        oos_universe = build_product_universe(config, bars, market=market, end=oos_end)
         oos = run_product_backtest(
             config,
             bars,
@@ -322,6 +370,7 @@ def optimize_grid(
             initial_cash=initial_cash,
             output_dir=output_dir,
             corporate_actions=corporate_actions,
+            universe=oos_universe,
         )
         payload["out_of_sample"] = {
             "parameters": best["parameters"],
@@ -415,6 +464,7 @@ def _persist_run(
 
 __all__ = [
     "ProductBacktestResult",
+    "build_product_universe",
     "load_csv_bars",
     "optimize_grid",
     "ranking_score",

@@ -102,10 +102,11 @@ class PortfolioStateRepository:
                 );
                 CREATE TABLE IF NOT EXISTS portfolio_decisions (
                     decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
-                    configuration_digest TEXT NOT NULL, decision_timestamp TEXT NOT NULL,
-                    market TEXT NOT NULL, strategy_name TEXT NOT NULL,
+                    account_id TEXT NOT NULL DEFAULT '', configuration_digest TEXT NOT NULL,
+                    decision_timestamp TEXT NOT NULL, market TEXT NOT NULL,
+                    strategy_name TEXT NOT NULL,
                     target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
-                    UNIQUE(configuration_digest, decision_timestamp, market),
+                    UNIQUE(account_id, configuration_digest, decision_timestamp, market),
                     FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
                 );
                 CREATE TABLE IF NOT EXISTS portfolio_orders (
@@ -156,6 +157,17 @@ class PortfolioStateRepository:
                     "ALTER TABLE portfolio_decisions RENAME COLUMN "
                     "manifest_checksum TO configuration_digest"
                 )
+            if "account_id" not in decision_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_decisions ADD COLUMN account_id TEXT NOT NULL DEFAULT ''"
+                )
+            self._rebuild_decisions_unique_constraint()
+            self.store.connection.execute(
+                """UPDATE portfolio_decisions SET account_id = COALESCE((
+                       SELECT s.account_id FROM portfolio_runtime_sessions s
+                       WHERE s.session_id = portfolio_decisions.session_id
+                   ), '') WHERE account_id = ''"""
+            )
             columns = {
                 str(row[1])
                 for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")
@@ -169,6 +181,62 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     "ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL"
                 )
+
+    def _rebuild_decisions_unique_constraint(self) -> None:
+        """Replace the pre-account UNIQUE(configuration_digest, timestamp, market)
+        with UNIQUE(account_id, configuration_digest, timestamp, market).
+
+        SQLite cannot drop a UNIQUE constraint in place, so the table is
+        rebuilt (the documented foreign-key-preserving recipe) whenever the
+        legacy definition is detected. Fresh databases already carry the new
+        constraint and skip the rebuild.
+        """
+        row = self.store.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'portfolio_decisions'"
+        ).fetchone()
+        if row is None:
+            return
+        create_sql = str(row[0])
+        if "UNIQUE(account_id, configuration_digest, decision_timestamp, market)" in create_sql:
+            return
+        self.store.connection.execute("PRAGMA foreign_keys=OFF")
+        try:
+            # An interrupted previous rebuild must not brick startup: the
+            # staging table is dropped and recreated idempotently.
+            self.store.connection.execute("DROP TABLE IF EXISTS portfolio_decisions_account_scoped")
+            self.store.connection.execute(
+                """
+                CREATE TABLE portfolio_decisions_account_scoped (
+                    decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL DEFAULT '', configuration_digest TEXT NOT NULL,
+                    decision_timestamp TEXT NOT NULL, market TEXT NOT NULL,
+                    strategy_name TEXT NOT NULL,
+                    target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
+                    UNIQUE(account_id, configuration_digest, decision_timestamp, market),
+                    FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
+                )
+                """
+            )
+            self.store.connection.execute(
+                """
+                INSERT INTO portfolio_decisions_account_scoped(
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                )
+                SELECT decision_id, session_id, account_id, configuration_digest,
+                       decision_timestamp, market, strategy_name, target_json, risk_json
+                FROM portfolio_decisions
+                """
+            )
+            self.store.connection.execute("DROP TABLE portfolio_decisions")
+            self.store.connection.execute(
+                "ALTER TABLE portfolio_decisions_account_scoped RENAME TO portfolio_decisions"
+            )
+            # The INSERT above opened a transaction; commit before restoring
+            # foreign keys, otherwise the pragma would be a silent no-op.
+            self.store.connection.commit()
+        finally:
+            self.store.connection.execute("PRAGMA foreign_keys=ON")
 
     def begin_session(self, account_id: str, configuration_digest: str, mode: str) -> str:
         session_id = uuid4().hex
@@ -195,45 +263,52 @@ class PortfolioStateRepository:
                 (datetime.now(UTC).isoformat(), status, session_id),
             )
 
-    def has_decision(self, configuration_digest: str, timestamp: datetime, market: Market) -> bool:
+    def has_decision(
+        self, account_id: str, configuration_digest: str, timestamp: datetime, market: Market
+    ) -> bool:
         with self.store.lock:
             row = self.store.connection.execute(
                 """SELECT 1 FROM portfolio_decisions
-                   WHERE configuration_digest = ? AND decision_timestamp = ? AND market = ?""",
-                (configuration_digest, timestamp.isoformat(), market.value),
+                   WHERE account_id = ? AND configuration_digest = ?
+                     AND decision_timestamp = ? AND market = ?""",
+                (account_id, configuration_digest, timestamp.isoformat(), market.value),
             ).fetchone()
         return row is not None
 
     def latest_decision_timestamp(
-        self, configuration_digest: str, market: Market
+        self, account_id: str, configuration_digest: str, market: Market
     ) -> datetime | None:
         """Return the last persisted decision boundary for restart-safe scheduling."""
         with self.store.lock:
             row = self.store.connection.execute(
                 """SELECT MAX(decision_timestamp) FROM portfolio_decisions
-                   WHERE configuration_digest = ? AND market = ?""",
-                (configuration_digest, market.value),
+                   WHERE account_id = ? AND configuration_digest = ? AND market = ?""",
+                (account_id, configuration_digest, market.value),
             ).fetchone()
         return datetime.fromisoformat(str(row[0])) if row and row[0] is not None else None
 
     def record_decision(
         self,
         session_id: str,
+        account_id: str,
         configuration_digest: str,
         target: TargetPortfolio,
         risk: RiskOverlayDecision,
         market: Market,
     ) -> str:
-        decision_id = _decision_id(configuration_digest, target.decision_timestamp, market)
+        decision_id = _decision_id(
+            account_id, configuration_digest, target.decision_timestamp, market
+        )
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_decisions(
-                    decision_id, session_id, configuration_digest, decision_timestamp,
-                    market, strategy_name, target_json, risk_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     decision_id,
                     session_id,
+                    account_id,
                     configuration_digest,
                     target.decision_timestamp.isoformat(),
                     market.value,
@@ -279,6 +354,7 @@ class PortfolioStateRepository:
         symbol: str,
         market: Market,
         quantity: float,
+        reference_price: float,
     ) -> None:
         """Record a protective/emergency stop for a portfolio-owned position.
 
@@ -286,7 +362,8 @@ class PortfolioStateRepository:
         so a later fill flows through ``apply_trade_update`` and decrements
         the net owned quantity exactly like a planned exit. Without this, a
         stop fill would leave the repository claiming ownership of a flat
-        broker position forever.
+        broker position forever. ``reference_price`` is the stop trigger price
+        so slippage is measured against the stop, not the entry.
         """
         with self.store.lock, self.store.connection:
             lineage = self._latest_entry_lineage(account_id, symbol, market)
@@ -301,7 +378,7 @@ class PortfolioStateRepository:
                     symbol,
                 )
                 return
-            decision_id, reference_price = lineage
+            decision_id, _entry_reference = lineage
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_orders(
                     client_order_id, decision_id, symbol, market, side, quantity,
@@ -550,12 +627,21 @@ class PortfolioStateRepository:
         """
         return set(self.owned_quantities(account_id, market))
 
-    def operations_snapshot(self) -> dict[str, object]:
+    def operations_snapshot(self, account_id: str | None = None) -> dict[str, object]:
         with self.store.lock:
-            last_decision = self.store.connection.execute(
-                """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
-                   FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"""
-            ).fetchone()
+            if account_id is None:
+                last_decision = self.store.connection.execute(
+                    """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
+                       FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"""
+                ).fetchone()
+            else:
+                last_decision = self.store.connection.execute(
+                    """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
+                       FROM portfolio_decisions
+                       WHERE account_id = ?
+                       ORDER BY decision_timestamp DESC LIMIT 1""",
+                    (account_id,),
+                ).fetchone()
             pending = self.store.connection.execute(
                 """SELECT client_order_id, symbol, market, side, quantity, status, created_at
                    FROM portfolio_orders
@@ -675,7 +761,7 @@ class PortfolioRuntime:
             self.risk_overlay.limits,
         )
         self.previous_timestamp = repository.latest_decision_timestamp(
-            self.configuration_digest, self.market
+            account_id, self.configuration_digest, self.market
         )
         self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
 
@@ -763,7 +849,9 @@ class PortfolioRuntime:
         if missing_symbols:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         ready_history = dict(self.history)
-        if self.repository.has_decision(self.configuration_digest, timestamp, self.market):
+        if self.repository.has_decision(
+            self.account_id, self.configuration_digest, timestamp, self.market
+        ):
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         account = self.broker.account()
         managed = {
@@ -838,6 +926,14 @@ class PortfolioRuntime:
         rules = {
             symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols
         }
+        # The order idempotency key must be scoped to the account-local
+        # decision identity (account + configuration digest + timestamp +
+        # market), otherwise two configurations sharing a strategy name,
+        # version and timestamp collide on the same client_order_id and the
+        # second decision's orders are silently dropped by the repository.
+        decision_id = _decision_id(
+            self.account_id, self.configuration_digest, timestamp, self.market
+        )
         planned = self.planner.plan(
             risk.target,
             account,
@@ -846,9 +942,11 @@ class PortfolioRuntime:
             rules=rules,
             approved_symbols=self.symbols,
             open_order_symbols=self.broker.open_portfolio_order_symbols(),
+            decision_id=decision_id,
         )
         decision_id = self.repository.record_decision(
             self.session_id,
+            self.account_id,
             self.configuration_digest,
             risk.target,
             risk,
@@ -881,11 +979,11 @@ class PortfolioRuntime:
         self.repository.end_session(self.session_id, status)
 
 
-def _decision_id(checksum: str, timestamp: datetime, market: Market) -> str:
+def _decision_id(account_id: str, checksum: str, timestamp: datetime, market: Market) -> str:
     import hashlib
 
     return hashlib.sha256(
-        f"{checksum}|{timestamp.isoformat()}|{market.value}".encode()
+        f"{account_id}|{checksum}|{timestamp.isoformat()}|{market.value}".encode()
     ).hexdigest()[:24]
 
 

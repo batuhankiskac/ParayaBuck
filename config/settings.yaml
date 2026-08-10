@@ -163,10 +163,13 @@ backtest:
   spread_bps: 2
   commission: 0
   crypto_taker_fee_bps: 5
-  equity_taf_per_share: 0
-  equity_taf_cap: 0
-  equity_cat_per_share: 0
-  equity_sec_fee_rate: 0
+  # Current SEC/TAF/CAT regulatory fee estimates (per share or per dollar of
+  # proceeds). These are order-fee estimates, not execution slippage; keep
+  # them updated with the rates in force at the trade date.
+  equity_taf_per_share: 0.000166
+  equity_taf_cap: 7.27
+  equity_cat_per_share: 0.00013
+  equity_sec_fee_rate: 0.0000278
   scanner_rebalance: daily
   output_dir: reports
   ranking_metric: risk_adjusted

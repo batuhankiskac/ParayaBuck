@@ -24,6 +24,7 @@ from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
     CryptoPriceObservation,
+    OwnershipDriftError,
     ProtectionReconciliationError,
 )
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
@@ -249,13 +250,14 @@ class EngineRuntime:
             portfolio_owned_quantities=lambda: self._portfolio_repository.owned_quantities(
                 self.broker.account_id or "unknown"
             ),
-            portfolio_stop_recorded=lambda symbol, market, qty, client_order_id: (
+            portfolio_stop_recorded=lambda symbol, market, qty, client_order_id, reference_price: (
                 self._portfolio_repository.record_protective_order(
                     self.broker.account_id or "unknown",
                     client_order_id,
                     symbol,
                     market,
                     qty,
+                    reference_price,
                 )
             ),
             portfolio_flat_reconciled=lambda symbol, market: (
@@ -1270,7 +1272,11 @@ class EngineRuntime:
         if portfolio_repository is not None and portfolio_repository.has_order(
             update.client_order_id
         ):
-            account = await asyncio.to_thread(self.broker.account)
+            # Book the fill BEFORE the account snapshot: a SELL fill that
+            # brings the broker position below the repository-owned quantity
+            # would otherwise trip the fail-closed ownership-drift check
+            # against the pre-fill owned quantity, aborting the handler and
+            # losing the fill.
             await asyncio.to_thread(
                 portfolio_repository.apply_trade_update,
                 client_order_id=update.client_order_id,
@@ -1284,9 +1290,10 @@ class EngineRuntime:
                     or f"{update.client_order_id}:{update.event}:{update.timestamp.isoformat()}"
                 ),
                 fee=update.fee,
-                realized_pnl=account.realized_pnl,
-                unrealized_pnl=account.unrealized_pnl,
+                realized_pnl=0.0,
+                unrealized_pnl=0.0,
             )
+            account = await asyncio.to_thread(self.broker.account)
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
             return
@@ -1629,7 +1636,10 @@ class EngineRuntime:
         except Exception as exc:
             worker.last_error = str(exc)
             self._state = "halted"
-            self._circuit_breaker_reason = "decision_worker_crashed"
+            if isinstance(exc, OwnershipDriftError):
+                self._circuit_breaker_reason = "ownership_drift"
+            else:
+                self._circuit_breaker_reason = "decision_worker_crashed"
             log.exception("Decision worker failed")
         finally:
             worker.alive = False
@@ -1711,6 +1721,14 @@ class EngineRuntime:
             try:
                 with self._portfolio_lock:
                     portfolio_result = portfolio_runtime.process_closed_bars(relevant)
+            except OwnershipDriftError:
+                self._circuit_breaker_reason = "ownership_drift"
+                self._state = "halted"
+                log.exception(
+                    "Portfolio ownership drift blocked decisions for market=%s",
+                    portfolio_runtime.market.value,
+                )
+                return
             except Exception as exc:
                 self._circuit_breaker_reason = "portfolio_runtime_failure"
                 self._state = "halted"
@@ -1920,6 +1938,9 @@ class EngineRuntime:
                 # minute obscures actionable protection failures.
                 log.warning("Position protection check deferred after Alpaca API error: %s", exc)
                 self._circuit_breaker_reason = "reconciliation_failed"
+            except OwnershipDriftError:
+                log.exception("Portfolio ownership drift detected; entries halted")
+                self._circuit_breaker_reason = "ownership_drift"
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
                 self._circuit_breaker_reason = "protection_failure"
@@ -1958,6 +1979,7 @@ class EngineRuntime:
             "protection_failure",
             "protection_mismatch",
             "ledger_mismatch",
+            "ownership_drift",
             "post_fill_risk_violation",
             "final_market_event_queue_overflow",
             "reconciliation_failed",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -556,6 +557,7 @@ def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
     decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
     decision_id = repo.record_decision(
         session_id,
+        "acct",
         "digest",
         _decision_target(decision_timestamp),
         _risk_decision(decision_timestamp),
@@ -605,9 +607,11 @@ def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
     broker = _portfolio_broker(client, repo, tmp_path)
     recorded: dict[str, str] = {}
 
-    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str) -> None:
+    def record_stop(
+        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
+    ) -> None:
         recorded["id"] = client_order_id
-        repo.record_protective_order("acct", client_order_id, symbol, market, qty)
+        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
 
     broker.portfolio_stop_recorded = record_stop
 
@@ -643,6 +647,7 @@ def _owned_crypto_entry(repo: PortfolioStateRepository, *, quantity: float) -> N
     decision_timestamp = datetime(2025, 1, 1, tzinfo=UTC)
     decision_id = repo.record_decision(
         session_id,
+        "acct",
         "digest",
         _decision_target(decision_timestamp),
         _risk_decision(decision_timestamp),
@@ -716,9 +721,11 @@ def test_emergency_stop_retry_fill_is_attributed_to_accepted_order_id(tmp_path) 
     broker = _portfolio_broker(client, repo, tmp_path)
     recorded: dict[str, str] = {}
 
-    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str) -> None:
+    def record_stop(
+        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
+    ) -> None:
         recorded["id"] = client_order_id
-        repo.record_protective_order("acct", client_order_id, symbol, market, qty)
+        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
 
     broker.portfolio_stop_recorded = record_stop
 
@@ -854,6 +861,7 @@ def test_owned_quantities_are_isolated_per_account(tmp_path) -> None:
     )
     paper_decision = repo.record_decision(
         paper,
+        "paper-acct",
         "digest-a",
         _decision_target(base.decision_timestamp),
         _risk_decision(base.decision_timestamp),
@@ -861,6 +869,7 @@ def test_owned_quantities_are_isolated_per_account(tmp_path) -> None:
     )
     repo.record_decision(
         live,
+        "live-acct",
         "digest-b",
         _decision_target(base.decision_timestamp),
         _risk_decision(base.decision_timestamp),
@@ -884,3 +893,327 @@ def test_owned_quantities_are_isolated_per_account(tmp_path) -> None:
     assert repo.owned_symbols("paper-acct") == {"AAPL"}
     assert repo.owned_quantities("live-acct") == {}
     assert repo.owned_symbols("live-acct") == set()
+
+
+def test_decision_identity_is_scoped_to_account_and_configuration(tmp_path) -> None:
+    """Two accounts sharing the same configuration digest and decision
+    timestamp must produce distinct, coexistable decisions."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    session_a = repo.begin_session("acct-a", "same-digest", "paper")
+    session_b = repo.begin_session("acct-b", "same-digest", "paper")
+    timestamp = datetime(2026, 8, 10, tzinfo=UTC)
+    id_a = repo.record_decision(
+        session_a,
+        "acct-a",
+        "same-digest",
+        _decision_target(timestamp),
+        _risk_decision(timestamp),
+        Market.EQUITY,
+    )
+    id_b = repo.record_decision(
+        session_b,
+        "acct-b",
+        "same-digest",
+        _decision_target(timestamp),
+        _risk_decision(timestamp),
+        Market.EQUITY,
+    )
+    assert id_a != id_b
+    assert repo.has_decision("acct-a", "same-digest", timestamp, Market.EQUITY)
+    assert repo.has_decision("acct-b", "same-digest", timestamp, Market.EQUITY)
+    assert not repo.has_decision("acct-c", "same-digest", timestamp, Market.EQUITY)
+    assert repo.latest_decision_timestamp("acct-a", "same-digest", Market.EQUITY) == timestamp
+    assert repo.latest_decision_timestamp("acct-b", "same-digest", Market.EQUITY) == timestamp
+    with sqlite3.connect(tmp_path / "runtime.sqlite3") as connection:
+        assert connection.execute("SELECT COUNT(*) FROM portfolio_decisions").fetchone()[0] == 2
+
+
+def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None:
+    """A SELL fill that brings the broker position below the repository-owned
+    quantity must be booked before the account snapshot; snapshotting first
+    would trip the fail-closed drift check and lose the fill forever."""
+    import asyncio
+
+    from parayabuck.core.models import OrderRole
+    from parayabuck.execution.alpaca_updates import TradeUpdate
+    from parayabuck.runtime import EngineRuntime
+
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
+    with repo.store.lock, repo.store.connection:
+        entry_decision_id = repo.store.connection.execute(
+            "SELECT decision_id FROM portfolio_orders WHERE client_order_id = 'pbp-entry'"
+        ).fetchone()[0]
+    # A SELL exit order for the full quantity.
+    repo.record_order(
+        PortfolioOrderRequest(
+            client_order_id="pbp-sell",
+            decision_id=str(entry_decision_id),
+            symbol="BTC/USD",
+            market=Market.CRYPTO,
+            side=PortfolioOrderSide.SELL,
+            quantity=0.5,
+            reference_price=100000.0,
+            decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            strategy_name="crypto",
+            strategy_version="1",
+            risk_reducing=True,
+        ),
+        "submitting",
+    )
+    client = _FakeAlpacaClient()
+    # The broker already reflects the partial fill.
+    client.positions = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.2",
+            avg_entry_price="100000",
+            current_price="100000",
+            qty_available="0.2",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._portfolio_repository = repo
+    runtime.broker = broker
+    runtime._last_account_at = None
+    runtime._persist_risk_state = lambda *args, **kwargs: None
+
+    update = TradeUpdate(
+        event="fill",
+        client_order_id="pbp-sell",
+        broker_order_id="broker-sell",
+        parent_order_id=None,
+        role=OrderRole.MANUAL_EXIT,
+        symbol="BTC/USD",
+        market=Market.CRYPTO,
+        requested_qty=0.5,
+        filled_qty=0.3,
+        average_fill_price=99000.0,
+        timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        fee=0.0,
+        activity_id="activity-sell-1",
+    )
+    asyncio.run(runtime._handle_trade_update(update))
+
+    assert repo.owned_quantities("acct") == {"BTC/USD": 0.2}
+
+
+def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> None:
+    """A symbol mid-exit (open order still working) must not trip the
+    fail-closed drift check: the shortfall is attributable to the exit."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.2",
+            avg_entry_price="100000",
+            current_price="100000",
+            qty_available="0.0",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    client.open_orders = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.3",
+            side="sell",
+            status="partially_filled",
+            type="stop_limit",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    assert broker.account() is not None
+
+    # Without the working order the same state is fail-closed.
+    client.open_orders = []
+    with pytest.raises(OwnershipDriftError, match="Ownership drift"):
+        broker.account()
+
+
+def test_decision_path_drift_halts_with_resettable_reason() -> None:
+    """A drift raised while a decision is being processed must halt the
+    runtime with the resettable ownership_drift reason."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+    from parayabuck.runtime import EngineRuntime
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._state = "running"
+    runtime._portfolio_lock = threading.RLock()
+
+    def process_closed_bars(_bars):
+        raise OwnershipDriftError("Ownership drift for BTC/USD")
+
+    drift_runtime = SimpleNamespace(
+        market=Market.CRYPTO,
+        strategy=SimpleNamespace(timeframe="1h"),
+        symbols=("BTC/USD",),
+        process_closed_bars=process_closed_bars,
+    )
+    runtime._portfolio_runtimes = (drift_runtime,)
+    runtime._entry_readiness_reasons = lambda _market: []
+
+    runtime._process_portfolio_timestamp(
+        [
+            Bar(
+                datetime(2025, 1, 1, tzinfo=UTC),
+                "BTC/USD",
+                "1h",
+                100.0,
+                101.0,
+                99.0,
+                100.0,
+                1000.0,
+                Market.CRYPTO,
+            )
+        ]
+    )
+
+    assert runtime._state == "halted"
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+
+
+def test_legacy_decisions_table_migrates_to_account_scoped_identity(tmp_path) -> None:
+    """A pre-account database (UNIQUE on digest+timestamp+market) must be
+    rebuilt so a second account with the same digest and timestamp is
+    accepted instead of being swallowed by INSERT OR IGNORE."""
+    path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE portfolio_runtime_sessions (
+                session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL,
+                configuration_digest TEXT NOT NULL, mode TEXT NOT NULL,
+                started_at TEXT NOT NULL, ended_at TEXT, status TEXT NOT NULL
+            );
+            CREATE TABLE portfolio_decisions (
+                decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                configuration_digest TEXT NOT NULL, decision_timestamp TEXT NOT NULL,
+                market TEXT NOT NULL, strategy_name TEXT NOT NULL,
+                target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
+                UNIQUE(configuration_digest, decision_timestamp, market),
+                FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
+            );
+            INSERT INTO portfolio_runtime_sessions
+                VALUES ('s1', 'acct-a', 'd', 'paper', '2026-01-01T00:00:00+00:00',
+                        NULL, 'running');
+            INSERT INTO portfolio_decisions
+                VALUES ('legacy-id', 's1', 'd', '2026-08-10T00:00:00+00:00',
+                        'equity', 'eq', '{}', '{}');
+            """
+        )
+    repo = PortfolioStateRepository(path)
+    timestamp = datetime(2026, 8, 10, tzinfo=UTC)
+    assert repo.has_decision("acct-a", "d", timestamp, Market.EQUITY)
+    session_b = repo.begin_session("acct-b", "d", "paper")
+    id_b = repo.record_decision(
+        session_b,
+        "acct-b",
+        "d",
+        _decision_target(timestamp),
+        _risk_decision(timestamp),
+        Market.EQUITY,
+    )
+    assert id_b != "legacy-id"
+    assert repo.has_decision("acct-b", "d", timestamp, Market.EQUITY)
+    assert repo.latest_decision_timestamp("acct-b", "d", Market.EQUITY) == timestamp
+
+
+def test_ownership_drift_below_repository_quantity_is_fail_closed(tmp_path) -> None:
+    """Broker qty below the repository-managed qty on a live position is
+    fail-closed: the bot must not silently reattribute the surviving shares."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.3",
+            avg_entry_price="100000",
+            current_price="100000",
+            qty_available="0.3",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    with pytest.raises(OwnershipDriftError, match="Ownership drift"):
+        broker.account()
+
+
+def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> None:
+    """A fully flat stale position is the reconcile-heal path, not a drift
+    halt: the heal books the missing exit leg and clears ownership."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
+    broker = _portfolio_broker(_FakeAlpacaClient(), repo, tmp_path)
+    snapshot = broker.account()
+    assert snapshot.positions == ()
+
+
+def test_protective_stop_slippage_references_stop_price_not_entry(tmp_path) -> None:
+    """The protective-stop SELL leg must carry the stop trigger as its
+    reference price; entry-to-stop loss is not execution slippage."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    _owned_crypto_entry(repo, quantity=0.5)
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.5",
+            avg_entry_price="100000",
+            current_price="100000",
+            qty_available="0.5",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    recorded: dict[str, object] = {}
+
+    def record_stop(
+        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
+    ) -> None:
+        recorded["id"] = client_order_id
+        recorded["reference_price"] = reference_price
+        repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
+
+    broker.portfolio_stop_recorded = record_stop
+    broker.reconcile()
+
+    expected_stop = 100_000 * (1 - 75.0 / 10_000)
+    assert recorded["reference_price"] == pytest.approx(expected_stop)
+    repo.apply_trade_update(
+        client_order_id=str(recorded["id"]),
+        broker_order_id="broker-stop",
+        status="fill",
+        cumulative_filled_quantity=0.5,
+        average_fill_price=99_000.0,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        activity_id="activity-stop",
+        fee=0.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+    with sqlite3.connect(tmp_path / "runtime.sqlite3") as connection:
+        slippage = connection.execute(
+            "SELECT slippage FROM portfolio_fills WHERE activity_id = 'activity-stop'"
+        ).fetchone()[0]
+    # (stop - fill) * qty * -1 for a SELL leg: fill below the stop is
+    # positive slippage measured against the stop trigger.
+    assert slippage == pytest.approx((expected_stop - 99_000.0) * 0.5)

@@ -166,6 +166,64 @@ def test_long_window_is_split_into_row_bounded_requests(monkeypatch: Any) -> Non
     assert len({bar.timestamp for bar in result}) == expected
 
 
+def test_long_window_split_covers_every_symbol_in_a_multi_symbol_batch() -> None:
+    """The row-bounded window split must not truncate any symbol in a
+    multi-symbol batch: every symbol receives its full date range."""
+    import pandas as pd
+
+    import parayabuck.data.alpaca as alpaca_module
+
+    end = datetime(2026, 1, 1, tzinfo=UTC)
+    start = end - timedelta(days=730)
+    symbols = [f"SYM{i:02d}/USD" for i in range(20)]
+    requests: list[tuple[datetime, datetime]] = []
+
+    class FakeCryptoClient:
+        def _bars(self, request: Any) -> Any:
+            requests.append((request.start, request.end))
+            frames = []
+            timestamp = request.start
+            while timestamp < request.end:
+                for symbol in symbols:
+                    frames.append(
+                        {
+                            "timestamp": timestamp,
+                            "symbol": symbol,
+                            "open": 100.0,
+                            "high": 101.0,
+                            "low": 99.0,
+                            "close": 100.0,
+                            "volume": 1000.0,
+                        }
+                    )
+                timestamp += timedelta(hours=1)
+            return SimpleNamespace(df=pd.DataFrame(frames))
+
+        def get_crypto_bars(self, request: Any) -> Any:
+            return self._bars(request)
+
+        def get_stock_bars(self, request: Any) -> Any:
+            return self._bars(request)
+
+    history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
+    history._stock_feed = "iex"
+    history._stock_client = FakeCryptoClient()
+    history._crypto_client = FakeCryptoClient()
+    history._cache = SimpleNamespace(
+        get=lambda *args, **kwargs: [],
+        upsert=lambda *args, **kwargs: None,
+    )
+
+    bars = history.get_bars_batch(symbols, "1h", start=start, end=end)
+
+    assert len(requests) > 1
+    expected = int((end - start).total_seconds() // 3600)
+    for symbol in symbols:
+        series = bars[symbol]
+        assert len(series) == expected, f"{symbol} lost bars to chunking"
+        assert len({bar.timestamp for bar in series}) == expected
+
+
 def test_incomplete_cache_is_not_used_as_api_fallback() -> None:
     end = datetime.now(UTC)
     start = end - timedelta(days=30)

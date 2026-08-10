@@ -177,44 +177,53 @@ class AlpacaBarStream:
         handler: Any,
         updated_handler: Any,
     ) -> None:
-        if added:
-            stream.subscribe_bars(handler, *added)
-            subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
-            if subscribe_updated is not None:
-                try:
+        """Converge one market's socket membership and roll back every leg this
+        call applied if any later leg fails.
+
+        A failure at any point must undo both the added and the removed legs;
+        otherwise a remove-leg failure (for example) leaves the freshly added
+        symbols subscribed while the local bookkeeping still says otherwise,
+        and the outer transaction rollback never sees this market at all.
+        """
+        subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
+        unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
+        plain_added = plain_removed = False
+        try:
+            if added:
+                stream.subscribe_bars(handler, *added)
+                plain_added = True
+                if subscribe_updated is not None:
                     subscribe_updated(updated_handler, *added)
-                except Exception:
-                    # The plain subscription is already live; leave the socket
-                    # and the local bookkeeping consistent before re-raising.
-                    try:
-                        stream.unsubscribe_bars(*added)
-                    except Exception:
-                        log.exception("Rollback of a partial subscription failed")
-                    unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
-                    if unsubscribe_updated is not None:
-                        try:
-                            unsubscribe_updated(*added)
-                        except Exception:
-                            log.exception("Rollback of a partial updated subscription failed")
-                    raise
-        if removed:
-            stream.unsubscribe_bars(*removed)
-            unsubscribe_updated = getattr(stream, "unsubscribe_updated_bars", None)
-            if unsubscribe_updated is not None:
-                try:
+            if removed:
+                stream.unsubscribe_bars(*removed)
+                plain_removed = True
+                if unsubscribe_updated is not None:
                     unsubscribe_updated(*removed)
+        except Exception:
+            # Undo everything this call applied so socket membership and the
+            # local bookkeeping never diverge, even before the outer
+            # transaction rollback (which only covers whole completed markets).
+            if plain_added:
+                try:
+                    stream.unsubscribe_bars(*added)
                 except Exception:
+                    log.exception("Rollback of a partial subscription failed")
+                if unsubscribe_updated is not None:
                     try:
-                        stream.subscribe_bars(handler, *removed)
+                        unsubscribe_updated(*added)
                     except Exception:
-                        log.exception("Rollback of a partial unsubscription failed")
-                    subscribe_updated = getattr(stream, "subscribe_updated_bars", None)
-                    if subscribe_updated is not None:
-                        try:
-                            subscribe_updated(updated_handler, *removed)
-                        except Exception:
-                            log.exception("Rollback of a partial updated unsubscription failed")
-                    raise
+                        log.exception("Rollback of a partial updated subscription failed")
+            if plain_removed:
+                try:
+                    stream.subscribe_bars(handler, *removed)
+                except Exception:
+                    log.exception("Rollback of a partial unsubscription failed")
+                if subscribe_updated is not None:
+                    try:
+                        subscribe_updated(updated_handler, *removed)
+                    except Exception:
+                        log.exception("Rollback of a partial updated unsubscription failed")
+            raise
 
     def run_stock(self) -> None:
         self.stock.run()

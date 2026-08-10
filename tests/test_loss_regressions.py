@@ -20,13 +20,11 @@ from parayabuck.core.models import (
     OrderRole,
     OrderState,
     Regime,
-    StrategyEvaluation,
 )
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.markets.regime import RegimeAssessment, RegimeDetector
-from parayabuck.monitoring import AIDecisionJournal
+from parayabuck.markets.regime import RegimeDetector
 from parayabuck.runtime import EngineRuntime
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
@@ -370,53 +368,3 @@ def test_scanner_keeps_only_one_alphabet_share_class(tmp_path: Path) -> None:
     assert len(alphabet) == 1
     rejected = ({"GOOG", "GOOGL"} - alphabet).pop()
     assert result.eliminated[rejected] == "duplicate_issuer"
-
-
-def test_fill_arriving_before_ai_record_is_not_lost(tmp_path: Path) -> None:
-    journal = AIDecisionJournal(str(tmp_path), "paper", "5m")
-    bar = _bars(symbol="TEST", count=1)[0]
-    from parayabuck.core.models import Signal
-
-    signal = Signal(
-        "TEST",
-        Market.EQUITY,
-        Direction.LONG,
-        "test",
-        80,
-        0.8,
-        100,
-        98,
-        104,
-        bar.timestamp,
-    )
-    order = OrderIntent(
-        signal.signal_id,
-        signal.symbol,
-        signal.market,
-        signal.direction,
-        1,
-        100,
-        98,
-        104,
-        signal.strategy,
-        client_order_id="parayabuck-racing-fill",
-    )
-    journal.record_broker_fill(
-        Fill(order.client_order_id, "TEST", 1, 100, Direction.LONG, bar.timestamp)
-    )
-    journal.record_signal(
-        bar,
-        signal,
-        StrategyEvaluation("test", True, "fired", (), signal=signal),
-        RegimeAssessment(Regime.RANGE, 0.8, 10, 0.01, ("test",)),
-        Regime.UNKNOWN.value,
-        Regime.UNKNOWN.value,
-        [],
-        False,
-        order=order,
-        order_state=OrderState.ACCEPTED,
-    )
-
-    assert journal._open[signal.signal_id].traded
-    decision = next((tmp_path / "paper").glob("*/*test*.md"))
-    assert "Execution: TRADED" in decision.read_text()

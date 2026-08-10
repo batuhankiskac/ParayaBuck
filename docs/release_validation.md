@@ -3,7 +3,8 @@
 ## Identity
 
 ```
-HEAD:               <filled at completion commit>
+HEAD:               7ae6645 (docs: release validation artifact + TRAIN-only
+                    optimization evidence); engineering changes in cde51a5
 validation date/time UTC: 2026-08-10 (final runs completed ~23:50 UTC)
 Environment:
   Python version:   3.14.6

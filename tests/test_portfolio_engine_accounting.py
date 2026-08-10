@@ -434,12 +434,16 @@ def test_state_round_trip_preserves_economic_fields(tmp_path) -> None:
     engine.run(_equity_days(60, epoch), liquidate_at_end=False)
     state = PortfolioBacktestEngine.load_state(state_path)
     assert state is not None
-    assert state.schema_version == 2
+    assert state.schema_version == 3
     assert state.last_processed_bar is not None
     assert state.last_prices.get("SPY") is not None
     assert state.entry_fees.get("SPY") is not None
     assert state.cash is not None
     assert state.last_target.get("SPY") == 0.6
+    assert state.peak_equity is not None
+    assert state.day_start_equity is not None
+    assert state.last_observed_equity is not None
+    assert state.risk_session_date is not None
 
 
 def test_v1_state_without_cash_migrates_by_deriving_cash(tmp_path) -> None:
@@ -461,6 +465,121 @@ def test_v1_state_without_cash_migrates_by_deriving_cash(tmp_path) -> None:
     assert resumed.state.cash == pytest.approx(
         100_000.0 - result.state.holdings["SPY"] * result.state.avg_prices["SPY"]
     )
+
+
+def test_restart_risk_state_equivalence_with_drawdown_after_restart(tmp_path) -> None:
+    """A -> B -> C -> D uninterrupted must equal A -> B, save, restart, C -> D:
+    ending equity, holdings, cash, fills, realized PnL, daily-loss and
+    drawdown-halt behavior, pending orders and the persisted risk lifecycle.
+
+    The scenario forces a high-water before the restart (the ramp peak is
+    captured in the saved state) and the drawdown limit is crossed only AFTER
+    the restart, so an unpersisted peak would silently disable the halt.
+    """
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    ramp = [
+        _bar(epoch + timedelta(days=index), "SPY", 100 * 1.005**index, Market.EQUITY, 5_000_000)
+        for index in range(40)
+    ]
+    crash = [
+        _bar(
+            epoch + timedelta(days=40 + index),
+            "SPY",
+            100 * 1.005**39 * 0.988**index,
+            Market.EQUITY,
+            5_000_000,
+        )
+        for index in range(30)
+    ]
+    bars = ramp + crash
+    strategy = _ScheduleStrategy({}, epoch, default_targets={"SPY": 0.6})
+    limits = PortfolioRiskLimits(
+        daily_loss_limit=0.005,
+        drawdown_halt=0.05,
+        maximum_equity=0.60,
+        maximum_equity_asset=0.60,
+    )
+    state_path = str(tmp_path / "state.json")
+
+    reference_engine = _engine(strategy, risk_limits=limits)
+    reference = reference_engine.run(bars, liquidate_at_end=False)
+
+    first_engine = _engine(strategy, state_path=state_path, risk_limits=limits)
+    first_engine.run(bars[:40], liquidate_at_end=False)
+    saved = PortfolioBacktestEngine.load_state(state_path)
+    assert saved is not None
+    # The high-water of the ramp was persisted before the restart.
+    assert saved.peak_equity == pytest.approx(reference.state.peak_equity)
+
+    restarted_engine = _engine(strategy, state=saved, risk_limits=limits)
+    restarted = restarted_engine.run(bars[40:], warmup=bars[:40], liquidate_at_end=False)
+
+    assert restarted.state.cash == pytest.approx(reference.state.cash)
+    assert restarted.state.holdings == reference.state.holdings
+    assert restarted.state.avg_prices == pytest.approx(reference.state.avg_prices)
+    assert restarted.state.realized_pnl == pytest.approx(reference.state.realized_pnl)
+    assert restarted.state.pending_orders == reference.state.pending_orders
+    assert restarted.state.pending_target == reference.state.pending_target
+    assert restarted.state.last_processed_bar == reference.state.last_processed_bar
+    cutoff = bars[39].timestamp
+    assert [fill.timestamp for fill in restarted.fills] == [
+        fill.timestamp for fill in reference.fills if fill.timestamp > cutoff
+    ]
+    assert [fill.qty for fill in restarted.fills] == [
+        fill.qty for fill in reference.fills if fill.timestamp > cutoff
+    ]
+    # Persisted risk lifecycle identical: peak, day-start, last observed and
+    # the active session date all survived the restart.
+    assert restarted.state.peak_equity == pytest.approx(reference.state.peak_equity)
+    assert restarted.state.day_start_equity == pytest.approx(reference.state.day_start_equity)
+    assert restarted.state.last_observed_equity == pytest.approx(
+        reference.state.last_observed_equity
+    )
+    assert restarted.state.risk_session_date == reference.state.risk_session_date
+    # Ending equity matches to the cent.
+    assert restarted.ending_equity == pytest.approx(reference.ending_equity, abs=1e-6)
+    # Daily-loss and drawdown halt behavior after the restart matches the
+    # uninterrupted run exactly (the drawdown limit is crossed only after the
+    # restart, so this proves the persisted peak feeds the halt).
+    reference_post = [
+        record for record in reference.rebalances if record.decision_timestamp > cutoff
+    ]
+    assert len(restarted.rebalances) == len(reference_post)
+    assert [record.risk_overlay_halted for record in restarted.rebalances] == [
+        record.risk_overlay_halted for record in reference_post
+    ]
+    assert [record.risk_overlay_reasons for record in restarted.rebalances] == [
+        record.risk_overlay_reasons for record in reference_post
+    ]
+    # The drawdown halt genuinely fired after the restart in both runs.
+    post_reasons = [reason for record in reference_post for reason in record.risk_overlay_reasons]
+    assert "portfolio_drawdown_halt" in post_reasons
+
+
+def test_v2_state_without_risk_lifecycle_still_loads(tmp_path) -> None:
+    """A pre-v3 state (no risk lifecycle fields) loads safely and the engine
+    seeds the lifecycle from the starting equity once."""
+    from parayabuck.portfolio.models import PortfolioState
+
+    epoch = datetime(2024, 1, 1, tzinfo=UTC)
+    bars = _equity_days(120, epoch)
+    strategy = _HoldStrategy("SPY", 0.6)
+    engine = _engine(strategy)
+    result = engine.run(bars[:60], liquidate_at_end=False)
+    v2_raw = result.state.to_dict()
+    v2_raw.pop("peak_equity")
+    v2_raw.pop("day_start_equity")
+    v2_raw.pop("last_observed_equity")
+    v2_raw.pop("risk_session_date")
+    v2_raw["schema_version"] = 2
+    v2 = PortfolioState.from_dict(v2_raw)
+    assert v2.peak_equity is None
+    resumed = _engine(strategy, state=v2).run(bars[60:], warmup=bars[:60], liquidate_at_end=False)
+    # Seeded from the starting equity, so the resumed run is self-consistent
+    # and re-derives the lifecycle from its own observations.
+    assert resumed.state.peak_equity is not None
+    assert resumed.state.peak_equity >= resumed.starting_equity
+    assert resumed.state.risk_session_date is not None
 
 
 def test_restart_after_liquidated_run_does_not_resurrect_positions(tmp_path) -> None:

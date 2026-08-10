@@ -349,7 +349,7 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
         "parayabuck.universe.preflight.eligible_equity_symbols",
         lambda _config, _trading, limit=None: ["SPY", "AAA"],
     )
-    captured: dict[str, object] = {}
+    captured_requests: list[dict[str, object]] = []
 
     class FakeProvider:
         def get_bars_batch(
@@ -361,12 +361,14 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
             end: datetime,
             adjustment: str,
         ) -> dict[str, list[Bar]]:
-            captured.update(
-                symbols=tuple(symbols),
-                timeframe=timeframe,
-                start=start,
-                end=end,
-                adjustment=adjustment,
+            captured_requests.append(
+                {
+                    "symbols": tuple(symbols),
+                    "timeframe": timeframe,
+                    "start": start,
+                    "end": end,
+                    "adjustment": adjustment,
+                }
             )
             return {symbol: [] for symbol in symbols}
 
@@ -377,12 +379,22 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
 
     cli_module._load_bars(config, args, Market.EQUITY, start, end)
 
-    expected_warmup = timedelta(days=cli_module._warmup_window_days(config, Market.EQUITY))
-    assert captured["start"] == start - expected_warmup
-    assert captured["end"] == end
-    assert captured["adjustment"] == "splits"
-    assert captured["timeframe"] == "1d"
-    assert captured["symbols"] == ("SPY", "AAA")
+    assert captured_requests
+    first = captured_requests[0]
+    # The warmup span is anchored at the evaluation start (2022 session
+    # density), never at today's date.
+    expected_warmup = timedelta(
+        days=cli_module._warmup_window_days(config, Market.EQUITY, end_date=start)
+    )
+    assert first["start"] == start - expected_warmup
+    assert first["end"] == end
+    assert first["adjustment"] == "splits"
+    assert first["timeframe"] == "1d"
+    assert first["symbols"] == ("SPY", "AAA")
+    # Empty downloads (no pre-start history) trigger the bounded warmup
+    # extension: at most three fetch attempts.
+    assert len(captured_requests) == 3
+    assert captured_requests[-1]["start"] <= first["start"]
 
 
 def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(

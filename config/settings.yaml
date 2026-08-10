@@ -199,3 +199,10 @@ engine:
   crypto_emergency_exit_bps: 75
   crypto_stop_cancel_timeout_seconds: 5
   crypto_stop_cancel_poll_interval_seconds: 0.25
+execution:
+  # Shared order-existence policy for backtest, paper and live: a rebalance
+  # band below which drift produces no order, and the minimum order notional.
+  # These values change order behavior and are part of the configuration and
+  # live-authorization digests.
+  rebalance_band_pct: 0.005
+  minimum_order_notional: 10

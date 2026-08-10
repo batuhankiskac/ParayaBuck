@@ -20,9 +20,18 @@ There is one strategy interface (`PortfolioStrategy.decide`) and one shared
 target/risk meaning. Historical fills use a deterministic simulator while
 paper/live orders use the broker planner. Strategy code never receives
 credentials or submits orders. Operational, market-state observation, and
-strategy timeframes have explicit roles; an entry-risk latch (daily loss,
-drawdown, account freshness) blocks entries while risk-reducing exits keep
-flowing.
+strategy timeframes have explicit roles.
+
+Risk-reaction semantics are explicit:
+
+- daily-loss / drawdown entry latch — blocks new entries while risk-reducing
+  target SELL exits keep flowing;
+- stale broker account snapshot — position quantity, cash and exposure are
+  no longer trusted, so ALL new portfolio rebalance decisions pause (buys
+  AND target sells); broker-native protective stops already resting at the
+  broker keep working independently;
+- ownership drift / circuit breakers — halt the runtime outright until a
+  verified reconciliation passes.
 
 The shipped strategies are deliberately limited to two:
 
@@ -103,13 +112,18 @@ refresh, and reconciliation time. Paper and live are visually distinct.
 Paper startup requires valid paper credentials, config, scanner/universe data,
 and operational state. It does not require a research manifest or calendar wait.
 
-A tiny end-to-end PAPER-only smoke (`scripts/paper_smoke.py`) exercises the
-real product path — submit, fill, portfolio ownership, repository restart,
-exit to target zero, ownership release, reconciliation — against the Alpaca
-paper endpoint. It is structurally incapable of touching live: the broker is
-always constructed with `paper=True` (live keys fail the paper endpoint), the
-configuration mode must be `paper`, `PARAYABUCK_ENABLE_LIVE` must not be set,
-and the explicit opt-in `PARAYABUCK_ALLOW_PAPER_SMOKE=YES` is required:
+A PAPER execution lifecycle smoke (`scripts/paper_smoke.py`) exercises the
+broker/repository execution lifecycle — submit, fill, portfolio ownership,
+repository restart, exit to target zero, ownership release, reconciliation —
+against the Alpaca paper endpoint. It validates the execution lifecycle, not
+a full strategy end-to-end run (it does not route through the scanner,
+strategy, risk overlay or planner). Failures are cleanup-safe: smoke-created
+orders are canceled, their terminal state resolved, and only the smoke-owned
+quantity is flattened — never unrelated/manual inventory. It is structurally
+incapable of touching live: the broker is always constructed with
+`paper=True` (live keys fail the paper endpoint), the configuration mode must
+be `paper`, `PARAYABUCK_ENABLE_LIVE` must not be set, and the explicit
+opt-in `PARAYABUCK_ALLOW_PAPER_SMOKE=YES` is required:
 
 ```bash
 PARAYABUCK_ALLOW_PAPER_SMOKE=YES .venv/bin/python scripts/paper_smoke.py

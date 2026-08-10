@@ -230,23 +230,36 @@ class AlpacaHistoricalData:
         market: Market,
     ) -> dict[str, list[Bar]]:
         span = (end_at - start_at).total_seconds()
-        expected_rows = len(symbols) * (span // 60 // minutes)
-        chunk_count = max(1, math.ceil(expected_rows / _MAX_ROWS_PER_REQUEST))
-        # Align chunk boundaries to whole timeframe steps: real bars are
-        # emitted on the timeframe grid, so fractional boundaries would
-        # interleave two time grids across adjacent chunks.
         step_seconds = minutes * 60
-        chunk_seconds = max(step_seconds, int(span / chunk_count // step_seconds) * step_seconds)
+        total_steps = max(1, int(span // step_seconds))
+        # Alpaca caps a single bars response at 10,000 ROWS across every
+        # symbol in the request. Every chunk after the first re-requests the
+        # boundary bar (one overlap bar per symbol) so the seam can never
+        # drop a bar; the row budget must therefore reserve the overlap rows
+        # plus a safety margin BEFORE splitting, otherwise a boundary-tight
+        # request (e.g. 20 symbols x 500 bars) silently truncates.
+        overlap_rows = len(symbols)
+        safety_margin = 100
+        usable_rows_per_chunk = _MAX_ROWS_PER_REQUEST - overlap_rows - safety_margin
+        expected_rows = len(symbols) * total_steps
+        chunk_count = max(1, math.ceil(expected_rows / usable_rows_per_chunk))
+        # Whole-step chunk boundaries keep one time grid across chunks. Each
+        # chunk then carries at most len(symbols) * steps_per_chunk rows plus
+        # the one-bar overlap, which is inside the reserved budget.
+        steps_per_chunk = max(1, total_steps // chunk_count)
+        actual_chunk_count = math.ceil(total_steps / steps_per_chunk)
         overlap = timedelta(minutes=minutes)
         merged: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
-        for index in range(chunk_count):
-            chunk_start = start_at + timedelta(seconds=index * chunk_seconds)
+        for index in range(actual_chunk_count):
+            chunk_start_step = index * steps_per_chunk
+            chunk_end_step = min(total_steps, (index + 1) * steps_per_chunk)
+            chunk_start = start_at + timedelta(seconds=chunk_start_step * step_seconds)
             # The last chunk absorbs the remainder of the window so the
             # floored chunk size never leaves a data tail unfetched.
             chunk_end = (
                 end_at
-                if index == chunk_count - 1
-                else start_at + timedelta(seconds=(index + 1) * chunk_seconds)
+                if index == actual_chunk_count - 1
+                else start_at + timedelta(seconds=chunk_end_step * step_seconds)
             )
             if index > 0:
                 chunk_start = max(start_at, chunk_start - overlap)

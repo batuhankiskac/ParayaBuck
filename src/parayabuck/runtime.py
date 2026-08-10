@@ -29,7 +29,10 @@ from parayabuck.execution.alpaca import (
 )
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+from parayabuck.execution.portfolio import (
+    PortfolioExecutionPolicy,
+    portfolio_risk_limits_from_config,
+)
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -39,8 +42,10 @@ from parayabuck.markets.timeframes import (
 )
 from parayabuck.portfolio import portfolio_strategy_from
 from parayabuck.portfolio.runtime_service import (
+    REBALANCE_PHASE_BLOCKED,
     PortfolioRuntime,
     PortfolioStateRepository,
+    is_terminal_order_status,
 )
 from parayabuck.risk.state import RiskState
 from parayabuck.runtime_state import RuntimeMarketState
@@ -227,10 +232,16 @@ class EngineRuntime:
             Market.EQUITY: self._initial_universe_halt(Market.EQUITY),
             Market.CRYPTO: self._initial_universe_halt(Market.CRYPTO),
         }
-        # Entry-risk latch: reacts to daily-loss/drawdown/account-freshness
-        # breaches on the account-poll cadence. A latched market still runs
-        # decisions, but only risk-reducing SELLs may be planned; entries are
-        # blocked. Ownership drift is stricter: it halts the runtime outright
+        # Entry-risk latch: reacts to daily-loss/drawdown breaches on the
+        # account-poll cadence. A latched market still runs decisions, but
+        # only risk-reducing SELLs may be planned; entries are blocked.
+        # Account freshness is deliberately NOT part of the latch: a stale
+        # broker account snapshot (position quantity/cash/exposure no longer
+        # trusted) pauses ALL new portfolio rebalance decisions — buys AND
+        # target sells — because even a risk-reducing target cannot be sized
+        # safely against unknown positions. Broker-native protective exits
+        # (stops already resting at the broker) keep working regardless.
+        # Ownership drift is stricter still: it halts the runtime outright
         # (a broken ownership model must not be traded against at all).
         self._entry_risk_latch: dict[Market, str | None] = {
             Market.EQUITY: None,
@@ -410,6 +421,44 @@ class EngineRuntime:
     def is_running(self) -> bool:
         return self.health().healthy
 
+    def _market_operationally_relevant(
+        self, market: Market, *, strategy_enabled: dict[Market, bool] | None = None
+    ) -> bool:
+        """Whether a market's scanner/stream/protection health is critical.
+
+        A market is operationally relevant when its strategy is enabled, a
+        managed position exists for it, or an open managed order/protection
+        exists. A completely unobserved market (strategy disabled, no managed
+        positions/orders) is not: its scanner failures are informational.
+        """
+        enabled = strategy_enabled or getattr(self, "_strategy_enabled", {})
+        if enabled.get(market, False):
+            return True
+        broker = getattr(self, "broker", None)
+        account_id = (
+            getattr(broker, "account_id", None) if broker is not None else None
+        ) or "unknown"
+        repository = getattr(self, "_portfolio_repository", None)
+        if repository is not None:
+            try:
+                if repository.owned_symbols(account_id, market):
+                    return True
+                if repository.open_orders(account_id, market):
+                    return True
+            except Exception:
+                # A repository read failure must not corrupt health; the
+                # runtime will surface it through its own fail-closed paths.
+                return True
+        ledger = getattr(self, "ledger", None)
+        if ledger is not None:
+            try:
+                for entry in ledger.managed_entries_for_account(account_id):
+                    if entry.market == market:
+                        return True
+            except Exception:
+                return True
+        return False
+
     def health(self) -> RuntimeHealth:
         now = datetime.now(UTC)
         # Some lightweight diagnostics construct a runtime via ``__new__``.
@@ -475,9 +524,16 @@ class EngineRuntime:
             and (now - self._last_account_at).total_seconds()
             <= self.config.maximum_account_age_for_entry_seconds
         )
+        # A scanner failure is operationally critical only for markets that
+        # are actually relevant: the strategy is enabled, a managed position
+        # exists, or an open managed order/protection exists. A disabled
+        # market with no positions failing its discovery API must not take
+        # the whole trading runtime down — it is informational/degraded.
+        scanner_status = dict(getattr(self, "_universe_refresh_status", {}))
         scanner_degraded = any(
             status in {"refresh_failed", "apply_failed"}
-            for status in getattr(self, "_universe_refresh_status", {}).values()
+            and self._market_operationally_relevant(market)
+            for market, status in ((Market(key), status) for key, status in scanner_status.items())
         )
         healthy = (
             self._running
@@ -535,6 +591,10 @@ class EngineRuntime:
                 "stream_healthy": stream_healthy,
                 "data_gap": (enabled and self._engine_has_market_gap(market)),
                 "entry_halt_reason": getattr(self, "_market_entry_halts", {}).get(market),
+                "scanner_status": scanner_status.get(market.value),
+                "scanner_critical": self._market_operationally_relevant(
+                    market, strategy_enabled=market_enabled
+                ),
             }
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
         last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
@@ -637,6 +697,10 @@ class EngineRuntime:
                 ),
                 account_id=self.broker.account_id or "unknown",
                 live_dollar_cap=configured_live_cap,
+                execution_policy=PortfolioExecutionPolicy(
+                    rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
+                    minimum_order_notional=self.app_config.execution.minimum_order_notional,
+                ),
             )
             for strategy, symbols, maximum_allocation in self._strategy_specs
         )
@@ -656,6 +720,13 @@ class EngineRuntime:
             for runtime in self._portfolio_runtimes:
                 runtime.live_dollar_cap = authorized_live_cap
         self._restore_persistent_state()
+        # Restart recovery: a two-phase rebalance interrupted between phases
+        # must resume here — SELL state is reconciled from the repository, a
+        # fresh account is taken, and the deferred BUY phase continues exactly
+        # once. No duplicate orders: the deferred BUY rows are only created at
+        # submission time with deterministic broker idempotency keys.
+        for runtime in self._portfolio_runtimes:
+            self._advance_portfolio_rebalance(runtime.market)
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
         stocks = sorted(self._symbols_by_market[Market.EQUITY])
@@ -1479,6 +1550,36 @@ class EngineRuntime:
                 exc,
             )
 
+    def _advance_portfolio_rebalance(self, market: Market) -> None:
+        """Advance the persisted two-phase rebalance for one market.
+
+        Called from trade-update callbacks, the bar decision loop and engine
+        startup. A blocked rebalance (ambiguous SELL outcome) halts market
+        entries until a verified reconciliation clears it.
+        """
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            if portfolio_runtime.market != market:
+                continue
+            try:
+                with self._portfolio_lock:
+                    result = portfolio_runtime.advance_rebalance()
+            except Exception as exc:
+                log.error(
+                    "Two-phase rebalance advance failed: market=%s error=%s",
+                    market.value,
+                    exc,
+                )
+                continue
+            if result is not None and result.status == "rebalance_blocked":
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._market_entry_halts[market] = "rebalance_reconciliation_required"
+                log.critical(
+                    "Two-phase rebalance outcome is ambiguous; %s entries halted "
+                    "pending reconciliation (decision=%s)",
+                    market.value,
+                    result.decision_id,
+                )
+
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         portfolio_repository = getattr(self, "_portfolio_repository", None)
         if portfolio_repository is not None and portfolio_repository.has_order(
@@ -1508,6 +1609,11 @@ class EngineRuntime:
             account = await asyncio.to_thread(self.broker.account)
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
+            # A terminal SELL fill may unlock the dependent BUY phase of a
+            # two-phase rebalance: advance it now, event-driven, instead of
+            # waiting for the next bar.
+            market = Market.CRYPTO if is_crypto(update.symbol) else Market.EQUITY
+            await asyncio.to_thread(self._advance_portfolio_rebalance, market)
             return
         # Never adopt orders from the retired signal engine. Broker/local
         # reconciliation reports them as unmanaged drift.
@@ -1928,11 +2034,16 @@ class EngineRuntime:
             ]
             if not relevant:
                 continue
+            # A stale broker account snapshot pauses the whole decision
+            # pipeline for this market: position quantity, cash and exposure
+            # are no longer trusted enough to size ANY new rebalance order —
+            # not even risk-reducing target sells. Broker-native protective
+            # exits (resting stops) continue independently at the broker.
             if self._entry_readiness_reasons(portfolio_runtime.market):
                 continue
-            # An entry-risk latch (daily loss / drawdown / account freshness)
-            # must not freeze the whole decision: risk-reducing SELL exits
-            # still run, only entries are blocked.
+            # An entry-risk latch (daily loss / drawdown) must not freeze the
+            # whole decision: risk-reducing SELL exits still run, only
+            # entries are blocked.
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             try:
                 with self._portfolio_lock:
@@ -1952,6 +2063,17 @@ class EngineRuntime:
                 self._state = "halted"
                 log.exception("Portfolio runtime failed closed: %s", exc)
                 return
+            if portfolio_result.status == "rebalance_blocked":
+                with getattr(self, "_state_lock", threading.RLock()):
+                    self._market_entry_halts[portfolio_runtime.market] = (
+                        "rebalance_reconciliation_required"
+                    )
+                log.critical(
+                    "Two-phase rebalance blocked; %s entries halted pending "
+                    "reconciliation (decision=%s)",
+                    portfolio_runtime.market.value,
+                    portfolio_result.decision_id,
+                )
             log.info(
                 "Portfolio decision: strategy=%s market=%s status=%s orders=%d submitted=%d",
                 portfolio_runtime.strategy.name,
@@ -2195,7 +2317,28 @@ class EngineRuntime:
         thread.start()
 
     def reset_safety_lock(self) -> None:
-        """Acknowledge a recoverable entry lock after broker/data verification."""
+        """Acknowledge a recoverable entry lock after broker/data verification.
+
+        Operator reset may INITIATE the verification action for each market
+        halt, but may never simply erase a halt flag. Each halt category has
+        its own verified recovery condition:
+
+        * ``subscription_state_unknown`` — only a successful authoritative
+          stream resync clears it (initiated here if needed);
+        * ``invalid_dynamic_universe`` — only a valid scanner refresh (or a
+          valid permitted fallback) clears it (initiated here);
+        * ``crypto_protection_failure`` — only a verified protection pass
+          (the successful broker reconciliation above) clears it;
+        * ``ambiguous_crypto_exit`` — only authoritative broker
+          reconciliation proving terminal exit state clears it;
+        * ``{worker}_restart_limit`` — only a verified stream reconnect
+          (worker re-armed and delivering fresh events) clears it;
+        * ``rebalance_reconciliation_required`` — only reconciled repository
+          order state clears it.
+
+        An unverified halt REMAINS ACTIVE while the global circuit breaker
+        clears; the operator is told exactly which halts were retained.
+        """
         recoverable = {
             "ambiguous_order_state",
             "protection_failure",
@@ -2231,8 +2374,7 @@ class EngineRuntime:
             self._circuit_breaker_reason = None
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
-                market_halts[Market.EQUITY] = None
-                market_halts[Market.CRYPTO] = None
+                self._verify_market_halts(market_halts)
             self._entry_risk_latch = {
                 market: None for market in getattr(self, "_entry_risk_latch", {})
             }
@@ -2240,6 +2382,152 @@ class EngineRuntime:
         if self._running and self._state == "halted":
             self._state = "running"
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
+
+    def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:
+        """Clear each market halt only after its specific verified recovery.
+
+        Runs INSIDE the reconcile lock; the successful ``broker.reconcile()``
+        above already verified protection and exit state, so per-halt
+        verifications may rely on it. Unverified halts stay active and are
+        reported to the operator.
+        """
+        retained: list[str] = []
+        for market in (Market.EQUITY, Market.CRYPTO):
+            halt = market_halts.get(market)
+            if halt is None:
+                continue
+            if halt == "subscription_state_unknown":
+                # Only a successful authoritative stream resync clears it.
+                if not getattr(self, "_resync_pending", False):
+                    self._resync_pending = True
+                try:
+                    self._resync_stream_if_needed()
+                except Exception as exc:
+                    retained.append(f"{market.value}:{halt}:{exc}")
+                if market_halts.get(market) == halt:
+                    retained.append(f"{market.value}:{halt}:resync_did_not_clear")
+                continue
+            if halt == "invalid_dynamic_universe":
+                # Only a valid scanner refresh (or a valid permitted
+                # fallback) clears it; the refresh itself re-asserts the halt
+                # on failure.
+                try:
+                    self._refresh_runtime_universes(market)
+                except Exception as exc:
+                    retained.append(f"{market.value}:{halt}:{exc}")
+                if market_halts.get(market) == halt:
+                    retained.append(f"{market.value}:{halt}:refresh_did_not_clear")
+                continue
+            if halt == "crypto_protection_failure":
+                # The broker reconciliation above is the verified protection
+                # pass: it restores managed crypto stops and raises on
+                # failure, so a completed reconcile proves the pass.
+                market_halts[market] = None
+                continue
+            if halt == "ambiguous_crypto_exit":
+                # Only authoritative broker reconciliation proving terminal
+                # exit state clears it; the reconcile above runs
+                # _reconcile_crypto_exit for every in-flight exit and raises
+                # on ambiguity. Verify nothing remains unresolved.
+                if self._crypto_exits_are_terminal():
+                    market_halts[market] = None
+                else:
+                    retained.append(f"{market.value}:{halt}:exit_state_not_terminal")
+                continue
+            if halt.endswith("_restart_limit"):
+                # Only a verified stream reconnect clears it: re-arm the
+                # worker and require it to be alive and (when the market is
+                # live) delivering fresh events.
+                if self._restart_stream_worker(market):
+                    market_halts[market] = None
+                else:
+                    retained.append(f"{market.value}:{halt}:worker_not_delivering")
+                continue
+            if halt == "rebalance_reconciliation_required":
+                if self._rebalance_state_reconciled(market):
+                    market_halts[market] = None
+                else:
+                    retained.append(f"{market.value}:{halt}:rebalance_state_unresolved")
+                continue
+            retained.append(f"{market.value}:{halt}:no_verification_path")
+        if retained:
+            log.warning("Market halts retained pending verification: %s", "; ".join(retained))
+
+    def _crypto_exits_are_terminal(self) -> bool:
+        """True when no crypto managed exit remains in an ambiguous state."""
+        account_id = self.broker.account_id or "unknown"
+        for entry in self.ledger.managed_entries_for_account(account_id):
+            if entry.market != Market.CRYPTO:
+                continue
+            if getattr(entry, "exit_client_order_id", None):
+                target_state = str(getattr(entry, "target_state", ""))
+                if target_state not in {"target_exit_filled", "emergency_exit_filled"}:
+                    return False
+        return True
+
+    def _restart_stream_worker(self, market: Market) -> bool:
+        """Re-arm a restart-limited stream worker and verify delivery.
+
+        A worker that hit its restart limit has exited; the operator reset
+        spawns a fresh worker. The halt clears only when the worker is alive
+        and — while the market is live — delivering fresh stream events.
+        """
+        worker_name = "pb-stocks" if market == Market.EQUITY else "pb-crypto"
+        worker = self._workers.get(worker_name)
+        target = self.stream.run_stock if market == Market.EQUITY else self.stream.run_crypto
+        if worker is None or not worker.alive:
+            if worker is not None:
+                worker.restart_count = 0
+                worker.last_error = None
+            thread = threading.Thread(
+                target=self._run_stream_worker,
+                args=(worker_name, target),
+                name=worker_name,
+                daemon=True,
+            )
+            self._threads.append(thread)
+            thread.start()
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if worker is not None and worker.alive:
+                    break
+                time.sleep(0.05)
+        return self._stream_worker_delivering(market, worker)
+
+    def _stream_worker_delivering(self, market: Market, worker: WorkerHealth | None) -> bool:
+        if worker is None or not worker.alive:
+            return False
+        now = datetime.now(UTC)
+        from parayabuck.markets.timeframes import is_regular_equity_time
+
+        event_required = market == Market.CRYPTO or is_regular_equity_time(now)
+        if not event_required:
+            return True
+        last_event = worker.last_event_at
+        if last_event is None:
+            return False
+        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        return (now - last_event).total_seconds() <= max(180.0, heartbeat_ttl)
+
+    def _rebalance_state_reconciled(self, market: Market) -> bool:
+        """True when the blocked two-phase rebalance for a market is resolved.
+
+        The broker reconciliation above resolves working orders into terminal
+        states; once every order of the blocked decision is terminal the halt
+        can clear and the runtime completes the deferred BUY phase normally.
+        """
+        repository = getattr(self, "_portfolio_repository", None)
+        if repository is None:
+            return True
+        current = repository.current_rebalance_execution(
+            self.broker.account_id or "unknown", market
+        )
+        if current is None or current.phase != REBALANCE_PHASE_BLOCKED:
+            return True
+        orders = repository.orders_for_decision(current.decision_id)
+        return bool(orders) and all(
+            is_terminal_order_status(str(order["status"])) for order in orders
+        )
 
     def _warmup(self) -> None:
         history = AlpacaHistoricalData(
@@ -2288,7 +2576,11 @@ class EngineRuntime:
                 }
                 if not strategy_requirements and not operational:
                     continue
-                requested_bars = max(2, *strategy_requirements)
+                # ``max(2, *[])`` would reduce to ``max(2)`` — a single
+                # argument, which Python tries to iterate. Operational
+                # timeframes with no strategy requirement still need a
+                # baseline window.
+                requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
                 for symbol_batch in _symbol_batches(group):
                     try:
                         batched = history.get_bars_batch(

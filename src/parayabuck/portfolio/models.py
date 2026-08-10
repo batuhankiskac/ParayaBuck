@@ -123,6 +123,41 @@ class TargetPortfolio:
             "metadata": self.metadata,
         }
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> TargetPortfolio:
+        """Reconstruct a persisted decision target (used by rebalance recovery)."""
+        weights = tuple(
+            TargetWeight(
+                symbol=str(weight["symbol"]),
+                weight=float(weight["weight"]),
+                reason=str(weight.get("reason", "")),
+            )
+            for weight in dict(raw).get("weights", ())
+        )
+        raw_timestamp = raw.get("decision_timestamp") or raw.get("timestamp")
+        if raw_timestamp is None:
+            raise ValueError("Target portfolio dict is missing decision_timestamp")
+        timestamp = datetime.fromisoformat(str(raw_timestamp))
+        raw_data_timestamp = raw.get("data_timestamp")
+        return cls(
+            strategy_name=str(raw.get("strategy_name", "")),
+            strategy_version=str(raw.get("strategy_version", "")),
+            decision_timestamp=timestamp,
+            weights=weights,
+            cash_weight=float(raw.get("cash_weight", 0.0)),
+            rebalance_reason=RebalanceReason(str(raw.get("rebalance_reason", "scheduled"))),
+            data_timestamp=(
+                datetime.fromisoformat(str(raw_data_timestamp)) if raw_data_timestamp else None
+            ),
+            universe_version=str(raw.get("universe_version", "")),
+            universe_snapshot_id=str(raw.get("universe_snapshot_id", "")),
+            parameters=tuple(
+                (str(key), value) for key, value in dict(raw.get("parameters", {})).items()
+            ),
+            risk_multiplier=float(raw.get("risk_multiplier", 1.0)),
+            metadata=dict(raw.get("metadata", {})),
+        )
+
 
 @dataclass(frozen=True)
 class RebalancePolicy:
@@ -208,7 +243,16 @@ class PortfolioState:
     pending_target: dict[str, float] = field(default_factory=dict)
     pending_orders: tuple[dict[str, object], ...] = ()
     last_processed_bar: str | None = None
-    schema_version: int = 2
+    # Schema v3: the explicit daily-loss/high-water risk lifecycle. A restart
+    # must resume the same peak equity, day-start equity and session date so
+    # drawdown halts and daily-loss behavior are identical to an uninterrupted
+    # run. None means "unknown (pre-v3 state)": the engine seeds them from the
+    # starting equity exactly once.
+    peak_equity: float | None = None
+    day_start_equity: float | None = None
+    last_observed_equity: float | None = None
+    risk_session_date: str | None = None
+    schema_version: int = 3
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -232,6 +276,10 @@ class PortfolioState:
             "pending_target": self.pending_target,
             "pending_orders": list(self.pending_orders),
             "last_processed_bar": self.last_processed_bar,
+            "peak_equity": self.peak_equity,
+            "day_start_equity": self.day_start_equity,
+            "last_observed_equity": self.last_observed_equity,
+            "risk_session_date": self.risk_session_date,
         }
 
     @classmethod
@@ -268,6 +316,18 @@ class PortfolioState:
             pending_orders=pending_orders,
             last_processed_bar=(
                 str(raw["last_processed_bar"]) if raw.get("last_processed_bar") else None
+            ),
+            peak_equity=(float(raw["peak_equity"]) if raw.get("peak_equity") is not None else None),
+            day_start_equity=(
+                float(raw["day_start_equity"]) if raw.get("day_start_equity") is not None else None
+            ),
+            last_observed_equity=(
+                float(raw["last_observed_equity"])
+                if raw.get("last_observed_equity") is not None
+                else None
+            ),
+            risk_session_date=(
+                str(raw["risk_session_date"]) if raw.get("risk_session_date") else None
             ),
             schema_version=int(raw.get("schema_version", 1)),
         )

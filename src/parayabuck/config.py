@@ -157,6 +157,22 @@ class BacktestConfig:
 
 
 @dataclass(frozen=True)
+class ExecutionConfig:
+    """Shared order-existence policy: identical semantics for backtest, paper
+    and live. Values change order behavior, so they are part of the
+    configuration digest and the live operator authorization digest."""
+
+    rebalance_band_pct: float = 0.005
+    minimum_order_notional: float = 10.0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.rebalance_band_pct < 1:
+            raise ValueError("execution.rebalance_band_pct must be in [0, 1)")
+        if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
+            raise ValueError("execution.minimum_order_notional must be non-negative")
+
+
+@dataclass(frozen=True)
 class RiskLimits:
     max_position_pct: float = 0.10
     max_crypto_exposure_pct: float = 0.10
@@ -514,6 +530,7 @@ class Config:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     live: LiveConfig = field(default_factory=LiveConfig)
     engine: EngineConfig = field(default_factory=EngineConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -689,6 +706,7 @@ def load_config(config_path: str | None = None) -> Config:
         backtest=BacktestConfig(**dict(raw.get("backtest", {}))),
         live=LiveConfig(**dict(raw.get("live", {}))),
         engine=EngineConfig(**engine_raw),
+        execution=ExecutionConfig(**dict(raw.get("execution", {}))),
     )
 
 
@@ -702,6 +720,7 @@ __all__ = [
     "DataConfig",
     "EngineConfig",
     "EquityUniverseConfig",
+    "ExecutionConfig",
     "LiveConfig",
     "MarketStrategyConfig",
     "RiskLimits",

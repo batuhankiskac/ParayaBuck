@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
-"""Tiny end-to-end PAPER-ONLY trading smoke.
+"""PAPER execution lifecycle smoke.
 
-Exercises the real product path against the Alpaca PAPER endpoint:
+Exercises the real broker/repository execution lifecycle against the Alpaca
+PAPER endpoint:
 
     submit -> fill -> portfolio ownership -> restart -> target zero -> exit
     -> ownership release -> reconciliation
+
+SCOPE: this validates the broker + repository execution lifecycle (order
+submission, idempotency, ownership bookkeeping, restart persistence, exit and
+reconciliation). It does NOT route through the scanner, strategy, risk
+overlay or planner, so it is NOT a full strategy end-to-end test.
+
+CLEANUP: failures are cleanup-safe. Smoke-created order ids and the
+smoke-owned filled quantity are tracked; on failure the script best-effort
+cancels ONLY smoke-created open orders, resolves their terminal state,
+flattens ONLY the smoke-owned quantity (never unrelated/manual inventory),
+reconciles the repository and prints a loud manual-cleanup instruction when
+automatic cleanup is ambiguous.
 
 This script is structurally incapable of targeting live credentials:
 
@@ -14,7 +27,8 @@ This script is structurally incapable of targeting live credentials:
 * ``PARAYABUCK_ENABLE_LIVE`` must not be ``YES``;
 * an explicit opt-in is required: ``PARAYABUCK_ALLOW_PAPER_SMOKE=YES``.
 
-No live order can ever be placed by this script.
+No live order can ever be placed by this script, and no CLI flag can change
+that.
 """
 
 from __future__ import annotations
@@ -47,6 +61,7 @@ from parayabuck.portfolio.runtime_service import PortfolioStateRepository  # noq
 SMOKE_SYMBOL = "AAPL"
 SMOKE_SHARES = 1.0
 FILL_TIMEOUT_SECONDS = 45.0
+SMOKE_ORDER_PREFIX = "pbp-smoke-"
 
 
 def _fail(message: str) -> int:
@@ -96,6 +111,37 @@ def _wait_for_fill(broker: AlpacaBroker, client_order_id: str) -> tuple[float, f
             raise RuntimeError(f"Order terminated without filling: {client_order_id} ({status})")
         time.sleep(0.5)
     raise RuntimeError(f"Fill timeout for {client_order_id}; last status={last_status}")
+
+
+def _poll_terminal(broker: AlpacaBroker, client_order_id: str, timeout: float = 20.0) -> str:
+    """Poll one order to a terminal state; returns the last observed status
+    (which may be non-terminal when the timeout expires = ambiguous)."""
+    get_by_client = broker._client.get_order_by_client_id
+    deadline = time.monotonic() + timeout
+    last_status = "new"
+    while time.monotonic() < deadline:
+        try:
+            order = get_by_client(client_order_id)
+        except Exception as exc:
+            last_status = f"lookup_error:{exc}"
+            time.sleep(0.5)
+            continue
+        status = str(getattr(order, "status", "")).lower().split(".")[-1]
+        last_status = status
+        if status in {"filled", "canceled", "cancelled", "rejected", "expired"}:
+            return status
+        time.sleep(0.5)
+    return last_status
+
+
+def _cancel_by_client_id(broker: AlpacaBroker, client_order_id: str) -> None:
+    """Cancel one broker order by its client id (raises on failure)."""
+    get_by_client = broker._client.get_order_by_client_id
+    order = get_by_client(client_order_id)
+    order_id = str(getattr(order, "id", "") or "")
+    if not order_id:
+        raise RuntimeError(f"order {client_order_id} has no broker id")
+    broker._client.cancel_order_by_id(order_id)
 
 
 def _book_fill(
@@ -153,7 +199,7 @@ def _submit_and_wait(
         Market.EQUITY,
     )
     order = PortfolioOrderRequest(
-        client_order_id=f"pbp-smoke-{tag}-{decision_id[:8]}",
+        client_order_id=f"{SMOKE_ORDER_PREFIX}{tag}-{decision_id[:8]}",
         decision_id=decision_id,
         symbol=SMOKE_SYMBOL,
         market=Market.EQUITY,
@@ -178,6 +224,126 @@ def _submit_and_wait(
         activity_id=f"smoke-{tag}-{datetime.now(UTC).timestamp()}",
     )
     return filled_qty, avg_price
+
+
+def _manual_cleanup_instructions(account_id: str) -> None:
+    print("=" * 72)
+    print("PAPER SMOKE MANUAL CLEANUP REQUIRED")
+    print("Automatic cleanup is ambiguous; inspect the PAPER account manually:")
+    print(f"  account: ...{account_id[-4:] if account_id else 'unknown'}")
+    print(f"  symbol : {SMOKE_SYMBOL} (PAPER environment only)")
+    print(
+        "  1. Cancel any remaining open PAPER orders for the smoke client ids "
+        f"(prefix {SMOKE_ORDER_PREFIX})."
+    )
+    print(f"  2. If the PAPER position in {SMOKE_SYMBOL} is still open, sell it back to zero.")
+    print("  3. Do NOT touch unrelated manual inventory or other symbols.")
+    print("=" * 72)
+
+
+def _cleanup(
+    repo: PortfolioStateRepository,
+    broker: AlpacaBroker,
+    *,
+    account_id: str,
+    session_id: str,
+    digest: str,
+) -> None:
+    """Best-effort cleanup of smoke-created orders/positions after a failure.
+
+    1. cancel ONLY smoke-created open orders;
+    2. resolve their terminal state (bounded poll);
+    3. flatten ONLY the smoke-owned quantity (a SELL capped at the smoke net,
+       never unrelated/manual inventory);
+    4. reconcile the repository;
+    5. print loud manual instructions when automatic cleanup is ambiguous.
+    """
+    print("PAPER SMOKE CLEANUP (best-effort):")
+    ambiguous: list[str] = []
+
+    def is_smoke(client_order_id: str) -> bool:
+        return client_order_id.startswith(SMOKE_ORDER_PREFIX)
+
+    # 1+2. cancel and resolve only smoke-created open orders.
+    try:
+        for order in repo.open_orders(account_id, Market.EQUITY):
+            if not is_smoke(order.client_order_id):
+                continue
+            try:
+                _cancel_by_client_id(broker, order.client_order_id)
+                print(f"  canceled open smoke order {order.client_order_id}")
+            except Exception as exc:
+                print(f"  cancel failed for {order.client_order_id}: {exc}")
+    except Exception as exc:
+        print(f"  could not enumerate open orders for cleanup: {exc}")
+        ambiguous.append("open_order_enumeration")
+    try:
+        for order in repo.open_orders(account_id, Market.EQUITY):
+            if not is_smoke(order.client_order_id):
+                continue
+            terminal = _poll_terminal(broker, order.client_order_id)
+            print(f"  smoke order {order.client_order_id} terminal={terminal}")
+            if terminal not in {"filled", "canceled", "cancelled", "rejected", "expired"}:
+                ambiguous.append(f"unresolved_order:{order.client_order_id}:{terminal}")
+    except Exception as exc:
+        print(f"  terminal-state resolution failed: {exc}")
+        ambiguous.append("terminal_resolution")
+
+    # 3. flatten ONLY the smoke-owned quantity. Smoke is the only managed
+    # holder of the symbol (preflight guarantees a flat start), so the repo's
+    # net owned quantity IS the smoke-owned quantity; the SELL is still capped
+    # by the broker position so unrelated/manual inventory is never touched.
+    try:
+        smoke_owned = repo.owned_quantities(account_id).get(SMOKE_SYMBOL, 0.0)
+        broker_position = broker._position_qty(SMOKE_SYMBOL)
+        if smoke_owned > 1e-6:
+            print(
+                f"  smoke-owned quantity {smoke_owned:.4f}; broker position {broker_position:.4f}"
+            )
+            if broker_position < smoke_owned - 1e-6:
+                ambiguous.append(f"broker_position_below_smoke_owned:{broker_position}")
+                print(
+                    "  WARNING: broker position is below the smoke-owned quantity; "
+                    "automatic flatten would oversell, skipping."
+                )
+            else:
+                flatten_qty = min(smoke_owned, broker_position)
+                if flatten_qty > 0:
+                    try:
+                        _submit_and_wait(
+                            repo,
+                            broker,
+                            account_id=account_id,
+                            session_id=session_id,
+                            digest=digest,
+                            side=PortfolioOrderSide.SELL,
+                            quantity=flatten_qty,
+                            decision_timestamp=datetime.now(UTC),
+                            tag="cleanup",
+                        )
+                        print(f"  flattened {flatten_qty:.4f} {SMOKE_SYMBOL}")
+                    except Exception as exc:
+                        print(f"  flatten failed: {exc}")
+                        ambiguous.append("flatten_failed")
+        else:
+            print("  no smoke-owned quantity to flatten")
+    except Exception as exc:
+        print(f"  flatten assessment failed: {exc}")
+        ambiguous.append("flatten_assessment")
+
+    # 4. reconcile the repository (PAPER).
+    try:
+        broker.reconcile()
+        print("  repository reconciled")
+    except Exception as exc:
+        print(f"  reconciliation failed: {exc}")
+        ambiguous.append("reconcile_failed")
+
+    if ambiguous:
+        print("  ambiguous outcomes: " + "; ".join(ambiguous))
+        _manual_cleanup_instructions(account_id)
+    else:
+        print("  automatic cleanup complete (no ambiguous outcomes)")
 
 
 def main() -> int:
@@ -206,6 +372,8 @@ def main() -> int:
         ),
     )
     account_id = ""
+    session_id = ""
+    digest = "paper-smoke-v1"
     try:
         account = broker.account()
         account_id = broker.account_id or "unknown"
@@ -229,7 +397,6 @@ def main() -> int:
                 f"({preflight_held[0].qty}); refusing to double the position"
             )
 
-        digest = "paper-smoke-v1"
         session_id = repo.begin_session(account_id, digest, "paper")
 
         # 1. submit + fill (BUY)
@@ -298,6 +465,7 @@ def main() -> int:
         # 4. reconciliation: no drift, no anomalies, broker flat
         broker.reconcile()
         anomalies = repo.ownership_adjustments(account_id)
+
         account = broker.account()
         flat = not any(
             not p.is_flat and p.market == Market.EQUITY and p.symbol == SMOKE_SYMBOL
@@ -316,6 +484,17 @@ def main() -> int:
         )
         return 0
     except Exception as exc:
+        try:
+            _cleanup(
+                repo,
+                broker,
+                account_id=account_id,
+                session_id=session_id,
+                digest=digest,
+            )
+        except Exception as cleanup_exc:
+            print(f"  cleanup itself failed: {cleanup_exc}")
+            _manual_cleanup_instructions(account_id)
         return _fail(f"{type(exc).__name__}: {exc}")
     finally:
         try:

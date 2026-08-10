@@ -445,6 +445,80 @@ class _WebSocketManagerStub:
         return not ticket or ticket == "valid-ticket"
 
 
+def _bare_engine_manager(state: str) -> server.EngineManager:
+    engine = server.EngineManager.__new__(server.EngineManager)
+    engine.config_path = None
+    engine.engine_state = state
+    engine.runtime = None
+    engine._state_lock = threading.RLock()
+    return engine
+
+
+def test_web_backtest_refused_while_engine_active(monkeypatch: Any) -> None:
+    """A Web backtest must not start while the trading engine is active."""
+    engine = _bare_engine_manager("running")
+    monkeypatch.setattr(server, "manager", engine)
+    with pytest.raises(ValueError, match="stop the engine first"):
+        server.backtest_manager.start({"market": "equity"})
+    # The engine singleton stays untouched by the refused start.
+    assert server.backtest_manager.state == "idle"
+
+
+def test_web_backtest_allowed_when_engine_stopped(monkeypatch: Any) -> None:
+    """With the engine stopped, the Web backtest starts normally."""
+    engine = _bare_engine_manager("stopped")
+    monkeypatch.setattr(server, "manager", engine)
+
+    class _FakeThread:
+        def __init__(self, target=None, args=(), kwargs=None, **extra) -> None:
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+            self.started = False
+
+        def start(self) -> None:
+            self.started = True
+
+        def is_alive(self) -> bool:
+            return False
+
+    original_factory = server.backtest_manager._thread_factory
+    try:
+        server.backtest_manager._thread_factory = _FakeThread
+        run_id = server.backtest_manager.start({"market": "equity"})
+        assert run_id.startswith("web-")
+        assert server.backtest_manager.state == "running"
+    finally:
+        server.backtest_manager._thread_factory = original_factory
+        server.backtest_manager.state = "idle"
+        server.backtest_manager._thread = None
+
+
+def test_engine_start_refused_while_web_backtest_running(monkeypatch: Any) -> None:
+    """The engine must not start while a Web backtest is running."""
+    manager = server.EngineManager()
+    monkeypatch.setattr(
+        server.backtest_manager.__class__, "is_running", property(lambda self: True)
+    )
+    with pytest.raises(ValueError, match="Web backtest is still running"):
+        manager.start_engine()
+    assert manager.engine_state == "stopped"
+
+
+def test_engine_start_allowed_when_web_backtest_idle(monkeypatch: Any) -> None:
+    """An idle backtest manager does not block engine start (no credentials:
+    the start fails for the credentials reason, not the backtest reason)."""
+    manager = server.EngineManager()
+    manager.env_path = Path("/nonexistent/.env")
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
+    monkeypatch.setattr(
+        server.backtest_manager.__class__, "is_running", property(lambda self: False)
+    )
+    with pytest.raises(ValueError, match="Alpaca API key/secret missing"):
+        manager.start_engine()
+
+
 def test_websocket_stream_detects_dead_browser_and_cleans_up(monkeypatch: Any) -> None:
     manager = _WebSocketManagerStub()
     monkeypatch.setattr(server, "manager", manager)
@@ -666,6 +740,120 @@ def test_readyz_reports_ready_when_no_runtime_is_expected(monkeypatch: Any) -> N
     payload = json.loads(response.body)
     assert payload["ready"] is True
     assert payload["runtime_expected"] is False
+    assert response.status_code == 200
+
+
+def test_readyz_config_invalid_returns_503(monkeypatch: Any) -> None:
+    """A configuration that fails to parse is never ready."""
+
+    class BadConfigManager:
+        config_path = None
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def has_active_runtime(self) -> bool:
+            return False
+
+        @property
+        def runtime(self) -> Any:
+            return None
+
+    monkeypatch.setattr(server, "manager", BadConfigManager())
+    monkeypatch.setattr(
+        server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml"))
+    )
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["ready"] is False
+    assert payload["config_valid"] is False
+    assert payload["process_alive"] is True
+    assert response.status_code == 503
+
+
+def test_readyz_auto_start_failure_returns_503(monkeypatch: Any) -> None:
+    """auto_start_engine=true + paper mode + engine ended in error: the config
+    parses but the deployment is NOT trading, so /readyz is 503."""
+    from parayabuck.config import Config
+
+    class FailedStartManager:
+        config_path = None
+
+        def current_engine_state(self) -> str:
+            return "error"
+
+        def has_active_runtime(self) -> bool:
+            return False
+
+        @property
+        def runtime(self) -> Any:
+            return None
+
+    monkeypatch.setattr(server, "manager", FailedStartManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: Config())
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["config_valid"] is True
+    assert payload["trading_expected"] is True
+    assert payload["trading_ready"] is False
+    assert payload["ready"] is False
+    assert response.status_code == 503
+
+
+def test_readyz_healthy_running_runtime_returns_200(monkeypatch: Any) -> None:
+    from parayabuck.config import Config
+
+    class HealthyManager:
+        config_path = None
+
+        def current_engine_state(self) -> str:
+            return "running"
+
+        def has_active_runtime(self) -> bool:
+            return True
+
+        @property
+        def runtime(self) -> Any:
+            health = SimpleNamespace(state="running", healthy=True)
+            return SimpleNamespace(health=lambda: health)
+
+    monkeypatch.setattr(server, "manager", HealthyManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: Config())
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["ready"] is True
+    assert payload["trading_expected"] is True
+    assert payload["trading_ready"] is True
+    assert response.status_code == 200
+
+
+def test_readyz_intentional_stop_control_plane_ready(monkeypatch: Any) -> None:
+    """Control-plane-only mode (auto_start_engine=false, engine intentionally
+    stopped): trading is NOT expected and the control plane is ready. This is
+    an explicit semantic, never an accident of ``runtime is None``."""
+    from parayabuck.config import AppConfig, Config
+
+    class StoppedManager:
+        config_path = None
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def has_active_runtime(self) -> bool:
+            return False
+
+        @property
+        def runtime(self) -> Any:
+            return None
+
+    monkeypatch.setattr(server, "manager", StoppedManager())
+    monkeypatch.setattr(
+        server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False))
+    )
+    response = asyncio.run(server.readyz())
+    payload = json.loads(response.body)
+    assert payload["ready"] is True
+    assert payload["trading_expected"] is False
     assert response.status_code == 200
 
 

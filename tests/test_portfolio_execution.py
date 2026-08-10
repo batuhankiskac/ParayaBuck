@@ -335,13 +335,14 @@ def test_risk_overlay_caps_managed_exposure_not_external() -> None:
     )
     assert "exposure_scaled_to_limit" in decision.reasons
     weights = {weight.symbol: weight.weight for weight in decision.target.weights}
-    # Managed desired 0.50 is scaled to the managed limit 0.40: AAPL 0.24
-    # (0.10 of it external), QQQ 0.24.
-    assert weights["AAPL"] == pytest.approx(0.24)
+    # Managed desired 0.50 is scaled to the managed limit 0.40 (scale 0.8).
+    # Only the MANAGED portion scales: AAPL = 0.10 external + 0.20*0.8 = 0.26,
+    # QQQ = 0.30*0.8 = 0.24. External inventory is never scaled.
+    assert weights["AAPL"] == pytest.approx(0.26)
     assert weights["QQQ"] == pytest.approx(0.24)
-    # Actual expected account gross: AAPL total 0.24 + QQQ 0.24.
-    assert decision.gross_after == pytest.approx(0.48)
-    assert decision.target.metadata["risk_overlay_managed_exposure"] == pytest.approx(0.38)
+    # Actual expected account gross: AAPL total 0.26 + QQQ 0.24.
+    assert decision.gross_after == pytest.approx(0.50)
+    assert decision.target.metadata["risk_overlay_managed_exposure"] == pytest.approx(0.40)
 
 
 def test_gross_after_matches_expected_account_gross_for_mixed_inventory() -> None:

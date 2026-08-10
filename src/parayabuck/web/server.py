@@ -62,6 +62,24 @@ class BacktestManager:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
+            # Mutual exclusion with the trading runtime: a large in-process
+            # backtest must never starve live/PAPER workers. The engine state
+            # is read at call time so tests can monkeypatch the singleton.
+            engine = manager
+            engine_state = engine.current_engine_state() if engine is not None else "stopped"
+            if engine_state in {
+                "starting",
+                "running",
+                "warming_up",
+                "degraded",
+                "halted",
+                "stopping",
+                "stop_failed",
+            }:
+                raise ValueError(
+                    "A Web backtest cannot start while the trading engine is "
+                    f"active ({engine_state}); stop the engine first"
+                )
             self.state = "running"
             self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
             self.output_dir = str(Path("reports") / self.run_id)
@@ -463,6 +481,13 @@ class EngineManager:
         )
 
     def start_engine(self) -> None:
+        # Mutual exclusion with the Web backtest runner: the engine must not
+        # start while an expensive in-process backtest is using the process.
+        if backtest_manager.is_running:
+            raise ValueError(
+                "A Web backtest is still running; wait for it to finish "
+                "before starting the trading engine"
+            )
         with self._state_lock:
             if self.runtime is not None or self.engine_state in {
                 "starting",
@@ -1094,28 +1119,60 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/readyz")
 async def readyz() -> JSONResponse:
-    """Configuration/runtime readiness, distinct from process liveness."""
+    """Deployment/trading readiness, distinct from /healthz process liveness.
+
+    Distinguishes the four readiness layers:
+    * process alive        — /healthz (this endpoint implies it);
+    * configuration valid  — ``config_valid`` (parsing is not enough);
+    * trading expected     — the configuration intends an engine to trade
+      (``auto_start_engine`` in paper mode, or live arming);
+    * trading ready        — the expected runtime is actually healthy.
+
+    A failed automatic engine start (``auto_start_engine: true`` but the
+    engine ended in the error state) is NOT ready: the configuration parsed,
+    but the deployment expected trading and is not trading. An operator who
+    intentionally stopped the engine leaves ``trading_expected`` false and
+    the control plane ready; readiness is never accidentally derived from
+    ``runtime is None``.
+    """
     try:
-        load_config(str(manager.config_path))
+        cfg = load_config(str(manager.config_path))
         config_valid = True
         config_error = None
     except Exception as exc:
         config_valid = False
         config_error = str(exc)
+        cfg = None
+    engine_state = manager.current_engine_state()
     runtime = getattr(manager, "runtime", None)
     health = runtime.health() if runtime is not None and hasattr(runtime, "health") else None
-    # A runtime that exists (or is still transitioning) is expected to trade.
-    # degraded/halted/stopping runtimes must NOT be reported ready just
-    # because the config parses; /healthz already covers process liveness.
-    runtime_expected = manager.has_active_runtime()
     trading_ready = bool(health and health.healthy)
-    ready = config_valid and (not runtime_expected or trading_ready)
+    app_config = getattr(cfg, "app", None) if cfg is not None else None
+    runtime_config = getattr(cfg, "runtime", None) if cfg is not None else None
+    configured_mode = getattr(runtime_config, "mode", None) if runtime_config is not None else None
+    configured_to_trade = bool(
+        app_config is not None
+        and configured_mode is not None
+        and getattr(app_config, "auto_start_engine", False)
+        and configured_mode.value == "paper"
+    )
+    engine_error = engine_state == "error"
+    # A failed auto-start (or any unexpected engine error while trading is
+    # expected) is a 503: the config parses but the deployment is not
+    # trading. An intentional operator stop (or auto_start_engine=false)
+    # means trading is not expected and the control plane is ready.
+    trading_expected = configured_to_trade or manager.has_active_runtime() or engine_error
+    ready = config_valid and (not trading_expected or trading_ready)
     return JSONResponse(
         {
             "ready": ready,
+            "process_alive": True,
             "config_valid": config_valid,
+            "trading_expected": trading_expected,
             "trading_ready": trading_ready,
-            "runtime_expected": runtime_expected,
+            "engine_state": engine_state,
+            # Legacy alias for older probes.
+            "runtime_expected": manager.has_active_runtime(),
             "error": config_error,
         },
         status_code=200 if ready else 503,

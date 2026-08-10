@@ -58,6 +58,29 @@ class PortfolioOrderRequest:
 
 
 @dataclass(frozen=True)
+class PortfolioExecutionPolicy:
+    """Shared order-existence policy consumed by backtest, paper and live.
+
+    The exact same (target, current) pair must result in the same decision
+    about whether an order SHOULD EXIST in BACKTEST, PAPER and LIVE. Fill
+    mechanics may differ; order-existence policy must not. ``rebalance_band``
+    skips sub-band drift so backtest and production do not diverge on small
+    turnover, and ``minimum_order_notional`` is the floor for a produced
+    order (production also enforces the broker-authoritative minimum, which
+    is at least as large).
+    """
+
+    rebalance_band_pct: float = 0.005
+    minimum_order_notional: float = 10.0
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.rebalance_band_pct < 1:
+            raise ValueError("rebalance_band_pct must be in [0, 1)")
+        if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
+            raise ValueError("minimum_order_notional must be finite and non-negative")
+
+
+@dataclass(frozen=True)
 class PortfolioRiskLimits:
     daily_loss_limit: float = 0.005
     drawdown_halt: float = 0.05
@@ -165,16 +188,23 @@ class PortfolioRiskOverlay:
             if market == Market.CRYPTO
             else self.limits.maximum_equity_asset
         )
+        # Immutable external inventory per symbol: never sellable, never
+        # scaled. The strategy's total desired weight for a mixed symbol is
+        # split internally into external_floor + managed_desired; only the
+        # managed part is mutable by the bot.
+        external_weight_by_symbol: dict[str, float] = {}
+        for position in account.positions:
+            if position.is_flat or position.external_qty <= 1e-12:
+                continue
+            symbol = canonical_symbol(position.symbol, position.market)
+            external_weight_by_symbol[symbol] = (
+                external_weight_by_symbol.get(symbol, 0.0)
+                + abs(position.external_qty) * position.current_price / equity
+            )
         for symbol in list(desired):
             desired[symbol] = min(desired[symbol], per_asset)
             current = current_weights.get(symbol, 0.0)
-            external_weight = sum(
-                abs(position.external_qty) * position.current_price / equity
-                for position in account.positions
-                if canonical_symbol(position.symbol, position.market) == symbol
-                and position.external_qty > 1e-12
-                and not position.is_flat
-            )
+            external_weight = external_weight_by_symbol.get(symbol, 0.0)
             managed_weight = sum(
                 abs(position.managed_qty) * position.current_price / equity
                 for position in account.positions
@@ -190,6 +220,11 @@ class PortfolioRiskOverlay:
                 # position and consume a portfolio slot.
                 desired.pop(symbol)
                 continue
+            if external_weight > per_asset and external_weight > desired[symbol]:
+                # A total-per-symbol limit exceeded solely by immutable manual
+                # inventory: never sell the manual inventory, block new managed
+                # additions and surface the violation.
+                halted_reasons.append(f"external_exceeds_asset_limit:{symbol}")
             if halted:
                 desired[symbol] = min(desired[symbol], current)
             # External quantities are exposure, never inventory this runtime
@@ -241,7 +276,16 @@ class PortfolioRiskOverlay:
         )
         if managed_desired > managed_limit and managed_desired > 0:
             scale = managed_limit / managed_desired
-            desired = {symbol: weight * scale for symbol, weight in desired.items()}
+            # Scale ONLY the managed desired exposure of each symbol. The
+            # external floor is immutable inventory and must never shrink as
+            # part of the bot's allocation. final = external_floor +
+            # managed_desired * scale, so the managed sleeve lands exactly on
+            # the limit while external exposure is preserved.
+            desired = {
+                symbol: external_weight_by_symbol.get(symbol, 0.0)
+                + max(0.0, weight - external_weight_by_symbol.get(symbol, 0.0)) * scale
+                for symbol, weight in desired.items()
+            }
             halted_reasons.append("exposure_scaled_to_limit")
         weights = tuple(
             TargetWeight(symbol, weight, "portfolio_risk_overlay")
@@ -284,6 +328,9 @@ class PortfolioRiskOverlay:
 
 
 class TargetToOrderPlanner:
+    def __init__(self, policy: PortfolioExecutionPolicy | None = None) -> None:
+        self.policy = policy or PortfolioExecutionPolicy()
+
     def plan(
         self,
         target: TargetPortfolio,
@@ -331,6 +378,13 @@ class TargetToOrderPlanner:
             current_qty = position.qty if position is not None else 0.0
             managed_qty = position.managed_qty if position is not None else 0.0
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
+            current_weight = current_qty * price / account.equity if account.equity > 0 else 0.0
+            target_weight = target_weights.get(symbol, 0.0)
+            # Shared execution policy: sub-band drift produces no order in
+            # backtest, paper OR live. This keeps turnover/cost parity between
+            # the historical simulator and the live broker path.
+            if abs(target_weight - current_weight) < self.policy.rebalance_band_pct:
+                continue
             delta = target_qty - current_qty
             if delta < 0:
                 # The bot may only sell its own (managed) units; manual
@@ -353,7 +407,9 @@ class TargetToOrderPlanner:
                 quantity = _floor_increment(quantity, rule.quantity_increment)
             if quantity < rule.minimum_order_size:
                 continue
-            if quantity * price < rule.minimum_order_notional:
+            if quantity * price < max(
+                self.policy.minimum_order_notional, rule.minimum_order_notional
+            ):
                 continue
             orders.append(
                 PortfolioOrderRequest(
@@ -405,6 +461,7 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide) ->
 
 __all__ = [
     "AssetTradingRules",
+    "PortfolioExecutionPolicy",
     "PortfolioOrderRequest",
     "PortfolioOrderSide",
     "PortfolioRiskLimits",

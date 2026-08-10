@@ -1,0 +1,386 @@
+"""Two-phase portfolio rebalance lifecycle tests.
+
+A decision with both SELL and BUY legs must submit the risk-reducing sells
+first and the dependent buys only after every required sell is terminal AND a
+fresh account snapshot proves the remaining exposure is safe. The lifecycle
+is persisted so a process restart between phases resumes exactly once.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
+from parayabuck.execution.portfolio import (
+    AssetTradingRules,
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+    PortfolioRiskLimits,
+)
+from parayabuck.portfolio.base import PortfolioContext
+from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
+from parayabuck.portfolio.runtime_service import (
+    PortfolioRuntime,
+    PortfolioStateRepository,
+)
+
+
+class _FixedTargetStrategy:
+    name = "fixed_target"
+    version = "1.0.0"
+    market = Market.EQUITY
+    timeframe = "1d"
+    minimum_history_bars = 1
+
+    def __init__(self, targets: dict[str, float]) -> None:
+        self._targets = targets
+        self.parameters = {"targets": dict(targets)}
+
+    def parameter_tuple(self) -> tuple[tuple[str, object], ...]:
+        return tuple(sorted(self.parameters.items()))
+
+    def requires_intermediate_risk_rebalance(self, context: PortfolioContext) -> bool:
+        return True
+
+    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+        weights = tuple(TargetWeight(symbol, w) for symbol, w in self._targets.items())
+        return TargetPortfolio(
+            strategy_name=self.name,
+            strategy_version=self.version,
+            decision_timestamp=context.decision_timestamp,
+            weights=weights,
+            cash_weight=1.0 - sum(self._targets.values()),
+            universe_version="test",
+        )
+
+
+class _SimBroker:
+    """Controlled paper broker.
+
+    The position map is owned by the test: after applying a fill through the
+    repository the test mutates ``positions``/``open_symbols`` to simulate
+    what the real broker would report, exactly like a live fill changes the
+    broker-side account.
+    """
+
+    def __init__(self, positions: tuple[PositionSnapshot, ...] = ()) -> None:
+        self.positions = list(positions)
+        self.open_symbols: set[str] = set()
+        self.submitted: list[PortfolioOrderRequest] = []
+
+    def account(self) -> AccountSnapshot:
+        equity = 100_000.0
+        value = sum(position.market_value for position in self.positions)
+        return AccountSnapshot(
+            cash=equity - value,
+            equity=equity,
+            peak_equity=equity,
+            daily_pnl=0.0,
+            positions=tuple(self.positions),
+        )
+
+    def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
+        return AssetTradingRules(symbol, market, 1.0, 1.0, 0.01, 10.0)
+
+    def all_open_order_symbols(self) -> set[str]:
+        return set(self.open_symbols)
+
+    def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
+        if order.symbol in self.open_symbols:
+            raise ValueError(f"Open order already exists for {order.symbol}")
+        self.submitted.append(order)
+        self.open_symbols.add(order.symbol)
+        return "broker-" + order.client_order_id
+
+
+def _runtime(
+    tmp_path,
+    broker: _SimBroker,
+    targets: dict[str, float],
+    *,
+    mode: str = "paper",
+    cap: float = 0.0,
+    limits: PortfolioRiskLimits | None = None,
+) -> tuple[PortfolioRuntime, PortfolioStateRepository]:
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime = PortfolioRuntime(
+        _FixedTargetStrategy(targets),
+        tuple(sorted(targets)),
+        broker,
+        repository,
+        mode=mode,
+        maximum_allocation=0.50,
+        risk_limits=limits,
+        live_dollar_cap=cap,
+        account_id="acct",
+    )
+    return runtime, repository
+
+
+def _bars(symbols: tuple[str, ...], *, day: datetime | None = None) -> list[Bar]:
+    timestamp = day or datetime(2025, 1, 1, tzinfo=UTC)
+    return [
+        Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY)
+        for symbol in symbols
+    ]
+
+
+def _fill(
+    repository: PortfolioStateRepository,
+    order: PortfolioOrderRequest,
+    *,
+    cumulative: float | None = None,
+    status: str = "fill",
+    activity_id: str = "activity-1",
+) -> None:
+    repository.apply_trade_update(
+        client_order_id=order.client_order_id,
+        broker_order_id="broker-" + order.client_order_id,
+        status=status,
+        cumulative_filled_quantity=(cumulative if cumulative is not None else order.quantity),
+        average_fill_price=order.reference_price,
+        occurred_at=order.decision_timestamp,
+        activity_id=activity_id,
+        fee=0.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+
+
+def _position(symbol: str, qty: float) -> PositionSnapshot:
+    return PositionSnapshot(
+        symbol,
+        qty,
+        100.0,
+        100.0,
+        Market.EQUITY,
+        qty_available=qty,
+        ownership="managed",
+        managed_qty=qty,
+    )
+
+
+def test_sell_exists_buy_exists_no_buy_submission_before_sell_terminal(tmp_path) -> None:
+    """SELL + BUY decision: the BUY must never reach the broker before the
+    SELL is terminal, no matter how many bars arrive."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    assert any(order.side == PortfolioOrderSide.BUY for order in result.orders)
+    # More bars arrive while the sell is still working: still no BUY.
+    next_day = result.orders[0].decision_timestamp + timedelta(days=1)
+    deferred = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_day))
+    assert deferred.status == "rebalance_in_progress"
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    # The SELL fills: the BUY phase resumes with a fresh account snapshot.
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell)
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
+    assert [order.symbol for order in buys] == ["MSFT"]
+
+
+def test_partial_sell_keeps_buy_deferred(tmp_path) -> None:
+    """A partially filled SELL that is still working keeps the dependent BUY
+    deferred."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    # Partial fill, order still working at the broker.
+    _fill(repository, sell, cumulative=sell.quantity / 2, status="partial_fill")
+    assert runtime.advance_rebalance() is None
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    # The sell goes terminal partially filled: the BUY is re-planned against
+    # the fresh (still-heavy) account instead of blindly replaying.
+    _fill(repository, sell, cumulative=sell.quantity / 2, status="canceled")
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
+    assert [order.symbol for order in buys] == ["MSFT"]
+    # The account still holds AAPL 400 - 200 = 200 shares; the BUY must not
+    # push gross above the safe level: 200 shares (0.20) + BUY <= 0.60 gross.
+    buy = buys[0]
+    assert buy.quantity * buy.reference_price <= (0.60 - 0.20) * 100_000 + 1e-6
+
+
+def test_rejected_sell_replans_smaller_buy(tmp_path) -> None:
+    """A rejected SELL leaves the account over-exposed: the re-planned BUY is
+    capped by the gross headroom, not replayed at the original size."""
+    broker = _SimBroker((_position("AAPL", 450),))
+    runtime, repository = _runtime(
+        tmp_path,
+        broker,
+        {"AAPL": 0.25, "MSFT": 0.30},
+        limits=PortfolioRiskLimits(maximum_gross=0.60, maximum_equity=0.50, minimum_cash=0.40),
+    )
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    assert sell.symbol == "AAPL"
+    # The broker rejects the sell; the position never left the account.
+    _fill(repository, sell, cumulative=0.0, status="rejected")
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
+    assert [order.symbol for order in buys] == ["MSFT"]
+    gross_headroom = (0.60 - 0.45) * 100_000
+    assert buys[0].quantity * buys[0].reference_price <= gross_headroom + 1e-6
+    assert buys[0].quantity < 250  # smaller than the original plan (272)
+
+
+def test_restart_during_sell_phase_recovers_exactly_once(tmp_path) -> None:
+    """decision -> SELL submitted -> process stops -> SELL fills -> restart:
+    the new process reconciles the SELL, takes a fresh account and continues
+    the BUY exactly once. No duplicate order, no lost BUY, no second SELL."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime_a, _ = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime_a.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    runtime_a.close()
+    # ---- process restarts ----
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime_b = PortfolioRuntime(
+        _FixedTargetStrategy({"AAPL": 0.15, "MSFT": 0.20}),
+        ("AAPL", "MSFT"),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    # The SELL filled while the process was down (persisted via trade updates
+    # or broker reconciliation).
+    _fill(repository, sell)
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    recovered = runtime_b.advance_rebalance()
+    assert recovered is not None and recovered.status == "buy_phase_submitted"
+    assert [order.side for order in broker.submitted] == [
+        PortfolioOrderSide.SELL,
+        PortfolioOrderSide.BUY,
+    ]
+    assert len(broker.submitted) == 2
+    # Re-advancing (restart storms, duplicate trade updates) submits nothing.
+    assert runtime_b.advance_rebalance() is None
+    assert len(broker.submitted) == 2
+
+
+def test_duplicate_trade_update_no_duplicate_buy(tmp_path) -> None:
+    """Replayed/duplicate trade updates must not submit the BUY twice."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    # The same terminal fill arrives twice (stream replay).
+    _fill(repository, sell, activity_id="a1")
+    _fill(repository, sell, activity_id="a2")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    assert len([o for o in broker.submitted if o.side == PortfolioOrderSide.BUY]) == 1
+    # The BUY fill is also replayed; advancing again must not resubmit.
+    for order in resumed.orders:
+        _fill(repository, order, activity_id="b1")
+        _fill(repository, order, activity_id="b2")
+    completed = runtime.advance_rebalance()
+    assert completed is not None and completed.status == "rebalance_complete"
+    assert len(broker.submitted) == 2
+
+
+def test_live_hard_dollar_cap_transient_exposure_never_exceeds_cap(tmp_path) -> None:
+    """LIVE: with a rejected SELL the account is already over the hard dollar
+    cap, so the dependent BUY must NOT be submitted at all."""
+    broker = _SimBroker((_position("AAPL", 400),))  # $40k managed exposure
+    runtime, repository = _runtime(
+        tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0
+    )
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    # SELL rejected: $40k managed exposure is already above the $30k cap.
+    _fill(repository, sell, cumulative=0.0, status="rejected")
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "rebalance_complete"
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+
+
+def test_live_hard_dollar_cap_buy_fits_after_sell(tmp_path) -> None:
+    """LIVE: after the SELL fills there is room under the cap; the BUY is
+    submitted but the post-buy managed exposure never exceeds the cap."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(
+        tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0
+    )
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell)
+    sold = sell.quantity
+    broker.positions = [_position("AAPL", 400 - sold)]
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
+    assert [order.symbol for order in buys] == ["MSFT"]
+    managed_after = (400 - sold) * 100 + buys[0].quantity * buys[0].reference_price
+    assert managed_after <= 30_000 + 1e-6
+
+
+def test_max_gross_exposure_transient_never_exceeds_limit(tmp_path) -> None:
+    """While a SELL is open the broker exposure must not grow; after a
+    rejected SELL the re-planned BUY is capped by the gross headroom."""
+    broker = _SimBroker((_position("AAPL", 350),))  # 0.35 gross
+    runtime, repository = _runtime(
+        tmp_path,
+        broker,
+        {"AAPL": 0.10, "MSFT": 0.25},
+        limits=PortfolioRiskLimits(maximum_gross=0.40, maximum_equity=0.40, minimum_cash=0.40),
+    )
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    # No BUY at the broker while the SELL is open: gross stays at 0.35.
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell, cumulative=0.0, status="expired")
+    broker.open_symbols.discard("AAPL")
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
+    assert [order.symbol for order in buys] == ["MSFT"]
+    # 0.35 + buy <= 0.40 maximum gross.
+    assert buys[0].quantity * buys[0].reference_price <= 0.05 * 100_000 + 1e-6
+
+
+def test_pure_buy_decision_has_no_unnecessary_delay(tmp_path) -> None:
+    """A decision with no SELL leg begins the BUY phase immediately."""
+    broker = _SimBroker()
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.30, "MSFT": 0.20})
+    result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "submitted"
+    assert len(broker.submitted) == 2
+    assert all(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    # No rebalance lifecycle was created: there was nothing to defer.
+    assert repository.current_rebalance_execution("acct", Market.EQUITY) is None
+
+
+def test_sells_only_decision_submits_immediately(tmp_path) -> None:
+    """A pure risk-reducing decision (no BUY leg) is not deferred either."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.10})
+    result = runtime.process_closed_bars(_bars(("AAPL",)))
+    assert result.status == "submitted"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    assert repository.current_rebalance_execution("acct", Market.EQUITY) is None

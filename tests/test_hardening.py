@@ -1129,7 +1129,10 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime._reconcile_lock = threading.Lock()
     runtime._running = True
     runtime._state = "halted"
-    runtime._market_entry_halts = {Market.EQUITY: "equity_reason", Market.CRYPTO: None}
+    runtime._market_entry_halts = {
+        Market.EQUITY: None,
+        Market.CRYPTO: "crypto_protection_failure",
+    }
     runtime.market_state = SimpleNamespace(has_data_gaps=False)
     reconciled: list[bool] = []
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
@@ -1141,6 +1144,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
     persisted: list[AccountSnapshot] = []
     runtime._persist_risk_state = persisted.append
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
 
     runtime.reset_safety_lock()
 
@@ -1148,10 +1152,203 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     assert runtime._circuit_breaker_reason is None
     assert runtime._state == "running"
     assert persisted == [account]
-    # Operator reset must also clear market-level entry halts; previously a
-    # transient crypto protection failure kept entries blocked for the whole
-    # process lifetime despite a successful reset.
+    # A verified protection pass (the successful broker reconciliation) clears
+    # the crypto protection-failure halt; nothing is erased blindly.
     assert runtime._market_entry_halts == {Market.EQUITY: None, Market.CRYPTO: None}
+
+
+def test_safety_lock_reset_is_granular_per_market_halt() -> None:
+    """Global ownership drift + crypto ambiguous exit: resolving ownership
+    must NOT clear the crypto halt whose exit state is still unresolved."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {
+        Market.EQUITY: None,
+        Market.CRYPTO: "ambiguous_crypto_exit",
+    }
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: None,  # ownership reconciliation succeeds
+        account=lambda: account,
+    )
+    # A crypto managed exit is still in flight (not provably terminal).
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (
+            SimpleNamespace(
+                market=Market.CRYPTO,
+                exit_client_order_id="exit-1",
+                target_state="target_exit_submitted",
+                status="open",
+            ),
+        )
+    )
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason is None  # ownership resolved
+    assert runtime._market_entry_halts[Market.EQUITY] is None
+    # The ambiguous crypto exit was NOT erased: no terminal-state proof.
+    assert runtime._market_entry_halts[Market.CRYPTO] == "ambiguous_crypto_exit"
+
+    # Once the exit is provably terminal (verified reconciliation), a later
+    # reset clears the crypto halt too.
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (
+            SimpleNamespace(
+                market=Market.CRYPTO,
+                exit_client_order_id="exit-1",
+                target_state="target_exit_filled",
+                status="open",
+            ),
+        )
+    )
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime.reset_safety_lock()
+    assert runtime._market_entry_halts[Market.CRYPTO] is None
+
+
+def test_safety_lock_reset_retains_unrecognized_halt() -> None:
+    """A market halt with no verified recovery path is never erased."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {
+        Market.EQUITY: "unknown_halt_reason",
+        Market.CRYPTO: None,
+    }
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: None,
+        account=lambda: account,
+    )
+    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+
+    runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._market_entry_halts[Market.EQUITY] == "unknown_halt_reason"
+
+
+def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
+    """subscription_state_unknown clears only after a successful authoritative
+    stream resync; a failing resync keeps the halt active."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {
+        Market.EQUITY: "subscription_state_unknown",
+        Market.CRYPTO: None,
+    }
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: None,
+        account=lambda: account,
+    )
+    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._resync_pending = True
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}, Market.CRYPTO: set()}
+    resynced: list[bool] = []
+    runtime.stream = SimpleNamespace(
+        clear_rollback_failure=lambda: None,
+        update_subscriptions=lambda stocks, crypto: resynced.append(True),
+    )
+
+    runtime.reset_safety_lock()
+
+    assert resynced == [True]
+    assert runtime._circuit_breaker_reason is None
+    assert runtime._market_entry_halts[Market.EQUITY] is None
+
+    # A resync failure must retain the halt.
+    runtime._market_entry_halts = {
+        Market.EQUITY: "subscription_state_unknown",
+        Market.CRYPTO: None,
+    }
+    runtime._resync_pending = False
+
+    def failing_resync() -> None:
+        raise RuntimeError("socket broken")
+
+    runtime._resync_stream_if_needed = failing_resync
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime.reset_safety_lock()
+    assert runtime._market_entry_halts[Market.EQUITY] == "subscription_state_unknown"
+
+
+def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
+    """invalid_dynamic_universe clears only when a scanner refresh produces a
+    valid snapshot; a failing refresh keeps the halt active."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime._market_entry_halts = {
+        Market.EQUITY: "invalid_dynamic_universe",
+        Market.CRYPTO: None,
+    }
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    account = AccountSnapshot(10_000, 10_000, 10_000, 0)
+    runtime.broker = SimpleNamespace(
+        account_id="acct",
+        reconcile=lambda: None,
+        account=lambda: account,
+    )
+    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime._persist_risk_state = lambda _account: None
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._resync_pending = False
+    cleared: list[Market] = []
+
+    def successful_refresh(market: Market) -> None:
+        runtime._market_entry_halts[market] = None
+        cleared.append(market)
+
+    runtime._refresh_runtime_universes = successful_refresh
+    runtime.reset_safety_lock()
+    assert cleared == [Market.EQUITY]
+    assert runtime._market_entry_halts[Market.EQUITY] is None
+
+    # A failing refresh leaves the halt in place.
+    runtime._market_entry_halts = {
+        Market.EQUITY: "invalid_dynamic_universe",
+        Market.CRYPTO: None,
+    }
+
+    def failing_refresh(market: Market) -> None:
+        raise RuntimeError("scanner down")
+
+    runtime._refresh_runtime_universes = failing_refresh
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime.reset_safety_lock()
+    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
 
 
 def test_safety_lock_reset_refuses_manual_intervention() -> None:

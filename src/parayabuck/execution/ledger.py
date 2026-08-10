@@ -735,6 +735,37 @@ class ExecutionLedger:
             ).fetchone()
         return float(row[0] if row else 0.0)
 
+    def record_fee_activity(
+        self,
+        activity_id: str,
+        client_order_id: str,
+        fee: float,
+        occurred_at: datetime,
+    ) -> bool:
+        """Record one fill-activity fee without touching the orders row.
+
+        Used by fill-activity recovery when the exit is already booked in the
+        ledger under a different client id: the fee leg is still real and must
+        be recorded exactly once, but re-running the order upsert would
+        violate the unique broker-order index.
+        """
+        if fee <= 0 or not activity_id:
+            return False
+        with self._lock:
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                self.connection.execute(
+                    """INSERT OR IGNORE INTO fee_activities(
+                        activity_id, client_order_id, fee, occurred_at
+                    ) VALUES (?, ?, ?, ?)""",
+                    (activity_id, client_order_id, fee, occurred_at.isoformat()),
+                )
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+                raise
+        return True
+
     def apply_fee_activity(
         self,
         account_id: str,
@@ -1199,6 +1230,27 @@ class ExecutionLedger:
                 if order is not None:
                     result.append((order, max(0.0, order.qty - float(cumulative))))
             return result
+
+    def order_for_broker_id(self, account_id: str, broker_order_id: str) -> str | None:
+        """Client order id of any ledger order with this broker order id.
+
+        Used by fill-activity recovery to avoid re-booking an exit whose
+        broker order is already in the ledger under a different client id
+        (e.g. a portfolio SELL row or an earlier recovery row); inserting a
+        second row would violate the unique broker-order index.
+        """
+        with self._lock:
+            row = self.connection.execute(
+                """
+                SELECT client_order_id FROM orders
+                WHERE account_id=? AND broker_order_id=?
+                LIMIT 1
+                """,
+                (account_id, broker_order_id),
+            ).fetchone()
+            if row is None:
+                return None
+            return str(row[0])
 
     def entry_order_for_broker_id(
         self, account_id: str, broker_order_id: str

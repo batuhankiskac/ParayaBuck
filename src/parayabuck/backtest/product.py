@@ -20,7 +20,10 @@ from parayabuck.backtest.universe import (
 from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
-from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+from parayabuck.execution.portfolio import (
+    PortfolioExecutionPolicy,
+    portfolio_risk_limits_from_config,
+)
 from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 
@@ -222,6 +225,10 @@ def run_product_backtest(
         universe_version=hash_point_in_time_universe(universe),
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
+        execution_policy=PortfolioExecutionPolicy(
+            rebalance_band_pct=config.execution.rebalance_band_pct,
+            minimum_order_notional=config.execution.minimum_order_notional,
+        ),
     )
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
     result = engine.run(filtered, warmup=warmup, corporate_actions=corporate_actions)

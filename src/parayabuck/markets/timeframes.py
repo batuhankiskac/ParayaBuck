@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 TIMEFRAME_MINUTES: dict[str, int] = {
@@ -42,7 +42,9 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
-def bars_to_calendar_days(symbol: str, timeframe: str, bars: int) -> int:
+def bars_to_calendar_days(
+    symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None
+) -> int:
     """Calendar span needed to collect ``bars`` of ``timeframe`` history.
 
     Equity bars only exist on regular trading sessions: 61 daily bars do not
@@ -50,6 +52,11 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int) -> int:
     NYSE session calendar (holiday-aware) via pandas-market-calendars when
     available, falling back to a Mon-Fri session estimate otherwise. Crypto
     trades 24/7 and scales purely by time.
+
+    ``end_date`` anchors the session-density calculation: historical
+    backtests must size their warmup around the requested evaluation start
+    (e.g. 2020), whose holiday calendar differs from today's, never around
+    the current date.
     """
     minutes = TIMEFRAME_MINUTES[timeframe]
     if "/" in symbol:
@@ -58,11 +65,16 @@ def bars_to_calendar_days(symbol: str, timeframe: str, bars: int) -> int:
         return max(2, math.ceil(bars / max(0.01, bars_per_day) * multiplier))
     bars_per_session = (390 / minutes) if minutes < 1440 else 1
     needed_sessions = max(1, math.ceil(bars / bars_per_session))
+    anchor: date | None = None
+    if end_date is not None:
+        anchor = end_date if isinstance(end_date, date) else end_date.date()
     try:
         from pandas_market_calendars import get_calendar
 
         calendar = get_calendar("NYSE")
-        today = datetime.now(UTC).date()
+        # For live warmup the anchor is today; historical backtests pass the
+        # evaluation start so session density reflects that era's calendar.
+        today = anchor or datetime.now(UTC).date()
         # Grow the backward window until it contains enough real sessions,
         # then tighten to the exact minimum with a binary search.
         days = max(2, math.ceil(needed_sessions * 7 / 5))

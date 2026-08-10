@@ -2156,9 +2156,18 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
     bars = _bars()
     unlatched = runtime.process_closed_bars(bars)
     assert any(order.side == PortfolioOrderSide.BUY for order in unlatched.orders)
+    # The unlatched decision has both legs: the risk-reducing SELL is
+    # submitted immediately and the dependent BUY is deferred until the sell
+    # is terminal.
+    assert unlatched.status == "sell_phase_submitted"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    sell = next(order for order in unlatched.orders if order.side == PortfolioOrderSide.SELL)
+    assert sell.symbol == "AAPL"
 
     # The latched decision runs on a NEW bar timestamp (the previous one was
-    # already recorded as a decision).
+    # already recorded as a decision). While the two-phase rebalance is still
+    # in flight no new decision is planned: stacking a fresh BUY on top of a
+    # not-yet-filled SELL could exceed the safe exposure.
     next_day = max(bar.timestamp for bar in bars) + timedelta(days=1)
     next_batch = [
         Bar(
@@ -2175,10 +2184,53 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
         for symbol in ("AAPL", "MSFT")
     ]
     latched = runtime.process_closed_bars(next_batch, entry_latch="daily_loss_limit")
-    assert latched.orders
-    assert all(order.side == PortfolioOrderSide.SELL for order in latched.orders)
-    # The cap drops the MSFT entry entirely.
-    assert all(order.symbol != "MSFT" for order in latched.orders)
+    assert latched.status == "rebalance_in_progress"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+
+    # The AAPL sell fills; the deferred BUY phase resumes with a fresh
+    # account, submitting the re-planned MSFT BUY exactly once.
+    runtime.repository.apply_trade_update(
+        client_order_id=sell.client_order_id,
+        broker_order_id=f"broker-{sell.client_order_id}",
+        status="fill",
+        cumulative_filled_quantity=sell.quantity,
+        average_fill_price=sell.reference_price,
+        occurred_at=sell.decision_timestamp,
+        activity_id=f"activity-{sell.client_order_id}",
+        fee=0.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    assert [order.side for order in broker.submitted] == [
+        PortfolioOrderSide.SELL,
+        PortfolioOrderSide.BUY,
+    ]
+    # The deferred BUY fills and the rebalance completes.
+    for order in resumed.orders:
+        runtime.repository.apply_trade_update(
+            client_order_id=order.client_order_id,
+            broker_order_id=f"broker-{order.client_order_id}",
+            status="fill",
+            cumulative_filled_quantity=order.quantity,
+            average_fill_price=order.reference_price,
+            occurred_at=order.decision_timestamp,
+            activity_id=f"activity-{order.client_order_id}",
+            fee=0.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+        )
+    completed = runtime.advance_rebalance()
+    assert completed is not None and completed.status == "rebalance_complete"
+
+    # After the rebalance completes, a latched decision is risk-reducing
+    # only: the cap drops the MSFT entry entirely.
+    after = runtime.process_closed_bars(next_batch, entry_latch="daily_loss_limit")
+    assert after.status != "rebalance_in_progress"
+    assert after.orders
+    assert all(order.side == PortfolioOrderSide.SELL for order in after.orders)
+    assert all(order.symbol != "MSFT" for order in after.orders)
 
 
 def test_entry_risk_latch_evaluates_from_account_poll(tmp_path) -> None:
@@ -2230,5 +2282,94 @@ def test_health_exposes_entry_risk_latch() -> None:
     runtime._next_universe_refresh_at = None
     runtime.strategy_status = "configured"
     runtime._strategy_specs = ()
+    runtime._portfolio_repository = None
+    runtime.ledger = None
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.broker = SimpleNamespace(account_id="acct")
     health = runtime.health()
     assert health.entry_risk_latch == {"equity": "daily_loss_limit", "crypto": None}
+
+
+def _health_runtime() -> object:
+    from parayabuck.runtime import EngineRuntime, WorkerHealth
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._state = "running"
+    runtime._running = True
+    now = datetime.now(UTC)
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+        "pb-stocks": WorkerHealth(now, now, now, alive=True),
+    }
+    runtime._events = SimpleNamespace(qsize=lambda: 0, empty=lambda: True)
+    runtime._last_account_at = datetime.now(UTC)
+    runtime._oldest_received_at = None
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.symbols = ["SPY"]
+    runtime._symbols_by_market = {Market.EQUITY: {"SPY"}, Market.CRYPTO: set()}
+    runtime._market_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
+    runtime._strategy_enabled = {Market.EQUITY: True, Market.CRYPTO: False}
+    runtime._not_ready_symbols = set()
+    runtime._circuit_breaker_reason = None
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15.0,
+        maximum_account_age_for_entry_seconds=30.0,
+        maximum_queue_age_seconds=30.0,
+    )
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "refresh_failed"}
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._last_reconciliation_at = None
+    runtime._last_universe_refresh_at = None
+    runtime._next_universe_refresh_at = None
+    runtime.strategy_status = "configured"
+    runtime._strategy_specs = ()
+    runtime._portfolio_repository = None
+    runtime.ledger = None
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.market_state = SimpleNamespace(
+        has_data_gaps=False, has_data_gaps_for_market=lambda market: False
+    )
+    return runtime
+
+
+def test_disabled_market_scanner_failure_is_not_critical() -> None:
+    """Equity enabled, crypto disabled, no crypto positions: a crypto
+    discovery failure is informational and the trading runtime stays
+    healthy."""
+    runtime = _health_runtime()
+    health = runtime.health()
+    assert health.healthy is True
+    crypto_health = health.markets["crypto"]
+    assert crypto_health["scanner_status"] == "refresh_failed"
+    assert crypto_health["scanner_critical"] is False
+    equity_health = health.markets["equity"]
+    assert equity_health["scanner_status"] == "success"
+
+
+def test_enabled_market_scanner_failure_is_critical() -> None:
+    """The enabled equity strategy makes an equity scanner failure critical:
+    the runtime is degraded."""
+    runtime = _health_runtime()
+    runtime._universe_refresh_status = {"equity": "refresh_failed", "crypto": "success"}
+    health = runtime.health()
+    assert health.healthy is False
+    assert health.state == "degraded"
+    assert health.markets["equity"]["scanner_critical"] is True
+
+
+def test_managed_position_makes_disabled_market_scanner_critical() -> None:
+    """A managed crypto position keeps crypto scanner/stream/protection health
+    operationally relevant even with the strategy disabled."""
+    runtime = _health_runtime()
+    runtime._portfolio_repository = SimpleNamespace(
+        owned_symbols=lambda account_id, market: {"BTC/USD"} if market == Market.CRYPTO else set(),
+        open_orders=lambda account_id, market: (),
+    )
+    health = runtime.health()
+    assert health.healthy is False
+    assert health.state == "degraded"
+    assert health.markets["crypto"]["scanner_critical"] is True

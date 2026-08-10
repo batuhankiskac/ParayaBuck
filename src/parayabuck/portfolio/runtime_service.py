@@ -14,11 +14,14 @@ from uuid import uuid4
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
+    PortfolioExecutionPolicy,
     PortfolioOrderRequest,
+    PortfolioOrderSide,
     PortfolioRiskLimits,
     PortfolioRiskOverlay,
     RiskOverlayDecision,
     TargetToOrderPlanner,
+    _floor_increment,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -40,6 +43,25 @@ _TERMINAL_ORDER_STATUSES = frozenset(
         "rejected",
         "done_for_day",
         "fill",
+    }
+)
+
+# Order outcomes that are neither terminal nor provably working: the order
+# may or may not exist at the broker. Dependent BUY orders must not be
+# submitted while a required SELL sits in this state.
+_AMBIGUOUS_ORDER_STATUSES = frozenset({"reconciliation_required", "manual_intervention_required"})
+
+# Two-phase rebalance execution phases (persisted, restart-safe).
+REBALANCE_PHASE_SELL_PENDING = "sell_pending"
+REBALANCE_PHASE_BUY_READY = "buy_ready"
+REBALANCE_PHASE_BUY_PENDING = "buy_pending"
+REBALANCE_PHASE_COMPLETE = "complete"
+REBALANCE_PHASE_BLOCKED = "blocked"
+_NON_TERMINAL_REBALANCE_PHASES = frozenset(
+    {
+        REBALANCE_PHASE_SELL_PENDING,
+        REBALANCE_PHASE_BUY_READY,
+        REBALANCE_PHASE_BUY_PENDING,
     }
 )
 
@@ -113,6 +135,29 @@ class OpenPortfolioOrder:
 
 
 @dataclass(frozen=True)
+class RebalanceExecutionState:
+    """Persisted two-phase rebalance lifecycle for one decision.
+
+    A decision with both SELL and BUY legs executes in two phases: the
+    risk-reducing sells are submitted first and the dependent buys only after
+    every required sell is terminal and a fresh account snapshot proves the
+    remaining BUY exposure is still safe. The state survives process restarts
+    so a rebalance interrupted between phases resumes exactly once.
+    """
+
+    decision_id: str
+    account_id: str
+    market: Market
+    phase: str
+    status: str
+    updated_at: datetime
+
+    @property
+    def active(self) -> bool:
+        return self.phase in _NON_TERMINAL_REBALANCE_PHASES and self.status == "active"
+
+
+@dataclass(frozen=True)
 class PortfolioRuntimeResult:
     decision_id: str | None
     target: TargetPortfolio | None
@@ -179,6 +224,16 @@ class PortfolioStateRepository:
                     note TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     consumed_quantity REAL NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_rebalance_executions (
+                    decision_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    buy_orders_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
                 );
                 """
             )
@@ -407,6 +462,144 @@ class PortfolioStateRepository:
                     datetime.now(UTC).isoformat(),
                 ),
             )
+
+    # -- two-phase rebalance execution lifecycle ----------------------------
+
+    def save_rebalance_execution(
+        self,
+        decision_id: str,
+        account_id: str,
+        market: Market,
+        phase: str,
+        *,
+        buy_orders_json: str = "[]",
+        status: str = "active",
+    ) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_rebalance_executions(
+                    decision_id, account_id, market, phase, status, buy_orders_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(decision_id) DO UPDATE SET
+                    phase = excluded.phase,
+                    status = excluded.status,
+                    buy_orders_json = excluded.buy_orders_json,
+                    updated_at = excluded.updated_at""",
+                (
+                    decision_id,
+                    account_id,
+                    market.value,
+                    phase,
+                    status,
+                    buy_orders_json,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def update_rebalance_execution(
+        self,
+        decision_id: str,
+        phase: str,
+        *,
+        status: str | None = None,
+    ) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_rebalance_executions
+                   SET phase = ?, status = COALESCE(?, status), updated_at = ?
+                   WHERE decision_id = ?""",
+                (phase, status, datetime.now(UTC).isoformat(), decision_id),
+            )
+
+    def current_rebalance_execution(
+        self, account_id: str, market: Market
+    ) -> RebalanceExecutionState | None:
+        """The newest persisted rebalance execution for one account/market.
+
+        Includes completed and blocked executions so callers can distinguish
+        "no two-phase rebalance has ever run" from "the last one is done".
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT decision_id, account_id, market, phase, status, updated_at
+                   FROM portfolio_rebalance_executions
+                   WHERE account_id = ? AND market = ?
+                   ORDER BY updated_at DESC LIMIT 1""",
+                (account_id, market.value),
+            ).fetchall()
+        if not rows:
+            return None
+        row = rows[0]
+        return RebalanceExecutionState(
+            decision_id=str(row[0]),
+            account_id=str(row[1]),
+            market=Market(str(row[2])),
+            phase=str(row[3]),
+            status=str(row[4]),
+            updated_at=datetime.fromisoformat(str(row[5])),
+        )
+
+    def decision_row(self, decision_id: str) -> dict[str, object] | None:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT target_json, risk_json, market, decision_timestamp
+                   FROM portfolio_decisions WHERE decision_id = ?""",
+                (decision_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "target_json": str(row[0]),
+            "risk_json": str(row[1]),
+            "market": str(row[2]),
+            "decision_timestamp": str(row[3]),
+        }
+
+    def rebalance_buy_orders(self, decision_id: str) -> tuple[dict[str, object], ...]:
+        """The BUY orders planned at decision time (deferred for the SELL phase).
+
+        Used as a price fallback when restart recovery runs before warmup has
+        repopulated history: the deferred BUY side must still be re-plannable.
+        """
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT buy_orders_json FROM portfolio_rebalance_executions WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+        if row is None or not row[0]:
+            return ()
+        try:
+            parsed = json.loads(str(row[0]))
+        except (TypeError, ValueError):
+            return ()
+        return tuple(dict(item) for item in parsed if isinstance(item, dict))
+
+    def orders_for_decision(
+        self, decision_id: str, side: str | None = None
+    ) -> tuple[dict[str, object], ...]:
+        """Order rows attributed to one decision (used by rebalance recovery)."""
+        query = """SELECT client_order_id, symbol, market, side, quantity,
+                          status, cumulative_filled_quantity
+                   FROM portfolio_orders WHERE decision_id = ?"""
+        params: tuple[object, ...] = (decision_id,)
+        if side is not None:
+            query += " AND side = ?"
+            params = (decision_id, side)
+        query += " ORDER BY created_at"
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+        return tuple(
+            {
+                "client_order_id": str(row[0]),
+                "symbol": str(row[1]),
+                "market": str(row[2]),
+                "side": str(row[3]),
+                "quantity": float(row[4] or 0.0),
+                "status": str(row[5]),
+                "cumulative_filled_quantity": float(row[6] or 0.0),
+            }
+            for row in rows
+        )
 
     def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
         with self.store.lock, self.store.connection:
@@ -965,6 +1158,7 @@ class PortfolioRuntime:
         universe_version: str = "runtime",
         account_id: str = "unknown",
         live_dollar_cap: float = 0.0,
+        execution_policy: PortfolioExecutionPolicy | None = None,
     ) -> None:
         if mode not in {"paper", "live"}:
             raise ValueError("PortfolioRuntime mode must be paper or live")
@@ -988,9 +1182,10 @@ class PortfolioRuntime:
         self.universe_version = universe_version
         self.account_id = account_id
         self.policy = rebalance_policy_for(self.strategy)
+        self.execution_policy = execution_policy or PortfolioExecutionPolicy()
         self.decision_service = PortfolioDecisionService()
         self.risk_overlay = PortfolioRiskOverlay(risk_limits)
-        self.planner = TargetToOrderPlanner()
+        self.planner = TargetToOrderPlanner(self.execution_policy)
         self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
         self.configuration_digest = configuration_digest(
             strategy,
@@ -998,6 +1193,7 @@ class PortfolioRuntime:
             maximum_allocation,
             universe_version,
             self.risk_overlay.limits,
+            self.execution_policy,
         )
         self.previous_timestamp = repository.latest_decision_timestamp(
             account_id, self.configuration_digest, self.market
@@ -1094,6 +1290,28 @@ class PortfolioRuntime:
             self.account_id, self.configuration_digest, timestamp, self.market
         ):
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
+        # A persisted two-phase rebalance may have become ready since the last
+        # event (trade update, restart, or reconcile). Advance it first, then
+        # defer any new decision while the previous rebalance is still in
+        # flight: submitting a fresh BUY while an older SELL is working could
+        # stack risk-increasing exposure on top of the not-yet-sold position.
+        self.advance_rebalance()
+        current_rebalance = self.repository.current_rebalance_execution(
+            self.account_id, self.market
+        )
+        if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
+            if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
+                return PortfolioRuntimeResult(
+                    current_rebalance.decision_id, None, None, (), (), "rebalance_blocked"
+                )
+            return PortfolioRuntimeResult(
+                current_rebalance.decision_id,
+                None,
+                None,
+                (),
+                (),
+                "rebalance_in_progress",
+            )
         account = self.broker.account()
         managed = {
             canonical_symbol(position.symbol, position.market)
@@ -1230,6 +1448,298 @@ class PortfolioRuntime:
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
             for order in planned
         )
+        sells = tuple(order for order in orders if order.side == PortfolioOrderSide.SELL)
+        buys = tuple(order for order in orders if order.side == PortfolioOrderSide.BUY)
+        if not buys:
+            # Pure risk-reducing decision: nothing depends on a sell outcome,
+            # so the whole order set can be submitted immediately.
+            submitted = self._submit_orders(orders)
+            return PortfolioRuntimeResult(
+                decision_id,
+                risk.target,
+                risk,
+                orders,
+                submitted,
+                "submitted",
+            )
+        if sells:
+            # Two-phase rebalance. Submit the risk-reducing sells now and
+            # persist the dependent buys in the rebalance-execution state;
+            # they are submitted only after every required sell is terminal
+            # and a fresh account snapshot proves the exposure is safe.
+            self.repository.save_rebalance_execution(
+                decision_id,
+                self.account_id,
+                self.market,
+                REBALANCE_PHASE_SELL_PENDING,
+                buy_orders_json=json.dumps(
+                    [asdict(order) for order in buys], sort_keys=True, default=str
+                ),
+            )
+            submitted = self._submit_orders(sells)
+            return PortfolioRuntimeResult(
+                decision_id,
+                risk.target,
+                risk,
+                orders,
+                submitted,
+                "sell_phase_submitted",
+            )
+        # Pure BUY decision with no SELL leg: there is nothing to wait for,
+        # so the BUY phase begins immediately.
+        submitted = self._submit_orders(buys)
+        return PortfolioRuntimeResult(
+            decision_id,
+            risk.target,
+            risk,
+            orders,
+            submitted,
+            "submitted",
+        )
+
+    def advance_rebalance(self) -> PortfolioRuntimeResult | None:
+        """Advance a persisted two-phase rebalance by one step.
+
+        ``sell_pending``: while any required SELL is still working (or its
+        outcome is ambiguous), the dependent BUY orders stay deferred. When
+        every required SELL is terminal, a fresh broker account snapshot is
+        taken, the remaining BUY side is re-planned against the safe managed
+        capacity and those BUY orders are submitted exactly once. A
+        rejected/canceled/expired/partially-filled SELL therefore yields the
+        re-planned (smaller) BUY quantities; an ambiguous SELL outcome blocks
+        the rebalance with ``reconciliation_required`` and submits nothing.
+
+        ``buy_pending``: once every deferred BUY is terminal the rebalance is
+        marked complete.
+
+        Returns the transition result, or ``None`` when the rebalance cannot
+        advance yet (or nothing is in flight). This is safe to call from a
+        trade-update callback, a bar decision and process startup, and is
+        restart-safe because all phase transitions are persisted.
+        """
+        current = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
+            return None
+        if current.phase == REBALANCE_PHASE_BLOCKED:
+            return PortfolioRuntimeResult(
+                current.decision_id, None, None, (), (), "rebalance_blocked"
+            )
+        if current.phase == REBALANCE_PHASE_BUY_READY:
+            return self._submit_deferred_buys(current.decision_id)
+        if current.phase == REBALANCE_PHASE_BUY_PENDING:
+            buys = self.repository.orders_for_decision(current.decision_id, side="buy")
+            if buys and all(is_terminal_order_status(str(item["status"])) for item in buys):
+                self.repository.update_rebalance_execution(
+                    current.decision_id, REBALANCE_PHASE_COMPLETE
+                )
+                return PortfolioRuntimeResult(
+                    current.decision_id, None, None, (), (), "rebalance_complete"
+                )
+            return None
+        # sell_pending: wait until every required sell is terminal.
+        sells = self.repository.orders_for_decision(current.decision_id, side="sell")
+        if not sells:
+            # No sell rows recorded for a sell_pending rebalance: nothing can
+            # ever become terminal, so re-plan the buys from the fresh state.
+            self.repository.update_rebalance_execution(
+                current.decision_id, REBALANCE_PHASE_BUY_READY
+            )
+            return self._submit_deferred_buys(current.decision_id)
+        statuses = [str(item["status"]) for item in sells]
+        if any(status in _AMBIGUOUS_ORDER_STATUSES for status in statuses):
+            self.repository.update_rebalance_execution(
+                current.decision_id,
+                REBALANCE_PHASE_BLOCKED,
+                status="reconciliation_required",
+            )
+            return PortfolioRuntimeResult(
+                current.decision_id, None, None, (), (), "rebalance_blocked"
+            )
+        if not all(is_terminal_order_status(status) for status in statuses):
+            return None
+        self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
+        return self._submit_deferred_buys(current.decision_id)
+
+    def _submit_deferred_buys(self, decision_id: str) -> PortfolioRuntimeResult | None:
+        """Re-plan and submit the BUY side of a completed SELL phase.
+
+        The original decision target is re-applied against a FRESH broker
+        account snapshot so the submitted BUY quantities reflect the actual
+        post-sell state: a rejected or partially-filled SELL leaves more
+        exposure, so the re-planned BUY is smaller (or absent) instead of
+        blindly replaying the original quantity.
+        """
+        decision = self.repository.decision_row(decision_id)
+        if decision is None:
+            self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BLOCKED)
+            return None
+        try:
+            adjusted_target = TargetPortfolio.from_dict(
+                json.loads(str(decision["risk_json"]))["target"]
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            log.error("Cannot restore rebalance target for %s: %s", decision_id, exc)
+            self.repository.update_rebalance_execution(
+                decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required"
+            )
+            return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
+        account = self.broker.account()
+        maximum_allocation = self.maximum_allocation
+        if self.mode == "live":
+            maximum_allocation = min(
+                maximum_allocation, self.live_dollar_cap / max(1.0, account.equity)
+            )
+        risk = self.risk_overlay.apply(
+            adjusted_target,
+            account,
+            market=self.market,
+            approved_symbols=self.symbols,
+            maximum_allocation=maximum_allocation,
+            mode=self.mode,
+        )
+        prices: dict[str, float] = {
+            symbol: series[-1].close for symbol, series in self.history.items() if series
+        }
+        for position in account.positions:
+            prices.setdefault(
+                canonical_symbol(position.symbol, position.market), position.current_price
+            )
+        # Restart recovery can run before warmup repopulated history; the
+        # decision-time reference prices of the deferred BUY orders are the
+        # authoritative fallback so the BUY side is never lost.
+        for stored in self.repository.rebalance_buy_orders(decision_id):
+            symbol = str(stored.get("symbol", ""))
+            reference = stored.get("reference_price")
+            if symbol and reference is not None:
+                prices.setdefault(symbol, float(str(reference)))
+        rules = {
+            symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols
+        }
+        planned = self.planner.plan(
+            risk.target,
+            account,
+            market=self.market,
+            prices=prices,
+            rules=rules,
+            approved_symbols=self.symbols,
+            open_order_symbols=self.broker.all_open_order_symbols(),
+            decision_id=decision_id,
+        )
+        buy_orders = tuple(
+            PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
+            for order in planned
+            if order.side == PortfolioOrderSide.BUY
+        )
+        if not buy_orders:
+            self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            return PortfolioRuntimeResult(
+                decision_id, risk.target, risk, (), (), "rebalance_complete"
+            )
+        buy_orders = self._size_buys_to_safe_capacity(buy_orders, account)
+        if not buy_orders:
+            log.warning(
+                "Deferred BUY phase has no safe capacity; decision=%s submits nothing",
+                decision_id,
+            )
+            self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            return PortfolioRuntimeResult(
+                decision_id, risk.target, risk, (), (), "rebalance_complete"
+            )
+        submitted = self._submit_orders(buy_orders)
+        self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
+        return PortfolioRuntimeResult(
+            decision_id,
+            risk.target,
+            risk,
+            buy_orders,
+            submitted,
+            "buy_phase_submitted",
+        )
+
+    def _size_buys_to_safe_capacity(
+        self,
+        buy_orders: tuple[PortfolioOrderRequest, ...],
+        account: AccountSnapshot,
+    ) -> tuple[PortfolioOrderRequest, ...]:
+        """Cap the re-planned BUY side by what the fresh account can absorb.
+
+        A rejected/canceled/expired/partial SELL leaves the account with more
+        exposure and less cash than the original decision assumed. The BUY
+        phase must therefore be re-sized against three hard constraints, all
+        evaluated on the FRESH broker snapshot:
+
+        * cash: buy notional must not exceed available cash;
+        * maximum gross: current broker gross + buy notional must stay within
+          the configured maximum gross exposure;
+        * live hard dollar cap: managed exposure after the buys must stay
+          within the authorized cap.
+
+        Orders that fall below the broker minimum after scaling are dropped;
+        if nothing remains, the BUY phase submits nothing. Margin is never
+        used as a risk control.
+        """
+        prices: dict[str, float] = {order.symbol: order.reference_price for order in buy_orders}
+        for position in account.positions:
+            prices.setdefault(
+                canonical_symbol(position.symbol, position.market), position.current_price
+            )
+        equity = max(1e-9, account.equity)
+        current_gross = sum(
+            position.market_value for position in account.positions if not position.is_flat
+        )
+        managed_value = sum(
+            abs(position.managed_qty) * position.current_price
+            for position in account.positions
+            if not position.is_flat and position.managed_qty > 1e-12
+        )
+        limits = self.risk_overlay.limits
+        gross_capacity = max(0.0, limits.maximum_gross * equity - current_gross)
+        cash_capacity = max(0.0, account.cash)
+        if self.mode == "live":
+            cash_capacity = min(cash_capacity, max(0.0, self.live_dollar_cap - managed_value))
+        capacity = min(gross_capacity, cash_capacity)
+        notional = sum(
+            order.quantity * prices.get(order.symbol, order.reference_price) for order in buy_orders
+        )
+        if notional <= 0:
+            return ()
+        if notional > capacity:
+            scale = capacity / notional
+            if scale <= 0:
+                return ()
+            buy_orders = tuple(
+                PortfolioOrderRequest(
+                    **{
+                        **asdict(order),
+                        "quantity": _floor_increment(
+                            order.quantity * scale,
+                            self.broker.asset_trading_rules(
+                                order.symbol, self.market
+                            ).quantity_increment,
+                        ),
+                    }
+                )
+                for order in buy_orders
+            )
+        sized: list[PortfolioOrderRequest] = []
+        for order in buy_orders:
+            rule = self.broker.asset_trading_rules(order.symbol, self.market)
+            price = prices.get(order.symbol, order.reference_price)
+            if order.quantity < rule.minimum_order_size:
+                continue
+            if order.quantity * price < rule.minimum_order_notional:
+                continue
+            sized.append(order)
+        return tuple(sized)
+
+    def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
+        """Persist and submit one order batch with broker idempotency keys.
+
+        The client order id is deterministic per decision/symbol/side, so a
+        crash between persistence and broker acknowledgement cannot produce a
+        duplicate broker order (Alpaca rejects a reused client id and the
+        broker's ambiguity recovery resolves the existing order).
+        """
         submitted: list[str] = []
         for order in orders:
             self.repository.record_order(order, "submitting")
@@ -1240,14 +1750,7 @@ class PortfolioRuntime:
                 raise
             self.repository.update_order(order.client_order_id, "submitted", broker_order_id)
             submitted.append(broker_order_id)
-        return PortfolioRuntimeResult(
-            decision_id,
-            risk.target,
-            risk,
-            orders,
-            tuple(submitted),
-            "submitted",
-        )
+        return tuple(submitted)
 
     def close(self, status: str = "stopped") -> None:
         self.repository.end_session(self.session_id, status)
@@ -1267,6 +1770,7 @@ def configuration_digest(
     maximum_allocation: float,
     universe_version: str,
     risk_limits: PortfolioRiskLimits | None = None,
+    execution_policy: PortfolioExecutionPolicy | None = None,
 ) -> str:
     import hashlib
 
@@ -1279,6 +1783,7 @@ def configuration_digest(
             "maximum_allocation": maximum_allocation,
             "scanner_policy_digest": universe_version,
             "risk_limits": asdict(risk_limits or PortfolioRiskLimits()),
+            "execution_policy": asdict(execution_policy or PortfolioExecutionPolicy()),
         },
         sort_keys=True,
         default=str,
@@ -1293,4 +1798,10 @@ __all__ = [
     "PortfolioRuntimeResult",
     "PortfolioDecisionService",
     "PortfolioStateRepository",
+    "RebalanceExecutionState",
+    "REBALANCE_PHASE_SELL_PENDING",
+    "REBALANCE_PHASE_BUY_READY",
+    "REBALANCE_PHASE_BUY_PENDING",
+    "REBALANCE_PHASE_COMPLETE",
+    "REBALANCE_PHASE_BLOCKED",
 ]

@@ -1137,25 +1137,47 @@ class AlpacaBroker:
                 # orders table enforces a unique broker_order_id. A stable
                 # client id derived from the broker order makes every activity
                 # of that order merge into the same row (ON CONFLICT) instead
-                # of colliding on the unique index.
-                ledger.apply_execution_event(
-                    ExecutionEvent(
-                        account_id=self._account_id or "unknown",
-                        client_order_id=f"alpaca-fill-activity-{broker_order_id}",
-                        broker_order_id=broker_order_id,
-                        parent_order_id=None,
-                        role=OrderRole.MANUAL_EXIT,
-                        symbol=canonical_symbol(symbol, market),
-                        market=market,
-                        state=OrderState.FILLED,
-                        requested_qty=qty,
-                        cumulative_filled_qty=qty,
-                        average_fill_price=price,
-                        occurred_at=occurred_at,
-                        fee=fee,
-                        activity_id=activity_id,
-                    )
+                # of colliding on the unique index. If the broker order is
+                # ALREADY in the ledger under a different client id (a
+                # portfolio SELL row, or a recovery row from an earlier
+                # reconciliation), the exit is already booked — inserting a
+                # second row would violate the unique broker-order index and
+                # brick engine startup.
+                order_lookup = getattr(ledger, "order_for_broker_id", None)
+                existing_client = (
+                    order_lookup(self._account_id or "unknown", broker_order_id)
+                    if order_lookup is not None
+                    else None
                 )
+                if existing_client is not None:
+                    log.info(
+                        "Sell activity already booked in the ledger; recording "
+                        "the fee leg only: broker_order_id=%s symbol=%s",
+                        broker_order_id,
+                        symbol,
+                    )
+                    fee_recorder = getattr(ledger, "record_fee_activity", None)
+                    if fee_recorder is not None:
+                        fee_recorder(activity_id, existing_client, fee, occurred_at)
+                else:
+                    ledger.apply_execution_event(
+                        ExecutionEvent(
+                            account_id=self._account_id or "unknown",
+                            client_order_id=f"alpaca-fill-activity-{broker_order_id}",
+                            broker_order_id=broker_order_id,
+                            parent_order_id=None,
+                            role=OrderRole.MANUAL_EXIT,
+                            symbol=canonical_symbol(symbol, market),
+                            market=market,
+                            state=OrderState.FILLED,
+                            requested_qty=qty,
+                            cumulative_filled_qty=qty,
+                            average_fill_price=price,
+                            occurred_at=occurred_at,
+                            fee=fee,
+                            activity_id=activity_id,
+                        )
+                    )
             if (
                 activity_id
                 and broker_order_id

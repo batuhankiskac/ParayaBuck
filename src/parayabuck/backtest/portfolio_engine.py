@@ -16,7 +16,11 @@ from parayabuck.data.market_dataset import (
     CorporateActionType,
     MarketDataset,
 )
-from parayabuck.execution.portfolio import PortfolioRiskLimits, PortfolioRiskOverlay
+from parayabuck.execution.portfolio import (
+    PortfolioExecutionPolicy,
+    PortfolioRiskLimits,
+    PortfolioRiskOverlay,
+)
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK
@@ -248,6 +252,7 @@ class PortfolioBacktestEngine:
         liquidity_lookback_bars: int = 20,
         turnover_band: float = 0.005,
         minimum_order_notional: float = 10.0,
+        execution_policy: PortfolioExecutionPolicy | None = None,
         universe: object | None = None,
         universe_version: str = "",
         state: PortfolioState | None = None,
@@ -272,6 +277,12 @@ class PortfolioBacktestEngine:
             raise ValueError("Minimum order notional must be non-negative")
         if not 0 < maximum_allocation <= 1:
             raise ValueError("Maximum allocation must be in (0, 1]")
+        if execution_policy is not None:
+            # One shared order-existence policy: the configured band and
+            # notional floor are authoritative over any legacy constructor
+            # defaults so BACKTEST and PAPER/LIVE cannot drift apart.
+            turnover_band = execution_policy.rebalance_band_pct
+            minimum_order_notional = execution_policy.minimum_order_notional
         cost_inputs = (
             slippage_bps,
             spread_bps,
@@ -336,11 +347,29 @@ class PortfolioBacktestEngine:
         # Explicit daily-loss/high-water lifecycle. day-start equity is the
         # previous session's closing equity, never the current post-close
         # equity; the risk state advances on every processed bar so drawdown
-        # and daily PnL stay live between scheduled rebalances.
-        self._peak_equity = starting_equity
-        self._day_start_equity = starting_equity
-        self._last_observed_equity = starting_equity
+        # and daily PnL stay live between scheduled rebalances. A persisted
+        # v3 state restores the lifecycle so a restart behaves identically to
+        # an uninterrupted run (high-water before restart, drawdown crossed
+        # after restart, mid-session day-start).
+        self._peak_equity = (
+            self.state.peak_equity if self.state.peak_equity is not None else starting_equity
+        )
+        self._day_start_equity = (
+            self.state.day_start_equity
+            if self.state.day_start_equity is not None
+            else starting_equity
+        )
+        self._last_observed_equity = (
+            self.state.last_observed_equity
+            if self.state.last_observed_equity is not None
+            else starting_equity
+        )
         self._risk_session_date: date | None = None
+        if self.state.risk_session_date:
+            try:
+                self._risk_session_date = date.fromisoformat(self.state.risk_session_date)
+            except ValueError:
+                self._risk_session_date = None
         if self.state.last_rebalance_at is not None:
             # Period detection resumes from the last decision so a restart in
             # the middle of a month does not fire an unscheduled rebalance.
@@ -639,6 +668,14 @@ class PortfolioBacktestEngine:
         self.state.last_prices = dict(self._last_price)
         self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
         self.state.last_processed_bar = timestamp.isoformat()
+        # Persist the daily-loss/high-water lifecycle alongside holdings/cash
+        # at every completed cycle so a restart resumes the same risk state.
+        self.state.peak_equity = self._peak_equity
+        self.state.day_start_equity = self._day_start_equity
+        self.state.last_observed_equity = self._last_observed_equity
+        self.state.risk_session_date = (
+            self._risk_session_date.isoformat() if self._risk_session_date is not None else None
+        )
         if self.state_path is not None:
             self.save_state()
 

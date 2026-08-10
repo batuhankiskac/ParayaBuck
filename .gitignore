@@ -228,3 +228,4 @@ reports/
 data/storage.sqlite*
 data/universe/
 data/historical/*_sample.csv
+data/historical/equity_1200_2019_2026.csv

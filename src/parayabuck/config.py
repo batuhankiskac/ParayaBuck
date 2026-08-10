@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import warnings
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -557,6 +558,18 @@ def load_config(config_path: str | None = None) -> Config:
         raise FileNotFoundError(f"Config file not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     runtime_raw = dict(raw.get("runtime", {}))
+    # The pre-v1 ``risk_monitor_timeframe`` key was renamed to
+    # ``market_state_timeframe`` (the cadence observes market state; risk
+    # reactions live in the entry-risk latch). Accept the old key so an
+    # existing operator configuration keeps loading, and normalize it.
+    if "risk_monitor_timeframe" in runtime_raw:
+        warnings.warn(
+            "runtime.risk_monitor_timeframe is deprecated; rename it to "
+            "runtime.market_state_timeframe (same cadence)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        runtime_raw.setdefault("market_state_timeframe", runtime_raw.pop("risk_monitor_timeframe"))
     if "mode" in runtime_raw:
         raw_mode = str(runtime_raw["mode"]).lower()
         if raw_mode == "backtest":

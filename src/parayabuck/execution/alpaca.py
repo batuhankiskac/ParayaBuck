@@ -1132,10 +1132,16 @@ class AlpacaBroker:
                 and price > 0
             ):
                 market = Market.CRYPTO if "/" in symbol else Market.EQUITY
+                # One ledger row per broker order: a single order can produce
+                # several fill activities (partial fills, fee legs), and the
+                # orders table enforces a unique broker_order_id. A stable
+                # client id derived from the broker order makes every activity
+                # of that order merge into the same row (ON CONFLICT) instead
+                # of colliding on the unique index.
                 ledger.apply_execution_event(
                     ExecutionEvent(
                         account_id=self._account_id or "unknown",
-                        client_order_id=f"alpaca-fill-activity-{activity_id}",
+                        client_order_id=f"alpaca-fill-activity-{broker_order_id}",
                         broker_order_id=broker_order_id,
                         parent_order_id=None,
                         role=OrderRole.MANUAL_EXIT,

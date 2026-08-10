@@ -124,3 +124,20 @@ def test_shipped_container_config_stays_paper_even_when_credentials_exist(
 
     assert config.runtime.mode == RuntimeMode.PAPER
     assert not config.live.enabled
+
+
+def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> None:
+    """A pre-v1 settings.yaml with runtime.risk_monitor_timeframe must keep
+    loading after the market_state_timeframe rename instead of crashing."""
+    path = tmp_path / "settings.yaml"
+    path.write_text(
+        "runtime:\n  mode: paper\n  execution_timeframe: 5m\n"
+        "  risk_monitor_timeframe: 5m\n  decision_db_path: data/runtime/test.sqlite3\n"
+        "universe:\n  equity:\n    enabled: true\n"
+        "strategy:\n  equity:\n    enabled: true\n",
+        encoding="utf-8",
+    )
+    with pytest.warns(DeprecationWarning, match="risk_monitor_timeframe"):
+        config = load_config(str(path))
+    assert config.runtime.market_state_timeframe == "5m"
+    assert config.runtime.execution_timeframe == "5m"

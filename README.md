@@ -103,6 +103,18 @@ refresh, and reconciliation time. Paper and live are visually distinct.
 Paper startup requires valid paper credentials, config, scanner/universe data,
 and operational state. It does not require a research manifest or calendar wait.
 
+A tiny end-to-end PAPER-only smoke (`scripts/paper_smoke.py`) exercises the
+real product path — submit, fill, portfolio ownership, repository restart,
+exit to target zero, ownership release, reconciliation — against the Alpaca
+paper endpoint. It is structurally incapable of touching live: the broker is
+always constructed with `paper=True` (live keys fail the paper endpoint), the
+configuration mode must be `paper`, `PARAYABUCK_ENABLE_LIVE` must not be set,
+and the explicit opt-in `PARAYABUCK_ALLOW_PAPER_SMOKE=YES` is required:
+
+```bash
+PARAYABUCK_ALLOW_PAPER_SMOKE=YES .venv/bin/python scripts/paper_smoke.py
+```
+
 ## Backtesting
 
 Use a CSV offline or let the CLI download Alpaca bars with configured credentials.

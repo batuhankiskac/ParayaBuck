@@ -1197,3 +1197,51 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(
     with pytest.raises(ValueError, match="fresh confirmation"):
         manager._require_valid_live_arm(*credentials)
     assert not manager._live_armed
+
+
+def test_fill_activity_recovery_merges_activities_of_one_order(tmp_path: Path) -> None:
+    """A single broker order can produce several FILL activities (partial
+    fills, fee legs). The offline-recovery path must merge them into ONE
+    ledger row instead of colliding on the unique broker_order_id index."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    ledger = ExecutionLedger(str(tmp_path / "activities.sqlite3"))
+    activities = [
+        {
+            "id": "act-1",
+            "order_id": "broker-exit",
+            "side": "sell",
+            "symbol": "AAPL",
+            "qty": "5",
+            "price": "101",
+            "commission": "0.5",
+            "transaction_time": "2026-01-02T15:00:00+00:00",
+        },
+        {
+            "id": "act-2",
+            "order_id": "broker-exit",
+            "side": "sell",
+            "symbol": "AAPL",
+            "qty": "5",
+            "price": "102",
+            "commission": "0.5",
+            "transaction_time": "2026-01-02T15:01:00+00:00",
+        },
+    ]
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: activities)
+    broker.ledger = ledger
+    broker._account_id = "acct"
+
+    assert broker._reconcile_fill_activity_fees() is True
+
+    rows = ledger.connection.execute(
+        """SELECT client_order_id, broker_order_id, cumulative_filled_qty
+           FROM orders WHERE broker_order_id = 'broker-exit'"""
+    ).fetchall()
+    # One merged row per broker order; the second activity updated it instead
+    # of colliding on the unique index.
+    assert rows == [("alpaca-fill-activity-broker-exit", "broker-exit", 5.0)]
+    fee_rows = ledger.connection.execute("SELECT COUNT(*) FROM fee_activities").fetchone()[0]
+    assert fee_rows == 2
+    ledger.close()

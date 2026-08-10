@@ -397,8 +397,17 @@ class EngineManager:
             risk_raw.pop(key, None)
         cfg_raw["risk"] = risk_raw
 
-        cfg_raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper_mode else "live"
-        cfg_raw.setdefault("runtime", {})["execution_timeframe"] = payload.execution_timeframe
+        cfg_raw.setdefault("runtime", {})
+        # Normalize the pre-v1 risk_monitor_timeframe rename on save so the
+        # operator UI heals configs that still carry the old key.
+        runtime_save = dict(cfg_raw["runtime"])
+        if "risk_monitor_timeframe" in runtime_save:
+            runtime_save.setdefault(
+                "market_state_timeframe", runtime_save.pop("risk_monitor_timeframe")
+            )
+        runtime_save["mode"] = "paper" if payload.paper_mode else "live"
+        runtime_save["execution_timeframe"] = payload.execution_timeframe
+        cfg_raw["runtime"] = runtime_save
         live = cfg_raw.setdefault("live", {})
         live["enabled"] = not payload.paper_mode
         live["hard_dollar_cap"] = payload.live_dollar_cap

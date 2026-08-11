@@ -1,0 +1,13 @@
+{
+  "path": "data/historical/equity_1200_2016_2019.csv",
+  "start": "2016-01-04T05:00:00+00:00",
+  "end": "2019-05-24T04:00:00+00:00",
+  "symbols_requested": 1194,
+  "symbols_with_data": 504,
+  "symbols_empty": 690,
+  "bar_count": 373725,
+  "sha256": "a3825dee21c76c2ae5407be6e1b54e13209c39cbe4642efdeaf82ca6f59e15ca",
+  "feed": "sip (iex fallback)",
+  "adjustment": "splits",
+  "survivorship_limitation": "symbol list frozen to the existing 2019-2026 CSV membership; delisted names are absent (known limitation, not solved)"
+}

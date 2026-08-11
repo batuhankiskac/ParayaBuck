@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import webbrowser
 from pathlib import Path
 from threading import Thread
@@ -10,6 +11,36 @@ import uvicorn
 import yaml
 
 from parayabuck.logger import setup_logging
+
+
+def _probe_web_bind(host: str, port: int) -> None:
+    """Fail fast when the operator Web port cannot be bound.
+
+    uvicorn starts the application lifespan (which auto-starts the trading
+    engine) BEFORE it binds the listening socket, so a lost port race would
+    otherwise launch a full engine in a process that can never serve a
+    single request. Probe the exact bind uvicorn will attempt (asyncio's
+    create_server sets SO_REUSEADDR on POSIX, so the probe mirrors that) and
+    exit non-zero with a clear console error before any engine work begins.
+    """
+    last_error: OSError | None = None
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    for family, socktype, proto, _canonname, sockaddr in infos:
+        probe = socket.socket(family, socktype, proto)
+        try:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(sockaddr)
+            return
+        except OSError as exc:
+            last_error = exc
+        finally:
+            probe.close()
+    raise SystemExit(
+        f"ParayaBuck cannot start: Web bind on {host}:{port} failed "
+        f"({last_error}). The address is already in use or not bindable, so "
+        "the trading engine was NOT started. Stop the other instance or "
+        "choose a different port (PORT env or app.port) and retry."
+    )
 
 
 def main() -> None:
@@ -33,6 +64,9 @@ def main() -> None:
             "control API is intentionally local-only."
         )
     port = int(os.getenv("PORT", str(app_config.get("port", 8000))))
+    # Must precede uvicorn.run AND the browser thread: a port that cannot be
+    # bound must never start the engine (lifespan) just to tear it down.
+    _probe_web_bind(host, port)
     url_host = f"[{host}]" if ":" in host else host
     url = f"http://{url_host}:{port}"
 

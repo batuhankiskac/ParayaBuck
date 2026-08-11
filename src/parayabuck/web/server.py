@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -29,11 +30,17 @@ from starlette.requests import Request
 
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
+from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
 from parayabuck.universe import validate_active_crypto_universe, validate_active_universe
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.web.server")
+
+# Bounded autonomous startup recovery: retry delays (seconds) for transient
+# network failures on the Web auto-start path. Later attempts stay capped at
+# the final value, so the loop never busy-spins or floods the logs.
+_AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 
 
 class BacktestManager:
@@ -244,6 +251,12 @@ class EngineManager:
         self._live_arm_token: LiveArmToken | None = None
         self._ws_tickets: dict[str, tuple[str, float]] = {}
         self._paper_mode_cache: tuple[int, bool] | None = None
+        # Bounded autonomous startup recovery (Web auto-start path only):
+        # attempt counter, next-attempt deadline (time.monotonic()), and the
+        # sleeping retry task, which stop_engine/app shutdown cancel.
+        self._retry_attempt = 0
+        self._retry_next_at: float | None = None
+        self._retry_task: asyncio.Task[None] | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -480,7 +493,7 @@ class EngineManager:
             credentials_changed=credentials_changed,
         )
 
-    def start_engine(self) -> None:
+    def start_engine(self, *, auto_start: bool = False) -> None:
         # Mutual exclusion with the Web backtest runner: the engine must not
         # start while an expensive in-process backtest is using the process.
         if backtest_manager.is_running:
@@ -490,7 +503,6 @@ class EngineManager:
             )
         with self._state_lock:
             if self.runtime is not None or self.engine_state in {
-                "starting",
                 "running",
                 "warming_up",
                 "degraded",
@@ -499,6 +511,17 @@ class EngineManager:
                 "stop_failed",
             }:
                 raise ValueError(f"Engine is already {self.engine_state}")
+            if self.engine_state == "starting":
+                # The auto-start retry loop re-enters while its own failed
+                # attempt left the state at 'starting'. A manual start during
+                # a pending retry is refused so two runtimes can never race.
+                if not auto_start:
+                    if self._retry_task is not None:
+                        raise ValueError(
+                            "Engine auto-start retry is in progress; wait for "
+                            "it to finish or stop the engine"
+                        )
+                    raise ValueError("Engine is already starting")
             self.engine_state = "starting"
             self.last_engine_error = None
 
@@ -512,6 +535,17 @@ class EngineManager:
         runtime: Any = None
         interrupted = False
         try:
+            from parayabuck.runtime import EngineRuntime, TransientStartupError
+        except Exception as exc:
+            # The runtime module must be importable for a start attempt; a
+            # failure is permanent and must not leave the state at 'starting'.
+            with self._state_lock:
+                self._reset_retry_state()
+                self.engine_state = "error"
+                self.last_engine_error = str(exc)
+            self.invalidate_live_arming()
+            raise
+        try:
             warning = _tracked_secret_warning(Path.cwd())
             if warning:
                 raise ValueError(warning)
@@ -524,7 +558,6 @@ class EngineManager:
                 )
             if live_mode:
                 self._require_valid_live_arm(key, secret, consume=True)
-            from parayabuck.runtime import EngineRuntime
 
             runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
             runtime.start()
@@ -537,11 +570,32 @@ class EngineManager:
                     self.runtime = runtime
                     self.broker = runtime.broker
                     self.engine_state = "running"
+                    self._reset_retry_state()
             if interrupted:
                 raise RuntimeError("Engine start was interrupted by a stop request")
             if live_mode:
                 self.invalidate_live_arming()
             log.info("ParayaBuck engine started from Web UI")
+
+        except TransientStartupError as exc:
+            # Network-class startup failure: never a permanent incident. The
+            # auto-start loop retries with bounded backoff while the state
+            # stays 'starting'; a manual start surfaces the message and the
+            # operator retries explicitly.
+            if runtime is not None:
+                try:
+                    runtime.stop()
+                except Exception:
+                    log.exception("Cleanup after transient engine start failure")
+            with self._state_lock:
+                if interrupted or self.engine_state == "stopping":
+                    self.engine_state = "stopped"
+                    self.last_engine_error = None
+                else:
+                    self.engine_state = "starting" if auto_start else "error"
+                    self.last_engine_error = f"transient: {exc}"
+            self.invalidate_live_arming()
+            raise
 
         except Exception as exc:
             if runtime is not None:
@@ -550,6 +604,7 @@ class EngineManager:
                 except Exception:
                     log.exception("Cleanup after failed engine start")
             with self._state_lock:
+                self._reset_retry_state()
                 if interrupted:
                     self.engine_state = "stopped"
                     self.last_engine_error = None
@@ -568,6 +623,10 @@ class EngineManager:
 
     def stop_engine(self) -> None:
         with self._state_lock:
+            # A sleeping auto-start retry must not outlive an explicit stop:
+            # cancel it (a start attempt already in flight is interrupted via
+            # the 'stopping' state instead).
+            self._cancel_pending_retry()
             if self.engine_state == "stopped" and self.runtime is None:
                 return
             if self.runtime is None:
@@ -603,6 +662,67 @@ class EngineManager:
                 self.last_account = None
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
+
+    def _reset_retry_state(self) -> None:
+        """Clear auto-start retry bookkeeping (caller holds the state lock)."""
+        self._retry_attempt = 0
+        self._retry_next_at = None
+        self._retry_task = None
+
+    def _cancel_pending_retry(self) -> None:
+        """Cancel a sleeping auto-start retry, if any; safe from any thread."""
+        with self._state_lock:
+            task = self._retry_task
+            self._reset_retry_state()
+            if task is not None and not task.done():
+                task.cancel()
+
+    async def auto_start_engine(self) -> None:
+        """Bounded autonomous startup recovery for the Web auto-start path.
+
+        Runs one ``start_engine(auto_start=True)`` attempt per iteration and
+        retries transient (network-class) failures with backoff
+        [5, 15, 30, 60]s, capped at 60s, while ``engine_state`` stays
+        'starting'. Permanent failures, an explicit stop, or app shutdown end
+        the loop; every successful start resets the retry counters.
+        """
+        from parayabuck.runtime import TransientStartupError
+
+        try:
+            while True:
+                try:
+                    await asyncio.to_thread(self.start_engine, auto_start=True)
+                    return
+                except TransientStartupError as exc:
+                    with self._state_lock:
+                        if self.engine_state != "starting":
+                            return
+                        attempt = self._retry_attempt + 1
+                        delay = _AUTO_START_RETRY_BACKOFF[
+                            min(attempt, len(_AUTO_START_RETRY_BACKOFF)) - 1
+                        ]
+                        self._retry_attempt = attempt
+                        self._retry_next_at = time.monotonic() + delay
+                        self._retry_task = asyncio.current_task()
+                        self.last_engine_error = f"transient: {exc}; retry in {delay}s"
+                    log.warning(
+                        "Automatic engine start attempt %d failed transiently (%s); "
+                        "retrying in %ds",
+                        attempt,
+                        exc,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    with self._state_lock:
+                        self._retry_task = None
+                        self._retry_next_at = None
+        except asyncio.CancelledError:
+            with self._state_lock:
+                self._reset_retry_state()
+                if self.runtime is None and self.engine_state in {"starting", "stopping"}:
+                    self.engine_state = "stopped"
+                    self.last_engine_error = None
+            raise
 
     def reset_safety_lock(self) -> None:
         with self._state_lock:
@@ -802,6 +922,280 @@ class EngineManager:
         self._pending_live_arm = None
         self._live_arm_token = None
 
+    def live_prerequisites(self) -> dict[str, Any]:
+        """Operator-facing live-arm readiness checklist computed WITHOUT secrets.
+
+        Mirrors the exact gates enforced by EngineRuntime.start() and the web
+        arming flow: config live.enabled, runtime.mode=live,
+        live.hard_dollar_cap>0, PARAYABUCK_ENABLE_LIVE=YES, the operator
+        approval file binding (LiveOperatorApproval: HMAC signature, account
+        match, configuration-digest match, expiry), the in-process
+        LiveArmToken phrase, credentials, and an idle engine. Never returns
+        credentials, the approval HMAC key, or approval-file contents.
+        """
+        items: list[dict[str, Any]] = []
+        raw: dict[str, Any] = {}
+        config_error: str | None = None
+        try:
+            if self.config_path.exists():
+                raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            config_error = str(exc)
+        live_cfg = raw.get("live", {}) if isinstance(raw.get("live", {}), dict) else {}
+        runtime_cfg = raw.get("runtime", {}) if isinstance(raw.get("runtime", {}), dict) else {}
+
+        def item(
+            item_id: str,
+            label: str,
+            satisfied: bool,
+            missing: str | None = None,
+            state: str | None = None,
+        ) -> None:
+            items.append(
+                {
+                    "id": item_id,
+                    "label": label,
+                    "satisfied": satisfied,
+                    "missing": missing,
+                    "state": state or ("ok" if satisfied else "missing"),
+                }
+            )
+
+        # 1. live.enabled
+        live_enabled = bool(live_cfg.get("enabled", False))
+        item(
+            "config_live_enabled",
+            "Config: live.enabled=true",
+            live_enabled,
+            "live.enabled is false in settings.yaml" if not live_enabled else None,
+        )
+
+        # 2. runtime.mode=live
+        mode_live = str(runtime_cfg.get("mode", "paper")).lower() == "live"
+        item(
+            "runtime_mode_live",
+            "Config: runtime.mode=live",
+            mode_live,
+            "runtime.mode is not 'live' in settings.yaml" if not mode_live else None,
+        )
+
+        # 3. live.hard_dollar_cap>0
+        try:
+            cap = float(live_cfg.get("hard_dollar_cap", 0) or 0)
+        except (TypeError, ValueError):
+            cap = 0.0
+        cap_ok = cap > 0
+        item(
+            "live_cap",
+            "Config: live.hard_dollar_cap > 0",
+            cap_ok,
+            f"live.hard_dollar_cap must be greater than 0 (currently {cap:g})"
+            if not cap_ok
+            else None,
+        )
+
+        # 4. PARAYABUCK_ENABLE_LIVE=YES
+        env_ok = os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
+        item(
+            "enable_live_env",
+            "PARAYABUCK_ENABLE_LIVE=YES",
+            env_ok,
+            "PARAYABUCK_ENABLE_LIVE=YES is not set; restart the application with it"
+            if not env_ok
+            else None,
+        )
+
+        # 5-8. Operator approval file: presence, HMAC key, signature+expiry,
+        # and the account/config binding.
+        approval_path = str(live_cfg.get("operator_approval_path") or "")
+        key_env_name = str(
+            live_cfg.get("operator_approval_key_env") or "PARAYABUCK_OPERATOR_APPROVAL_KEY"
+        )
+        hmac_key = os.getenv(key_env_name, "")
+        file_ok = bool(approval_path) and Path(approval_path).exists()
+        item(
+            "approval_file",
+            "Operator approval file present",
+            file_ok,
+            (
+                "live.operator_approval_path is not configured"
+                if not approval_path
+                else f"operator approval file not found: {approval_path}"
+            )
+            if not file_ok
+            else None,
+        )
+        key_ok = len(hmac_key) >= 32
+        item(
+            "approval_key",
+            "Operator approval HMAC key configured",
+            key_ok,
+            f"approval key env {key_env_name} is missing or shorter than 32 characters"
+            if not key_ok
+            else None,
+        )
+
+        approval: LiveOperatorApproval | None = None
+        approval_error: str | None = None
+        if file_ok and key_ok:
+            try:
+                parsed = json.loads(Path(approval_path).read_text(encoding="utf-8"))
+                approval = LiveOperatorApproval(
+                    operator_id=str(parsed.get("operator_id", "")),
+                    account_id=str(parsed.get("account_id", "")),
+                    configuration_digests=tuple(
+                        str(item) for item in parsed.get("configuration_digests", ())
+                    ),
+                    maximum_dollar_exposure=float(parsed.get("maximum_dollar_exposure", 0)),
+                    approved_at=datetime.fromisoformat(str(parsed.get("approved_at", ""))),
+                    expires_at=datetime.fromisoformat(str(parsed.get("expires_at", ""))),
+                    nonce=str(parsed.get("nonce", "")),
+                    signature=str(parsed.get("signature", "")),
+                )
+                expected = approval.calculated_signature(hmac_key)
+                if not hmac.compare_digest(approval.signature, expected):
+                    approval_error = (
+                        "approval file signature does not match the operator approval key"
+                    )
+                elif approval.expires_at <= datetime.now(UTC):
+                    approval_error = "approval file has expired"
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                approval_error = f"approval file is unreadable or invalid: {exc}"
+        signature_ok = approval is not None and approval_error is None
+        if not signature_ok and approval_error is None:
+            approval_error = (
+                "approval file or operator approval HMAC key is missing (see checks above)"
+            )
+        item(
+            "approval_signature",
+            "Approval signature and expiry valid",
+            signature_ok,
+            approval_error if not signature_ok else None,
+        )
+
+        # Binding checks need the LIVE account identity (read-only broker
+        # probe against the live endpoint, exactly like request_live_arming)
+        # and the configuration digests the engine will compute at start.
+        key, secret = self.get_credentials()
+        account_id: str | None = None
+        if key and secret:
+            try:
+                from parayabuck.execution.alpaca import AlpacaBroker
+
+                live_broker = AlpacaBroker(key, secret, paper=False)
+                try:
+                    live_broker.account()
+                    account_id = live_broker.account_id
+                finally:
+                    live_broker.close()
+            except Exception:
+                account_id = None
+        expected_digests: tuple[str, ...] | None = None
+        digest_error: str | None = None
+        try:
+            cfg = load_config(str(self.config_path))
+            from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+            from parayabuck.portfolio import portfolio_strategy_from
+            from parayabuck.portfolio.runtime_service import configuration_digest
+            from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
+            from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
+            from parayabuck.universe.scanner import scanner_config_digest
+
+            digests: list[str] = []
+            for market, selection, symbols, universe_version in (
+                (
+                    Market.EQUITY,
+                    cfg.strategy.equity,
+                    load_active_symbols(cfg.universe.equity, log_rejection=False),
+                    scanner_config_digest(cfg.universe.equity),
+                ),
+                (
+                    Market.CRYPTO,
+                    cfg.strategy.crypto,
+                    load_active_crypto_symbols(cfg.universe.crypto, log_rejection=False),
+                    crypto_scanner_config_digest(cfg.universe.crypto),
+                ),
+            ):
+                if not selection.enabled or not symbols:
+                    continue
+                strategy = portfolio_strategy_from(selection.name, selection.parameters)
+                digests.append(
+                    configuration_digest(
+                        strategy,
+                        "live",
+                        selection.maximum_allocation,
+                        universe_version,
+                        portfolio_risk_limits_from_config(cfg.risk),
+                    )
+                )
+            expected_digests = tuple(digests)
+        except Exception as exc:
+            digest_error = str(exc)
+
+        binding_state = "ok"
+        binding_missing: str | None = None
+        if approval is None:
+            binding_state = "missing"
+            binding_missing = "approval file is not loadable (see approval checks above)"
+        elif account_id is None:
+            binding_state = "unverifiable"
+            binding_missing = (
+                "cannot verify the live account binding without reachable live credentials"
+            )
+        elif expected_digests is None:
+            binding_state = "unverifiable"
+            binding_missing = f"cannot verify the configuration binding: {digest_error}"
+        elif approval.account_id != account_id:
+            binding_state = "missing"
+            binding_missing = "approval file was issued for a different Alpaca account"
+        elif set(approval.configuration_digests) != set(expected_digests):
+            binding_state = "missing"
+            binding_missing = (
+                "approval file configuration digests do not match the current settings"
+            )
+        item(
+            "approval_binding",
+            "Approval binds this account and configuration",
+            binding_state == "ok",
+            binding_missing,
+            binding_state,
+        )
+
+        # 9. Web-path account-suffix phrase (LiveArmToken) for this process.
+        armed = bool(self._live_armed and self._live_arm_token is not None)
+        item(
+            "web_arm_token",
+            "Live confirmation phrase verified in this session",
+            armed,
+            ("complete the LIVE <account-suffix> phrase confirmation (mode chip) before starting")
+            if not armed
+            else None,
+        )
+
+        # 10. Credentials present.
+        creds_ok = bool(key and secret)
+        item(
+            "credentials",
+            "Alpaca credentials configured",
+            creds_ok,
+            "Alpaca API key and secret are required (settings)" if not creds_ok else None,
+        )
+
+        # 11. Engine not running.
+        engine_idle = not self.has_active_runtime()
+        item(
+            "engine_stopped",
+            "Trading engine is stopped",
+            engine_idle,
+            "stop the engine before arming live mode" if not engine_idle else None,
+        )
+
+        return {
+            "all_met": all(entry["satisfied"] for entry in items),
+            "items": items,
+            "config_error": config_error,
+        }
+
     def _require_valid_live_arm(
         self, key: str, secret: str, *, consume: bool = False
     ) -> LiveArmToken:
@@ -938,7 +1332,7 @@ manager = EngineManager()
 
 async def _auto_start_paper_engine() -> None:
     try:
-        await asyncio.to_thread(manager.start_engine)
+        await manager.auto_start_engine()
     except Exception as exc:
         log.error("Automatic paper engine start failed: %s", exc)
 
@@ -954,7 +1348,14 @@ async def app_lifespan(_app: FastAPI) -> Any:
         yield
     finally:
         if auto_start_task is not None:
-            await auto_start_task
+            # A pending backoff sleep must not delay shutdown by up to a full
+            # retry interval: cancel the retry so the task settles promptly.
+            # An in-flight start attempt is still allowed to finish.
+            manager._cancel_pending_retry()
+            try:
+                await auto_start_task
+            except asyncio.CancelledError:
+                pass
         # Uvicorn shutting down must also release Alpaca's stock and crypto
         # sockets. Daemon threads alone remain active long enough to collide
         # with a newly launched process and trigger the connection limit.
@@ -1213,6 +1614,19 @@ async def get_status() -> dict[str, Any]:
         # Mirror the universe-section failure state so consumers never see a
         # missing scanner key when the config cannot be loaded.
         result["scanner"] = {"last_run_at": None, "status": "error"}
+    # Bounded auto-start retry state (cheap reads; present only while a retry
+    # cycle is active, so a settled engine exposes no retry noise).
+    retry_attempt = getattr(manager, "_retry_attempt", 0)
+    retry_next_at = getattr(manager, "_retry_next_at", None)
+    if retry_attempt > 0 and retry_next_at is not None:
+        remaining = max(0.0, retry_next_at - time.monotonic())
+        result["engine"] = {
+            "retry": {
+                "attempt": retry_attempt,
+                "retry_in_seconds": round(remaining, 1),
+                "next_retry_at": (datetime.now(UTC) + timedelta(seconds=remaining)).isoformat(),
+            }
+        }
     runtime = getattr(manager, "runtime", None)
     runtime_refresh: dict[str, Any] = {}
     if runtime is not None and hasattr(runtime, "health"):
@@ -1387,6 +1801,12 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
     except Exception:
         log.exception("Trading-mode toggle failed with an unexpected error")
         raise HTTPException(status_code=500, detail="Trading mode could not be changed") from None
+
+
+@app.get("/api/live/prerequisites")
+async def live_prerequisites() -> dict[str, Any]:
+    """Live-arm readiness checklist (no secrets in the response)."""
+    return await asyncio.to_thread(manager.live_prerequisites)
 
 
 @app.post("/api/live/arming/request")

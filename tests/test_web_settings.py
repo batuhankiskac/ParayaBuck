@@ -277,11 +277,17 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
         def should_auto_start(self) -> bool:
             return True
 
+        async def auto_start_engine(self) -> None:
+            self.start_engine()
+
         def start_engine(self) -> None:
             self.start_calls += 1
 
         def stop_engine(self) -> None:
             self.stop_calls += 1
+
+        def _cancel_pending_retry(self) -> None:
+            pass
 
     manager = AutoStartManager()
     monkeypatch.setattr(server, "manager", manager)

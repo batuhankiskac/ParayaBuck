@@ -680,6 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
             portInput.value = data.port || 8000;
             openBrowserInput.checked = data.open_browser !== false;
             logLevelInput.value = data.log_level || 'INFO';
+            refreshLivePrerequisites();
             setSettingsOpen(true);
         } catch (err) {
             alert("Ayarlar yüklenemedi: " + err.message);
@@ -687,6 +688,52 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     settingsBtn.addEventListener('click', openSettings);
+
+    // Live arming prerequisites checklist (computed server-side without secrets)
+    const livePrerequisitesBox = document.getElementById('livePrerequisites');
+    const livePrerequisitesList = document.getElementById('livePrerequisitesList');
+    const livePrerequisitesSummary = document.getElementById('livePrerequisitesSummary');
+
+    const refreshLivePrerequisites = async () => {
+        try {
+            const response = await fetch('/api/live/prerequisites');
+            if (!response.ok) throw new Error(`Ön koşullar alınamadı (${response.status})`);
+            const data = await response.json();
+            const items = Array.isArray(data.items) ? data.items : [];
+            livePrerequisitesBox.hidden = false;
+            livePrerequisitesList.innerHTML = '';
+            for (const item of items) {
+                const li = document.createElement('li');
+                const mark = document.createElement('span');
+                if (item.satisfied) {
+                    mark.textContent = '✓ ';
+                    mark.className = 'positive';
+                } else if (item.state === 'unverifiable') {
+                    mark.textContent = '? ';
+                    mark.className = '';
+                } else {
+                    mark.textContent = '✗ ';
+                    mark.className = 'negative';
+                }
+                li.appendChild(mark);
+                const label = document.createElement('span');
+                label.textContent = item.label;
+                li.appendChild(label);
+                if (!item.satisfied && item.missing) {
+                    const detail = document.createElement('small');
+                    detail.className = 'settings-note';
+                    detail.textContent = ' — ' + item.missing;
+                    li.appendChild(detail);
+                }
+                livePrerequisitesList.appendChild(li);
+            }
+            livePrerequisitesSummary.textContent = data.all_met
+                ? 'Tüm ön koşullar sağlandı.'
+                : 'Eksik ön koşullar tamamlanmadan canlı mod arm edilemez.';
+        } catch (err) {
+            livePrerequisitesBox.hidden = true;
+        }
+    };
     closeSettingsBtn.addEventListener('click', () => setSettingsOpen(false));
     cancelSettingsBtn.addEventListener('click', () => setSettingsOpen(false));
     settingsModal.addEventListener('click', (event) => {

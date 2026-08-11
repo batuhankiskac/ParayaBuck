@@ -1528,6 +1528,11 @@ class PortfolioRuntime:
             return self._submit_deferred_buys(current.decision_id)
         if current.phase == REBALANCE_PHASE_BUY_PENDING:
             buys = self.repository.orders_for_decision(current.decision_id, side="buy")
+            if buys and any(str(item["status"]) == "submitting" for item in buys):
+                resolved = self._resolve_stuck_submission_rows(current.decision_id, buys, "buy")
+                if resolved is None:
+                    return None
+                buys = resolved
             if buys and all(is_terminal_order_status(str(item["status"])) for item in buys):
                 self.repository.update_rebalance_execution(
                     current.decision_id, REBALANCE_PHASE_COMPLETE
@@ -1545,6 +1550,15 @@ class PortfolioRuntime:
                 current.decision_id, REBALANCE_PHASE_BUY_READY
             )
             return self._submit_deferred_buys(current.decision_id)
+        if any(str(item["status"]) == "submitting" for item in sells):
+            # A crash between repository persistence and broker acknowledgement
+            # leaves a row at ``submitting``. Resolve it against the broker so
+            # a restart never wedges the rebalance; a broker that is
+            # unreachable leaves the row for a later attempt.
+            resolved = self._resolve_stuck_submission_rows(current.decision_id, sells, "sell")
+            if resolved is None:
+                return None
+            sells = resolved
         statuses = [str(item["status"]) for item in sells]
         if any(status in _AMBIGUOUS_ORDER_STATUSES for status in statuses):
             self.repository.update_rebalance_execution(
@@ -1559,6 +1573,45 @@ class PortfolioRuntime:
             return None
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
         return self._submit_deferred_buys(current.decision_id)
+
+    def _resolve_stuck_submission_rows(
+        self, decision_id: str, orders: tuple[dict[str, object], ...], side: str
+    ) -> tuple[dict[str, object], ...] | None:
+        """Resolve order rows left at ``submitting`` by a crash between
+        repository persistence and broker acknowledgement.
+
+        The broker's deterministic client-order-id lookup proves whether the
+        order ever reached Alpaca: an unknown id is canceled (it can never
+        fill), a filled order is recovered at its real price through the
+        broker's fill-recovery callback, and a working order is marked
+        submitted. Returns the re-read rows, or ``None`` when the broker was
+        unreachable or lacks the lookup — the caller retries without
+        guessing.
+        """
+        resolver = getattr(self.broker, "resolve_portfolio_submission", None)
+        if resolver is None:
+            return None
+        changed = False
+        for item in orders:
+            if str(item["status"]) != "submitting":
+                continue
+            client_order_id = str(item["client_order_id"])
+            try:
+                outcome = resolver(client_order_id, str(item.get("broker_order_id") or ""))
+            except Exception:
+                # Broker unreachable: do not guess; retry on a later advance.
+                continue
+            if outcome is None:
+                continue
+            if isinstance(outcome, tuple):
+                status, broker_order_id = outcome
+            else:
+                status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
+            self.repository.update_order(client_order_id, status, broker_order_id)
+            changed = True
+        if not changed:
+            return orders
+        return self.repository.orders_for_decision(decision_id, side=side)
 
     def _submit_deferred_buys(self, decision_id: str) -> PortfolioRuntimeResult | None:
         """Re-plan and submit the BUY side of a completed SELL phase.

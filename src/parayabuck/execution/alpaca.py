@@ -405,6 +405,46 @@ class AlpacaBroker:
                         raise
         return None
 
+    def resolve_portfolio_submission(
+        self, client_order_id: str, broker_order_id: str = ""
+    ) -> tuple[str, str] | str | None:
+        """Resolve a portfolio order row left at ``submitting`` by a crash
+        between repository persistence and broker acknowledgement.
+
+        The deterministic client order id proves whether the order ever
+        reached Alpaca:
+
+        * unknown at the broker (404) -> ``"canceled"``: it can never fill;
+        * present and filled -> the real fill is recovered through
+          ``portfolio_fill_recovered`` (the same path startup reconciliation
+          uses) and ``"filled"`` is returned;
+        * present and terminal (canceled/expired/rejected/done_for_day) ->
+          that status;
+        * present and still working -> ``"submitted"``.
+
+        Returns ``None`` when the broker is unreachable or the lookup
+        capability is missing; the caller retries later without guessing.
+        """
+        get_by_client = getattr(self._client, "get_order_by_client_id", None)
+        if get_by_client is None:
+            return None
+        broker_order = self._fetch_broker_order(client_order_id, broker_order_id)
+        if broker_order is None:
+            return "canceled"
+        status = str(self._normalized_field(broker_order, "status") or "").lower()
+        if status == "filled":
+            recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
+            if recovered is not None:
+                if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
+                    fill_recovered(*recovered)
+                return "filled"
+            # The order filled but its fill could not be extracted; keep the
+            # row non-terminal so ownership is not silently released.
+            return "submitted"
+        if status in {"canceled", "cancelled", "expired", "rejected", "done_for_day"}:
+            return status
+        return "submitted"
+
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str
     ) -> tuple[str, str, float, float, datetime, str, float] | None:

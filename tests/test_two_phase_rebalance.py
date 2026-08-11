@@ -67,6 +67,10 @@ class _SimBroker:
         self.positions = list(positions)
         self.open_symbols: set[str] = set()
         self.submitted: list[PortfolioOrderRequest] = []
+        # Crash-window resolution map: client_order_id -> broker outcome
+        # ("canceled" default when absent = the order never reached the
+        # broker; "filled" recovers a real fill through the callback).
+        self.order_resolution: dict[str, str] = {}
 
     def account(self) -> AccountSnapshot:
         equity = 100_000.0
@@ -91,6 +95,24 @@ class _SimBroker:
         self.submitted.append(order)
         self.open_symbols.add(order.symbol)
         return "broker-" + order.client_order_id
+
+    def resolve_portfolio_submission(self, client_order_id: str, broker_order_id: str = "") -> str:
+        """Fake broker crash-window resolution: an id absent from
+        ``order_resolution`` never reached the broker and resolves canceled;
+        ``filled`` recovers a real fill through ``portfolio_fill_recovered``."""
+        outcome = self.order_resolution.get(client_order_id, "canceled")
+        if outcome == "filled":
+            if recover := getattr(self, "portfolio_fill_recovered", None):
+                recover(
+                    client_order_id,
+                    broker_order_id or ("broker-" + client_order_id),
+                    250.0,
+                    100.0,
+                    datetime.now(UTC),
+                    f"activity-{client_order_id}",
+                    0.0,
+                )
+        return outcome
 
 
 def _runtime(
@@ -273,6 +295,141 @@ def test_restart_during_sell_phase_recovers_exactly_once(tmp_path) -> None:
     # Re-advancing (restart storms, duplicate trade updates) submits nothing.
     assert runtime_b.advance_rebalance() is None
     assert len(broker.submitted) == 2
+
+
+def test_crash_before_broker_ack_never_submitted_recovers_autonomously(tmp_path) -> None:
+    """A crash between repository persistence and broker acknowledgement
+    leaves the SELL row at ``submitting``. On restart the deterministic
+    client id lookup proves the order never reached Alpaca, so the row is
+    canceled and the deferred BUY proceeds — no operator DB cleanup, no
+    wedged rebalance."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime_a, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime_a.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    # ---- crash between persist("submitting") and broker acknowledgement ----
+    repository.update_order(sell.client_order_id, "submitting")
+    broker.open_symbols.discard("AAPL")
+    runtime_a.close()
+    # ---- restart: broker has no record of the client id ----
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime_b = PortfolioRuntime(
+        _FixedTargetStrategy({"AAPL": 0.15, "MSFT": 0.20}),
+        ("AAPL", "MSFT"),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    recovered = runtime_b.advance_rebalance()
+    assert recovered is not None and recovered.status == "buy_phase_submitted"
+    assert [order.side for order in broker.submitted] == [
+        PortfolioOrderSide.SELL,
+        PortfolioOrderSide.BUY,
+    ]
+    rows = repository.orders_for_decision(result.decision_id, side="sell")
+    assert [str(row["status"]) for row in rows] == ["canceled"]
+    # The rebalance completes normally afterwards.
+    for order in recovered.orders:
+        _fill(repository, order)
+    broker.positions = [_position("AAPL", 400), _position("MSFT", 200)]
+    broker.open_symbols.discard(order.symbol)
+    completed = runtime_b.advance_rebalance()
+    assert completed is not None and completed.status == "rebalance_complete"
+
+
+def test_crash_before_ack_but_broker_filled_recovers_real_fill(tmp_path) -> None:
+    """A crash between persistence and acknowledgement where the broker DID
+    receive and fill the SELL: restart resolution recovers the real fill at
+    its actual price, releases ownership, and continues the BUY phase."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime_a, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    result = runtime_a.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert result.status == "sell_phase_submitted"
+    sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
+    # The 400 AAPL were bought by the portfolio in an earlier session; seed
+    # the repo ownership so the recovered SELL fill can release it.
+    entry = PortfolioOrderRequest(
+        client_order_id="pbp-entry-aapl",
+        decision_id=result.decision_id,
+        symbol="AAPL",
+        market=Market.EQUITY,
+        side=PortfolioOrderSide.BUY,
+        quantity=400.0,
+        reference_price=100.0,
+        decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        strategy_name="fixed_target",
+        strategy_version="1.0.0",
+        risk_reducing=False,
+    )
+    repository.record_order(entry, "submitted")
+    repository.apply_trade_update(
+        client_order_id="pbp-entry-aapl",
+        broker_order_id="broker-pbp-entry-aapl",
+        status="filled",
+        cumulative_filled_quantity=400.0,
+        average_fill_price=100.0,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        activity_id="activity-entry-aapl",
+        fee=0.0,
+        realized_pnl=0.0,
+        unrealized_pnl=0.0,
+    )
+    # ---- crash; the broker actually filled the SELL while the process was
+    # down (no stream event was persisted) ----
+    repository.update_order(sell.client_order_id, "submitting")
+    broker.open_symbols.discard("AAPL")
+    broker.positions = [_position("AAPL", 150)]
+    broker.order_resolution[sell.client_order_id] = "filled"
+
+    def _recover_fill(
+        client_order_id: str,
+        broker_order_id: str,
+        filled_qty: float,
+        avg_price: float,
+        occurred_at: datetime,
+        activity_id: str,
+        fee: float,
+    ) -> None:
+        repository.apply_trade_update(
+            client_order_id=client_order_id,
+            broker_order_id=broker_order_id,
+            status="filled",
+            cumulative_filled_quantity=filled_qty,
+            average_fill_price=avg_price,
+            occurred_at=occurred_at,
+            activity_id=activity_id,
+            fee=fee,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+        )
+
+    broker.portfolio_fill_recovered = _recover_fill
+    runtime_a.close()
+    # ---- restart ----
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    runtime_b = PortfolioRuntime(
+        _FixedTargetStrategy({"AAPL": 0.15, "MSFT": 0.20}),
+        ("AAPL", "MSFT"),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    recovered = runtime_b.advance_rebalance()
+    assert recovered is not None and recovered.status == "buy_phase_submitted"
+    # Ownership was released by the recovered real fill.
+    owned = repository.owned_quantities("acct")
+    assert owned.get("AAPL", 0.0) == 150.0
+    rows = repository.orders_for_decision(result.decision_id, side="sell")
+    assert [str(row["status"]) for row in rows] == ["filled"]
+    assert [order.side for order in broker.submitted] == [
+        PortfolioOrderSide.SELL,
+        PortfolioOrderSide.BUY,
+    ]
 
 
 def test_duplicate_trade_update_no_duplicate_buy(tmp_path) -> None:

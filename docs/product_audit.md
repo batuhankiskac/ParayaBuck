@@ -1,24 +1,26 @@
 # ParayaBuck Product Identity Audit
 
-Audit date: 2026-08-11 · HEAD: `199d153` (+ one defect fix, see "Automated fix")
+Audit date: 2026-08-11 · HEAD at audit: `199d153` · HEAD after hardening:
+`<see git log>` (product hardening mini-loop: G1–G9)
 
 Documentation only. Nothing at runtime reads this file.
 
 ## Verdict
 
-**B — AUTOMATED TRADING PRODUCT WITH MINOR PRODUCT GAPS.**
+**B — AUTOMATED TRADING PRODUCT WITH MINOR PRODUCT GAPS** (pre-hardening),
+**closed by the hardening loop: product foundation is now FROZEN.**
 
 ParayaBuck is an autonomous Alpaca trading bot. Configure, supply PAPER
 credentials, start, leave running: it discovers/maintains its universe,
 ingests market data, runs the enabled strategy on schedule, applies risk,
 submits and reconciles orders, monitors positions, and recovers from restart
 without any research command. Research/backtest tooling is optional and
-cleanly separated. A small number of operational gaps remain (below); none
-require research infrastructure, and none block normal autonomous operation.
+cleanly separated.
 
-**NO FURTHER PRODUCT ARCHITECTURE REDESIGN REQUIRED.** Future work should
-focus on strategy selection, risk semantics, PAPER validation, and
-operational polish — not research infrastructure.
+**PRODUCT FOUNDATION: FROZEN — NO FURTHER PRODUCT ARCHITECTURE REDESIGN
+REQUIRED.** Future work focuses on strategy selection, risk semantics, PAPER
+validation, and operational polish — not research infrastructure. See
+`docs/product_foundation.md`.
 
 ## Product entrypoints
 
@@ -73,9 +75,9 @@ persisted, no orphan state.
 | 5 | Automatic strategy decisions | PASS (closed-bar schedule, weekly policy, intermediate risk rebalance) |
 | 6 | Automatic risk application | PASS (overlay + entry latch + buy-capacity sizing) |
 | 7 | Automatic order submission | PASS (two-phase, deterministic client ids, persist-before-broker) |
-| 8 | Automatic fill/reconciliation | PARTIAL (see gaps G1, G5, G6) |
-| 9 | Restart recovery | PARTIAL (unit-tested per layer; no full-engine restart test; G2) |
-| 10 | Persistent safety state | PARTIAL (risk baselines persist; G2) |
+| 8 | Automatic fill/reconciliation | PASS (stream fills + 60 s reconcile + startup fill-activity recovery + G1 crash-window resolution in the chaos gate) |
+| 9 | Restart recovery | PASS (per-layer unit tests + 16 restart chaos scenarios incl. cross-day; full-engine lifecycle verified live) |
+| 10 | Persistent safety state | PASS (safety_incidents table survives day boundary; session-scoped baselines deliberate) |
 | 11 | Operator Web control | PASS (status/start/stop/positions/orders/safety/universe/config; verified) |
 | 12 | PAPER/LIVE separation | PASS (mode-driven, triple-gated live) |
 | 13 | LIVE disabled by default | PASS (config + env + approval; verified) |
@@ -84,10 +86,10 @@ persisted, no orphan state.
 | 16 | Strategy selection is normal config | PASS (`strategy.equity.name` + parameters in settings.yaml) |
 | 17 | No experiment promotion requirement | PASS (no registry/trial/gate on any runtime path) |
 | 18 | Managed positions remain monitored | PASS (pins, bracket/stop protection, reconcile) |
-| 19 | Scanner refresh requires no manual action | PARTIAL (automatic; failed scan halts entries until next scheduled slot, ≤ ~24 h) |
+| 19 | Scanner refresh requires no manual action | PASS (automatic; failed scans retry bounded 5/15/30/60 min, equity gated pre-market) |
 | 20 | Long-running runtime needs no research commands | PASS |
 
-**PASS 16 · PARTIAL 4 · FAIL 0**
+**PASS 20 · PARTIAL 0 · FAIL 0** (after hardening loop)
 
 ## Research-runtime dependency audit
 
@@ -119,9 +121,9 @@ ZERO mandatory research-runtime coupling. Verified in code:
 | `ruff check .` | PASS |
 | `ruff format --check .` | PASS |
 | `mypy src` | PASS (64 files) |
-| `pytest` | PASS 359 passed (357 before audit fix) |
+| `pytest` | PASS 426 passed (hardening added 67) |
 | `python -m build` | PASS (wheel + sdist) |
-| `python scripts/run_paper_chaos.py` | PASS (63 marked scenarios) |
+| `python scripts/run_paper_chaos.py` | PASS (90 marked scenarios incl. restart/cross-day chaos) |
 | `pip-audit` | PASS (no known vulnerabilities) |
 | Docker build/healthz/readyz/SIGTERM/restart | NOT RUN (no Docker daemon on this machine; all contexts point at dead sockets) |
 
@@ -138,49 +140,81 @@ ZERO mandatory research-runtime coupling. Verified in code:
 - `PARAYABUCK_ALLOW_PAPER_SMOKE=YES` is not set and was not manufactured;
   the execution-lifecycle smoke (`scripts/paper_smoke.py`) was not run.
 
-## Known operational gaps
+## Operational gaps — status after hardening loop (2026-08-12)
 
-- **G1 (fixed this audit) — crash window between repository persistence and
-  broker acknowledgement wedged two-phase rebalances.** A row left at
-  `submitting` (process dies between `record_order("submitting")` and the
-  ack write) was neither terminal nor ambiguous, so `advance_rebalance`
-  returned `None` forever and no reconcile/reset path rewrote the row:
-  the market stayed `rebalance_in_progress` and recovery required manual DB
-  surgery. **Automated fix**: `PortfolioRuntime._resolve_stuck_submission_rows`
-  + `AlpacaBroker.resolve_portfolio_submission` resolve `submitting` rows at
-  restart via the deterministic client-order-id lookup — unknown-at-broker →
-  canceled, filled-at-broker → real fill recovered through the existing
-  recovery callback, working → submitted. Fail-safe (broker unreachable ⇒
-  retry, no guessing). 2 regression tests added.
-- **G2 — safety-state persistence is session-date-scoped.** `risk_state` is
-  keyed (account_id, session_date) and restored only for today's date, so a
-  halt (e.g. `ownership_drift`) persisted at 23:59 is silently cleared by a
-  restart after midnight. Recovery otherwise intact.
-- **G3 — auto-start is one-shot.** A transient startup failure leaves the
-  engine in `error` until the operator clicks Start or restarts the process
-  (observed live). No retry.
-- **G4 — crypto universe scan runs even with `strategy.crypto.enabled:
-  false`** (universe discovery stays enabled): full USD-pair scan every 24 h
-  and at startup when stale. Not trading-affecting; avoidable load.
-- **G5 — failed universe scan halts entries until the next scheduled refresh
-  slot** (equity next pre-market 06:00 ET, crypto +24 h), fail-closed but
-  with up to ~24 h of blocked entries; only broker-native resting stops
-  reduce risk meanwhile.
-- **G6 — legacy execution-layer gaps**: the old signal-engine ledger path is
-  unreachable from production code but still maintained; stream trade updates
-  for ledger orders are dropped (60 s reconcile + fill-activity pagination
-  covers them); fill-activity recovery can silently skip older activities;
-  portfolio fills persist zero PnL (slippage only).
-- **G7 — Web live-arming UI** only covers the in-process account-suffix
-  phrase; the approval-file prerequisite enforced by the engine is not
-  surfaced, so a Web-only live arm fails at engine start with a generic
-  error. (Live is unreachable by default regardless.)
-- **G8 — chaos gate excludes the restart tests** (marker `paper_chaos`
-  matches only 3 modules); restart recovery is not part of the gate despite
-  its docstring.
-- **G9 — port-bind failure orphans the engine** (observed live): the engine
-  auto-starts during lifespan startup before the socket binds; if the bind
-  fails the engine keeps running with no operator console.
+- **G1 — crash-window rebalance wedge: CLOSED** (previous audit). A row left
+  at `submitting` (crash between repository persistence and broker ack) is
+  resolved at restart via the deterministic client-order-id lookup
+  (`AlpacaBroker.resolve_portfolio_submission` +
+  `PortfolioRuntime._resolve_stuck_submission_rows`): unknown-at-broker →
+  canceled, filled-at-broker → real fill recovered, working → submitted.
+  Fail-safe; now part of the chaos gate (test_restart_chaos.py).
+- **G2 — cross-day safety state: CLOSED.** New `safety_incidents` table
+  (account-scoped, date-independent) is the authoritative
+  PERSISTENT_INCIDENT store: `ownership_drift`, `protection_failure`,
+  `ambiguous_order_state`, `reconciliation_failed` and friends survive
+  midnight/restart/reboot until their verified recovery (startup or periodic
+  reconcile success, or a granular operator `reset_safety_lock`). Daily-loss
+  /drawdown baselines stay SESSION_SCOPED in the session-keyed `risk_state`
+  (a new healthy session may clear them). Migration backfills the latest
+  historical halt fail-safe; an operator-cleared incident is never
+  resurrected. Startup reconcile success clears incidents (same recovery
+  semantics as the periodic path); the restart rebalance-resume is deferred
+  while a restored breaker is active.
+- **G3 — bounded autonomous startup recovery: CLOSED.** `TransientStartupError`
+  classification (network-class failures: connect/read timeouts, connection
+  errors, HTTP 5xx/429 — never recorded as permanent incidents) with a
+  bounded auto-start retry loop in the Web manager ([5, 15, 30, 60]s cap;
+  one warning per attempt; stop/shutdown cancel; manual start refused while a
+  retry is pending; success resets counters). Permanent/config/safety failures
+  stay fail-closed with an actionable error. Also covers the final startup
+  account fetch.
+- **G4 — disabled crypto scanner load: DEFERRED** (optional optimization,
+  not a release blocker). Crypto scanning continues on its cadence even with
+  the crypto strategy disabled; the G5 retry work keeps crypto failures
+  isolated from equity.
+- **G5 — scanner refresh self-healing: CLOSED.** Per-market bounded retries
+  (300/900/1800/3600 s cap) after a failed refresh instead of waiting for the
+  next schedule slot; fail-closed preserved (membership unchanged,
+  `invalid_dynamic_universe` halt, digest validation, pins untouched).
+  Equity retries are capped at the next pre-market slot when the backoff
+  would land mid-session (a partial daily bar must never change the
+  universe). Retry state surfaces in `/api/status` (`scanner.retry_at`,
+  `retry_attempt`); shutdown cancels pending retries.
+- **G6 — accounting/legacy classification: AUDITED, DEFERRED (reporting-only).**
+  (a) Legacy ledger path (`AlpacaBroker.submit()` era) is unreachable from
+  production — DEAD LEGACY, retained for recovery/crypto protection; (b)
+  fill-activity recovery can skip very old activities — intentional bounded
+  pagination, RECONCILIATION-CRITICAL but only for ages beyond the Alpaca
+  activity window; (c) portfolio fills persist `realized_pnl=0` —
+  REPORTING-ONLY: authoritative equity is the broker account snapshot
+  (account loop + reconcile), daily-loss state derives from
+  `account.daily_pnl`, not stored fill PnL; risk does not consume stored
+  fill PnL; reconciliation uses quantities/activity ids, not stored PnL; the
+  Web operations snapshot shows slippage and broker-computed PnL. Zero-PnL
+  is a display incompleteness, not a correctness issue. No code change.
+- **G7 — live-arming prerequisites: CLOSED.** `/api/live/prerequisites`
+  computes an 11-item checklist mirroring the real gates (config live
+  enabled/mode/cap, `PARAYABUCK_ENABLE_LIVE=YES`, approval file presence,
+  HMAC key length, signature+expiry, account binding via read-only live
+  probe, configuration-digest match, Web arm-token phrase, credentials,
+  engine idle) WITHOUT secrets; the settings drawer renders
+  satisfied/missing per item. No requirement weakened; live remains
+  impossible by default.
+- **G8 — restart chaos gate: CLOSED.** New `tests/test_restart_chaos.py`
+  (marked `paper_chaos`) adds 16 deterministic restart scenarios — flat,
+  managed position, open order, SELL phase, SELL-filled-before-BUY, partial
+  fill, duplicate trade update, G1 submitting-window (both outcomes),
+  persistent-incident restart, cross-day incident restart, universe
+  persisted/pins, symbol outside scanner universe — executed by
+  `scripts/run_paper_chaos.py` (now 90 marked scenarios).
+- **G9 — Web bind failure must not orphan the engine: CLOSED.** Traced:
+  uvicorn starts the lifespan (which auto-starts the engine) BEFORE binding
+  the socket, so a lost port race launched a full engine before the bind
+  error. Pre-bind probe in `web/app.py` (`_probe_web_bind`) fails fast
+  (exit 1, clear console error, engine never started). Verified live:
+  second instance on the same port exits rc=1 with zero engine activity;
+  SIGTERM on the running instance shuts down cleanly with no orphans.
 
 ## Dead / obsolete research code
 

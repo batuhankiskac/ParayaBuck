@@ -1141,7 +1141,10 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
         reconcile=lambda: reconciled.append(True),
         account=lambda: account,
     )
-    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (),
+        clear_safety_incident=lambda _account, _reason=None: None,
+    )
     persisted: list[AccountSnapshot] = []
     runtime._persist_risk_state = persisted.append
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
@@ -1187,7 +1190,8 @@ def test_safety_lock_reset_is_granular_per_market_halt() -> None:
                 target_state="target_exit_submitted",
                 status="open",
             ),
-        )
+        ),
+        clear_safety_incident=lambda _account, _reason=None: None,
     )
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
@@ -1209,7 +1213,8 @@ def test_safety_lock_reset_is_granular_per_market_halt() -> None:
                 target_state="target_exit_filled",
                 status="open",
             ),
-        )
+        ),
+        clear_safety_incident=lambda _account, _reason=None: None,
     )
     runtime._circuit_breaker_reason = "reconciliation_failed"
     runtime.reset_safety_lock()
@@ -1236,7 +1241,10 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
         reconcile=lambda: None,
         account=lambda: account,
     )
-    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (),
+        clear_safety_incident=lambda _account, _reason=None: None,
+    )
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
 
@@ -1267,7 +1275,10 @@ def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
         reconcile=lambda: None,
         account=lambda: account,
     )
-    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (),
+        clear_safety_incident=lambda _account, _reason=None: None,
+    )
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
     runtime._resync_pending = True
@@ -1321,7 +1332,10 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
         reconcile=lambda: None,
         account=lambda: account,
     )
-    runtime.ledger = SimpleNamespace(managed_entries_for_account=lambda _account: ())
+    runtime.ledger = SimpleNamespace(
+        managed_entries_for_account=lambda _account: (),
+        clear_safety_incident=lambda _account, _reason=None: None,
+    )
     runtime._persist_risk_state = lambda _account: None
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
     runtime._resync_pending = False
@@ -1362,7 +1376,8 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (
             SimpleNamespace(status="manual_intervention_required"),
-        )
+        ),
+        clear_safety_incident=lambda _account, _reason=None: None,
     )
 
     with pytest.raises(ValueError, match="manual intervention"):

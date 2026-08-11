@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -737,3 +737,371 @@ def test_update_subscriptions_marks_rollback_failure_when_rollback_leg_fails() -
     with _pytest.raises(RuntimeError, match="crypto subscribe rejected"):
         stream.update_subscriptions(["NVDA"], ["BTC/USD"])
     assert stream.rollback_failed is True
+
+
+def test_retry_backoff_escalates_and_caps_at_sixty_minutes(monkeypatch) -> None:
+    """A failed refresh schedules a bounded backoff retry (~5 min, then
+    ~15, ~30, capped at ~60 min); a success clears the market's retry state
+    so a later failure restarts from the first rung."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._universe_retry_at = {}
+    runtime._universe_retry_attempt = {}
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == 1300.0  # +300
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 1
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == 1900.0  # +900
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 2
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == 2800.0  # +1800
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 3
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == 4600.0  # +3600 (cap)
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 4
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == 4600.0  # still +3600 (cap)
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 5
+
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, True)
+    assert runtime._universe_retry_at == {}
+    assert runtime._universe_retry_attempt == {}
+
+
+def test_equity_retry_deferred_to_premarket_when_backoff_lands_mid_session(
+    monkeypatch,
+) -> None:
+    """An equity scanner retry whose backoff deadline would land inside a
+    regular session must be deferred to the next pre-market slot: a
+    mid-session refresh reads a partial daily bar into the scanner metrics
+    and could change the universe (the pre-market-only invariant). Crypto
+    keeps the plain bounded backoff."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._universe_retry_at = {}
+    runtime._universe_retry_attempt = {}
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
+    premarket = datetime.now(UTC) + timedelta(hours=20)
+    runtime._next_equity_refresh_at = lambda when: premarket  # type: ignore[attr-defined]
+
+    # Mid-session failure: the 300s backoff would land inside the session.
+    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda when: True)
+    runtime._mark_universe_refresh_outcome(Market.EQUITY, False)
+    deadline = runtime._universe_retry_at[Market.EQUITY]
+    assert deadline > clock["t"] + 3600  # deferred ~20h, not +300s
+    assert runtime._universe_retry_attempt[Market.EQUITY] == 1
+
+    # Pre-market failure: plain backoff applies.
+    monkeypatch.setattr(runtime_module, "is_regular_equity_time", lambda when: False)
+    runtime._mark_universe_refresh_outcome(Market.EQUITY, False)
+    assert runtime._universe_retry_at[Market.EQUITY] == clock["t"] + 900  # +900 (attempt 2)
+    assert runtime._universe_retry_attempt[Market.EQUITY] == 2
+
+    # Crypto never defers to the equity pre-market slot.
+    runtime._mark_universe_refresh_outcome(Market.CRYPTO, False)
+    assert runtime._universe_retry_at[Market.CRYPTO] == clock["t"] + 300  # +300 (attempt 1)
+
+
+def test_scheduled_refresh_failure_retries_bounded_and_restores_health(monkeypatch) -> None:
+    """A failed scheduled refresh must self-heal with a bounded retry (~5
+    min) instead of waiting for the next full interval; a successful retry
+    clears the retry state and restores a healthy scanner status."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = replace(base, runtime=replace(base.runtime, scanner_refresh_hours=1))
+    runtime._running = True
+    runtime._stop_event = threading.Event()
+    now = runtime_module.datetime.now(runtime_module.UTC)
+    runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
+    calls: list[Market] = []
+    call_times: list[float] = []
+    failures = {"remaining": 1}
+    clock = {"t": 0.0}
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
+
+    def refresh(target: Market | None = None) -> None:
+        assert target is Market.CRYPTO
+        calls.append(target)
+        call_times.append(clock["t"])
+        if failures["remaining"] > 0:
+            failures["remaining"] -= 1
+            runtime._universe_refresh_status["crypto"] = "refresh_failed"
+            runtime._last_universe_refresh_error["crypto"] = "scanner unavailable"
+        else:
+            runtime._universe_refresh_status["crypto"] = "success"
+            runtime._last_universe_refresh_error["crypto"] = None
+            runtime._running = False
+
+    runtime._refresh_runtime_universes = refresh
+    runtime._next_equity_refresh_at = lambda _now: None
+    captured_deadline = {}
+
+    def advance_wait(timeout: float) -> None:
+        clock["t"] += timeout
+        if clock["t"] > 3600.0 and "value" not in captured_deadline:
+            # First wake after the failed slot: the published next-refresh
+            # deadline must be the ~5 min retry, not the next 1h interval.
+            captured_deadline["value"] = runtime._next_universe_refresh_at
+
+    runtime._stop_event.wait = advance_wait
+    runtime._universe_refresh_loop()
+
+    # The retry fired at the ~300s backoff deadline (not the next 1h slot).
+    assert calls == [Market.CRYPTO, Market.CRYPTO]
+    assert call_times == [3600.0, 3900.0]
+    # The health/status deadline accounted for the pending retry.
+    retry_deadline = captured_deadline["value"] - runtime_module.datetime.now(runtime_module.UTC)
+    assert 280.0 <= retry_deadline.total_seconds() <= 310.0
+    # Retry state cleared and scanner status restored on success.
+    assert runtime._universe_retry_at == {}
+    assert runtime._universe_retry_attempt == {}
+    assert runtime._universe_refresh_status["crypto"] == "success"
+    assert runtime._last_universe_refresh_error["crypto"] is None
+
+
+def test_shutdown_cancels_pending_retry(monkeypatch) -> None:
+    """Shutdown cancels a pending retry: the loop exits and no further
+    refresh attempts happen, even though a retry deadline is pending."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = replace(base, runtime=replace(base.runtime, scanner_refresh_hours=1 / 60))
+    runtime._running = True
+    runtime._stop_event = threading.Event()
+    now = runtime_module.datetime.now(runtime_module.UTC)
+    runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
+    calls: list[Market] = []
+    clock = {"t": 0.0}
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
+
+    def refresh(target: Market | None = None) -> None:
+        calls.append(target)
+        runtime._universe_refresh_status["crypto"] = "refresh_failed"
+        runtime._last_universe_refresh_error["crypto"] = "scanner unavailable"
+
+    runtime._refresh_runtime_universes = refresh
+    runtime._next_equity_refresh_at = lambda _now: None
+
+    def shutdown_wait(timeout: float) -> None:
+        clock["t"] += timeout
+        if calls:
+            runtime._running = False
+
+    runtime._stop_event.wait = shutdown_wait
+    runtime._universe_refresh_loop()
+
+    assert calls == [Market.CRYPTO], "a pending retry must not fire after shutdown"
+    # The pending retry deadline survives for observability but is never
+    # attempted once the loop has exited.
+    assert runtime._universe_retry_at[Market.CRYPTO] == 360.0
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 1
+
+
+def test_disabled_market_failure_does_not_degrade_active_market(monkeypatch) -> None:
+    """A crypto scanner failure (no crypto exposure) must not degrade the
+    active equity market: both markets refresh independently in the same due
+    iteration, and the crypto retry stays isolated per market."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = replace(base, runtime=replace(base.runtime, scanner_refresh_hours=1))
+    runtime._running = True
+    runtime._stop_event = threading.Event()
+    now = datetime.now(UTC)
+    runtime._workers = {"pb-universe-refresh": WorkerHealth(now, now)}
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "success"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    calls: list[Market] = []
+    call_times: list[float] = []
+    clock = {"t": 0.0}
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: clock["t"])
+
+    class _FakeDatetime:
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 8, 3, tzinfo=tz or UTC) + timedelta(seconds=clock["t"])
+
+    monkeypatch.setattr(runtime_module, "datetime", _FakeDatetime)
+
+    def refresh(target: Market | None = None) -> None:
+        assert target is not None
+        calls.append(target)
+        call_times.append(clock["t"])
+        if target is Market.CRYPTO:
+            runtime._universe_refresh_status["crypto"] = "apply_failed"
+            runtime._last_universe_refresh_error["crypto"] = "universe rejected"
+            runtime._market_entry_halts[Market.CRYPTO] = "invalid_dynamic_universe"
+            raise RuntimeError("universe rejected")
+        runtime._universe_refresh_status["equity"] = "success"
+        runtime._last_universe_refresh_error["equity"] = None
+        runtime._market_entry_halts[Market.EQUITY] = None
+        runtime._running = False
+
+    runtime._refresh_runtime_universes = refresh
+    # Equity shares the first due iteration with the crypto interval.
+    runtime._next_equity_refresh_at = lambda _now: _FakeDatetime.now(UTC) + timedelta(seconds=3600)
+
+    def advance_wait(timeout: float) -> None:
+        clock["t"] += timeout
+        if len(calls) >= 2:
+            runtime._running = False
+
+    runtime._stop_event.wait = advance_wait
+    runtime._universe_refresh_loop()
+
+    # Both markets refreshed in the same due iteration. The crypto refresh
+    # raises (apply failure) yet the equity refresh still runs: the failing
+    # market must not block or degrade the active market.
+    assert calls == [Market.CRYPTO, Market.EQUITY]
+    assert call_times == [3600.0, 3600.0]
+    assert runtime._universe_refresh_status["equity"] == "success"
+    assert runtime._market_entry_halts[Market.EQUITY] is None
+    assert Market.EQUITY not in runtime._universe_retry_at
+    # The failing market keeps its bounded retry, isolated from equity.
+    assert runtime._universe_refresh_status["crypto"] == "apply_failed"
+    assert runtime._market_entry_halts[Market.CRYPTO] == "invalid_dynamic_universe"
+    assert runtime._universe_retry_at[Market.CRYPTO] == 3900.0
+    assert runtime._universe_retry_attempt[Market.CRYPTO] == 1
+
+
+def test_refresh_failure_keeps_pinned_membership_fail_closed(monkeypatch) -> None:
+    """A scanner failure must keep the previous membership — including
+    managed pins — fully protected: entries stay blocked and the active
+    universe is unchanged."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = replace(
+        base,
+        universe=replace(
+            base.universe,
+            equity=replace(
+                base.universe.equity,
+                enabled=True,
+                dynamic_selection_enabled=True,
+            ),
+        ),
+    )
+    runtime.api_key = "key"
+    runtime.secret_key = "secret"
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "disabled"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._symbols_by_market = {Market.EQUITY: {"AAPL", "SPY"}, Market.CRYPTO: set()}
+    runtime._managed_pin_symbols = {"AAPL"}
+    monkeypatch.setattr(
+        runtime_module,
+        "refresh_equity_universe",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
+    )
+    monkeypatch.setattr(runtime_module, "validate_active_universe", lambda _config: ((), "stale"))
+
+    runtime._refresh_runtime_universes(Market.EQUITY)
+
+    assert runtime._universe_refresh_status["equity"] == "refresh_failed"
+    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+    # Previous membership — including the managed pin — is untouched.
+    assert runtime._symbols_by_market[Market.EQUITY] == {"AAPL", "SPY"}
+    assert runtime._managed_pin_symbols == {"AAPL"}
+
+
+def test_old_scanner_result_with_mismatched_digest_cannot_become_valid(monkeypatch) -> None:
+    """An old scanner result whose config digest no longer matches stays
+    fail-closed: the refresh failure halts entries instead of accepting the
+    stale universe."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    base = Config()
+    runtime.app_config = replace(
+        base,
+        universe=replace(
+            base.universe,
+            crypto=replace(base.universe.crypto, enabled=False),
+        ),
+    )
+    runtime.api_key = "key"
+    runtime.secret_key = "secret"
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "disabled"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": None}
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    monkeypatch.setattr(
+        runtime_module,
+        "refresh_equity_universe",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
+    )
+    monkeypatch.setattr(
+        runtime_module, "validate_active_universe", lambda _config: ((), "digest_mismatch")
+    )
+
+    runtime._refresh_runtime_universes()
+
+    assert runtime._universe_refresh_status["equity"] == "refresh_failed"
+    assert runtime._market_entry_halts[Market.EQUITY] == "invalid_dynamic_universe"
+
+
+def _health_payload_runtime() -> EngineRuntime:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._state = "running"
+    runtime._running = True
+    now = datetime.now(UTC)
+    runtime._workers = {
+        "pb-decisions": WorkerHealth(now, now, alive=True),
+        "pb-trade-updates": WorkerHealth(now, now, alive=True),
+        "pb-account": WorkerHealth(now, now, alive=True),
+    }
+    runtime._events = SimpleNamespace(qsize=lambda: 0, empty=lambda: True)
+    runtime._last_account_at = datetime.now(UTC)
+    runtime._oldest_received_at = None
+    runtime._dropped_events = 0
+    runtime._coalesced_events = 0
+    runtime.symbols = []
+    runtime._symbols_by_market = {Market.EQUITY: set(), Market.CRYPTO: set()}
+    runtime._market_enabled = {Market.EQUITY: False, Market.CRYPTO: False}
+    runtime._strategy_enabled = {Market.EQUITY: False, Market.CRYPTO: False}
+    runtime._not_ready_symbols = set()
+    runtime._circuit_breaker_reason = None
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15.0,
+        maximum_account_age_for_entry_seconds=30.0,
+        maximum_queue_age_seconds=30.0,
+    )
+    runtime._universe_refresh_status = {"equity": "success", "crypto": "refresh_failed"}
+    runtime._last_universe_refresh_error = {"equity": None, "crypto": "scanner unavailable"}
+    runtime._market_entry_halts = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._last_reconciliation_at = None
+    runtime._last_universe_refresh_at = None
+    runtime._next_universe_refresh_at = None
+    runtime.strategy_status = "configured"
+    runtime._strategy_specs = ()
+    runtime._portfolio_repository = None
+    runtime.ledger = None
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.market_state = SimpleNamespace(
+        has_data_gaps=False, has_data_gaps_for_market=lambda market: False
+    )
+    return runtime
+
+
+def test_health_payload_exposes_scanner_retry_state() -> None:
+    """The health/status payload surfaces the pending per-market retry
+    deadline and attempt count next to the existing scanner status."""
+    runtime = _health_payload_runtime()
+    runtime._universe_retry_at = {Market.CRYPTO: runtime_module.time.monotonic() + 300.0}
+    runtime._universe_retry_attempt = {Market.CRYPTO: 2}
+    payload = runtime.health().universe_refresh
+    assert payload["retry_attempt"] == {"crypto": 2}
+    retry_at = datetime.fromisoformat(payload["retry_at"]["crypto"])
+    assert retry_at > datetime.now(UTC)
+    # A disabled market with no exposure keeps the runtime healthy while its
+    # scanner is failing and a retry is pending.
+    health = runtime.health()
+    assert health.healthy is True
+    assert health.markets["crypto"]["scanner_critical"] is False

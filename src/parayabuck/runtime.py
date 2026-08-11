@@ -65,8 +65,53 @@ from parayabuck.universe.scanner import scanner_config_digest, validate_active_u
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
+
+
+class TransientStartupError(RuntimeError):
+    """A network-class failure during engine startup.
+
+    Raised by ``EngineRuntime.start()`` only for transient infrastructure
+    failures (broker/data API connection errors, timeouts, HTTP 5xx/429
+    responses) during startup reconciliation or warmup. The runtime object is
+    discarded by the caller, no permanent circuit-breaker incident is
+    recorded, and the caller may retry startup.
+    """
+
+
+def _is_transient_network_error(exc: BaseException) -> bool:
+    """True when ``exc`` is a network-class startup failure.
+
+    Network-class failures are requests-level connection/timeout errors, HTTP
+    5xx/429 responses, and builtin ``ConnectionError``/``TimeoutError`` (the
+    builtins are not subclasses of ``RequestException``) — including the same
+    failures wrapped as the ``__cause__``/``__context__`` of another exception
+    (for example the Alpaca SDK's ``APIError`` wrapping an ``HTTPError``).
+    HTTP 4xx responses are permanent (auth/config/entitlement problems) and
+    the domain safety exceptions fail closed: neither is ever retried.
+    """
+    if isinstance(exc, (ProtectionReconciliationError, AmbiguousOrderState)):
+        return False
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, RequestException):
+            response = getattr(current, "response", None)
+            status = getattr(response, "status_code", None)
+            if status is not None and status != 429 and status < 500:
+                return False
+            return True
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
+# Per-market scanner-refresh backoff (seconds) after a failed scheduled
+# refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
+_UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
 
 
 @dataclass
@@ -372,6 +417,10 @@ class EngineRuntime:
         self._historical: AlpacaHistoricalData | None = None
         self._last_universe_refresh_at: datetime | None = None
         self._next_universe_refresh_at: datetime | None = None
+        # Per-market bounded retry state for the scheduled universe refresh:
+        # monotonic deadline + consecutive-failure count, cleared on success.
+        self._universe_retry_at: dict[Market, float] = {}
+        self._universe_retry_attempt: dict[Market, int] = {}
         self._managed_pin_symbols: set[str] = set()
         # Set when a hot-swap rollback failed and the socket membership is
         # unknown; cleared after a successful reconnect from the authoritative
@@ -633,6 +682,16 @@ class EngineRuntime:
                 "next_refresh_at": (
                     next_universe_refresh.isoformat() if next_universe_refresh is not None else None
                 ),
+                "retry_at": {
+                    market.value: (
+                        datetime.now(UTC) + timedelta(seconds=max(0.0, deadline - time.monotonic()))
+                    ).isoformat()
+                    for market, deadline in getattr(self, "_universe_retry_at", {}).items()
+                },
+                "retry_attempt": {
+                    market.value: attempt
+                    for market, attempt in getattr(self, "_universe_retry_attempt", {}).items()
+                },
             },
             entry_risk_latch={
                 market.value: reason
@@ -659,7 +718,20 @@ class EngineRuntime:
         try:
             self.broker.reconcile()
             self._last_reconciliation_at = datetime.now(UTC)
+            # A verified startup reconciliation is the same recovery
+            # condition the periodic path uses: reconcile() raises on
+            # ownership drift / protection / ambiguous state, so success
+            # means every persisted PERSISTENT_INCIDENT is resolved and a
+            # restart must not resurrect it.
+            self.ledger.clear_safety_incident(self.broker.account_id or "unknown")
         except Exception as exc:
+            if _is_transient_network_error(exc):
+                # G2/G3 boundary: a transient broker API failure is NOT a
+                # protection incident. The caller discards this runtime and
+                # may retry startup; nothing is persisted as permanent.
+                raise TransientStartupError(
+                    f"Startup reconciliation deferred after transient network failure: {exc}"
+                ) from exc
             self._circuit_breaker_reason = (
                 "protection_failure"
                 if isinstance(exc, ProtectionReconciliationError)
@@ -726,6 +798,15 @@ class EngineRuntime:
         # once. No duplicate orders: the deferred BUY rows are only created at
         # submission time with deterministic broker idempotency keys.
         for runtime in self._portfolio_runtimes:
+            if self._circuit_breaker_reason is not None:
+                # A restored PERSISTENT_INCIDENT (cross-day restart) must
+                # hold until its verified recovery; the persisted rebalance
+                # stays deferred and resumes once the breaker clears.
+                log.warning(
+                    "Restart rebalance resume deferred: circuit breaker active (%s)",
+                    self._circuit_breaker_reason,
+                )
+                break
             self._advance_portfolio_rebalance(runtime.market)
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
@@ -789,9 +870,13 @@ class EngineRuntime:
             thread.start()
         try:
             self._warmup()
-        except Exception:
+        except Exception as exc:
             self._state = "error"
             self.stop()
+            if _is_transient_network_error(exc):
+                raise TransientStartupError(
+                    f"Startup warmup deferred after transient network failure: {exc}"
+                ) from exc
             raise
         finally:
             self._warming_up = False
@@ -799,9 +884,13 @@ class EngineRuntime:
             account = self.broker.account()
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
-        except Exception:
+        except Exception as exc:
             self._state = "error"
             self.stop()
+            if _is_transient_network_error(exc):
+                raise TransientStartupError(
+                    f"Startup account fetch deferred after transient network failure: {exc}"
+                ) from exc
             raise
         self._refresh_readiness()
         self._state = "running" if self._has_ready_symbols() else "warming_up"
@@ -815,6 +904,10 @@ class EngineRuntime:
     def _universe_refresh_loop(self) -> None:
         worker = self._workers["pb-universe-refresh"]
         worker.alive = True
+        # A fresh loop run starts with no pending retries: a bounded retry
+        # scheduled by a previous run must not fire immediately on restart.
+        self._universe_retry_at = {}
+        self._universe_retry_attempt = {}
         interval = self.app_config.runtime.scanner_refresh_hours * 3600
         next_interval = time.monotonic() + interval
         next_equity = self._next_equity_refresh_at(datetime.now(UTC))
@@ -826,48 +919,112 @@ class EngineRuntime:
                 now = datetime.now(UTC)
                 interval_due = now_mono >= next_interval
                 equity_due = next_equity is not None and now >= next_equity
-                if interval_due or equity_due:
-                    try:
-                        if interval_due:
-                            # Crypto trades 24/7: keep a fixed cadence.
-                            self._refresh_runtime_universes(Market.CRYPTO)
-                            worker.last_event_at = datetime.now(UTC)
-                            worker.last_error = None
-                        if equity_due:
-                            # Equity refreshes pre-market only, after the
-                            # previous session's data is final, so a mid-session
-                            # partial daily bar can never change the universe.
-                            self._refresh_runtime_universes(Market.EQUITY)
-                            worker.last_event_at = datetime.now(UTC)
-                            worker.last_error = None
-                    except Exception as exc:
-                        worker.last_error = str(exc)
-                        log.exception("Scheduled universe refresh failed")
-                    finally:
-                        # Advance the deadlines even when the refresh failed:
-                        # a stuck past deadline would otherwise busy-spin the
-                        # loop and hammer Alpaca during an outage.
-                        if interval_due:
-                            next_interval = now_mono + interval
-                        if equity_due:
-                            next_equity = self._next_equity_refresh_at(now)
-                        self._next_universe_refresh_at = self._next_universe_deadline(
-                            next_interval, next_equity
-                        )
+                retry_due = [
+                    market
+                    for market, deadline in self._universe_retry_at.items()
+                    if now_mono >= deadline
+                ]
+                if interval_due or equity_due or retry_due:
+                    markets_to_refresh: set[Market] = set()
+                    if interval_due:
+                        # Crypto trades 24/7: keep a fixed cadence.
+                        markets_to_refresh.add(Market.CRYPTO)
+                    if equity_due:
+                        # Equity refreshes pre-market only, after the
+                        # previous session's data is final, so a mid-session
+                        # partial daily bar can never change the universe.
+                        markets_to_refresh.add(Market.EQUITY)
+                    markets_to_refresh.update(retry_due)
+                    # Markets refresh independently: a failing market (or an
+                    # apply failure that re-raises) must not skip the other
+                    # market's slot, and its retry state stays per-market.
+                    for market in sorted(markets_to_refresh, key=lambda m: m.value):
+                        try:
+                            self._refresh_runtime_universes(market)
+                        except Exception as exc:
+                            worker.last_error = str(exc)
+                            log.exception("Scheduled universe refresh failed: %s", market)
+                            self._mark_universe_refresh_outcome(market, False)
+                            continue
+                        worker.last_event_at = datetime.now(UTC)
+                        worker.last_error = None
+                        status = getattr(self, "_universe_refresh_status", {}).get(market.value)
+                        if status == "success":
+                            self._mark_universe_refresh_outcome(market, True)
+                        elif status in {"refresh_failed", "apply_failed"}:
+                            self._mark_universe_refresh_outcome(market, False)
+                    # Advance the deadlines even when the refresh failed:
+                    # a stuck past deadline would otherwise busy-spin the
+                    # loop and hammer Alpaca during an outage.
+                    if interval_due:
+                        next_interval = now_mono + interval
+                    if equity_due:
+                        next_equity = self._next_equity_refresh_at(now)
+                    self._next_universe_refresh_at = self._next_universe_deadline(
+                        next_interval, next_equity
+                    )
                 remaining = next_interval - now_mono
                 if next_equity is not None:
                     remaining = min(remaining, (next_equity - now).total_seconds())
+                # Wake for a pending per-market retry before the next slot.
+                for retry_at in self._universe_retry_at.values():
+                    remaining = min(remaining, retry_at - now_mono)
                 self._stop_event.wait(min(5.0, max(0.0, remaining)))
         finally:
             worker.alive = False
 
-    @staticmethod
-    def _next_universe_deadline(next_interval: float, next_equity: datetime | None) -> datetime:
-        interval_remaining = max(0.0, next_interval - time.monotonic())
-        interval_deadline = datetime.now(UTC) + timedelta(seconds=interval_remaining)
-        if next_equity is None:
-            return interval_deadline
-        return min(interval_deadline, next_equity)
+    def _mark_universe_refresh_outcome(self, market: Market, ok: bool) -> None:
+        """Track per-market retry state for the scheduled refresh loop.
+
+        A failed refresh schedules a bounded backoff retry (first ~5 min,
+        then ~15, ~30, capped at ~60 min per consecutive failure) instead of
+        waiting for the next full schedule slot; a success clears the market's
+        retry state so a later failure restarts from the first rung.
+
+        Equity retries are capped at the next pre-market slot when the backoff
+        deadline would land inside a regular session: a mid-session refresh
+        would read a partial daily bar into the scanner metrics and could
+        change the universe, which the pre-market-only cadence exists to
+        prevent. Crypto trades 24/7 and retries on the plain backoff.
+        """
+        if ok:
+            self._universe_retry_at.pop(market, None)
+            self._universe_retry_attempt.pop(market, None)
+            return
+        attempt = self._universe_retry_attempt.get(market, 0)
+        delay = _UNIVERSE_RETRY_BACKOFF_SECONDS[
+            min(attempt, len(_UNIVERSE_RETRY_BACKOFF_SECONDS) - 1)
+        ]
+        deadline = time.monotonic() + delay
+        if market == Market.EQUITY:
+            candidate = datetime.now(UTC) + timedelta(seconds=delay)
+            if is_regular_equity_time(candidate):
+                next_premarket = self._next_equity_refresh_at(candidate)
+                if next_premarket is not None:
+                    deadline = time.monotonic() + max(
+                        0.0, (next_premarket - datetime.now(UTC)).total_seconds()
+                    )
+                    log.warning(
+                        "Equity scanner retry deferred to next pre-market slot %s "
+                        "(backoff %ds would land mid-session)",
+                        next_premarket.isoformat(),
+                        delay,
+                    )
+        self._universe_retry_at[market] = deadline
+        self._universe_retry_attempt[market] = attempt + 1
+
+    def _next_universe_deadline(
+        self, next_interval: float, next_equity: datetime | None
+    ) -> datetime:
+        now_mono = time.monotonic()
+        interval_remaining = max(0.0, next_interval - now_mono)
+        deadline = datetime.now(UTC) + timedelta(seconds=interval_remaining)
+        if next_equity is not None:
+            deadline = min(deadline, next_equity)
+        for retry_at in getattr(self, "_universe_retry_at", {}).values():
+            retry_remaining = max(0.0, retry_at - now_mono)
+            deadline = min(deadline, datetime.now(UTC) + timedelta(seconds=retry_remaining))
+        return deadline
 
     def _next_equity_refresh_at(self, now: datetime) -> datetime | None:
         """Next pre-market slot (06:00 ET) with the prior session finalized.
@@ -1494,10 +1651,16 @@ class EngineRuntime:
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known
-        risk numbers when a fresh account snapshot is unavailable."""
+        risk numbers when a fresh account snapshot is unavailable.
+
+        The incident table is the authoritative PERSISTENT_INCIDENT store
+        (restored regardless of date); the session-scoped risk_state row is
+        kept for backward compatibility.
+        """
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
             today = datetime.now(UTC).date()
+            self.ledger.save_safety_incident(account_id, reason)
             previous = self.ledger.load_risk_state(account_id, today)
             if previous is None:
                 return
@@ -1517,8 +1680,23 @@ class EngineRuntime:
             )
 
     def _restore_persistent_state(self) -> None:
+        """Restore persisted runtime state at startup.
+
+        Persisted state is classified by lifetime semantics:
+
+        * SESSION_SCOPED — daily-loss/drawdown baselines (``consecutive_losses``
+          and the risk numbers) live in the per-session ``risk_state`` row and
+          are restored from TODAY's row only: a new session day deliberately
+          starts with a clean baseline.
+        * PERSISTENT_INCIDENT — circuit-breaker reasons live in the
+          ``safety_incidents`` table and are restored REGARDLESS of the
+          session date, so a halt persisted at 23:59 survives a 00:01 restart
+          until an operator verifies the recovery.
+        * TRANSIENT_READINESS — the entry-risk latch and market entry halts are
+          reconstructed from authoritative state at startup and never
+          persisted.
+        """
         account_id = self.broker.account_id or "unknown"
-        previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         persistent_reasons = {
             "ambiguous_order_state",
             "protection_failure",
@@ -1528,10 +1706,13 @@ class EngineRuntime:
             "final_market_event_queue_overflow",
             "ownership_drift",
         }
+        for incident in self.ledger.load_safety_incidents(account_id):
+            if incident.reason in persistent_reasons:
+                self._circuit_breaker_reason = incident.reason
+                break
+        previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
-            if previous.circuit_breaker_reason in persistent_reasons:
-                self._circuit_breaker_reason = previous.circuit_breaker_reason
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         try:
@@ -2248,6 +2429,12 @@ class EngineRuntime:
                         current_losses = 0
             self._consecutive_losses = current_losses
             self._evaluate_entry_risk_latch(account)
+            reason = self._circuit_breaker_reason
+            # The circuit_breaker_reason in the session row is kept for
+            # backward compatibility; the incident table is authoritative for
+            # restore, so any halt reason in effect is also recorded there.
+            if reason is not None:
+                self.ledger.save_safety_incident(account_id, reason)
             self.ledger.save_risk_state(
                 RiskState(
                     account_id=account_id,
@@ -2258,7 +2445,7 @@ class EngineRuntime:
                     unrealized_pnl=float(account.unrealized_pnl),
                     fees=self.ledger.total_fees_for_account(account_id),
                     consecutive_losses=current_losses,
-                    circuit_breaker_reason=self._circuit_breaker_reason,
+                    circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                 )
             )
@@ -2271,6 +2458,11 @@ class EngineRuntime:
                 self._last_reconciliation_at = datetime.now(UTC)
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0
+                account_id = self.broker.account_id or "unknown"
+                # reconcile() raises on drift/protection issues, so reaching
+                # this line proves every persisted halt resolved; clear the
+                # incidents so a restart does not resurrect them.
+                self.ledger.clear_safety_incident(account_id)
                 if self._circuit_breaker_reason == "reconciliation_failed":
                     self._circuit_breaker_reason = None
             except RequestException as exc:
@@ -2372,6 +2564,10 @@ class EngineRuntime:
             account = self.broker.account()
             self._last_account_at = datetime.now(UTC)
             self._circuit_breaker_reason = None
+            # The operator verified THIS halt's recovery condition above;
+            # clear exactly its incident, never unrelated incidents (those
+            # need their own per-halt verification).
+            self.ledger.clear_safety_incident(account_id, reason)
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)
@@ -2646,4 +2842,4 @@ def _source_revision(explicit: str) -> str:
     return completed.stdout.strip()
 
 
-__all__ = ["EngineRuntime"]
+__all__ = ["EngineRuntime", "TransientStartupError"]

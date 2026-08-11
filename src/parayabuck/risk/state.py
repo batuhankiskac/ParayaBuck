@@ -20,4 +20,23 @@ class RiskState:
     updated_at: datetime
 
 
-__all__ = ["RiskState"]
+@dataclass(frozen=True)
+class SafetyIncident:
+    """A PERSISTENT_INCIDENT circuit-breaker record that survives the
+    session-day boundary.
+
+    Unlike the SESSION_SCOPED ``RiskState`` row (keyed by session date), an
+    incident is keyed by ``(account_id, reason)`` and is restored regardless
+    of date, so a halt persisted at 23:59 is still active after a 00:01
+    restart until an operator verifies the recovery. ``scope`` is always
+    ``"global"`` (the incident blocks entries for the whole account).
+    """
+
+    account_id: str
+    reason: str
+    scope: str
+    activated_at: datetime
+    updated_at: datetime
+
+
+__all__ = ["RiskState", "SafetyIncident"]

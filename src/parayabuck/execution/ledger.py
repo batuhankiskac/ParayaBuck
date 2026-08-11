@@ -17,7 +17,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.risk.state import RiskState
+from parayabuck.risk.state import RiskState, SafetyIncident
 from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
 
 log = get_logger("parayabuck.execution.ledger")
@@ -128,6 +128,15 @@ class ExecutionLedger:
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY(account_id, session_date)
                 );
+                CREATE TABLE IF NOT EXISTS safety_incidents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    activated_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(account_id, reason)
+                );
                 CREATE TABLE IF NOT EXISTS runtime_sessions (
                     session_id TEXT PRIMARY KEY,
                     account_id TEXT,
@@ -234,6 +243,51 @@ class ExecutionLedger:
                 VALUES (3, CURRENT_TIMESTAMP)
                 """
             )
+            # v4: persistent circuit-breaker incidents. A halt persisted in the
+            # SESSION_SCOPED risk_state row (with a non-null
+            # circuit_breaker_reason) must fail safe across the session-day
+            # boundary, so the LATEST such row per account backfills an
+            # incident. The backfill is gated on the version stamp: it runs
+            # exactly once, otherwise an operator-reset incident would be
+            # resurrected from a historical row on the next open. INSERT OR
+            # IGNORE keeps it idempotent even if a crash lands between the
+            # backfill and the stamp.
+            applied_versions = {
+                int(row[0])
+                for row in self.connection.execute("SELECT version FROM schema_migrations")
+            }
+            if 4 not in applied_versions:
+                self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO safety_incidents(
+                        account_id, reason, scope, activated_at, updated_at
+                    )
+                    SELECT
+                        account_id,
+                        json_extract(payload, '$.circuit_breaker_reason'),
+                        'global',
+                        updated_at,
+                        updated_at
+                    FROM risk_state
+                    WHERE json_extract(payload, '$.circuit_breaker_reason') IS NOT NULL
+                      AND rowid = (
+                          SELECT r2.rowid
+                          FROM risk_state r2
+                          WHERE r2.account_id = risk_state.account_id
+                            AND json_extract(
+                                r2.payload, '$.circuit_breaker_reason'
+                            ) IS NOT NULL
+                          ORDER BY r2.session_date DESC, r2.updated_at DESC
+                          LIMIT 1
+                      )
+                    """
+                )
+                self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                    VALUES (4, CURRENT_TIMESTAMP)
+                    """
+                )
             self.connection.commit()
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
@@ -1337,6 +1391,84 @@ class ExecutionLedger:
             circuit_breaker_reason=payload.get("circuit_breaker_reason"),
             updated_at=datetime.fromisoformat(row[1]),
         )
+
+    def save_safety_incident(
+        self,
+        account_id: str,
+        reason: str,
+        activated_at: datetime | None = None,
+    ) -> None:
+        """Record (or refresh) a PERSISTENT_INCIDENT circuit-breaker halt.
+
+        Upserts by ``(account_id, reason)``: a re-save of the same reason
+        preserves the original ``activated_at`` and only bumps ``updated_at``.
+        """
+        now = datetime.now(UTC)
+        activated = activated_at if activated_at is not None else now
+        with self._lock:
+            self.connection.execute(
+                """
+                INSERT INTO safety_incidents(
+                    account_id, reason, scope, activated_at, updated_at
+                )
+                VALUES (?, ?, 'global', ?, ?)
+                ON CONFLICT(account_id, reason) DO UPDATE SET
+                    scope=excluded.scope, updated_at=excluded.updated_at
+                """,
+                (account_id, reason, activated.isoformat(), now.isoformat()),
+            )
+            self.connection.commit()
+
+    def load_safety_incidents(self, account_id: str) -> tuple[SafetyIncident, ...]:
+        """Return the persistent incidents for an account, most recent first."""
+        with self._lock:
+            rows = self.connection.execute(
+                """
+                SELECT account_id, reason, scope, activated_at, updated_at
+                FROM safety_incidents
+                WHERE account_id=?
+                ORDER BY activated_at DESC, id DESC
+                """,
+                (account_id,),
+            ).fetchall()
+        incidents: list[SafetyIncident] = []
+        for row in rows:
+            try:
+                incidents.append(
+                    SafetyIncident(
+                        account_id=str(row[0]),
+                        reason=str(row[1]),
+                        scope=str(row[2]),
+                        activated_at=datetime.fromisoformat(row[3]),
+                        updated_at=datetime.fromisoformat(row[4]),
+                    )
+                )
+            except (TypeError, ValueError):
+                # A corrupt incident row must not fail runtime startup; the
+                # halt it describes is skipped (fail-open for the row itself).
+                log.warning(
+                    "Ignoring corrupt safety_incident row for account=%s reason=%s",
+                    account_id,
+                    row[1],
+                )
+        return tuple(incidents)
+
+    def clear_safety_incident(self, account_id: str, reason: str | None = None) -> None:
+        """Clear a verified incident, or every incident for the account when
+        ``reason`` is None (used only after a reconciliation that proves the
+        whole account healthy)."""
+        with self._lock:
+            if reason is None:
+                self.connection.execute(
+                    "DELETE FROM safety_incidents WHERE account_id=?",
+                    (account_id,),
+                )
+            else:
+                self.connection.execute(
+                    "DELETE FROM safety_incidents WHERE account_id=? AND reason=?",
+                    (account_id, reason),
+                )
+            self.connection.commit()
 
     def close(self) -> None:
         self._store.release()

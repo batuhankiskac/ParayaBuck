@@ -4,6 +4,7 @@ from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMomentum1hV1
 from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
+from parayabuck.portfolio.equity_long_horizon_momentum import EquityLongHorizonMomentum1dV2
 from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
@@ -14,6 +15,7 @@ from parayabuck.portfolio.models import (
 
 _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityDynamicTrend1dV1.name: EquityDynamicTrend1dV1,
+    EquityLongHorizonMomentum1dV2.name: EquityLongHorizonMomentum1dV2,
     CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
 }
 
@@ -60,6 +62,7 @@ def rebalance_policy_for(
 __all__ = [
     "CryptoCrossSectionalMomentum1hV1",
     "EquityDynamicTrend1dV1",
+    "EquityLongHorizonMomentum1dV2",
     "PortfolioContext",
     "PortfolioState",
     "PortfolioStrategy",

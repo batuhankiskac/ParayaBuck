@@ -174,6 +174,10 @@ class PortfolioBacktestResult:
     # Every sell is a realized-PnL event. Full-close events separately carry
     # the complete lifetime PnL of positions that reached zero quantity.
     closed_position_events: tuple[tuple[datetime, str, float], ...] = ()
+    # Research backtests record drawdown breaches as SHADOW events (where
+    # production would have halted) instead of halting the curve; each entry
+    # is (decision timestamp, "portfolio_drawdown_halt").
+    drawdown_halt_shadow_events: tuple[tuple[datetime, str], ...] = ()
 
 
 def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
@@ -902,6 +906,10 @@ class PortfolioBacktestEngine:
                 approved_symbols=tuple(context.history),
                 maximum_allocation=self.maximum_allocation,
                 mode="backtest",
+                # Research backtests record drawdown breaches as shadow
+                # events instead of halting: the peak is monotonic, so an
+                # enforced halt would freeze the alpha curve permanently.
+                enforce_drawdown_halt=False,
             )
             target = risk.target
         self._rebalance_number += 1
@@ -1372,6 +1380,11 @@ class PortfolioBacktestEngine:
             benchmark_max_drawdown=benchmark_max_drawdown,
             benchmark_calmar=benchmark_calmar,
             maximum_risk_contribution=max(self._risk_contribution_history, default=0.0),
+            drawdown_halt_shadow_events=tuple(
+                (record.decision_timestamp, "portfolio_drawdown_halt")
+                for record in rebalances
+                if "portfolio_drawdown_halt" in record.risk_overlay_reasons
+            ),
         )
 
     def _enrich_rebalances(self) -> tuple[RebalanceRecord, ...]:

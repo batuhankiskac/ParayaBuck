@@ -25,6 +25,9 @@ correctness or safety defects.
    finite, optional tooling. PAPER/LIVE runtime has ZERO dependency on
    research artifacts: no experiment registry, trial ledger, promotion
    state, validation status, or optimizer output is read at runtime.
+   Research backtests record drawdown breaches as shadow events
+   (`drawdown_halt_shadow_events`) instead of freezing the alpha curve on
+   the monotonic peak.
 3. **Same strategy semantics across backtest/paper/live.** One
    `PortfolioStrategy` interface, one target/risk meaning, one
    execution policy (`PortfolioExecutionPolicy`) shared by the simulator
@@ -38,7 +41,11 @@ correctness or safety defects.
    reconciliation or a granular operator reset). Transient failures
    (network, scanner, startup) retry with bounded backoff; entries stay
    blocked while a market's universe is not verified.
-6. **LIVE is never automatic.** Triple-gated: config, `PARAYABUCK_ENABLE_LIVE=YES`,
+6. **Drawdown has an explicit recovery.** A drawdown breach is an
+   operational incident with a monotonic peak; recovery is a verified
+   risk-epoch reset (operator action rebasing the peak baseline to the
+   current equity) — never a silent date-based clear.
+7. **LIVE is never automatic.** Triple-gated: config, `PARAYABUCK_ENABLE_LIVE=YES`,
    and a short-lived HMAC operator approval bound to account + configuration
    digests + dollar cap, plus a fresh Web account-suffix confirmation.
 

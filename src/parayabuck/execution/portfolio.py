@@ -132,7 +132,17 @@ class PortfolioRiskOverlay:
         approved_symbols: tuple[str, ...],
         maximum_allocation: float,
         mode: str,
+        enforce_drawdown_halt: bool = True,
     ) -> RiskOverlayDecision:
+        """Apply the portfolio risk overlay to a strategy target.
+
+        ``enforce_drawdown_halt``: when False (research backtests), a
+        drawdown breach is a SHADOW event — the ``portfolio_drawdown_halt``
+        reason is still recorded on the decision (where production would have
+        halted) but the target is not capped, so the alpha curve keeps
+        trading. Production (paper/live) always enforces the halt until an
+        operator starts a new risk epoch.
+        """
         equity = account.equity
         if equity <= 0:
             raise ValueError("Account equity must be positive")
@@ -150,6 +160,16 @@ class PortfolioRiskOverlay:
         if account.drawdown_pct >= self.limits.drawdown_halt:
             halted_reasons.append("portfolio_drawdown_halt")
         halted = bool(halted_reasons)
+        if (
+            not enforce_drawdown_halt
+            and "portfolio_drawdown_halt" in halted_reasons
+            and "daily_loss_limit" not in halted_reasons
+        ):
+            # Research backtest: record the drawdown breach as a shadow event
+            # (production would have halted here) but keep the curve trading.
+            # Daily-loss breaches are always enforced (session-scoped, they
+            # self-recover; the drawdown peak does not).
+            halted = False
 
         # Only the external portion of a mixed position is immutable: the
         # managed quantity remains mutable inventory the bot may rebalance.

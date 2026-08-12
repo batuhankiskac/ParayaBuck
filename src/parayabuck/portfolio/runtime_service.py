@@ -954,6 +954,21 @@ class PortfolioStateRepository:
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
 
+    def reset_high_water(self, account_id: str, equity: float) -> None:
+        """Rebase the persisted portfolio high-water to ``equity`` (a new
+        risk epoch started by the operator after a verified drawdown
+        incident). Unlike ``update_high_water`` this REPLACES the baseline
+        instead of taking the max, so decisions resume measuring drawdown
+        from the reset-time equity."""
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_high_water(account_id, equity, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     equity = excluded.equity, updated_at = excluded.updated_at""",
+                (account_id, equity, datetime.now(UTC).isoformat()),
+            )
+
     def owned_quantities(
         self, account_id: str = "unknown", market: Market | None = None
     ) -> dict[str, float]:

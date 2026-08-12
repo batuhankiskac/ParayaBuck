@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const resetSafetyBtn = document.getElementById('resetSafetyBtn');
+    const riskEpochBtn = document.getElementById('riskEpochBtn');
     const settingsBtn = document.getElementById('settingsBtn');
 
     // Stat Values
@@ -221,6 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         statusText.textContent = stateLabels[state] || state;
         resetSafetyBtn.hidden = state !== 'halted' && state !== 'degraded';
+        // Risk-epoch reset is available while the engine is up: it is the
+        // explicit recovery for a drawdown halt (rebases the peak baseline).
+        riskEpochBtn.hidden = !['running', 'warming_up', 'degraded', 'halted'].includes(state);
 
         // Buttons state
         if (['running', 'warming_up', 'degraded', 'halted'].includes(state)) {
@@ -595,6 +599,27 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Hata: ' + err.message);
         } finally {
             resetSafetyBtn.disabled = false;
+        }
+    });
+
+    riskEpochBtn.addEventListener('click', async () => {
+        if (!confirm('Drawdown tabanı doğrulanmış hesap özkaynağına çekilsin ve yeni risk dönemi başlasın mı? (Başka güvenlik kilitleri aktifse önce onları çözün)')) {
+            return;
+        }
+        try {
+            riskEpochBtn.disabled = true;
+            const res = await controlFetch('/api/safety/risk-epoch', { method: 'POST' });
+            const data = await responsePayload(res);
+            if (!res.ok) throw new Error(data.detail || 'Risk dönemi başlatılamadı');
+            const baseline = data.baseline_equity !== undefined
+                ? ` (yeni taban: ${Number(data.baseline_equity).toLocaleString('tr-TR', { maximumFractionDigits: 2 })})`
+                : '';
+            appendLog('Yeni risk dönemi başlatıldı' + baseline + '.', 'warning');
+            await refreshSystemStatus();
+        } catch (err) {
+            alert('Hata: ' + err.message);
+        } finally {
+            riskEpochBtn.disabled = false;
         }
     });
 

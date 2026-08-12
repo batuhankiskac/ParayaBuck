@@ -288,6 +288,25 @@ def run_product_backtest(
                     "date before using results as a cost proxy."
                 ),
             },
+            "drawdown_halt_shadow_events": {
+                "count": len(result.drawdown_halt_shadow_events),
+                "first": (
+                    result.drawdown_halt_shadow_events[0][0].isoformat()
+                    if result.drawdown_halt_shadow_events
+                    else None
+                ),
+                "last": (
+                    result.drawdown_halt_shadow_events[-1][0].isoformat()
+                    if result.drawdown_halt_shadow_events
+                    else None
+                ),
+                "note": (
+                    "Research backtest: entries were NOT blocked at these "
+                    "points (the curve kept trading). Under the production "
+                    "drawdown policy each event is a halt until an operator "
+                    "starts a new risk epoch."
+                ),
+            },
         }
     )
     run_id = uuid4().hex

@@ -437,3 +437,138 @@ def test_reconcile_failure_keeps_persisted_incidents(tmp_path: Path) -> None:
     assert runtime._circuit_breaker_reason == "reconciliation_failed"
     assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["ownership_drift"]
     ledger.close()
+
+
+# --- DRAWDOWN OPERATIONAL INCIDENT + RISK-EPOCH RESET ----------------------
+
+
+class _EpochBroker:
+    """Fake broker for the risk-epoch reset: reconcile verifies, account()
+    reflects the current (rebased) peak."""
+
+    account_id = "acct"
+
+    def __init__(self, equity: float, peak: float) -> None:
+        self.equity = equity
+        self.peak = peak
+        self.reconcile_calls = 0
+        self.reset_calls: list[float] = []
+
+    def reconcile(self) -> None:
+        self.reconcile_calls += 1
+
+    def account(self) -> AccountSnapshot:
+        return AccountSnapshot(
+            cash=self.equity,
+            equity=self.equity,
+            peak_equity=self.peak,
+            daily_pnl=0.0,
+        )
+
+    def reset_peak_equity(self, equity: float) -> None:
+        self.reset_calls.append(equity)
+        self.peak = equity
+
+
+class _EpochRepository:
+    def __init__(self) -> None:
+        self.resets: list[tuple[str, float]] = []
+
+    def reset_high_water(self, account_id: str, equity: float) -> None:
+        self.resets.append((account_id, equity))
+
+
+def _epoch_runtime(ledger: ExecutionLedger, broker: _EpochBroker) -> EngineRuntime:
+    runtime = _runtime_with_ledger(ledger)
+    runtime.broker = broker  # type: ignore[attr-defined]
+    runtime._running = True  # type: ignore[attr-defined]
+    runtime._portfolio_repository = _EpochRepository()  # type: ignore[attr-defined]
+    return runtime
+
+
+def test_drawdown_breach_persists_incident_and_epoch_reset_recovers(
+    tmp_path: Path,
+) -> None:
+    """A >limit drawdown persists the portfolio_drawdown_halt operational
+    incident; the operator risk-epoch reset rebases the peak to the current
+    equity (broker + repository), clears the incident and unblocks entries."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    broker = _EpochBroker(equity=94_000, peak=100_000)  # 6% drawdown
+    runtime = _epoch_runtime(ledger, broker)
+
+    runtime._evaluate_entry_risk_latch(broker.account())
+    assert runtime._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["portfolio_drawdown_halt"]
+
+    baseline = runtime.start_new_risk_epoch()
+
+    assert baseline == pytest.approx(94_000)
+    assert broker.reset_calls == [94_000]
+    assert broker.peak == pytest.approx(94_000)
+    assert runtime._portfolio_repository.resets == [("acct", 94_000)]  # type: ignore[attr-defined]
+    assert ledger.load_safety_incidents("acct") == ()
+    # The latch re-evaluates against the rebased baseline and clears.
+    assert runtime._entry_risk_latch[Market.EQUITY] is None
+    ledger.close()
+
+
+def test_risk_epoch_reset_clears_only_drawdown_incident(tmp_path: Path) -> None:
+    """The epoch reset never touches unrelated incidents (ownership drift
+    keeps its own recovery flow)."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "ownership_drift")
+    ledger.save_safety_incident("acct", "portfolio_drawdown_halt")
+    broker = _EpochBroker(equity=94_000, peak=100_000)
+    runtime = _epoch_runtime(ledger, broker)
+    runtime._circuit_breaker_reason = None  # type: ignore[attr-defined]
+
+    runtime.start_new_risk_epoch()
+
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["ownership_drift"]
+    ledger.close()
+
+
+def test_risk_epoch_reset_refused_with_circuit_breaker(tmp_path: Path) -> None:
+    """A circuit breaker (e.g. ownership drift) blocks the epoch reset: the
+    drawdown baseline must not be rebased while a serious incident is
+    unresolved."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    broker = _EpochBroker(equity=94_000, peak=100_000)
+    runtime = _epoch_runtime(ledger, broker)
+    runtime._circuit_breaker_reason = "ownership_drift"  # type: ignore[attr-defined]
+
+    with pytest.raises(RuntimeError, match="circuit breaker"):
+        runtime.start_new_risk_epoch()
+
+    assert broker.reset_calls == []
+    assert broker.reconcile_calls == 0
+    ledger.close()
+
+
+def test_risk_epoch_reset_refused_when_not_running(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    broker = _EpochBroker(equity=94_000, peak=100_000)
+    runtime = _epoch_runtime(ledger, broker)
+    runtime._running = False  # type: ignore[attr-defined]
+
+    with pytest.raises(RuntimeError, match="not running"):
+        runtime.start_new_risk_epoch()
+
+    assert broker.reset_calls == []
+    ledger.close()
+
+
+def test_restart_restores_drawdown_latch_from_incident(tmp_path: Path) -> None:
+    """A drawdown breach persists as an incident; a restart restores the
+    entry latch from it so the halt is visible before the first account
+    poll re-evaluates."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "portfolio_drawdown_halt")
+
+    restarted = _runtime_with_ledger(ledger)
+    restarted._restore_persistent_state()
+
+    assert restarted._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
+    assert restarted._entry_risk_latch[Market.CRYPTO] == "portfolio_drawdown_halt"
+    assert restarted._circuit_breaker_reason is None
+    ledger.close()

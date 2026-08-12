@@ -2238,11 +2238,22 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
 
 def test_entry_risk_latch_evaluates_from_account_poll(tmp_path) -> None:
     """The account-poll cadence latches entries on daily loss and drawdown
-    and clears the latch when the condition recovers."""
+    and clears the latch when the condition recovers; a drawdown breach is
+    mirrored as a persisted safety incident until recovery."""
     from parayabuck.runtime import EngineRuntime
+
+    incidents: list[tuple[str, str | None]] = []
+
+    def _save(account_id: str, reason: str) -> None:
+        incidents.append((account_id, reason))
+
+    def _clear(account_id: str, reason: str | None = None) -> None:
+        incidents.append((account_id, reason))
 
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.app_config = Config()
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.ledger = SimpleNamespace(save_safety_incident=_save, clear_safety_incident=_clear)
     runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
     # 1% daily loss on a $100k account trips the 0.5% daily-loss limit.
     runtime._evaluate_entry_risk_latch(AccountSnapshot(99_000, 99_000, 100_000, -1_000))
@@ -2250,9 +2261,15 @@ def test_entry_risk_latch_evaluates_from_account_poll(tmp_path) -> None:
     # Recovery clears the latch.
     runtime._evaluate_entry_risk_latch(AccountSnapshot(100_000, 100_000, 100_000, 0.0))
     assert runtime._entry_risk_latch[Market.EQUITY] is None
-    # A 6% drawdown from the peak trips the drawdown halt.
+    # A 6% drawdown from the peak trips the drawdown halt and persists the
+    # operational incident.
     runtime._evaluate_entry_risk_latch(AccountSnapshot(94_000, 94_000, 100_000, 0.0))
     assert runtime._entry_risk_latch[Market.EQUITY] == "portfolio_drawdown_halt"
+    assert ("acct", "portfolio_drawdown_halt") in incidents
+    # The incident clears once the breach recovers.
+    runtime._evaluate_entry_risk_latch(AccountSnapshot(100_000, 100_000, 100_000, 0.0))
+    assert runtime._entry_risk_latch[Market.EQUITY] is None
+    assert ("acct", "portfolio_drawdown_halt") in incidents[-1:]
 
 
 def test_health_exposes_entry_risk_latch() -> None:

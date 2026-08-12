@@ -109,6 +109,7 @@ class AlpacaBroker:
     ) -> None:
         self._client = TradingClient(api_key, secret_key, paper=paper)
         patch_session_timeout(self._client._session, timeout=15.0)
+        self._paper = paper
         self._peak_state_path = Path("data/runtime") / (
             "paper_equity_peak.json" if paper else "live_equity_peak.json"
         )
@@ -2693,6 +2694,23 @@ class AlpacaBroker:
         temporary = self._peak_state_path.with_suffix(".tmp")
         temporary.write_text(json.dumps({"peak_equity": self._peak_equity}))
         temporary.replace(self._peak_state_path)
+
+    def reset_peak_equity(self, equity: float) -> None:
+        """Start a new risk epoch: rebase the drawdown peak to ``equity``.
+
+        The peak is deliberately monotonic (drawdown is measured against the
+        highest observed equity); only a verified operator action may rebase
+        it. ``equity`` must be positive.
+        """
+        if equity <= 0:
+            raise ValueError("Cannot reset the equity peak to a non-positive value")
+        self._peak_equity = float(equity)
+        self._save_peak_equity()
+        log.warning(
+            "Equity peak rebased to %.2f (%s)",
+            self._peak_equity,
+            "paper" if self._paper else "live",
+        )
 
 
 __all__ = ["AlpacaBroker", "CryptoPriceObservation"]

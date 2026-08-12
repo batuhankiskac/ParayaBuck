@@ -1619,7 +1619,16 @@ class EngineRuntime:
         Daily loss and drawdown breach limits latch entries (SELL-only
         decisions still run); the latch clears when the condition recovers.
         Account freshness is enforced by the readiness gate on the same data.
+
+        A drawdown breach is additionally mirrored as a persisted
+        ``portfolio_drawdown_halt`` safety incident: the drawdown peak is
+        monotonic and entries stay blocked, so the breach is an operational
+        incident whose explicit recovery is a verified risk-epoch reset
+        (``start_new_risk_epoch``) — the incident keeps that state visible
+        across restarts until the operator acts. The incident clears when the
+        breach recovers (e.g. an external deposit) or the epoch is reset.
         """
+        account_id = self.broker.account_id or "unknown"
         equity = max(1e-9, account.equity)
         daily_loss = max(0.0, -account.daily_pnl / equity)
         breach: str | None = None
@@ -1627,6 +1636,10 @@ class EngineRuntime:
             breach = "daily_loss_limit"
         elif account.drawdown_pct >= self.app_config.risk.max_drawdown_pct:
             breach = "portfolio_drawdown_halt"
+        if breach == "portfolio_drawdown_halt":
+            self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
+        else:
+            self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
         self._entry_risk_latch = {
             market: (breach if breach is not None else None) for market in self._entry_risk_latch
         }
@@ -1706,10 +1719,20 @@ class EngineRuntime:
             "final_market_event_queue_overflow",
             "ownership_drift",
         }
-        for incident in self.ledger.load_safety_incidents(account_id):
+        incidents = self.ledger.load_safety_incidents(account_id)
+        for incident in incidents:
             if incident.reason in persistent_reasons:
                 self._circuit_breaker_reason = incident.reason
                 break
+        if any(incident.reason == "portfolio_drawdown_halt" for incident in incidents):
+            # A drawdown breach is an operational incident with an explicit
+            # recovery (verified risk-epoch reset). Restore the entry latch
+            # from the persisted incident so the halt is visible immediately
+            # after restart; the first account poll re-evaluates it against
+            # the broker state (a recovered breach clears it).
+            self._entry_risk_latch = {
+                market: "portfolio_drawdown_halt" for market in self._entry_risk_latch
+            }
         previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
@@ -2507,6 +2530,53 @@ class EngineRuntime:
         )
         self._reconcile_thread = thread
         thread.start()
+
+    def start_new_risk_epoch(self) -> float:
+        """Operator-verified drawdown-baseline reset (explicit recovery path
+        for the ``portfolio_drawdown_halt`` operational incident).
+
+        The drawdown peak is monotonic, so a >limit drawdown cannot recover
+        on its own while entries stay blocked. This action rebases the peak
+        baseline to the current account equity after a verified broker
+        reconciliation and a fresh account snapshot, clears the drawdown
+        incident and re-evaluates the entry latch. It NEVER touches other
+        incidents (ownership drift, protection failure, ...) or the circuit
+        breaker: those keep their own recovery flows.
+
+        Returns the new baseline equity.
+        """
+        if not self._running:
+            raise RuntimeError(
+                "The engine is not running; start it before resetting the risk epoch"
+            )
+        if self._circuit_breaker_reason is not None:
+            raise RuntimeError(
+                "Cannot reset the risk epoch while a circuit breaker is active "
+                f"({self._circuit_breaker_reason}); resolve that incident first"
+            )
+        self.broker.reconcile()  # verified recovery before rebasing
+        account = self.broker.account()  # fresh authoritative snapshot
+        account_id = self.broker.account_id or "unknown"
+        new_baseline = float(account.equity)
+        if new_baseline <= 0:
+            raise RuntimeError("Cannot reset the risk epoch with non-positive account equity")
+        self.broker.reset_peak_equity(new_baseline)
+        repository = getattr(self, "_portfolio_repository", None)
+        if repository is not None:
+            repository.reset_high_water(account_id, new_baseline)
+        self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+        # Re-fetch the account AFTER the rebase: a pre-rebase snapshot would
+        # re-evaluate the latch against the old monotonic peak and instantly
+        # re-trigger the breach we just cleared.
+        rebased = self.broker.account()
+        self._persist_risk_state(rebased)
+        self._evaluate_entry_risk_latch(rebased)
+        log.warning(
+            "New risk epoch started: drawdown baseline rebased to %.2f (account=%s)",
+            new_baseline,
+            account_id,
+        )
+        return new_baseline
 
     def reset_safety_lock(self) -> None:
         """Acknowledge a recoverable entry lock after broker/data verification.

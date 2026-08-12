@@ -352,7 +352,9 @@ def test_verified_startup_reconcile_clears_persisted_incidents() -> None:
         total_fees_for_account=lambda account_id: 0.0,
     )
     runtime.start()
-    assert cleared == [("acct", None)]
+    # The verified startup reconcile cleared ALL persisted incidents; the
+    # account-poll latch mirror may add a no-breach drawdown clear after.
+    assert cleared and cleared[0] == ("acct", None)
 
 
 def test_restart_rebalance_resume_deferred_while_breaker_active() -> None:

@@ -732,6 +732,18 @@ class EngineManager:
             raise ValueError("A halted runtime is required to reset the safety lock")
         runtime.reset_safety_lock()
 
+    def start_new_risk_epoch(self) -> dict[str, object]:
+        """Operator-verified drawdown-baseline reset (explicit recovery for
+        the portfolio_drawdown_halt operational incident)."""
+        with self._state_lock:
+            runtime = self.runtime
+        if runtime is None:
+            raise ValueError(
+                "The trading engine is not running; start it before resetting the risk epoch"
+            )
+        baseline = runtime.start_new_risk_epoch()
+        return {"baseline_equity": baseline}
+
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:
             if (
@@ -1766,6 +1778,20 @@ async def reset_safety_lock() -> dict[str, str]:
         "status": "reset",
         "message": "Safety lock reset after broker reconciliation and data checks.",
     }
+
+
+@app.post("/api/safety/risk-epoch")
+async def start_new_risk_epoch() -> dict[str, Any]:
+    """Operator-verified drawdown-baseline reset: rebases the drawdown peak
+    to the current account equity after a verified broker reconciliation and
+    starts a new risk epoch. Explicit recovery for portfolio_drawdown_halt."""
+    try:
+        return await asyncio.to_thread(manager.start_new_risk_epoch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        log.exception("Risk epoch reset failed with an unexpected error")
+        raise HTTPException(status_code=500, detail="Risk epoch reset failed") from None
 
 
 @app.post("/api/mode")

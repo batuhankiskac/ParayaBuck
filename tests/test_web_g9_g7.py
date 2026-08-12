@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 import yaml
+from fastapi import HTTPException
 
 import parayabuck.execution.alpaca as alpaca_module
 from parayabuck.config import load_config
@@ -295,3 +296,24 @@ def test_live_prerequisites_route_returns_checklist(monkeypatch: Any) -> None:
     result = asyncio.run(server.live_prerequisites())
     assert result["all_met"] is False
     assert result["items"] == [{"id": "x", "satisfied": False}]
+
+
+def test_risk_epoch_route_calls_manager_and_returns_baseline(monkeypatch: Any) -> None:
+    class _StubManager:
+        def start_new_risk_epoch(self) -> dict[str, object]:
+            return {"baseline_equity": 94_000.0}
+
+    monkeypatch.setattr(server, "manager", _StubManager())
+    result = asyncio.run(server.start_new_risk_epoch())
+    assert result == {"baseline_equity": 94_000.0}
+
+
+def test_risk_epoch_route_400_when_engine_not_running(monkeypatch: Any) -> None:
+    class _StubManager:
+        def start_new_risk_epoch(self) -> dict[str, object]:
+            raise ValueError("The trading engine is not running; start it first")
+
+    monkeypatch.setattr(server, "manager", _StubManager())
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(server.start_new_risk_epoch())
+    assert exc_info.value.status_code == 400

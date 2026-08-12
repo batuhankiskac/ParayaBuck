@@ -140,6 +140,33 @@ ZERO mandatory research-runtime coupling. Verified in code:
 - `PARAYABUCK_ALLOW_PAPER_SMOKE=YES` is not set and was not manufactured;
   the execution-lifecycle smoke (`scripts/paper_smoke.py`) was not run.
 
+## Drawdown risk policy (2026-08-12)
+
+Drawdown is measured against a monotonic peak (`AccountSnapshot.drawdown_pct`,
+peak persisted in `data/runtime/{paper,live}_equity_peak.json` + repository
+high-water), so a >`risk.max_drawdown_pct` breach cannot recover on its own
+while entries stay blocked — without an explicit recovery it was a permanent
+kill-switch. Policy now:
+
+1. A drawdown breach is an **operational incident** (`portfolio_drawdown_halt`
+   mirrored into `safety_incidents`): entries blocked (latch + risk overlay,
+   SELL-only decisions still run), state visible across restarts.
+2. Recovery is an **explicit verified risk-epoch reset**
+   (`POST /api/safety/risk-epoch`, Web "Yeni risk dönemi" button): requires a
+   running engine, no active circuit breaker, a verified broker
+   reconciliation and a fresh account snapshot; then the peak baseline
+   (broker JSON + repository high-water) is rebased to the current equity,
+   the incident is cleared and the latch re-evaluates. Other incidents are
+   never touched.
+3. The latch also clears if the breach genuinely recovers (e.g. an external
+   deposit) — the incident mirrors the breach.
+4. **Backtest**: the drawdown breach is a **shadow event** (recorded per
+   decision and aggregated as `drawdown_halt_shadow_events` in the run
+   record/report: count + first/last date) and the alpha curve keeps trading,
+   so a monotonic peak can never freeze a research run. Daily-loss halts stay
+   enforced (session-scoped, they self-recover). A production-policy
+   simulation can be layered on separately later.
+
 ## Operational gaps — status after hardening loop (2026-08-12)
 
 - **G1 — crash-window rebalance wedge: CLOSED** (previous audit). A row left

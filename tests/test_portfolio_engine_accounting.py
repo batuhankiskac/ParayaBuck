@@ -676,12 +676,15 @@ def test_daily_loss_limit_triggers_on_single_day_drop() -> None:
 
 
 def test_high_water_between_rebalances_feeds_later_drawdown() -> None:
-    """Equity that peaks between scheduled rebalances feeds the drawdown halt."""
+    """Equity that peaks between scheduled rebalances feeds the drawdown
+    measurement; in a research backtest the breach is a SHADOW event (the
+    reason is recorded where production would have halted) and the curve
+    keeps trading instead of freezing on the monotonic peak."""
     epoch = datetime(2024, 1, 1, tzinfo=UTC)
     # Month 0: target 60% SPY (capped at the 50% sleeve). Month 1: target 90%.
     # Prices rise to 115 mid-month then fall back to 100 before the next
     # decision: the peak is 107 530, so the later drawdown is ~7% and the
-    # portfolio_drawdown_halt must cap the next decision.
+    # decision records a portfolio_drawdown_halt shadow event.
     bars = [
         _bar(epoch + timedelta(days=0), "SPY", 100.0, Market.EQUITY, 5_000_000),
         _bar(epoch + timedelta(days=1), "SPY", 115.0, Market.EQUITY, 5_000_000),
@@ -699,14 +702,19 @@ def test_high_water_between_rebalances_feeds_later_drawdown() -> None:
     expected_peak = 100_000.0 + first_fill.qty * (bars[1].close - first_fill.fill_price)
     assert engine._peak_equity == pytest.approx(expected_peak)
     assert engine._peak_equity > 100_000.0
-    # The next-month decision wanted 90% but drawdown > 5% caps it at the
-    # current weight, so no BUY order is planned.
+    # The next-month decision wanted 90%; the ~7% drawdown records the
+    # shadow event but does NOT cap the target below the strategy's desired
+    # exposure (the sleeve/maximum-allocation caps still apply) — the curve
+    # keeps trading instead of freezing on the monotonic peak.
     assert len(result.rebalances) == 2
     month_one = result.rebalances[1]
-    assert month_one.risk_overlay_halted
+    assert not month_one.risk_overlay_halted
     assert "portfolio_drawdown_halt" in month_one.risk_overlay_reasons
-    assert dict(month_one.target_weights)["SPY"] == pytest.approx(0.5, abs=1e-9)
-    assert month_one.signed_trade_weights == ()
+    # The shadow events are aggregated in the result (production would have
+    # halted at this decision).
+    assert [(ts, reason) for ts, reason in result.drawdown_halt_shadow_events] == [
+        (month_one.decision_timestamp, "portfolio_drawdown_halt")
+    ]
 
 
 def test_weekly_strategy_risk_state_updates_on_non_rebalance_days() -> None:

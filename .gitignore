@@ -230,6 +230,9 @@ data/universe/
 data/historical/*_sample.csv
 data/historical/equity_1200_2019_2026.csv
 data/historical/crypto_18_1h_2024_2026.csv
+data/historical/crypto_18_1h_extended.csv
+data/historical/crypto_18_1d_extended.csv
+data/historical/crypto_18_extended_report.json
 data/smoke/
 data/historical/equity_1200_2016_2019.csv
 data/historical/equity_1200_2016_2026.csv

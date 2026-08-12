@@ -492,9 +492,20 @@ def _crypto_observation_set(
         start=start,
         end=data_timestamp,
     )
+    # Alpaca's feed includes the forming (in-progress) bar for the current
+    # bucket; its partial close must never rank the observation set.
+    from parayabuck.markets.timeframes import bar_is_closed
+
+    now = datetime.now(UTC)
+    closed_bars = {
+        symbol: tuple(
+            bar for bar in bars.get(symbol, ()) if bar_is_closed(bar.timestamp, bar.timeframe, now)
+        )
+        for symbol in pool
+    }
     observation = build_observation_set(
         strategy,
-        {symbol: tuple(bars.get(symbol, ())) for symbol in pool},
+        closed_bars,
         pool,
         market=Market.CRYPTO,
         timeframe=strategy.timeframe,

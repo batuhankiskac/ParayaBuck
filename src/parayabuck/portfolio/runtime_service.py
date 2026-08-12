@@ -25,6 +25,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import bar_is_closed, equity_day_bar_is_closed
 from parayabuck.portfolio import rebalance_policy_for
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
@@ -1216,7 +1217,15 @@ class PortfolioRuntime:
         self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
 
     def seed(self, bars: list[Bar]) -> None:
-        """Seed only closed, approved bars without producing a decision."""
+        """Seed only closed, approved bars without producing a decision.
+
+        Forming (in-progress) bars are rejected: Alpaca's historical feed
+        includes the partial bar for the current bucket, and an appended
+        forming bar would block the true closed bar (same timestamp) via the
+        ``series[-1].timestamp < bar.timestamp`` append rule, leaving a
+        partial close in decision history indefinitely.
+        """
+        now = datetime.now(UTC)
         for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol)):
             symbol = canonical_symbol(bar.symbol, bar.market)
             if (
@@ -1224,6 +1233,11 @@ class PortfolioRuntime:
                 or bar.timeframe != self.strategy.timeframe
                 or symbol not in self.history
             ):
+                continue
+            if self.market == Market.CRYPTO:
+                if not bar_is_closed(bar.timestamp, bar.timeframe, now):
+                    continue
+            elif bar.timeframe == "1d" and not equity_day_bar_is_closed(bar.timestamp, now):
                 continue
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:

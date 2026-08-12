@@ -29,6 +29,40 @@ def is_regular_equity_time(timestamp: datetime) -> bool:
     return local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60
 
 
+def bar_bucket_end(timestamp: datetime, timeframe: str) -> datetime:
+    """When a bar's fixed time bucket fully elapses (24/7 calendar rule)."""
+    return timestamp + timeframe_duration(timeframe)
+
+
+def bar_is_closed(timestamp: datetime, timeframe: str, now: datetime) -> bool:
+    """Whether a bar is fully closed at ``now`` under the 24/7 bucket rule.
+
+    Crypto trades round the clock on fixed UTC buckets: a bar for bucket
+    ``timestamp`` is closed once ``timestamp + duration`` has passed.
+    Alpaca's historical feed INCLUDES the in-progress (forming) bar for the
+    current bucket, whose close is partial data; seeding or ranking on it
+    would let a partial close masquerade as the true close.
+    """
+    return bar_bucket_end(timestamp, timeframe) <= now
+
+
+def equity_day_bar_is_closed(timestamp: datetime, now: datetime) -> bool:
+    """Whether an equity 1d bar is closed at ``now``.
+
+    Equity daily bars close at the 16:00 ET session close of their session
+    date, NOT 24 hours after the 09:30 ET open. A bar for a past session
+    date is always closed; a bar for today is closed once 16:00 ET has
+    passed.
+    """
+    local = timestamp.astimezone(NEW_YORK)
+    today = now.astimezone(NEW_YORK)
+    if local.date() < today.date():
+        return True
+    if local.date() > today.date():
+        return False
+    return today >= local.replace(hour=16, minute=0, second=0, microsecond=0)
+
+
 def weekday_count(start: datetime, end: datetime) -> int:
     """Approximate number of trading days (Mon-Fri) in an inclusive window."""
     total_days = (end.date() - start.date()).days + 1
@@ -107,7 +141,10 @@ def bars_to_calendar_days(
 __all__ = [
     "NEW_YORK",
     "TIMEFRAME_MINUTES",
+    "bar_bucket_end",
+    "bar_is_closed",
     "bars_to_calendar_days",
+    "equity_day_bar_is_closed",
     "is_regular_equity_time",
     "timeframe_duration",
     "weekday_count",

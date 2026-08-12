@@ -48,14 +48,29 @@ from parayabuck.backtest.product import build_product_universe, load_csv_bars, r
 from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.aggregator import aggregate_historical_bars
+from parayabuck.portfolio.base import PortfolioContext
 
 REPO = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = REPO / "data" / "research" / "strategy_validation_v2"
 OUTPUT_DIR_V3 = REPO / "data" / "research" / "strategy_validation_v3"
+OUTPUT_DIR_V4 = REPO / "data" / "research" / "strategy_validation_v4"
+FROZEN_SPECS_PATH = OUTPUT_DIR_V4 / "frozen_specs.json"
 EQUITY_CSV = REPO / "data" / "historical" / "equity_1200_2016_2026.csv"
 CRYPTO_CSV = REPO / "data" / "historical" / "crypto_18_1h_2024_2026.csv"
 CRYPTO_CSV_EXTENDED = REPO / "data" / "historical" / "crypto_18_1h_extended.csv"
 FOUNDATION_REPORT = REPO / "data" / "research" / "strategy_foundation_v1" / "report.json"
+
+# Bake-off: the four predeclared families. Candidate D (signed jump) was
+# declared DATA/FEATURE INFEASIBLE in Wave 1 and is deliberately absent here.
+BAKEOFF_KEYS = ("A", "B", "C")
+BAKEOFF_LABELS = {
+    "A": "high_proximity",
+    "B": "low_variance",
+    "C": "low_disagreement",
+}
+# Smoke mode uses a 2024 window so every candidate (including A's 364-day
+# warmup) actually trades during the pipeline check.
+BAKEOFF_SMOKE_START = datetime(2024, 1, 1, tzinfo=UTC)
 
 EQUITY_START = datetime(2017, 1, 3, tzinfo=UTC)
 EQUITY_END = datetime(2026, 7, 30, 23, 59, 59, tzinfo=UTC)
@@ -88,6 +103,18 @@ CRYPTO_TSM_PARAMETERS = {
     "top_n": 3,
     "max_single_weight": 0.5,
     "rebalance_hours": 168,
+}
+# Frozen reference parameters of the closed 1h cross-sectional momentum
+# family, pinned here so legacy reference runs never depend on the CURRENT
+# config strategy's parameters (the config now selects a different strategy).
+CRYPTO_CSM_PARAMETERS = {
+    "momentum_scheme": "7d",
+    "rebalance_hours": 24,
+    "top_n": 3,
+    "volatility_window": 72,
+    "btc_regime_lookback_hours": 168,
+    "max_annualized_volatility_pct": 250.0,
+    "max_single_weight": 0.05,
 }
 
 
@@ -430,7 +457,9 @@ def validate_crypto(config) -> dict[str, object]:
     print(f"  aggregated {len(bars_1d):,} 1d / {len(bars_4h):,} 4h bars")
 
     print("Building point-in-time crypto universe from scanner timeframe (1h)...")
-    universe = build_product_universe(config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END)
+    universe = build_product_universe(
+        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
+    )
     snapshots = universe.snapshots
     print(f"  snapshots={len(snapshots)}")
 
@@ -548,7 +577,9 @@ def validate_reversal(config, *, smoke: bool = False) -> dict[str, object]:
     )
 
     print("Building point-in-time crypto universe from 1h scanner bars (P1-R1)...")
-    universe = build_product_universe(config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END)
+    universe = build_product_universe(
+        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
+    )
     snapshots = universe.snapshots
     candidate_counts = [snapshot.candidate_count for snapshot in snapshots]
     print(f"  snapshots={len(snapshots)} candidates avg={statistics.fmean(candidate_counts):.1f}")
@@ -646,7 +677,7 @@ def validate_reversal(config, *, smoke: bool = False) -> dict[str, object]:
         bars_1h,
         market=Market.CRYPTO,
         strategy_name="crypto_cross_sectional_momentum_1h_v1",
-        parameters=config.strategy.crypto.parameters,
+        parameters=CRYPTO_CSM_PARAMETERS,
         strategy_timeframe="1h",
         start=REVERSAL_EVAL_START,
         end=eval_end,
@@ -1224,9 +1255,683 @@ def validate_references(config) -> dict[str, object]:
     return references
 
 
+def _bakeoff_candidate_specs() -> dict[str, dict[str, object]]:
+    """Frozen candidate specs straight from the Wave-1 artifact (single source
+    of truth; the harness never re-declares parameters)."""
+    frozen = json.loads(FROZEN_SPECS_PATH.read_text(encoding="utf-8"))
+    candidates = frozen["candidates"]
+    specs: dict[str, dict[str, object]] = {}
+    for key in BAKEOFF_KEYS:
+        entry = candidates[key]
+        spec = entry["frozen_spec"]
+        specs[key] = {
+            "name": entry["name"],
+            "family": entry["family"],
+            "hypothesis": entry["hypothesis"],
+            "parameters": dict(spec["parameters"]),
+            "timeframe": spec["signal_timeframe"],
+            "warmup_bars": spec["warmup_bars"],
+            "top_n": int(spec["top_n"]),
+            "rebalance_hours": int(spec["parameters"]["rebalance_hours"]),
+        }
+    return specs
+
+
+def _crypto_benchmark_runs(
+    config,
+    bars_1d: list[Bar],
+    bars_1h: list[Bar],
+    universe,
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, object]:
+    """Shared benchmark runs over the evaluation window (1x cost).
+
+    BTC/ETH buy-and-hold, static 50/50, old TSM (1d), old CSM (1h) and the
+    closed reversal family — identical inputs for every candidate so the
+    comparison table is one window, one cost model.
+    """
+    btc_1d = _benchmark_bars(bars_1d, "BTC/USD", Market.CRYPTO)
+    eth_1d = _benchmark_bars(bars_1d, "ETH/USD", Market.CRYPTO)
+    eval_btc = [bar for bar in btc_1d if start <= bar.timestamp <= end]
+    eval_eth = [bar for bar in eth_1d if start <= bar.timestamp <= end]
+    btc_return = _buy_and_hold_return(eval_btc)
+    eth_return = _buy_and_hold_return(eval_eth)
+    benchmarks: dict[str, object] = {
+        "window": [start.isoformat(), end.isoformat()],
+        "BTC_buy_and_hold_return": round(btc_return, 6),
+        "BTC_monthly_sharpe": round(
+            _sharpe_from_returns(_monthly_returns_from_bars(eval_btc), 12), 4
+        ),
+        "BTC_max_drawdown": round(_max_drawdown_from_bars(eval_btc), 6),
+        "ETH_buy_and_hold_return": round(eth_return, 6),
+        "ETH_monthly_sharpe": round(
+            _sharpe_from_returns(_monthly_returns_from_bars(eval_eth), 12), 4
+        ),
+        "ETH_max_drawdown": round(_max_drawdown_from_bars(eval_eth), 6),
+        "BTC_ETH_static_50_50_return": round(0.5 * (btc_return + eth_return), 6),
+        "note": "static 50/50 is buy-and-hold, no rebalancing, no costs",
+    }
+    old_tsm = run_product_backtest(
+        config,
+        bars_1d,
+        market=Market.CRYPTO,
+        strategy_name="crypto_time_series_momentum_v1",
+        parameters=CRYPTO_TSM_PARAMETERS,
+        strategy_timeframe="1d",
+        start=start,
+        end=end,
+        cost_multiplier=1.0,
+        persist=False,
+        persist_artifacts=False,
+        universe=universe,
+    )
+    benchmarks["crypto_time_series_momentum_v1_1d_1x"] = _run_summary_stats(old_tsm.result)
+    old_csm = run_product_backtest(
+        config,
+        bars_1h,
+        market=Market.CRYPTO,
+        strategy_name="crypto_cross_sectional_momentum_1h_v1",
+        parameters=CRYPTO_CSM_PARAMETERS,
+        strategy_timeframe="1h",
+        start=start,
+        end=end,
+        cost_multiplier=1.0,
+        persist=False,
+        persist_artifacts=False,
+        universe=universe,
+    )
+    benchmarks["crypto_cross_sectional_momentum_1h_v1_1x"] = _run_summary_stats(old_csm.result)
+    reversal = run_product_backtest(
+        config,
+        bars_1d,
+        market=Market.CRYPTO,
+        strategy_name=REVERSAL_STRATEGY,
+        parameters=CRYPTO_REVERSAL_PARAMETERS,
+        strategy_timeframe="1d",
+        start=start,
+        end=end,
+        cost_multiplier=1.0,
+        persist=False,
+        persist_artifacts=False,
+        universe=universe,
+    )
+    benchmarks[REVERSAL_STRATEGY + "_1x"] = _run_summary_stats(reversal.result)
+    return benchmarks
+
+
+def _generic_mechanism_diagnostics(
+    bars_1d: list[Bar],
+    universe,
+    *,
+    strategy,
+    start: datetime,
+    end: datetime,
+    rebalance_hours: int = 168,
+    top_n: int = 2,
+    btc_symbol: str = "BTC/USD",
+) -> dict[str, object]:
+    """Would-be-selection audit of a candidate's frozen signal.
+
+    Pure bar math over completed 1d bars: for every weekly decision date (the
+    first 1d bar of each ``rebalance_hours`` epoch block, identical to
+    ``RebalancePolicy.is_period_start``), build a point-in-time context from
+    bars <= decision, run the strategy's OWN ``rank_candidates`` (the exact
+    observation-set ranking code) and measure the forward one-week return of
+    the top-N names. Buckets split by the trailing-week BTC regime so the
+    report can see whether the signal's edge is one-regime dependent.
+    """
+    block_seconds = rebalance_hours * 3600
+
+    def _block_key(ts: datetime) -> int:
+        return int(ts.timestamp()) // block_seconds
+
+    by_symbol: dict[str, list[Bar]] = {}
+    for bar in bars_1d:
+        by_symbol.setdefault(bar.symbol, []).append(bar)
+    for series in by_symbol.values():
+        series.sort(key=lambda bar: bar.timestamp)
+    close_at: dict[str, dict[datetime, float]] = {}
+    for symbol, series in by_symbol.items():
+        close_at[symbol] = {bar.timestamp: bar.close for bar in series}
+    timestamps = sorted({bar.timestamp for bar in bars_1d})
+
+    decision_dates: list[datetime] = []
+    last_key: int | None = None
+    for ts in timestamps:
+        if ts < start or ts > end:
+            continue
+        key = _block_key(ts)
+        if key != last_key:
+            decision_dates.append(ts)
+            last_key = key
+
+    observations: list[dict[str, object]] = []
+    for index, decision in enumerate(decision_dates):
+        if index + 1 >= len(decision_dates):
+            break  # last decision has no forward window
+        d_next = decision_dates[index + 1]
+        history: dict[str, tuple[Bar, ...]] = {}
+        for symbol, series in by_symbol.items():
+            eligible = [bar for bar in series if bar.timestamp <= decision]
+            if eligible:
+                history[symbol] = tuple(eligible)
+        context = PortfolioContext(
+            decision_timestamp=decision,
+            market=Market.CRYPTO,
+            timeframe="1d",
+            history=history,
+            universe=universe,
+            universe_version="",
+            equity=0.0,
+            holdings={},
+            prices={},
+            benchmark_symbol=btc_symbol,
+        )
+        ranked = tuple(strategy.rank_candidates(context))
+        if not ranked:
+            continue
+        btc_close_at = close_at.get(btc_symbol, {})
+        btc_prev_week = None
+        if decision in btc_close_at:
+            prev_week_close = btc_close_at.get(decision - timedelta(days=7))
+            if prev_week_close and prev_week_close > 0:
+                btc_prev_week = btc_close_at[decision] / prev_week_close - 1
+        for symbol in ranked[:top_n]:
+            series = by_symbol.get(symbol)
+            if not series:
+                continue
+            closes_after = [bar for bar in series if decision <= bar.timestamp <= d_next]
+            closes_upto = [bar for bar in series if bar.timestamp <= decision]
+            if len(closes_after) < 2 or not closes_upto:
+                continue
+            entry = closes_upto[-1].close
+            exit_close = closes_after[-1].close
+            if entry <= 0:
+                continue
+            observations.append(
+                {
+                    "decision_date": decision.isoformat(),
+                    "symbol": symbol,
+                    "forward_return": round(exit_close / entry - 1, 6),
+                    "btc_prior_week_return": (
+                        round(btc_prev_week, 6) if btc_prev_week is not None else None
+                    ),
+                }
+            )
+
+    overall = [float(ob["forward_return"]) for ob in observations]
+    bull = [
+        float(ob["forward_return"])
+        for ob in observations
+        if (ob["btc_prior_week_return"] or 0.0) > 0
+    ]
+    bear = [
+        float(ob["forward_return"])
+        for ob in observations
+        if (ob["btc_prior_week_return"] or 0.0) <= 0
+    ]
+
+    def _stats(values: list[float]) -> dict[str, object]:
+        if not values:
+            return {"count": 0, "mean_forward_weekly_return": None, "win_rate": None}
+        return {
+            "count": len(values),
+            "mean_forward_weekly_return": round(statistics.fmean(values), 6),
+            "win_rate": round(sum(1 for v in values if v > 0) / len(values), 4),
+        }
+
+    return {
+        "methodology": (
+            "would-be weekly selection on completed 1d bars using the strategy's own "
+            "rank_candidates (observation-set parity) and forward one-week close-to-close "
+            "return per held name; decision dates are the first 1d bar of each "
+            f"{rebalance_hours}h epoch block (RebalancePolicy parity); diagnostic only"
+        ),
+        "weekly_decision_count": len(decision_dates),
+        "observation_count": len(observations),
+        "overall": _stats(overall),
+        "btc_prior_week_positive": _stats(bull),
+        "btc_prior_week_nonpositive": _stats(bear),
+    }
+
+
+def _btc_beta_diagnostic(result, btc_bars: list[Bar]) -> dict[str, object]:
+    """OLS beta of the candidate's daily curve returns on BTC daily returns
+    (timestamp-aligned). A candidate whose 'alpha' is mostly BTC beta will
+    show high beta/high r2 — the adversarial review consumes this."""
+    btc_close = {bar.timestamp: bar.close for bar in btc_bars if bar.close > 0}
+    pairs: list[tuple[float, float]] = []
+    for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=False):
+        if timestamp not in btc_close or equity <= 0:
+            continue
+        pairs.append((equity, btc_close[timestamp]))
+    xs: list[float] = []
+    ys: list[float] = []
+    for index in range(1, len(pairs)):
+        if pairs[index - 1][1] > 0:
+            xs.append(pairs[index][1] / pairs[index - 1][1] - 1)
+            ys.append(pairs[index][0] / pairs[index - 1][0] - 1)
+    if len(xs) < 30:
+        return {"observations": len(xs), "beta": None, "r_squared": None}
+    mean_x = statistics.fmean(xs)
+    mean_y = statistics.fmean(ys)
+    var_x = sum((x - mean_x) ** 2 for x in xs)
+    cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True))
+    beta = cov / var_x if var_x > 0 else 0.0
+    var_y = sum((y - mean_y) ** 2 for y in ys)
+    r_squared = cov * cov / (var_x * var_y) if var_x > 0 and var_y > 0 else 0.0
+    return {
+        "observations": len(xs),
+        "beta": round(beta, 4),
+        "r_squared": round(r_squared, 4),
+        "note": (
+            "daily returns of the candidate curve regressed on BTC/USD daily returns, same window"
+        ),
+    }
+
+
+def _jackknife_run(
+    config,
+    bars_1h: list[Bar],
+    bars_1d: list[Bar],
+    *,
+    spec: dict[str, object],
+    drop_symbol: str,
+    start: datetime,
+    end: datetime,
+) -> dict[str, object]:
+    """Drop-one-symbol rerun: the symbol's 1h bars are removed from BOTH the
+    PIT universe build and the strategy data, so a missing feed symbol is
+    absent from pool and observation set exactly as the production scanner
+    would see it."""
+    bars_1h_excl = [bar for bar in bars_1h if bar.symbol != drop_symbol]
+    bars_1d_excl = [bar for bar in bars_1d if bar.symbol != drop_symbol]
+    universe_excl = build_product_universe(
+        config, bars_1h_excl, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
+    )
+    run = run_product_backtest(
+        config,
+        bars_1d_excl,
+        market=Market.CRYPTO,
+        strategy_name=str(spec["name"]),
+        parameters=dict(spec["parameters"]),
+        strategy_timeframe=str(spec["timeframe"]),
+        start=start,
+        end=end,
+        cost_multiplier=1.0,
+        persist=False,
+        persist_artifacts=False,
+        universe=universe_excl,
+    )
+    result = run.result
+    top = sorted(result.per_symbol, key=lambda item: -item.realized_pnl)
+    return {
+        "dropped_symbol": drop_symbol,
+        "return": round(result.total_return, 6),
+        "cagr": round(result.cagr, 6),
+        "sharpe": round(result.sharpe, 6),
+        "max_drawdown": round(result.max_drawdown, 6),
+        "profit_factor": round(_profit_factor(result), 4),
+        "trades": len(result.closed_position_events),
+        "top_contributors_after_drop": [
+            {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)} for item in top[:3]
+        ],
+    }
+
+
+def validate_crypto_candidate(
+    config,
+    key: str,
+    *,
+    smoke: bool = False,
+    benchmarks: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Frozen-spec validation of ONE bake-off candidate through the production
+    engine — identical structure for every candidate (no per-strategy
+    shortcuts): full-period 1x/2x/3x cost stress, anchored walk-forward,
+    concentration + jackknife, BTC beta, turnover/cost efficiency, shared
+    benchmarks."""
+    specs = _bakeoff_candidate_specs()
+    if key not in specs:
+        raise ValueError(f"Unknown bake-off candidate key: {key}")
+    spec = specs[key]
+    name = str(spec["name"])
+    print(f"=== BAKE-OFF CANDIDATE {key} — {name} ===")
+    print(f"  family: {spec['family']}")
+    print(f"  parameters: {spec['parameters']}")
+
+    print("Loading extended crypto dataset (1h)...")
+    bars_1h = load_csv_bars(CRYPTO_CSV_EXTENDED, default_market=Market.CRYPTO)
+    print(f"  {len(bars_1h):,} 1h bars")
+    bars_1d = aggregate_historical_bars(bars_1h, "1d", require_complete=True)
+    print(f"  aggregated {len(bars_1d):,} 1d bars (require_complete=True)")
+
+    eval_start = BAKEOFF_SMOKE_START if smoke else REVERSAL_EVAL_START
+    eval_end = min(eval_start + timedelta(days=92), CRYPTO_END) if smoke else CRYPTO_END
+    print(f"  evaluation window: {eval_start.date()} .. {eval_end.date()}")
+
+    print("Building point-in-time crypto universe from 1h scanner bars (timeframe='1h')...")
+    universe = build_product_universe(
+        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
+    )
+    snapshots = universe.snapshots
+    candidate_counts = [snapshot.candidate_count for snapshot in snapshots]
+    print(f"  snapshots={len(snapshots)} candidates avg={statistics.fmean(candidate_counts):.1f}")
+
+    symbols = sorted({bar.symbol for bar in bars_1d})
+    dataset = {
+        "source": CRYPTO_CSV_EXTENDED.name,
+        "window": [
+            min(bar.timestamp for bar in bars_1d).isoformat(),
+            max(bar.timestamp for bar in bars_1d).isoformat(),
+        ],
+        "symbols": symbols,
+        "symbol_count": len(symbols),
+        "bars_1h": len(bars_1h),
+        "bars_1d": len(bars_1d),
+        "aggregation": "1h -> 1d via aggregate_historical_bars(require_complete=True)",
+        "hash_1h": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+        "hash_1d_csv": "75f820fc0d778df093bf3660f010bc87335b1429f58f153f8e8524c90af22387",
+    }
+
+    if benchmarks is None:
+        benchmarks = _crypto_benchmark_runs(
+            config,
+            bars_1d,
+            bars_1h,
+            universe,
+            start=eval_start,
+            end=eval_end,
+        )
+
+    print("Full-period runs (1x/2x/3x cost)...")
+    full_period = _cost_stress(
+        config,
+        bars_1d,
+        market=Market.CRYPTO,
+        strategy_name=name,
+        parameters=dict(spec["parameters"]),
+        strategy_timeframe=str(spec["timeframe"]),
+        start=eval_start,
+        end=eval_end,
+        universe=universe,
+    )
+
+    print("1x run (contribution analysis + BTC beta)...")
+    one_x = run_product_backtest(
+        config,
+        bars_1d,
+        market=Market.CRYPTO,
+        strategy_name=name,
+        parameters=dict(spec["parameters"]),
+        strategy_timeframe=str(spec["timeframe"]),
+        start=eval_start,
+        end=eval_end,
+        cost_multiplier=1.0,
+        persist=False,
+        persist_artifacts=False,
+        universe=universe,
+    )
+    result = one_x.result
+    contribution = _contribution_analysis(result)
+    btc_1d = _benchmark_bars(bars_1d, "BTC/USD", Market.CRYPTO)
+    btc_beta = _btc_beta_diagnostic(result, btc_1d)
+
+    print("Anchored walk-forward (calendar 6-month folds from 2022-01-01)...")
+    folds = _calendar_fold_window(datetime(2022, 1, 1, tzinfo=UTC), eval_end, 6)
+    fold_results = []
+    for index, (fold_start, fold_end) in enumerate(folds, start=1):
+        run = run_product_backtest(
+            config,
+            bars_1d,
+            market=Market.CRYPTO,
+            strategy_name=name,
+            parameters=dict(spec["parameters"]),
+            strategy_timeframe=str(spec["timeframe"]),
+            start=fold_start,
+            end=fold_end,
+            cost_multiplier=1.0,
+            persist=False,
+            persist_artifacts=False,
+            universe=universe,
+        )
+        stats = _fold_stats(run.result)
+        stats["top_contributors"] = [
+            {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)}
+            for item in sorted(run.result.per_symbol, key=lambda item: -item.realized_pnl)[:3]
+        ]
+        fold_results.append(stats)
+        print(
+            f"  fold {index:02d} {fold_start.date()}->{fold_end.date()} "
+            f"return={stats['return']:.2%} sharpe={stats['sharpe']:.2f} "
+            f"mdd={stats['max_drawdown']:.2%}"
+        )
+    positive = sum(1 for fold in fold_results if fold["return"] > 0)
+    sorted_folds = sorted(fold_results, key=lambda item: item["return"])
+    walk_forward: dict[str, object] = {
+        "folds": fold_results,
+        "positive_fold_count": positive,
+        "negative_fold_count": len(fold_results) - positive,
+        "total_fold_count": len(fold_results),
+        "positive_fold_ratio": round(positive / len(fold_results), 4) if fold_results else 0.0,
+        "mean_fold_return": (
+            round(statistics.fmean([f["return"] for f in fold_results]), 6) if fold_results else 0.0
+        ),
+        "median_fold_return": (
+            round(statistics.median([f["return"] for f in fold_results]), 6)
+            if fold_results
+            else 0.0
+        ),
+        "worst_fold": (
+            {
+                "start": sorted_folds[0]["start"],
+                "end": sorted_folds[0]["end"],
+                "return": sorted_folds[0]["return"],
+            }
+            if sorted_folds
+            else None
+        ),
+        "best_fold": (
+            {
+                "start": sorted_folds[-1]["start"],
+                "end": sorted_folds[-1]["end"],
+                "return": sorted_folds[-1]["return"],
+            }
+            if sorted_folds
+            else None
+        ),
+        "methodology": (
+            "anchored: each fold runs the frozen strategy from fold_start with warmup = "
+            "all bars before it; 6-month calendar folds, 1x cost, same PIT universe"
+        ),
+    }
+
+    print("Jackknife (drop top-1 contributor, BTC, ETH)...")
+    top1 = contribution["top_1"]
+    jackknife: dict[str, object] = {}
+    drop_symbols = [
+        top1["symbol"] if top1 else "BTC/USD",
+        "BTC/USD",
+        "ETH/USD",
+    ]
+    seen_drops: set[str] = set()
+    for drop in drop_symbols:
+        if drop in seen_drops:
+            continue
+        seen_drops.add(drop)
+        drop_key = f"drop_{drop.replace('/', '_')}"
+        jackknife[drop_key] = _jackknife_run(
+            config,
+            bars_1h,
+            bars_1d,
+            spec=spec,
+            drop_symbol=drop,
+            start=eval_start,
+            end=eval_end,
+        )
+        print(f"  drop {drop}: ret={jackknife[drop_key]['return']:.2%}")
+
+    print("Mechanism diagnostics (would-be weekly selections, forward 1w returns)...")
+    from parayabuck.portfolio import portfolio_strategy_from
+
+    strategy = portfolio_strategy_from(
+        name, dict(spec["parameters"]), timeframe=str(spec["timeframe"])
+    )
+    diagnostics = _generic_mechanism_diagnostics(
+        bars_1d,
+        universe,
+        strategy=strategy,
+        start=eval_start,
+        end=eval_end,
+        rebalance_hours=int(spec["rebalance_hours"]),
+        top_n=int(spec["top_n"]),
+    )
+
+    avg_equity = _avg_equity(result)
+    total_cost = result.slippage_cost_total + result.spread_cost_total + result.fee_total
+    gross_pnl = result.starting_equity * result.gross_return
+    run_days = max(1, result.duration_days)
+    cost_efficiency: dict[str, object] = {
+        "trade_count": len(result.closed_position_events),
+        "rebalance_count": result.rebalance_count,
+        "turnover_total": round(result.turnover, 4),
+        "annualized_turnover": round(result.turnover / (run_days / 365.25), 4),
+        # Average life of one position: each closed-position event closes one
+        # position; the average number of live positions scales the closure
+        # rate into a per-position holding period.
+        "average_holding_days": (
+            round(run_days * result.average_holdings_count / len(result.closed_position_events), 2)
+            if result.closed_position_events
+            else None
+        ),
+        "fees_total": round(total_cost, 2),
+        "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
+        "fees_pct_of_gross_pnl": (
+            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
+        ),
+        "avg_holdings": round(result.average_holdings_count, 3),
+        "avg_crypto_exposure": round(1.0 - result.average_cash_ratio, 4),
+        "avg_cash_ratio": round(result.average_cash_ratio, 4),
+    }
+
+    summary: dict[str, object] = {
+        "candidate_key": key,
+        "label": BAKEOFF_LABELS[key],
+        "strategy": name,
+        "family": spec["family"],
+        "hypothesis": spec["hypothesis"],
+        "parameters": spec["parameters"],
+        "dataset": dataset,
+        "evaluation_window": [eval_start.isoformat(), eval_end.isoformat()],
+        "warmup": "2021-01-01 .. 2021-03-31 (harness-wide)",
+        "smoke": smoke,
+        "universe": {
+            "snapshots": len(snapshots),
+            "methodology": universe.methodology,
+            "scanner_timeframe": "1h",
+            "avg_candidate_pool": (
+                round(statistics.fmean(candidate_counts), 1) if candidate_counts else 0.0
+            ),
+            "note": (
+                "PIT universe built once from the extended 1h bars with timeframe='1h' (P1-A fix)"
+            ),
+        },
+        "benchmarks": benchmarks,
+        "full_period": full_period,
+        "walk_forward": walk_forward,
+        "concentration": contribution,
+        "jackknife": jackknife,
+        "btc_beta": btc_beta,
+        "diagnostics": diagnostics,
+        "cost_efficiency": cost_efficiency,
+    }
+
+    one_x = full_period["1x"]
+    wf = walk_forward
+    diag = diagnostics["overall"]
+    print(f"=== {name} KEY NUMBERS ===")
+    print(
+        f"  1x: return={one_x['return']:.2%} cagr={one_x['cagr']:.2%} "
+        f"sharpe={one_x['sharpe']:.2f} sortino={one_x['sortino']:.2f} "
+        f"mdd={one_x['max_drawdown']:.2%} pf={one_x['profit_factor']:.2f} "
+        f"turnover={one_x['turnover']:.2%} trades={one_x['trade_count']} "
+        f"rebalances={one_x['rebalance_count']}"
+    )
+    print(
+        f"  2x: return={full_period['2x']['return']:.2%} sharpe={full_period['2x']['sharpe']:.2f} "
+        f"3x: return={full_period['3x']['return']:.2%} sharpe={full_period['3x']['sharpe']:.2f}"
+    )
+    print(
+        f"  walk-forward: {wf['positive_fold_count']}/{wf['total_fold_count']} positive, "
+        f"mean={wf['mean_fold_return']:.2%} median={wf['median_fold_return']:.2%}"
+    )
+    if wf["best_fold"] is not None and wf["worst_fold"] is not None:
+        print(f"    best={wf['best_fold']['return']:.2%} worst={wf['worst_fold']['return']:.2%}")
+    print(
+        f"  diagnostics: {diag['count']} weekly selections, "
+        f"mean forward 1w return={diag['mean_forward_weekly_return']:.2%} "
+        f"win rate={diag['win_rate']:.1%}"
+    )
+    top = contribution["top_1"]
+    print(
+        f"  contribution: top_1={top['symbol'] if top else None} "
+        f"({top['share_of_positive_pnl']:.1%} of positive) "
+        f"BTC={contribution['BTC/USD']['share_of_positive_pnl']:.1%} "
+        f"ETH={contribution['ETH/USD']['share_of_positive_pnl']:.1%}"
+    )
+    print(f"  btc beta: {btc_beta['beta']} r2={btc_beta['r_squared']}")
+    return summary
+
+
+def validate_bakeoff(config, *, smoke: bool = False) -> dict[str, object]:
+    """Run every feasible candidate through the identical pipeline and produce
+    the comparison report the mission requires."""
+    print("Loading extended crypto dataset (1h) once for shared benchmarks...")
+    bars_1h = load_csv_bars(CRYPTO_CSV_EXTENDED, default_market=Market.CRYPTO)
+    bars_1d = aggregate_historical_bars(bars_1h, "1d", require_complete=True)
+    eval_start = BAKEOFF_SMOKE_START if smoke else REVERSAL_EVAL_START
+    eval_end = min(eval_start + timedelta(days=92), CRYPTO_END) if smoke else CRYPTO_END
+    universe = build_product_universe(
+        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
+    )
+    benchmarks = _crypto_benchmark_runs(
+        config,
+        bars_1d,
+        bars_1h,
+        universe,
+        start=eval_start,
+        end=eval_end,
+    )
+    report: dict[str, object] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "head": "68331da9430b155bd2aa6572adb4afb63bbb1e44",
+        "frozen_specs": FROZEN_SPECS_PATH.name,
+        "candidates": {},
+    }
+    for key in BAKEOFF_KEYS:
+        report["candidates"][key] = validate_crypto_candidate(
+            config, key, smoke=smoke, benchmarks=benchmarks
+        )
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="validate_strategy_candidates")
-    parser.add_argument("target", choices=("equity", "crypto", "references", "reversal", "all"))
+    parser.add_argument(
+        "target",
+        choices=(
+            "equity",
+            "crypto",
+            "references",
+            "reversal",
+            "bakeoff",
+            "all",
+            *BAKEOFF_KEYS,
+        ),
+    )
+
     parser.add_argument("--config", default=str(REPO / "config" / "settings.yaml"))
     parser.add_argument(
         "--smoke",
@@ -1257,13 +1962,36 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(report["reversal"], indent=2, sort_keys=True, allow_nan=False),
             encoding="utf-8",
         )
+    if args.target == "bakeoff" or args.target in BAKEOFF_KEYS:
+        OUTPUT_DIR_V4.mkdir(parents=True, exist_ok=True)
+        if args.target == "bakeoff":
+            report["bakeoff"] = validate_bakeoff(config, smoke=args.smoke)
+            (OUTPUT_DIR_V4 / "bakeoff.json").write_text(
+                json.dumps(report["bakeoff"], indent=2, sort_keys=True, allow_nan=False),
+                encoding="utf-8",
+            )
+            for key, candidate in report["bakeoff"]["candidates"].items():
+                (OUTPUT_DIR_V4 / f"candidate_{key}.json").write_text(
+                    json.dumps(candidate, indent=2, sort_keys=True, allow_nan=False),
+                    encoding="utf-8",
+                )
+        else:
+            report[args.target] = validate_crypto_candidate(config, args.target, smoke=args.smoke)
+            (OUTPUT_DIR_V4 / f"candidate_{args.target}.json").write_text(
+                json.dumps(report[args.target], indent=2, sort_keys=True, allow_nan=False),
+                encoding="utf-8",
+            )
     if args.target in {"references", "all"}:
         report["references"] = validate_references(config)
         (OUTPUT_DIR / "references.json").write_text(
             json.dumps(report["references"], indent=2, sort_keys=True, allow_nan=False),
             encoding="utf-8",
         )
-    summary_path = OUTPUT_DIR_V3 if args.target in {"reversal", "all"} else OUTPUT_DIR
+    summary_path = (
+        OUTPUT_DIR_V4
+        if args.target in {"bakeoff", *BAKEOFF_KEYS}
+        else (OUTPUT_DIR_V3 if args.target in {"reversal", "all"} else OUTPUT_DIR)
+    )
     (summary_path / "summary.json").write_text(
         json.dumps(report, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
     )

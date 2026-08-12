@@ -140,20 +140,16 @@ strategy:
       ivol_reject_quantile: 0.70
       exclude_symbols: [SPY]
   crypto:
-    # crypto_time_series_momentum_v1 is NOT validated (family verdict C);
-    # the frozen cross-sectional strategy remains the only crypto strategy
-    # and stays disabled until a candidate passes historical validation.
-    enabled: false
-    name: crypto_cross_sectional_momentum_1h_v1
+    # crypto_low_variance_v1 — VALIDATED in the 2026-08-12 strategy bake-off
+    # (verdict A: 1x +4.61%, 2x +0.86%, WF 8/10, concentration-robust) and
+    # registered as the PAPER selection. LIVE remains disabled.
+    enabled: true
+    name: crypto_low_variance_v1
     maximum_allocation: 0.10
     parameters:
-      momentum_scheme: 7d
-      rebalance_hours: 24
-      top_n: 3
-      volatility_window: 72
-      btc_regime_lookback_hours: 168
-      max_annualized_volatility_pct: 250.0
-      max_single_weight: 0.05
+      variance_lookback_days: 22
+      top_n: 2
+      rebalance_hours: 168
 risk:
   max_position_pct: 0.1
   max_crypto_exposure_pct: 0.1

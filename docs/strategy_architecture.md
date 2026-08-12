@@ -200,6 +200,10 @@ GREEN/RED runtime gate.
 | `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | validated candidate (broad-pool alpha) |
 | `crypto_cross_sectional_momentum_1h_v1` | crypto | 1h | 1h | hours:24 | frozen reference |
 | `crypto_time_series_momentum_v1` | crypto | 1d | 4h, 1d | hours:168 | NOT validated (family verdict C) |
+| `crypto_cross_sectional_reversal_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C) |
+| `crypto_high_proximity_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C, bake-off 2026-08-12) |
+| `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | validated candidate (bake-off 2026-08-12, PAPER selection) |
+| `crypto_low_disagreement_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C, bake-off 2026-08-12) |
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

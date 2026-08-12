@@ -6,6 +6,9 @@ from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMome
 from parayabuck.portfolio.crypto_cross_sectional_reversal import (
     CryptoCrossSectionalReversal1dV1,
 )
+from parayabuck.portfolio.crypto_high_proximity import CryptoHighProximity1dV1
+from parayabuck.portfolio.crypto_low_disagreement import CryptoLowDisagreement1dV1
+from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV1
 from parayabuck.portfolio.crypto_time_series import CryptoTimeSeriesMomentumV1
 from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
 from parayabuck.portfolio.equity_long_horizon_momentum import EquityLongHorizonMomentum1dV2
@@ -25,6 +28,9 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
     CryptoCrossSectionalReversal1dV1.name: CryptoCrossSectionalReversal1dV1,
     CryptoTimeSeriesMomentumV1.name: CryptoTimeSeriesMomentumV1,
+    CryptoHighProximity1dV1.name: CryptoHighProximity1dV1,
+    CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
+    CryptoLowDisagreement1dV1.name: CryptoLowDisagreement1dV1,
 }
 
 
@@ -111,6 +117,9 @@ def rebalance_policy_for(
 __all__ = [
     "CryptoCrossSectionalMomentum1hV1",
     "CryptoCrossSectionalReversal1dV1",
+    "CryptoHighProximity1dV1",
+    "CryptoLowDisagreement1dV1",
+    "CryptoLowVariance1dV1",
     "CryptoTimeSeriesMomentumV1",
     "EquityDynamicTrend1dV1",
     "EquityLongHorizonMomentum1dV2",

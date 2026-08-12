@@ -48,6 +48,8 @@ class CryptoCrossSectionalMomentum1hV1(PortfolioStrategy):
     market = Market.CRYPTO
     timeframe = "1h"
     minimum_history_bars = 730
+    default_rebalance_hours = 24
+    rebalance_policy_declared = "hours:24"
 
     def _validate_parameters(self) -> None:
         allowed_schemes = {"24h", "7d", "30d", "norm_24_7_30"}

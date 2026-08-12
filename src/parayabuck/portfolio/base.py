@@ -43,13 +43,65 @@ class PortfolioContext:
         return bool(contains(symbol, self.market, self.decision_timestamp))
 
 
+@dataclass(frozen=True)
+class StrategySpec:
+    """Immutable description of a strategy's declared trading-layer contract.
+
+    The strategy owns its signal timeframe: there is no global strategy
+    timeframe, and ``supported_timeframes`` is the ONLY set of timeframes a
+    strategy may ever be run on (the UI restricts choice to it). Scanner,
+    signal, rebalance, execution and reconciliation cadences are independent
+    responsibilities and are NOT collapsed here.
+    """
+
+    name: str
+    version: str
+    market: Market
+    display_name: str
+    primary_timeframe: str
+    supported_timeframes: tuple[str, ...]
+    required_timeframes: tuple[str, ...]
+    rebalance_policy: str
+    minimum_history_bars: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "market": self.market.value,
+            "display_name": self.display_name,
+            "primary_timeframe": self.primary_timeframe,
+            "supported_timeframes": list(self.supported_timeframes),
+            "required_timeframes": list(self.required_timeframes),
+            "rebalance_policy": self.rebalance_policy,
+            "minimum_history_bars": self.minimum_history_bars,
+        }
+
+
 class PortfolioStrategy(ABC):
-    """Produces target portfolios from point-in-time market state."""
+    """Produces target portfolios from point-in-time market state.
+
+    ``timeframe`` is the strategy's PRIMARY signal timeframe and is owned by
+    the strategy, never by a global runtime selector. ``supported_timeframes``
+    may list additional VALIDATED variants; anything else is rejected.
+    """
 
     name: str
     version: str = "1.0.0"
     market: Market
     timeframe: str
+    display_name: str = ""
+    # Validated alternative signal timeframes (in addition to ``timeframe``).
+    # Empty means the strategy is single-timeframe and MUST NOT be run on any
+    # other resolution.
+    supported_timeframes: tuple[str, ...] = ()
+    # Additional timeframes whose bars must be seeded/aggregated before the
+    # strategy can decide (e.g. a lower-resolution reference series).
+    required_timeframes: tuple[str, ...] = ()
+    # Declared decision cadence ("monthly", "weekly", "hours:N"). Informational
+    # metadata; the executable policy mapping lives in
+    # ``parayabuck.portfolio.rebalance_policy_for``.
+    rebalance_policy_declared: str = "monthly"
 
     @property
     def minimum_history_bars(self) -> int:
@@ -68,8 +120,26 @@ class PortfolioStrategy(ABC):
     def parameter_tuple(self) -> tuple[tuple[str, object], ...]:
         return tuple(sorted(self.parameters.items()))
 
+    def supports_timeframe(self, timeframe: str) -> bool:
+        """Whether ``timeframe`` is a validated signal resolution for this strategy."""
+        return timeframe == self.timeframe or timeframe in self.supported_timeframes
+
+    def spec(self) -> StrategySpec:
+        """The strategy's declared trading-layer contract (name, timeframes, cadence)."""
+        return StrategySpec(
+            name=self.name,
+            version=self.version,
+            market=self.market,
+            display_name=self.display_name or self.name,
+            primary_timeframe=self.timeframe,
+            supported_timeframes=self.supported_timeframes,
+            required_timeframes=self.required_timeframes,
+            rebalance_policy=self.rebalance_policy_declared,
+            minimum_history_bars=self.minimum_history_bars,
+        )
+
     def supports(self, context: PortfolioContext) -> bool:
-        if context.market != self.market or context.timeframe != self.timeframe:
+        if context.market != self.market or not self.supports_timeframe(context.timeframe):
             return False
         longest = max((len(bars) for bars in context.history.values()), default=0)
         return longest >= self.minimum_history_bars
@@ -107,4 +177,4 @@ class PortfolioStrategy(ABC):
         return float(value)
 
 
-__all__ = ["PortfolioContext", "PortfolioStrategy"]
+__all__ = ["PortfolioContext", "PortfolioStrategy", "StrategySpec"]

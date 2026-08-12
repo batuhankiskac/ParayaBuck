@@ -57,18 +57,18 @@ class MarketStrategyConfig:
 def _default_equity_strategy() -> MarketStrategyConfig:
     return MarketStrategyConfig(
         enabled=True,
-        name="equity_dynamic_trend_1d_v1",
+        name="equity_residual_momentum_v1",
         timeframe="1d",
         maximum_allocation=0.50,
         parameters={
-            "trend_window": 150,
-            "momentum_window": 60,
-            "volatility_window": 20,
-            "top_n": 6,
+            "formation_bars": 252,
+            "skip_bars": 21,
+            "beta_window_bars": 273,
+            "residual_vol_window": 63,
+            "top_n": 8,
             "max_single_weight": 0.10,
-            "annual_volatility_target": 0.10,
-            "correlation_floor": 0.25,
-            "rebalance_frequency": "weekly",
+            "ivol_reject_quantile": 0.70,
+            "exclude_symbols": ["SPY"],
         },
     )
 
@@ -657,6 +657,16 @@ def load_config(config_path: str | None = None) -> Config:
         scanner = CryptoScannerConfig(**dict(crypto_raw.pop("scanner", {})))
         crypto_universe = CryptoUniverseConfig(scanner=scanner, **crypto_raw)
     strategy_raw = dict(raw.get("strategy", {}))
+    for _market_key in ("equity", "crypto"):
+        if _market_key in strategy_raw and "timeframe" in dict(strategy_raw[_market_key]):
+            warnings.warn(
+                f"strategy.{_market_key}.timeframe is deprecated: the strategy "
+                "owns its signal timeframe. The value is still validated "
+                "against the selected strategy's supported timeframes and "
+                "rejected on mismatch, never silently reinterpreted.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
     default_strategy = StrategyConfig()
     equity_strategy = MarketStrategyConfig(
         **{

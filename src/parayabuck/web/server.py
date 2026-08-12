@@ -1599,6 +1599,79 @@ async def get_control_token() -> JSONResponse:
     return response
 
 
+def _strategy_metadata(cfg: Any) -> dict[str, Any]:
+    """Declared strategy contracts plus live universe sizes for the Web UI.
+
+    There is deliberately NO global strategy timeframe here: each strategy
+    owns its signal timeframe and the UI only surfaces the strategy's own
+    metadata (and, when a strategy supports multiple validated timeframes,
+    that restricted choice).
+    """
+    from parayabuck.portfolio import portfolio_strategy_from
+
+    result: dict[str, Any] = {"equity": None, "crypto": None}
+    candidate_payload: dict[str, Any] = {}
+    active_payload: dict[str, Any] = {}
+    active_crypto_payload: dict[str, Any] = {}
+    for path, store in (
+        (cfg.universe.equity.candidate_universe_path, candidate_payload),
+        (cfg.universe.equity.active_universe_path, active_payload),
+        (cfg.universe.crypto.active_universe_path, active_crypto_payload),
+    ):
+        if Path(path).exists():
+            try:
+                store.update(json.loads(Path(path).read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                continue
+    shortlist = candidate_payload.get("shortlist_symbols")
+    crypto_candidates = active_crypto_payload.get("candidate_symbols")
+    for market_key, selection, pool_size in (
+        (
+            "equity",
+            cfg.strategy.equity,
+            len(shortlist) if isinstance(shortlist, list) else None,
+        ),
+        (
+            "crypto",
+            cfg.strategy.crypto,
+            len(crypto_candidates) if isinstance(crypto_candidates, list) else None,
+        ),
+    ):
+        if not selection.enabled:
+            continue
+        try:
+            strategy = portfolio_strategy_from(
+                selection.name, selection.parameters, timeframe=selection.timeframe
+            )
+            spec = strategy.spec()
+            observation_size = (
+                len(active_payload.get("selected_symbols", ()))
+                if market_key == "equity"
+                else len(active_crypto_payload.get("selected_symbols", ()))
+            )
+            result[market_key] = {
+                "name": spec.name,
+                "display_name": spec.display_name,
+                "version": spec.version,
+                "signal_timeframe": spec.primary_timeframe,
+                "supported_timeframes": list(spec.supported_timeframes),
+                "rebalance_cadence": spec.rebalance_policy,
+                "minimum_history_bars": spec.minimum_history_bars,
+                "dynamic_universe_enabled": (
+                    cfg.universe.equity.dynamic_selection_enabled
+                    if market_key == "equity"
+                    else cfg.universe.crypto.dynamic_selection_enabled
+                ),
+                "candidate_pool_size": pool_size,
+                "observation_set_size": observation_size,
+            }
+        except Exception:
+            # A strategy that cannot be constructed must surface as an error,
+            # never silently disappear from the status UI.
+            result[market_key] = {"name": selection.name, "configuration_error": True}
+    return result
+
+
 @app.get("/api/status")
 async def get_status() -> dict[str, Any]:
     key, _ = manager.get_credentials()
@@ -1621,6 +1694,7 @@ async def get_status() -> dict[str, Any]:
         if cfg.strategy.crypto.enabled:
             configured.append(f"crypto/{cfg.strategy.crypto.name}")
         result["strategy_status"] = "configured:" + ",".join(configured)
+        result["strategy_metadata"] = _strategy_metadata(cfg)
     except Exception:
         result["strategy_status"] = "configuration_error"
         # Mirror the universe-section failure state so consumers never see a

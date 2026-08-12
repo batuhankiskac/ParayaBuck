@@ -231,6 +231,8 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
             "backtest",
             "--market",
             "equity",
+            "--strategy",
+            "equity_dynamic_trend_1d_v1",
             "--data",
             str(csv_path),
             "--output-dir",
@@ -276,6 +278,7 @@ def test_product_backtest_credits_explicit_dividend_once(tmp_path) -> None:
         config,
         bars,
         market=Market.EQUITY,
+        strategy_name="equity_dynamic_trend_1d_v1",
         corporate_actions=[action],
     )
 
@@ -401,12 +404,13 @@ def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     tmp_path,
 ) -> None:
     config = _config(tmp_path)
-    # _config uses trend_window=60 -> minimum_history_bars=61 daily bars. The
-    # warmup window counts REAL NYSE sessions (holiday-aware), so it spans
-    # more calendar days than bars: at least the no-holiday Mon-Fri minimum
-    # (ceil(61*7/5)=86) and bounded by a plausible holiday count.
+    # The shipped default (equity_residual_momentum_v1) declares
+    # minimum_history_bars=274 daily bars. The warmup window counts REAL NYSE
+    # sessions (holiday-aware), so it spans more calendar days than bars: at
+    # least the no-holiday Mon-Fri minimum (ceil(274*7/5)=384) and bounded by
+    # a plausible holiday count.
     days = cli_module._warmup_window_days(config, Market.EQUITY)
-    assert 86 <= days <= 120
+    assert 384 <= days <= 460
     assert days >= config.universe.equity.scanner.minimum_data_completeness  # sanity
 
 

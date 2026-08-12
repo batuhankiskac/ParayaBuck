@@ -10,6 +10,7 @@ TIMEFRAME_MINUTES: dict[str, int] = {
     "15m": 15,
     "30m": 30,
     "1h": 60,
+    "4h": 240,
     "1d": 1440,
 }
 NEW_YORK = ZoneInfo("America/New_York")

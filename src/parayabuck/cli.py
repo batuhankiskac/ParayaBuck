@@ -227,7 +227,9 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             continue
         if not symbols:
             raise SystemExit(f"No active {market.value} universe is available")
-        strategy = portfolio_strategy_from(selection.name, selection.parameters)
+        strategy = portfolio_strategy_from(
+            selection.name, selection.parameters, timeframe=selection.timeframe
+        )
         digests.append(
             configuration_digest(
                 strategy,
@@ -295,7 +297,9 @@ def _load_bars(
         stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
-    strategy = portfolio_strategy_from(selection.name, selection.parameters)
+    strategy = portfolio_strategy_from(
+        selection.name, selection.parameters, timeframe=selection.timeframe
+    )
     minimum_bars = strategy.minimum_history_bars
     # Bounded warmup extension: a symbol with fewer pre-start bars than the
     # strategy declares would silently drop out of the early evaluation
@@ -369,7 +373,9 @@ def _warmup_window_days(config: Config, market: Market, end_date: datetime | Non
     a historical backtest sizes its warmup with that era's session density.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    strategy = portfolio_strategy_from(selection.name, selection.parameters)
+    strategy = portfolio_strategy_from(
+        selection.name, selection.parameters, timeframe=selection.timeframe
+    )
     lookback_days = 60 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
     from parayabuck.markets.timeframes import bars_to_calendar_days
 

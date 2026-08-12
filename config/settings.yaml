@@ -124,25 +124,27 @@ universe:
       maximum_meme_symbols: 1
       maximum_high_beta_symbols: 2
 strategy:
+  # The strategy owns its signal timeframe; strategy.*.timeframe is a
+  # deprecated compatibility key and intentionally omitted here.
   equity:
     enabled: true
-    name: equity_dynamic_trend_1d_v1
-    timeframe: 1d
+    name: equity_residual_momentum_v1
     maximum_allocation: 0.50
     parameters:
-      trend_window: 150
-      momentum_window: 60
-      volatility_window: 20
-      top_n: 6
+      formation_bars: 252
+      skip_bars: 21
+      beta_window_bars: 273
+      residual_vol_window: 63
+      top_n: 8
       max_single_weight: 0.10
-      annual_volatility_target: 0.10
-      correlation_floor: 0.25
-      rebalance_frequency: weekly
+      ivol_reject_quantile: 0.70
       exclude_symbols: [SPY]
   crypto:
+    # crypto_time_series_momentum_v1 is NOT validated (family verdict C);
+    # the frozen cross-sectional strategy remains the only crypto strategy
+    # and stays disabled until a candidate passes historical validation.
     enabled: false
     name: crypto_cross_sectional_momentum_1h_v1
-    timeframe: 1h
     maximum_allocation: 0.10
     parameters:
       momentum_scheme: 7d

@@ -40,7 +40,7 @@ from parayabuck.markets.timeframes import (
     NEW_YORK,
     is_regular_equity_time,
 )
-from parayabuck.portfolio import portfolio_strategy_from
+from parayabuck.portfolio import portfolio_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
     PortfolioRuntime,
@@ -299,13 +299,16 @@ class EngineRuntime:
         ):
             if not selection.enabled or not symbols:
                 continue
-            strategy = portfolio_strategy_from(selection.name, selection.parameters)
+            strategy = portfolio_strategy_from(
+                selection.name, selection.parameters, timeframe=selection.timeframe
+            )
             if strategy.market != market:
                 raise ValueError(f"Configured {market.value} strategy has the wrong market")
-            if strategy.timeframe != selection.timeframe:
-                raise ValueError(
-                    f"Configured timeframe for {selection.name} must be {strategy.timeframe}"
-                )
+            # The strategy owns its signal timeframe; the configured value must
+            # match one of its validated timeframes (never silently
+            # reinterpreted). portfolio_strategy_from already enforces this,
+            # and validate_strategy_timeframe keeps the invariant explicit.
+            validate_strategy_timeframe(strategy, selection.timeframe)
             strategy_specs.append((strategy, tuple(symbols), selection.maximum_allocation))
         self._strategy_specs = tuple(strategy_specs)
         if not self._strategy_specs:

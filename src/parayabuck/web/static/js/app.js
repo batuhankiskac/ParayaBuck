@@ -279,6 +279,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const scanner = statusData.scanner || {};
         const equityScanner = scanner.equity_status || scanner.status || 'not_run';
         const cryptoScanner = scanner.crypto_status || 'not_run';
+        // Strategy metadata replaces any notion of a global strategy
+        // timeframe: each market shows its own strategy, signal timeframe,
+        // rebalance cadence and universe sizes.
+        const strategyMeta = statusData.strategy_metadata || {};
+        const fmtStrategy = (meta) => {
+            if (!meta) return null;
+            if (meta.configuration_error) return `${meta.name} (ayar hatası)`;
+            const extra = [
+                `Sinyal ${meta.signal_timeframe}`,
+                `Rebalance ${meta.rebalance_cadence}`,
+                meta.dynamic_universe_enabled ? 'Dinamik evren' : 'Statik evren',
+                `Aday ${meta.candidate_pool_size ?? 0}`,
+                `İzlenen ${meta.observation_set_size ?? 0}`,
+            ];
+            return `${meta.display_name || meta.name} · ${extra.join(' · ')}`;
+        };
+        const strategyMetaText = [
+            strategyMeta.equity ? `E: ${fmtStrategy(strategyMeta.equity)}` : null,
+            strategyMeta.crypto ? `C: ${fmtStrategy(strategyMeta.crypto)}` : null,
+        ].filter(Boolean).join('  |  ');
         marketStatusText.textContent =
             `Global ${globalHealth} | ` +
             `${strategyLabel} | ` +
@@ -288,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `${marketLabel(crypto)} | ` +
             `Aday ${statusData.candidate_universe_size ?? 0} · ` +
             `Scanner E ${equityScanner} · C ${cryptoScanner}` +
+            (strategyMetaText ? `\n${strategyMetaText}` : '') +
             (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
         const universe = statusData.universe || {};
         const operations = statusData.operations || {};

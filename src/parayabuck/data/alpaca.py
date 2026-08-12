@@ -30,6 +30,7 @@ _TIMEFRAMES = {
     "15m": TimeFrame(15, TimeFrameUnit.Minute),
     "30m": TimeFrame(30, TimeFrameUnit.Minute),
     "1h": TimeFrame(1, TimeFrameUnit.Hour),
+    "4h": TimeFrame(4, TimeFrameUnit.Hour),
     "1d": TimeFrame(1, TimeFrameUnit.Day),
 }
 

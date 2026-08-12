@@ -127,7 +127,9 @@ def build_product_universe(
     the strategy.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    strategy = portfolio_strategy_from(selection.name, selection.parameters)
+    strategy = portfolio_strategy_from(
+        selection.name, selection.parameters, timeframe=selection.timeframe
+    )
     available = [
         bar
         for bar in bars
@@ -174,6 +176,7 @@ def run_product_backtest(
     market: Market,
     strategy_name: str | None = None,
     parameters: dict[str, object] | None = None,
+    strategy_timeframe: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     initial_cash: float | None = None,
@@ -189,7 +192,9 @@ def run_product_backtest(
         raise ValueError("cost_multiplier must be positive")
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(
-        strategy_name or selection.name, parameters or selection.parameters
+        strategy_name or selection.name,
+        parameters or selection.parameters,
+        timeframe=strategy_timeframe or selection.timeframe,
     )
     available = [
         bar

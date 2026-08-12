@@ -661,6 +661,82 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
     assert disabled["strategy_status"] == "configured:"
 
 
+def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """The status payload surfaces each strategy's OWN signal timeframe and
+    rebalance cadence (no global strategy-timeframe selector exists)."""
+    from parayabuck.web import server
+
+    class StaticManager:
+        config_path = None
+        runtime = None
+        last_engine_error = None
+        security_warning = None
+
+        def get_credentials(self) -> tuple[str, str]:
+            return "", ""
+
+        def current_engine_state(self) -> str:
+            return "stopped"
+
+        def is_paper_mode(self) -> bool:
+            return True
+
+    selection = type(
+        "Selection",
+        (),
+        {
+            "enabled": True,
+            "name": "equity_residual_momentum_v1",
+            "timeframe": "1d",
+            "parameters": {},
+        },
+    )()
+    disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
+    strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
+    universe = type(
+        "Universe",
+        (),
+        {
+            "equity": type(
+                "Equity",
+                (),
+                {
+                    "candidate_universe_path": str(tmp_path / "c.json"),
+                    "active_universe_path": str(tmp_path / "a.json"),
+                    "dynamic_selection_enabled": True,
+                },
+            )(),
+            "crypto": type(
+                "Crypto",
+                (),
+                {
+                    "active_universe_path": str(tmp_path / "crypto.json"),
+                    "dynamic_selection_enabled": True,
+                },
+            )(),
+        },
+    )()
+    config = type("Config", (), {"strategy": strategy, "universe": universe})()
+    (tmp_path / "c.json").write_text(json.dumps({"shortlist_symbols": ["A", "B", "C"]}))
+    (tmp_path / "a.json").write_text(json.dumps({"selected_symbols": ["A", "B"]}))
+    (tmp_path / "crypto.json").write_text(json.dumps({"selected_symbols": []}))
+
+    monkeypatch.setattr(server, "manager", StaticManager())
+    monkeypatch.setattr(server, "load_config", lambda _path: config)
+    status = asyncio.run(server.get_status())
+    meta = status["strategy_metadata"]
+    assert meta["equity"]["name"] == "equity_residual_momentum_v1"
+    assert meta["equity"]["signal_timeframe"] == "1d"
+    assert meta["equity"]["supported_timeframes"] == ["1d"]
+    assert meta["equity"]["rebalance_cadence"] == "monthly"
+    assert meta["equity"]["candidate_pool_size"] == 3
+    assert meta["equity"]["observation_set_size"] == 2
+    assert meta["crypto"] is None  # disabled strategy exposes no metadata
+
+
 def test_status_falls_back_when_config_load_fails(monkeypatch: Any) -> None:
     from parayabuck.web import server
 

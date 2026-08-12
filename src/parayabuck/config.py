@@ -41,14 +41,18 @@ class RuntimeConfig:
 class MarketStrategyConfig:
     enabled: bool
     name: str
-    timeframe: str
     maximum_allocation: float
+    # The strategy owns its signal timeframe: None means "resolve from the
+    # selected strategy's primary timeframe at load time". A value here is a
+    # deprecated backward-compatibility override that must be one of the
+    # strategy's VALIDATED timeframes (validated at load, never reinterpreted).
+    timeframe: str | None = None
     parameters: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("strategy name must not be empty")
-        if self.timeframe not in TIMEFRAME_MINUTES:
+        if self.timeframe is not None and self.timeframe not in TIMEFRAME_MINUTES:
             raise ValueError(f"Unsupported strategy timeframe: {self.timeframe}")
         if not 0 < self.maximum_allocation <= 1:
             raise ValueError("strategy maximum_allocation must be in (0, 1]")
@@ -675,7 +679,8 @@ def load_config(config_path: str | None = None) -> Config:
                     default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled
                 ),
                 "name": default_strategy.equity.name,
-                "timeframe": default_strategy.equity.timeframe,
+                # No market default timeframe: the STRATEGY supplies it.
+                "timeframe": None,
                 "maximum_allocation": default_strategy.equity.maximum_allocation,
                 "parameters": default_strategy.equity.parameters,
             },
@@ -691,12 +696,35 @@ def load_config(config_path: str | None = None) -> Config:
                     else crypto_universe.enabled
                 ),
                 "name": default_strategy.crypto.name,
-                "timeframe": default_strategy.crypto.timeframe,
+                "timeframe": None,
                 "maximum_allocation": default_strategy.crypto.maximum_allocation,
                 "parameters": default_strategy.crypto.parameters,
             },
             **dict(strategy_raw.get("crypto", {})),
         }
+    )
+    # The strategy owns its signal timeframe: resolve the primary (or a
+    # validated alternative explicitly selected in the YAML) from the strategy
+    # itself, so a configured name NEVER inherits another market default.
+    from dataclasses import replace
+
+    from parayabuck.portfolio import portfolio_strategy_from
+
+    equity_strategy = replace(
+        equity_strategy,
+        timeframe=portfolio_strategy_from(
+            equity_strategy.name,
+            equity_strategy.parameters,
+            timeframe=equity_strategy.timeframe,
+        ).timeframe,
+    )
+    crypto_strategy = replace(
+        crypto_strategy,
+        timeframe=portfolio_strategy_from(
+            crypto_strategy.name,
+            crypto_strategy.parameters,
+            timeframe=crypto_strategy.timeframe,
+        ).timeframe,
     )
     alpaca_raw = dict(raw.get("alpaca", {}))
     legacy_paper = alpaca_raw.pop("paper", None)

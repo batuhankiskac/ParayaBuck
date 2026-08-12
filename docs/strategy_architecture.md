@@ -40,25 +40,44 @@ answer "which asset will make money" — that is the strategy's job.
 
 ## 3. Candidate pool vs observation stream
 
-The stream limit is NOT the opportunity universe:
+The stream limit is NOT the opportunity universe — this is implemented, not
+only documented:
 
 ```
 13,000+ equity / all crypto
-        ↓ eligibility scanner
+        ↓ eligibility scanner (tradability-first)
 broad candidate pool (equity ~300 shortlist)
-        ↓ historical / batch alpha scoring
-top observation candidates
+        ↓ STRATEGY ALPHA RANKING on batch historical data
+top observation candidates (<= maximum_stream_symbols)
         ↓ streamed (~30 equity / ~12 crypto)
 positions
 ```
 
-- `scanner eligibility pool` > `stream count` by design; the point-in-time
-  universe records both (`candidate_count` vs `selected` per snapshot).
-- Alpha scoring runs over the broad pool on historical/batch data where
-  appropriate; the streamed set is the OBSERVATION set, not the alpha-search
-  universe. In backtests the strategy receives the full downloaded pool and
-  universe membership gates investability, so alpha ranks more names than the
-  stream holds.
+Mechanics:
+
+- The scanner is eligibility-first: `selected_symbols` is the eligible POOL
+  (every candidate that passes tradability filters, plus reserved symbols) —
+  deliberately larger than the stream capacity. `observation_set` on the
+  scanner result is the fail-safe quality-ranked stream set (with
+  issuer/sector/category diversity), used when no strategy ranker exists.
+- The strategy alpha ranks the pool: `PortfolioStrategy.rank_candidates`
+  reuses the EXACT scoring code of `decide` (BACKTEST/PAPER/LIVE parity), so
+  the live observation set is selected by the same alpha the strategy trades.
+- `build_observation_set` (universe/observation_set.py) produces the streamed
+  set: pinned symbols (references, inverse hedges, configured pins, managed
+  positions) first, then the alpha-top candidates up to
+  `maximum_stream_symbols`, filling any shortfall from the scanner's quality
+  ranking (e.g. young symbols without the strategy's warmup history).
+- The universe refresh fetches strategy-warmup batch history for the pool
+  (`bars_to_calendar_days`), ranks it, and persists `observation_set` in the
+  active universe file. `load_active_symbols` / `load_active_crypto_symbols`
+  stream the OBSERVATION SET; validation enforces it ⊆ pool and ≤ capacity.
+- In backtests the point-in-time universe snapshots carry the eligible POOL
+  (so the strategy alpha-scores the broad pool) plus the snapshot's
+  OBSERVATION SET. The engine's completeness gate follows the observation
+  set (live parity): decisions require a closed bar for every STREAMED
+  symbol, never for every pool member — a halted/absent pool member must
+  not block the whole market.
 - `maximum_stream_symbols` is a streaming-load limit, not a universe size.
   Do not raise it to widen the alpha universe; widen the candidate pool.
 
@@ -104,7 +123,12 @@ Rules:
    multiple validated variants.
 4. `strategy.*.timeframe` in YAML is a deprecated backward-compatibility
    key: it is validated against the selected strategy and rejected on
-   mismatch — never silently reinterpreted.
+   mismatch — never silently reinterpreted. WITHOUT the key, the loader
+   resolves the timeframe FROM THE STRATEGY's primary (or a validated
+   alternative), so a configured name never inherits another market's
+   default. Example: selecting `crypto_time_series_momentum_v1` with no
+   timeframe resolves `1d`, and `timeframe: 4h` selects the validated 4h
+   variant while `timeframe: 1h` fails at load time.
 5. BACKTEST, PAPER and LIVE use identical strategy timeframe semantics: the
    same `PortfolioStrategy` class, the same `spec()`, the same bar
    finalization rule (decisions fire only on completed bars, orders fill on
@@ -173,7 +197,7 @@ GREEN/RED runtime gate.
 |---|---|---|---|---|---|
 | `equity_dynamic_trend_1d_v1` | equity | 1d | 1d | weekly (param) | frozen reference |
 | `equity_long_horizon_momentum_1d_v2` | equity | 1d | 1d | monthly | frozen reference |
-| `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | validated candidate |
+| `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | validated candidate (broad-pool alpha) |
 | `crypto_cross_sectional_momentum_1h_v1` | crypto | 1h | 1h | hours:24 | frozen reference |
 | `crypto_time_series_momentum_v1` | crypto | 1d | 4h, 1d | hours:168 | NOT validated (family verdict C) |
 

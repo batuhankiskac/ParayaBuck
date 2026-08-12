@@ -20,8 +20,8 @@ anchored (train = everything before the fold), fold parameters are never
 touched after seeing a fold.
 
 Outputs:
-  data/research/strategy_validation_v1/equity.json
-  data/research/strategy_validation_v1/crypto.json
+  data/research/strategy_validation_v2/equity.json
+  data/research/strategy_validation_v2/crypto.json
   printed summary JSON
 
 Usage:
@@ -46,7 +46,7 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.aggregator import aggregate_historical_bars
 
 REPO = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = REPO / "data" / "research" / "strategy_validation_v1"
+OUTPUT_DIR = REPO / "data" / "research" / "strategy_validation_v2"
 EQUITY_CSV = REPO / "data" / "historical" / "equity_1200_2016_2026.csv"
 CRYPTO_CSV = REPO / "data" / "historical" / "crypto_18_1h_2024_2026.csv"
 FOUNDATION_REPORT = REPO / "data" / "research" / "strategy_foundation_v1" / "report.json"

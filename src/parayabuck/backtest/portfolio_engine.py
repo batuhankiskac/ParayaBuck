@@ -859,7 +859,12 @@ class PortfolioBacktestEngine:
         context = self._build_context(timestamp)
         if not self.strategy.supports(context):
             return
-        expected_symbols = self._universe_symbols(timestamp)
+        # LIVE PARITY completeness gate: decisions require a closed bar for
+        # every STREAMED OBSERVATION symbol (what the live runtime streams),
+        # not for every pool member. A halted/absent pool member must not
+        # block the whole market (the strategy skips gapped names internally);
+        # snapshots without an observation set fall back to the full pool.
+        expected_symbols = self._universe_observation_symbols(timestamp)
         if expected_symbols is not None and any(
             symbol not in context.history
             or not context.history[symbol]
@@ -1128,6 +1133,19 @@ class PortfolioBacktestEngine:
         eligible = [item for item in snapshots if item.effective_at <= timestamp]
         if not eligible:
             return None
+        return tuple(sorted(eligible[-1].symbols))
+
+    def _universe_observation_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
+        """The snapshot's STREAMED OBSERVATION SET (live parity for the
+        completeness gate), falling back to the full pool for snapshots that
+        carry no observation set."""
+        snapshots = getattr(self.universe, "snapshots", ())
+        eligible = [item for item in snapshots if item.effective_at <= timestamp]
+        if not eligible:
+            return None
+        observation = getattr(eligible[-1], "observation_set", None)
+        if observation:
+            return tuple(sorted(observation))
         return tuple(sorted(eligible[-1].symbols))
 
     def _close_position(self, position: _Position, bar: Bar) -> None:

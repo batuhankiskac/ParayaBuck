@@ -148,6 +148,19 @@ class PortfolioStrategy(ABC):
         """Whether a non-scheduled decision may only reduce portfolio risk."""
         return False
 
+    def rank_candidates(self, context: PortfolioContext) -> tuple[str, ...]:
+        """Optional alpha ranking of the candidate pool for observation-set
+        selection (stream limit != opportunity universe).
+
+        Returns candidate symbols sorted by the strategy's own alpha, best
+        first. The base implementation returns () — meaning the strategy
+        provides no pool ranking and the scanner's eligibility-quality
+        stream set is used as the observation set. Strategies that implement
+        this MUST share the exact scoring code with ``decide`` so BACKTEST,
+        PAPER and LIVE rank identically.
+        """
+        return ()
+
     # -- typed parameter access (values are validated in _validate_parameters)
 
     def param_str(self, name: str, default: str) -> str:

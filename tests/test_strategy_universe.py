@@ -46,7 +46,11 @@ def _panel(symbols: list[str], days: int = 320) -> list[Bar]:
     for index in range(days):
         timestamp = start + timedelta(days=index)
         for offset, symbol in enumerate(symbols):
-            close = 100 * (1.002 + offset * 0.0001) ** index + 2.0 * math.sin(index * 0.8 + offset)
+            close = (
+                100
+                * (1.002 + offset * 0.0001) ** index
+                * (1 + 0.012 * math.sin(index * 0.8 + offset))
+            )
             bars.append(_bar(symbol, timestamp, close))
     return bars
 
@@ -80,10 +84,14 @@ def test_scanner_eligibility_pool_exceeds_stream_symbol_count() -> None:
     )
     assert universe.snapshots
     for snapshot in universe.snapshots:
-        # Eligibility pool (candidate count) can exceed the stream capacity.
+        # The snapshot symbols are the ELIGIBLE POOL (alpha-search universe),
+        # which deliberately exceeds the streamed observation-set capacity.
         assert snapshot.candidate_count >= len(snapshot.symbols)
-        assert len(snapshot.symbols) <= 10
-    # The very first snapshot already has a 30-symbol candidate pool.
+    assert len(universe.snapshots[0].symbols) <= 30  # Stage-A shortlist bound
+    # The pool is larger than the stream capacity (10): stream limit !=
+    # opportunity universe.
+    assert max(len(snapshot.symbols) for snapshot in universe.snapshots) > 10
+    # The very first snapshot already has a large candidate pool.
     assert universe.snapshots[0].candidate_count >= 20
 
 
@@ -125,7 +133,9 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
         if snapshot.effective_at <= last_decision
     )
     assert snapshot_symbols
-    assert len(snapshot_symbols) <= 10 < len(context_history)
+    # The alpha-search pool is BIGGER than the streamed observation capacity:
+    # the strategy ranks the broad pool, then the stream set (10) truncates.
+    assert 10 < len(snapshot_symbols) <= 30 < len(context_history)
     for symbol, _weight in result.rebalances[-1].target_weights:
         assert symbol in snapshot_symbols
 

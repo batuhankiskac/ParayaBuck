@@ -6,7 +6,7 @@ import logging
 import math
 import statistics
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -93,6 +93,9 @@ def equity_candidate_from_bars(
 class ScannerResult:
     selection_timestamp: str
     data_timestamp: str
+    # The ELIGIBLE POOL (tradability-first): reserved + every candidate that
+    # passes the scanner's eligibility filters. This is the alpha-search
+    # universe — deliberately larger than the streamed observation set.
     selected_symbols: tuple[str, ...]
     candidate_symbols: tuple[str, ...]
     score_breakdown: dict[str, dict[str, float | str]]
@@ -102,6 +105,11 @@ class ScannerResult:
     sector_distribution: dict[str, int]
     status: str = "success"
     sector_metadata_coverage: float = 1.0
+    # The STREAMED observation set: at most ``maximum_stream_symbols``.
+    # Defaults to the scanner's eligibility-quality ranking; the strategy
+    # alpha ranking replaces it when a candidate ranker is configured.
+    observation_set: tuple[str, ...] = ()
+    observation_eliminated: dict[str, str] = field(default_factory=dict)
 
 
 class EquityUniverseScanner:
@@ -202,7 +210,12 @@ class EquityUniverseScanner:
             }
             scored.append((score, symbol, sector, breakdown))
 
-        selected = list(reserved)
+        # ELIGIBILITY-FIRST POOL: reserved + every candidate that passes the
+        # tradability filters. No stream-capacity, issuer or sector
+        # truncation here — the alpha strategy ranks THIS pool, and only then
+        # is the streamed observation set truncated (stream limit !=
+        # opportunity universe).
+        pool = list(reserved)
         breakdowns: dict[str, dict[str, float | str]] = {
             symbol: {
                 "total": 0.0,
@@ -220,38 +233,53 @@ class EquityUniverseScanner:
             for symbol in reserved
         }
         sector_counts: dict[str, int] = {}
-        selected_issuers: set[str] = set()
         for symbol in reserved:
             sector = str(breakdowns[symbol]["economic_sector"]).lower()
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
-            selected_issuers.add(_issuer_key(symbol))
-        capacity = self.config.maximum_stream_symbols
-        for _score, symbol, sector, breakdown in sorted(
-            scored, key=lambda item: (-item[0], item[1])
-        ):
-            if symbol in selected:
+        ordered_scored = sorted(scored, key=lambda item: (-item[0], item[1]))
+        for _score, symbol, sector, breakdown in ordered_scored:
+            if symbol in pool:
                 continue
-            issuer = _issuer_key(symbol)
-            if issuer in selected_issuers:
-                eliminated[symbol] = "duplicate_issuer"
-                continue
-            if len(selected) >= capacity:
-                eliminated.setdefault(symbol, "stream_capacity")
-                continue
-            sector_limit = capacity if sector == "unknown" else self.scanner.maximum_per_sector
-            if sector_counts.get(sector, 0) >= sector_limit:
-                eliminated[symbol] = "sector_concentration"
-                continue
-            selected.append(symbol)
-            selected_issuers.add(issuer)
+            pool.append(symbol)
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
             breakdowns[symbol] = breakdown
+
+        # FALLBACK OBSERVATION SET: the scanner's eligibility-quality top-N
+        # with issuer/sector diversity (the pre-alpha stream behavior). A
+        # strategy alpha ranking REPLACES this when one is configured; this
+        # stays as the fail-safe stream set when no ranker exists.
+        capacity = self.config.maximum_stream_symbols
+        observation: list[str] = list(reserved)
+        observation_eliminated: dict[str, str] = {}
+        observation_sectors: dict[str, int] = {}
+        observation_issuers: set[str] = set()
+        for symbol in reserved:
+            sector = str(breakdowns[symbol]["economic_sector"]).lower()
+            observation_sectors[sector] = observation_sectors.get(sector, 0) + 1
+            observation_issuers.add(_issuer_key(symbol))
+        for _score, symbol, sector, _breakdown in ordered_scored:
+            if symbol in observation:
+                continue
+            issuer = _issuer_key(symbol)
+            if issuer in observation_issuers:
+                observation_eliminated[symbol] = "duplicate_issuer"
+                continue
+            if len(observation) >= capacity:
+                observation_eliminated.setdefault(symbol, "stream_capacity")
+                continue
+            sector_limit = capacity if sector == "unknown" else self.scanner.maximum_per_sector
+            if observation_sectors.get(sector, 0) >= sector_limit:
+                observation_eliminated[symbol] = "sector_concentration"
+                continue
+            observation.append(symbol)
+            observation_issuers.add(issuer)
+            observation_sectors[sector] = observation_sectors.get(sector, 0) + 1
         timestamp = (selection_timestamp or datetime.now(UTC)).astimezone(UTC)
         coverage = sector_known / len(scored) if scored else 1.0
         return ScannerResult(
             selection_timestamp=timestamp.isoformat(),
             data_timestamp=data_timestamp.astimezone(UTC).isoformat(),
-            selected_symbols=tuple(selected),
+            selected_symbols=tuple(pool),
             candidate_symbols=tuple(sorted(seen)),
             score_breakdown=breakdowns,
             eliminated=dict(sorted(eliminated.items())),
@@ -259,6 +287,8 @@ class EquityUniverseScanner:
             config_digest=self._config_digest(),
             sector_distribution=dict(sorted(sector_counts.items())),
             sector_metadata_coverage=round(coverage, 6),
+            observation_set=tuple(observation),
+            observation_eliminated=dict(sorted(observation_eliminated.items())),
         )
 
     def persist(self, result: ScannerResult) -> None:
@@ -374,9 +404,21 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
         required = {*config.reference_symbols, *config.inverse_trade_symbols}
         if not required.issubset(selected):
             return (), "invalid"
-        if len(selected) > config.maximum_stream_symbols:
+        # The eligible pool may exceed the stream capacity; the OBSERVATION
+        # SET is the streamed subset and must respect the cap.
+        raw_observation = payload.get("observation_set")
+        if not isinstance(raw_observation, list):
             return (), "invalid"
-        return selected, "success"
+        observation = tuple(canonical_symbol(str(item), Market.EQUITY) for item in raw_observation)
+        if len(observation) != len(set(observation)):
+            return (), "invalid"
+        if not set(observation).issubset(set(selected)):
+            return (), "observation_outside_pool"
+        if len(observation) > config.maximum_stream_symbols:
+            return (), "invalid"
+        if not required.issubset(observation):
+            return (), "invalid"
+        return observation, "success"
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         # Fail closed, but surface the parse error: a persistent "invalid"
         # status is indistinguishable from rot without the underlying cause.
@@ -392,7 +434,13 @@ def load_active_symbols(
     pinned_symbols: tuple[str, ...] = (),
     log_rejection: bool = True,
 ) -> tuple[str, ...]:
-    """Load the last complete scanner output or return the configured fallback."""
+    """Load the streamed OBSERVATION SET (alpha-ranked top of the eligible
+    pool) or return the configured fallback.
+
+    ``validate_active_universe`` returns the validated observation set; the
+    scanner's eligible pool stays the alpha-search universe and is NOT
+    streamed wholesale.
+    """
     references = config.reference_symbols
     selected: tuple[str, ...] = ()
     if config.dynamic_selection_enabled:

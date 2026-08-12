@@ -130,10 +130,13 @@ def test_scanner_is_deterministic_and_atomic(tmp_path: Path) -> None:
         list(reversed(candidates)), data_timestamp=timestamp, selection_timestamp=timestamp
     )
     assert first == second
-    assert first.selected_symbols == ("SPY", "AAPL", "JPM")
-    assert first.eliminated["MSFT"] == "sector_concentration"
+    # The eligible POOL exceeds the stream capacity; the OBSERVATION SET is
+    # the streamed subset with sector diversity.
+    assert first.selected_symbols == ("SPY", "AAPL", "MSFT", "JPM")
+    assert first.observation_set == ("SPY", "AAPL", "JPM")
+    assert first.observation_eliminated["MSFT"] == "sector_concentration"
     scanner.persist(first)
-    assert load_active_symbols(config) == first.selected_symbols
+    assert load_active_symbols(config) == first.observation_set
     assert not active.with_suffix(".json.tmp").exists()
 
 

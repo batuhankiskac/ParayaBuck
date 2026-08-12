@@ -28,8 +28,10 @@ def main() -> int:
         raise SystemExit(
             f"Automatic-compatible equity scan failed; previous universe preserved: {exc}"
         ) from exc
+    print(f"Eligible pool: {len(result.selected_symbols)} symbols at {result.selection_timestamp}")
     print(
-        f"Scanner selected {len(result.selected_symbols)} symbols at {result.selection_timestamp}"
+        f"Streamed observation set ({len(result.observation_set)}): "
+        f"{', '.join(result.observation_set)}"
     )
     print(f"Persisted: {equity.active_universe_path}")
     return 0

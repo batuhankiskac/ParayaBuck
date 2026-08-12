@@ -320,7 +320,7 @@ def _load_bars(
             batch = symbols[offset : offset + batch_size]
             downloaded = provider.get_bars_batch(
                 batch,
-                selection.timeframe,
+                strategy.timeframe,
                 start=start_at,
                 end=end_at,
                 adjustment="splits" if market == Market.EQUITY else "raw",
@@ -353,7 +353,7 @@ def _load_bars(
 
         extra_days = bars_to_calendar_days(
             "SPY" if market == Market.EQUITY else "BTC/USD",
-            selection.timeframe,
+            strategy.timeframe,
             minimum_bars,
             end_date=start,
         )
@@ -385,7 +385,7 @@ def _warmup_window_days(config: Config, market: Market, end_date: datetime | Non
     # through the number of trading sessions, not 1 bar == 1 calendar day.
     strategy_days = bars_to_calendar_days(
         "SPY" if market == Market.EQUITY else "BTC/USD",
-        selection.timeframe,
+        strategy.timeframe,
         strategy.minimum_history_bars,
         end_date=end_date,
     )

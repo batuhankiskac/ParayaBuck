@@ -80,12 +80,15 @@ class CryptoTimeSeriesMomentumV1(PortfolioStrategy):
         if rebalance_hours <= 0 or rebalance_hours % 24:
             raise ValueError("rebalance_hours must be a positive multiple of 24")
 
-    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+    def _score_candidates(
+        self, context: PortfolioContext
+    ) -> tuple[tuple[tuple[float, str], ...], dict[str, float]]:
+        """Per-asset time-series momentum ranking shared by decide() and
+        rank_candidates() so the observation set is selected by the same
+        signal the strategy trades."""
         lookback_days = self.param_int("lookback_days", _DEFAULT_LOOKBACK_DAYS)
         trend_days = self.param_int("trend_days", _DEFAULT_TREND_DAYS)
         volatility_days = self.param_int("volatility_window_days", _DEFAULT_VOLATILITY_WINDOW_DAYS)
-        top_n = self.param_int("top_n", 3)
-        cap = self.param_float("max_single_weight", 0.5)
         skip = self.param_int("skip_bars", _DEFAULT_SKIP_BARS)
         bars_per_day = self._bars_per_day()
         lookback_bars = lookback_days * bars_per_day
@@ -112,10 +115,22 @@ class CryptoTimeSeriesMomentumV1(PortfolioStrategy):
                 continue
             qualified.append((score, symbol))
             volatilities[symbol] = volatility
+        qualified.sort(key=lambda item: (-item[0], item[1]))
+        return tuple(qualified), volatilities
 
+    def rank_candidates(self, context: PortfolioContext) -> tuple[str, ...]:
+        ranked, _vols = self._score_candidates(context)
+        return tuple(symbol for _score, symbol in ranked)
+
+    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+        top_n = self.param_int("top_n", 3)
+        cap = self.param_float("max_single_weight", 0.5)
+        lookback_days = self.param_int("lookback_days", _DEFAULT_LOOKBACK_DAYS)
+        trend_days = self.param_int("trend_days", _DEFAULT_TREND_DAYS)
+
+        qualified, volatilities = self._score_candidates(context)
         if not qualified:
             return self._cash_portfolio(context, "no_positive_trend_assets")
-        qualified.sort(key=lambda item: (-item[0], item[1]))
         selected = tuple(symbol for _score, symbol in qualified[:top_n])
         weights = dict(inverse_volatility_weights(selected, volatilities, maximum_weight=cap))
         targets = tuple(

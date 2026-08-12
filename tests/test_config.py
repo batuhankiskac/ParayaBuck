@@ -141,3 +141,57 @@ def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> Non
         config = load_config(str(path))
     assert config.runtime.market_state_timeframe == "5m"
     assert config.runtime.execution_timeframe == "5m"
+
+
+def test_strategy_supplies_default_timeframe_not_market_default(tmp_path: Path) -> None:
+    """The strategy owns its signal timeframe: selecting crypto TSM without a
+    timeframe must resolve to the strategy's PRIMARY (1d), never to the old
+    crypto default (1h)."""
+    raw = _settings()
+    raw["strategy"] = {
+        "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
+        "crypto": {
+            "enabled": True,
+            "name": "crypto_time_series_momentum_v1",
+            "maximum_allocation": 0.1,
+        },
+    }
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    config = load_config(str(path))
+    assert config.strategy.crypto.timeframe == "1d"
+    assert config.strategy.equity.timeframe == "1d"
+
+
+def test_supported_alternative_timeframe_is_selectable(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["strategy"] = {
+        "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
+        "crypto": {
+            "enabled": True,
+            "name": "crypto_time_series_momentum_v1",
+            "timeframe": "4h",
+            "maximum_allocation": 0.1,
+        },
+    }
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    config = load_config(str(path))
+    assert config.strategy.crypto.timeframe == "4h"
+
+
+def test_unsupported_strategy_timeframe_is_rejected_at_load(tmp_path: Path) -> None:
+    raw = _settings()
+    raw["strategy"] = {
+        "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
+        "crypto": {
+            "enabled": True,
+            "name": "crypto_time_series_momentum_v1",
+            "timeframe": "1h",  # TSM validates only 4h/1d
+            "maximum_allocation": 0.1,
+        },
+    }
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match="cannot run on timeframe 1h"):
+        load_config(str(path))

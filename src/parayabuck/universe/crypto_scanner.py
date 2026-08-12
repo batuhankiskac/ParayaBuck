@@ -7,7 +7,7 @@ import math
 import statistics
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -181,6 +181,8 @@ class CryptoCandidate:
 class CryptoScannerResult:
     selection_timestamp: str
     data_timestamp: str
+    # The ELIGIBLE POOL (tradability-first): reserved + every candidate that
+    # passes eligibility filters — the alpha-search universe.
     selected_symbols: tuple[str, ...]
     candidate_symbols: tuple[str, ...]
     score_breakdown: dict[str, dict[str, float | str]]
@@ -189,6 +191,10 @@ class CryptoScannerResult:
     scanner_version: str
     config_digest: str
     status: str = "success"
+    # The STREAMED observation set (<= maximum_stream_symbols); the scanner's
+    # quality ranking is the fallback until a strategy alpha ranker runs.
+    observation_set: tuple[str, ...] = ()
+    observation_eliminated: dict[str, str] = field(default_factory=dict)
 
 
 class CryptoUniverseScanner:
@@ -320,7 +326,10 @@ class CryptoUniverseScanner:
             }
             scored.append((score, symbol, category, breakdown))
 
-        selected = list(reserved)
+        # ELIGIBILITY-FIRST POOL: reserved + every eligible candidate. No
+        # stream-capacity or category truncation here; the strategy alpha
+        # ranks this pool and only then is the streamed observation set cut.
+        pool = list(reserved)
         breakdowns: dict[str, dict[str, float | str]] = {}
         categories: dict[str, int] = {}
         by_symbol = {symbol: (category, breakdown) for _, symbol, category, breakdown in scored}
@@ -344,37 +353,55 @@ class CryptoUniverseScanner:
             }
             categories[category] = categories.get(category, 0) + 1
 
-        for _score, symbol, category, breakdown in sorted(
-            scored, key=lambda item: (-item[0], item[1])
-        ):
-            if symbol in selected:
+        ordered_scored = sorted(scored, key=lambda item: (-item[0], item[1]))
+        for _score, symbol, category, breakdown in ordered_scored:
+            if symbol in pool:
                 continue
-            if len(selected) >= self.config.maximum_stream_symbols:
-                eliminated.setdefault(symbol, "stream_capacity")
+            pool.append(symbol)
+            categories[category] = categories.get(category, 0) + 1
+            breakdowns[symbol] = breakdown
+
+        # FALLBACK OBSERVATION SET: quality top-N with category diversity
+        # (pre-alpha stream behavior); replaced by strategy alpha ranking.
+        capacity = self.config.maximum_stream_symbols
+        observation: list[str] = list(reserved)
+        observation_eliminated: dict[str, str] = {}
+        observation_categories: dict[str, int] = {}
+        for symbol in reserved:
+            category = str(
+                breakdowns[symbol].get("category", CRYPTO_CATEGORIES.get(symbol, "unknown"))
+            )
+            observation_categories[category] = observation_categories.get(category, 0) + 1
+        for _score, symbol, category, _breakdown in ordered_scored:
+            if symbol in observation:
+                continue
+            if len(observation) >= capacity:
+                observation_eliminated.setdefault(symbol, "stream_capacity")
                 continue
             limit = self.config.scanner.maximum_per_category
             if category == "meme":
                 limit = min(limit, self.config.scanner.maximum_meme_symbols)
             elif category == "high_beta":
                 limit = min(limit, self.config.scanner.maximum_high_beta_symbols)
-            if categories.get(category, 0) >= limit:
-                eliminated[symbol] = "category_concentration"
+            if observation_categories.get(category, 0) >= limit:
+                observation_eliminated[symbol] = "category_concentration"
                 continue
-            selected.append(symbol)
-            categories[category] = categories.get(category, 0) + 1
-            breakdowns[symbol] = breakdown
+            observation.append(symbol)
+            observation_categories[category] = observation_categories.get(category, 0) + 1
 
         timestamp = (selection_timestamp or datetime.now(UTC)).astimezone(UTC)
         return CryptoScannerResult(
             selection_timestamp=timestamp.isoformat(),
             data_timestamp=data_timestamp.astimezone(UTC).isoformat(),
-            selected_symbols=tuple(selected),
+            selected_symbols=tuple(pool),
             candidate_symbols=tuple(sorted(seen)),
             score_breakdown=breakdowns,
             eliminated=dict(sorted(eliminated.items())),
             category_distribution=dict(sorted(categories.items())),
             scanner_version=self.version,
             config_digest=crypto_scanner_config_digest(self.config),
+            observation_set=tuple(observation),
+            observation_eliminated=dict(sorted(observation_eliminated.items())),
         )
 
     def persist(self, result: CryptoScannerResult) -> None:
@@ -471,8 +498,6 @@ def validate_active_crypto_universe(
         selected = tuple(canonical_symbol(str(item), Market.CRYPTO) for item in raw)
         if len(selected) != len(set(selected)):
             return (), "invalid"
-        if len(selected) > config.maximum_stream_symbols:
-            return (), "invalid"
         if not set(config.pinned_symbols).issubset(selected):
             return (), "missing_pins"
         raw_candidates = payload.get("candidate_symbols")
@@ -492,7 +517,26 @@ def validate_active_crypto_universe(
             for symbol in selected
         ):
             return (), "invalid"
-        return selected, "success"
+        # The eligible pool may exceed the stream capacity; the OBSERVATION
+        # SET is the streamed subset and must respect the cap.
+        raw_observation = payload.get("observation_set")
+        if not isinstance(raw_observation, list):
+            return (), "invalid"
+        observation = tuple(canonical_symbol(str(item), Market.CRYPTO) for item in raw_observation)
+        if len(observation) != len(set(observation)):
+            return (), "invalid"
+        if not set(observation).issubset(set(selected)):
+            return (), "observation_outside_pool"
+        if len(observation) > config.maximum_stream_symbols:
+            return (), "invalid"
+        if not set(config.pinned_symbols).issubset(observation):
+            return (), "missing_pins"
+        if any(
+            split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol)
+            for symbol in observation
+        ):
+            return (), "invalid"
+        return observation, "success"
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         # Fail closed, but surface the parse error: a persistent "invalid"
         # status is indistinguishable from rot without the underlying cause.
@@ -508,7 +552,8 @@ def load_active_crypto_symbols(
     pinned_symbols: tuple[str, ...] = (),
     log_rejection: bool = True,
 ) -> tuple[str, ...]:
-    """Load a validated scan or use the deterministic configured fallback."""
+    """Load the validated OBSERVATION SET (streamed top of the eligible
+    pool) or use the deterministic configured fallback."""
     managed = tuple(dict.fromkeys(canonical_symbol(item, Market.CRYPTO) for item in pinned_symbols))
     if not config.dynamic_selection_enabled:
         return tuple(dict.fromkeys((*config.trade_symbols, *managed)))

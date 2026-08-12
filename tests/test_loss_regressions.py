@@ -364,7 +364,11 @@ def test_scanner_keeps_only_one_alphabet_share_class(tmp_path: Path) -> None:
         selection_timestamp=timestamp,
     )
 
+    # The eligible POOL keeps both share classes; the streamed OBSERVATION
+    # SET deduplicates economically identical issuers.
     alphabet = set(result.selected_symbols) & {"GOOG", "GOOGL"}
-    assert len(alphabet) == 1
-    rejected = ({"GOOG", "GOOGL"} - alphabet).pop()
-    assert result.eliminated[rejected] == "duplicate_issuer"
+    assert len(alphabet) == 2
+    observation_alphabet = set(result.observation_set) & {"GOOG", "GOOGL"}
+    assert len(observation_alphabet) == 1
+    rejected = ({"GOOG", "GOOGL"} - observation_alphabet).pop()
+    assert result.observation_eliminated[rejected] == "duplicate_issuer"

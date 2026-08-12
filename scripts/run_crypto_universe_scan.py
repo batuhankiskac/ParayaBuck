@@ -28,7 +28,11 @@ def main() -> int:
         raise SystemExit(
             f"Automatic-compatible crypto scan failed; previous universe preserved: {exc}"
         ) from exc
-    print(f"Selected ({len(result.selected_symbols)}): {', '.join(result.selected_symbols)}")
+    print(f"Eligible pool ({len(result.selected_symbols)}): {', '.join(result.selected_symbols)}")
+    print(
+        f"Streamed observation set ({len(result.observation_set)}): "
+        f"{', '.join(result.observation_set)}"
+    )
     print(f"Eliminated: {elimination_reason_summary(result.eliminated)}")
     print(f"Persisted: {crypto.active_universe_path}")
     return 0

@@ -36,6 +36,12 @@ class UniverseSnapshot:
     score_breakdown: dict[str, dict[str, float | str]] = field(default_factory=dict)
     eliminated: dict[str, str] = field(default_factory=dict)
     sector_metadata_coverage: float = 1.0
+    # The STREAMED observation set at the snapshot (live parity): the
+    # completeness gate requires these symbols to have a closed bar at the
+    # decision timestamp, exactly like the live runtime requires its stream.
+    # Empty means the legacy snapshot carried no observation set and the
+    # gate falls back to the full pool.
+    observation_set: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -67,6 +73,7 @@ class PointInTimeUniverse:
                 {
                     "effective_at": snapshot.effective_at.isoformat(),
                     "symbols": sorted(snapshot.symbols),
+                    "observation_set": sorted(snapshot.observation_set),
                     "scanner_version": snapshot.scanner_version,
                     "config_digest": snapshot.config_digest,
                     "candidate_count": snapshot.candidate_count,
@@ -264,6 +271,8 @@ def build_trailing_point_in_time_universe(
         selected = tuple(symbol for symbol in result.selected_symbols if symbol in by_symbol)
         if not selected and not result.candidate_symbols:
             continue
+        raw_observation = getattr(result, "observation_set", ())
+        observation = frozenset(symbol for symbol in raw_observation if symbol in by_symbol)
         snapshots.append(
             UniverseSnapshot(
                 timestamp,
@@ -274,6 +283,7 @@ def build_trailing_point_in_time_universe(
                 result.score_breakdown,
                 result.eliminated,
                 getattr(result, "sector_metadata_coverage", 1.0),
+                observation,
             )
         )
     return PointInTimeUniverse(

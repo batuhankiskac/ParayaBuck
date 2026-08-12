@@ -197,8 +197,11 @@ def test_scanner_is_order_independent_pins_core_and_limits_capacity(tmp_path: Pa
     )
     assert first == second
     assert first.selected_symbols[:2] == ("BTC/USD", "ETH/USD")
-    assert len(first.selected_symbols) == config.maximum_stream_symbols
-    assert len(set(first.selected_symbols)) == len(first.selected_symbols)
+    # The eligible POOL can exceed the stream capacity; the OBSERVATION SET
+    # is the streamed subset at the capacity.
+    assert len(first.selected_symbols) > config.maximum_stream_symbols
+    assert len(first.observation_set) == config.maximum_stream_symbols
+    assert len(set(first.observation_set)) == len(first.observation_set)
 
 
 @pytest.mark.parametrize(
@@ -230,15 +233,18 @@ def test_category_limits_and_score_penalties(tmp_path: Path) -> None:
         _candidates(),
         data_timestamp=datetime.now(UTC),
     )
-    assert sum(symbol in result.selected_symbols for symbol in ("DOGE/USD", "SHIB/USD")) == 1
-    assert sum(symbol in result.selected_symbols for symbol in ("ARB/USD", "HYPE/USD")) == 1
+    # Category diversity is an OBSERVATION-SET constraint; the pool keeps
+    # every eligible pair.
+    assert sum(symbol in result.observation_set for symbol in ("DOGE/USD", "SHIB/USD")) == 1
+    assert sum(symbol in result.observation_set for symbol in ("ARB/USD", "HYPE/USD")) == 1
     assert (
         sum(
-            symbol in result.selected_symbols
+            symbol in result.observation_set
             for symbol in ("SOL/USD", "ADA/USD", "AVAX/USD", "DOT/USD")
         )
         == 2
     )
+    assert len(result.selected_symbols) > len(result.observation_set)
 
     normal = _candidate("SOL/USD", correlation=0.5)
     correlated = _candidate("ADA/USD", correlation=0.99)
@@ -265,8 +271,8 @@ def test_persist_validate_and_fallback_rejections(tmp_path: Path) -> None:
     now = datetime.now(UTC)
     result = scanner.scan(_candidates(), data_timestamp=now, selection_timestamp=now)
     scanner.persist(result)
-    assert validate_active_crypto_universe(config) == (result.selected_symbols, "success")
-    assert load_active_crypto_symbols(config) == result.selected_symbols
+    assert validate_active_crypto_universe(config) == (result.observation_set, "success")
+    assert load_active_crypto_symbols(config) == result.observation_set
     assert not Path(config.active_universe_path + ".tmp").exists()
     history_path = Path(config.active_universe_path + ".history.jsonl")
     assert len(history_path.read_text(encoding="utf-8").splitlines()) == 1

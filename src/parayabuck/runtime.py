@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -112,6 +112,25 @@ _WARMUP_RETRY_SECONDS = 600.0
 # Per-market scanner-refresh backoff (seconds) after a failed scheduled
 # refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
+
+
+def required_aggregation_timeframes(
+    execution_timeframe: str,
+    market_state_timeframe: str,
+    strategy_specs: Sequence[tuple[object, tuple[str, ...], float]],
+) -> frozenset[str]:
+    """The union of cadences the bar aggregation pipeline must produce.
+
+    Includes the execution and market-state cadences, every enabled
+    strategy's primary signal timeframe, AND every strategy-declared
+    ``required_timeframes`` (StrategySpec) so a strategy that needs a second
+    series gets its bars aggregated and seeded like any other cadence.
+    """
+    timeframes: set[str] = {execution_timeframe, market_state_timeframe}
+    for strategy, _symbols, _cap in strategy_specs:
+        timeframes.add(strategy.timeframe)  # type: ignore[attr-defined]
+        timeframes.update(strategy.required_timeframes)  # type: ignore[attr-defined]
+    return frozenset(timeframes)
 
 
 @dataclass
@@ -308,7 +327,7 @@ class EngineRuntime:
             # match one of its validated timeframes (never silently
             # reinterpreted). portfolio_strategy_from already enforces this,
             # and validate_strategy_timeframe keeps the invariant explicit.
-            validate_strategy_timeframe(strategy, selection.timeframe)
+            validate_strategy_timeframe(strategy, selection.timeframe or strategy.timeframe)
             strategy_specs.append((strategy, tuple(symbols), selection.maximum_allocation))
         self._strategy_specs = tuple(strategy_specs)
         if not self._strategy_specs:
@@ -379,11 +398,11 @@ class EngineRuntime:
         self._strategy_timeframes = {
             strategy.timeframe for strategy, _symbols, _cap in strategy_specs
         }
-        required_timeframes = {
+        required_timeframes = required_aggregation_timeframes(
             self.app_config.runtime.execution_timeframe,
             self.app_config.runtime.market_state_timeframe,
-            *self._strategy_timeframes,
-        }
+            strategy_specs,
+        )
         self.aggregators = {
             timeframe: TimeframeAggregator(
                 timeframe,

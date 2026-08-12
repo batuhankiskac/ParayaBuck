@@ -1645,9 +1645,17 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
             )
             spec = strategy.spec()
             observation_size = (
-                len(active_payload.get("selected_symbols", ()))
+                len(
+                    active_payload.get(
+                        "observation_set", active_payload.get("selected_symbols", ())
+                    )
+                )
                 if market_key == "equity"
-                else len(active_crypto_payload.get("selected_symbols", ()))
+                else len(
+                    active_crypto_payload.get(
+                        "observation_set", active_crypto_payload.get("selected_symbols", ())
+                    )
+                )
             )
             result[market_key] = {
                 "name": spec.name,
@@ -1795,12 +1803,22 @@ async def get_status() -> dict[str, Any]:
             }
             result["universe"] = {
                 "equity": {
-                    "symbols": list(active_payload.get("selected_symbols", ())),
+                    "symbols": list(
+                        active_payload.get(
+                            "observation_set", active_payload.get("selected_symbols", ())
+                        )
+                    ),
+                    "pool_size": len(active_payload.get("selected_symbols", ())),
                     "scores": active_payload.get("score_breakdown", {}),
                     "eliminated": active_payload.get("eliminated", {}),
                 },
                 "crypto": {
-                    "symbols": list(active_crypto_payload.get("selected_symbols", ())),
+                    "symbols": list(
+                        active_crypto_payload.get(
+                            "observation_set", active_crypto_payload.get("selected_symbols", ())
+                        )
+                    ),
+                    "pool_size": len(active_crypto_payload.get("selected_symbols", ())),
                     "scores": active_crypto_payload.get("score_breakdown", {}),
                     "eliminated": active_crypto_payload.get("eliminated", {}),
                 },

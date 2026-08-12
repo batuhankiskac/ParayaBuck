@@ -278,6 +278,7 @@ def refresh_equity_universe(
             candidates.append(with_spread)
     scanner = EquityUniverseScanner(universe)
     result = scanner.scan(candidates, data_timestamp=end)
+    result = _equity_observation_set(config, history, result, end)
 
     enriched = {
         "generated_at": end.isoformat(),
@@ -298,18 +299,79 @@ def refresh_equity_universe(
     scanner.persist(result)
     log.info(
         "Equity universe refresh metrics: assets_eligible=%d "
-        "historical_requests=%d bars_downloaded=%d shortlist_size=%d selected_count=%d "
-        "refresh_mode=%s refreshed_assets=%d duration_seconds=%.3f",
+        "historical_requests=%d bars_downloaded=%d shortlist_size=%d pool_size=%d "
+        "observation_size=%d refresh_mode=%s refreshed_assets=%d duration_seconds=%.3f",
         len(allowed),
         historical_requests,
         bars_downloaded,
         len(shortlist_symbols),
         len(result.selected_symbols),
+        len(result.observation_set),
         refresh_mode,
         len(by_symbol),
         time.monotonic() - started,
     )
     return result
+
+
+def _equity_observation_set(
+    config: Config,
+    history: AlpacaHistoricalData,
+    result: ScannerResult,
+    data_timestamp: datetime,
+) -> ScannerResult:
+    """Replace the scanner's quality observation set with the STRATEGY ALPHA
+    ranking of the eligible pool (stream limit != opportunity universe).
+
+    The configured strategy's alpha scores the full pool on batch historical
+    data; the top ``maximum_stream_symbols`` plus references/inverse hedges
+    become the streamed observation set. Without an enabled strategy the
+    scanner's eligibility-quality set stays as the fail-safe stream set.
+    """
+    from dataclasses import replace
+
+    from parayabuck.markets.timeframes import bars_to_calendar_days
+    from parayabuck.portfolio import portfolio_strategy_from
+    from parayabuck.universe.observation_set import build_observation_set
+
+    universe = config.universe.equity
+    selection = config.strategy.equity
+    if not selection.enabled or not result.selected_symbols:
+        return result
+    strategy = portfolio_strategy_from(
+        selection.name, selection.parameters, timeframe=selection.timeframe
+    )
+    pool = result.selected_symbols
+    warmup_days = bars_to_calendar_days(
+        "SPY", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
+    )
+    start = data_timestamp - timedelta(days=warmup_days)
+    bars = history.get_bars_batch(
+        list(pool),
+        strategy.timeframe,
+        start=start,
+        end=data_timestamp,
+        adjustment="splits",
+    )
+    observation = build_observation_set(
+        strategy,
+        {symbol: tuple(bars.get(symbol, ())) for symbol in pool},
+        pool,
+        market=Market.EQUITY,
+        timeframe=strategy.timeframe,
+        decision_timestamp=data_timestamp,
+        maximum_stream_symbols=universe.maximum_stream_symbols,
+        pinned_symbols=(*universe.reference_symbols, *universe.inverse_trade_symbols),
+        scanner_fallback=result.observation_set,
+    )
+    return replace(
+        result,
+        observation_set=observation.observation_set,
+        observation_eliminated={
+            **result.observation_eliminated,
+            "observation_source": observation.source,
+        },
+    )
 
 
 def refresh_crypto_universe(
@@ -392,8 +454,63 @@ def refresh_crypto_universe(
         )
     scanner = CryptoUniverseScanner(universe)
     result = scanner.scan(candidates, data_timestamp=end)
+    result = _crypto_observation_set(config, history, result, end)
     scanner.persist(result)
     return result
+
+
+def _crypto_observation_set(
+    config: Config,
+    history: AlpacaHistoricalData,
+    result: CryptoScannerResult,
+    data_timestamp: datetime,
+) -> CryptoScannerResult:
+    """Strategy-alpha observation set for crypto (same contract as equity):
+    the configured strategy ranks the eligible pool on batch history and the
+    top ``maximum_stream_symbols`` plus pins become the streamed set."""
+    from dataclasses import replace
+
+    from parayabuck.markets.timeframes import bars_to_calendar_days
+    from parayabuck.portfolio import portfolio_strategy_from
+    from parayabuck.universe.observation_set import build_observation_set
+
+    universe = config.universe.crypto
+    selection = config.strategy.crypto
+    if not selection.enabled or not result.selected_symbols:
+        return result
+    strategy = portfolio_strategy_from(
+        selection.name, selection.parameters, timeframe=selection.timeframe
+    )
+    pool = result.selected_symbols
+    warmup_days = bars_to_calendar_days(
+        "BTC/USD", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
+    )
+    start = data_timestamp - timedelta(days=warmup_days)
+    bars = history.get_bars_batch(
+        list(pool),
+        strategy.timeframe,
+        start=start,
+        end=data_timestamp,
+    )
+    observation = build_observation_set(
+        strategy,
+        {symbol: tuple(bars.get(symbol, ())) for symbol in pool},
+        pool,
+        market=Market.CRYPTO,
+        timeframe=strategy.timeframe,
+        decision_timestamp=data_timestamp,
+        maximum_stream_symbols=universe.maximum_stream_symbols,
+        pinned_symbols=universe.pinned_symbols,
+        scanner_fallback=result.observation_set,
+    )
+    return replace(
+        result,
+        observation_set=observation.observation_set,
+        observation_eliminated={
+            **result.observation_eliminated,
+            "observation_source": observation.source,
+        },
+    )
 
 
 def _chunks(values: list[str], size: int = 8) -> list[list[str]]:

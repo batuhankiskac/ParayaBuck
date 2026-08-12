@@ -411,10 +411,12 @@ def test_incremental_universe_matches_naive_trailing_windows_per_snapshot() -> N
                 break
             if bar.timestamp >= cutoff:
                 by_symbol.setdefault(bar.symbol, []).append(bar)
-        shortlisted = sorted(by_symbol.items())[:1]
+        # Mirror the builder exactly: no Stage-A shortlist here (the builder
+        # ran with target_shortlist=None), so EVERY trailing-window symbol
+        # reaches the scanner and the eligible pool is the snapshot.
         candidates = [
             equity_candidate_from_bars(symbol, history, expected_bar_count=20)
-            for symbol, history in shortlisted
+            for symbol, history in sorted(by_symbol.items())
         ]
         direct = EquityUniverseScanner(config).scan(
             candidates,
@@ -626,7 +628,12 @@ def test_equity_refresh_full_mode_when_no_cache_and_neutral_spread(tmp_path, mon
 
     result = preflight_module.refresh_equity_universe(config, "key", "secret")
 
-    assert len(windows) == 1  # single full 45d pass for everything
+    # Call 1: the scanner's full 45d pass. Call 2: the observation-set
+    # builder's strategy-warmup batch fetch over the eligible pool (the
+    # stream limit != opportunity universe pipeline).
+    assert len(windows) == 2
+    observation_window = windows[1]
+    assert observation_window[0] == ("SPY", "AAA", "BBB")
     saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
     for item in saved["candidates"]:
         assert item["spread_bps"] is None  # neutral spread score

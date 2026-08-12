@@ -721,7 +721,11 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     )()
     config = type("Config", (), {"strategy": strategy, "universe": universe})()
     (tmp_path / "c.json").write_text(json.dumps({"shortlist_symbols": ["A", "B", "C"]}))
-    (tmp_path / "a.json").write_text(json.dumps({"selected_symbols": ["A", "B"]}))
+    # The streamed observation set is the alpha-ranked subset of the pool;
+    # selected_symbols holds the broader pool.
+    (tmp_path / "a.json").write_text(
+        json.dumps({"selected_symbols": ["A", "B", "C"], "observation_set": ["A", "B"]})
+    )
     (tmp_path / "crypto.json").write_text(json.dumps({"selected_symbols": []}))
 
     monkeypatch.setattr(server, "manager", StaticManager())

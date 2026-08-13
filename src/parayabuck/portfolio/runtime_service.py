@@ -306,6 +306,32 @@ class PortfolioStateRepository:
                        )
                        WHERE average_fill_price IS NULL"""
                 )
+            fill_columns = {
+                str(row[1])
+                for row in self.store.connection.execute("PRAGMA table_info(portfolio_fills)")
+            }
+            # Execution-quality capture (telemetry, REPORT ONLY): submission ->
+            # fill delay per fill. Nullable; legacy rows stay valid.
+            if "fill_delay_seconds" not in fill_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_fills ADD COLUMN fill_delay_seconds REAL"
+                )
+                self.store.connection.execute(
+                    """UPDATE portfolio_fills
+                       SET fill_delay_seconds = (
+                           SELECT CASE
+                               WHEN o.created_at IS NOT NULL AND
+                                    julianday(portfolio_fills.occurred_at) >=
+                                    julianday(o.created_at)
+                               THEN (julianday(portfolio_fills.occurred_at)
+                                     - julianday(o.created_at)) * 86400.0
+                               ELSE NULL
+                           END
+                           FROM portfolio_orders o
+                           WHERE o.client_order_id = portfolio_fills.client_order_id
+                       )
+                       WHERE fill_delay_seconds IS NULL"""
+                )
 
     def _rebuild_decisions_unique_constraint(self) -> None:
         """Replace the pre-account UNIQUE(configuration_digest, timestamp, market)
@@ -836,7 +862,7 @@ class PortfolioStateRepository:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
-                          s.account_id
+                          s.account_id, o.created_at
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -850,6 +876,15 @@ class PortfolioStateRepository:
             reference = float(row[1] or 0.0)
             side = str(row[2])
             account_id = str(row[3])
+            created_at = str(row[4]) if row[4] is not None else None
+            delay_seconds: float | None = None
+            if created_at:
+                try:
+                    raw_delay = (occurred_at - datetime.fromisoformat(created_at)).total_seconds()
+                    if raw_delay >= 0:
+                        delay_seconds = raw_delay
+                except (TypeError, ValueError):
+                    delay_seconds = None
             self.store.connection.execute(
                 """UPDATE portfolio_orders SET status = ?, broker_order_id = ?,
                    cumulative_filled_quantity = ?, average_fill_price = ?
@@ -868,8 +903,8 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
-                        fee, realized_pnl, unrealized_pnl, slippage
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         activity_id,
                         client_order_id,
@@ -880,6 +915,7 @@ class PortfolioStateRepository:
                         realized_pnl,
                         unrealized_pnl,
                         slippage,
+                        delay_seconds,
                     ),
                 )
                 if side == "sell":
@@ -913,11 +949,25 @@ class PortfolioStateRepository:
         slippage: float,
     ) -> None:
         with self.store.lock, self.store.connection:
+            delay_seconds: float | None = None
+            created_row = self.store.connection.execute(
+                "SELECT created_at FROM portfolio_orders WHERE client_order_id = ?",
+                (client_order_id,),
+            ).fetchone()
+            if created_row and created_row[0] is not None:
+                try:
+                    raw_delay = (
+                        occurred_at - datetime.fromisoformat(str(created_row[0]))
+                    ).total_seconds()
+                    if raw_delay >= 0:
+                        delay_seconds = raw_delay
+                except (TypeError, ValueError):
+                    delay_seconds = None
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_fills(
                     activity_id, client_order_id, occurred_at, quantity, price,
-                    fee, realized_pnl, unrealized_pnl, slippage
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     activity_id,
                     client_order_id,
@@ -928,6 +978,7 @@ class PortfolioStateRepository:
                     realized_pnl,
                     unrealized_pnl,
                     slippage,
+                    delay_seconds,
                 ),
             )
 

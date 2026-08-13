@@ -54,6 +54,26 @@ log = get_logger("parayabuck.execution.alpaca")
 _CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
 
 
+def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
+    """Emit one execution alert without ever affecting order flow.
+
+    The ``parayabuck.monitoring.alerts`` module lands in the same release
+    batch; the import is guarded so a missing (or broken) alerts module
+    degrades to a logged no-op instead of failing a submission or a fill.
+    """
+    try:
+        from parayabuck.monitoring import alerts
+    except ImportError:
+        log.debug("alerts module unavailable; skipping %s alert", kind)
+        return
+    try:
+        alerts.emit(kind, message=message, **fields)
+    except Exception:
+        log.warning(
+            "Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True
+        )
+
+
 class AmbiguousOrderState(RuntimeError):
     pass
 
@@ -543,10 +563,43 @@ class AlpacaBroker:
         increment = Decimal(str(rules.quantity_increment))
         quantity = (quantity / increment).to_integral_value(rounding=ROUND_DOWN) * increment
         if quantity < Decimal(str(rules.minimum_order_size)):
+            _emit_alert(
+                "order_rejected",
+                message=(
+                    f"Portfolio order below minimum size: {order.symbol} "
+                    f"client_order_id={order.client_order_id}"
+                ),
+                symbol=order.symbol,
+                market=order.market.value,
+                client_order_id=order.client_order_id,
+                reason="below_minimum_size",
+            )
             raise ValueError(f"Portfolio order is below minimum size: {order.symbol}")
         if float(quantity) * order.reference_price < rules.minimum_order_notional:
+            _emit_alert(
+                "order_rejected",
+                message=(
+                    f"Portfolio order below minimum notional: {order.symbol} "
+                    f"client_order_id={order.client_order_id}"
+                ),
+                symbol=order.symbol,
+                market=order.market.value,
+                client_order_id=order.client_order_id,
+                reason="below_minimum_notional",
+            )
             raise ValueError(f"Portfolio order is below minimum notional: {order.symbol}")
         if self._has_open_order(order.symbol):
+            _emit_alert(
+                "order_rejected",
+                message=(
+                    f"Portfolio order rejected: open order already exists for "
+                    f"{order.symbol} client_order_id={order.client_order_id}"
+                ),
+                symbol=order.symbol,
+                market=order.market.value,
+                client_order_id=order.client_order_id,
+                reason="open_order_exists",
+            )
             raise ValueError(f"Open order already exists for {order.symbol}")
         request = MarketOrderRequest(
             symbol=order.symbol,
@@ -558,6 +611,16 @@ class AlpacaBroker:
         result = self._submit_with_recovery(request, order.client_order_id)
         broker_order_id = str(self._field(result, "id", "") or "")
         if not broker_order_id:
+            _emit_alert(
+                "ambiguous_order",
+                message=(
+                    f"Alpaca order response has no id for "
+                    f"client_order_id={order.client_order_id} symbol={order.symbol}"
+                ),
+                symbol=order.symbol,
+                market=order.market.value,
+                client_order_id=order.client_order_id,
+            )
             raise AmbiguousOrderState(
                 f"Alpaca order response has no id for {order.client_order_id}"
             )
@@ -709,6 +772,25 @@ class AlpacaBroker:
                                 occurred_at=exit_fill.timestamp,
                             )
                         )
+                    log.critical(
+                        "Crypto entry protection failed; position flattened: "
+                        "symbol=%s entry_client_order_id=%s broker_order_id=%s",
+                        intent.symbol,
+                        intent.client_order_id,
+                        result_id,
+                    )
+                    _emit_alert(
+                        "order_rejected",
+                        message=(
+                            f"Crypto entry protection failed; entry flattened and "
+                            f"rejected: symbol={intent.symbol} "
+                            f"client_order_id={intent.client_order_id}"
+                        ),
+                        symbol=intent.symbol,
+                        market=intent.market.value,
+                        client_order_id=intent.client_order_id,
+                        reason="protection_failed_after_fill",
+                    )
                     return OrderState.REJECTED, fill
             if fill is None and state in {
                 OrderState.CANCELLED,
@@ -731,10 +813,29 @@ class AlpacaBroker:
                     "reconciliation is required: %s",
                     exc,
                 )
+                _emit_alert(
+                    "ambiguous_order",
+                    message=(
+                        f"Order failed after broker acceptance (reconciliation "
+                        f"required): {exc} client_order_id={intent.client_order_id}"
+                    ),
+                    symbol=intent.symbol,
+                    market=intent.market.value,
+                    client_order_id=intent.client_order_id,
+                    reason="validation_failure_after_acceptance",
+                )
                 return OrderState.RECONCILIATION_REQUIRED, None
             if entry_registered:
                 self._record_entry_terminal(intent, OrderState.REJECTED)
             log.warning("Order rejected: %s", exc)
+            _emit_alert(
+                "order_rejected",
+                message=f"Order rejected: {exc} client_order_id={intent.client_order_id}",
+                symbol=intent.symbol,
+                market=intent.market.value,
+                client_order_id=intent.client_order_id,
+                reason=str(exc),
+            )
             return OrderState.REJECTED, None
         except AmbiguousOrderState as exc:
             ledger = self.ledger
@@ -744,6 +845,16 @@ class AlpacaBroker:
                 )
             log.critical(
                 "Order state is ambiguous; entries must halt pending reconciliation: %s", exc
+            )
+            _emit_alert(
+                "ambiguous_order",
+                message=(
+                    f"Order state is ambiguous; entries halt pending reconciliation: "
+                    f"{exc} client_order_id={intent.client_order_id}"
+                ),
+                symbol=intent.symbol,
+                market=intent.market.value,
+                client_order_id=intent.client_order_id,
             )
             return OrderState.RECONCILIATION_REQUIRED, None
         except Exception as exc:
@@ -759,8 +870,27 @@ class AlpacaBroker:
                     "Order processing failed after broker write; reconciliation is required: %s",
                     exc,
                 )
+                _emit_alert(
+                    "ambiguous_order",
+                    message=(
+                        f"Order processing failed after broker write (reconciliation "
+                        f"required): {exc} client_order_id={intent.client_order_id}"
+                    ),
+                    symbol=intent.symbol,
+                    market=intent.market.value,
+                    client_order_id=intent.client_order_id,
+                    reason="exception_after_broker_write",
+                )
                 return OrderState.RECONCILIATION_REQUIRED, None
             log.error("Order rejected: %s", exc)
+            _emit_alert(
+                "order_rejected",
+                message=f"Order rejected: {exc} client_order_id={intent.client_order_id}",
+                symbol=intent.symbol,
+                market=intent.market.value,
+                client_order_id=intent.client_order_id,
+                reason=str(exc),
+            )
             return OrderState.REJECTED, None
 
     def _record_entry_terminal(
@@ -2535,6 +2665,15 @@ class AlpacaBroker:
                         submit_exc,
                     )
                     return recovered
+            _emit_alert(
+                "ambiguous_order",
+                message=(
+                    f"Broker write outcome unknown for client_order_id={client_order_id}: "
+                    f"{submit_exc}"
+                ),
+                client_order_id=client_order_id,
+                reason="broker_write_outcome_unknown",
+            )
             raise AmbiguousOrderState(
                 f"Broker write outcome unknown for client_order_id={client_order_id}: {submit_exc}"
             ) from submit_exc
@@ -2648,6 +2787,14 @@ class AlpacaBroker:
                 if last_status in {"canceled", "cancelled", "expired", "rejected"}:
                     return
                 if last_status == "filled":
+                    _emit_alert(
+                        "ambiguous_order",
+                        message=(
+                            f"Protective order filled while cancellation was pending for {symbol}"
+                        ),
+                        symbol=symbol,
+                        reason="protective_order_filled_during_cancel",
+                    )
                     raise AmbiguousOrderState(
                         f"Protective order filled while cancellation was pending for {symbol}"
                     )
@@ -2658,6 +2805,16 @@ class AlpacaBroker:
                 # cancelled. Keep polling until the bounded deadline.
                 pass
             time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.25))
+        _emit_alert(
+            "ambiguous_order",
+            message=(
+                f"Protective order cancellation is unconfirmed for {symbol}: "
+                f"{last_status or 'lookup_failed'}"
+            ),
+            symbol=symbol,
+            reason="cancel_unconfirmed",
+            last_status=last_status or "lookup_failed",
+        )
         raise AmbiguousOrderState(
             f"Protective order cancellation is unconfirmed for {symbol}: "
             f"{last_status or 'lookup_failed'}"

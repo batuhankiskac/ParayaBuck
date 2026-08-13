@@ -40,6 +40,8 @@ from parayabuck.markets.timeframes import (
     NEW_YORK,
     is_regular_equity_time,
 )
+from parayabuck.monitoring import alerts
+from parayabuck.monitoring import metrics as runtime_metrics_store
 from parayabuck.portfolio import portfolio_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
@@ -457,6 +459,16 @@ class EngineRuntime:
             Market.EQUITY.value: None,
             Market.CRYPTO.value: None,
         }
+        # Observability state: the alert sink is configured once from the
+        # config block; the runtime session row pairs with the ledger's
+        # runtime_sessions table so restart counts are persisted.
+        alerts.configure_alerting(
+            enabled=config.alerting.enabled,
+            webhook_url=config.alerting.webhook_url,
+            events=config.alerting.events,
+        )
+        self._runtime_session_id: str | None = None
+        self._reconcile_failed = False
 
     @staticmethod
     def _validate_execution_mode(config: Config) -> None:
@@ -760,6 +772,12 @@ class EngineRuntime:
                 else "reconciliation_failed"
             )
             self._state = "halted"
+            alerts.emit(
+                "reconciliation_failure",
+                message="Startup reconciliation failed; runtime not started",
+                reason=self._circuit_breaker_reason,
+                error=str(exc),
+            )
             raise
         with self._state_lock:
             self._pin_managed_symbols()
@@ -814,6 +832,15 @@ class EngineRuntime:
             for runtime in self._portfolio_runtimes:
                 runtime.live_dollar_cap = authorized_live_cap
         self._restore_persistent_state()
+        if getattr(self, "_circuit_breaker_reason", None) is not None:
+            # A persisted PERSISTENT_INCIDENT survives restarts until verified
+            # recovery; surface it immediately so the operator is not surprised
+            # by the halt on the first health poll.
+            alerts.emit(
+                "circuit_breaker",
+                message="Persisted circuit breaker restored at startup",
+                reason=self._circuit_breaker_reason,
+            )
         # Restart recovery: a two-phase rebalance interrupted between phases
         # must resume here — SELL state is reconciled from the repository, a
         # fresh account is taken, and the deferred BUY phase continues exactly
@@ -916,6 +943,20 @@ class EngineRuntime:
             raise
         self._refresh_readiness()
         self._state = "running" if self._has_ready_symbols() else "warming_up"
+        record_session = getattr(self.ledger, "record_runtime_session", None)
+        if record_session is not None:
+            # Observability-only; fake ledgers in unit tests may omit it.
+            self._runtime_session_id = record_session(
+                self.broker.account_id or "unknown", self.mode.value
+            )
+        runtime_metrics_store.record_event("runtime_started")
+        alerts.emit(
+            "runtime_started",
+            message=f"Engine runtime started in {self.mode.value} mode",
+            mode=self.mode.value,
+            symbols=len(self.symbols),
+            timeframes=",".join(sorted(self.aggregators)),
+        )
         log.info(
             "Engine runtime started: mode=%s symbols=%d timeframe=%s",
             "paper" if self.paper else "live",
@@ -1012,8 +1053,22 @@ class EngineRuntime:
         if ok:
             self._universe_retry_at.pop(market, None)
             self._universe_retry_attempt.pop(market, None)
+            runtime_metrics_store.record_event("scanner_recovered")
+            alerts.emit(
+                "scanner_recovered",
+                message=f"Scanner refresh recovered for {market.value}",
+                market=market.value,
+            )
             return
         attempt = self._universe_retry_attempt.get(market, 0)
+        runtime_metrics_store.record_event("scanner_refresh_failure")
+        alerts.emit(
+            "scanner_refresh_failure",
+            message=f"Scanner refresh failed for {market.value}",
+            market=market.value,
+            attempt=attempt + 1,
+            error=getattr(self, "_last_universe_refresh_error", {}).get(market.value),
+        )
         delay = _UNIVERSE_RETRY_BACKOFF_SECONDS[
             min(attempt, len(_UNIVERSE_RETRY_BACKOFF_SECONDS) - 1)
         ]
@@ -1543,6 +1598,8 @@ class EngineRuntime:
 
     def stop(self) -> bool:
         alive: list[str] = []
+        previous_state = getattr(self, "_state", None)
+        breaker_at_stop = getattr(self, "_circuit_breaker_reason", None)
         if self._running:
             self._state = "stopping"
             self._running = False
@@ -1589,6 +1646,29 @@ class EngineRuntime:
                     close()
                 except Exception as exc:
                     log.warning("Session close warning during stop: %s", exc)
+        # A stop from a halted/error state (or while a circuit breaker is
+        # active) is an unexpected shutdown: alert and record the session as
+        # such. Graceful stops just close the session row.
+        unexpected = (
+            previous_state in {"halted", "error", "stop_failed"} or breaker_at_stop is not None
+        )
+        if unexpected:
+            runtime_metrics_store.record_event("runtime_stopped_unexpected")
+            alerts.emit(
+                "runtime_stopped_unexpected",
+                message="Engine runtime stopped unexpectedly",
+                previous_state=previous_state,
+                circuit_breaker_reason=breaker_at_stop,
+            )
+        if getattr(self, "_runtime_session_id", None) is not None:
+            try:
+                self.ledger.end_runtime_session(
+                    self._runtime_session_id,
+                    "unexpected" if unexpected else "stopped",
+                )
+            except Exception as exc:
+                log.warning("Runtime session end failed: %s", exc)
+            self._runtime_session_id = None
         if not self._storage_closed:
             try:
                 for runtime in getattr(self, "_portfolio_runtimes", ()):
@@ -1662,9 +1742,31 @@ class EngineRuntime:
             self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+        previous = dict(getattr(self, "_entry_risk_latch", {}))
         self._entry_risk_latch = {
             market: (breach if breach is not None else None) for market in self._entry_risk_latch
         }
+        # Alert only on latch TRANSITIONS (the account loop re-evaluates this
+        # every poll); a persistent breach must not re-alert per poll.
+        if breach != previous.get(Market.EQUITY):
+            if breach == "daily_loss_limit":
+                runtime_metrics_store.record_event("risk_incident")
+                alerts.emit(
+                    "risk_incident",
+                    message="Daily loss limit breached; entries latched",
+                    daily_loss_pct=daily_loss,
+                    limit_pct=self.app_config.risk.daily_loss_limit_pct,
+                    equity=equity,
+                )
+            elif breach == "portfolio_drawdown_halt":
+                runtime_metrics_store.record_event("drawdown_halt")
+                alerts.emit(
+                    "drawdown_halt",
+                    message="Drawdown limit breached; entries halted until risk-epoch reset",
+                    drawdown_pct=account.drawdown_pct,
+                    limit_pct=self.app_config.risk.max_drawdown_pct,
+                    equity=equity,
+                )
 
     def _halt_for_ownership_drift(self) -> None:
         """Fail closed on ownership drift from the account-polling loop.
@@ -1683,6 +1785,12 @@ class EngineRuntime:
         }
         self._persist_safety_state("ownership_drift")
         log.critical("Ownership drift detected; runtime halted and safety state persisted")
+        runtime_metrics_store.record_event("circuit_breaker")
+        alerts.emit(
+            "circuit_breaker",
+            message="Ownership drift detected; runtime halted and safety state persisted",
+            reason="ownership_drift",
+        )
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known
@@ -1755,6 +1863,13 @@ class EngineRuntime:
             self._entry_risk_latch = {
                 market: "portfolio_drawdown_halt" for market in self._entry_risk_latch
             }
+            runtime_metrics_store.record_event("drawdown_halt")
+            alerts.emit(
+                "drawdown_halt",
+                message="Persisted drawdown halt restored at startup; entries blocked",
+                account_id=account_id,
+                reason="portfolio_drawdown_halt",
+            )
         previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
@@ -1805,6 +1920,16 @@ class EngineRuntime:
                     market.value,
                     result.decision_id,
                 )
+                runtime_metrics_store.record_event("ambiguous_order")
+                alerts.emit(
+                    "ambiguous_order",
+                    message=(
+                        "Two-phase rebalance outcome ambiguous; entries halted "
+                        "pending reconciliation"
+                    ),
+                    market=market.value,
+                    decision_id=result.decision_id,
+                )
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         portfolio_repository = getattr(self, "_portfolio_repository", None)
@@ -1832,6 +1957,18 @@ class EngineRuntime:
                 realized_pnl=0.0,
                 unrealized_pnl=0.0,
             )
+            # A rejected portfolio order is an operator-visible event: the
+            # dependent rebalance replans smaller (or absent) buys, so the
+            # rejection is not silent.
+            if update.event == "rejected":
+                runtime_metrics_store.record_event("order_rejected")
+                alerts.emit(
+                    "order_rejected",
+                    message=f"Portfolio order rejected: {update.client_order_id}",
+                    client_order_id=update.client_order_id,
+                    symbol=update.symbol,
+                    market=Market.CRYPTO.value if is_crypto(update.symbol) else Market.EQUITY.value,
+                )
             account = await asyncio.to_thread(self.broker.account)
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
@@ -1874,10 +2011,25 @@ class EngineRuntime:
                             self._state = "halted"
                             self._circuit_breaker_reason = f"{name}_restart_limit"
                             log.exception("%s shared worker restart limit reached", name)
+                            runtime_metrics_store.record_event("circuit_breaker")
+                            alerts.emit(
+                                "circuit_breaker",
+                                message=(
+                                    f"{name} shared worker restart limit reached; runtime halted"
+                                ),
+                                reason=self._circuit_breaker_reason,
+                            )
                             return
                         else:
                             self._market_entry_halts[market] = f"{name}_restart_limit"
                         log.exception("%s stream worker restart limit reached", name)
+                        runtime_metrics_store.record_event("circuit_breaker")
+                        alerts.emit(
+                            "circuit_breaker",
+                            message=f"{name} stream worker restart limit reached; entries halted",
+                            reason=f"{name}_restart_limit",
+                            market=market.value,
+                        )
                     delay = min(16.0, 2 ** (worker.restart_count - 1))
                     log.warning(
                         "%s stream worker failed; retrying in %.1fs: %s",
@@ -1988,6 +2140,13 @@ class EngineRuntime:
             with getattr(self, "_event_stats_lock", threading.Lock()):
                 self._market_entry_halts[Market.CRYPTO] = "ambiguous_crypto_exit"
             log.critical("Crypto exit state is ambiguous; crypto entries halted: %s", exc)
+            runtime_metrics_store.record_event("ambiguous_order")
+            alerts.emit(
+                "ambiguous_order",
+                message="Crypto exit state ambiguous; crypto entries halted",
+                market="crypto",
+                error=str(exc),
+            )
         except Exception as exc:
             with getattr(self, "_event_stats_lock", threading.Lock()):
                 self._market_entry_halts[Market.CRYPTO] = "crypto_protection_failure"
@@ -2011,6 +2170,12 @@ class EngineRuntime:
             elif result == "overflow":
                 self._circuit_breaker_reason = "final_market_event_queue_overflow"
                 self._dropped_events += 1
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Final market event queue overflow; runtime halted",
+                    reason="final_market_event_queue_overflow",
+                )
             if self._oldest_received_at is None:
                 self._oldest_received_at = event.received_at
 
@@ -2185,6 +2350,13 @@ class EngineRuntime:
             else:
                 self._circuit_breaker_reason = "decision_worker_crashed"
             log.exception("Decision worker failed")
+            runtime_metrics_store.record_event("circuit_breaker")
+            alerts.emit(
+                "circuit_breaker",
+                message="Decision worker failed; runtime halted",
+                reason=self._circuit_breaker_reason,
+                error=str(exc),
+            )
         finally:
             worker.alive = False
 
@@ -2221,6 +2393,10 @@ class EngineRuntime:
             for bar, mutation in zip(ingestion.bars, ingestion.mutations, strict=True)
             if mutation.value == "gap_detected"
         ]
+        if gap_bars:
+            # One data-gap episode per finalized batch with detected gaps
+            # (runtime_metrics() reads this counter).
+            runtime_metrics_store.record_event("data_gap")
         for bar in gap_bars:
             self._repair_gap(bar)
         if self._warming_up:
@@ -2283,11 +2459,26 @@ class EngineRuntime:
                     "Portfolio ownership drift blocked decisions for market=%s",
                     portfolio_runtime.market.value,
                 )
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Portfolio ownership drift blocked decisions; runtime halted",
+                    reason="ownership_drift",
+                    market=portfolio_runtime.market.value,
+                )
                 return
             except Exception as exc:
                 self._circuit_breaker_reason = "portfolio_runtime_failure"
                 self._state = "halted"
                 log.exception("Portfolio runtime failed closed: %s", exc)
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Portfolio runtime failed closed; runtime halted",
+                    reason="portfolio_runtime_failure",
+                    error=str(exc),
+                    market=portfolio_runtime.market.value,
+                )
                 return
             if portfolio_result.status == "rebalance_blocked":
                 with getattr(self, "_state_lock", threading.RLock()):
@@ -2299,6 +2490,13 @@ class EngineRuntime:
                     "reconciliation (decision=%s)",
                     portfolio_runtime.market.value,
                     portfolio_result.decision_id,
+                )
+                runtime_metrics_store.record_event("ambiguous_order")
+                alerts.emit(
+                    "ambiguous_order",
+                    message="Two-phase rebalance blocked; entries halted pending reconciliation",
+                    market=portfolio_runtime.market.value,
+                    decision_id=portfolio_result.decision_id,
                 )
             log.info(
                 "Portfolio decision: strategy=%s market=%s status=%s orders=%d submitted=%d",
@@ -2507,6 +2705,14 @@ class EngineRuntime:
                 # reconcile() raises on drift/protection issues, so reaching
                 # this line proves every persisted halt resolved; clear the
                 # incidents so a restart does not resurrect them.
+                if getattr(self, "_reconcile_failed", False):
+                    self._reconcile_failed = False
+                    runtime_metrics_store.record_event("reconciliation_recovered")
+                    alerts.emit(
+                        "reconciliation_recovered",
+                        message="Periodic reconciliation recovered",
+                        account_id=account_id,
+                    )
                 self.ledger.clear_safety_incident(account_id)
                 if self._circuit_breaker_reason == "reconciliation_failed":
                     self._circuit_breaker_reason = None
@@ -2516,28 +2722,58 @@ class EngineRuntime:
                 # minute obscures actionable protection failures.
                 log.warning("Position protection check deferred after Alpaca API error: %s", exc)
                 self._circuit_breaker_reason = "reconciliation_failed"
+                self._reconcile_failed = True
+                runtime_metrics_store.record_event("reconciliation_failure")
+                alerts.emit(
+                    "reconciliation_failure",
+                    message="Position protection check deferred after Alpaca API error",
+                    reason="reconciliation_failed",
+                    error=str(exc),
+                )
             except OwnershipDriftError:
                 log.exception("Portfolio ownership drift detected; entries halted")
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._state = "halted"
                 self._circuit_breaker_reason = "ownership_drift"
+                self._reconcile_failed = True
                 self._persist_safety_state("ownership_drift")
+                runtime_metrics_store.record_event("circuit_breaker")
+                alerts.emit(
+                    "circuit_breaker",
+                    message="Portfolio ownership drift detected; runtime halted",
+                    reason="ownership_drift",
+                )
             except ProtectionReconciliationError:
                 log.exception("Managed position protection reconciliation failed")
                 self._circuit_breaker_reason = "protection_failure"
+                self._reconcile_failed = True
+                runtime_metrics_store.record_event("reconciliation_failure")
+                alerts.emit(
+                    "reconciliation_failure",
+                    message="Managed position protection reconciliation failed",
+                    reason="protection_failure",
+                )
             except Exception:
                 # A generic failure is usually a code bug, not a broker
                 # timeout. Keep retrying (defense in depth) but escalate after
-                # repeated failures so the bug is not indistinguishable from
-                # a transient network error.
+                # three consecutive failures, which is strictly more lenient
+                # than a transient network error.
                 self._generic_reconcile_failures = (
                     getattr(self, "_generic_reconcile_failures", 0) + 1
                 )
                 log.exception("Periodic position protection check failed")
+                self._reconcile_failed = True
                 if self._generic_reconcile_failures >= 3:
                     self._circuit_breaker_reason = "reconciliation_bug_suspected"
                 else:
                     self._circuit_breaker_reason = "reconciliation_failed"
+                runtime_metrics_store.record_event("reconciliation_failure")
+                alerts.emit(
+                    "reconciliation_failure",
+                    message="Periodic position protection check failed",
+                    reason=self._circuit_breaker_reason,
+                    consecutive_failures=self._generic_reconcile_failures,
+                )
 
     def _schedule_reconcile(self) -> None:
         """Run the expensive broker scan without stalling finalized-bar decisions."""
@@ -2597,6 +2833,13 @@ class EngineRuntime:
             "New risk epoch started: drawdown baseline rebased to %.2f (account=%s)",
             new_baseline,
             account_id,
+        )
+        runtime_metrics_store.record_event("risk_epoch_reset")
+        alerts.emit(
+            "risk_epoch_reset",
+            message="New risk epoch started; drawdown baseline rebased",
+            baseline_equity=new_baseline,
+            account_id=account_id,
         )
         return new_baseline
 

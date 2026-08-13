@@ -135,6 +135,15 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
                     f"(trailing {lookback}-day realized vol, AHXZ 2006) assets, "
                     "equal weight, weekly, no filters or regime conditioning"
                 ),
+                "explanations": {
+                    symbol: {
+                        "alpha_rank": rank,
+                        "realized_vol_22d": sigma,
+                        "target_weight": weight,
+                        "current_weight": float(context.holdings.get(symbol, 0.0)),
+                    }
+                    for rank, (sigma, symbol) in enumerate(ranked[:top_n], start=1)
+                },
             },
         )
 

@@ -201,6 +201,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                     "timestamp-aligned returns), top idiosyncratic-volatility "
                     "names rejected, monthly, inverse-vol sized"
                 ),
+                "explanations": _equity_explanations(context, ranked, residual_vols, weights),
             },
         )
 
@@ -218,6 +219,37 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             parameters=self.parameter_tuple(),
             metadata={"risk_off_detail": detail},
         )
+
+
+def _equity_explanations(
+    context: PortfolioContext,
+    ranked: tuple[tuple[float, str], ...],
+    residual_vols: dict[str, float],
+    weights: dict[str, float],
+) -> dict[str, dict[str, float | int]]:
+    """Concise per-holding decision reasons for the selected names.
+
+    Ranking numbers are read straight from ``_score_candidates`` output
+    (alpha rank is the 1-based position in the post-filter ranked pool; the
+    momentum score and annualized idio-vol are the exact production values).
+    ``current_weight`` is the holding recorded in ``context.holdings``
+    (position quantity from the account snapshot; 0.0 when flat).
+    """
+    pool_vols = sorted(residual_vols[symbol] for _score, symbol in ranked)
+    pool_size = max(1, len(pool_vols))
+    explanations: dict[str, dict[str, float | int]] = {}
+    for rank, (score, symbol) in enumerate(ranked, start=1):
+        if symbol not in weights:
+            continue
+        below_or_equal = sum(1 for value in pool_vols if value <= residual_vols[symbol])
+        explanations[symbol] = {
+            "alpha_rank": rank,
+            "residual_momentum_score": score,
+            "idio_vol_percentile": round(below_or_equal / pool_size, 4),
+            "target_weight": weights[symbol],
+            "current_weight": float(context.holdings.get(symbol, 0.0)),
+        }
+    return explanations
 
 
 def _aligned_returns(

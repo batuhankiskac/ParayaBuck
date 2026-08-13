@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from parayabuck.core.models import (
     Direction,
@@ -288,6 +289,30 @@ class ExecutionLedger:
                     VALUES (4, CURRENT_TIMESTAMP)
                     """
                 )
+            # v5: execution-quality capture columns on the authoritative
+            # ``orders`` record (decision timestamp, signal/reference price,
+            # target weight, spread estimate, submission/fill timestamps, fill
+            # delay, observed slippage and fees). All columns are nullable
+            # except actual_fee so legacy rows remain valid; the telemetry
+            # layer aggregates whatever is present and reports None otherwise.
+            for column, definition in (
+                ("decision_timestamp", "TEXT"),
+                ("target_weight", "REAL"),
+                ("reference_price", "REAL"),
+                ("spread_estimate_bps", "REAL"),
+                ("submitted_at", "TEXT"),
+                ("filled_at", "TEXT"),
+                ("fill_delay_seconds", "REAL"),
+                ("slippage_bps", "REAL"),
+                ("actual_fee", "REAL NOT NULL DEFAULT 0"),
+            ):
+                self._ensure_column("orders", column, definition)
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (5, CURRENT_TIMESTAMP)
+                """
+            )
             self.connection.commit()
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
@@ -300,6 +325,11 @@ class ExecutionLedger:
         account_id: str,
         order: OrderIntent,
         broker_order_id: str | None = None,
+        *,
+        decision_timestamp: datetime | None = None,
+        target_weight: float | None = None,
+        reference_price: float | None = None,
+        spread_estimate_bps: float | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         symbol = canonical_symbol(order.symbol, order.market)
@@ -342,12 +372,16 @@ class ExecutionLedger:
                     parent_broker_order_id, entry_client_order_id, order_role,
                     canonical_symbol, market, side, requested_qty,
                     cumulative_filled_qty, signal_id, strategy, entry_price,
-                    stop_price, target_price, updated_at
-                ) VALUES (?, ?, ?, NULL, ?, 'entry', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                    stop_price, target_price, updated_at, decision_timestamp,
+                    target_weight, reference_price, spread_estimate_bps, submitted_at
+                ) VALUES (?, ?, ?, NULL, ?, 'entry', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 ON CONFLICT(client_order_id) DO UPDATE SET
                     account_id=excluded.account_id,
                     broker_order_id=COALESCE(excluded.broker_order_id, orders.broker_order_id),
                     requested_qty=excluded.requested_qty,
+                    reference_price=COALESCE(excluded.reference_price, orders.reference_price),
+                    submitted_at=COALESCE(excluded.submitted_at, orders.submitted_at),
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -364,6 +398,11 @@ class ExecutionLedger:
                     order.entry_price,
                     order.stop_price,
                     order.target_price,
+                    now,
+                    decision_timestamp.isoformat() if decision_timestamp is not None else None,
+                    target_weight,
+                    reference_price,
+                    spread_estimate_bps,
                     now,
                 ),
             )
@@ -1039,6 +1078,60 @@ class ExecutionLedger:
                     event.broker_order_id,
                     now,
                 )
+                # Execution-quality capture (telemetry, REPORT ONLY): record
+                # the terminal fill timestamp, fill delay vs submission,
+                # adverse slippage vs the decision reference price, and the
+                # actual fee on the authoritative orders row. None of this
+                # changes order behavior.
+                if (
+                    fill_delta > 0
+                    or fee_delta > 0
+                    or (current_state in terminal_states and event.average_fill_price is not None)
+                ):
+                    captured = self.connection.execute(
+                        """
+                        SELECT submitted_at, reference_price, side
+                        FROM orders WHERE client_order_id=?
+                        """,
+                        (event.client_order_id,),
+                    ).fetchone()
+                    submitted_at = str(captured[0]) if captured and captured[0] else None
+                    reference = float(captured[1]) if captured and captured[1] is not None else None
+                    direction = str(captured[2]) if captured and captured[2] else ""
+                    delay: float | None = None
+                    slippage: float | None = None
+                    if fill_delta > 0 and fill_price > 0:
+                        if submitted_at:
+                            try:
+                                occurred_dt = event.occurred_at
+                                submitted_dt = datetime.fromisoformat(submitted_at)
+                                raw_delay = (occurred_dt - submitted_dt).total_seconds()
+                                if raw_delay >= 0:
+                                    delay = raw_delay
+                            except (TypeError, ValueError):
+                                delay = None
+                        if reference and reference > 0:
+                            sign = 1.0 if direction in {"long", "buy"} else -1.0
+                            slippage = (fill_price - reference) / reference * 10_000.0 * sign
+                    self.connection.execute(
+                        """
+                        UPDATE orders
+                        SET filled_at=COALESCE(?, filled_at),
+                            fill_delay_seconds=COALESCE(?, fill_delay_seconds),
+                            slippage_bps=COALESCE(?, slippage_bps),
+                            actual_fee=actual_fee+?,
+                            updated_at=?
+                        WHERE client_order_id=?
+                        """,
+                        (
+                            now if fill_delta > 0 else None,
+                            delay,
+                            slippage,
+                            fee_delta,
+                            now,
+                            event.client_order_id,
+                        ),
+                    )
                 self.connection.commit()
                 return ExecutionTransition(
                     previous_state=previous_state,
@@ -1468,6 +1561,39 @@ class ExecutionLedger:
                     "DELETE FROM safety_incidents WHERE account_id=? AND reason=?",
                     (account_id, reason),
                 )
+            self.connection.commit()
+
+    def record_runtime_session(self, account_id: str, mode: str) -> str:
+        """Record one engine start in the existing ``runtime_sessions`` table.
+
+        Returns the session id; the caller stores it and pairs it with
+        ``end_runtime_session`` so ``runtime_metrics()`` can derive restart
+        counts (every row is one start; an unended row is a crash).
+        """
+        session_id = uuid4().hex
+        with self._lock:
+            self.connection.execute(
+                """
+                INSERT INTO runtime_sessions(
+                    session_id, account_id, mode, state, started_at
+                ) VALUES (?, ?, ?, 'running', ?)
+                """,
+                (session_id, account_id or "unknown", mode, datetime.now(UTC).isoformat()),
+            )
+            self.connection.commit()
+        return session_id
+
+    def end_runtime_session(self, session_id: str, state: str = "stopped") -> None:
+        """Mark a recorded engine session ended (idempotent)."""
+        with self._lock:
+            self.connection.execute(
+                """
+                UPDATE runtime_sessions
+                SET state = ?, ended_at = ?
+                WHERE session_id = ? AND ended_at IS NULL
+                """,
+                (state, datetime.now(UTC).isoformat(), session_id),
+            )
             self.connection.commit()
 
     def close(self) -> None:

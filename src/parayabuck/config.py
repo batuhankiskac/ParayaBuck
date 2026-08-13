@@ -117,6 +117,42 @@ class LiveConfig:
             raise ValueError("Enabled live mode requires an operator approval file")
 
 
+_ALERT_KINDS = (
+    "runtime_started",
+    "runtime_stopped_unexpected",
+    "scanner_refresh_failure",
+    "scanner_recovered",
+    "order_rejected",
+    "ambiguous_order",
+    "reconciliation_failure",
+    "reconciliation_recovered",
+    "risk_incident",
+    "drawdown_halt",
+    "risk_epoch_reset",
+    "circuit_breaker",
+)
+
+
+@dataclass(frozen=True)
+class AlertingConfig:
+    """Event-notification sink configuration (console/log always on)."""
+
+    enabled: bool = True
+    webhook_url: str = ""
+    events: tuple[str, ...] = _ALERT_KINDS
+
+    def __post_init__(self) -> None:
+        known = set(_ALERT_KINDS)
+        unknown = set(self.events) - known
+        if unknown:
+            raise ValueError(f"alerting.events contains unknown kinds: {sorted(unknown)}")
+        object.__setattr__(
+            self,
+            "events",
+            tuple(dict.fromkeys(kind for kind in _ALERT_KINDS if kind in self.events)),
+        )
+
+
 @dataclass(frozen=True)
 class BacktestConfig:
     initial_cash: float = 100_000.0
@@ -523,6 +559,20 @@ class UniverseConfig:
 
 
 @dataclass(frozen=True)
+class BackupConfig:
+    """Runtime decision-database backup policy (``backup:`` block)."""
+
+    path: str = "data/backups"
+    retention_days: float = 7.0
+
+    def __post_init__(self) -> None:
+        if not self.path.strip():
+            raise ValueError("backup.path must not be empty")
+        if not math.isfinite(self.retention_days) or self.retention_days <= 0:
+            raise ValueError("backup.retention_days must be positive")
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
@@ -535,6 +585,8 @@ class Config:
     live: LiveConfig = field(default_factory=LiveConfig)
     engine: EngineConfig = field(default_factory=EngineConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    alerting: AlertingConfig = field(default_factory=AlertingConfig)
+    backup: BackupConfig = field(default_factory=BackupConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -745,13 +797,17 @@ def load_config(config_path: str | None = None) -> Config:
         live=LiveConfig(**dict(raw.get("live", {}))),
         engine=EngineConfig(**engine_raw),
         execution=ExecutionConfig(**dict(raw.get("execution", {}))),
+        backup=BackupConfig(**dict(raw.get("backup", {}))),
+        alerting=AlertingConfig(**dict(raw.get("alerting", {}))),
     )
 
 
 __all__ = [
+    "AlertingConfig",
     "AlpacaConfig",
     "AppConfig",
     "BacktestConfig",
+    "BackupConfig",
     "Config",
     "CryptoScannerConfig",
     "CryptoUniverseConfig",

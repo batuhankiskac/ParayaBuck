@@ -204,3 +204,29 @@ execution:
   # live-authorization digests.
   rebalance_band_pct: 0.005
   minimum_order_notional: 10
+backup:
+  # Consistent SQLite snapshots of the runtime decision database
+  # (runtime.decision_db_path), taken with the sqlite3 online backup API so
+  # the copy stays safe while the WAL-mode runtime database is open.
+  path: data/backups
+  retention_days: 7
+alerting:
+  # Event-notification sink for runtime operators. The console/log sink is
+  # always attached; webhook_url enables an additional generic POST sink
+  # (also overridable via PARAYABUCK_ALERT_WEBHOOK_URL). Failure events are
+  # throttled per kind so a broken scanner/broker cannot spam the webhook.
+  enabled: true
+  webhook_url: ""
+  events:
+  - runtime_started
+  - runtime_stopped_unexpected
+  - scanner_refresh_failure
+  - scanner_recovered
+  - order_rejected
+  - ambiguous_order
+  - reconciliation_failure
+  - reconciliation_recovered
+  - risk_incident
+  - drawdown_halt
+  - risk_epoch_reset
+  - circuit_breaker

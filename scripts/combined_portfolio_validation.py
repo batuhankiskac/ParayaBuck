@@ -80,9 +80,7 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
     mean_x = statistics.fmean(xs)
     mean_y = statistics.fmean(ys)
     cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
-    denom = math.sqrt(
-        sum((x - mean_x) ** 2 for x in xs) * sum((y - mean_y) ** 2 for y in ys)
-    )
+    denom = math.sqrt(sum((x - mean_x) ** 2 for x in xs) * sum((y - mean_y) ** 2 for y in ys))
     return cov / denom if denom > 0 else None
 
 
@@ -148,29 +146,22 @@ def _benchmark_stats(bars: list[Bar], start: datetime) -> dict[str, object]:
 
 def _window_sleeve_stats(result, start: datetime, end: datetime) -> dict[str, object]:
     """Cost/turnover/rebalance stats scoped to [start, end] from a full run."""
-    window_fills = [
-        fill for fill in result.fills if start <= fill.timestamp <= end
-    ]
-    window_cost = (
-        sum(fill.slippage_cost + fill.spread_cost + fill.fee for fill in window_fills)
-    )
+    window_fills = [fill for fill in result.fills if start <= fill.timestamp <= end]
+    window_cost = sum(fill.slippage_cost + fill.spread_cost + fill.fee for fill in window_fills)
     traded_notional = sum(fill.qty * fill.reference_price for fill in window_fills)
     window_rebalances = [
         record for record in result.rebalances if start <= record.decision_timestamp <= end
     ]
-    window_closes = [
-        event for event in result.closed_position_events if start <= event[0] <= end
-    ]
+    window_closes = [event for event in result.closed_position_events if start <= event[0] <= end]
     curve_in_window = [
-        value for value, ts in zip(result.equity_curve, result.curve_timestamps)
+        value
+        for value, ts in zip(result.equity_curve, result.curve_timestamps)
         if start.date() <= ts.date() <= end.date()
     ]
     avg_equity = statistics.fmean(curve_in_window) if curve_in_window else 0.0
     return {
         "fees_total": round(window_cost, 2),
-        "fees_pct_of_avg_equity": (
-            round(window_cost / avg_equity, 6) if avg_equity > 0 else 0.0
-        ),
+        "fees_pct_of_avg_equity": (round(window_cost / avg_equity, 6) if avg_equity > 0 else 0.0),
         "turnover": round(traded_notional / avg_equity, 6) if avg_equity > 0 else 0.0,
         "rebalance_count": len(window_rebalances),
         "trade_count": len(window_closes),
@@ -260,8 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         if ts.date() >= CRYPTO_EVAL_START.date()
     }
     c_by_date = {
-        ts.date(): value
-        for ts, value in zip(c_result.curve_timestamps, c_result.equity_curve)
+        ts.date(): value for ts, value in zip(c_result.curve_timestamps, c_result.equity_curve)
     }
     common_dates = sorted(set(eq_by_date) & set(c_by_date))
     if len(common_dates) < 60:
@@ -283,17 +273,12 @@ def main(argv: list[str] | None = None) -> int:
     eq_window = [eq_by_date[day] for day in common_dates]
     c_window = [c_by_date[day] for day in common_dates]
     combined_window = [
-        eq_value + c_value - initial_cash
-        for eq_value, c_value in zip(eq_window, c_window)
+        eq_value + c_value - initial_cash for eq_value, c_value in zip(eq_window, c_window)
     ]
     dates = [datetime.combine(day, datetime.min.time(), tzinfo=UTC) for day in common_dates]
 
     def _returns(series: list[float]) -> list[float]:
-        return [
-            series[i] / series[i - 1] - 1
-            for i in range(1, len(series))
-            if series[i - 1] > 0
-        ]
+        return [series[i] / series[i - 1] - 1 for i in range(1, len(series)) if series[i - 1] > 0]
 
     combined_returns = _returns(combined_window)
     eq_returns = _returns(eq_window)
@@ -312,17 +297,13 @@ def main(argv: list[str] | None = None) -> int:
         + c_sleeve_stats["turnover"] * c_sleeve_stats["avg_equity_in_window"]
     )
     combined_sleeve_stats = {
-        "fees_total": round(
-            eq_sleeve_stats["fees_total"] + c_sleeve_stats["fees_total"], 2
-        ),
+        "fees_total": round(eq_sleeve_stats["fees_total"] + c_sleeve_stats["fees_total"], 2),
         "fees_pct_of_avg_equity": round(
-            (eq_sleeve_stats["fees_total"] + c_sleeve_stats["fees_total"])
-            / combined_avg_equity,
+            (eq_sleeve_stats["fees_total"] + c_sleeve_stats["fees_total"]) / combined_avg_equity,
             6,
         ),
         "turnover": round(combined_traded_notional / combined_avg_equity, 6),
-        "rebalance_count": eq_sleeve_stats["rebalance_count"]
-        + c_sleeve_stats["rebalance_count"],
+        "rebalance_count": eq_sleeve_stats["rebalance_count"] + c_sleeve_stats["rebalance_count"],
         "trade_count": eq_sleeve_stats["trade_count"] + c_sleeve_stats["trade_count"],
         "avg_equity_in_window": round(combined_avg_equity, 2),
     }
@@ -337,11 +318,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- risk-on fractions ----
     both_risk_on = sum(1 for e, c in zip(eq_exposure, c_exposure) if e > 1e-9 and c > 1e-9)
-    one_risk_on = sum(
-        1
-        for e, c in zip(eq_exposure, c_exposure)
-        if (e > 1e-9) != (c > 1e-9)
-    )
+    one_risk_on = sum(1 for e, c in zip(eq_exposure, c_exposure) if (e > 1e-9) != (c > 1e-9))
     both_cash = sum(1 for e, c in zip(eq_exposure, c_exposure) if e <= 1e-9 and c <= 1e-9)
     n_days = len(dates)
 
@@ -382,11 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     crypto_cagr = crypto_only_metrics.get("cagr")
     return_part = (
         "dilutes return"
-        if (
-            combined_cagr is not None
-            and equity_cagr is not None
-            and combined_cagr < equity_cagr
-        )
+        if (combined_cagr is not None and equity_cagr is not None and combined_cagr < equity_cagr)
         else "does not dilute return"
     )
     risk_part = (
@@ -474,16 +447,22 @@ def main(argv: list[str] | None = None) -> int:
     _write_json(OUTPUT_DIR / "combined.json", report)
 
     print("\n=== COMBINED RESULTS ===")
-    print(f"  equity sleeve: CAGR {equity_only_metrics.get('cagr', 0) * 100:.2f}% "
-          f"Sharpe {equity_only_metrics.get('sharpe', 0):.2f} "
-          f"maxDD {equity_only_metrics.get('max_drawdown', 0) * 100:.2f}%")
-    print(f"  crypto sleeve: CAGR {crypto_only_metrics.get('cagr', 0) * 100:.2f}% "
-          f"Sharpe {crypto_only_metrics.get('sharpe', 0):.2f} "
-          f"maxDD {crypto_only_metrics.get('max_drawdown', 0) * 100:.2f}%")
-    print(f"  combined:      CAGR {combined_metrics.get('cagr', 0) * 100:.2f}% "
-          f"Sharpe {combined_metrics.get('sharpe', 0):.2f} "
-          f"maxDD {combined_metrics.get('max_drawdown', 0) * 100:.2f}% "
-          f"Calmar {combined_metrics.get('calmar', 0):.2f}")
+    print(
+        f"  equity sleeve: CAGR {equity_only_metrics.get('cagr', 0) * 100:.2f}% "
+        f"Sharpe {equity_only_metrics.get('sharpe', 0):.2f} "
+        f"maxDD {equity_only_metrics.get('max_drawdown', 0) * 100:.2f}%"
+    )
+    print(
+        f"  crypto sleeve: CAGR {crypto_only_metrics.get('cagr', 0) * 100:.2f}% "
+        f"Sharpe {crypto_only_metrics.get('sharpe', 0):.2f} "
+        f"maxDD {crypto_only_metrics.get('max_drawdown', 0) * 100:.2f}%"
+    )
+    print(
+        f"  combined:      CAGR {combined_metrics.get('cagr', 0) * 100:.2f}% "
+        f"Sharpe {combined_metrics.get('sharpe', 0):.2f} "
+        f"maxDD {combined_metrics.get('max_drawdown', 0) * 100:.2f}% "
+        f"Calmar {combined_metrics.get('calmar', 0):.2f}"
+    )
     print(
         f"  sleeve correlation: {correlation:.4f}"
         if correlation is not None

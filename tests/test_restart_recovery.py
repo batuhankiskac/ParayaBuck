@@ -274,7 +274,8 @@ def test_restart_preserves_legacy_ledger_capture(tmp_path: Path) -> None:
         assert row[6] == pytest.approx(20.0)  # (100.2 - 100) / 100 * 1e4
         assert row[7] == 0.4
         metrics = telemetry.execution_metrics(db)
-        assert metrics["fills"]["count"] == 1
+        assert metrics["fills"]["count"] == 0  # legacy rows count under orders_with_fills
+        assert metrics["orders_with_fills"]["count"] == 1
         assert metrics["slippage"]["median"] == pytest.approx(20.0)
         assert metrics["fees"]["total"] == pytest.approx(0.4)
     finally:

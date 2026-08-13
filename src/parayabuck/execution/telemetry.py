@@ -25,10 +25,7 @@ import math
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from parayabuck.config import BacktestConfig, Config
+from typing import Any
 
 # Direction of the adverse-slippage sign convention: for a BUY a fill above
 # the reference price is adverse; for a SELL a fill below the reference is
@@ -206,6 +203,7 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
                 open_orders += 1
 
         fills_by_market: dict[str, int] = {}
+        orders_with_fills_by_market: dict[str, int] = {}
         latency_values: list[float] = []
         slippage_values: list[float] = []
         slippage_by_market: dict[str, list[float]] = {}
@@ -263,7 +261,12 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
                 stored_bps, filled_at, submitted_at, market, cumulative = row
                 market_key = str(market or "unknown")
                 if cumulative is not None and float(cumulative) > 0:
-                    fills_by_market[market_key] = fills_by_market.get(market_key, 0) + 1
+                    # Legacy rows: ONE row per order, however many partial
+                    # fills it had — count orders-with-fills, not fill events
+                    # (portfolio_fills rows above count each fill exactly once).
+                    orders_with_fills_by_market[market_key] = (
+                        orders_with_fills_by_market.get(market_key, 0) + 1
+                    )
                 if stored_bps is not None:
                     slippage_values.append(float(stored_bps))
                     slippage_by_market.setdefault(market_key, []).append(float(stored_bps))
@@ -299,6 +302,10 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
             "fills": {
                 "count": sum(fills_by_market.values()),
                 "by_market": fills_by_market,
+            },
+            "orders_with_fills": {
+                "count": sum(orders_with_fills_by_market.values()),
+                "by_market": orders_with_fills_by_market,
             },
             "fill_latency": {
                 **_stat_summary(latency_values),

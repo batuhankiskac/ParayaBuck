@@ -483,7 +483,8 @@ def test_ledger_capture_columns_populated_on_fill(tmp_path: Path) -> None:
         assert row[4] == "filled"
 
         metrics = telemetry.execution_metrics(tmp_path / "ledger.sqlite3")
-        assert metrics["fills"]["count"] == 1
+        assert metrics["fills"]["count"] == 0  # legacy rows count under orders_with_fills
+        assert metrics["orders_with_fills"]["count"] == 1
         assert metrics["slippage"]["median"] == 50.0
         assert metrics["fees"]["total"] == 0.25
         assert metrics["fill_latency"]["mean"] == 30.0

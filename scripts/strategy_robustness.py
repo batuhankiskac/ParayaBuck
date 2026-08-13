@@ -135,9 +135,7 @@ def _write_json(path: Path, payload: dict) -> None:
 
 def _window_metrics(curve: list[float], timestamps: list[datetime]) -> dict[str, object]:
     """Return/Sortino/Sharpe/maxDD over a curve slice (daily series)."""
-    returns = [
-        curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0
-    ]
+    returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
     total_return = curve[-1] / curve[0] - 1 if curve and curve[0] > 0 else 0.0
     days = (timestamps[-1] - timestamps[0]).total_seconds() / 86_400 if len(timestamps) > 1 else 0.0
     years = days / 365.25
@@ -313,9 +311,7 @@ def _regime_table(
             for key, values in sorted(buckets.items())
             if key in {"high_vol", "low_vol"}
         },
-        "quadrants": {
-            f"{t}+{v}": _section(values) for (t, v), values in sorted(quadrants.items())
-        },
+        "quadrants": {f"{t}+{v}": _section(values) for (t, v), values in sorted(quadrants.items())},
     }
 
 
@@ -496,8 +492,7 @@ def _neighborhood_verdict(base: dict, runs: dict[str, dict]) -> dict[str, object
             "max_sharpe_deviation": 0.0,
             "sign_flips": 0,
             "rationale": (
-                "every predeclared neighborhood point was rejected by parameter "
-                "validation"
+                "every predeclared neighborhood point was rejected by parameter validation"
             ),
             "note": "See runs for the per-point rejection reasons.",
         }
@@ -557,8 +552,15 @@ def run_equity_pack(config) -> dict[str, object]:
     base_params = dict(config.strategy.equity.parameters)
     print("  full-period 1x base run...")
     base = _run_result(
-        config, bars, market=Market.EQUITY, parameters=base_params, timeframe="1d",
-        start=EQUITY_START, end=EQUITY_END, multiplier=1.0, universe=universe,
+        config,
+        bars,
+        market=Market.EQUITY,
+        parameters=base_params,
+        timeframe="1d",
+        start=EQUITY_START,
+        end=EQUITY_END,
+        multiplier=1.0,
+        universe=universe,
     )
     base_stats = _summary_stats(base)
     print(
@@ -566,9 +568,7 @@ def run_equity_pack(config) -> dict[str, object]:
         f"sharpe={base_stats['sharpe']:.2f} mdd={base_stats['max_drawdown']:.2%}"
     )
 
-    top_contributors = sorted(
-        base.per_symbol, key=lambda item: -item.realized_pnl
-    )
+    top_contributors = sorted(base.per_symbol, key=lambda item: -item.realized_pnl)
     top_symbols = [item.symbol for item in top_contributors if item.realized_pnl > 0][:6]
     print(f"  top contributors: {top_symbols}")
 
@@ -606,8 +606,7 @@ def run_equity_pack(config) -> dict[str, object]:
             pool_tasks.append((label, (params, 1.0, EQUITY_START, EQUITY_END)))
 
     print(
-        f"  running {len(pool_tasks)} full-window runs in a forked pool "
-        f"({POOL_WORKERS} workers)..."
+        f"  running {len(pool_tasks)} full-window runs in a forked pool ({POOL_WORKERS} workers)..."
     )
     _WORKER["config"] = config
     _WORKER["bars"] = bars
@@ -634,7 +633,7 @@ def run_equity_pack(config) -> dict[str, object]:
                 print(f"  neighborhood {label}: INFEASIBLE ({outcome[1]})")
         elif key.startswith("cost_"):
             cost_runs[key[len("cost_") :]] = outcome[1]
-            print(f"  cost stress {key[len('cost_'):]}: ret={outcome[1]['return']:.2%}")
+            print(f"  cost stress {key[len('cost_') :]}: ret={outcome[1]['return']:.2%}")
         else:
             jackknife[key] = outcome[1]
             print(f"  jackknife {key}: ret={outcome[1]['return']:.2%}")
@@ -764,8 +763,15 @@ def run_crypto_pack(config) -> dict[str, object]:
     base_params["rebalance_hours"] = CRYPTO_REBALANCE_HOURS  # always production
     print("  full-period 1x base run...")
     base = _run_result(
-        config, bars_1d, market=Market.CRYPTO, parameters=base_params, timeframe="1d",
-        start=CRYPTO_EVAL_START, end=CRYPTO_END, multiplier=1.0, universe=universe,
+        config,
+        bars_1d,
+        market=Market.CRYPTO,
+        parameters=base_params,
+        timeframe="1d",
+        start=CRYPTO_EVAL_START,
+        end=CRYPTO_END,
+        multiplier=1.0,
+        universe=universe,
     )
     base_stats = _summary_stats(base)
     print(
@@ -782,8 +788,15 @@ def run_crypto_pack(config) -> dict[str, object]:
             params = {**base_params, parameter: value}
             print(f"  neighborhood {parameter}={value}...")
             result = _run_result(
-                config, bars_1d, market=Market.CRYPTO, parameters=params, timeframe="1d",
-                start=CRYPTO_EVAL_START, end=CRYPTO_END, multiplier=1.0, universe=universe,
+                config,
+                bars_1d,
+                market=Market.CRYPTO,
+                parameters=params,
+                timeframe="1d",
+                start=CRYPTO_EVAL_START,
+                end=CRYPTO_END,
+                multiplier=1.0,
+                universe=universe,
             )
             neighborhood_runs[f"{parameter}={value}"] = _summary_stats(result)
 
@@ -792,8 +805,15 @@ def run_crypto_pack(config) -> dict[str, object]:
     for multiplier in (2.0, 3.0):
         print(f"  cost stress {multiplier:g}x...")
         result = _run_result(
-            config, bars_1d, market=Market.CRYPTO, parameters=base_params, timeframe="1d",
-            start=CRYPTO_EVAL_START, end=CRYPTO_END, multiplier=multiplier, universe=universe,
+            config,
+            bars_1d,
+            market=Market.CRYPTO,
+            parameters=base_params,
+            timeframe="1d",
+            start=CRYPTO_EVAL_START,
+            end=CRYPTO_END,
+            multiplier=multiplier,
+            universe=universe,
         )
         cost_runs[f"{multiplier:g}x"] = _summary_stats(result)
 
@@ -816,8 +836,15 @@ def run_crypto_pack(config) -> dict[str, object]:
             config, bars_1h_excl, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
         )
         result = _run_result(
-            config, bars_1d_excl, market=Market.CRYPTO, parameters=base_params, timeframe="1d",
-            start=CRYPTO_EVAL_START, end=CRYPTO_END, multiplier=1.0, universe=universe_excl,
+            config,
+            bars_1d_excl,
+            market=Market.CRYPTO,
+            parameters=base_params,
+            timeframe="1d",
+            start=CRYPTO_EVAL_START,
+            end=CRYPTO_END,
+            multiplier=1.0,
+            universe=universe_excl,
         )
         jackknife[key] = _summary_stats(result)
         print(f"  jackknife {key}: ret={jackknife[key]['return']:.2%}")
@@ -1014,9 +1041,7 @@ def _fmt_num(value, digits: int = 2) -> str:
 
 def _market_markdown(report: dict) -> list[str]:
     lines: list[str] = []
-    title = (
-        f"## {report['strategy']} ({report['market']})"
-    )
+    title = f"## {report['strategy']} ({report['market']})"
     lines.append(title)
     lines.append("")
     base = report["base_run"]

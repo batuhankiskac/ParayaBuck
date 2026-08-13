@@ -151,14 +151,19 @@ def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
 
     # Equity sleeve at its cap: 5 positions x 10% = 50% of the account.
     account = _account(
-        equity_positions=(("S00", 100.0, 100.0), ("S01", 100.0, 100.0),
-                          ("S02", 100.0, 100.0), ("S03", 100.0, 100.0),
-                          ("S04", 100.0, 100.0))
+        equity_positions=(
+            ("S00", 100.0, 100.0),
+            ("S01", 100.0, 100.0),
+            ("S02", 100.0, 100.0),
+            ("S03", 100.0, 100.0),
+            ("S04", 100.0, 100.0),
+        )
     )
     equity_decision = overlay.apply(
-        _target("equity_residual_momentum_v1", (("S00", 0.10), ("S01", 0.10),
-                                                ("S02", 0.10), ("S03", 0.10),
-                                                ("S04", 0.10))),
+        _target(
+            "equity_residual_momentum_v1",
+            (("S00", 0.10), ("S01", 0.10), ("S02", 0.10), ("S03", 0.10), ("S04", 0.10)),
+        ),
         account,
         market=Market.EQUITY,
         approved_symbols=("S00", "S01", "S02", "S03", "S04"),
@@ -242,8 +247,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     assert len(decision.target.weights) <= config.risk.max_positions
     assert decision.target.invested_weight <= 0.50 + _EPS
     assert all(
-        weight.weight <= config.risk.max_position_pct + _EPS
-        for weight in decision.target.weights
+        weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights
     )
 
 

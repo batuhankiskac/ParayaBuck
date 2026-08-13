@@ -77,6 +77,7 @@ _settings: dict[str, object] = {
 _configured = False
 _last_emitted_at: dict[str, float] = {}
 _suppressed_count = 0
+_delivered_counts: dict[str, int] = {}
 _webhook_count = 0
 _config_sources: list[str] = []
 
@@ -172,6 +173,7 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
     also POSTed (fire-and-forget) to the configured webhook URL. Per-kind
     throttling coalesces repeat failures within the throttle window.
     """
+    global _delivered_counts
     try:
         if kind not in ALERT_KINDS:
             log.error("Ignored alert with unknown kind=%r", kind)
@@ -192,6 +194,8 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
                 log.debug("Alert %s suppressed (throttle window %.0fs)", kind, throttle)
                 return
             _last_emitted_at[kind] = now
+        with _lock:
+            _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, dict(fields))
         if not enabled or not webhook_url or kind not in events:
             return
@@ -225,6 +229,7 @@ def alert_stats() -> dict[str, object]:
     with _lock:
         return {
             "suppressed": _suppressed_count,
+            "delivered": dict(_delivered_counts),
             "webhook_sent": _webhook_count,
             "configured_from": list(_config_sources),
         }
@@ -232,7 +237,7 @@ def alert_stats() -> dict[str, object]:
 
 def reset_for_tests() -> None:
     """Clear configuration, throttle state and counters (test helper only)."""
-    global _configured, _suppressed_count, _webhook_count
+    global _configured, _suppressed_count, _webhook_count, _delivered_counts
     with _lock:
         _settings.update(
             {
@@ -245,6 +250,7 @@ def reset_for_tests() -> None:
         _configured = False
         _last_emitted_at.clear()
         _suppressed_count = 0
+        _delivered_counts = {}
         _webhook_count = 0
         _config_sources.clear()
 

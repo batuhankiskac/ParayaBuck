@@ -445,6 +445,7 @@ class EngineRuntime:
         # monotonic deadline + consecutive-failure count, cleared on success.
         self._universe_retry_at: dict[Market, float] = {}
         self._universe_retry_attempt: dict[Market, int] = {}
+        self._scanner_failed: dict[Market, bool] = {}
         self._managed_pin_symbols: set[str] = set()
         # Set when a hot-swap rollback failed and the socket membership is
         # unknown; cleared after a successful reconnect from the authoritative
@@ -1053,14 +1054,20 @@ class EngineRuntime:
         if ok:
             self._universe_retry_at.pop(market, None)
             self._universe_retry_attempt.pop(market, None)
-            runtime_metrics_store.record_event("scanner_recovered")
-            alerts.emit(
-                "scanner_recovered",
-                message=f"Scanner refresh recovered for {market.value}",
-                market=market.value,
-            )
+            # "Recovered" is a TRANSITION event: a refresh succeeding after a
+            # prior failure. A healthy first success must not count as a
+            # recovery (that would inflate scanner-recovery metrics).
+            failed = getattr(self, "_scanner_failed", {})
+            if failed.pop(market, False):
+                runtime_metrics_store.record_event("scanner_recovered")
+                alerts.emit(
+                    "scanner_recovered",
+                    message=f"Scanner refresh recovered for {market.value}",
+                    market=market.value,
+                )
             return
         attempt = self._universe_retry_attempt.get(market, 0)
+        getattr(self, "_scanner_failed", {})[market] = True
         runtime_metrics_store.record_event("scanner_refresh_failure")
         alerts.emit(
             "scanner_refresh_failure",
@@ -1652,7 +1659,10 @@ class EngineRuntime:
         unexpected = (
             previous_state in {"halted", "error", "stop_failed"} or breaker_at_stop is not None
         )
-        if unexpected:
+        if unexpected and getattr(self, "_runtime_session_id", None) is not None:
+            # Only a stop after a completed start is an unexpected shutdown;
+            # a failed start (no session row, no runtime_started) must not
+            # produce a phantom stopped-unexpected event.
             runtime_metrics_store.record_event("runtime_stopped_unexpected")
             alerts.emit(
                 "runtime_stopped_unexpected",
@@ -1660,10 +1670,11 @@ class EngineRuntime:
                 previous_state=previous_state,
                 circuit_breaker_reason=breaker_at_stop,
             )
-        if getattr(self, "_runtime_session_id", None) is not None:
+        session_id = getattr(self, "_runtime_session_id", None)
+        if session_id is not None:
             try:
                 self.ledger.end_runtime_session(
-                    self._runtime_session_id,
+                    session_id,
                     "unexpected" if unexpected else "stopped",
                 )
             except Exception as exc:
@@ -1743,12 +1754,15 @@ class EngineRuntime:
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
         previous = dict(getattr(self, "_entry_risk_latch", {}))
-        self._entry_risk_latch = {
+        new_latch = {
             market: (breach if breach is not None else None) for market in self._entry_risk_latch
         }
         # Alert only on latch TRANSITIONS (the account loop re-evaluates this
-        # every poll); a persistent breach must not re-alert per poll.
-        if breach != previous.get(Market.EQUITY):
+        # every poll); a persistent breach must not re-alert per poll. Compare
+        # per market so a future market-specific latch stays correct.
+        transitioned = any(new_latch.get(market) != previous.get(market) for market in new_latch)
+        self._entry_risk_latch = new_latch
+        if transitioned:
             if breach == "daily_loss_limit":
                 runtime_metrics_store.record_event("risk_incident")
                 alerts.emit(

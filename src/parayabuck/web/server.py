@@ -285,7 +285,7 @@ class EngineManager:
             # A config we cannot read must not silently present live mode as
             # paper: surface it so the operator notices the corruption.
             log.error("Could not read paper-mode flag from %s: %s", self.config_path, exc)
-        return True
+        return False
 
     def get_credentials(self) -> tuple[str | None, str | None]:
         load_dotenv(self.env_path, override=True)
@@ -2188,9 +2188,7 @@ def _dashboard_mode(cfg: Any) -> dict[str, Any]:
     paper = bool(getattr(manager, "is_paper_mode", lambda: True)())
     live_configured = bool(runtime_mode == "live" and live_enabled)
     engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
-    live_active = bool(
-        live_configured and engine_state in {"running", "warming_up", "degraded", "halted"}
-    )
+    live_active = bool(live_configured and engine_state in {"running", "warming_up", "degraded"})
     live_disabled = bool(live_configured and not live_active)
     return {
         "paper": paper,
@@ -2200,7 +2198,11 @@ def _dashboard_mode(cfg: Any) -> dict[str, Any]:
         "live_active": live_active,
         "live_disabled": live_disabled,
         "engine_state": engine_state,
-        "badge": "paper" if not live_configured else ("live" if live_active else "live_disabled"),
+        "badge": (
+            "paper"
+            if (paper and not live_configured)
+            else ("live" if live_active else ("live_disabled" if live_configured else "unknown"))
+        ),
     }
 
 

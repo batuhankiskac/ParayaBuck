@@ -945,6 +945,401 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ------------------------------------------------------------------
+    // Trading dashboard (Phase 7): topline, strategy cards, risk,
+    // execution, universe and system-health panels.
+    // ------------------------------------------------------------------
+    const STRATEGY_STATUS_LABELS = {
+        active: 'Aktif',
+        warming: 'Isınıyor',
+        halted: 'Durdu (güvenlik)',
+        scanner_issue: 'Tarayıcı sorunu',
+        disabled: 'Devre dışı',
+        stopped: 'Motor durdu',
+        starting: 'Başlatılıyor',
+        stopping: 'Durduruluyor',
+        error: 'Hata',
+        stop_failed: 'Durdurma hatası',
+        unknown: 'Bilinmiyor',
+        unavailable: 'Yok'
+    };
+    const fmtPct = (v) => (v === undefined || v === null || !Number.isFinite(Number(v)))
+        ? '—' : Number(v).toFixed(1) + '%';
+    const fmtNum = (v, digits = 2) => (v === undefined || v === null || !Number.isFinite(Number(v)))
+        ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: digits });
+    const fmtVol = (v) => (v === undefined || v === null || !Number.isFinite(Number(v)))
+        ? '—' : (Number(v) * 100).toFixed(2) + '%';
+    const fmtDateTime = (iso) => {
+        if (!iso) return '—';
+        const date = new Date(iso);
+        return Number.isNaN(date.getTime()) ? iso : date.toLocaleString('tr-TR', { hour12: false });
+    };
+    const fmtDate = (iso) => {
+        if (!iso) return '—';
+        const date = new Date(iso);
+        return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('tr-TR');
+    };
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    const renderModeBadge = (mode) => {
+        if (!mode) return;
+        const badge = document.getElementById('modeBadge');
+        if (!badge) return;
+        badge.className = 'mode-badge ' + (mode.badge || 'paper');
+        if (mode.badge === 'paper') badge.textContent = 'PAPER';
+        else if (mode.badge === 'live') badge.textContent = 'LIVE';
+        else badge.textContent = 'LIVE (devre dışı)';
+        badge.title = `runtime.mode=${mode.runtime_mode || 'paper'} · live.enabled=${mode.live_enabled === true}`;
+    };
+
+    const renderStrategyCard = (card, ids, isCrypto) => {
+        if (!card || card.unavailable) {
+            setText(ids.name, 'Panel yok');
+            return;
+        }
+        setText(ids.name, (card.strategy && card.strategy.display_name) || card.name || '—');
+        const badge = document.getElementById(ids.badge);
+        if (badge) {
+            badge.className = 'strategy-chip ' + (card.status || 'unknown');
+            badge.textContent = STRATEGY_STATUS_LABELS[card.status] || card.status || '—';
+        }
+        setText(ids.signal, (card.strategy && card.strategy.signal_timeframe) || '—');
+        setText(ids.rebalance, (card.strategy && card.strategy.rebalance_cadence) || '—');
+        if (ids.lookback) setText(ids.lookback, '22 gün');
+        setText(ids.pool, card.eligible_pool === undefined || card.eligible_pool === null ? '—' : String(card.eligible_pool));
+        setText(ids.obs, card.observation_set_size === undefined || card.observation_set_size === null ? '—' : String(card.observation_set_size));
+        setText(ids.positions, String(card.positions_count ?? 0));
+        setText(ids.allocation, `${fmtPct(card.current_allocation_pct)} / ${fmtPct(card.maximum_allocation_pct)}`);
+        setText(ids.nextRebalance, fmtDateTime(card.next_rebalance_at));
+        renderHoldingsTable(card.holdings || [], ids.body, isCrypto);
+    };
+
+    const renderHoldingsTable = (holdings, bodyId, isCrypto) => {
+        const tbody = document.getElementById(bodyId);
+        if (!tbody) return;
+        tbody.replaceChildren();
+        if (!holdings.length) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = isCrypto ? 7 : 5;
+            cell.className = 'empty-state';
+            const icon = document.createElement('span');
+            icon.className = 'empty-icon';
+            icon.textContent = '—';
+            cell.append(icon, document.createTextNode('Pozisyon yok'));
+            row.appendChild(cell);
+            tbody.appendChild(row);
+            return;
+        }
+        for (const holding of holdings) {
+            const row = document.createElement('tr');
+            const reason = holding.reason || holding.hypothesis || '—';
+            const values = isCrypto
+                ? [
+                    holding.symbol,
+                    fmtNum(holding.qty, 4),
+                    fmtVol(holding.realized_vol_22d),
+                    holding.rank ? `#${holding.rank}/${holding.of_qualified ?? '?'}` : '—',
+                    fmtPct(holding.target_weight_pct),
+                    fmtPct(holding.current_weight_pct),
+                    reason
+                ]
+                : [
+                    holding.symbol,
+                    fmtNum(holding.qty, 4),
+                    fmtPct(holding.target_weight_pct),
+                    fmtPct(holding.current_weight_pct),
+                    reason
+                ];
+            values.forEach((value) => {
+                const cell = document.createElement('td');
+                cell.textContent = String(value);
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        }
+    };
+
+    const renderRiskPanel = (risk) => {
+        if (!risk || risk.unavailable) return;
+        setText('riskGross', `${fmtPct(risk.gross_exposure_pct)} / ${fmtPct(risk.gross_exposure_limit_pct)}`);
+        setText('riskCash', `${fmtPct(risk.cash_pct)} / ${fmtPct(risk.cash_buffer_limit_pct)}`);
+        setText('riskEquity', fmtPct(risk.equity_exposure_pct));
+        setText('riskCrypto', `${fmtPct(risk.crypto_exposure_pct)} / ${fmtPct(risk.crypto_exposure_limit_pct)}`);
+        setText('riskDrawdown', `${formatCurrency(risk.drawdown)} / ${fmtPct(risk.max_drawdown_pct)}`);
+        setText('riskDailyLoss', `${formatPnl(risk.daily_pnl)} / ${fmtPct(risk.daily_loss_limit_pct)}`);
+        const latch = risk.entry_risk_latch || {};
+        const latchReasons = Object.entries(latch)
+            .filter(([, reason]) => reason)
+            .map(([market, reason]) => `${market}: ${reason}`)
+            .join(', ');
+        setText('riskEntryLatch', latchReasons || 'açık');
+        const epoch = risk.risk_epoch;
+        setText('riskEpoch', epoch ? fmtDate(epoch.session_date) + ' · taban $' + fmtNum(epoch.day_start_equity) : '—');
+        const circuitBadge = document.getElementById('riskCircuitBadge');
+        if (circuitBadge) {
+            circuitBadge.textContent = risk.circuit_breaker ? ('KESİCİ: ' + risk.circuit_breaker) : 'risk hazır';
+            circuitBadge.className = 'count-badge' + (risk.circuit_breaker ? ' risk-critical' : '');
+        }
+        const incidentsBox = document.getElementById('riskIncidents');
+        if (!incidentsBox) return;
+        incidentsBox.replaceChildren();
+        const incidents = risk.safety_incidents || [];
+        if (!incidents.length) {
+            const ok = document.createElement('div');
+            ok.className = 'risk-incident ok';
+            ok.textContent = 'Aktif güvenlik olayı yok';
+            incidentsBox.appendChild(ok);
+            return;
+        }
+        for (const incident of incidents) {
+            const item = document.createElement('div');
+            item.className = 'risk-incident';
+            item.textContent = `${incident.reason} (${fmtDateTime(incident.activated_at)})`;
+            incidentsBox.appendChild(item);
+        }
+    };
+
+    const renderHealthPanel = (health) => {
+        if (!health || health.unavailable) return;
+        const badge = document.getElementById('healthBadge');
+        if (badge) {
+            badge.textContent = health.healthy === true ? 'sağlıklı' : (health.healthy === false ? 'degrade' : (health.engine_state || '—'));
+            badge.className = 'count-badge' + (health.healthy === false ? ' risk-critical' : '');
+        }
+        const queue = health.queue || {};
+        setText('healthQueue', `boyut ${queue.size ?? 0} · yaş ${queue.age_seconds === undefined || queue.age_seconds === null ? '—' : Math.round(queue.age_seconds) + 's'}`);
+        const markets = health.markets || {};
+        const equityMarket = markets.equity || {};
+        const cryptoMarket = markets.crypto || {};
+        const dataOk = (equityMarket.stream_healthy !== false && cryptoMarket.stream_healthy !== false);
+        setText('healthData', dataOk ? 'güncel' : 'gecikme/gap var');
+        const freshness = health.account_freshness || {};
+        const maxAge = freshness.maximum_age_for_entry_seconds;
+        const ageOk = freshness.stale !== true;
+        setText('healthAccount', `${freshness.source || '—'}${freshness.age_seconds === undefined || freshness.age_seconds === null ? '' : ' · ' + Math.round(freshness.age_seconds) + 's'}` + (maxAge ? ` (limit ${maxAge}s)` : ''));
+        setText('healthHeartbeat', fmtDateTime(health.last_heartbeat));
+        setText('healthRestarts', String(health.restart_count ?? 0));
+        const db = health.database || {};
+        setText('healthDatabase', `${db.exists ? 'açık' : 'yok'}${db.size_bytes ? ' · ' + fmtNum(db.size_bytes / 1024, 0) + ' KB' : ''}`);
+        const scanner = health.scanner || {};
+        const scannerStatus = Object.entries(scanner.status || {})
+            .map(([market, status]) => `${market}: ${status}`)
+            .join(', ');
+        setText('healthScanner', scannerStatus || '—');
+        const reconciliation = health.reconciliation || {};
+        setText('healthReconciliation', reconciliation.failed ? 'HATA' : (reconciliation.last_at ? fmtDateTime(reconciliation.last_at) : '—'));
+        renderWorkersTable(health.workers || {});
+    };
+
+    const renderWorkersTable = (workers) => {
+        const tbody = document.getElementById('workersBody');
+        if (!tbody) return;
+        tbody.replaceChildren();
+        const names = Object.keys(workers);
+        if (!names.length) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 5;
+            cell.className = 'empty-state';
+            const icon = document.createElement('span');
+            icon.className = 'empty-icon';
+            icon.textContent = '—';
+            cell.append(icon, document.createTextNode('Çalışan bilgisi yok'));
+            row.appendChild(cell);
+            tbody.appendChild(row);
+            return;
+        }
+        for (const name of names.sort()) {
+            const worker = workers[name] || {};
+            const row = document.createElement('tr');
+            const values = [
+                name,
+                worker.alive ? 'canlı' : 'durdu',
+                fmtDateTime(worker.last_heartbeat),
+                String(worker.restart_count ?? 0),
+                worker.last_error || '—'
+            ];
+            values.forEach((value) => {
+                const cell = document.createElement('td');
+                cell.textContent = String(value);
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        }
+    };
+
+    const renderExecutionPanel = (execution) => {
+        if (!execution || execution.unavailable) return;
+        const badge = document.getElementById('executionBadge');
+        if (badge) {
+            badge.textContent = `${(execution.open_orders || []).length} açık · ${(execution.recent_fills || []).length} dolum`;
+        }
+        const ordersBody = document.getElementById('openOrdersBody');
+        if (ordersBody) {
+            ordersBody.replaceChildren();
+            const orders = execution.open_orders || [];
+            if (!orders.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 6;
+                cell.className = 'empty-state';
+                const icon = document.createElement('span');
+                icon.className = 'empty-icon';
+                icon.textContent = '—';
+                cell.append(icon, document.createTextNode('Açık emir yok'));
+                row.appendChild(cell);
+                ordersBody.appendChild(row);
+            } else {
+                for (const order of orders) {
+                    const row = document.createElement('tr');
+                    const lineage = order.lineage || {};
+                    const values = [
+                        order.symbol,
+                        order.side || '—',
+                        fmtNum(order.quantity, 4),
+                        order.reference_price === undefined || order.reference_price === null ? '—' : '$' + fmtNum(order.reference_price, 4),
+                        order.status || '—',
+                        lineage.strategy ? `${lineage.strategy} · ${fmtDate(lineage.decision_timestamp)}` : '—'
+                    ];
+                    values.forEach((value) => {
+                        const cell = document.createElement('td');
+                        cell.textContent = String(value);
+                        row.appendChild(cell);
+                    });
+                    ordersBody.appendChild(row);
+                }
+            }
+        }
+        const fillsBody = document.getElementById('recentFillsBody');
+        if (fillsBody) {
+            fillsBody.replaceChildren();
+            const fills = execution.recent_fills || [];
+            if (!fills.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 7;
+                cell.className = 'empty-state';
+                const icon = document.createElement('span');
+                icon.className = 'empty-icon';
+                icon.textContent = '—';
+                cell.append(icon, document.createTextNode('Dolum yok'));
+                row.appendChild(cell);
+                fillsBody.appendChild(row);
+            } else {
+                for (const fill of fills) {
+                    const row = document.createElement('tr');
+                    const slippage = fill.slippage_bps;
+                    const values = [
+                        fill.symbol,
+                        fill.side || '—',
+                        fmtNum(fill.quantity, 4),
+                        '$' + fmtNum(fill.price, 4),
+                        slippage === undefined || slippage === null ? '—' : fmtNum(slippage, 2) + ' bps',
+                        '$' + fmtNum(fill.fee, 4),
+                        fmtDateTime(fill.occurred_at)
+                    ];
+                    values.forEach((value) => {
+                        const cell = document.createElement('td');
+                        cell.textContent = String(value);
+                        row.appendChild(cell);
+                    });
+                    fillsBody.appendChild(row);
+                }
+            }
+        }
+    };
+
+    const renderUniversePanel = (universe) => {
+        if (!universe || universe.unavailable) return;
+        const renderMarket = (market, ids) => {
+            if (!market) return;
+            setText(ids.broad, fmtNum(market.broad_discovered_count, 0));
+            setText(ids.eligible, fmtNum(market.eligible_pool_size, 0));
+            setText(ids.observed, fmtNum(market.observation_set_size, 0));
+            setText(ids.lastScan, fmtDateTime(market.last_refresh_at));
+            setText(ids.scanner, market.scanner_status || '—');
+            setText(ids.nextScan, fmtDateTime(market.next_refresh_at));
+            const box = document.getElementById(ids.symbols);
+            if (box) {
+                box.replaceChildren();
+                const symbols = market.observation_set || [];
+                symbols.slice(0, 120).forEach((symbol) => {
+                    const chip = document.createElement('span');
+                    chip.textContent = symbol;
+                    box.appendChild(chip);
+                });
+                if (symbols.length > 120) {
+                    const more = document.createElement('span');
+                    more.textContent = `+${symbols.length - 120} daha…`;
+                    box.appendChild(more);
+                }
+            }
+        };
+        renderMarket(universe.equity, {
+            broad: 'eqBroad', eligible: 'eqEligible', observed: 'eqObserved',
+            lastScan: 'eqLastScan', scanner: 'eqScanner', nextScan: 'eqNextScan', symbols: 'eqSymbols'
+        });
+        renderMarket(universe.crypto, {
+            broad: 'crBroad', eligible: 'crEligible', observed: 'crObserved',
+            lastScan: 'crLastScan', scanner: 'crScanner', nextScan: 'crNextScan', symbols: 'crSymbols'
+        });
+    };
+
+    const renderDashboard = (data) => {
+        if (!data) return;
+        renderModeBadge(data.mode);
+        // Account top line
+        setText('grossExposureValue', formatCurrency(data.account && data.account.gross_exposure));
+        setText('grossExposureSub', data.account && data.account.stale ? `eski veri (${data.account.source})` : 'Toplam pozisyon büyüklüğü');
+        const totalPnl = data.account && data.account.total_pnl;
+        setText('totalPnlValue', formatPnl(totalPnl));
+        const totalPnlEl = document.getElementById('totalPnlValue');
+        if (totalPnlEl) {
+            totalPnlEl.className = 'metric-value ' + (totalPnl > 0 ? 'positive' : (totalPnl < 0 ? 'negative' : ''));
+        }
+        setText('engineStatusValue', STRATEGY_STATUS_LABELS[data.engine_state] || data.engine_state || '—');
+        setText('engineStatusSub', data.engine_error ? data.engine_error : 'Durum açıklaması');
+        setText('lastReconValue', fmtDateTime(data.account && data.account.last_reconciliation_at));
+        // Strategy cards
+        renderStrategyCard(data.equity, {
+            name: 'equityStrategyName', badge: 'equityStatusBadge', signal: 'equitySignal',
+            rebalance: 'equityRebalance', pool: 'equityPool', obs: 'equityObs',
+            positions: 'equityPositions', allocation: 'equityAllocation',
+            nextRebalance: 'equityNextRebalance', body: 'equityHoldingsBody'
+        }, false);
+        renderStrategyCard(data.crypto, {
+            name: 'cryptoStrategyName', badge: 'cryptoStatusBadge', signal: 'cryptoSignal',
+            rebalance: 'cryptoRebalance', lookback: 'cryptoLookback', pool: 'cryptoPool',
+            obs: 'cryptoObs', positions: 'cryptoPositions', allocation: 'cryptoAllocation',
+            nextRebalance: 'cryptoNextRebalance', body: 'cryptoHoldingsBody'
+        }, true);
+        // Panels
+        renderRiskPanel(data.risk);
+        renderHealthPanel(data.health);
+        renderExecutionPanel(data.execution);
+        renderUniversePanel(data.universe);
+    };
+
+    let dashboardRefreshInFlight = false;
+    const refreshDashboard = async () => {
+        if (dashboardRefreshInFlight) return;
+        dashboardRefreshInFlight = true;
+        try {
+            const response = await fetch('/api/dashboard/overview');
+            if (!response.ok) throw new Error(`Panel verisi alınamadı (${response.status})`);
+            renderDashboard(await response.json());
+        } catch (err) {
+            console.error('Dashboard refresh error:', err);
+        } finally {
+            dashboardRefreshInFlight = false;
+        }
+    };
+
     // Initial Fetch & Start WebSockets
     const init = async () => {
         try {
@@ -957,6 +1352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!accountRes.ok) throw new Error(`Hesap alınamadı (${accountRes.status})`);
             const accountData = await accountRes.json();
             updateAccountUI(accountData);
+            await refreshDashboard();
+            window.setInterval(refreshDashboard, 5000);
         } catch (err) {
             console.error("Initialization error:", err);
         }

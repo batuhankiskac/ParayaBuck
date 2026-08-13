@@ -8,14 +8,16 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -2077,6 +2079,1078 @@ async def run_backtest(payload: BacktestPayload) -> dict[str, Any]:
 @app.get("/api/backtest/status")
 async def backtest_status() -> dict[str, Any]:
     return await asyncio.to_thread(backtest_manager.status)
+
+
+# ---------------------------------------------------------------------------
+# Trading dashboard API (Phase 7). Read-only operator views over the SAME
+# state /api/status and /api/account expose — no secrets, no mutations, no
+# new ledgers. Every panel degrades to an explicit unavailable/error field
+# instead of raising, so the dashboard stays readable while the engine is
+# stopped, the ledger is missing, or a batch module has not landed yet.
+# ---------------------------------------------------------------------------
+
+_DASHBOARD_DEFAULT_DB = Path("data/runtime/parayabuck.sqlite3")
+
+
+def _dashboard_runtime() -> Any:
+    """The live EngineRuntime instance, or None when stopped (or stubbed)."""
+    return getattr(manager, "runtime", None)
+
+
+def _dashboard_runtime_health() -> dict[str, Any] | None:
+    runtime = _dashboard_runtime()
+    if runtime is None or not hasattr(runtime, "health"):
+        return None
+    try:
+        return asdict(runtime.health())
+    except Exception as exc:
+        log.warning("Dashboard health probe failed: %s", exc)
+        return None
+
+
+def _dashboard_config() -> Any | None:
+    try:
+        return load_config(str(manager.config_path))
+    except Exception:
+        return None
+
+
+def _dashboard_account_id() -> str:
+    runtime = _dashboard_runtime()
+    broker_account = getattr(getattr(runtime, "broker", None), "account_id", None)
+    if broker_account:
+        return str(broker_account)
+    # Engine stopped (or stubbed): scope reads to the account this
+    # deployment's own ledger last traded with, never another process's.
+    connection = _dashboard_readonly_connection()
+    if connection is not None:
+        try:
+            row = connection.execute(
+                "SELECT account_id FROM portfolio_runtime_sessions "
+                "WHERE account_id IS NOT NULL AND account_id != '' "
+                "ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+            if row is not None and row[0]:
+                return str(row[0])
+        except sqlite3.Error:
+            pass
+        finally:
+            connection.close()
+    return "unknown"
+
+
+def _dashboard_db_path() -> Path:
+    cfg = _dashboard_config()
+    if cfg is not None:
+        configured = getattr(getattr(cfg, "runtime", None), "decision_db_path", None)
+        if configured:
+            return Path(str(configured))
+    return _DASHBOARD_DEFAULT_DB
+
+
+def _dashboard_readonly_connection() -> sqlite3.Connection | None:
+    """Short-lived read-only ledger connection; None when the DB is missing."""
+    path = _dashboard_db_path()
+    if not path.exists():
+        return None
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5.0)
+        connection.execute("PRAGMA busy_timeout=5000")
+        return connection
+    except sqlite3.Error as exc:
+        log.warning("Dashboard could not open ledger read-only: %s", exc)
+        return None
+
+
+def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """Run one panel builder; a failure becomes an explicit unavailable dict."""
+    try:
+        payload = builder()
+        return payload if isinstance(payload, dict) else {"unavailable": True}
+    except Exception as exc:
+        log.warning("Dashboard panel %s failed: %s", name, exc)
+        return {"unavailable": True, "error": str(exc)}
+
+
+def _dashboard_mode(cfg: Any) -> dict[str, Any]:
+    """PAPER/LIVE badge state, driven by config.live.enabled + runtime mode.
+
+    A live-configured deployment whose engine is not trading right now shows
+    LIVE in a clearly-disabled style; a paper config always shows PAPER. The
+    badge never derives from broker connectivity or secrets.
+    """
+    runtime_mode = "paper"
+    live_enabled = False
+    if cfg is not None:
+        configured_mode = getattr(getattr(cfg, "runtime", None), "mode", None)
+        runtime_mode = str(getattr(configured_mode, "value", None) or configured_mode or "paper")
+        live_enabled = bool(getattr(getattr(cfg, "live", None), "enabled", False))
+    paper = bool(getattr(manager, "is_paper_mode", lambda: True)())
+    live_configured = bool(runtime_mode == "live" and live_enabled)
+    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
+    live_active = bool(
+        live_configured and engine_state in {"running", "warming_up", "degraded", "halted"}
+    )
+    live_disabled = bool(live_configured and not live_active)
+    return {
+        "paper": paper,
+        "runtime_mode": runtime_mode,
+        "live_enabled": live_enabled,
+        "live_configured": live_configured,
+        "live_active": live_active,
+        "live_disabled": live_disabled,
+        "engine_state": engine_state,
+        "badge": "paper" if not live_configured else ("live" if live_active else "live_disabled"),
+    }
+
+
+def _dashboard_market_decisions(account_id: str) -> dict[str, dict[str, Any]]:
+    """Latest persisted decision per market (target + risk JSON payloads)."""
+    connection = _dashboard_readonly_connection()
+    if connection is None:
+        return {}
+    try:
+        rows = connection.execute(
+            """
+            SELECT market, decision_timestamp, strategy_name, target_json, risk_json
+            FROM portfolio_decisions
+            WHERE account_id = ?
+            ORDER BY decision_timestamp DESC
+            """,
+            (account_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        connection.close()
+    latest: dict[str, dict[str, Any]] = {}
+    for market, timestamp, strategy_name, target, risk in rows:
+        if market in latest:
+            continue
+        try:
+            target_payload = json.loads(str(target)) if target else {}
+            risk_payload = json.loads(str(risk)) if risk else {}
+        except (TypeError, ValueError):
+            continue
+        latest[str(market)] = {
+            "timestamp": str(timestamp),
+            "strategy_name": str(strategy_name),
+            "target": target_payload,
+            "risk": risk_payload,
+        }
+    return latest
+
+
+def _dashboard_next_rebalance_at(last_decision_at: str | None, policy: str | None) -> str | None:
+    """Deterministic next rebalance boundary from the strategy cadence.
+
+    Derived from the persisted decision timestamp and the strategy's declared
+    rebalance policy (monthly / weekly / hours:N). It is an EXPECTED boundary
+    (the decision runs on the first completed bar of the period), not a
+    guarantee.
+    """
+    if not last_decision_at or not policy:
+        return None
+    try:
+        last = datetime.fromisoformat(last_decision_at)
+    except ValueError:
+        return None
+    if policy.startswith("hours:"):
+        try:
+            hours = int(policy.removeprefix("hours:"))
+        except ValueError:
+            return None
+        return (last + timedelta(hours=hours)).isoformat()
+    if policy == "weekly":
+        days_ahead = 7 - last.weekday()
+        boundary = (last + timedelta(days=days_ahead)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return boundary.isoformat()
+    if policy == "monthly":
+        year, month = last.year, last.month
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+        return datetime(year, month, 1, tzinfo=UTC).isoformat()
+    return None
+
+
+def _dashboard_market_status(
+    engine_state: str,
+    enabled: bool,
+    market_health: dict[str, Any],
+    health: dict[str, Any] | None,
+) -> str:
+    """active | warming | halted | scanner_issue | disabled | engine states."""
+    if not enabled:
+        return "disabled"
+    if engine_state in {"stopped", "error", "stop_failed", "stopping", "starting"}:
+        return engine_state
+    if (health or {}).get("circuit_breaker_reason"):
+        return "halted"
+    if market_health.get("entry_halt_reason"):
+        return "halted"
+    if market_health.get("warming_symbols"):
+        return "warming"
+    if market_health.get("scanner_status") in {"refresh_failed", "apply_failed"}:
+        return "scanner_issue"
+    if health is None:
+        return "unknown"
+    return "active"
+
+
+def _dashboard_market_card(
+    market_key: str,
+    *,
+    cfg: Any,
+    health: dict[str, Any] | None,
+    account: dict[str, Any],
+    meta: dict[str, Any],
+    decision: dict[str, Any] | None,
+    engine_state: str,
+) -> dict[str, Any]:
+    """One strategy card (equity or crypto): contract, pools, holdings."""
+    strategy_cfg = getattr(cfg, "strategy", None) if cfg is not None else None
+    selection = getattr(strategy_cfg, market_key, None)
+    if selection is None:
+        return {
+            "enabled": False,
+            "name": market_key,
+            "status": "unavailable",
+            "strategy": {},
+            "eligible_pool": None,
+            "observation_set_size": None,
+            "positions_count": 0,
+            "current_allocation_pct": 0.0,
+            "maximum_allocation_pct": 0.0,
+            "last_decision_at": None,
+            "next_rebalance_at": None,
+            "holdings": [],
+        }
+    enabled = bool(selection.enabled)
+    market_health = dict((health or {}).get("markets", {}).get(market_key, {}) or {})
+    positions = [
+        position
+        for position in account.get("positions", [])
+        if position.get("market") == market_key
+    ]
+    equity = max(float(account.get("equity") or 0.0), 1e-9)
+    market_value = sum(float(position.get("market_value") or 0.0) for position in positions)
+    target = dict((decision or {}).get("target") or {})
+    weights = {str(weight.get("symbol")): weight for weight in target.get("weights", [])}
+    metadata = dict(target.get("metadata") or {})
+    selected = [str(symbol) for symbol in metadata.get("selected_symbols", ())]
+    qualified = int(metadata.get("qualified_symbols") or 0)
+    hypothesis = str(metadata.get("hypothesis") or "")
+    holdings: list[dict[str, Any]] = []
+    for position in positions:
+        symbol = str(position.get("symbol", ""))
+        weight = weights.get(symbol)
+        rank = selected.index(symbol) + 1 if symbol in selected else None
+        holdings.append(
+            {
+                "symbol": symbol,
+                "direction": position.get("direction"),
+                "qty": position.get("total_qty") or position.get("qty") or 0,
+                "market_value": position.get("market_value"),
+                "current_weight_pct": (float(position.get("market_value") or 0.0) / equity) * 100,
+                "target_weight_pct": (
+                    float((weight or {}).get("weight") or 0.0) * 100 if weight else None
+                ),
+                "reason": (weight or {}).get("reason") if weight else None,
+                "rank": rank,
+                "of_qualified": qualified if rank is not None else None,
+                "hypothesis": hypothesis,
+                "unrealized_pnl": position.get("unrealized_pnl"),
+                "protection_state": position.get("protection_state"),
+            }
+        )
+    return {
+        "enabled": enabled,
+        "name": selection.name,
+        "status": _dashboard_market_status(engine_state, enabled, market_health, health),
+        "strategy": {
+            "name": (meta or {}).get("name") or selection.name,
+            "display_name": (meta or {}).get("display_name"),
+            "version": (meta or {}).get("version"),
+            "signal_timeframe": (meta or {}).get("signal_timeframe"),
+            "rebalance_cadence": (meta or {}).get("rebalance_cadence"),
+            "minimum_history_bars": (meta or {}).get("minimum_history_bars"),
+            "configuration_error": bool((meta or {}).get("configuration_error")),
+        },
+        "eligible_pool": (meta or {}).get("candidate_pool_size"),
+        "observation_set_size": (meta or {}).get("observation_set_size"),
+        "positions_count": len(positions),
+        "current_allocation_pct": (market_value / equity) * 100,
+        "maximum_allocation_pct": float(selection.maximum_allocation or 0.0) * 100,
+        "last_decision_at": (decision or {}).get("timestamp"),
+        "next_rebalance_at": _dashboard_next_rebalance_at(
+            (decision or {}).get("timestamp"),
+            (meta or {}).get("rebalance_cadence"),
+        ),
+        "holdings": holdings,
+    }
+
+
+# Trailing 22d realized vol per crypto holding, computed from the warmup cache
+# with the strategy's own realized_volatility math. Minute-bucketed TTL so the
+# ~2 GB cache file is only queried at most once per minute per symbol set.
+_crypto_vol_cache: dict[tuple[tuple[str, ...], int], dict[str, float | None]] = {}
+
+
+def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
+    """Trailing 22d realized vol for crypto symbols (None when unavailable)."""
+    if not symbols:
+        return {}
+    bucket = int(time.monotonic() // 60)
+    cache_key = (tuple(sorted(symbols)), bucket)
+    cached = _crypto_vol_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    result: dict[str, float | None] = {}
+    try:
+        from parayabuck.data.cache import WarmupCache
+        from parayabuck.portfolio.momentum import realized_volatility
+    except Exception:
+        return {symbol: None for symbol in symbols}
+    try:
+        cache = WarmupCache()
+        try:
+            end = datetime.now(UTC)
+            start = end - timedelta(days=90)
+            for symbol in symbols:
+                try:
+                    bars = cache.get(
+                        symbol,
+                        "1d",
+                        market=Market.CRYPTO,
+                        feed="crypto",
+                        start=start,
+                        end=end,
+                    )
+                except Exception:
+                    result[symbol] = None
+                    continue
+                closes = [float(bar.close) for bar in bars if bar.close > 0]
+                if len(closes) < 23:
+                    result[symbol] = None
+                    continue
+                try:
+                    result[symbol] = float(realized_volatility(closes[-23:], 22))
+                except Exception:
+                    result[symbol] = None
+        finally:
+            cache.close()
+    except Exception:
+        return {symbol: None for symbol in symbols}
+    _crypto_vol_cache[cache_key] = result
+    return result
+
+
+def _dashboard_crypto_card(
+    *,
+    cfg: Any,
+    health: dict[str, Any] | None,
+    account: dict[str, Any],
+    meta: dict[str, Any],
+    decision: dict[str, Any] | None,
+    engine_state: str,
+) -> dict[str, Any]:
+    card = _dashboard_market_card(
+        "crypto",
+        cfg=cfg,
+        health=health,
+        account=account,
+        meta=meta,
+        decision=decision,
+        engine_state=engine_state,
+    )
+    held = [str(holding.get("symbol", "")) for holding in card.get("holdings", [])]
+    vols = _crypto_realized_vols(held)
+    for holding in card.get("holdings", []):
+        holding["realized_vol_22d"] = vols.get(str(holding.get("symbol", "")))
+    return card
+
+
+def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Active safety incidents + latest risk-state row for the account."""
+    account_id = _dashboard_account_id()
+    connection = _dashboard_readonly_connection()
+    if connection is None:
+        return [], None
+    try:
+        incident_rows = connection.execute(
+            """
+            SELECT reason, scope, activated_at, updated_at
+            FROM safety_incidents
+            WHERE account_id = ?
+            ORDER BY activated_at DESC, id DESC
+            """,
+            (account_id,),
+        ).fetchall()
+        risk_rows = connection.execute(
+            """
+            SELECT session_date, payload, updated_at
+            FROM risk_state
+            WHERE account_id = ?
+            ORDER BY session_date DESC, updated_at DESC LIMIT 1
+            """,
+            (account_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        return [], None
+    finally:
+        connection.close()
+    incidents = [
+        {
+            "reason": str(row[0]),
+            "scope": str(row[1]),
+            "activated_at": str(row[2]),
+            "updated_at": str(row[3]),
+        }
+        for row in incident_rows
+    ]
+    risk_state: dict[str, Any] | None = None
+    if risk_rows:
+        try:
+            payload = json.loads(str(risk_rows[0][1]))
+        except (TypeError, ValueError):
+            payload = {}
+        risk_state = {
+            "session_date": str(risk_rows[0][0]),
+            "updated_at": str(risk_rows[0][2]),
+            **{str(key): value for key, value in dict(payload).items()},
+        }
+    return incidents, risk_state
+
+
+def _dashboard_risk(
+    cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]
+) -> dict[str, Any]:
+    """Risk panel: exposure, buffers, policies, latch, incidents, epoch."""
+    equity = max(float(account.get("equity") or 0.0), 1e-9)
+    cash = float(account.get("cash") or 0.0)
+    gross = float(account.get("gross_exposure") or 0.0)
+    positions = account.get("positions", [])
+    equity_value = sum(
+        float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity"
+    )
+    crypto_value = sum(
+        float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "crypto"
+    )
+    daily_pnl = float(account.get("daily_pnl") or 0.0)
+    drawdown = float(account.get("drawdown") or 0.0)
+    limits = getattr(cfg, "risk", None) if cfg is not None else None
+    incidents, risk_state = _dashboard_ledger_risk()
+    return {
+        "gross_exposure_pct": (gross / equity) * 100,
+        "gross_exposure_limit_pct": (
+            float(getattr(limits, "max_gross_exposure_pct", 0.60) or 0.0) * 100
+        ),
+        "cash_pct": (cash / equity) * 100,
+        "cash_buffer_limit_pct": (float(getattr(limits, "cash_buffer_pct", 0.40) or 0.0) * 100),
+        "equity_exposure_pct": (equity_value / equity) * 100,
+        "crypto_exposure_pct": (crypto_value / equity) * 100,
+        "crypto_exposure_limit_pct": (
+            float(getattr(limits, "max_crypto_exposure_pct", 0.10) or 0.0) * 100
+        ),
+        "max_position_pct": (float(getattr(limits, "max_position_pct", 0.10) or 0.0) * 100),
+        "max_positions": int(getattr(limits, "max_positions", 0) or 0),
+        "crypto_positions": sum(1 for p in positions if p.get("market") == "crypto"),
+        "max_crypto_positions": int(getattr(limits, "max_crypto_positions", 0) or 0),
+        "daily_pnl": daily_pnl,
+        "daily_loss_limit_pct": (
+            float(getattr(limits, "daily_loss_limit_pct", 0.005) or 0.0) * 100
+        ),
+        "drawdown": drawdown,
+        "max_drawdown_pct": (float(getattr(limits, "max_drawdown_pct", 0.05) or 0.0) * 100),
+        "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
+        "circuit_breaker": (health or {}).get("circuit_breaker_reason"),
+        "safety_incidents": incidents,
+        "risk_epoch": risk_state,
+    }
+
+
+def _fill_expected_vs_actual(order: dict[str, Any], fill: dict[str, Any]) -> dict[str, Any] | None:
+    """Worker B's per-order expected-vs-actual comparison; None on degrade."""
+    try:
+        from parayabuck.execution.telemetry import expected_vs_actual
+    except Exception:
+        return None
+    try:
+        return dict(expected_vs_actual(order, [fill]))
+    except Exception as exc:
+        log.debug("expected_vs_actual comparison unavailable: %s", exc)
+        return None
+
+
+def _dashboard_execution() -> dict[str, Any]:
+    """Execution panel: open orders + recent fills with decision lineage."""
+    account_id = _dashboard_account_id()
+    connection = _dashboard_readonly_connection()
+    if connection is None:
+        return {
+            "open_orders": [],
+            "recent_fills": [],
+            "last_decision": None,
+            "reconciliation_anomalies": [],
+        }
+    order_rows: list[Any] = []
+    fill_rows: list[Any] = []
+    anomaly_rows: list[Any] = []
+    try:
+        order_rows = connection.execute(
+            """
+            SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                   o.status, o.reference_price, o.created_at,
+                   d.decision_timestamp, d.strategy_name
+            FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ?
+              AND o.status NOT IN (
+                  'filled', 'canceled', 'cancelled', 'rejected', 'expired',
+                  'done_for_day', 'fill'
+              )
+            ORDER BY o.created_at DESC LIMIT 25
+            """,
+            (account_id,),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        log.debug("Dashboard open-orders query skipped: %s", exc)
+    try:
+        fill_rows = connection.execute(
+            """
+            SELECT f.activity_id, f.client_order_id, o.symbol, o.market, o.side,
+                   f.quantity, f.price, f.fee, f.slippage, o.reference_price,
+                   f.realized_pnl, f.unrealized_pnl, f.occurred_at,
+                   d.decision_timestamp, d.strategy_name,
+                   o.quantity, o.status, o.created_at
+            FROM portfolio_fills f
+            JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ?
+            ORDER BY f.occurred_at DESC LIMIT 25
+            """,
+            (account_id,),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        log.debug("Dashboard recent-fills query skipped: %s", exc)
+    try:
+        anomaly_rows = connection.execute(
+            """
+            SELECT symbol, market, quantity, kind, note, created_at
+            FROM portfolio_ownership_adjustments
+            WHERE account_id = ?
+            ORDER BY created_at DESC LIMIT 10
+            """,
+            (account_id,),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        log.debug("Dashboard reconciliation-anomaly query skipped: %s", exc)
+    finally:
+        connection.close()
+
+    def _lineage(decision_timestamp: object, strategy_name: object) -> dict[str, Any]:
+        return {
+            "decision_timestamp": (str(decision_timestamp) if decision_timestamp else None),
+            "strategy": str(strategy_name) if strategy_name else None,
+        }
+
+    open_orders = [
+        {
+            "client_order_id": str(row[0]),
+            "symbol": str(row[1]),
+            "market": str(row[2]),
+            "side": str(row[3]),
+            "quantity": float(row[4] or 0.0),
+            "status": str(row[5]),
+            "reference_price": float(row[6]) if row[6] is not None else None,
+            "created_at": str(row[7]),
+            "lineage": _lineage(row[8], row[9]),
+        }
+        for row in order_rows
+    ]
+    recent_fills = []
+    for row in fill_rows:
+        price = float(row[6] or 0.0)
+        reference = float(row[9]) if row[9] is not None else None
+        direction = 1.0 if str(row[4]).lower() == "buy" else -1.0
+        slippage_bps = (
+            ((price - reference) / reference) * 10000 * direction
+            if reference and reference > 0
+            else None
+        )
+        fill_entry = {
+            "activity_id": str(row[0]),
+            "client_order_id": str(row[1]),
+            "symbol": str(row[2]),
+            "market": str(row[3]),
+            "side": str(row[4]),
+            "quantity": float(row[5] or 0.0),
+            "price": price,
+            "fee": float(row[7] or 0.0),
+            "slippage": float(row[8] or 0.0),
+            "reference_price": reference,
+            "slippage_bps": slippage_bps,
+            "realized_pnl": float(row[10]) if row[10] is not None else None,
+            "unrealized_pnl": float(row[11]) if row[11] is not None else None,
+            "occurred_at": str(row[12]),
+            "lineage": _lineage(row[13], row[14]),
+        }
+        fill_entry["expected_vs_actual"] = _fill_expected_vs_actual(
+            {
+                "client_order_id": str(row[1]),
+                "symbol": str(row[2]),
+                "market": str(row[3]),
+                "side": str(row[4]),
+                "quantity": float(row[15] or 0.0),
+                "reference_price": reference,
+                "created_at": row[17],
+                "status": str(row[16]),
+            },
+            {
+                "quantity": float(row[5] or 0.0),
+                "price": price,
+                "fee": float(row[7] or 0.0),
+                "occurred_at": str(row[12]),
+            },
+        )
+        recent_fills.append(fill_entry)
+    reconciliation_anomalies = [
+        {
+            "symbol": str(row[0]),
+            "market": str(row[1]),
+            "quantity": float(row[2] or 0.0),
+            "kind": str(row[3]),
+            "note": str(row[4] or ""),
+            "created_at": str(row[5]),
+        }
+        for row in anomaly_rows
+    ]
+    return {
+        "open_orders": open_orders,
+        "recent_fills": recent_fills,
+        "reconciliation_anomalies": reconciliation_anomalies,
+    }
+
+
+def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, Any]:
+    """Universe panel: discovered assets, pools, scanner freshness, pins."""
+    if cfg is None:
+        return {"unavailable": True, "reason": "config unavailable"}
+    refresh = dict((health or {}).get("universe_refresh") or {})
+    status_map = dict(refresh.get("status") or {})
+    errors = dict(refresh.get("errors") or {})
+    market_health = dict((health or {}).get("markets") or {})
+    result: dict[str, Any] = {}
+    for market_key, active_path, candidate_path in (
+        (
+            "equity",
+            cfg.universe.equity.active_universe_path,
+            cfg.universe.equity.candidate_universe_path,
+        ),
+        ("crypto", cfg.universe.crypto.active_universe_path, None),
+    ):
+        active: dict[str, Any] = {}
+        candidates: dict[str, Any] = {}
+        active_file = Path(active_path)
+        if active_file.exists():
+            try:
+                active.update(json.loads(active_file.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        candidate_file = Path(candidate_path) if candidate_path else None
+        if candidate_file is not None and candidate_file.exists():
+            try:
+                candidates.update(json.loads(candidate_file.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        shortlist = candidates.get("shortlist_symbols")
+        candidate_symbols = active.get("candidate_symbols", ())
+        candidate_items = (
+            candidates.get("candidates", candidates.get("symbols", candidates))
+            if isinstance(candidates, dict)
+            else candidates
+        )
+        broad_discovered = len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
+        eligible_pool = (
+            len(shortlist)
+            if market_key == "equity" and isinstance(shortlist, list)
+            else len(candidate_symbols)
+            if isinstance(candidate_symbols, (list, tuple))
+            else 0
+        )
+        selected = active.get("observation_set", active.get("selected_symbols", ()))
+        market = dict(market_health.get(market_key) or {})
+        pinned = list(market.get("managed_pins") or ())
+        if market_key == "crypto" and not pinned:
+            pinned = list(getattr(cfg.universe.crypto, "pinned_symbols", ()) or ())
+        result[market_key] = {
+            "broad_discovered_count": broad_discovered,
+            "eligible_pool_size": eligible_pool,
+            "observation_set_size": len(selected),
+            "observation_set": list(selected),
+            "pinned_symbols": pinned,
+            "last_refresh_at": active.get("selection_timestamp"),
+            "data_timestamp": active.get("data_timestamp"),
+            "scanner_status": status_map.get(market_key) or active.get("status"),
+            "scanner_version": active.get("scanner_version"),
+            "refresh_errors": dict(errors.get(market_key) or {}),
+            "next_refresh_at": refresh.get("next_refresh_at"),
+            "eliminated_count": len(active.get("eliminated", {})),
+        }
+    return result
+
+
+def _dashboard_database_state() -> dict[str, Any]:
+    path = _dashboard_db_path()
+    try:
+        size = path.stat().st_size if path.exists() else None
+    except OSError:
+        size = None
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "size_bytes": size,
+        "wal_file_present": Path(f"{path}-wal").exists(),
+    }
+
+
+def _dashboard_restart_count() -> int | None:
+    """Restart count fallback (Worker D's runtime_metrics is authoritative;
+    this mirrors its formula only when that module has not landed)."""
+    connection = _dashboard_readonly_connection()
+    if connection is None:
+        return 0
+    try:
+        rows = connection.execute("SELECT COUNT(*) FROM runtime_sessions").fetchall()
+    except sqlite3.Error:
+        return 0
+    finally:
+        connection.close()
+    total = int(rows[0][0]) if rows else 0
+    return max(0, total - 1)
+
+
+def _dashboard_health(
+    cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]
+) -> dict[str, Any]:
+    """System health panel: workers, queue, freshness, reconciliation, DB."""
+    workers = dict((health or {}).get("workers") or {})
+    heartbeats = [
+        str(worker.get("last_heartbeat"))
+        for worker in workers.values()
+        if worker.get("last_heartbeat")
+    ]
+    refresh = dict((health or {}).get("universe_refresh") or {})
+    engine_cfg = getattr(cfg, "engine", None) if cfg is not None else None
+    runtime_metrics_payload = _runtime_metrics_payload(_dashboard_account_id())
+    restart_count = runtime_metrics_payload.get("restart_count")
+    if restart_count is None:
+        restart_count = _dashboard_restart_count()
+    return {
+        "engine_state": getattr(manager, "current_engine_state", lambda: "stopped")(),
+        "healthy": (health or {}).get("healthy"),
+        "workers": workers,
+        "restart_count": restart_count,
+        "queue": {
+            "size": (health or {}).get("queue_size"),
+            "age_seconds": (health or {}).get("queue_age_seconds"),
+            "dropped_events": (health or {}).get("dropped_events"),
+            "coalesced_events": (health or {}).get("coalesced_events"),
+        },
+        "markets": dict((health or {}).get("markets") or {}),
+        "account_freshness": {
+            "age_seconds": account.get("age_seconds"),
+            "stale": account.get("stale"),
+            "source": account.get("source"),
+            "maximum_age_for_entry_seconds": getattr(
+                engine_cfg, "maximum_account_age_for_entry_seconds", None
+            ),
+        },
+        "reconciliation": {
+            "last_at": (health or {}).get("last_reconciliation_at"),
+            "failed": (health or {}).get("circuit_breaker_reason") == "reconciliation_failed",
+        },
+        "scanner": {
+            "last_refresh_at": refresh.get("last_refresh_at"),
+            "next_refresh_at": refresh.get("next_refresh_at"),
+            "status": dict(refresh.get("status") or {}),
+            "errors": dict(refresh.get("errors") or {}),
+            "retry_at": dict(refresh.get("retry_at") or {}),
+            "retry_attempt": dict(refresh.get("retry_attempt") or {}),
+        },
+        "database": _dashboard_database_state(),
+        "last_heartbeat": max(heartbeats) if heartbeats else None,
+        "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
+    }
+
+
+def _dashboard_explanations(
+    cfg: Any, decisions: dict[str, dict[str, Any]], account: dict[str, Any]
+) -> dict[str, Any]:
+    """Per-holding structured reasons from persisted decision metadata."""
+    result: dict[str, Any] = {}
+    for market_key in ("equity", "crypto"):
+        decision = decisions.get(market_key)
+        target = dict((decision or {}).get("target") or {})
+        metadata = dict(target.get("metadata") or {})
+        weights = {str(weight.get("symbol")): weight for weight in target.get("weights", [])}
+        selected = [str(symbol) for symbol in metadata.get("selected_symbols", ())]
+        qualified = int(metadata.get("qualified_symbols") or 0)
+        holdings: list[dict[str, Any]] = []
+        for position in account.get("positions", []):
+            if position.get("market") != market_key:
+                continue
+            symbol = str(position.get("symbol", ""))
+            weight = weights.get(symbol)
+            rank = selected.index(symbol) + 1 if symbol in selected else None
+            if weight is not None:
+                reason = str(weight.get("reason") or "target_weight")
+            elif rank is not None:
+                reason = "ranked candidate not in the latest target"
+            else:
+                reason = "held outside the latest decision (external or pre-decision)"
+            holdings.append(
+                {
+                    "symbol": symbol,
+                    "reason": reason,
+                    "rank": rank,
+                    "of_qualified": qualified if rank is not None else None,
+                    "target_weight_pct": (
+                        float((weight or {}).get("weight") or 0.0) * 100 if weight else 0.0
+                    ),
+                    "decision_timestamp": (decision or {}).get("timestamp"),
+                    "decision_strategy": (decision or {}).get("strategy_name"),
+                    "hypothesis": metadata.get("hypothesis"),
+                    "universe_version": target.get("universe_version"),
+                    "rebalance_reason": target.get("rebalance_reason"),
+                    "risk_multiplier": target.get("risk_multiplier"),
+                }
+            )
+        result[market_key] = {
+            "strategy_name": (decision or {}).get("strategy_name"),
+            "last_decision_at": (decision or {}).get("timestamp"),
+            "qualified_symbols": qualified,
+            "selected_symbols": selected,
+            "hypothesis": metadata.get("hypothesis"),
+            "risk_off_detail": metadata.get("risk_off_detail"),
+            "holdings": holdings,
+        }
+    return result
+
+
+def _telemetry_payload(account_id: str) -> dict[str, Any]:
+    """Worker B's execution/forward/cost telemetry; degrades explicitly."""
+    try:
+        from parayabuck.execution.telemetry import (
+            cost_calibration,
+            execution_metrics,
+            forward_metrics,
+        )
+    except ImportError:
+        return {
+            "unavailable": True,
+            "reason": "parayabuck.execution.telemetry is not available yet",
+        }
+    except Exception as exc:
+        log.warning("Dashboard telemetry import failed: %s", exc)
+        return {"unavailable": True, "reason": f"telemetry import error: {exc}"}
+    db_path = _dashboard_db_path()
+    try:
+        execution = execution_metrics(db_path)
+        forward = forward_metrics(db_path)
+        calibration = cost_calibration(db_path)
+        return {
+            "unavailable": False,
+            "execution_metrics": execution,
+            "forward_metrics": forward,
+            "cost_calibration": calibration,
+        }
+    except Exception as exc:
+        log.warning("Dashboard telemetry failed: %s", exc)
+        return {"unavailable": True, "reason": f"telemetry error: {exc}"}
+
+
+def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
+    """Worker D's runtime_metrics; degrades explicitly while it lands."""
+    try:
+        from parayabuck.monitoring.metrics import runtime_metrics
+
+        return dict(runtime_metrics(_dashboard_db_path(), account_id=account_id))
+    except ImportError:
+        return {
+            "unavailable": True,
+            "reason": "parayabuck.monitoring.metrics is not available yet",
+        }
+    except Exception as exc:
+        log.warning("Dashboard runtime metrics failed: %s", exc)
+        return {"unavailable": True, "reason": f"runtime metrics error: {exc}"}
+
+
+def _dashboard_payload() -> dict[str, Any]:
+    """Full aggregated dashboard payload; each panel degrades on failure."""
+    cfg = _dashboard_config()
+    health = _dashboard_runtime_health()
+    account = _dashboard_account()
+    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
+    account_id = _dashboard_account_id()
+    decisions = _dashboard_market_decisions(account_id)
+    meta: dict[str, Any] = {}
+    if cfg is not None:
+        try:
+            meta = _strategy_metadata(cfg)
+        except Exception:
+            meta = {}
+    equity_meta = dict(meta.get("equity") or {})
+    crypto_meta = dict(meta.get("crypto") or {})
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        "engine_state": engine_state,
+        "engine_error": getattr(manager, "last_engine_error", None),
+        "mode": _dashboard_safe_panel("mode", lambda: _dashboard_mode(cfg)),
+        "account": {
+            "equity": account.get("equity"),
+            "cash": account.get("cash"),
+            "gross_exposure": account.get("gross_exposure"),
+            "daily_pnl": account.get("daily_pnl"),
+            "realized_pnl": account.get("realized_pnl"),
+            "unrealized_pnl": account.get("unrealized_pnl"),
+            "total_pnl": (
+                float(account.get("realized_pnl") or 0.0)
+                + float(account.get("unrealized_pnl") or 0.0)
+            )
+            if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
+            else None,
+            "drawdown": account.get("drawdown"),
+            "account_suffix": account.get("account_suffix"),
+            "snapshot_at": account.get("snapshot_at"),
+            "age_seconds": account.get("age_seconds"),
+            "stale": account.get("stale"),
+            "source": account.get("source"),
+            "last_reconciliation_at": (health or {}).get("last_reconciliation_at"),
+        },
+        "equity": _dashboard_safe_panel(
+            "equity",
+            lambda: _dashboard_market_card(
+                "equity",
+                cfg=cfg,
+                health=health,
+                account=account,
+                meta=equity_meta,
+                decision=decisions.get("equity"),
+                engine_state=engine_state,
+            ),
+        ),
+        "crypto": _dashboard_safe_panel(
+            "crypto",
+            lambda: _dashboard_crypto_card(
+                cfg=cfg,
+                health=health,
+                account=account,
+                meta=crypto_meta,
+                decision=decisions.get("crypto"),
+                engine_state=engine_state,
+            ),
+        ),
+        "risk": _dashboard_safe_panel("risk", lambda: _dashboard_risk(cfg, health, account)),
+        "execution": _dashboard_safe_panel("execution", _dashboard_execution),
+        "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg, health)),
+        "health": _dashboard_safe_panel("health", lambda: _dashboard_health(cfg, health, account)),
+        "explanations": _dashboard_safe_panel(
+            "explanations",
+            lambda: _dashboard_explanations(cfg, decisions, account),
+        ),
+        "metrics": _dashboard_metrics_payload(account_id),
+    }
+
+
+def _dashboard_metrics_payload(account_id: str) -> dict[str, Any]:
+    return {
+        "telemetry": _telemetry_payload(account_id),
+        "runtime_metrics": _runtime_metrics_payload(account_id),
+    }
+
+
+def _dashboard_account() -> dict[str, Any]:
+    fetch = getattr(manager, "fetch_account_snapshot", None)
+    if fetch is not None:
+        try:
+            return dict(fetch())
+        except Exception as exc:
+            log.warning("Dashboard account snapshot failed: %s", exc)
+    return {
+        "equity": 0.0,
+        "cash": 0.0,
+        "daily_pnl": 0.0,
+        "realized_pnl": 0.0,
+        "unrealized_pnl": 0.0,
+        "drawdown": 0.0,
+        "gross_exposure": 0.0,
+        "positions": [],
+        "account_suffix": "",
+        "snapshot_at": None,
+        "age_seconds": None,
+        "stale": True,
+        "source": "unavailable",
+    }
+
+
+@app.get("/api/dashboard/overview")
+async def dashboard_overview() -> dict[str, Any]:
+    return await asyncio.to_thread(_dashboard_payload)
+
+
+@app.get("/api/equity")
+async def dashboard_equity() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["equity"])
+
+
+@app.get("/api/crypto")
+async def dashboard_crypto() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["crypto"])
+
+
+@app.get("/api/risk")
+async def dashboard_risk() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["risk"])
+
+
+@app.get("/api/execution")
+async def dashboard_execution() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["execution"])
+
+
+@app.get("/api/universe")
+async def dashboard_universe() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["universe"])
+
+
+@app.get("/api/health")
+async def dashboard_health() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["health"])
+
+
+@app.get("/api/explanations")
+async def dashboard_explanations() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["explanations"])
+
+
+@app.get("/api/metrics")
+async def dashboard_metrics() -> dict[str, Any]:
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload["metrics"])
 
 
 # WebSockets

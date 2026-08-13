@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#080b0f">
     <title>ParayaBuck — Trading Control Center</title>
     <script src="/static/js/chart-lite.js?v=20260812-1"></script>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260812-1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260813-1">
 </head>
 <body>
     <div class="ambient ambient-one"></div>
@@ -75,71 +75,13 @@
             <span class="system-time">bağımsız strateji zaman dilimleri</span>
         </section>
 
-        <main class="dashboard-content">
-            <section class="panel" aria-label="Operasyon durumu">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">OPERASYON</span>
-                        <h2>Strateji, evren ve emir durumu</h2>
-                    </div>
-                </div>
-                <pre id="operationsDetail" class="terminal-view">Operasyon durumu yükleniyor…</pre>
-            </section>
-            <section class="panel backtest-panel" aria-label="Backtest çalıştırıcı">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">DOĞRULAMA</span>
-                        <h2>Backtest çalıştır</h2>
-                        <p>Üretimdeki strateji, risk katmanı ve maliyet modelini geçmiş veride çalıştırır; raporlar ve tarihsel evren anlık görüntüleri reports/ altına yazılır.</p>
-                    </div>
-                    <span id="backtestStateBadge" class="count-badge">beklemede</span>
-                </div>
-                <div class="backtest-body">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="btStrategy">Strateji (boş = ayar)</label>
-                            <input type="text" id="btStrategy" placeholder="equity_dynamic_trend_1d_v1">
-                        </div>
-                        <div class="form-group">
-                            <label for="btMarket">Piyasa</label>
-                            <select id="btMarket">
-                                <option value="equity" selected>Borsa</option>
-                                <option value="crypto">Kripto</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="btYears">Yıl</label>
-                            <input type="number" id="btYears" min="1" max="30" value="3">
-                        </div>
-                        <div class="form-group">
-                            <label for="btDays">Gün (0 = yıllar)</label>
-                            <input type="number" id="btDays" min="0" max="3650" value="90">
-                        </div>
-                        <div class="form-group">
-                            <label for="btMaxSymbols">Max sembol (0 = tümü)</label>
-                            <input type="number" id="btMaxSymbols" min="0" max="2000" value="0">
-                        </div>
-                        <div class="form-group form-wide">
-                            <label for="btSymbols">Semboller (boş = universe)</label>
-                            <input type="text" id="btSymbols" placeholder="AAPL,MSFT,BTC/USD">
-                        </div>
-                        <div class="form-group form-wide">
-                            <label for="btParameters">Parametreler (JSON, boş = ayar)</label>
-                            <input type="text" id="btParameters" placeholder='{"top_n": 12, "momentum_window": 126}'>
-                        </div>
-                    </div>
-                    <div class="backtest-options">
-                        <button id="backtestRunBtn" class="btn btn-primary">
-                            <span class="button-icon" aria-hidden="true">▶</span>
-                            <span>Backtest'i çalıştır</span>
-                        </button>
-                    </div>
-                    <div id="backtestSummary" class="backtest-summary" hidden></div>
-                    <div id="backtestProgress" class="terminal-view backtest-progress" aria-live="polite"></div>
-                </div>
-            </section>
+        <nav class="page-nav" aria-label="Ana bölümler">
+            <a class="page-nav-link active" href="/" aria-current="page">Dashboard</a>
+            <a class="page-nav-link" href="/tools">Araçlar</a>
+        </nav>
 
-            <section class="metric-grid" aria-label="Portföy özeti">
+        <main class="dashboard-content">
+            <section class="metric-grid metric-grid-primary" aria-label="Öncelikli portföy özeti">
                 <article class="metric-card metric-primary">
                     <div class="metric-head">
                         <span class="metric-icon">EQ</span>
@@ -169,6 +111,17 @@
 
                 <article class="metric-card">
                     <div class="metric-head">
+                        <span class="metric-icon">TP</span>
+                        <span class="metric-label">Toplam PnL</span>
+                    </div>
+                    <div id="totalPnlValue" class="metric-value">$0.00</div>
+                    <div id="totalPnlSub" class="metric-meta">Gerçekleşen + gerçekleşmemiş</div>
+                </article>
+            </section>
+
+            <section class="metric-grid metric-grid-secondary" aria-label="Tamamlayıcı portföy özeti">
+                <article class="metric-card metric-compact">
+                    <div class="metric-head">
                         <span class="metric-icon">RP</span>
                         <span class="metric-label">Gerçekleşen PnL</span>
                     </div>
@@ -176,7 +129,7 @@
                     <div id="realizedPnlSub" class="metric-meta">Kapatılan işlemler net</div>
                 </article>
 
-                <article class="metric-card">
+                <article class="metric-card metric-compact">
                     <div class="metric-head">
                         <span class="metric-icon">UP</span>
                         <span class="metric-label">Açık pozisyon PnL</span>
@@ -212,32 +165,42 @@
                     <div id="grossExposureSub" class="metric-meta">Toplam pozisyon büyüklüğü</div>
                 </article>
 
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">TP</span>
-                        <span class="metric-label">Toplam PnL</span>
-                    </div>
-                    <div id="totalPnlValue" class="metric-value">$0.00</div>
-                    <div id="totalPnlSub" class="metric-meta">Gerçekleşen + gerçekleşmemiş</div>
-                </article>
+            </section>
 
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">ES</span>
-                        <span class="metric-label">Motor durumu</span>
+            <section class="panel chart-panel" aria-label="Portföy performansı">
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">PORTFÖY ANALİTİĞİ</span>
+                        <h2>Performans eğrisi</h2>
                     </div>
-                    <div id="engineStatusValue" class="metric-value">Durdu</div>
-                    <div id="engineStatusSub" class="metric-meta">Durum açıklaması</div>
-                </article>
+                    <span class="live-pill"><span></span> Canlı</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </section>
 
-                <article class="metric-card metric-compact">
-                    <div class="metric-head">
-                        <span class="metric-icon">RC</span>
-                        <span class="metric-label">Son mutabakat</span>
+            <section class="panel positions-panel" aria-label="Açık pozisyonlar">
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">PİYASA MARUZİYETİ</span>
+                        <h2>Açık pozisyonlar</h2>
                     </div>
-                    <div id="lastReconValue" class="metric-value">—</div>
-                    <div id="lastReconSub" class="metric-meta">Broker mutabakat zamanı</div>
-                </article>
+                    <span id="activePositionsBadge" class="count-badge">0 açık</span>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Sembol</th><th>Piyasa</th><th>Yön</th><th>Miktar</th><th>Giriş</th>
+                                <th>Açık PnL</th><th>Koruma</th><th>Stop / Hedef</th><th>Çıkış</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positionsTableBody">
+                            <tr><td colspan="9" class="empty-state"><span class="empty-icon">—</span>Henüz açık pozisyon bulunmuyor</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <div class="strategy-grid" aria-label="Strateji kartları">
@@ -439,71 +402,6 @@
                 </div>
             </section>
 
-            <div class="dashboard-grid-row">
-                <section class="panel chart-panel">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">PORTFÖY ANALİTİĞİ</span>
-                            <h2>Performans eğrisi</h2>
-                        </div>
-                        <span class="live-pill"><span></span> Canlı</span>
-                    </div>
-                    <div class="chart-container">
-                        <canvas id="equityChart"></canvas>
-                    </div>
-                </section>
-
-                <section class="panel positions-panel">
-                    <div class="panel-header">
-                        <div>
-                            <span class="eyebrow">PİYASA MARUZİYETİ</span>
-                            <h2>Açık pozisyonlar</h2>
-                        </div>
-                        <span id="activePositionsBadge" class="count-badge">0 açık</span>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Sembol</th>
-                                    <th>Piyasa</th>
-                                    <th>Yön</th>
-                                    <th>Miktar</th>
-                                    <th>Giriş</th>
-                                    <th>Açık PnL</th>
-                                    <th>Koruma</th>
-                                    <th>Stop / Hedef</th>
-                                    <th>Çıkış</th>
-                                </tr>
-                            </thead>
-                            <tbody id="positionsTableBody">
-                                <tr>
-                                    <td colspan="9" class="empty-state">
-                                        <span class="empty-icon">—</span>
-                                        Henüz açık pozisyon bulunmuyor
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
-
-            <section class="panel terminal-panel">
-                <div class="panel-header">
-                    <div>
-                        <span class="eyebrow">SİSTEM AKIŞI</span>
-                        <h2>Motor konsolu</h2>
-                    </div>
-                    <button id="clearLogsBtn" class="btn btn-small btn-quiet">Kayıtları temizle</button>
-                </div>
-                <div id="terminalLogView" class="terminal-view" aria-live="polite">
-                    <div class="log-line info">
-                        <span class="log-time">[SYSTEM]</span>
-                        <span class="log-msg">ParayaBuck kontrol merkezi bağlantısı kuruldu.</span>
-                    </div>
-                </div>
-            </section>
         </main>
     </div>
 
@@ -676,6 +574,7 @@
         </aside>
     </div>
 
-    <script src="/static/js/app.js?v=20260812-1"></script>
+    <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
+    <script src="/static/js/app.js?v=20260813-1"></script>
 </body>
 </html>

@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const marketStatusText = document.getElementById('marketStatusText');
-    const operationsDetail = document.getElementById('operationsDetail');
 
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -69,22 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const activePositionsBadge = document.getElementById('activePositionsBadge');
     const positionsTableBody = document.getElementById('positionsTableBody');
-    const terminalLogView = document.getElementById('terminalLogView');
-    const clearLogsBtn = document.getElementById('clearLogsBtn');
-
-    // Backtest Panel Elements
-    const backtestRunBtn = document.getElementById('backtestRunBtn');
-    const backtestStateBadge = document.getElementById('backtestStateBadge');
-    const backtestSummary = document.getElementById('backtestSummary');
-    const backtestProgress = document.getElementById('backtestProgress');
-    const btStrategy = document.getElementById('btStrategy');
-    const btMarket = document.getElementById('btMarket');
-    const btYears = document.getElementById('btYears');
-    const btDays = document.getElementById('btDays');
-    const btMaxSymbols = document.getElementById('btMaxSymbols');
-    const btSymbols = document.getElementById('btSymbols');
-    const btParameters = document.getElementById('btParameters');
-
     // Settings Modal Elements
     const settingsModal = document.getElementById('settingsModal');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -135,9 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let timeHistory = storedEquityHistory.times;
     let snapshotHistory = storedEquityHistory.snapshots;
     let dataWs = null;
-    let logWs = null;
     let dataReconnectAttempts = 0;
-    let logReconnectAttempts = 0;
 
     // Initialize Chart.js
     const ctx = document.getElementById('equityChart').getContext('2d');
@@ -310,47 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `Scanner E ${equityScanner} · C ${cryptoScanner}` +
             (strategyMetaText ? `\n${strategyMetaText}` : '') +
             (statusData.engine_error ? ` | Hata: ${statusData.engine_error}` : '');
-        const universe = statusData.universe || {};
-        const operations = statusData.operations || {};
-        operationsDetail.textContent = JSON.stringify({
-            mode: statusData.paper ? 'PAPER' : 'LIVE',
-            strategies: statusData.runtime?.strategies || [],
-            active_universe: {
-                equity: universe.equity?.symbols || [],
-                crypto: universe.crypto?.symbols || []
-            },
-            universe_scores: {
-                equity: universe.equity?.scores || {},
-                crypto: universe.crypto?.scores || {}
-            },
-            pending_orders: operations.pending_orders || [],
-            recent_fills: operations.recent_fills || [],
-            last_decision: operations.last_decision || null,
-            last_scanner_refresh: scanner.last_run_at || null,
-            next_scanner_refresh: scanner.next_refresh_at || null,
-            scanner_status: {
-                equity: scanner.equity_status || null,
-                crypto: scanner.crypto_status || null,
-                snapshot_equity: scanner.equity_snapshot_status || null,
-                snapshot_crypto: scanner.crypto_snapshot_status || null,
-                errors: scanner.refresh_errors || {}
-            },
-            scanner_counts: {
-                equity_candidates: scanner.equity_candidate_count || 0,
-                equity_shortlist: scanner.equity_shortlist_count || 0,
-                crypto_candidates: scanner.crypto_candidate_count || 0
-            },
-            warming_symbols: {
-                equity: equity.warming_symbols || [],
-                crypto: crypto.warming_symbols || []
-            },
-            managed_pins: {
-                equity: equity.managed_pins || [],
-                crypto: crypto.managed_pins || []
-            },
-            last_reconciliation: statusData.runtime?.last_reconciliation_at || null,
-            risk_status: statusData.runtime?.circuit_breaker_reason || 'ready'
-        }, null, 2);
     };
 
     let statusRefreshInFlight = false;
@@ -483,28 +423,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Log Streamer
+    // Dashboard actions use a compact notification instead of the technical log console.
     const appendLog = (msg, level = 'info') => {
-        const line = document.createElement('div');
-        line.className = `log-line ${level.toLowerCase()}`;
-        const timeStr = new Date().toLocaleTimeString();
-        const timeSpan = document.createElement('span');
-        timeSpan.className = 'log-time';
-        timeSpan.textContent = `[${timeStr}]`;
-        const messageSpan = document.createElement('span');
-        messageSpan.className = 'log-msg';
-        messageSpan.textContent = ` ${msg}`;
-        line.append(timeSpan, messageSpan);
-        terminalLogView.appendChild(line);
-        while (terminalLogView.children.length > 500) {
-            terminalLogView.firstElementChild.remove();
-        }
-        terminalLogView.scrollTop = terminalLogView.scrollHeight;
+        const toast = document.getElementById('statusToast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.className = `status-toast ${level.toLowerCase()}`;
+        toast.hidden = false;
+        window.clearTimeout(appendLog.toastTimer);
+        appendLog.toastTimer = window.setTimeout(() => { toast.hidden = true; }, 4500);
     };
-
-    clearLogsBtn.addEventListener('click', () => {
-        terminalLogView.innerHTML = '';
-    });
 
     // WebSocket Stream Connection
     const initWebSockets = () => {
@@ -553,33 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         };
 
-        const connectLogs = async () => {
-            if (logWs && [WebSocket.OPEN, WebSocket.CONNECTING].includes(logWs.readyState)) return;
-            let ticket;
-            try {
-                ticket = await websocketTicket('logs');
-            } catch (_error) {
-                setTimeout(connectLogs, reconnectDelay(logReconnectAttempts++));
-                return;
-            }
-            logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs?ticket=${encodeURIComponent(ticket)}`);
-            logWs.onopen = () => { logReconnectAttempts = 0; };
-            logWs.onmessage = (event) => {
-                try {
-                    const logData = JSON.parse(event.data);
-                    appendLog(logData.message, logData.level || 'info');
-                } catch (e) {
-                    console.error("Log WS error", e);
-                }
-            };
-            logWs.onclose = () => {
-                logWs = null;
-                setTimeout(connectLogs, reconnectDelay(logReconnectAttempts++));
-            };
-        };
-
         connectData();
-        connectLogs();
     };
 
     // Button Listeners
@@ -834,114 +736,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Kaydet ve uygula';
-        }
-    });
-
-    // Backtest (tek tık)
-    const backtestStateLabels = {
-        idle: 'beklemede',
-        running: 'çalışıyor',
-        done: 'tamamlandı',
-        error: 'hata'
-    };
-    const renderBacktestSummary = (summary) => {
-        if (!summary) {
-            backtestSummary.hidden = true;
-            return;
-        }
-        const pct = (key) => {
-            const value = Number(summary[key] || 0);
-            return (value * 100).toFixed(2) + '%';
-        };
-        backtestSummary.hidden = false;
-        backtestSummary.innerHTML =
-            `<div class="backtest-summary-grid">
-                <span><strong>Getiri</strong>${pct('total_return')}</span>
-                <span><strong>CAGR</strong>${pct('cagr')}</span>
-                <span><strong>Benchmark</strong>${pct('benchmark_return')} (${summary.benchmark_symbol || '-'})</span>
-                <span><strong>MaxDD</strong>${pct('max_drawdown')}</span>
-                <span><strong>Sharpe</strong>${Number(summary.sharpe || 0).toFixed(2)}</span>
-                <span><strong>İşlem</strong>${summary.total_trades || 0}</span>
-                <span><strong>Kazanma</strong>${pct('win_rate')}</span>
-                <span><strong>Bitiş</strong>$${Number(summary.ending_equity || 0).toLocaleString()}</span>
-                <span><strong>Periyot</strong>${summary.start_date ? summary.start_date.slice(0, 10) : '-'} → ${summary.end_date ? summary.end_date.slice(0, 10) : '-'}</span>
-                <span><strong>Kapanış</strong>${summary.open_positions > 0 ? summary.open_positions + ' açık' : 'hepsi realize'}</span>
-            </div>`;
-    };
-    const renderBacktestProgress = (lines) => {
-        const container = backtestProgress;
-        container.innerHTML = '';
-        for (const line of lines) {
-            const div = document.createElement('div');
-            div.className = 'log-line info';
-            const message = document.createElement('span');
-            message.className = 'log-msg';
-            message.textContent = line;
-            div.appendChild(message);
-            container.appendChild(div);
-        }
-        container.scrollTop = container.scrollHeight;
-    };
-    const refreshBacktestStatus = async () => {
-        let response;
-        try {
-            response = await fetch('/api/backtest/status');
-        } catch (_) {
-            return;
-        }
-        if (!response.ok) return;
-        const data = await response.json();
-        backtestStateBadge.textContent = backtestStateLabels[data.state] || data.state;
-        backtestRunBtn.disabled = data.state === 'running';
-        renderBacktestProgress(data.progress || []);
-        if (data.state === 'done' || data.state === 'error') {
-            renderBacktestSummary(data.summary);
-            if (data.error) {
-                backtestSummary.hidden = false;
-                backtestSummary.innerHTML = `<span class="negative">Hata: ${data.error}</span>`;
-            }
-            appendLog(`Backtest ${data.state}: reports/${data.run_id}`, data.state === 'error' ? 'warning' : 'info');
-        } else if (data.state === 'running') {
-            backtestSummary.hidden = true;
-        }
-    };
-
-    backtestRunBtn.addEventListener('click', async () => {
-        const daysValue = parseInt(btDays.value, 10);
-        let parameters = {};
-        if (btParameters.value.trim()) {
-            try {
-                parameters = JSON.parse(btParameters.value);
-            } catch (_) {
-                alert('Parametreler geçerli bir JSON nesnesi olmalıdır.');
-                return;
-            }
-            if (!parameters || Array.isArray(parameters) || typeof parameters !== 'object') {
-                alert('Parametreler bir JSON nesnesi olmalıdır.');
-                return;
-            }
-        }
-        const payload = {
-            market: btMarket.value,
-            strategy: btStrategy.value.trim(),
-            parameters,
-            years: parseInt(btYears.value, 10) || 3,
-            days: Number.isNaN(daysValue) ? 90 : daysValue,
-            max_symbols: parseInt(btMaxSymbols.value, 10) || 0,
-            symbols: btSymbols.value.trim()
-        };
-        try {
-            const res = await controlFetch('/api/backtest/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await responsePayload(res);
-            if (!res.ok) throw new Error(data.detail || 'Backtest başlatılamadı');
-            appendLog(`Backtest başladı: ${data.run_id} (${payload.market}, ${payload.days || payload.years * 365} gün)`, 'info');
-            await refreshBacktestStatus();
-        } catch (err) {
-            alert('Hata: ' + err.message);
         }
     });
 
@@ -1346,14 +1140,13 @@ document.addEventListener('DOMContentLoaded', () => {
             await refreshSystemStatus();
             window.setInterval(refreshSystemStatus, 2000);
             initWebSockets();
-            await refreshBacktestStatus();
-            window.setInterval(refreshBacktestStatus, 3000);
             const accountRes = await fetch('/api/account');
             if (!accountRes.ok) throw new Error(`Hesap alınamadı (${accountRes.status})`);
             const accountData = await accountRes.json();
             updateAccountUI(accountData);
             await refreshDashboard();
             window.setInterval(refreshDashboard, 5000);
+            if (window.location.hash === '#settings') await openSettings();
         } catch (err) {
             console.error("Initialization error:", err);
         }

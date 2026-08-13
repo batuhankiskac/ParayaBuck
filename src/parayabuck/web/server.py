@@ -1526,6 +1526,17 @@ async def serve_index(request: Request) -> HTMLResponse:
     return response
 
 
+@app.get("/tools", response_class=HTMLResponse)
+async def serve_tools(request: Request) -> HTMLResponse:
+    response = templates.TemplateResponse(
+        request=request,
+        name="tools.html",
+        context={"control_token": manager.control_token},
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     """Process liveness endpoint; runtime readiness remains visible in /api/status."""

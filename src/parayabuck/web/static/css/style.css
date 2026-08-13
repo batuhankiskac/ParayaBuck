@@ -25,6 +25,10 @@
     padding: 0;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 html {
     color-scheme: dark;
 }
@@ -85,7 +89,7 @@ summary {
 .topbar {
     min-height: 76px;
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) auto minmax(360px, 1fr);
+    grid-template-columns: max-content minmax(360px, 1fr) max-content;
     align-items: center;
     gap: 24px;
     padding: 12px 14px 12px 18px;
@@ -149,6 +153,7 @@ summary {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: rgba(5, 8, 11, 0.44);
+    justify-self: center;
 }
 
 .mode-chip,
@@ -250,6 +255,7 @@ summary {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    white-space: nowrap;
 }
 
 .btn {
@@ -1095,7 +1101,7 @@ summary {
     50% { opacity: 0.45; }
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1500px) {
     .topbar {
         grid-template-columns: 1fr auto;
     }
@@ -1104,12 +1110,16 @@ summary {
         order: 3;
         grid-column: 1 / -1;
         width: 100%;
+        justify-self: stretch;
     }
 
     .mode-chip,
     .engine-state {
         flex: 1;
     }
+}
+
+@media (max-width: 1280px) {
 
     .metric-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -1148,6 +1148,7 @@ summary {
     }
 
     .nav-actions {
+        flex-wrap: wrap;
         justify-content: stretch;
     }
 
@@ -1231,6 +1232,10 @@ summary {
         flex-basis: 100%;
     }
 
+    .nav-actions .btn {
+        flex: 1 1 calc(50% - 4px);
+    }
+
     .topbar-context {
         display: grid;
         grid-template-columns: 1fr;
@@ -1269,6 +1274,29 @@ summary {
 
     .switch-row small {
         max-width: 230px;
+    }
+}
+
+/* Safety actions are intentionally contextual. When either becomes visible,
+   reserve a dedicated row instead of squeezing the status block and controls
+   into one line. */
+@media (min-width: 821px) {
+    .topbar:has(#resetSafetyBtn:not([hidden]), #riskEpochBtn:not([hidden])) {
+        grid-template-columns: max-content minmax(0, 1fr);
+    }
+
+    .topbar:has(#resetSafetyBtn:not([hidden]), #riskEpochBtn:not([hidden])) .topbar-context {
+        order: initial;
+        grid-column: auto;
+        width: auto;
+        justify-self: end;
+    }
+
+    .topbar:has(#resetSafetyBtn:not([hidden]), #riskEpochBtn:not([hidden])) .nav-actions {
+        grid-column: 1 / -1;
+        width: 100%;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
     }
 }
 

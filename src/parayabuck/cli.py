@@ -45,6 +45,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help="configuration YAML path")
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("web", help="start the local operations console")
+    backup = commands.add_parser(
+        "backup", help="consistent SQLite backup of the runtime decision database"
+    )
+    backup.add_argument(
+        "--retention-days",
+        type=float,
+        default=None,
+        help="override the configured backup retention (days)",
+    )
     authorize = commands.add_parser(
         "authorize-live", help="create a short-lived account/config-bound live approval"
     )
@@ -113,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args.config)
     if args.command == "authorize-live":
         return _authorize_live(config, args)
+    if args.command == "backup":
+        return _run_backup(config, args)
     market = Market(args.market)
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
@@ -258,6 +269,27 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         f"Live approval written for account ...{account_suffix}; "
         f"expires {approval.expires_at.isoformat()}"
     )
+    return 0
+
+
+def _run_backup(config: Config, args: argparse.Namespace) -> int:
+    """Snapshot the runtime decision database with the sqlite3 online backup
+    API (safe while the runtime keeps the WAL database open), then prune
+    backups older than the retention window."""
+    from parayabuck.backup import backup_database, verify_backup
+
+    retention_days = (
+        args.retention_days if args.retention_days is not None else config.backup.retention_days
+    )
+    destination = backup_database(
+        config.runtime.decision_db_path,
+        config.backup.path,
+        retention_days=retention_days,
+    )
+    if not verify_backup(destination):
+        raise SystemExit(f"Backup failed integrity check: {destination}")
+    print(f"Backup written: {destination}")
+    print(f"Retention: {retention_days:g} day(s); older backups pruned")
     return 0
 
 
@@ -504,3 +536,7 @@ def _print_summary(summary: dict[str, object], output_dir: str) -> None:
 
 
 __all__ = ["backtest_main", "main"]
+
+
+if __name__ == "__main__":
+    main()

@@ -152,6 +152,7 @@ activemq-data/
 data/runtime/
 data/cache/
 data/research/
+data/backups/
 parayabuck.sqlite3
 parayabuck.sqlite3-*
 parayabuck.sqlite3*.bak

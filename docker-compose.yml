@@ -1,0 +1,57 @@
+# ParayaBuck 24/7 paper-trading deployment.
+#
+# Builds the existing Dockerfile (python:3.12-slim, non-root user, locked
+# requirements, /healthz liveness probe) and runs the Web/engine process with
+# durable state mounted from the repository. The port is published to loopback
+# only: the operator UI stays host-private.
+#
+#   docker compose up -d --build
+#   docker compose logs -f parayabuck
+#   docker compose down
+#
+# Env (ALPACA_API_KEY, ALPACA_SECRET_KEY, PARAYABUCK_ENABLE_LIVE, LOG_LEVEL,
+# CONFIG_PATH, ...) is loaded from .env into the container. No secret value is
+# ever part of the command line or the compose file itself, so it cannot appear
+# in `docker ps` output or the json-file logs.
+services:
+  parayabuck:
+    build:
+      context: .
+    image: parayabuck:local
+    container_name: parayabuck
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Matches the Dockerfile VOLUMEs: runtime settings saved from the
+      # operator UI, the SQLite runtime ledger and universe state, and
+      # backtest/backup artifacts all survive container recreation.
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      # Liveness only (/healthz = process alive). Readiness is deliberately
+      # NOT part of container health: /readyz gates on config validity and a
+      # trading-expected engine, and paper credentials may legitimately be
+      # absent — an alive control plane must not be restarted for that.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 30s
+    logging:
+      # Container-level log rotation: the app streams structured logs to
+      # stdout, Docker's json-file driver rotates them here.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

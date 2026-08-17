@@ -333,6 +333,7 @@ class PortfolioBacktestEngine:
         self._positions: dict[str, _Position] = {}
         self._pending: list[PortfolioOrder] = []
         self._fills: list[PortfolioFill] = []
+        self._liquidation_costs: list[tuple[str, float, float, float]] = []
         self._rebalances: list[RebalanceRecord] = []
         self._realized_pnl_events: list[tuple[datetime, str, float]] = []
         self._closed_position_events: list[tuple[datetime, str, float]] = []
@@ -430,6 +431,7 @@ class PortfolioBacktestEngine:
         self._rebalances = []
         self._realized_pnl_events = []
         self._closed_position_events = []
+        self._liquidation_costs = []
         self._dividend_total = 0.0
         self._cash_rate_observations = tuple(
             sorted(cash_rates or [], key=lambda item: item.timestamp)
@@ -757,9 +759,14 @@ class PortfolioBacktestEngine:
                 remaining.append(order)
                 continue
             fillable = min(order.qty, known_average_volume * self.max_participation_pct)
-            if fillable <= 0:
-                remaining.append(order)
-                continue
+            if side == OrderSide.SELL:
+                position = self._positions.get(symbol)
+                if position is None or position.qty <= 0:
+                    continue
+                # Costs (fee/slippage/spread) and the recorded fill must be
+                # based on the quantity actually executed: a sell capped by
+                # current holdings must not charge for unsold shares.
+                fillable = min(fillable, position.qty)
             adverse = _adverse_bps(self.slippage_bps, self.spread_bps)
             side_multiplier = 1 if side == OrderSide.BUY else -1
             fill_price = bar.open * (1 + side_multiplier * adverse / 10_000)
@@ -797,8 +804,7 @@ class PortfolioBacktestEngine:
                     position.entry_fee += fee
             else:
                 position = self._positions.get(symbol)
-                if position is None or position.qty <= 0:
-                    continue
+                assert position is not None  # guaranteed by the SELL gate above
                 close_qty = min(fillable, position.qty)
                 filled_qty = close_qty
                 notional = close_qty * fill_price
@@ -1164,6 +1170,17 @@ class PortfolioBacktestEngine:
         self._realized_pnl_events.append((bar.timestamp, position.symbol, realized_delta))
         self._closed_position_events.append((bar.timestamp, position.symbol, lifetime_realized))
         self.state.realized_pnl += realized_delta
+        # Liquidation costs are real but not decision-driven: fold them into
+        # the cost/fee totals instead of recording a synthetic fill (which
+        # would violate the fills-strictly-after-decisions invariant).
+        self._liquidation_costs.append(
+            (
+                position.symbol,
+                position.qty * bar.close * self.slippage_bps / 10_000,
+                position.qty * bar.close * (self.spread_bps / 2) / 10_000,
+                fee,
+            )
+        )
         self._positions.pop(position.symbol, None)
 
     def _cash_hurdle_return(self, timestamps: list[datetime]) -> float:
@@ -1231,9 +1248,15 @@ class PortfolioBacktestEngine:
         pnls = tuple(event for _, _, event in self._realized_pnl_events)
         fills = tuple(self._fills)
         rebalances = tuple(self._enrich_rebalances())
-        slippage_total = sum(fill.slippage_cost for fill in fills)
-        spread_total = sum(fill.spread_cost for fill in fills)
-        fee_total = sum(fill.fee for fill in fills)
+        slippage_total = sum(fill.slippage_cost for fill in fills) + sum(
+            slippage for _symbol, slippage, _spread, _fee in self._liquidation_costs
+        )
+        spread_total = sum(fill.spread_cost for fill in fills) + sum(
+            spread for _symbol, _slippage, spread, _fee in self._liquidation_costs
+        )
+        fee_total = sum(fill.fee for fill in fills) + sum(
+            fee for _symbol, _slippage, _spread, fee in self._liquidation_costs
+        )
         avg_equity = sum(curve) / len(curve) if curve else self.starting_equity
         traded_notional = sum(fill.qty * fill.reference_price for fill in fills)
         turnover = traded_notional / avg_equity if avg_equity > 0 else 0.0
@@ -1514,6 +1537,8 @@ class PortfolioBacktestEngine:
         fee_by_symbol: dict[str, float] = {}
         for fill in self._fills:
             fee_by_symbol[fill.symbol] = fee_by_symbol.get(fill.symbol, 0.0) + fill.fee
+        for symbol, _slippage, _spread, fee in self._liquidation_costs:
+            fee_by_symbol[symbol] = fee_by_symbol.get(symbol, 0.0) + fee
         realized_by_symbol: dict[str, float] = {}
         for _timestamp, symbol, pnl in self._realized_pnl_events:
             realized_by_symbol[symbol] = realized_by_symbol.get(symbol, 0.0) + pnl

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import csv
 import itertools
 import json
@@ -494,7 +495,8 @@ def _persist_run(
 ) -> None:
     path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as connection:
+    # ``with sqlite3.connect`` only manages transactions; closing is manual.
+    with contextlib.closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(
             """CREATE TABLE IF NOT EXISTS backtest_runs (
                 run_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, strategy_name TEXT NOT NULL,

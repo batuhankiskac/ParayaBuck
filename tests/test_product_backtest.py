@@ -375,6 +375,9 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
             )
             return {symbol: [] for symbol in symbols}
 
+        def close(self) -> None:
+            pass
+
     monkeypatch.setattr(cli_module, "AlpacaHistoricalData", lambda *a, **k: FakeProvider())
     args = SimpleNamespace(data=None, symbols=None, candidate_limit=None)
     start = datetime(2022, 1, 1, tzinfo=UTC)

@@ -88,17 +88,6 @@ class ExitPolicy:
     max_holding_bars: int | None = None
     regime_exit: bool = False
 
-    @property
-    def is_dynamic(self) -> bool:
-        return any(
-            (
-                self.break_even_trigger_r is not None,
-                self.trailing_type != TrailingStopType.NONE,
-                self.max_holding_bars is not None,
-                self.regime_exit,
-            )
-        )
-
     def __post_init__(self) -> None:
         if not self.policy_id.strip():
             raise ValueError("Exit policy id cannot be empty")
@@ -199,12 +188,6 @@ class Signal:
     minimum_risk_reward: float | None = None
     reentry_cooldown_bars: int = 0
     normalized_expected_r: float | None = None
-
-    @property
-    def risk_reward(self) -> float:
-        risk = abs(self.entry_price - self.invalidation_price)
-        reward = abs(self.target_price - self.entry_price)
-        return reward / risk if risk > 0 else 0.0
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:

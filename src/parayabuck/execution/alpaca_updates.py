@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from parayabuck.core.models import Market, OrderRole, OrderState
+from parayabuck.core.models import Market, OrderRole
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils.objects import field_value as _field
 
@@ -25,19 +25,6 @@ class TradeUpdate:
     timestamp: datetime
     fee: float = 0.0
     activity_id: str | None = None
-
-    @property
-    def state(self) -> OrderState | None:
-        return {
-            "new": OrderState.ACCEPTED,
-            "accepted": OrderState.ACCEPTED,
-            "partial_fill": OrderState.PARTIALLY_FILLED,
-            "fill": OrderState.FILLED,
-            "canceled": OrderState.CANCELLED,
-            "cancelled": OrderState.CANCELLED,
-            "rejected": OrderState.REJECTED,
-            "expired": OrderState.EXPIRED,
-        }.get(self.event)
 
 
 UpdateHandler = Callable[[TradeUpdate], Awaitable[None]]

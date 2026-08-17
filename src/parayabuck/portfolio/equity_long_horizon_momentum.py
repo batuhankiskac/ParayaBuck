@@ -199,8 +199,5 @@ class EquityLongHorizonMomentum1dV2(PortfolioStrategy):
             },
         )
 
-    def requires_intermediate_risk_rebalance(self, context: PortfolioContext) -> bool:
-        return False
-
 
 __all__ = ["EquityLongHorizonMomentum1dV2"]

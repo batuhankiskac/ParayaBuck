@@ -15,10 +15,6 @@ from parayabuck.core.models import Bar
 MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 
 
-def _as_float(value: object, default: float = 0.0) -> float:
-    return float(value) if isinstance(value, (int, float)) else default
-
-
 def _benchmark_yearly_returns(benchmark_bars: Sequence[Bar] | None) -> dict[int, float]:
     if not benchmark_bars:
         return {}
@@ -205,104 +201,6 @@ class PortfolioReport:
             writer.writerows(self.drawdowns)
         written.append(str(directory / "drawdowns.csv"))
         return written
-
-    def render_text(self) -> str:
-        summary = self.summary
-        lines = ["=" * 78, "PORTFOLIO BACKTEST RAPORU", "=" * 78]
-        lines.append(
-            f"Strateji: {summary.get('strategy_name', '')} v{summary.get('strategy_version', '')}"
-        )
-        lines.append(f"Periyot: {summary.get('start_date', '')} -> {summary.get('end_date', '')}")
-        lines.append("")
-        lines.append("-- ÖZET --")
-        lines.append(f"  Toplam Getiri : {_as_float(summary.get('total_return')) * 100:.2f}%")
-        lines.append(
-            f"  Benchmark     : {_as_float(summary.get('benchmark_return')) * 100:.2f}%  "
-            f"({summary.get('benchmark_symbol', '')})"
-        )
-        lines.append(f"  Excess        : {_as_float(summary.get('excess_return')) * 100:.2f}%")
-        lines.append(
-            f"  Brüt / Net    : {_as_float(summary.get('gross_return')) * 100:.2f}% / "
-            f"{_as_float(summary.get('net_return')) * 100:.2f}%"
-        )
-        lines.append(f"  Max Drawdown  : {_as_float(summary.get('max_drawdown')) * 100:.2f}%")
-        lines.append(
-            f"  Sharpe / Sortino / Calmar: {_as_float(summary.get('sharpe')):.2f} / "
-            f"{_as_float(summary.get('sortino')):.2f} / {_as_float(summary.get('calmar')):.2f}"
-        )
-        lines.append(
-            f"  CAGR          : {_as_float(summary.get('cagr')) * 100:.2f}%  "
-            f"Volatilite: {_as_float(summary.get('annualized_volatility')) * 100:.2f}%"
-        )
-        lines.append("")
-        lines.append("-- MALİYETLER --")
-        lines.append(
-            f"  Slippage      : {_as_float(summary.get('slippage_cost_total')):,.2f}  "
-            f"Spread: {_as_float(summary.get('spread_cost_total')):,.2f}  "
-            f"Fee: {_as_float(summary.get('fee_total')):,.2f}"
-        )
-        lines.append(
-            f"  Turnover      : {_as_float(summary.get('turnover')):.2f}  "
-            f"Ort. varlık: {_as_float(summary.get('average_holdings_count')):.2f}  "
-            f"Ort. nakit: {_as_float(summary.get('average_cash_ratio')) * 100:.1f}%"
-        )
-        lines.append(
-            f"  Rebalance     : {summary.get('rebalance_count', 0)}  "
-            f"Kapanan pozisyon: {summary.get('closed_positions', 0)}"
-        )
-        lines.append(
-            f"  Max konsantrasyon: {_as_float(summary.get('maximum_concentration')) * 100:.1f}%  "
-            f"En kötü ay: {_as_float(summary.get('worst_month_return')) * 100:.2f}%  "
-            f"En kötü yıl: {_as_float(summary.get('worst_year_return')) * 100:.2f}%  "
-            f"Pozitif ay oranı: {_as_float(summary.get('positive_month_ratio')) * 100:.1f}%"
-        )
-        lines.append("")
-        lines.append("-- REJİM PERFORMANSI --")
-        regime = self.regime_performance
-        lines.append(
-            f"  Benchmark pozitif aylar: {regime.get('up_months', 0)} "
-            f"(ort. {_as_float(regime.get('mean_up_month_return')) * 100:.2f}%)  "
-            f"Benchmark negatif aylar: {regime.get('down_months', 0)} "
-            f"(ort. {_as_float(regime.get('mean_down_month_return')) * 100:.2f}%)"
-        )
-        lines.append(
-            f"  Rolling beta (63g): ort. {_as_float(regime.get('mean_rolling_beta')):.2f} "
-            f"son {_as_float(regime.get('last_rolling_beta')):.2f}"
-        )
-        lines.append("")
-        lines.append("-- SEMBOL KATKILARI --")
-        for contribution in sorted(
-            self.per_symbol,
-            key=lambda item: _as_float(item.get("realized_pnl")),
-            reverse=True,
-        ):
-            lines.append(
-                f"  {contribution['symbol']:<10} "
-                f"realized={_as_float(contribution.get('realized_pnl')):>12,.2f}  "
-                f"fee={_as_float(contribution.get('fees')):>8,.2f}  "
-                f"son ağırlık={_as_float(contribution.get('final_weight')) * 100:>5.1f}%"
-            )
-        lines.append("")
-        lines.append("-- YILLIK GETİRİLER --")
-        for year, return_pct, benchmark_pct in self.yearly_returns:
-            lines.append(
-                f"  {year}: {return_pct * 100:>8.2f}%   benchmark {benchmark_pct * 100:>8.2f}%"
-            )
-        lines.append("")
-        lines.append("-- REBALANCE GÜNLÜĞÜ (ilk 12) --")
-        for record in list(self.rebalances)[:12]:
-            targets = ", ".join(
-                f"{symbol}={weight * 100:.0f}%" for symbol, weight in record.target_weights
-            )
-            lines.append(
-                f"  #{record.rebalance_number:>3} {record.decision_timestamp.date()} "
-                f"[{record.reason}] {targets or 'nakit'}  "
-                f"turnover={record.realized_turnover * 100:.1f}%"
-            )
-        if len(self.rebalances) > 12:
-            lines.append(f"  ... ve {len(self.rebalances) - 12} rebalance daha")
-        lines.append("=" * 78)
-        return "\n".join(lines)
 
 
 def build_portfolio_report(
@@ -546,16 +444,20 @@ def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
     for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True):
         portfolio_by_date[timestamp] = equity
     common_dates = sorted(set(portfolio_by_date) & set(benchmark_by_date))
-    portfolio_returns = [
-        portfolio_by_date[common_dates[index]] / portfolio_by_date[common_dates[index - 1]] - 1
+    # Build (portfolio, benchmark) pairs jointly: filtering the two series
+    # independently desynchronizes them when only one leg has a non-positive
+    # base value, corrupting (or crashing) the window slices below.
+    aligned_returns = [
+        (
+            portfolio_by_date[common_dates[index]] / portfolio_by_date[common_dates[index - 1]] - 1,
+            benchmark_by_date[common_dates[index]] / benchmark_by_date[common_dates[index - 1]] - 1,
+        )
         for index in range(1, len(common_dates))
         if portfolio_by_date[common_dates[index - 1]] > 0
+        and benchmark_by_date[common_dates[index - 1]] > 0
     ]
-    benchmark_returns = [
-        benchmark_by_date[common_dates[index]] / benchmark_by_date[common_dates[index - 1]] - 1
-        for index in range(1, len(common_dates))
-        if benchmark_by_date[common_dates[index - 1]] > 0
-    ]
+    portfolio_returns = [pair[0] for pair in aligned_returns]
+    benchmark_returns = [pair[1] for pair in aligned_returns]
     if len(portfolio_returns) < ROLLING_BETA_WINDOW_DAYS:
         return ()
     betas: list[float] = []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import statistics
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -305,12 +306,9 @@ def build_trailing_point_in_time_universe(
 
 
 def _median_dollar_volume(bars: list[Bar]) -> float:
-    import statistics
-
     values = [
         float(bar.close) * float(bar.volume)
         for bar in sorted(bars, key=lambda item: item.timestamp)[-20:]
-        if float(bar.volume) >= 0
     ]
     return statistics.median(values) if values else 0.0
 

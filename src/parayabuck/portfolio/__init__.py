@@ -82,13 +82,6 @@ def supported_portfolio_strategies() -> tuple[str, ...]:
     return tuple(sorted(_PORTFOLIO_STRATEGY_FACTORIES))
 
 
-def strategy_specs() -> tuple[StrategySpec, ...]:
-    """Declared trading-layer contracts of every registered strategy."""
-    return tuple(
-        _PORTFOLIO_STRATEGY_FACTORIES[name]().spec() for name in supported_portfolio_strategies()
-    )
-
-
 def rebalance_policy_for(
     strategy: PortfolioStrategy, parameters: dict[str, object] | None = None
 ) -> RebalancePolicy:
@@ -134,7 +127,6 @@ __all__ = [
     "TargetWeight",
     "portfolio_strategy_from",
     "rebalance_policy_for",
-    "strategy_specs",
     "supported_portfolio_strategies",
     "validate_strategy_timeframe",
 ]

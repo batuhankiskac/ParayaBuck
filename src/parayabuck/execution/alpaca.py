@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import math
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -13,16 +13,13 @@ from typing import Any
 from uuid import uuid4
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
+from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import (
     GetOrderByIdRequest,
     GetOrdersRequest,
     MarketOrderRequest,
-    ReplaceOrderRequest,
     StopLimitOrderRequest,
-    StopLossRequest,
     StopOrderRequest,
-    TakeProfitRequest,
 )
 
 from parayabuck.core.models import (
@@ -625,300 +622,6 @@ class AlpacaBroker:
                 f"Alpaca order response has no id for {order.client_order_id}"
             )
         return broker_order_id
-
-    def submit(self, intent: OrderIntent) -> tuple[OrderState, Fill | None]:
-        """Submit an entry and drive it to a terminal synchronous outcome.
-
-        Equity entries are accepted broker-side (bracket protection) and
-        return ``ACCEPTED``; later state is authoritative from TradingStream.
-        Crypto entries are polled to a terminal state; if protection cannot
-        be installed the position is flattened and the result is
-        ``REJECTED`` together with a non-None fill (callers must not treat a
-        non-None fill as proof of entry without checking the state, and a
-        rejection with a fill means the entry was closed, not that nothing
-        happened). Exceptions after broker acceptance degrade to
-        ``RECONCILIATION_REQUIRED``, never to a silent rejection.
-        """
-        entry_registered = False
-        broker_write_attempted = False
-        broker_order_id = ""
-        try:
-            self._validate_pre_submit(intent)
-            ledger = self.ledger
-            if ledger is not None:
-                # Reserve the symbol in the durable ledger before the broker
-                # write.  Previously this happened after submit(), leaving a
-                # window in which a second cycle could buy the same symbol.
-                ledger.register_entry_order(self._account_id or "unknown", intent)
-                entry_registered = True
-            qty, stop_price, target_price = self._validated_values(intent)
-            side = OrderSide.BUY if intent.direction == Direction.LONG else OrderSide.SELL
-            # DAY bracket legs expire at the close and leave overnight equity
-            # positions without their take-profit. Alpaca supports GTC bracket
-            # orders, keeping both OCO legs intact across sessions.
-            tif = TimeInForce.GTC
-            if intent.market == Market.EQUITY:
-                request: Any = MarketOrderRequest(
-                    symbol=intent.symbol,
-                    qty=qty,
-                    side=side,
-                    time_in_force=tif,
-                    order_class=OrderClass.BRACKET,
-                    stop_loss=StopLossRequest(stop_price=stop_price),
-                    take_profit=TakeProfitRequest(limit_price=target_price),
-                    client_order_id=intent.client_order_id,
-                )
-            else:
-                request = MarketOrderRequest(
-                    symbol=intent.symbol,
-                    qty=qty,
-                    side=side,
-                    time_in_force=tif,
-                    client_order_id=intent.client_order_id,
-                )
-            broker_write_attempted = True
-            result = self._submit_with_recovery(request, intent.client_order_id)
-            result_id = self._field(result, "id")
-            if not result_id:
-                raise AmbiguousOrderState(f"Alpaca order response has no id for {intent.symbol}")
-            broker_order_id = str(result_id)
-            if ledger is not None:
-                ledger.register_entry_order(
-                    self._account_id or "unknown",
-                    intent,
-                    str(result_id),
-                )
-            if intent.market == Market.EQUITY:
-                # Bracket protection is broker-side. TradingStream is the
-                # authoritative source for later partial/fill/terminal state.
-                return OrderState.ACCEPTED, None
-            state, fill = self._wait_for_fill(str(result_id), intent, qty)
-            if intent.market == Market.CRYPTO and state in {
-                OrderState.ACCEPTED,
-                OrderState.PARTIALLY_FILLED,
-            }:
-                log.warning(
-                    "Entry cancel requested: market=crypto symbol=%s "
-                    "entry_client_order_id=%s broker_order_id=%s recovery_action=bounded_poll",
-                    intent.symbol,
-                    intent.client_order_id,
-                    result_id,
-                )
-                try:
-                    self._client.cancel_order_by_id(result_id)
-                except Exception as exc:
-                    # The request may have reached Alpaca. Resolve the existing
-                    # order instead of converting uncertainty into rejection.
-                    log.warning(
-                        "Entry cancel response ambiguous: market=crypto symbol=%s "
-                        "entry_client_order_id=%s broker_order_id=%s error=%s",
-                        intent.symbol,
-                        intent.client_order_id,
-                        result_id,
-                        exc,
-                    )
-                state, final_fill = self._wait_for_fill(
-                    str(result_id),
-                    intent,
-                    qty,
-                    timeout=getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0),
-                )
-                if final_fill is not None:
-                    fill = final_fill
-                if state in {OrderState.ACCEPTED, OrderState.PARTIALLY_FILLED}:
-                    raise AmbiguousOrderState(
-                        "Crypto entry cancel outcome unresolved for "
-                        f"client_order_id={intent.client_order_id}"
-                    )
-                if fill is None:
-                    self._record_entry_terminal(intent, state, str(result_id))
-                    return state, None
-            if intent.market == Market.CRYPTO and fill is not None:
-                if ledger is not None:
-                    ledger.apply_execution_event(
-                        ExecutionEvent(
-                            account_id=self._account_id or "unknown",
-                            client_order_id=intent.client_order_id,
-                            broker_order_id=str(result_id),
-                            parent_order_id=None,
-                            role=OrderRole.ENTRY,
-                            symbol=intent.symbol,
-                            market=intent.market,
-                            state=state,
-                            requested_qty=intent.qty,
-                            cumulative_filled_qty=fill.qty,
-                            average_fill_price=fill.price,
-                            occurred_at=fill.timestamp,
-                        )
-                    )
-                protected = self._submit_crypto_stop(intent, fill.qty, stop_price)
-                if not protected:
-                    flatten_result = self._flatten(intent, fill.qty)
-                    if ledger is not None and flatten_result is not None:
-                        exit_fill, exit_broker_id = flatten_result
-                        ledger.apply_execution_event(
-                            ExecutionEvent(
-                                account_id=self._account_id or "unknown",
-                                client_order_id=exit_fill.client_order_id,
-                                broker_order_id=exit_broker_id,
-                                parent_order_id=None,
-                                role=OrderRole.EMERGENCY_EXIT,
-                                symbol=intent.symbol,
-                                market=intent.market,
-                                state=OrderState.FILLED,
-                                requested_qty=exit_fill.qty,
-                                cumulative_filled_qty=exit_fill.qty,
-                                average_fill_price=exit_fill.price,
-                                occurred_at=exit_fill.timestamp,
-                            )
-                        )
-                    log.critical(
-                        "Crypto entry protection failed; position flattened: "
-                        "symbol=%s entry_client_order_id=%s broker_order_id=%s",
-                        intent.symbol,
-                        intent.client_order_id,
-                        result_id,
-                    )
-                    _emit_alert(
-                        "order_rejected",
-                        message=(
-                            f"Crypto entry protection failed; entry flattened and "
-                            f"rejected: symbol={intent.symbol} "
-                            f"client_order_id={intent.client_order_id}"
-                        ),
-                        symbol=intent.symbol,
-                        market=intent.market.value,
-                        client_order_id=intent.client_order_id,
-                        reason="protection_failed_after_fill",
-                    )
-                    return OrderState.REJECTED, fill
-            if fill is None and state in {
-                OrderState.CANCELLED,
-                OrderState.REJECTED,
-                OrderState.EXPIRED,
-            }:
-                self._record_entry_terminal(intent, state, str(result_id))
-            return state, fill
-        except ValueError as exc:
-            # Closed markets, unsupported shorts, and duplicate orders are
-            # expected safety rejections rather than broker failures.
-            if broker_order_id:
-                ledger = self.ledger
-                if ledger is not None:
-                    ledger.mark_manual_intervention(
-                        self._account_id or "unknown", intent.client_order_id
-                    )
-                log.critical(
-                    "Order processing failed after broker acceptance; "
-                    "reconciliation is required: %s",
-                    exc,
-                )
-                _emit_alert(
-                    "ambiguous_order",
-                    message=(
-                        f"Order failed after broker acceptance (reconciliation "
-                        f"required): {exc} client_order_id={intent.client_order_id}"
-                    ),
-                    symbol=intent.symbol,
-                    market=intent.market.value,
-                    client_order_id=intent.client_order_id,
-                    reason="validation_failure_after_acceptance",
-                )
-                return OrderState.RECONCILIATION_REQUIRED, None
-            if entry_registered:
-                self._record_entry_terminal(intent, OrderState.REJECTED)
-            log.warning("Order rejected: %s", exc)
-            _emit_alert(
-                "order_rejected",
-                message=f"Order rejected: {exc} client_order_id={intent.client_order_id}",
-                symbol=intent.symbol,
-                market=intent.market.value,
-                client_order_id=intent.client_order_id,
-                reason=str(exc),
-            )
-            return OrderState.REJECTED, None
-        except AmbiguousOrderState as exc:
-            ledger = self.ledger
-            if ledger is not None:
-                ledger.mark_manual_intervention(
-                    self._account_id or "unknown", intent.client_order_id
-                )
-            log.critical(
-                "Order state is ambiguous; entries must halt pending reconciliation: %s", exc
-            )
-            _emit_alert(
-                "ambiguous_order",
-                message=(
-                    f"Order state is ambiguous; entries halt pending reconciliation: "
-                    f"{exc} client_order_id={intent.client_order_id}"
-                ),
-                symbol=intent.symbol,
-                market=intent.market.value,
-                client_order_id=intent.client_order_id,
-            )
-            return OrderState.RECONCILIATION_REQUIRED, None
-        except Exception as exc:
-            if entry_registered and not broker_write_attempted:
-                self._record_entry_terminal(intent, OrderState.REJECTED)
-            if broker_write_attempted:
-                ledger = self.ledger
-                if ledger is not None:
-                    ledger.mark_manual_intervention(
-                        self._account_id or "unknown", intent.client_order_id
-                    )
-                log.critical(
-                    "Order processing failed after broker write; reconciliation is required: %s",
-                    exc,
-                )
-                _emit_alert(
-                    "ambiguous_order",
-                    message=(
-                        f"Order processing failed after broker write (reconciliation "
-                        f"required): {exc} client_order_id={intent.client_order_id}"
-                    ),
-                    symbol=intent.symbol,
-                    market=intent.market.value,
-                    client_order_id=intent.client_order_id,
-                    reason="exception_after_broker_write",
-                )
-                return OrderState.RECONCILIATION_REQUIRED, None
-            log.error("Order rejected: %s", exc)
-            _emit_alert(
-                "order_rejected",
-                message=f"Order rejected: {exc} client_order_id={intent.client_order_id}",
-                symbol=intent.symbol,
-                market=intent.market.value,
-                client_order_id=intent.client_order_id,
-                reason=str(exc),
-            )
-            return OrderState.REJECTED, None
-
-    def _record_entry_terminal(
-        self,
-        intent: OrderIntent,
-        state: OrderState,
-        broker_order_id: str = "",
-    ) -> None:
-        """Persist a confirmed terminal entry state and release its reservation."""
-        ledger = self.ledger
-        if ledger is None:
-            return
-        ledger.apply_execution_event(
-            ExecutionEvent(
-                account_id=self._account_id or "unknown",
-                client_order_id=intent.client_order_id,
-                broker_order_id=broker_order_id,
-                parent_order_id=None,
-                role=OrderRole.ENTRY,
-                symbol=intent.symbol,
-                market=intent.market,
-                state=state,
-                requested_qty=intent.qty,
-                cumulative_filled_qty=0,
-                average_fill_price=None,
-                occurred_at=datetime.now(UTC),
-            )
-        )
 
     def reconcile(self) -> None:
         """Synchronize broker, stream and ledger state after any drift.
@@ -1672,59 +1375,6 @@ class AlpacaBroker:
         rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
         return float(rounded)
 
-    def _validated_values(self, intent: OrderIntent) -> tuple[float, float, float]:
-        asset = self._asset(intent.symbol)
-        if not bool(getattr(asset, "tradable", False)):
-            raise ValueError(f"Asset is not tradable: {intent.symbol}")
-        if intent.market == Market.CRYPTO and intent.direction == Direction.SHORT:
-            raise ValueError("Alpaca does not support short selling crypto")
-        if intent.market == Market.EQUITY and intent.direction == Direction.SHORT:
-            if not bool(getattr(asset, "shortable", False)) or not bool(
-                getattr(asset, "easy_to_borrow", False)
-            ):
-                raise ValueError(f"Asset is not available to short: {intent.symbol}")
-        qty = Decimal(str(intent.qty))
-        if intent.market == Market.EQUITY:
-            # Bracket orders (take_profit/stop_loss legs) require whole shares;
-            # fractional equity qty is only allowed for simple market orders.
-            qty = qty.to_integral_value(rounding=ROUND_DOWN)
-        minimum = getattr(asset, "min_order_size", None)
-        increment = getattr(asset, "min_trade_increment", None)
-        if increment is not None:
-            step = Decimal(str(increment))
-            qty = (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
-        if intent.market == Market.EQUITY:
-            qty = qty.to_integral_value(rounding=ROUND_DOWN)
-        if qty <= 0:
-            raise ValueError(f"Order rounds to zero for {intent.symbol}")
-        if minimum is not None and qty < Decimal(str(minimum)):
-            raise ValueError(
-                f"Order quantity {qty} is below the minimum {minimum} for {intent.symbol}"
-            )
-        stop_price = self._round_to_step(
-            intent.stop_price, self._price_step(intent.symbol, intent.market, intent.stop_price)
-        )
-        target_price = self._round_to_step(
-            intent.target_price,
-            self._price_step(intent.symbol, intent.market, intent.target_price),
-        )
-        if intent.direction == Direction.LONG and not (
-            stop_price < intent.entry_price < target_price
-        ):
-            raise ValueError(
-                f"Bracket legs inverted for {intent.symbol}: "
-                f"stop={stop_price} entry={intent.entry_price} target={target_price}"
-            )
-        if intent.direction == Direction.SHORT and not (
-            target_price < intent.entry_price < stop_price
-        ):
-            raise ValueError(
-                f"Bracket legs inverted for {intent.symbol}: "
-                f"target={target_price} entry={intent.entry_price} stop={stop_price}"
-            )
-        qty_number: float = int(qty) if intent.market == Market.EQUITY else float(qty)
-        return qty_number, stop_price, target_price
-
     def _wait_for_fill(
         self, order_id: str, intent: OrderIntent, qty: float, timeout: float = 5.0
     ) -> tuple[OrderState, Fill | None]:
@@ -1765,155 +1415,6 @@ class AlpacaBroker:
             time.sleep(0.5)
         log.warning("Order %s not filled within %.1fs", order_id, timeout)
         return state, fill
-
-    def _submit_crypto_stop(self, intent: OrderIntent, qty: float, stop: float) -> bool:
-        qty = self._available_position_qty(
-            intent.symbol,
-            qty,
-            reserve_fee_on_lookup_failure=intent.direction == Direction.LONG,
-        )
-        if qty <= 0:
-            log.error("Protective stop has no available quantity for %s", intent.symbol)
-            return False
-        return (
-            self._submit_stop(
-                intent.symbol,
-                intent.market,
-                qty,
-                stop,
-                intent.direction == Direction.LONG,
-                client_order_id=f"{intent.client_order_id}-stop",
-            )
-            is not None
-        )
-
-    def protect_recovered_crypto_entry(self, intent: OrderIntent) -> bool:
-        """Protect a fill discovered after an ambiguous entry-cancel outcome."""
-        ledger = self.ledger
-        if ledger is None:
-            return False
-        current = next(
-            (
-                item
-                for item in ledger.managed_entries_for_account(self._account_id or "unknown")
-                if item.entry_client_order_id == intent.client_order_id
-            ),
-            None,
-        )
-        if current is None or current.owned_qty <= 0:
-            return False
-        if current.protective_stop_broker_order_id and current.stop_state == "open":
-            return True
-        protected = self._submit_crypto_stop(
-            intent,
-            current.owned_qty,
-            current.current_stop or current.original_stop,
-        )
-        if not protected:
-            ledger.mark_manual_intervention(self._account_id or "unknown", intent.client_order_id)
-        return protected
-
-    def replace_protective_stop(
-        self,
-        entry_client_order_id: str,
-        requested_stop: float,
-    ) -> bool:
-        """Atomically tighten a managed stop and persist the acknowledged order.
-
-        Alpaca's replace endpoint is used directly. The method never cancels the
-        active order first, so an API failure leaves the existing stop in force.
-        """
-        ledger = self.ledger
-        account_id = self._account_id
-        if ledger is None or not account_id or not math.isfinite(requested_stop):
-            return False
-        current = next(
-            (
-                item
-                for item in ledger.managed_entries_for_account(account_id)
-                if item.entry_client_order_id == entry_client_order_id
-            ),
-            None,
-        )
-        if current is None or not current.protective_stop_broker_order_id:
-            return False
-        active_stop = current.current_stop or current.original_stop
-        # Direction comes from the bracket geometry (stop < target means a
-        # long entry), never from the fill price: an accepted-but-unfilled
-        # entry has filled_avg_price == 0 and would misclassify as short.
-        # A row without a target (legacy data) cannot prove direction:
-        # refuse rather than risk moving a stop the wrong way.
-        if current.original_target <= 0:
-            return False
-        position_is_long = current.original_stop < current.original_target
-        tighter = requested_stop > active_stop if position_is_long else requested_stop < active_stop
-        if requested_stop <= 0 or not tighter:
-            return False
-
-        step = self._price_step(current.canonical_symbol, current.market, requested_stop)
-        stop_price = self._round_to_step(requested_stop, step)
-        rounded_tighter = stop_price > active_stop if position_is_long else stop_price < active_stop
-        if stop_price <= 0 or not rounded_tighter:
-            return False
-        request_values: dict[str, float] = {"stop_price": stop_price}
-        if current.market == Market.CRYPTO:
-            offset = Decimal(str(self.crypto_stop_limit_offset_bps)) / Decimal("10000")
-            stop_decimal = Decimal(str(stop_price))
-            distance_steps = max(
-                1,
-                int((stop_decimal * offset / step).to_integral_value(rounding=ROUND_CEILING)),
-            )
-            limit_decimal = stop_decimal + (
-                -distance_steps * step if position_is_long else distance_steps * step
-            )
-            if limit_decimal <= 0:
-                return False
-            request_values["limit_price"] = float(limit_decimal)
-
-        try:
-            result = self._client.replace_order_by_id(
-                current.protective_stop_broker_order_id,
-                ReplaceOrderRequest(**request_values),
-            )
-        except Exception as exc:
-            log.error(
-                "Atomic protective stop replacement failed for %s: %s",
-                current.canonical_symbol,
-                exc,
-            )
-            return False
-        status = self._normalized_field(result, "status")
-        if status in {"canceled", "cancelled", "expired", "rejected"}:
-            return False
-        broker_order_id = str(self._field(result, "id", "") or "")
-        client_order_id = str(
-            self._field(result, "client_order_id", "")
-            or current.protective_stop_client_order_id
-            or ""
-        )
-        if not broker_order_id or not client_order_id:
-            ledger.mark_manual_intervention(account_id, entry_client_order_id)
-            log.critical(
-                "Replacement acknowledged without stable identifiers: symbol=%s",
-                current.canonical_symbol,
-            )
-            return False
-        try:
-            ledger.register_protective_stop_replacement(
-                account_id,
-                entry_client_order_id,
-                stop_price=stop_price,
-                client_order_id=client_order_id,
-                broker_order_id=broker_order_id,
-            )
-        except Exception:
-            ledger.mark_manual_intervention(account_id, entry_client_order_id)
-            log.exception(
-                "Replacement stop could not be persisted: symbol=%s",
-                current.canonical_symbol,
-            )
-            return False
-        return True
 
     def _available_position_qty(
         self,
@@ -2158,15 +1659,26 @@ class AlpacaBroker:
 
     @staticmethod
     def _available_qty_from_error(exc: Exception) -> float:
+        """Extract the broker-reported available quantity from a rejection.
+
+        Alpaca rejects an oversized sell with a JSON body whose ``available``
+        value lives inside the message TEXT (``{"code": 40211000, "message":
+        "insufficient qty available for base (requested: X, available: Y)"}``),
+        not as a top-level key. Both shapes are accepted so synthetic and
+        broker-native errors resolve identically.
+        """
         message = str(exc)
         start = message.find("{")
-        if start < 0:
-            return 0.0
-        try:
-            payload = json.loads(message[start:])
-            return max(0.0, float(payload.get("available", 0)))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return 0.0
+        if start >= 0:
+            try:
+                payload = json.loads(message[start:])
+                if "available" in payload:
+                    return max(0.0, float(payload["available"]))
+                message = str(payload.get("message", ""))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        match = re.search(r"available:\s*([0-9]+(?:\.[0-9]+)?)", message)
+        return max(0.0, float(match.group(1))) if match else 0.0
 
     def _flatten(self, intent: OrderIntent, qty: float) -> tuple[Fill, str]:
         # Never call close_position(symbol): it closes the account's full
@@ -2622,22 +2134,6 @@ class AlpacaBroker:
             f"{last_status or 'lookup_failed'}"
         )
 
-    def _validate_pre_submit(self, intent: OrderIntent) -> None:
-        if intent.market == Market.EQUITY:
-            get_clock = getattr(self._client, "get_clock", None)
-            if get_clock is not None:
-                clock: Any = get_clock()
-                is_open = clock.get("is_open", False) if isinstance(clock, dict) else clock.is_open
-                if not bool(is_open):
-                    raise ValueError(
-                        "Equity market is closed; refusing to queue stale order for "
-                        f"{intent.symbol}"
-                    )
-        if getattr(self._client, "get_orders", None) is not None and self._has_open_order(
-            intent.symbol
-        ):
-            raise ValueError(f"Open order already exists for {intent.symbol}")
-
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
         try:
             return self._client.submit_order(request)
@@ -2649,10 +2145,12 @@ class AlpacaBroker:
                 raise
             get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
             if get_by_client_id is not None:
+                lookup_error: Exception | None = None
                 try:
                     recovered: Any = get_by_client_id(client_order_id)
-                except Exception:
+                except Exception as lookup_exc:
                     recovered = None
+                    lookup_error = lookup_exc
                 if recovered is not None:
                     status = self._normalized_field(recovered, "status")
                     if status in {"rejected", "canceled", "cancelled", "expired"}:
@@ -2665,6 +2163,17 @@ class AlpacaBroker:
                         submit_exc,
                     )
                     return recovered
+                if getattr(lookup_error, "status_code", None) == 404:
+                    # The deterministic client id was never accepted: the
+                    # original submit failure is the definite outcome, not an
+                    # ambiguity (mirrors resolve_portfolio_submission).
+                    raise submit_exc
+                if lookup_error is not None:
+                    log.warning(
+                        "Recovery lookup failed for %s after submit error: %s",
+                        client_order_id,
+                        lookup_error,
+                    )
             _emit_alert(
                 "ambiguous_order",
                 message=(
@@ -2707,6 +2216,10 @@ class AlpacaBroker:
             GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
         )
         if isinstance(orders, dict):
+            log.warning(
+                "Unexpected get_orders payload shape for %s; treating as no open orders",
+                symbol,
+            )
             return []
         closing_side = "sell" if position_is_long else "buy"
         canonical = canonical_symbol(symbol)

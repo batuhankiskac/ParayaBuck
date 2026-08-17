@@ -340,61 +340,64 @@ def _load_bars(
     # letting the backtest run with truncated history.
     by_symbol: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
     attempts = 0
-    while attempts < 3:
-        attempts += 1
-        expected_per_symbol = max(
-            1,
-            int((end_at - start_at).total_seconds() / 86_400)
-            * (24 if selection.timeframe == "1h" else 1),
-        )
-        batch_size = max(1, min(100, 9_000 // expected_per_symbol))
-        for offset in range(0, len(symbols), batch_size):
-            batch = symbols[offset : offset + batch_size]
-            downloaded = provider.get_bars_batch(
-                batch,
-                strategy.timeframe,
-                start=start_at,
-                end=end_at,
-                adjustment="splits" if market == Market.EQUITY else "raw",
+    try:
+        while attempts < 3:
+            attempts += 1
+            expected_per_symbol = max(
+                1,
+                int((end_at - start_at).total_seconds() / 86_400)
+                * (24 if selection.timeframe == "1h" else 1),
             )
-            for symbol in batch:
-                by_symbol[symbol] = [
-                    bar for bar in downloaded.get(symbol, ()) if bar.timestamp >= start_at
-                ]
-        deficient = [
-            symbol
-            for symbol in symbols
-            if start is not None
-            and sum(1 for bar in by_symbol[symbol] if bar.timestamp < start) < minimum_bars
-        ]
-        if not deficient:
-            break
-        if attempts >= 3:
-            log.warning(
-                "Warmup still short of %d pre-start bars for %d symbol(s) after "
-                "3 extension attempts: %s",
-                minimum_bars,
-                len(deficient),
-                ", ".join(sorted(deficient)[:20]),
-            )
-            continue
-        # Extend the window backward for the deficient symbols only. The
-        # shortfall is converted to calendar days anchored at the evaluation
-        # start, plus a growth buffer so the next attempt makes real progress.
-        from parayabuck.markets.timeframes import bars_to_calendar_days
+            batch_size = max(1, min(100, 9_000 // expected_per_symbol))
+            for offset in range(0, len(symbols), batch_size):
+                batch = symbols[offset : offset + batch_size]
+                downloaded = provider.get_bars_batch(
+                    batch,
+                    strategy.timeframe,
+                    start=start_at,
+                    end=end_at,
+                    adjustment="splits" if market == Market.EQUITY else "raw",
+                )
+                for symbol in batch:
+                    by_symbol[symbol] = [
+                        bar for bar in downloaded.get(symbol, ()) if bar.timestamp >= start_at
+                    ]
+            deficient = [
+                symbol
+                for symbol in symbols
+                if start is not None
+                and sum(1 for bar in by_symbol[symbol] if bar.timestamp < start) < minimum_bars
+            ]
+            if not deficient:
+                break
+            if attempts >= 3:
+                log.warning(
+                    "Warmup still short of %d pre-start bars for %d symbol(s) after "
+                    "3 extension attempts: %s",
+                    minimum_bars,
+                    len(deficient),
+                    ", ".join(sorted(deficient)[:20]),
+                )
+                continue
+            # Extend the window backward for the deficient symbols only. The
+            # shortfall is converted to calendar days anchored at the evaluation
+            # start, plus a growth buffer so the next attempt makes real progress.
+            from parayabuck.markets.timeframes import bars_to_calendar_days
 
-        extra_days = bars_to_calendar_days(
-            "SPY" if market == Market.EQUITY else "BTC/USD",
-            strategy.timeframe,
-            minimum_bars,
-            end_date=start,
-        )
-        symbols_to_retry = sorted(set(deficient))
-        symbols = [s for s in symbols if s not in symbols_to_retry] + symbols_to_retry
-        start_at = min(
-            start_at,
-            start - timedelta(days=extra_days) if start is not None else start_at,
-        )
+            extra_days = bars_to_calendar_days(
+                "SPY" if market == Market.EQUITY else "BTC/USD",
+                strategy.timeframe,
+                minimum_bars,
+                end_date=start,
+            )
+            symbols_to_retry = sorted(set(deficient))
+            symbols = [s for s in symbols if s not in symbols_to_retry] + symbols_to_retry
+            start_at = min(
+                start_at,
+                start - timedelta(days=extra_days) if start is not None else start_at,
+            )
+    finally:
+        provider.close()
     return [bar for symbol in symbols for bar in by_symbol.get(symbol, ())]
 
 

@@ -71,6 +71,13 @@ def is_terminal_order_status(status: str) -> bool:
     return str(status).lower() in _TERMINAL_ORDER_STATUSES
 
 
+# Single SQL source for the terminal set above: queries must never hardcode
+# a second copy that can drift from is_terminal_order_status.
+TERMINAL_ORDER_STATUSES_SQL = ", ".join(
+    f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES)
+)
+
+
 log = get_logger("parayabuck.portfolio.runtime_service")
 
 
@@ -129,10 +136,6 @@ class OpenPortfolioOrder:
     side: str
     quantity: float
     cumulative_filled_quantity: float
-
-    @property
-    def remaining_quantity(self) -> float:
-        return max(0.0, self.quantity - self.cumulative_filled_quantity)
 
 
 @dataclass(frozen=True)
@@ -815,16 +818,13 @@ class PortfolioStateRepository:
         so manual/external broker orders can never appear here: a manual
         order must not suppress ownership drift or consume universe pins.
         """
-        query = """
+        query = f"""
             SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
                    o.cumulative_filled_quantity
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-            WHERE s.account_id = ? AND o.status NOT IN (
-                'filled', 'canceled', 'cancelled', 'rejected', 'expired',
-                'done_for_day', 'fill'
-            )
+            WHERE s.account_id = ? AND o.status NOT IN ({TERMINAL_ORDER_STATUSES_SQL})
         """
         params: tuple[object, ...] = (account_id,)
         if market is not None:
@@ -934,53 +934,6 @@ class PortfolioStateRepository:
                             fill_delta,
                         )
         return True
-
-    def record_fill(
-        self,
-        *,
-        activity_id: str,
-        client_order_id: str,
-        occurred_at: datetime,
-        quantity: float,
-        price: float,
-        fee: float,
-        realized_pnl: float,
-        unrealized_pnl: float,
-        slippage: float,
-    ) -> None:
-        with self.store.lock, self.store.connection:
-            delay_seconds: float | None = None
-            created_row = self.store.connection.execute(
-                "SELECT created_at FROM portfolio_orders WHERE client_order_id = ?",
-                (client_order_id,),
-            ).fetchone()
-            if created_row and created_row[0] is not None:
-                try:
-                    raw_delay = (
-                        occurred_at - datetime.fromisoformat(str(created_row[0]))
-                    ).total_seconds()
-                    if raw_delay >= 0:
-                        delay_seconds = raw_delay
-                except (TypeError, ValueError):
-                    delay_seconds = None
-            self.store.connection.execute(
-                """INSERT OR IGNORE INTO portfolio_fills(
-                    activity_id, client_order_id, occurred_at, quantity, price,
-                    fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    activity_id,
-                    client_order_id,
-                    occurred_at.isoformat(),
-                    quantity,
-                    price,
-                    fee,
-                    realized_pnl,
-                    unrealized_pnl,
-                    slippage,
-                    delay_seconds,
-                ),
-            )
 
     def update_high_water(self, account_id: str, equity: float) -> float:
         with self.store.lock, self.store.connection:
@@ -1127,16 +1080,13 @@ class PortfolioStateRepository:
                 (account_id,),
             ).fetchone()
             pending = self.store.connection.execute(
-                """SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                f"""SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
                           o.status, o.created_at
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
                    WHERE s.account_id = ?
-                     AND o.status NOT IN (
-                         'filled', 'canceled', 'cancelled', 'rejected', 'expired',
-                         'done_for_day', 'fill'
-                     )
+                     AND o.status NOT IN ({TERMINAL_ORDER_STATUSES_SQL})
                    ORDER BY o.created_at DESC LIMIT 25""",
                 (account_id,),
             ).fetchall()

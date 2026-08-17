@@ -33,20 +33,6 @@ class CorporateAction:
 
 
 @dataclass(frozen=True)
-class QuoteSnapshot:
-    timestamp: datetime
-    symbol: str
-    bid: float
-    ask: float
-
-    def __post_init__(self) -> None:
-        if self.timestamp.tzinfo is None:
-            raise ValueError("Quote timestamps must be timezone-aware")
-        if self.bid <= 0 or self.ask < self.bid:
-            raise ValueError("Quote must have 0 < bid <= ask")
-
-
-@dataclass(frozen=True)
 class CashRateObservation:
     timestamp: datetime
     annualized_rate: float
@@ -95,7 +81,6 @@ class MarketDataset:
     signal_bars: tuple[Bar, ...]
     executable_bars: tuple[Bar, ...]
     lineage: DatasetLineage
-    quotes: tuple[QuoteSnapshot, ...] = ()
     corporate_actions: tuple[CorporateAction, ...] = ()
     cash_rates: tuple[CashRateObservation, ...] = ()
 
@@ -165,5 +150,4 @@ __all__ = [
     "DatasetLineage",
     "CashRateObservation",
     "MarketDataset",
-    "QuoteSnapshot",
 ]

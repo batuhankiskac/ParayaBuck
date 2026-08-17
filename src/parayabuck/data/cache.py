@@ -6,7 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+
+log = get_logger("parayabuck.data.cache")
 
 
 class WarmupCache:
@@ -97,8 +100,8 @@ class WarmupCache:
         with self._lock:
             try:
                 self.connection.close()
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as exc:
+                log.warning("Warmup cache close warning: %s", exc)
 
     def upsert(self, bars: list[Bar], *, feed: str, adjustment: str = "all") -> None:
         retrieved_at = datetime.now(UTC).isoformat()

@@ -1359,25 +1359,6 @@ class ExecutionLedger:
             ).fetchall()
         return {str(row[0]) for row in rows}
 
-    def pending_entry_orders(self, account_id: str) -> list[tuple[OrderIntent, float]]:
-        with self._lock:
-            rows = self.connection.execute(
-                """
-                SELECT client_order_id, cumulative_filled_qty
-                FROM orders
-                WHERE account_id=? AND order_role='entry'
-                  AND cumulative_filled_qty < requested_qty
-                  AND terminal_state IS NULL
-                """,
-                (account_id,),
-            ).fetchall()
-            result: list[tuple[OrderIntent, float]] = []
-            for client_order_id, cumulative in rows:
-                order = self._load_order_intent_tx(str(client_order_id))
-                if order is not None:
-                    result.append((order, max(0.0, order.qty - float(cumulative))))
-            return result
-
     def order_for_broker_id(self, account_id: str, broker_order_id: str) -> str | None:
         """Client order id of any ledger order with this broker order id.
 

@@ -379,36 +379,3 @@ def test_partial_crypto_exit_is_cancelled_and_remaining_qty_reprotected(
     assert remaining.stop_state == "open"
     assert remaining.status == "open"
     ledger.close()
-
-
-def test_crypto_risk_rejects_inactive_account() -> None:
-    # The direct broker lifecycle must preserve a broker-confirmed inactive state.
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker.ledger = None
-    broker._validate_pre_submit = lambda _intent: None
-    broker._validated_values = lambda _intent: (_intent.qty, 95.0, 110.0)
-    broker._client = SimpleNamespace()
-    intent = OrderIntent(
-        "signal",
-        "BTC/USD",
-        Market.CRYPTO,
-        Direction.SHORT,
-        0.1,
-        100,
-        105,
-        90,
-        "test",
-    )
-    # Asset validation is the final broker boundary even when the strategy/risk
-    # layers have already rejected crypto shorts.
-    broker._asset_cache = {
-        "BTC/USD": SimpleNamespace(
-            tradable=True,
-            min_trade_increment="0.0001",
-            min_order_size="0.0001",
-            price_increment="0.01",
-        )
-    }
-    with pytest.raises(ValueError, match="short"):
-        AlpacaBroker._validated_values(broker, intent)
-    assert OrderState.REJECTED.value == "rejected"

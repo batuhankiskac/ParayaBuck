@@ -333,12 +333,6 @@ class EngineManager:
                     # known state.
                     log.warning("Runtime health probe failed: %s", exc)
                 return self.engine_state
-            if (
-                self.engine_state == "running"
-                and self.runtime is not None
-                and not self.runtime.is_running
-            ):
-                self.engine_state = "error"
             return self.engine_state
 
     def has_active_runtime(self) -> bool:
@@ -563,6 +557,10 @@ class EngineManager:
 
             runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
             runtime.start()
+            # Close the lazy /api/account broker (if any) instead of leaking
+            # its pooled HTTP session; the runtime's broker takes over
+            # account polling from here.
+            self.reset_broker()
             with self._state_lock:
                 # A stop request issued while the engine was starting wins:
                 # shut the fresh runtime down instead of leaving it running
@@ -665,6 +663,20 @@ class EngineManager:
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
 
+    def reset_broker(self) -> None:
+        """Close and drop the account-snapshot broker without leaking its pool.
+
+        The broker lazily created for /api/account polling holds a pooled HTTP
+        session; dropping the reference without closing leaks one pool per
+        reset (mode toggle, settings save, engine start). A runtime-owned
+        broker is closed by EngineRuntime.stop() instead, so it is skipped.
+        """
+        with self._account_lock:
+            broker = self.broker
+            self.broker = None
+        if broker is not None and broker is not getattr(self.runtime, "broker", None):
+            broker.close()
+
     def _reset_retry_state(self) -> None:
         """Clear auto-start retry bookkeeping (caller holds the state lock)."""
         self._retry_attempt = 0
@@ -748,15 +760,14 @@ class EngineManager:
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:
+            now = time.monotonic()
             if (
                 self.last_account is not None
-                and time.monotonic() - self._last_account_monotonic
-                < self._account_cache_ttl_seconds
+                and now - self._last_account_monotonic < self._account_cache_ttl_seconds
             ):
-                age = max(0.0, time.monotonic() - self._last_account_monotonic)
                 return {
-                    **self.last_account,
-                    "age_seconds": age,
+                    "account": self.last_account,
+                    "age_seconds": max(0.0, now - self._last_account_monotonic),
                     "stale": False,
                     "source": "cache",
                 }
@@ -896,7 +907,6 @@ class EngineManager:
                 issued_at=now,
                 expires_at=now + timedelta(minutes=2),
             )
-            self._live_request_suffix = suffix
             self._live_armed = False
             self._live_arm_token = None
             return suffix
@@ -931,7 +941,6 @@ class EngineManager:
         self._live_armed = True
 
     def invalidate_live_arming(self) -> None:
-        self._live_request_suffix = None
         self._live_armed = False
         self._pending_live_arm = None
         self._live_arm_token = None
@@ -1251,8 +1260,14 @@ class EngineManager:
     def issue_ws_ticket(self, kind: str) -> str:
         if kind not in {"stream", "logs"}:
             raise ValueError("Unknown WebSocket channel")
+        # Prune expired entries: a ticket fetched but never consumed (page
+        # closed before the WebSocket connected) must not accumulate forever.
+        now = time.monotonic()
+        self._ws_tickets = {
+            ticket: value for ticket, value in self._ws_tickets.items() if now < value[1]
+        }
         ticket = secrets.token_urlsafe(24)
-        self._ws_tickets[ticket] = (kind, time.monotonic() + 30.0)
+        self._ws_tickets[ticket] = (kind, now + 30.0)
         return ticket
 
     def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
@@ -1433,8 +1448,8 @@ async def protect_local_control_api(request: Request, call_next: Any) -> Any:
     ):
         return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})
     if request.method not in {"GET", "HEAD", "OPTIONS"} and not secrets.compare_digest(
-        request.headers.get("x-parayabuck-control-token", ""),
-        manager.control_token,
+        request.headers.get("x-parayabuck-control-token", "").encode("latin-1", "replace"),
+        manager.control_token.encode(),
     ):
         return JSONResponse(status_code=403, content={"detail": "Invalid local control token"})
     response = await call_next(request)
@@ -1571,7 +1586,14 @@ async def readyz() -> JSONResponse:
         cfg = None
     engine_state = manager.current_engine_state()
     runtime = getattr(manager, "runtime", None)
-    health = runtime.health() if runtime is not None and hasattr(runtime, "health") else None
+    health = None
+    if runtime is not None and hasattr(runtime, "health"):
+        try:
+            # A failing probe (e.g. ledger closed mid-stop) must degrade the
+            # readiness answer, not 500 the endpoint.
+            health = runtime.health()
+        except Exception as exc:
+            log.warning("Readiness health probe failed: %s", exc)
     trading_ready = bool(health and health.healthy)
     app_config = getattr(cfg, "app", None) if cfg is not None else None
     runtime_config = getattr(cfg, "runtime", None) if cfg is not None else None
@@ -1737,22 +1759,33 @@ async def get_status() -> dict[str, Any]:
     runtime = getattr(manager, "runtime", None)
     runtime_refresh: dict[str, Any] = {}
     if runtime is not None and hasattr(runtime, "health"):
-        health = runtime.health()
-        result["runtime"] = asdict(health)
-        runtime_refresh = health.universe_refresh
-        result["strategy_status"] = health.strategy_status
-        repository = getattr(runtime, "_portfolio_repository", None)
-        if repository is not None:
-            account_id = getattr(runtime.broker, "account_id", None) or "unknown"
-            result["operations"] = repository.operations_snapshot(account_id)
-            result["ownership_drift_active"] = health.circuit_breaker_reason == "ownership_drift"
-            result["reconciliation_anomalies"] = list(repository.ownership_adjustments(account_id))
-        result["active_equity_symbol_count"] = len(
-            getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
-        )
-        result["active_crypto_symbol_count"] = len(
-            getattr(runtime, "_symbols_by_market", {}).get(Market.CRYPTO, ())
-        )
+        try:
+            health = runtime.health()
+        except Exception as exc:
+            # Same contract as current_engine_state: a failing probe must
+            # not take down /api/status, which the UI polls every 2s.
+            log.warning("Status health probe failed: %s", exc)
+            health = None
+        if health is not None:
+            result["runtime"] = asdict(health)
+            runtime_refresh = health.universe_refresh
+            result["strategy_status"] = health.strategy_status
+            repository = getattr(runtime, "_portfolio_repository", None)
+            if repository is not None:
+                account_id = getattr(runtime.broker, "account_id", None) or "unknown"
+                result["operations"] = repository.operations_snapshot(account_id)
+                result["ownership_drift_active"] = (
+                    health.circuit_breaker_reason == "ownership_drift"
+                )
+                result["reconciliation_anomalies"] = list(
+                    repository.ownership_adjustments(account_id)
+                )
+            result["active_equity_symbol_count"] = len(
+                getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
+            )
+            result["active_crypto_symbol_count"] = len(
+                getattr(runtime, "_symbols_by_market", {}).get(Market.CRYPTO, ())
+            )
     if cfg is not None:
         try:
             candidate_path = Path(cfg.universe.equity.candidate_universe_path)
@@ -1925,7 +1958,7 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
             yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),
         )
 
-        manager.broker = None  # Force broker reset
+        manager.reset_broker()  # Force broker reset
         return {"status": "success", "paper": payload.paper}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1976,9 +2009,26 @@ async def websocket_ticket(payload: WebSocketTicketPayload) -> dict[str, str]:
 async def get_settings() -> dict[str, Any]:
     key, secret = manager.get_credentials()
     cfg_raw: dict[str, Any] = {}
-    if manager.config_path.exists():
-        with open(manager.config_path, encoding="utf-8") as f:
-            cfg_raw = yaml.safe_load(f) or {}
+    try:
+        if manager.config_path.exists():
+            with open(manager.config_path, encoding="utf-8") as f:
+                cfg_raw = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        # The settings page is the operator's recovery tool: it must survive
+        # a config it exists to fix. Fall back to defaults, like
+        # live_prerequisites does.
+        log.warning("Settings could not read config (%s): %s", manager.config_path, exc)
+
+    def _section(name: str) -> dict[str, Any]:
+        # A YAML section present but empty parses to None.
+        value = cfg_raw.get(name, {})
+        return value if isinstance(value, dict) else {}
+
+    risk_cfg = _section("risk")
+    runtime_cfg = _section("runtime")
+    app_cfg = _section("app")
+    strategy_cfg = _section("strategy")
+    live_cfg = _section("live")
 
     return {
         # Never send credentials back to the browser. Empty fields mean
@@ -1987,22 +2037,18 @@ async def get_settings() -> dict[str, Any]:
         "secret_key": "",
         "has_credentials": bool(key and secret),
         "paper_mode": manager.is_paper_mode(),
-        "daily_loss_limit_pct": 100 * cfg_raw.get("risk", {}).get("daily_loss_limit_pct", 0.015),
-        "max_drawdown_pct": 100 * cfg_raw.get("risk", {}).get("max_drawdown_pct", 0.10),
-        "timeframe": cfg_raw.get("runtime", {}).get("execution_timeframe", "5m"),
-        "host": cfg_raw.get("app", {}).get("host", "127.0.0.1"),
-        "port": cfg_raw.get("app", {}).get("port", 8000),
-        "open_browser": cfg_raw.get("app", {}).get("open_browser", True),
-        "log_level": cfg_raw.get("app", {}).get("log_level", "INFO"),
-        "equity_trading_enabled": cfg_raw.get("strategy", {})
-        .get("equity", {})
-        .get("enabled", True),
-        "crypto_trading_enabled": cfg_raw.get("strategy", {})
-        .get("crypto", {})
-        .get("enabled", False),
-        "live_trading_enabled": cfg_raw.get("live", {}).get("enabled", False),
-        "live_dollar_cap": cfg_raw.get("live", {}).get("hard_dollar_cap", 0.0),
-        "live_operator_approval_path": cfg_raw.get("live", {}).get("operator_approval_path", ""),
+        "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", 0.015),
+        "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", 0.10),
+        "timeframe": runtime_cfg.get("execution_timeframe", "5m"),
+        "host": app_cfg.get("host", "127.0.0.1"),
+        "port": app_cfg.get("port", 8000),
+        "open_browser": app_cfg.get("open_browser", True),
+        "log_level": app_cfg.get("log_level", "INFO"),
+        "equity_trading_enabled": (strategy_cfg.get("equity") or {}).get("enabled", True),
+        "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", False),
+        "live_trading_enabled": live_cfg.get("enabled", False),
+        "live_dollar_cap": live_cfg.get("hard_dollar_cap", 0.0),
+        "live_operator_approval_path": live_cfg.get("operator_approval_path", ""),
     }
 
 
@@ -2034,7 +2080,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
         )
 
-        manager.broker = None
+        manager.reset_broker()
         if credentials_changed:
             manager.invalidate_live_arming()
         restart_error: str | None = None
@@ -2419,6 +2465,10 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
         return {}
     bucket = int(time.monotonic() // 60)
     cache_key = (tuple(sorted(symbols)), bucket)
+    # Keep only the current bucket per symbol set: one stale entry per key
+    # instead of one per minute the dashboard keeps polling.
+    for stale_key in [key for key in _crypto_vol_cache if key[0] == cache_key[0]]:
+        _crypto_vol_cache.pop(stale_key, None)
     cached = _crypto_vol_cache.get(cache_key)
     if cached is not None:
         return cached
@@ -2614,8 +2664,10 @@ def _dashboard_execution() -> dict[str, Any]:
     fill_rows: list[Any] = []
     anomaly_rows: list[Any] = []
     try:
+        from parayabuck.portfolio.runtime_service import TERMINAL_ORDER_STATUSES_SQL
+
         order_rows = connection.execute(
-            """
+            f"""
             SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
                    o.status, o.reference_price, o.created_at,
                    d.decision_timestamp, d.strategy_name
@@ -2623,10 +2675,7 @@ def _dashboard_execution() -> dict[str, Any]:
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
             WHERE s.account_id = ?
-              AND o.status NOT IN (
-                  'filled', 'canceled', 'cancelled', 'rejected', 'expired',
-                  'done_for_day', 'fill'
-              )
+              AND o.status NOT IN ({TERMINAL_ORDER_STATUSES_SQL})
             ORDER BY o.created_at DESC LIMIT 25
             """,
             (account_id,),

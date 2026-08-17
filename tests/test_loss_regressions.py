@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from alpaca.trading.enums import TimeInForce
 
 from parayabuck.config import Config, EquityUniverseConfig
 from parayabuck.core.models import (
@@ -152,34 +151,6 @@ def test_uuid_exit_without_parent_links_to_unique_managed_lot(tmp_path: Path) ->
     assert transition.realized_pnl_delta == -50
     assert row == (order.client_order_id, -50.0, "closed")
     ledger.close()
-
-
-def test_equity_bracket_uses_gtc_so_both_legs_survive_the_close() -> None:
-    submitted = []
-    broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._account_id = "acct"
-    broker.ledger = None
-    broker._validate_pre_submit = lambda _intent: None
-    broker._validated_values = lambda _intent: (10, 95, 110)
-    broker._submit_with_recovery = lambda request, _client_order_id: (
-        submitted.append(request) or SimpleNamespace(id="broker-entry")
-    )
-    intent = OrderIntent(
-        "signal",
-        "AAPL",
-        Market.EQUITY,
-        Direction.LONG,
-        10,
-        100,
-        95,
-        110,
-        "test",
-    )
-
-    state, fill = broker.submit(intent)
-
-    assert (state, fill) == (OrderState.ACCEPTED, None)
-    assert submitted[0].time_in_force == TimeInForce.GTC
 
 
 def test_account_poll_does_not_restore_stale_consecutive_loss_count(tmp_path: Path) -> None:

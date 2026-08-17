@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 import queue
-import subprocess
 import threading
 import time
 from collections import deque
@@ -3173,22 +3172,6 @@ def _warmup_start(symbol: str, timeframe: str, bars: int) -> str:
 
     days = bars_to_calendar_days(symbol, timeframe, bars)
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
-
-
-def _source_revision(explicit: str) -> str:
-    if explicit.strip():
-        return explicit.strip()
-    try:
-        completed = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return completed.stdout.strip()
 
 
 __all__ = ["EngineRuntime", "TransientStartupError"]

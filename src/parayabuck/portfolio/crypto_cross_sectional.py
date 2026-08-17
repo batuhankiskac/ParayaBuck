@@ -94,6 +94,11 @@ class CryptoCrossSectionalMomentum1hV1(PortfolioStrategy):
             if not context.in_universe(symbol):
                 continue
             closes = context.closes(symbol)
+            if len(closes) < self.minimum_history_bars:
+                # Match the declared contract and every sibling strategy:
+                # short-history symbols never qualify, even when the momentum
+                # scheme alone has enough bars.
+                continue
             score = _crypto_momentum(closes, scheme)
             if not math.isfinite(score) or score <= 0:
                 continue
@@ -104,7 +109,7 @@ class CryptoCrossSectionalMomentum1hV1(PortfolioStrategy):
                 continue
             scored.append((score, symbol))
             volatilities[symbol] = volatility
-        scored.sort(reverse=True)
+        scored.sort(key=lambda item: (-item[0], item[1]))
         selected = tuple(symbol for _, symbol in scored[:top_n])
         if not selected:
             return self._cash_portfolio(context, RebalanceReason.SCHEDULED, "no_candidates")

@@ -1,3 +1,3 @@
-from parayabuck.features.indicators import adx, atr, bollinger, ema, rsi, sma
+from parayabuck.features.indicators import adx, atr, ema, rsi, sma
 
-__all__ = ["adx", "atr", "bollinger", "ema", "rsi", "sma"]
+__all__ = ["adx", "atr", "ema", "rsi", "sma"]

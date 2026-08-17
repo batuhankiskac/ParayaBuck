@@ -9,7 +9,6 @@ from parayabuck.data.market_dataset import (
     CorporateActionType,
     DatasetLineage,
     MarketDataset,
-    QuoteSnapshot,
 )
 
 __all__ = [
@@ -21,7 +20,6 @@ __all__ = [
     "CorporateActionType",
     "DatasetLineage",
     "MarketDataset",
-    "QuoteSnapshot",
     "TimeframeAggregator",
     "WarmupCache",
 ]

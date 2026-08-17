@@ -181,7 +181,12 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
             strategy = str(row[1] or "unknown")
             terminal = str(row[2] or "open")
             total_orders += 1
-            by_market.setdefault(market, {"total": 0, "filled": 0, "rejected": 0})["total"] += 1
+            bucket = by_market.setdefault(market, {"total": 0, "filled": 0, "rejected": 0})
+            bucket["total"] += 1
+            if terminal in {"filled", "fill", "partially_filled"}:
+                bucket["filled"] += 1
+            elif terminal in {"rejected", "canceled", "cancelled", "expired"}:
+                bucket["rejected"] += 1
             by_strategy[strategy] = by_strategy.get(strategy, 0) + 1
             by_terminal[terminal] = by_terminal.get(terminal, 0) + 1
             if terminal == "open":
@@ -198,6 +203,10 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
             bucket = by_market.setdefault(market, {"total": 0, "filled": 0, "rejected": 0})
             bucket["total"] += 1
             terminal = "filled" if status in {"filled", "fill"} else status
+            if terminal == "filled":
+                bucket["filled"] += 1
+            elif terminal in {"rejected", "canceled", "cancelled", "expired"}:
+                bucket["rejected"] += 1
             by_terminal[terminal] = by_terminal.get(terminal, 0) + 1
             if status not in {"filled", "fill", "canceled", "cancelled", "rejected", "expired"}:
                 open_orders += 1

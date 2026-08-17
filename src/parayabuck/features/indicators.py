@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from parayabuck.core.models import Bar
 
@@ -100,29 +98,3 @@ def directional_indicators(bars: list[Bar], period: int = 14) -> tuple[float, fl
     if true_range <= 0:
         return None
     return 100 * plus_dm / true_range, 100 * minus_dm / true_range
-
-
-@dataclass(frozen=True)
-class BollingerBands:
-    lower: float
-    middle: float
-    upper: float
-    zscore: float
-
-
-def bollinger(
-    values: list[float], period: int = 20, deviations: float = 2.0
-) -> BollingerBands | None:
-    middle = sma(values, period)
-    if middle is None:
-        return None
-    window = values[-period:]
-    variance = sum((value - middle) ** 2 for value in window) / period
-    stddev = math.sqrt(variance)
-    zscore = (values[-1] - middle) / stddev if stddev > 0 else 0.0
-    return BollingerBands(
-        lower=middle - deviations * stddev,
-        middle=middle,
-        upper=middle + deviations * stddev,
-        zscore=zscore,
-    )

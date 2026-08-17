@@ -26,11 +26,8 @@ def _float_mapping(raw: dict[str, Any], key: str) -> dict[str, float]:
 
 
 class RebalanceReason(StrEnum):
-    INITIAL = "initial"
     SCHEDULED = "scheduled"
     RISK_OFF = "risk_off"
-    MAX_VOLATILITY = "max_volatility"
-    EMERGENCY = "emergency"
 
 
 @dataclass(frozen=True)

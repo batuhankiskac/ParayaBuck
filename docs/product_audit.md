@@ -208,10 +208,15 @@ kill-switch. Policy now:
   would land mid-session (a partial daily bar must never change the
   universe). Retry state surfaces in `/api/status` (`scanner.retry_at`,
   `retry_attempt`); shutdown cancels pending retries.
-- **G6 — accounting/legacy classification: AUDITED, DEFERRED (reporting-only).**
-  (a) Legacy ledger path (`AlpacaBroker.submit()` era) is unreachable from
-  production — DEAD LEGACY, retained for recovery/crypto protection; (b)
-  fill-activity recovery can skip very old activities — intentional bounded
+- **G6 — accounting/legacy classification: RESOLVED (2026-08-17).** The
+  legacy ledger path (`AlpacaBroker.submit()` era: `submit`,
+  `replace_protective_stop`, `protect_recovered_crypto_entry`,
+  `_validated_values`, `_validate_pre_submit`, `_record_entry_terminal`,
+  `_submit_crypto_stop`, the `ExecutionBroker` protocol, and
+  `pending_entry_orders`) was deleted together with its tests; recovery and
+  crypto protection live in `reconcile()` / `submit_portfolio_order()`.
+  Still open (reporting-only): fill-activity recovery can skip very old
+  activities — intentional bounded
   pagination, RECONCILIATION-CRITICAL but only for ages beyond the Alpaca
   activity window; (c) portfolio fills persist `realized_pnl=0` —
   REPORTING-ONLY: authoritative equity is the broker account snapshot
@@ -253,11 +258,11 @@ kill-switch. Policy now:
 - `data/runtime/portfolio_trial_ledger.json` /
   `portfolio_holdout_registry.json` — unreferenced research leftovers.
 - SQLite tables `executions`, `runtime_sessions` — dead schema (never
-  written). `execution/ledger.py` legacy machinery (`submit()`,
-  `replace_protective_stop`, `protect_recovered_crypto_entry`) is
-  unreachable from production but retained for recovery/crypto protection.
+  written). The formerly retained `execution/ledger.py` legacy machinery
+  (`submit()`, `replace_protective_stop`, `protect_recovered_crypto_entry`)
+  was deleted on 2026-08-17 (see G6).
 - None of these are required by, or misleading about, the current product
-  runtime; none were deleted (kept per audit guidance — cleanup optional).
+  runtime.
 
 ## Strategy → order trace (enabled: `equity_dynamic_trend_1d_v1`)
 

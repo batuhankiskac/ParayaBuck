@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from bisect import bisect_right
 from datetime import datetime
 
 from parayabuck.core.models import Bar, Market
@@ -247,7 +248,9 @@ def _equity_explanations(
     for rank, (score, symbol) in enumerate(ranked, start=1):
         if symbol not in weights:
             continue
-        below_or_equal = sum(1 for value in pool_vols if value <= residual_vols[symbol])
+        # pool_vols is sorted, so the count of values <= the symbol's vol is
+        # its bisect index (identical to the linear scan it replaces).
+        below_or_equal = bisect_right(pool_vols, residual_vols[symbol])
         explanations[symbol] = {
             "alpha_rank": rank,
             "residual_momentum_score": score,

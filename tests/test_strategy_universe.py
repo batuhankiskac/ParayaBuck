@@ -99,7 +99,7 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
     """The backtest strategy sees the full downloaded pool; the point-in-time
     universe gates eligibility, so alpha scoring runs before the streamed
     observation-set truncation (and only universe members are investable)."""
-    symbols = [f"S{i:02d}" for i in range(40)]
+    symbols = ["SPY"] + [f"S{i:02d}" for i in range(40)]
     bars = _panel(symbols)
     universe = build_trailing_point_in_time_universe(
         bars,
@@ -112,8 +112,8 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
         equity_config=_equity_config(maximum_stream_symbols=10),
     )
     strategy = portfolio_strategy_from(
-        "equity_long_horizon_momentum_1d_v2",
-        {"top_n": 3, "use_market_regime": False, "exclude_symbols": []},
+        "equity_residual_momentum_v1",
+        {"top_n": 3, "exclude_symbols": []},
     )
     engine = PortfolioBacktestEngine(
         strategy,
@@ -166,7 +166,7 @@ def test_managed_positions_stay_pinned_outside_universe() -> None:
 
 def test_open_managed_orders_stay_pinned_across_restart() -> None:
     """Pending managed orders decided before a restart are re-armed and fill."""
-    symbols = [f"S{i:02d}" for i in range(20)]
+    symbols = ["SPY"] + [f"S{i:02d}" for i in range(20)]
     bars = _panel(symbols)
     universe = build_trailing_point_in_time_universe(
         bars,
@@ -180,7 +180,7 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
     )
     decision_timestamp = bars[10].timestamp
     state = PortfolioState(
-        strategy_name="equity_long_horizon_momentum_1d_v2",
+        strategy_name="equity_residual_momentum_v1",
         strategy_version="1.0.0",
         holdings={},
         cash=100_000.0,
@@ -197,8 +197,8 @@ def test_open_managed_orders_stay_pinned_across_restart() -> None:
         ),
     )
     strategy = portfolio_strategy_from(
-        "equity_long_horizon_momentum_1d_v2",
-        {"top_n": 2, "use_market_regime": False, "exclude_symbols": []},
+        "equity_residual_momentum_v1",
+        {"top_n": 2, "exclude_symbols": []},
     )
     engine = PortfolioBacktestEngine(
         strategy,

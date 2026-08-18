@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -22,7 +23,10 @@ def _bars(days: int = 420) -> list[Bar]:
         timestamp = start + timedelta(days=index)
         for offset, symbol in enumerate(symbols):
             drift = -0.0005 if symbol == "LOSER" else 0.0004 + offset * 0.00002
-            close = 100 * (1 + drift) ** index
+            # A small deterministic oscillation gives the returns real
+            # variance so the volatility-aware product strategy can rank.
+            wobble = 1 + 0.01 * math.sin(index * 0.9 + offset)
+            close = 100 * (1 + drift) ** index * wobble
             bars.append(
                 Bar(
                     timestamp,
@@ -43,9 +47,10 @@ def _config(tmp_path) -> Config:
     base = Config()
     parameters = {
         **base.strategy.equity.parameters,
-        "trend_window": 60,
-        "momentum_window": 30,
-        "volatility_window": 15,
+        "formation_bars": 60,
+        "skip_bars": 5,
+        "beta_window_bars": 80,
+        "residual_vol_window": 20,
         "top_n": 4,
     }
     return replace(
@@ -82,7 +87,7 @@ def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:
         config,
         _bars(),
         market=Market.EQUITY,
-        grid={"momentum_window": [20, 30]},
+        grid={"formation_bars": [60, 66]},
         train_start=start + timedelta(days=100),
         train_end=start + timedelta(days=299),
         oos_start=start + timedelta(days=300),
@@ -118,7 +123,7 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
         config,
         bars,
         market=Market.EQUITY,
-        grid={"momentum_window": [20, 30, 40]},
+        grid={"formation_bars": [60, 66, 72]},
         train_start=start + timedelta(days=100),
         train_end=start + timedelta(days=299),
         oos_start=start + timedelta(days=300),
@@ -155,7 +160,7 @@ def test_optimizer_rejects_overlapping_train_and_oos_windows(tmp_path) -> None:
             _config(tmp_path),
             _bars(),
             market=Market.EQUITY,
-            grid={"momentum_window": [20]},
+            grid={"formation_bars": [60]},
             train_start=start,
             train_end=start + timedelta(days=300),
             oos_start=start + timedelta(days=200),
@@ -167,7 +172,7 @@ def test_optimizer_rejects_overlapping_train_and_oos_windows(tmp_path) -> None:
             _config(tmp_path),
             _bars(),
             market=Market.EQUITY,
-            grid={"momentum_window": [20]},
+            grid={"formation_bars": [60]},
             oos_start=start + timedelta(days=300),
             oos_end=start + timedelta(days=400),
         )
@@ -183,7 +188,7 @@ def test_optimizer_uses_configured_metric_for_full_trial_ordering(tmp_path) -> N
         config,
         _bars(280),
         market=Market.EQUITY,
-        grid={"momentum_window": [20, 30]},
+        grid={"formation_bars": [60, 66]},
     )
     training = payload["training_results"]
 
@@ -232,7 +237,7 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
             "--market",
             "equity",
             "--strategy",
-            "equity_dynamic_trend_1d_v1",
+            "equity_residual_momentum_v1",
             "--data",
             str(csv_path),
             "--output-dir",
@@ -241,7 +246,7 @@ def test_backtest_cli_runs_offline_csv_end_to_end(tmp_path, monkeypatch, capsys)
     )
 
     assert exit_code == 0
-    assert "equity_dynamic_trend_1d_v1" in capsys.readouterr().out
+    assert "equity_residual_momentum_v1" in capsys.readouterr().out
     assert list((tmp_path / "cli-reports").glob("*/report.json"))
 
 
@@ -278,7 +283,7 @@ def test_product_backtest_credits_explicit_dividend_once(tmp_path) -> None:
         config,
         bars,
         market=Market.EQUITY,
-        strategy_name="equity_dynamic_trend_1d_v1",
+        strategy_name="equity_residual_momentum_v1",
         corporate_actions=[action],
     )
 
@@ -406,12 +411,17 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
 def test_warmup_window_covers_strategy_minimum_history_and_scanner_lookback(
     tmp_path,
 ) -> None:
-    config = _config(tmp_path)
-    # The shipped default (equity_residual_momentum_v1) declares
-    # minimum_history_bars=274 daily bars. The warmup window counts REAL NYSE
-    # sessions (holiday-aware), so it spans more calendar days than bars: at
-    # least the no-holiday Mon-Fri minimum (ceil(274*7/5)=384) and bounded by
-    # a plausible holiday count.
+    # The SHIPPED DEFAULT strategy (equity_residual_momentum_v2, identical
+    # windows to v1) declares minimum_history_bars=274 daily bars — not the
+    # reduced-window fixture config used by the other backtest tests.
+    base = Config()
+    config = replace(
+        base,
+        runtime=replace(base.runtime, decision_db_path=str(tmp_path / "runtime.sqlite3")),
+    )
+    # The warmup window counts REAL NYSE sessions (holiday-aware), so it
+    # spans more calendar days than bars: at least the no-holiday Mon-Fri
+    # minimum (ceil(274*7/5)=384) and bounded by a plausible holiday count.
     days = cli_module._warmup_window_days(config, Market.EQUITY)
     assert 384 <= days <= 460
     assert days >= config.universe.equity.scanner.minimum_data_completeness  # sanity

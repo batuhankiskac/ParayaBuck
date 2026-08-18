@@ -62,7 +62,7 @@ def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path)
     raw["strategy"] = {
         "equity": {
             "enabled": True,
-            "name": "equity_dynamic_trend_1d_v1",
+            "name": "equity_residual_momentum_v1",
             "timeframe": "1d",
             "maximum_allocation": 0.5,
         }
@@ -144,15 +144,15 @@ def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> Non
 
 
 def test_strategy_supplies_default_timeframe_not_market_default(tmp_path: Path) -> None:
-    """The strategy owns its signal timeframe: selecting crypto TSM without a
-    timeframe must resolve to the strategy's PRIMARY (1d), never to the old
-    crypto default (1h)."""
+    """The strategy owns its signal timeframe: selecting crypto low-variance
+    without a timeframe must resolve to the strategy's PRIMARY (1d), never to
+    the old crypto default (1h)."""
     raw = _settings()
     raw["strategy"] = {
         "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
         "crypto": {
             "enabled": True,
-            "name": "crypto_time_series_momentum_v1",
+            "name": "crypto_low_variance_v1",
             "maximum_allocation": 0.1,
         },
     }
@@ -163,35 +163,18 @@ def test_strategy_supplies_default_timeframe_not_market_default(tmp_path: Path) 
     assert config.strategy.equity.timeframe == "1d"
 
 
-def test_supported_alternative_timeframe_is_selectable(tmp_path: Path) -> None:
-    raw = _settings()
-    raw["strategy"] = {
-        "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
-        "crypto": {
-            "enabled": True,
-            "name": "crypto_time_series_momentum_v1",
-            "timeframe": "4h",
-            "maximum_allocation": 0.1,
-        },
-    }
-    path = tmp_path / "settings.yaml"
-    path.write_text(yaml.safe_dump(raw))
-    config = load_config(str(path))
-    assert config.strategy.crypto.timeframe == "4h"
-
-
 def test_unsupported_strategy_timeframe_is_rejected_at_load(tmp_path: Path) -> None:
     raw = _settings()
     raw["strategy"] = {
         "equity": {"enabled": True, "name": "equity_residual_momentum_v1"},
         "crypto": {
             "enabled": True,
-            "name": "crypto_time_series_momentum_v1",
-            "timeframe": "1h",  # TSM validates only 4h/1d
+            "name": "crypto_low_variance_v1",
+            "timeframe": "4h",  # low-variance validates only 1d
             "maximum_allocation": 0.1,
         },
     }
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ValueError, match="cannot run on timeframe 1h"):
+    with pytest.raises(ValueError, match="cannot run on timeframe 4h"):
         load_config(str(path))

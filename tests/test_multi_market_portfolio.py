@@ -131,7 +131,7 @@ def test_equity_and_crypto_targets_combine_within_account_limits() -> None:
         equity_positions=(("AAPL", 100.0, 100.0), ("MSFT", 100.0, 100.0), ("NVDA", 100.0, 100.0)),
     )
     crypto_target = _target(
-        "crypto_time_series_momentum_v1",
+        "crypto_low_variance_v1",
         timestamp,
         (("BTC/USD", 0.05), ("ETH/USD", 0.05)),
     )
@@ -162,7 +162,7 @@ def test_single_surviving_crypto_asset_cannot_absorb_the_sleeve() -> None:
     overlay = PortfolioRiskOverlay(_limits())
     account = _account()
     target = _target(
-        "crypto_time_series_momentum_v1",
+        "crypto_low_variance_v1",
         timestamp,
         (("BTC/USD", 0.5),),  # strategy would like half of its own sleeve
     )
@@ -289,9 +289,8 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
     )
     crypto = portfolio_strategy_from(
-        "crypto_time_series_momentum_v1",
-        {"top_n": 2, "rebalance_hours": 24},
-        timeframe="1d",
+        "crypto_low_variance_v1",
+        {"top_n": 2, "rebalance_hours": 168},
     )
     equity_runtime = PortfolioRuntime(
         equity,

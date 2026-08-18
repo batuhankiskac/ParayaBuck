@@ -23,7 +23,7 @@ from parayabuck.execution.portfolio import (
     RiskOverlayDecision,
 )
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
-from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
+from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_SELL_PENDING,
@@ -51,9 +51,24 @@ class _Broker:
         return "broker-" + order.client_order_id
 
 
+def _fixture_strategy() -> EquityResidualMomentum1dV1:
+    """A real product strategy (frozen v1 baseline) with reduced windows so
+    the 220-bar runtime fixture satisfies warmup and produces targets."""
+    return EquityResidualMomentum1dV1(
+        {
+            "formation_bars": 60,
+            "skip_bars": 5,
+            "beta_window_bars": 66,
+            "residual_vol_window": 20,
+            "top_n": 2,
+            "exclude_symbols": ["SPY"],
+        }
+    )
+
+
 def _runtime(tmp_path, broker: _Broker, *, mode: str = "paper", cap: float = 0.0):
     return PortfolioRuntime(
-        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        _fixture_strategy(),
         EQUITY_UNIVERSE,
         broker,
         PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
@@ -171,7 +186,7 @@ def test_restart_restores_last_decision_boundary_without_extra_rebalance(tmp_pat
 
 
 def test_live_policy_digest_is_independent_of_ephemeral_active_symbols(tmp_path) -> None:
-    strategy = EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]})
+    strategy = _fixture_strategy()
     limits = PortfolioRiskLimits()
     first_runtime = PortfolioRuntime(
         strategy,
@@ -337,7 +352,7 @@ def test_portfolio_buy_fill_is_managed_and_full_exit_returns_to_external(
     client = _FakeAlpacaClient()
     broker = _portfolio_broker(client, repo, tmp_path)
     runtime = PortfolioRuntime(
-        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        _fixture_strategy(),
         EQUITY_UNIVERSE,
         broker,
         repo,
@@ -425,7 +440,7 @@ def test_portfolio_ownership_survives_runtime_restart(tmp_path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     client = _FakeAlpacaClient()
     first = PortfolioRuntime(
-        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        _fixture_strategy(),
         EQUITY_UNIVERSE,
         _portfolio_broker(client, repo, tmp_path),
         repo,
@@ -478,7 +493,7 @@ def test_partial_exit_keeps_ownership_until_fully_flat(tmp_path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     client = _FakeAlpacaClient()
     runtime = PortfolioRuntime(
-        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        _fixture_strategy(),
         EQUITY_UNIVERSE,
         _portfolio_broker(client, repo, tmp_path),
         repo,
@@ -2463,7 +2478,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     its first usable bar while a seeded runtime mid-period reports
     ``not_scheduled`` — the startup catch-up closes the gap with an immediate
     full-target decision."""
-    strategy = EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]})
+    strategy = _fixture_strategy()
     bars = _bars()  # 220 daily bars; the last bar is mid-month
     last_timestamp = max(bar.timestamp for bar in bars)
     assert (
@@ -2667,7 +2682,7 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
         "submitting",
     )
     runtime = PortfolioRuntime(
-        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        _fixture_strategy(),
         EQUITY_UNIVERSE,
         _Broker(),
         repo,

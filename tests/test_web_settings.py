@@ -633,7 +633,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
 
     def make_config(enabled: bool) -> object:
         selection = type(
-            "Selection", (), {"enabled": enabled, "name": "equity_dynamic_trend_1d_v1"}
+            "Selection", (), {"enabled": enabled, "name": "equity_residual_momentum_v1"}
         )()
         disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
         strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
@@ -654,7 +654,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
     monkeypatch.setattr(server, "manager", StaticManager())
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(True))
     configured = asyncio.run(server.get_status())
-    assert configured["strategy_status"] == "configured:equity/equity_dynamic_trend_1d_v1"
+    assert configured["strategy_status"] == "configured:equity/equity_residual_momentum_v1"
 
     monkeypatch.setattr(server, "load_config", lambda _path: make_config(False))
     disabled = asyncio.run(server.get_status())

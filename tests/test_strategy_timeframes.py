@@ -52,7 +52,10 @@ def _bar(symbol: str, timestamp: datetime, timeframe: str, market: Market, close
 
 
 def _daily_series(
-    symbols: tuple[str, ...], days: int = 320, base: datetime | None = None
+    symbols: tuple[str, ...],
+    days: int = 320,
+    base: datetime | None = None,
+    market: Market = Market.EQUITY,
 ) -> list[Bar]:
     start = base or datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     bars: list[Bar] = []
@@ -64,7 +67,7 @@ def _daily_series(
                     symbol,
                     timestamp,
                     "1d",
-                    Market.EQUITY,
+                    market,
                     100 * (1.001 + offset * 0.0001) ** index,
                 )
             )
@@ -121,13 +124,12 @@ def test_strategy_cannot_run_on_unsupported_timeframe() -> None:
 
 
 def test_crypto_strategy_supports_only_validated_variants() -> None:
-    for timeframe in ("4h", "1d"):
-        strategy = portfolio_strategy_from("crypto_time_series_momentum_v1", timeframe=timeframe)
-        assert strategy.timeframe == timeframe
-        validate_strategy_timeframe(strategy, timeframe)
-    for bad in ("5m", "1h", "15m"):
+    strategy = portfolio_strategy_from("crypto_low_variance_v1", timeframe="1d")
+    assert strategy.timeframe == "1d"
+    validate_strategy_timeframe(strategy, "1d")
+    for bad in ("5m", "1h", "4h", "15m"):
         with pytest.raises(ValueError):
-            portfolio_strategy_from("crypto_time_series_momentum_v1", timeframe=bad)
+            portfolio_strategy_from("crypto_low_variance_v1", timeframe=bad)
 
 
 def test_spec_declares_owned_timeframes_and_cadence() -> None:
@@ -162,9 +164,9 @@ def test_required_timeframe_aggregation_is_initialized() -> None:
     assert daily[0].open == 100.0 and daily[0].close == 123.0
 
 
-def test_multiple_markets_run_different_signal_timeframes_simultaneously(tmp_path) -> None:
-    """Equity (1d) and crypto (4h) run at the same time, one account, one risk
-    layer, one repository, without interfering."""
+def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) -> None:
+    """Equity (monthly) and crypto (hours:168) run at the same time, one
+    account, one risk layer, one repository, without interfering."""
     broker = _Broker()
     repository = PortfolioStateRepository(tmp_path / "shared.sqlite3")
     equity = portfolio_strategy_from(
@@ -172,7 +174,9 @@ def test_multiple_markets_run_different_signal_timeframes_simultaneously(tmp_pat
         {"top_n": 2, "exclude_symbols": ["SPY"]},
         timeframe="1d",
     )
-    crypto = portfolio_strategy_from("crypto_time_series_momentum_v1", timeframe="4h")
+    crypto = portfolio_strategy_from(
+        "crypto_low_variance_v1", {"top_n": 2, "rebalance_hours": 168}, timeframe="1d"
+    )
     risk = PortfolioRiskLimits(
         daily_loss_limit=0.05,
         drawdown_halt=0.20,
@@ -205,14 +209,16 @@ def test_multiple_markets_run_different_signal_timeframes_simultaneously(tmp_pat
         account_id="shared-account",
     )
     assert equity_runtime.strategy.timeframe == "1d"
-    assert crypto_runtime.strategy.timeframe == "4h"
+    assert crypto_runtime.strategy.timeframe == "1d"
     assert equity_runtime.policy.frequency == "monthly"
     assert crypto_runtime.policy.frequency == "hours:168"
 
     # Both markets decide on their own closed-bar batches.
     equity_result = equity_runtime.process_closed_bars(_daily_series(EQUITY_SYMBOLS))
     assert equity_result.status == "submitted"
-    crypto_result = crypto_runtime.process_closed_bars(_crypto_4h_series(CRYPTO_SYMBOLS))
+    crypto_result = crypto_runtime.process_closed_bars(
+        _daily_series(CRYPTO_SYMBOLS, market=Market.CRYPTO)
+    )
     assert crypto_result.status == "submitted"
     submitted_symbols = {order.symbol for order in broker.submitted}
     assert any("/" in symbol for symbol in submitted_symbols)
@@ -249,7 +255,7 @@ def test_backtest_uses_same_strategy_timeframe() -> None:
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
     from parayabuck.data.market_dataset import DatasetLineage, MarketDataset
 
-    strategy = portfolio_strategy_from("crypto_time_series_momentum_v1", timeframe="1d")
+    strategy = portfolio_strategy_from("crypto_low_variance_v1", timeframe="1d")
     engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
     # The backtest engine refuses a dataset whose timeframe differs from the
     # strategy's signal timeframe: no silent reinterpretation.
@@ -361,10 +367,9 @@ def test_decision_fires_only_on_finalized_bars() -> None:
 def test_no_same_bar_execution_lookahead() -> None:
     """A decision on completed bar t may only fill on the NEXT tradable bar."""
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
-    from parayabuck.portfolio.equity_long_horizon_momentum import EquityLongHorizonMomentum1dV2
 
-    strategy = EquityLongHorizonMomentum1dV2(
-        {"top_n": 2, "use_market_regime": False, "exclude_symbols": ["SPY"]}
+    strategy = portfolio_strategy_from(
+        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
     )
     engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
     bars = _daily_series(EQUITY_SYMBOLS, days=320)

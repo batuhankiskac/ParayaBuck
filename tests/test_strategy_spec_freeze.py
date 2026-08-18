@@ -19,6 +19,7 @@ repository config and construct strategy classes offline.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -117,6 +118,26 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
         "crypto_low_variance_v2",
     }
     assert {config.strategy.equity.name, config.strategy.crypto.name} <= registered
+
+
+# Deleted/rejected families (implementations removed 2026-08-18; evidence in
+# docs/rejected_strategies.md). Construction must fail loudly — no silent
+# fallback, no automatic substitution.
+REJECTED_STRATEGY_NAMES = (
+    "equity_dynamic_trend_1d_v1",
+    "equity_long_horizon_momentum_1d_v2",
+    "crypto_cross_sectional_momentum_1h_v1",
+    "crypto_time_series_momentum_v1",
+    "crypto_cross_sectional_reversal_v1",
+    "crypto_high_proximity_v1",
+    "crypto_low_disagreement_v1",
+)
+
+
+@pytest.mark.parametrize("name", REJECTED_STRATEGY_NAMES)
+def test_rejected_strategies_are_not_constructible(name: str) -> None:
+    with pytest.raises(ValueError, match=rf"Unsupported portfolio strategy: {re.escape(name)}"):
+        portfolio_strategy_from(name)
 
 
 def test_crypto_risk_limits_frozen(config: Config) -> None:

@@ -191,6 +191,14 @@ def build_trailing_point_in_time_universe(
         by_symbol: dict[str, list[Bar]] = {
             symbol: list(series) for symbol, series in window.items()
         }
+        # Each per-symbol series is built from ``selected_bars`` (sorted by
+        # (timestamp, symbol)) and only ever shrinks from the front, so it is
+        # timestamp-ascending: the latest bar of the latest series is the
+        # window's data timestamp.
+        data_timestamp = max(
+            (series[-1].timestamp for series in by_symbol.values()),
+            default=timestamp - duration,
+        )
         result: ScannerResult | CryptoScannerResult
         if market == Market.EQUITY:
             configured = equity_config or EquityUniverseConfig(
@@ -202,15 +210,18 @@ def build_trailing_point_in_time_universe(
                     minimum_data_completeness=minimum_history_ratio,
                 ),
             )
-            shortlisted = sorted(by_symbol.items())
             if target_shortlist is not None:
                 # Stage-A parity with the live pipeline: rank the trailing
                 # window by median dollar volume and admit only the top target
-                # before the production scanner runs.
+                # before the production scanner runs. The sort key is a total
+                # order (median-dollars, symbol), so the result is independent
+                # of the input order and one sort suffices.
                 shortlisted = sorted(
-                    shortlisted,
+                    by_symbol.items(),
                     key=lambda item: (-_median_dollar_volume(item[1]), item[0]),
                 )[:target_shortlist]
+            else:
+                shortlisted = sorted(by_symbol.items())
             equity_candidates = [
                 equity_candidate_from_bars(
                     symbol,
@@ -221,10 +232,7 @@ def build_trailing_point_in_time_universe(
             ]
             result = EquityUniverseScanner(configured).scan(
                 equity_candidates,
-                data_timestamp=max(
-                    (bar.timestamp for history in by_symbol.values() for bar in history),
-                    default=timestamp - duration,
-                ),
+                data_timestamp=data_timestamp,
                 selection_timestamp=timestamp,
                 pinned_symbols=pinned,
             )
@@ -257,10 +265,7 @@ def build_trailing_point_in_time_universe(
             ]
             result = CryptoUniverseScanner(configured_crypto).scan(
                 crypto_candidates,
-                data_timestamp=max(
-                    (bar.timestamp for history in by_symbol.values() for bar in history),
-                    default=timestamp - duration,
-                ),
+                data_timestamp=data_timestamp,
                 selection_timestamp=timestamp,
             )
         if not result.selected_symbols and not result.candidate_symbols:
@@ -306,10 +311,10 @@ def build_trailing_point_in_time_universe(
 
 
 def _median_dollar_volume(bars: list[Bar]) -> float:
-    values = [
-        float(bar.close) * float(bar.volume)
-        for bar in sorted(bars, key=lambda item: item.timestamp)[-20:]
-    ]
+    # ``bars`` is the trailing-window series, already timestamp-ascending
+    # (see the builder's forward-pass invariant), so the last 20 are the
+    # trailing 20 without a redundant sort.
+    values = [float(bar.close) * float(bar.volume) for bar in bars[-20:]]
     return statistics.median(values) if values else 0.0
 
 

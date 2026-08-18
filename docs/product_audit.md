@@ -264,15 +264,18 @@ kill-switch. Policy now:
 - None of these are required by, or misleading about, the current product
   runtime.
 
-## Strategy → order trace (enabled: `equity_dynamic_trend_1d_v1`)
+## Strategy → order trace (enabled: `equity_residual_momentum_v2` / `crypto_low_variance_v2`)
 
 `AlpacaBarStream` → `EngineRuntime._on_bar` → `TimeframeAggregator` (5m→1d)
 → event queue → `_decision_loop` → `_process_portfolio_timestamp` →
 readiness gate → `PortfolioRuntime.process_closed_bars` →
-`PortfolioDecisionService.build_context` → `EquityDynamicTrend1dV1.decide`
+`PortfolioDecisionService.build_context` →
+`EquityResidualMomentum1dV2.decide` / `CryptoLowVariance1dV2.decide`
 → `TargetPortfolio` → entry-latch/intermediate caps → `PortfolioRiskOverlay`
 → `TargetToOrderPlanner.plan` (SELL-first, deterministic `pbp-` client ids)
 → two-phase persisted rebalance → `_submit_orders`
 (persist-before-broker) → `AlpacaBroker.submit_portfolio_order` →
 TradingStream trade update → `PortfolioStateRepository.apply_trade_update`
-→ ownership. No backtest-only class in this path.
+→ ownership. Startup catch-up (`decision_origin: startup_catch_up`) runs the
+same path once on the latest warmup bars after a fresh start. No
+backtest-only class in this path.

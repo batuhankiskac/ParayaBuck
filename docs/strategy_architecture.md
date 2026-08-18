@@ -191,19 +191,29 @@ selects a strategy by normal configuration after reviewing evidence. There is
 no experiment registry, trial ledger, promotion database, holdout lock or
 GREEN/RED runtime gate.
 
-## 8. Strategy registry (as of this contract)
+## 8. Strategy registry (as of the PAPER v2 release)
+
+**PRODUCT surface** — `supported_portfolio_strategies()` (config-selectable):
 
 | name | market | primary timeframe | supported | rebalance | status |
 |---|---|---|---|---|---|
-| `equity_dynamic_trend_1d_v1` | equity | 1d | 1d | weekly (param) | frozen reference |
-| `equity_long_horizon_momentum_1d_v2` | equity | 1d | 1d | monthly | frozen reference |
-| `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | validated candidate (broad-pool alpha) |
-| `crypto_cross_sectional_momentum_1h_v1` | crypto | 1h | 1h | hours:24 | frozen reference |
+| `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | frozen historical baseline |
+| `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | PAPER production selection (2026-08-18) |
+| `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
+| `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | PAPER production selection (2026-08-18) |
+
+**Research-only identities** — still constructible for reproducibility
+(`portfolio_strategy_from`), never part of the product surface:
+
+| name | market | primary timeframe | supported | rebalance | status |
+|---|---|---|---|---|---|
+| `equity_dynamic_trend_1d_v1` | equity | 1d | 1d | weekly (param) | rejected economics (OOS negative) |
+| `equity_long_horizon_momentum_1d_v2` | equity | 1d | 1d | monthly | NOT validated |
+| `crypto_cross_sectional_momentum_1h_v1` | crypto | 1h | 1h | hours:24 | family closed (verdict C) |
 | `crypto_time_series_momentum_v1` | crypto | 1d | 4h, 1d | hours:168 | NOT validated (family verdict C) |
 | `crypto_cross_sectional_reversal_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C) |
-| `crypto_high_proximity_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C, bake-off 2026-08-12) |
-| `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | validated candidate (bake-off 2026-08-12, PAPER selection) |
-| `crypto_low_disagreement_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C, bake-off 2026-08-12) |
+| `crypto_high_proximity_v1` | crypto | 1d | 1d | hours:168 | NOT validated (verdict C, bake-off 2026-08-12) |
+| `crypto_low_disagreement_v1` | crypto | 1d | 1d | hours:168 | NOT validated (verdict C, bake-off 2026-08-12) |
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

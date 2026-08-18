@@ -1,8 +1,10 @@
 # Paper Operations
 
 Operational contract for the ParayaBuck PAPER runtime (dual-market:
-`equity_residual_momentum_v1` on 1d monthly cadence, `crypto_low_variance_v1`
-on 1d weekly cadence). This document is a companion to
+`equity_residual_momentum_v2` on 1d weekly cadence, `crypto_low_variance_v2`
+on 1d 96h cadence). v1 identities remain frozen historical baselines
+(`equity_residual_momentum_v1` monthly, `crypto_low_variance_v1` 168h).
+This document is a companion to
 `docs/operations.md` and `docs/validated_strategies.md`.
 
 ## Startup contract (Phase 4)
@@ -20,15 +22,21 @@ before the next begins:
    decision; a verified reconcile clears persisted safety incidents so a
    restart never resurrects them.
 4. **Strategy runtimes** — one `PortfolioRuntime` per market on a SINGLE
-   shared repository/account: equity monthly (1d), crypto weekly
-   (`rebalance_hours: 168`, 1d). Both runtimes decide simultaneously.
+   shared repository/account: equity weekly (1d), crypto 96h
+   (`rebalance_hours: 96`, 1d). Both runtimes decide simultaneously.
 5. **Warmup** — each runtime seeds completed bars until every symbol meets
    the strategy's minimum history (equity: beta window + 1; crypto:
    variance lookback + 1).
-6. **Account reconciliation** — a fresh broker snapshot is taken between
+6. **Startup catch-up** — after warmup the engine forces ONE immediate
+   full-target decision per market on the latest closed bars (backtest/PAPER
+   parity) unless the account already holds managed positions in that market
+   (`already_invested`) or a decision already exists (restart:
+   `catch_up_superseded`/`duplicate_decision`). Tagged
+   `decision_origin: startup_catch_up`.
+7. **Account reconciliation** — a fresh broker snapshot is taken between
    phases and before any order sizing (stale account data pauses decisions
    for that market).
-7. **Ready** — the runtime enters `running` when both markets have ready
+8. **Ready** — the runtime enters `running` when both markets have ready
    symbol history and the decision loop is live.
 
 Offline verification of this contract lives in

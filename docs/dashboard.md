@@ -53,9 +53,9 @@ shows **LIVE (devre dışı)** — visually dimmed and struck through. The same
 state is exposed as `mode.badge` / `mode.live_active` / `mode.live_disabled`
 in the overview payload.
 
-### Equity card — "Residual Momentum v1"
+### Equity card — "Residual Momentum v2 (weekly)"
 Strategy contract (display name, signal timeframe `1d`, rebalance cadence
-`monthly`, minimum history) from `StrategySpec` via `_strategy_metadata`.
+`weekly`, minimum history) from `StrategySpec` via `_strategy_metadata`.
 `Eligible pool` — shortlist count from
 `universe.equity.candidate_universe_path`; `observation set` — active-universe
 `selected_symbols` size; `positions` / `current allocation %` — account
@@ -64,12 +64,12 @@ positions weighted by market value over equity; `maximum allocation %` —
 active / warming / halted (entry halt or circuit breaker) / scanner_issue /
 disabled / engine states. `Next expected decision` — the last persisted
 `portfolio_decisions` timestamp advanced by the strategy's rebalance policy
-(`monthly` → next month start, `hours:N` → +N hours); it is an expected
+(`weekly` → next ISO-week start, `hours:N` → +N hours); it is an expected
 boundary, not a guarantee. Holdings carry target weight (from the decision's
 `target_json`), current weight (account), rank among the decision's
 `selected_symbols`, and the per-weight `reason` + strategy `hypothesis`.
 
-### Crypto card — "Low Realized Variance v1"
+### Crypto card — "Low Realized Variance v2 (96h)"
 Same shape plus: `lookback 22g` (the frozen `variance_lookback_days`),
 `22g vol` per holding — the trailing 22-day realized volatility computed
 with the strategy's own `realized_volatility` over cached 1d bars
@@ -77,7 +77,9 @@ with the strategy's own `realized_volatility` over cached 1d bars
 `rank` — the symbol's position in the decision's `selected_symbols`
 (lowest-vol first), `target weight` — equal-weight from the decision,
 `current weight` — account market value over equity. Rebalance cadence
-`hours:168`.
+`hours:96`. Each card also shows the startup catch-up status
+(`submitted` / `warming_up` / `blocked:*` / `already_invested` /
+`catch_up_superseded` / `duplicate_decision` / `rebalance_in_progress`).
 
 ### Risk panel
 `Gross exposure` vs `max_gross_exposure_pct`, `cash` vs

@@ -2161,6 +2161,15 @@ _dashboard_config_cache: dict[tuple[str, int], Any] = {}
 _dashboard_config_cache_lock = threading.Lock()
 
 
+def _dashboard_config_key() -> tuple[str, int] | None:
+    """Cache key for the settings file: (path, mtime_ns); None when unreadable."""
+    try:
+        path = Path(str(manager.config_path))
+        return (str(path), path.stat().st_mtime_ns if path.exists() else 0)
+    except OSError:
+        return None
+
+
 def _dashboard_runtime_health() -> dict[str, Any] | None:
     runtime = _dashboard_runtime()
     if runtime is None or not hasattr(runtime, "health"):
@@ -2183,11 +2192,9 @@ def _dashboard_config() -> Any | None:
     consumer. This cache is DISPLAY-ONLY: trading state never reads it.
     """
     try:
-        path = Path(str(manager.config_path))
-        key: tuple[str, int] = (
-            str(path),
-            path.stat().st_mtime_ns if path.exists() else 0,
-        )
+        key = _dashboard_config_key()
+        if key is None:
+            return None
     except OSError:
         return None
     with _dashboard_config_cache_lock:
@@ -3092,12 +3099,57 @@ def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
         return {"unavailable": True, "reason": f"runtime metrics error: {exc}"}
 
 
+# Display-only dashboard snapshot cache: the browser polls all 9 dashboard
+# endpoints every ~2s and every call rebuilds the ENTIRE payload (config,
+# ledger reads, telemetry, broker-snapshot panel). Within a short TTL the
+# payload is served from this cache, so a poll tick costs one rebuild instead
+# of nine. The cache is keyed by engine state and settings-file version, and
+# never feeds trading state, decisions, or the runtime (display-only).
+_DASHBOARD_SNAPSHOT_TTL_SECONDS = 1.5
+_dashboard_snapshot_lock = threading.Lock()
+_dashboard_snapshot: (
+    tuple[float, str, tuple[str, int] | None, dict[str, Any]] | None
+) = None
+
+
+def _dashboard_snapshot_reset() -> None:
+    """Clear the display-only payload cache (benchmarks/tests)."""
+    global _dashboard_snapshot
+    with _dashboard_snapshot_lock:
+        _dashboard_snapshot = None
+
+
 def _dashboard_payload() -> dict[str, Any]:
     """Full aggregated dashboard payload; each panel degrades on failure."""
+    global _dashboard_snapshot
+    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
+    config_key = _dashboard_config_key()
+    now = time.monotonic()
+    with _dashboard_snapshot_lock:
+        cached = _dashboard_snapshot
+        if (
+            cached is not None
+            and now < cached[0]
+            and cached[1] == engine_state
+            and cached[2] == config_key
+        ):
+            return cached[3]
+    payload = _build_dashboard_payload(engine_state)
+    with _dashboard_snapshot_lock:
+        _dashboard_snapshot = (
+            time.monotonic() + _DASHBOARD_SNAPSHOT_TTL_SECONDS,
+            engine_state,
+            config_key,
+            payload,
+        )
+    return payload
+
+
+def _build_dashboard_payload(engine_state: str) -> dict[str, Any]:
+    """Assemble the full dashboard payload (called on snapshot-cache miss)."""
     cfg = _dashboard_config()
     health = _dashboard_runtime_health()
     account = _dashboard_account()
-    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
     account_id = _dashboard_account_id()
     decisions = _dashboard_market_decisions(account_id)
     meta: dict[str, Any] = {}

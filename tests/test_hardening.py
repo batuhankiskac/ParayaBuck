@@ -34,7 +34,13 @@ from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.markets.sectors import classify_instrument, is_inverse_equity, sector_of
-from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
+from parayabuck.markets.symbols import (
+    canonical_symbol,
+    normalize_symbol,
+    same_symbol,
+    split_crypto_pair,
+)
+from parayabuck.utils import is_crypto
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.web import server
@@ -160,6 +166,26 @@ def test_canonical_crypto_symbols_and_adapters() -> None:
     assert same_symbol("BTCUSD", "btc/usd")
     assert canonical_symbol("aapl") == "AAPL"
     assert not same_symbol("AAPL", "AAPL/USD")
+
+
+def test_legacy_crypto_symbols_outside_the_allowlist_canonicalize() -> None:
+    """Regression: an Alpaca position/order symbol like ``PAXGUSD`` (base
+    not in the old allowlist) crashed account reconciliation with 'Cannot
+    infer crypto base/quote'; the engine degraded on every refresh once a
+    PAXG position existed. Explicit CRYPTO market must accept any base."""
+    assert normalize_symbol("paxgusd", Market.CRYPTO).canonical == "PAXG/USD"
+    assert canonical_symbol("PAXGUSD", Market.CRYPTO) == "PAXG/USD"
+    assert canonical_symbol("USDGUSD", Market.CRYPTO) == "USDG/USD"
+    assert canonical_symbol("BTCUSDT", Market.CRYPTO) == "BTC/USDT"
+    assert split_crypto_pair("PAXGUSD") == ("PAXG", "USD")
+    # Universe bases now infer to CRYPTO in no-slash legacy form too.
+    assert is_crypto("PAXGUSD")
+    assert normalize_symbol("PAXGUSD").market == Market.CRYPTO
+    # A bare quote or bare base is still not a pair.
+    with pytest.raises(ValueError):
+        canonical_symbol("USD", Market.CRYPTO)
+    with pytest.raises(ValueError):
+        canonical_symbol("PAXG", Market.CRYPTO)
 
 
 def test_legacy_crypto_symbols_have_crypto_sector_classification() -> None:

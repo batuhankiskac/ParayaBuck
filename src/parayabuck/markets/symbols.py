@@ -13,21 +13,47 @@ _CRYPTO_QUOTES = (
     "EUR",
     "GBP",
 )
+# Bases the crypto universe can actually select (pinned + scanner
+# candidates). Kept in sync with the trading universe so legacy no-slash
+# forms from the broker (e.g. Alpaca position symbols like ``PAXGUSD``)
+# infer to CRYPTO instead of being misread as equity tickers.
 _KNOWN_CRYPTO_BASES = {
     "AAVE",
     "ADA",
+    "ARB",
     "AVAX",
+    "BAT",
     "BCH",
+    "BONK",
     "BTC",
+    "CRV",
     "DOGE",
     "DOT",
     "ETH",
+    "FIL",
+    "GRT",
+    "HYPE",
+    "LDO",
     "LINK",
     "LTC",
+    "ONDO",
+    "PAXG",
+    "PEPE",
+    "POL",
+    "RENDER",
     "SHIB",
+    "SKY",
     "SOL",
+    "SUSHI",
+    "TRUMP",
     "UNI",
+    "USDC",
+    "USDG",
+    "USDT",
+    "WIF",
     "XRP",
+    "XTZ",
+    "YFI",
 }
 
 STABLECOIN_BASES = frozenset(
@@ -78,7 +104,12 @@ def normalize_symbol(symbol: str, market: Market | None = None) -> SymbolIdentit
             raise ValueError(f"Invalid crypto pair: {symbol!r}")
         base, quote = parts
     else:
-        pair = _split_legacy_pair(value)
+        # With an explicit CRYPTO market the base allowlist would be wrong:
+        # any broker legacy symbol ending in a known quote is a crypto pair
+        # (e.g. ``PAXGUSD`` -> PAXG/USD), not an equity ticker. The strict
+        # allowlist is reserved for market inference (market=None), where an
+        # equity symbol must never be misread as crypto.
+        pair = _split_legacy_pair(value, strict=market is None)
         if pair is None:
             raise ValueError(f"Cannot infer crypto base/quote for {symbol!r}; use BASE/QUOTE form")
         base, quote = pair
@@ -143,11 +174,14 @@ def same_symbol(left: str, right: str, market: Market | None = None) -> bool:
         return False
 
 
-def _split_legacy_pair(value: str) -> tuple[str, str] | None:
+def _split_legacy_pair(value: str, *, strict: bool = True) -> tuple[str, str] | None:
     for quote in _CRYPTO_QUOTES:
         base = value[: -len(quote)] if value.endswith(quote) else ""
-        if base in _KNOWN_CRYPTO_BASES:
-            return base, quote
+        if not base:
+            continue
+        if strict and base not in _KNOWN_CRYPTO_BASES:
+            continue
+        return base, quote
     return None
 
 

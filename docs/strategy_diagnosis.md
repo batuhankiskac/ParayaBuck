@@ -1,7 +1,9 @@
 # ParayaBuck Strategy Diagnosis — V1 Root-Cause Attribution
 
-Status: research evidence record (numbers are reproducible via
-`scripts/strategy_diagnose.py`; commands at the end).
+Status: research evidence record (numbers were reproducible via
+`scripts/strategy_diagnose.py`; that harness was retired 2026-08-18 with the
+rejected implementations — see `docs/rejected_strategies.md` — and the
+evidence below is frozen).
 
 ## Identity
 
@@ -280,6 +282,8 @@ not validated and the mission stops at the one candidate. Future direction
 relative-strength rotation.
 
 ## Reproduction commands
+
+> Commands target the retired harness `scripts/strategy_diagnose.py` (removed 2026-08-18). The evidence above is frozen; the current validation harness is `scripts/strategy_robustness.py` + the cadence-mission scripts.
 
 ```
 python scripts/strategy_diagnose.py --mode baseline --start 2020-01-02 --end 2024-12-31

@@ -8,7 +8,8 @@ events (production would halt; the curve kept trading), identical to prior
 research runs.
 
 Artifacts: `data/research/strategy_validation_v3/reversal.json` ·
-Harness: `scripts/validate_strategy_candidates.py reversal`
+Harness: `scripts/validate_strategy_candidates.py reversal` (retired
+2026-08-18; evidence frozen in this document) ·
 Dataset: `data/historical/crypto_18_1h_extended.csv` (hash
 `aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb`) ·
 1d: `crypto_18_1d_extended.csv` (hash

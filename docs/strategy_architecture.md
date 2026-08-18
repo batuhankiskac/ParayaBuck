@@ -126,9 +126,9 @@ Rules:
    mismatch — never silently reinterpreted. WITHOUT the key, the loader
    resolves the timeframe FROM THE STRATEGY's primary (or a validated
    alternative), so a configured name never inherits another market's
-   default. Example: selecting `crypto_time_series_momentum_v1` with no
-   timeframe resolves `1d`, and `timeframe: 4h` selects the validated 4h
-   variant while `timeframe: 1h` fails at load time.
+   default. Example: selecting `crypto_low_variance_v1` with no timeframe
+   resolves `1d`; `timeframe: 4h` fails at load time (low-variance
+   validates only 1d).
 5. BACKTEST, PAPER and LIVE use identical strategy timeframe semantics: the
    same `PortfolioStrategy` class, the same `spec()`, the same bar
    finalization rule (decisions fire only on completed bars, orders fill on
@@ -182,18 +182,24 @@ Strategies never see the account beyond `equity`/`holdings`/`prices` in the
 
 ## 7. Research / runtime separation
 
-Research tooling (`scripts/validate_strategy_candidates.py`,
-`scripts/strategy_foundation.py`, `scripts/strategy_diagnose.py`) reuses the
-production strategy classes, the production historical engine, the
-production universe policy, the production cost model and the production
-risk policy. The runtime NEVER reads research reports or manifests. A human
-selects a strategy by normal configuration after reviewing evidence. There is
-no experiment registry, trial ledger, promotion database, holdout lock or
-GREEN/RED runtime gate.
+Research tooling (`scripts/strategy_robustness.py`, the cadence-mission
+scripts `scripts/research_equity_cadence.py` / `research_crypto_cadence.py` /
+`research_robustness_audit.py` / `research_deployment_start.py` /
+`research_equity_staleness.py`, `scripts/combined_portfolio_validation.py`,
+`scripts/strategy_foundation.py`, shared helpers
+`scripts/research_helpers.py`) reuses the production strategy classes, the
+production historical engine, the production universe policy, the production
+cost model and the production risk policy. The runtime NEVER reads research
+reports or manifests. A human selects a strategy by normal configuration
+after reviewing evidence. There is no experiment registry, trial ledger,
+promotion database, holdout lock or GREEN/RED runtime gate. Rejected
+strategy families are archived (implementation removed) in
+`docs/rejected_strategies.md`.
 
 ## 8. Strategy registry (as of the PAPER v2 release)
 
-**PRODUCT surface** — `supported_portfolio_strategies()` (config-selectable):
+**The complete registry** — `_PORTFOLIO_STRATEGY_FACTORIES` and
+`supported_portfolio_strategies()` (config-selectable):
 
 | name | market | primary timeframe | supported | rebalance | status |
 |---|---|---|---|---|---|
@@ -202,18 +208,10 @@ GREEN/RED runtime gate.
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
 | `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | PAPER production selection (2026-08-18) |
 
-**Research-only identities** — still constructible for reproducibility
-(`portfolio_strategy_from`), never part of the product surface:
-
-| name | market | primary timeframe | supported | rebalance | status |
-|---|---|---|---|---|---|
-| `equity_dynamic_trend_1d_v1` | equity | 1d | 1d | weekly (param) | rejected economics (OOS negative) |
-| `equity_long_horizon_momentum_1d_v2` | equity | 1d | 1d | monthly | NOT validated |
-| `crypto_cross_sectional_momentum_1h_v1` | crypto | 1h | 1h | hours:24 | family closed (verdict C) |
-| `crypto_time_series_momentum_v1` | crypto | 1d | 4h, 1d | hours:168 | NOT validated (family verdict C) |
-| `crypto_cross_sectional_reversal_v1` | crypto | 1d | 1d | hours:168 | NOT validated (family verdict C) |
-| `crypto_high_proximity_v1` | crypto | 1d | 1d | hours:168 | NOT validated (verdict C, bake-off 2026-08-12) |
-| `crypto_low_disagreement_v1` | crypto | 1d | 1d | hours:168 | NOT validated (verdict C, bake-off 2026-08-12) |
+There are no research-only identities: rejected strategy families were
+removed from the runtime on 2026-08-18 and are archived in
+`docs/rejected_strategies.md`. `portfolio_strategy_from` rejects any other
+name with `Unsupported portfolio strategy: <name>`.
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

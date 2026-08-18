@@ -17,7 +17,8 @@ before alpha — they are RETRACTED as the representative claim for the new
 pipeline and kept only as a controlled comparison.
 
 Artifacts: `data/research/strategy_validation_v2/{equity,crypto,references,summary}.json`
-· Harness: `scripts/validate_strategy_candidates.py`
+· Harness: `scripts/validate_strategy_candidates.py` (retired 2026-08-18;
+evidence frozen in this document)
 
 ## Data
 

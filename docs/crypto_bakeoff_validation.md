@@ -7,7 +7,8 @@ tournaments, no optimizer, no post-hoc re-specification).
 
 Artifacts: `data/research/strategy_validation_v4/frozen_specs.json`,
 `bakeoff.json`, `candidate_{A,B,C}.json` ·
-Harness: `scripts/validate_strategy_candidates.py bakeoff` ·
+Harness: `scripts/validate_strategy_candidates.py bakeoff` (retired
+2026-08-18; evidence frozen in this document) ·
 Dataset: `data/historical/crypto_18_1h_extended.csv` (hash
 `aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb`) ·
 1d: `crypto_18_1d_extended.csv` (hash

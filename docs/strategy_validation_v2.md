@@ -1,7 +1,9 @@
 # ParayaBuck V2 Validation — equity_long_horizon_momentum_1d_v2
 
 Status: research evidence record. All numbers reproducible via
-`scripts/strategy_diagnose.py`; commands at the end. This document records
+`scripts/strategy_diagnose.py` (harness retired 2026-08-18 with the rejected
+implementations; evidence frozen in this document — see
+`docs/rejected_strategies.md`); commands at the end. This document records
 both what was tested and the exact protocol used, including its imperfections
 (see "Protocol disclosure" below).
 
@@ -238,6 +240,8 @@ V2 NOT VALIDATED.
 ```
 
 ## Reproduction commands
+
+> Commands target the retired harness `scripts/strategy_diagnose.py` (removed 2026-08-18). The evidence above is frozen; the current validation harness is `scripts/strategy_robustness.py` + the cadence-mission scripts.
 
 ```
 python scripts/strategy_diagnose.py --mode alpha --strategy equity_long_horizon_momentum_1d_v2 \

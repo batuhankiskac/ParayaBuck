@@ -1,5 +1,13 @@
 # ParayaBuck Release Validation
 
+> **HISTORICAL RECORD** — 2026-08-10 release evidence for the prior
+> production strategy generation (`equity_dynamic_trend_1d_v1`). That
+> strategy was rejected (see `docs/rejected_strategies.md`) and removed from
+> the runtime on 2026-08-18; "CURRENT production strategy" claims below
+> describe the state at THAT release, not today. Current release evidence:
+> `docs/capital_utilization_cadence_verdict.md`,
+> `docs/validated_strategies.md`, `data/release_evidence_v2/`.
+
 ## Identity
 
 ```

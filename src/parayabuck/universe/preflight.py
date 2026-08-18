@@ -230,6 +230,12 @@ def refresh_equity_universe(
         # daily bar is final, and a same-slot re-run (retry after an apply
         # failure, startup double-refresh) must not re-download the universe.
         skip_symbols = _equity_delta_skip_symbols(cached_history, generated_at, end)
+        for symbol in skip_symbols:
+            # Skipped symbols need no refetch (their cached last daily bar is
+            # the finalized latest session); their candidates are built from
+            # the same cached bars a refetch would return.
+            rows = cached_history.get(symbol) or []
+            by_symbol[symbol] = _tuples_to_bars(symbol, rows[-20:])
         start = end - timedelta(days=10)
         for batch in _chunks(
             [symbol for symbol in sorted(allowed) if symbol not in skip_symbols], 150
@@ -367,7 +373,7 @@ def _equity_observation_set(
         start,
         data_timestamp,
         scope="equity_observation",
-        config_digest=scanner_config_digest(universe),
+        config_digest=_observation_scope_digest(scanner_config_digest(universe), selection),
         identity=f"{selection.name}:{strategy.timeframe}",
         adjustment="splits",
     )
@@ -518,7 +524,9 @@ def _crypto_observation_set(
         start,
         data_timestamp,
         scope="crypto_observation",
-        config_digest=crypto_scanner_config_digest(universe),
+        config_digest=_observation_scope_digest(
+            crypto_scanner_config_digest(universe), selection
+        ),
         identity=f"{selection.name}:{strategy.timeframe}",
     )
     # Alpaca's feed includes the forming (in-progress) bar for the current
@@ -644,6 +652,27 @@ def _incremental_history(
         config_digest=config_digest,
         identity=identity,
     )
+
+
+def _observation_scope_digest(base_digest: str, selection: object) -> str:
+    """Cache-scope digest for a strategy observation-set fetch.
+
+    The observation window is sized by the strategy's minimum-history
+    requirement, so the strategy identity (name, parameters, timeframe) must
+    gate cache reuse: any change fails closed to a full refetch instead of
+    silently serving a shorter window.
+    """
+    import hashlib
+
+    payload = {
+        "base": base_digest,
+        "name": getattr(selection, "name", ""),
+        "timeframe": getattr(selection, "timeframe", None),
+        "parameters": getattr(selection, "parameters", {}),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 def _bar_to_tuple(bar: Bar) -> tuple[str, float, float, float, float, float]:

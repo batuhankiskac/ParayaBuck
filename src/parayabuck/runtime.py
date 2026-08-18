@@ -3295,9 +3295,11 @@ class EngineRuntime:
             "market_state_timeframe": self.app_config.runtime.market_state_timeframe,
             "strategies": [
                 {
-                    "name": runtime.strategy.name,
-                    "timeframe": runtime.strategy.timeframe,
-                    "minimum_history_bars": runtime.strategy.minimum_history_bars,
+                    "name": getattr(runtime.strategy, "name", ""),
+                    "timeframe": getattr(runtime.strategy, "timeframe", None),
+                    "minimum_history_bars": getattr(
+                        runtime.strategy, "minimum_history_bars", 0
+                    ),
                     "parameters": getattr(runtime.strategy, "parameters", {}),
                 }
                 for runtime in self._portfolio_runtimes

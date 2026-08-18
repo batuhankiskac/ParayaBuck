@@ -64,18 +64,21 @@ def _floor_to_grid(value: datetime, minutes: int) -> datetime:
 def _first_expected_bar(market: Market, timeframe: str, start: datetime) -> datetime:
     """The earliest bar timestamp a full fetch could return for ``start``.
 
-    Crypto trades 24/7: the first bar sits on the floored grid boundary
-    (daily bars get a 3-day holiday allowance). Equity bars only exist on
-    regular sessions: for a mid-session start the first bar is the next grid
-    point at/after start; for a pre-market/after-close/weekend start it is
-    the next session's 09:30 ET bar. This is the head-coverage reference for
-    incremental reuse: a cache whose oldest bar is NEWER than this cannot
-    cover the requested window head and must be fully refetched.
+    Crypto trades 24/7: the first bar sits on the floored grid boundary.
+    Daily bars keep the window's original bucket hour (they are not aligned
+    to the UTC midnight grid), so their head reference gets a one-day
+    allowance; equity daily bars additionally sit on regular sessions, so a
+    three-day allowance absorbs weekend/holiday gaps. Equity intraday bars
+    only exist on regular sessions: for a mid-session start the first bar is
+    the next grid point at/after start; for a pre-market/after-close/weekend
+    start it is the next session's 09:30 ET bar. This is the head-coverage
+    reference for incremental reuse: a cache whose oldest bar is NEWER than
+    this cannot cover the requested window head and must be fully refetched.
     """
-    if market == Market.CRYPTO:
+    if market == Market.CRYPTO and timeframe != "1d":
         return start
     if timeframe == "1d":
-        return start + timedelta(days=3)
+        return start + timedelta(days=3 if market == Market.EQUITY else 1)
     local = start.astimezone(NEW_YORK)
     minute = local.hour * 60 + local.minute
     if local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60:

@@ -118,6 +118,11 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         spy_bars = context.history.get(benchmark_key, ())
         if len(spy_bars) < beta_window + 1:
             return (), {}
+        # The market close-by-timestamp lookup is symbol-independent: build it
+        # once per decision instead of once per candidate symbol.
+        market_close_by_timestamp: dict[datetime, float] = {
+            bar.timestamp: bar.close for bar in spy_bars if bar.close > 0
+        }
 
         scored: list[tuple[float, str]] = []
         residual_vols: dict[str, float] = {}
@@ -130,7 +135,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             bars = context.history[symbol]
             if len(bars) < self.minimum_history_bars:
                 continue
-            aligned = _aligned_returns(bars, spy_bars, beta_window)
+            aligned = _aligned_returns(bars, market_close_by_timestamp, beta_window)
             if aligned is None or len(aligned[0]) < minimum_aligned:
                 continue
             stock_returns, market_returns = aligned
@@ -254,8 +259,8 @@ def _equity_explanations(
 
 
 def _aligned_returns(
-    stock_bars: tuple[Bar, ...] | tuple[Bar, ...],
-    market_bars: tuple[Bar, ...],
+    stock_bars: tuple[Bar, ...],
+    market_close_by_timestamp: dict[datetime, float],
     window: int,
 ) -> tuple[list[float], list[float]] | None:
     """Timestamp-INNER-JOINed simple returns over the stock's trailing window.
@@ -264,17 +269,15 @@ def _aligned_returns(
     ON TIMESTAMP (never positionally): a stock that misses a trading day must
     not pair its Thursday return with the market's Wednesday return. Returns
     (stock_returns, market_returns) over the aligned pairs, or None when too
-    few aligned pairs exist for a stable beta estimate.
+    few aligned pairs exist for a stable beta estimate. ``market_close_by_timestamp``
+    is the market's close lookup, built once per decision.
     """
     stock = stock_bars[-(window + 1) :]
-    market_by_timestamp: dict[datetime, float] = {
-        bar.timestamp: bar.close for bar in market_bars if bar.close > 0
-    }
     pairs: list[tuple[float, float]] = []
     for bar in stock:
         if bar.close <= 0:
             continue
-        market_close = market_by_timestamp.get(bar.timestamp)
+        market_close = market_close_by_timestamp.get(bar.timestamp)
         if market_close is not None:
             pairs.append((bar.close, market_close))
     if len(pairs) < 3:

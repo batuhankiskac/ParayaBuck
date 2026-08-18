@@ -24,7 +24,7 @@ from parayabuck.execution.portfolio import (
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK
-from parayabuck.portfolio.base import PortfolioContext
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
 from parayabuck.portfolio.models import (
     PortfolioState,
@@ -265,8 +265,6 @@ class PortfolioBacktestEngine:
         risk_limits: PortfolioRiskLimits | None = None,
         maximum_allocation: float = 1.0,
     ) -> None:
-        from parayabuck.portfolio.base import PortfolioStrategy
-
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
         if starting_equity <= 0:
@@ -862,6 +860,17 @@ class PortfolioBacktestEngine:
         previous = self._previous_timestamp[market]
         self._previous_timestamp[market] = timestamp
         scheduled = self.rebalance_policy.is_period_start(previous, timestamp)
+        # A non-scheduled bar can only produce a decision through an
+        # intermediate risk rebalance. The base implementation ignores the
+        # context and always returns False, so when the strategy does not
+        # override it no context construction (per-symbol history copy) is
+        # needed at all — this skips ~80% of bar cycles for weekly/96h
+        # strategies. Overriding strategies keep the full per-bar path.
+        if not scheduled and (
+            type(self.strategy).requires_intermediate_risk_rebalance
+            is PortfolioStrategy.requires_intermediate_risk_rebalance
+        ):
+            return
         context = self._build_context(timestamp)
         if not self.strategy.supports(context):
             return

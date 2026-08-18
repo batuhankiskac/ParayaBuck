@@ -610,6 +610,16 @@ def _equity_delta_skip_symbols(
             continue
         if not equity_day_bar_is_closed(last_ts, generated_at):
             continue
+        # Post-close finalization grace: Alpaca can still be finalizing the
+        # session bar minutes after 16:00 ET, so a same-day cached bar must
+        # be well past the close before its values are trusted as final.
+        # Past-date bars are final by construction (their session closed at
+        # least a day ago). Any doubt fails open to a refetch.
+        bar_local = last_ts.astimezone(NEW_YORK)
+        if bar_local.date() == generated_at.astimezone(NEW_YORK).date():
+            session_close = bar_local.replace(hour=16, minute=0, second=0, microsecond=0)
+            if generated_at < session_close + timedelta(minutes=60):
+                continue
         skip.add(symbol)
     return skip
 

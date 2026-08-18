@@ -198,35 +198,6 @@ class WarmupCache:
             for row in rows
         ]
 
-    def last_timestamp(
-        self,
-        symbol: str,
-        timeframe: str,
-        *,
-        market: Market,
-        feed: str,
-        adjustment: str = "all",
-    ) -> datetime | None:
-        """Latest cached bar timestamp for a key, or None when empty.
-
-        Used by incremental fetches to bound the refetch window to the tail
-        after the last cached bar instead of re-downloading the whole
-        lookback. The completeness of the cached window is validated
-        separately (head coverage + freshness), never assumed from this.
-        """
-        canonical = canonical_symbol(symbol)
-        with self._lock:
-            row = self.connection.execute(
-                """
-                SELECT MAX(timestamp) FROM bars
-                WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=?
-                """,
-                (feed, canonical, market.value, timeframe, adjustment),
-            ).fetchone()
-        if not row or row[0] is None:
-            return None
-        return datetime.fromisoformat(row[0])
-
     def scope_is_valid(self, scope: str, config_digest: str) -> bool:
         """Whether a cache scope was last written under ``config_digest``.
 

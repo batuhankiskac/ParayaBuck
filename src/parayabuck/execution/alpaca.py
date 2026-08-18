@@ -1039,6 +1039,11 @@ class AlpacaBroker:
             key=lambda item: str(item.get("transaction_time") or item.get("date") or "")
         )
         recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
+        # Watermark tracks only activities that were actually processed: an
+        # activity skipped by a transient parse failure must not be
+        # acknowledged, or it would permanently drop out of the reconciliation
+        # window (the pre-incremental design retried it every pass).
+        applied_watermark: datetime | None = None
         for activity in activities:
             fee_raw = activity.get("commission", activity.get("fee", 0))
             try:
@@ -1141,6 +1146,8 @@ class AlpacaBroker:
                 fee=fee,
                 occurred_at=occurred_at,
             )
+            if applied_watermark is None or occurred_at > applied_watermark:
+                applied_watermark = occurred_at
             if applied:
                 log.info(
                     "Fee activity applied: broker_order_id=%s fee=%s "
@@ -1196,23 +1203,8 @@ class AlpacaBroker:
                     broker_order_id,
                     cumulative,
                 )
-        if watermark_setter is not None and activities:
-            newest = max(
-                activities,
-                key=lambda item: str(item.get("transaction_time") or item.get("date") or ""),
-            )
-            newest_raw = (
-                newest.get("transaction_time")
-                or newest.get("date")
-                or datetime.now(UTC).isoformat()
-            )
-            try:
-                newest_at = datetime.fromisoformat(str(newest_raw).replace("Z", "+00:00"))
-                if newest_at.tzinfo is None:
-                    newest_at = newest_at.replace(tzinfo=UTC)
-            except ValueError:
-                newest_at = datetime.now(UTC)
-            watermark_setter(account_id, "fill_activity", newest_at)
+        if watermark_setter is not None and applied_watermark is not None:
+            watermark_setter(account_id, "fill_activity", applied_watermark)
         return True
 
     def _reconcile_crypto_exit(self, position: ManagedPosition) -> None:

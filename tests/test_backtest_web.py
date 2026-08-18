@@ -12,7 +12,7 @@ from parayabuck.web import server
 def _payload(**overrides: Any) -> dict[str, Any]:
     values = {
         "market": "equity",
-        "strategy": "equity_dynamic_trend_1d_v1",
+        "strategy": "equity_residual_momentum_v2",
         "parameters": {"top_n": 8},
         "years": 3,
         "days": 90,

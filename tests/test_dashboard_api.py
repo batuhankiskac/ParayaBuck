@@ -230,19 +230,19 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(
     equity = overview["equity"]
     crypto = overview["crypto"]
 
-    assert equity["name"] == "equity_residual_momentum_v1"
+    assert equity["name"] == "equity_residual_momentum_v2"
     assert equity["status"] == "stopped"
-    assert equity["strategy"]["display_name"] == "Residual Momentum v1"
+    assert equity["strategy"]["display_name"] == "Residual Momentum v2 (weekly)"
     assert equity["strategy"]["signal_timeframe"] == "1d"
-    assert equity["strategy"]["rebalance_cadence"] == "monthly"
+    assert equity["strategy"]["rebalance_cadence"] == "weekly"
     assert equity["maximum_allocation_pct"] == 50.0
     assert equity["eligible_pool"] is not None  # shortlist count
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
 
-    assert crypto["name"] == "crypto_low_variance_v1"
-    assert crypto["strategy"]["display_name"] == "Low Realized Variance v1"
-    assert crypto["strategy"]["rebalance_cadence"] == "hours:168"
+    assert crypto["name"] == "crypto_low_variance_v2"
+    assert crypto["strategy"]["display_name"] == "Low Realized Variance v2 (96h)"
+    assert crypto["strategy"]["rebalance_cadence"] == "hours:96"
     assert crypto["maximum_allocation_pct"] == 10.0
 
 
@@ -355,8 +355,8 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(
     assert holding["current_weight_pct"] == pytest.approx(35.05)
     assert "realized_vol_22d" in holding
     assert crypto["last_decision_at"] == "2026-08-10T00:00:00+00:00"
-    # weekly/168h cadence: next boundary = decision + 168 hours
-    assert crypto["next_rebalance_at"] == "2026-08-17T00:00:00+00:00"
+    # 96h cadence: next boundary = decision + 96 hours
+    assert crypto["next_rebalance_at"] == "2026-08-14T00:00:00+00:00"
 
 
 def test_dashboard_explanations_derive_structured_reasons(

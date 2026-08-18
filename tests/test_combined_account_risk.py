@@ -34,6 +34,7 @@ from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 _EPS = 1e-9
 
 # Frozen validated specs (docs/validated_strategies.md, strategy freeze).
+# v1 = historical baselines; production selection is v2 (same alpha, new cadence).
 _FROZEN_EQUITY_PARAMETERS = {
     "formation_bars": 252,
     "skip_bars": 21,
@@ -48,6 +49,14 @@ _FROZEN_CRYPTO_PARAMETERS = {
     "variance_lookback_days": 22,
     "top_n": 2,
     "rebalance_hours": 168,
+}
+_PRODUCTION_EQUITY_PARAMETERS = {
+    **_FROZEN_EQUITY_PARAMETERS,
+    "rebalance_frequency": "weekly",
+}
+_PRODUCTION_CRYPTO_PARAMETERS = {
+    **_FROZEN_CRYPTO_PARAMETERS,
+    "rebalance_hours": 96,
 }
 
 
@@ -95,14 +104,15 @@ def _target(
 
 
 def test_frozen_strategy_parameters_and_paper_mode() -> None:
-    """The config still selects exactly the validated frozen specs; runtime
-    mode stays paper (no live enablement)."""
+    """The config still selects exactly the validated production specs (v2
+    cadence identities, same alpha as the frozen v1 baselines); runtime mode
+    stays paper (no live enablement)."""
     config = load_config()
     assert config.runtime.mode == RuntimeMode.PAPER
-    assert config.strategy.equity.name == "equity_residual_momentum_v1"
-    assert dict(config.strategy.equity.parameters) == _FROZEN_EQUITY_PARAMETERS
-    assert config.strategy.crypto.name == "crypto_low_variance_v1"
-    assert dict(config.strategy.crypto.parameters) == _FROZEN_CRYPTO_PARAMETERS
+    assert config.strategy.equity.name == "equity_residual_momentum_v2"
+    assert dict(config.strategy.equity.parameters) == _PRODUCTION_EQUITY_PARAMETERS
+    assert config.strategy.crypto.name == "crypto_low_variance_v2"
+    assert dict(config.strategy.crypto.parameters) == _PRODUCTION_CRYPTO_PARAMETERS
 
 
 def test_combined_sleeve_allocations_fit_gross_cap_and_cash_buffer() -> None:

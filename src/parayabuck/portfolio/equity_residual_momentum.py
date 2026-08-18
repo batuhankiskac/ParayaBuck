@@ -60,6 +60,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     display_name = "Residual Momentum v1"
     supported_timeframes = ("1d",)
     rebalance_policy_declared = "monthly"
+    cadence_label = "monthly"
 
     @property
     def minimum_history_bars(self) -> int:
@@ -199,7 +200,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 "hypothesis": (
                     "12m/1m market-residual momentum (rolling beta vs SPY, "
                     "timestamp-aligned returns), top idiosyncratic-volatility "
-                    "names rejected, monthly, inverse-vol sized"
+                    f"names rejected, {self.cadence_label}, inverse-vol sized"
                 ),
                 "explanations": _equity_explanations(context, ranked, residual_vols, weights),
             },
@@ -340,6 +341,7 @@ class EquityResidualMomentum1dV2(EquityResidualMomentum1dV1):
     version = "2.0.0"
     display_name = "Residual Momentum v2 (weekly)"
     rebalance_policy_declared = "weekly"
+    cadence_label = "weekly"
 
     def _validate_parameters(self) -> None:
         self.parameters.setdefault("rebalance_frequency", "weekly")

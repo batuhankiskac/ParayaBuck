@@ -126,9 +126,12 @@ universe:
 strategy:
   # The strategy owns its signal timeframe; strategy.*.timeframe is a
   # deprecated compatibility key and intentionally omitted here.
+  # equity_residual_momentum_v2 — CADENCE-VALIDATED v2 (2026-08-18 cadence
+  # mission): same validated alpha as v1, weekly rebalance. v1 stays frozen
+  # as the historical baseline. LIVE remains disabled.
   equity:
     enabled: true
-    name: equity_residual_momentum_v1
+    name: equity_residual_momentum_v2
     maximum_allocation: 0.50
     parameters:
       formation_bars: 252
@@ -139,17 +142,19 @@ strategy:
       max_single_weight: 0.10
       ivol_reject_quantile: 0.70
       exclude_symbols: [SPY]
+      rebalance_frequency: weekly
   crypto:
-    # crypto_low_variance_v1 — VALIDATED in the 2026-08-12 strategy bake-off
-    # (verdict A: 1x +4.61%, 2x +0.86%, WF 8/10, concentration-robust) and
-    # registered as the PAPER selection. LIVE remains disabled.
+    # crypto_low_variance_v2 — CADENCE-VALIDATED v2 (2026-08-18 cadence
+    # mission): same validated alpha as v1 (bake-off verdict A), 96h
+    # rebalance. v1 stays frozen as the historical baseline. LIVE remains
+    # disabled.
     enabled: true
-    name: crypto_low_variance_v1
+    name: crypto_low_variance_v2
     maximum_allocation: 0.10
     parameters:
       variance_lookback_days: 22
       top_n: 2
-      rebalance_hours: 168
+      rebalance_hours: 96
 risk:
   max_position_pct: 0.1
   max_crypto_exposure_pct: 0.1

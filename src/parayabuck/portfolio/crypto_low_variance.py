@@ -50,6 +50,7 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
     supported_timeframes = ("1d",)
     default_rebalance_hours = _DEFAULT_REBALANCE_HOURS
     rebalance_policy_declared = f"hours:{_DEFAULT_REBALANCE_HOURS}"
+    cadence_label = "weekly"
 
     @property
     def minimum_history_bars(self) -> int:
@@ -133,7 +134,7 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
                 "hypothesis": (
                     f"low realized variance: buy the {top_n} lowest-variance "
                     f"(trailing {lookback}-day realized vol, AHXZ 2006) assets, "
-                    "equal weight, weekly, no filters or regime conditioning"
+                    f"equal weight, {self.cadence_label}, no filters or regime conditioning"
                 ),
                 "explanations": {
                     symbol: {
@@ -179,6 +180,7 @@ class CryptoLowVariance1dV2(CryptoLowVariance1dV1):
     display_name = "Low Realized Variance v2 (96h)"
     default_rebalance_hours = 96
     rebalance_policy_declared = "hours:96"
+    cadence_label = "96h"
 
     def _validate_parameters(self) -> None:
         self.parameters.setdefault("rebalance_hours", self.default_rebalance_hours)

@@ -6,8 +6,6 @@ from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMome
 from parayabuck.portfolio.crypto_cross_sectional_reversal import (
     CryptoCrossSectionalReversal1dV1,
 )
-from parayabuck.portfolio.crypto_high_proximity import CryptoHighProximity1dV1
-from parayabuck.portfolio.crypto_low_disagreement import CryptoLowDisagreement1dV1
 from parayabuck.portfolio.crypto_low_variance import (
     CryptoLowVariance1dV1,
     CryptoLowVariance1dV2,
@@ -35,11 +33,21 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
     CryptoCrossSectionalReversal1dV1.name: CryptoCrossSectionalReversal1dV1,
     CryptoTimeSeriesMomentumV1.name: CryptoTimeSeriesMomentumV1,
-    CryptoHighProximity1dV1.name: CryptoHighProximity1dV1,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
-    CryptoLowDisagreement1dV1.name: CryptoLowDisagreement1dV1,
 }
+
+# The PRODUCT strategy surface: the identities the PAPER product supports
+# (current validated selections plus frozen historical baselines). Research
+# scripts may still construct rejected/closed families through
+# ``portfolio_strategy_from`` (the factory above) for reproducibility; they
+# are deliberately NOT part of this product list.
+PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
+    "equity_residual_momentum_v1",
+    "equity_residual_momentum_v2",
+    "crypto_low_variance_v1",
+    "crypto_low_variance_v2",
+)
 
 
 def portfolio_strategy_from(
@@ -87,7 +95,13 @@ def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) ->
 
 
 def supported_portfolio_strategies() -> tuple[str, ...]:
-    return tuple(sorted(_PORTFOLIO_STRATEGY_FACTORIES))
+    """Names the PAPER product supports: validated selections + frozen v1 baselines.
+
+    Rejected/closed research families stay constructible through
+    ``portfolio_strategy_from`` (research reproducibility) but are NOT listed
+    here: this is the product surface, not the full factory inventory.
+    """
+    return tuple(sorted(PRODUCT_STRATEGY_NAMES))
 
 
 def rebalance_policy_for(
@@ -118,8 +132,6 @@ def rebalance_policy_for(
 __all__ = [
     "CryptoCrossSectionalMomentum1hV1",
     "CryptoCrossSectionalReversal1dV1",
-    "CryptoHighProximity1dV1",
-    "CryptoLowDisagreement1dV1",
     "CryptoLowVariance1dV1",
     "CryptoLowVariance1dV2",
     "CryptoTimeSeriesMomentumV1",

@@ -80,17 +80,13 @@ def _default_equity_strategy() -> MarketStrategyConfig:
 def _default_crypto_strategy() -> MarketStrategyConfig:
     return MarketStrategyConfig(
         enabled=False,
-        name="crypto_cross_sectional_momentum_1h_v1",
-        timeframe="1h",
+        name="crypto_low_variance_v1",
+        timeframe="1d",
         maximum_allocation=0.10,
         parameters={
-            "momentum_scheme": "7d",
-            "rebalance_hours": 24,
-            "top_n": 3,
-            "volatility_window": 72,
-            "btc_regime_lookback_hours": 168,
-            "max_annualized_volatility_pct": 250.0,
-            "max_single_weight": 0.05,
+            "variance_lookback_days": 22,
+            "top_n": 2,
+            "rebalance_hours": 168,
         },
     )
 

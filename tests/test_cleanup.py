@@ -75,20 +75,19 @@ def test_cli_no_longer_exposes_legacy_strategy_options() -> None:
 
 def test_new_strategies_are_registered() -> None:
     registered = set(supported_portfolio_strategies())
+    # The PAPER product surface: validated selections + frozen v1 baselines.
     assert {
-        "equity_dynamic_trend_1d_v1",
-        "crypto_cross_sectional_momentum_1h_v1",
+        "equity_residual_momentum_v1",
+        "equity_residual_momentum_v2",
+        "crypto_low_variance_v1",
+        "crypto_low_variance_v2",
     } <= registered
 
 
 # Legacy strategy names are allowed ONLY inside migration/audit documentation;
 # active docs, README, web and runtime paths must not reference them as live
 # features.
-_ALLOWED_LEGACY_DOCS = {
-    "docs/strategy_migration_2026-08-04.md",
-    "docs/multitimeframe_validation_2026-08-04.md",
-    "docs/research_correctness_audit_2026-08-05.md",
-}
+_ALLOWED_LEGACY_DOCS: set[str] = set()
 
 
 def _scan_paths(root: Path, extensions: tuple[str, ...], skip: set[str]) -> list[str]:
@@ -107,7 +106,7 @@ def _scan_paths(root: Path, extensions: tuple[str, ...], skip: set[str]) -> list
 
 def test_active_docs_and_web_do_not_reference_legacy_strategies() -> None:
     repo = Path(__file__).resolve().parents[1]
-    skip = set(_ALLOWED_LEGACY_DOCS) | {"docs/research_summary_2026-08-04.md"}
+    skip = set(_ALLOWED_LEGACY_DOCS)
     offenders = _scan_paths(repo / "docs", (".md",), skip=skip)
     assert offenders == []
     web_offenders = _scan_paths(repo / "src" / "parayabuck" / "web", (".html", ".js"), skip=set())

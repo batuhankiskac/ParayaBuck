@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
+from datetime import time as dtime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import NEW_YORK, equity_day_bar_is_closed
 from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
     CryptoUniverseScanner,
@@ -29,6 +31,7 @@ from parayabuck.universe.scanner import (
     EquityUniverseScanner,
     ScannerResult,
     equity_candidate_from_bars,
+    scanner_config_digest,
     validate_active_universe,
 )
 from parayabuck.utils.http import patch_session_timeout
@@ -178,6 +181,7 @@ def refresh_equity_universe(
         *universe.allowlist_symbols,
     }
     cached_history: dict[str, list[tuple[str, float, float, float, float, float]]] = {}
+    generated_at: datetime | None = None
     refresh_mode = "full"
     try:
         cached_payload = json.loads(source_path.read_text(encoding="utf-8"))
@@ -221,8 +225,15 @@ def refresh_equity_universe(
                         cached_history[symbol] = [_bar_to_tuple(bar) for bar in bars[-20:]]
         # Fresh daily bars for the entire eligible universe (one shared
         # trailing window keeps the request count to ~len/150 batches).
+        # Symbols whose cached last daily bar is already the latest completed
+        # session (fetched after that session closed) need no refetch: the
+        # daily bar is final, and a same-slot re-run (retry after an apply
+        # failure, startup double-refresh) must not re-download the universe.
+        skip_symbols = _equity_delta_skip_symbols(cached_history, generated_at, end)
         start = end - timedelta(days=10)
-        for batch in _chunks(sorted(allowed), 150):
+        for batch in _chunks(
+            [symbol for symbol in sorted(allowed) if symbol not in skip_symbols], 150
+        ):
             historical_requests += 1
             downloaded = history.get_bars_batch(batch, "1d", start=start, end=end)
             bars_downloaded += sum(len(items) for items in downloaded.values())
@@ -301,7 +312,8 @@ def refresh_equity_universe(
     log.info(
         "Equity universe refresh metrics: assets_eligible=%d "
         "historical_requests=%d bars_downloaded=%d shortlist_size=%d pool_size=%d "
-        "observation_size=%d refresh_mode=%s refreshed_assets=%d duration_seconds=%.3f",
+        "observation_size=%d refresh_mode=%s refreshed_assets=%d skipped_assets=%d "
+        "duration_seconds=%.3f",
         len(allowed),
         historical_requests,
         bars_downloaded,
@@ -310,6 +322,7 @@ def refresh_equity_universe(
         len(result.observation_set),
         refresh_mode,
         len(by_symbol),
+        len(skip_symbols) if refresh_mode == "incremental" else 0,
         time.monotonic() - started,
     )
     return result
@@ -347,11 +360,15 @@ def _equity_observation_set(
         "SPY", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
     )
     start = data_timestamp - timedelta(days=warmup_days)
-    bars = history.get_bars_batch(
+    bars = _incremental_history(
+        history,
         list(pool),
         strategy.timeframe,
-        start=start,
-        end=data_timestamp,
+        start,
+        data_timestamp,
+        scope="equity_observation",
+        config_digest=scanner_config_digest(universe),
+        identity=f"{selection.name}:{strategy.timeframe}",
         adjustment="splits",
     )
     observation = build_observation_set(
@@ -538,6 +555,57 @@ def _crypto_observation_set(
 
 def _chunks(values: list[str], size: int = 8) -> list[list[str]]:
     return [values[offset : offset + size] for offset in range(0, len(values), size)]
+
+
+def _equity_delta_skip_symbols(
+    cached_history: dict[str, list[tuple[str, float, float, float, float, float]]],
+    generated_at: datetime | None,
+    now: datetime,
+) -> set[str]:
+    """Symbols whose cached daily history can skip the delta refetch.
+
+    The scanner must never read a partial daily bar, so a symbol is skipped
+    ONLY when all of the following hold:
+
+    * ``now`` is outside the regular equity session (pre-market before 09:30
+      ET or after the 16:00 ET close) — inside the session today's bar is
+      forming and must be refetched;
+    * the cached last daily bar is the expected latest completed trading day
+      (previous weekday pre-market, today after close, previous Friday on
+      weekends — holidays conservatively fail open to a refetch);
+    * that bar was fetched AFTER its session closed
+      (``equity_day_bar_is_closed`` against the payload ``generated_at``), so
+      its values are final rather than a mid-session partial.
+
+    Any doubt fails open (symbol refetched), so skipping never changes the
+    scanner output — it only avoids re-downloading bars that are provably
+    unchanged (the same-slot retry and startup double-refresh cases).
+    """
+    if generated_at is None:
+        return set()
+    local = now.astimezone(NEW_YORK)
+    if local.weekday() >= 5:
+        expected = (local - timedelta(days=local.weekday() - 4)).date()
+    elif local.time() < dtime(9, 30):
+        expected = (local - timedelta(days=3 if local.weekday() == 0 else 1)).date()
+    elif local.time() >= dtime(16, 0):
+        expected = local.date()
+    else:
+        return set()
+    skip: set[str] = set()
+    for symbol, rows in cached_history.items():
+        if not rows:
+            continue
+        try:
+            last_ts = datetime.fromisoformat(rows[-1][0])
+        except (TypeError, ValueError):
+            continue
+        if last_ts.date() != expected:
+            continue
+        if not equity_day_bar_is_closed(last_ts, generated_at):
+            continue
+        skip.add(symbol)
+    return skip
 
 
 def _incremental_history(

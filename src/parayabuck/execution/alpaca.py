@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
@@ -977,17 +977,39 @@ class AlpacaBroker:
             )
 
     def _reconcile_fill_activity_fees(self) -> bool:
-        """Backfill fees when TradingStream fill payloads omit commission."""
+        """Backfill fees when TradingStream fill payloads omit commission.
+
+        The pass syncs incrementally: a persisted per-account watermark
+        (max transaction_time of previously reconciled activities) becomes an
+        ``after`` bound with a bounded look-back window. Application stays
+        idempotent (stable activity ids, ON CONFLICT upserts), so re-reading
+        the look-back window is harmless; the window only exists to catch
+        activities that appear in the feed later than their transaction_time
+        (Alpaca settles fills within minutes; 24h is a generous bound). The
+        watermark advances only after a fully successful pass, so a failed
+        pass re-reads the same window on the next reconcile — offline-fill
+        recovery and fee attribution are unchanged for any activity within
+        the window, and a fresh database (no watermark) scans full history
+        exactly like before.
+        """
         request = getattr(getattr(self, "_client", None), "_request", None)
         ledger = self.ledger
         if request is None or ledger is None:
             return False
+        account_id = self._account_id or "unknown"
+        watermark = None
+        watermark_getter = getattr(ledger, "get_reconcile_watermark", None)
+        watermark_setter = getattr(ledger, "set_reconcile_watermark", None)
+        if watermark_getter is not None:
+            watermark = watermark_getter(account_id, "fill_activity")
         activities: list[dict[str, Any]] = []
         page_token: str | None = None
         seen_tokens: set[str] = set()
         try:
             while True:
-                params = {"direction": "desc", "page_size": 100}
+                params: dict[str, object] = {"direction": "desc", "page_size": 100}
+                if watermark is not None:
+                    params["after"] = (watermark - timedelta(hours=24)).isoformat()
                 if page_token is not None:
                     params["page_token"] = page_token
                 payload = request("GET", "/account/activities/FILL", data=params)
@@ -1174,6 +1196,23 @@ class AlpacaBroker:
                     broker_order_id,
                     cumulative,
                 )
+        if watermark_setter is not None and activities:
+            newest = max(
+                activities,
+                key=lambda item: str(item.get("transaction_time") or item.get("date") or ""),
+            )
+            newest_raw = (
+                newest.get("transaction_time")
+                or newest.get("date")
+                or datetime.now(UTC).isoformat()
+            )
+            try:
+                newest_at = datetime.fromisoformat(str(newest_raw).replace("Z", "+00:00"))
+                if newest_at.tzinfo is None:
+                    newest_at = newest_at.replace(tzinfo=UTC)
+            except ValueError:
+                newest_at = datetime.now(UTC)
+            watermark_setter(account_id, "fill_activity", newest_at)
         return True
 
     def _reconcile_crypto_exit(self, position: ManagedPosition) -> None:

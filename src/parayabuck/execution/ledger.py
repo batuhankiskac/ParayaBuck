@@ -112,6 +112,13 @@ class ExecutionLedger:
                     fee REAL NOT NULL,
                     occurred_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS reconcile_watermarks (
+                    account_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    watermark TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (account_id, kind)
+                );
                 CREATE TABLE IF NOT EXISTS protective_orders (
                     client_order_id TEXT PRIMARY KEY,
                     entry_client_order_id TEXT NOT NULL,
@@ -311,6 +318,17 @@ class ExecutionLedger:
                 """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (5, CURRENT_TIMESTAMP)
+                """
+            )
+            # v6: persisted fill-activity reconciliation watermark. The
+            # per-minute reconcile previously rescanned the FULL fill-activity
+            # history every pass; the watermark lets it sync incrementally
+            # from a bounded window while keeping the same idempotent
+            # fee/fill-recovery application.
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (6, CURRENT_TIMESTAMP)
                 """
             )
             self.connection.commit()
@@ -928,6 +946,37 @@ class ExecutionLedger:
             except Exception:
                 self.connection.rollback()
                 raise
+
+    def get_reconcile_watermark(self, account_id: str, kind: str) -> datetime | None:
+        """Last successfully reconciled watermark for a recovery pass, or None."""
+        with self._lock:
+            row = self.connection.execute(
+                """
+                SELECT watermark FROM reconcile_watermarks
+                WHERE account_id=? AND kind=?
+                """,
+                (account_id, kind),
+            ).fetchone()
+        if row is None or not row[0]:
+            return None
+        watermark = datetime.fromisoformat(str(row[0]))
+        if watermark.tzinfo is None:
+            watermark = watermark.replace(tzinfo=UTC)
+        return watermark
+
+    def set_reconcile_watermark(self, account_id: str, kind: str, watermark: datetime) -> None:
+        """Persist the watermark only after a pass completed without exception."""
+        with self._lock:
+            self.connection.execute(
+                """
+                INSERT INTO reconcile_watermarks(account_id, kind, watermark, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(account_id, kind) DO UPDATE SET
+                    watermark=excluded.watermark, updated_at=excluded.updated_at
+                """,
+                (account_id, kind, watermark.isoformat(), datetime.now(UTC).isoformat()),
+            )
+            self.connection.commit()
 
     def apply_execution_event(self, event: ExecutionEvent) -> ExecutionTransition:
         """Apply one broker event atomically using cumulative fill quantities."""

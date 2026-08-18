@@ -382,9 +382,7 @@ class AlpacaHistoricalData:
                 )
             elif tail_start < end_at:
                 fetched.update(
-                    self._fetch_window(
-                        tail, timeframe, tail_start, end_at, adjustment, market
-                    )
+                    self._fetch_window(tail, timeframe, tail_start, end_at, adjustment, market)
                 )
             else:
                 # Cache already extends to the request end; nothing to fetch.

@@ -29,6 +29,7 @@ from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     portfolio_risk_limits_from_config,
@@ -134,8 +135,11 @@ class _FakeAlpacaClient:
         return self.positions
 
     def get_open_position(self, symbol: str) -> SimpleNamespace:
+        # Alpaca resolves both the canonical and legacy crypto forms to the
+        # same position; the broker queries by the legacy asset symbol.
+        wanted = canonical_symbol(symbol)
         for position in self.positions:
-            if position.symbol == symbol:
+            if canonical_symbol(position.symbol) == wanted:
                 return position
         raise ValueError(f"no open position for {symbol}")
 

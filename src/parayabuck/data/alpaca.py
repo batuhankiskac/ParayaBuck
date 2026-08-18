@@ -18,7 +18,12 @@ from parayabuck.core.models import Bar, Market
 from parayabuck.data.cache import WarmupCache
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time, weekday_count
+from parayabuck.markets.timeframes import (
+    NEW_YORK,
+    TIMEFRAME_MINUTES,
+    is_regular_equity_time,
+    weekday_count,
+)
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
 
@@ -54,6 +59,33 @@ def _floor_to_grid(value: datetime, minutes: int) -> datetime:
     """
     epoch_minutes = int(value.timestamp() // 60)
     return datetime.fromtimestamp((epoch_minutes - epoch_minutes % minutes) * 60, tz=UTC)
+
+
+def _first_expected_bar(market: Market, timeframe: str, start: datetime) -> datetime:
+    """The earliest bar timestamp a full fetch could return for ``start``.
+
+    Crypto trades 24/7: the first bar sits on the floored grid boundary
+    (daily bars get a 3-day holiday allowance). Equity bars only exist on
+    regular sessions: for a mid-session start the first bar is the next grid
+    point at/after start; for a pre-market/after-close/weekend start it is
+    the next session's 09:30 ET bar. This is the head-coverage reference for
+    incremental reuse: a cache whose oldest bar is NEWER than this cannot
+    cover the requested window head and must be fully refetched.
+    """
+    if market == Market.CRYPTO:
+        return start
+    if timeframe == "1d":
+        return start + timedelta(days=3)
+    local = start.astimezone(NEW_YORK)
+    minute = local.hour * 60 + local.minute
+    if local.weekday() < 5 and 9 * 60 + 30 <= minute < 16 * 60:
+        return start
+    cursor = local.replace(hour=9, minute=30, second=0, microsecond=0)
+    if cursor <= local:
+        cursor += timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor += timedelta(days=1)
+    return cursor.astimezone(UTC)
 
 
 class AlpacaHistoricalData:
@@ -305,14 +337,11 @@ class AlpacaHistoricalData:
         # and silently dropped from a warm reuse. API requests keep the raw
         # boundary exactly as the plain fetch uses it.
         grid_start = _floor_to_grid(start_at, minutes)
-        # Daily bars can be separated by weekend/holiday gaps; the head
-        # tolerance must absorb them or a perfectly good cache is refetched
-        # every time the window start lands on a non-trading day.
-        head_tolerance = timedelta(days=3) if timeframe == "1d" else step
 
         full: list[str] = []
         tail: list[str] = []
         tail_starts: dict[str, datetime] = {}
+        head_reference = _first_expected_bar(market, timeframe, grid_start)
         if cache.scope_is_valid(scope, config_digest):
             for symbol in symbols:
                 cached = self._cached_window(
@@ -321,7 +350,7 @@ class AlpacaHistoricalData:
                 if not cached:
                     full.append(symbol)
                     continue
-                if cached[0].timestamp > grid_start + head_tolerance:
+                if cached[0].timestamp > head_reference:
                     full.append(symbol)
                     continue
                 latest = cached[-1].timestamp

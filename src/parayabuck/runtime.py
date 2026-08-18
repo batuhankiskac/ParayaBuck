@@ -3275,6 +3275,38 @@ class EngineRuntime:
         self._warmup_symbols(history, self.symbols, retry=False)
         log.info("Warmup complete")
 
+    def _warmup_config_digest(self) -> str:
+        """Cache-scope digest for the runtime warmup fetch.
+
+        Gates warm-cache reuse on the identity of everything that determines
+        the warmup window: the enabled strategies (name, parameters, signal
+        timeframe, minimum history) and the operational aggregation
+        timeframes. Any change invalidates the scope and fails closed to a
+        full refetch; the head-coverage check inside the incremental fetch
+        additionally guards against a shorter window silently standing in
+        for a longer one.
+        """
+        import hashlib
+        import json as _json
+
+        payload = {
+            "timeframes": sorted(self.aggregators),
+            "execution_timeframe": self.app_config.runtime.execution_timeframe,
+            "market_state_timeframe": self.app_config.runtime.market_state_timeframe,
+            "strategies": [
+                {
+                    "name": runtime.strategy.name,
+                    "timeframe": runtime.strategy.timeframe,
+                    "minimum_history_bars": runtime.strategy.minimum_history_bars,
+                    "parameters": getattr(runtime.strategy, "parameters", {}),
+                }
+                for runtime in self._portfolio_runtimes
+            ],
+        }
+        return hashlib.sha256(
+            _json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+
     def _warmup_symbols(
         self,
         history: AlpacaHistoricalData,
@@ -3292,6 +3324,7 @@ class EngineRuntime:
         matching portfolio runtime under the ingestion and portfolio locks.
         """
         staged: dict[tuple[str, str], list[Bar]] = {}
+        warmup_digest = self._warmup_config_digest()
         groups = (
             (Market.EQUITY, [symbol for symbol in symbols if not is_crypto(symbol)]),
             (Market.CRYPTO, [symbol for symbol in symbols if is_crypto(symbol)]),
@@ -3317,11 +3350,23 @@ class EngineRuntime:
                 requested_bars = max(2, *strategy_requirements) if strategy_requirements else 2
                 for symbol_batch in _symbol_batches(group):
                     try:
-                        batched = history.get_bars_batch(
-                            symbol_batch,
-                            timeframe,
-                            start=_warmup_start(symbol_batch[0], timeframe, requested_bars),
-                        )
+                        start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
+                        fetcher = getattr(history, "get_bars_batch_incremental", None)
+                        if fetcher is None:
+                            # Fakes/tests without the incremental fetcher use
+                            # the plain download contract unchanged.
+                            batched = history.get_bars_batch(
+                                symbol_batch, timeframe, start=start
+                            )
+                        else:
+                            batched = fetcher(
+                                symbol_batch,
+                                timeframe,
+                                start=start,
+                                scope="runtime_warmup",
+                                config_digest=warmup_digest,
+                                identity=f"{timeframe}:{requested_bars}",
+                            )
                         for symbol in symbol_batch:
                             bars = batched.get(symbol, [])
                             if staged_only:

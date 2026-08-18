@@ -140,6 +140,12 @@ class AlpacaBroker:
         self.portfolio_stop_recorded = portfolio_stop_recorded
         self.portfolio_flat_reconciled = portfolio_flat_reconciled
         self._account_id = ""
+        # Immutable snapshot cache: every fresh account() seeds it; callers
+        # that tolerate bounded staleness (config-sanctioned entry-gate
+        # freshness) may reuse it via snapshot_if_fresh() instead of issuing
+        # another get_account + get_all_positions round-trip.
+        self._snapshot_cache: AccountSnapshot | None = None
+        self._snapshot_cached_at: float | None = None
         self.crypto_stop_limit_offset_bps = crypto_stop_limit_offset_bps
         self.crypto_emergency_exit_bps = crypto_emergency_exit_bps
         self.crypto_stop_cancel_timeout_seconds = crypto_stop_cancel_timeout_seconds
@@ -163,6 +169,26 @@ class AlpacaBroker:
     @property
     def account_id(self) -> str:
         return self._account_id
+
+    def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
+        """Return the last fetched account snapshot if it is at most
+        ``max_age_seconds`` old, else ``None``.
+
+        The snapshot is immutable and broker-authoritative at its fetch time.
+        Callers that require post-write broker state (e.g. the drift check
+        after booking a fill) must call ``account()`` instead; callers that
+        tolerate the config-sanctioned entry-gate freshness (for example the
+        trade-update risk-state persistence, which the 15s account loop
+        re-verifies with a fresh fetch) may reuse it to avoid a redundant
+        get_account + get_all_positions round-trip.
+        """
+        cached = self._snapshot_cache
+        cached_at = self._snapshot_cached_at
+        if cached is None or cached_at is None:
+            return None
+        if time.monotonic() - cached_at <= max_age_seconds:
+            return cached
+        return None
 
     def account(self) -> AccountSnapshot:
         account: Any = self._client.get_account()
@@ -287,7 +313,7 @@ class AlpacaBroker:
         cash = float(account.cash or 0)
         crypto_buying_power_raw = getattr(account, "non_marginable_buying_power", None)
         crypto_status = str(getattr(account, "crypto_status", "")).upper().split(".")[-1]
-        return AccountSnapshot(
+        snapshot = AccountSnapshot(
             cash=cash,
             equity=equity,
             peak_equity=self._peak_equity,
@@ -305,6 +331,9 @@ class AlpacaBroker:
                 else 0.0
             ),
         )
+        self._snapshot_cache = snapshot
+        self._snapshot_cached_at = time.monotonic()
+        return snapshot
 
     def asset_trading_rules(self, symbol: str, market: Market) -> AssetTradingRules:
         """Broker-authoritative increments introduced by Alpaca asset metadata."""

@@ -2055,12 +2055,33 @@ class EngineRuntime:
                     symbol=update.symbol,
                     market=Market.CRYPTO.value if is_crypto(update.symbol) else Market.EQUITY.value,
                 )
-            account = await asyncio.to_thread(self.broker.account)
-            # The fill-path fetch is the freshest snapshot in the system;
-            # share it with the decision-path cache.
-            self._last_account_snapshot = account
-            self._last_account_snapshot_at = datetime.now(UTC)
-            self._last_account_at = datetime.now(UTC)
+            # Reuse the account-loop snapshot when it is fresh (one poll
+            # interval) instead of issuing a full get_account +
+            # get_all_positions round-trip per fill. The fill was already
+            # booked into the repository above, and the 15s account loop is
+            # the authoritative REST re-verification of ownership drift; the
+            # reused snapshot only feeds risk-state persistence (equity/peak),
+            # which the loop re-persists from its next fresh fetch. When the
+            # loop has NOT fetched within the poll interval (e.g. a broker
+            # hiccup), fetch fresh exactly like before.
+            now = datetime.now(UTC)
+            freshness = getattr(
+                getattr(self, "config", None), "account_poll_interval_seconds", 15.0
+            )
+            snapshot_provider = getattr(self.broker, "snapshot_if_fresh", None)
+            cached = None
+            if snapshot_provider is not None and self._last_account_at is not None:
+                if (now - self._last_account_at).total_seconds() <= freshness:
+                    cached = snapshot_provider(freshness)
+            if cached is not None:
+                account = cached
+            else:
+                account = await asyncio.to_thread(self.broker.account)
+                # The fill-path fetch is the freshest snapshot in the system;
+                # share it with the decision-path cache.
+                self._last_account_snapshot = account
+                self._last_account_snapshot_at = now
+                self._last_account_at = now
             self._persist_risk_state(account)
             # A terminal SELL fill may unlock the dependent BUY phase of a
             # two-phase rebalance: advance it now, event-driven, instead of

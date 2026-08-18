@@ -1470,6 +1470,19 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
         if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
             return PortfolioRuntimeResult(None, None, None, (), (), "benchmark_not_ready")
+        # Non-scheduled batch fast path: when the strategy does not override
+        # the intermediate-risk hook (base implementation is constant False),
+        # the batch can never produce a decision, so the persisted
+        # high-water update and the full context build below are pure waste.
+        # The strategy-hook identity check keeps exact semantics for any
+        # strategy that DOES override the hook: those keep the original path
+        # (context built, hook evaluated, possible risk-reducing decision).
+        if (
+            not scheduled
+            and type(self.strategy).requires_intermediate_risk_rebalance
+            is PortfolioStrategy.requires_intermediate_risk_rebalance
+        ):
+            return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         persisted_high_water = self.repository.high_water(self.account_id)
         account = replace(
             account,

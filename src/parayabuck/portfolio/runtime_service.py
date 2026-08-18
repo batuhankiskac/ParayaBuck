@@ -335,6 +335,33 @@ class PortfolioStateRepository:
                        )
                        WHERE fill_delay_seconds IS NULL"""
                 )
+            self._ensure_hot_path_indexes()
+
+    def _ensure_hot_path_indexes(self) -> None:
+        """Additive, backward-compatible hot-path indexes (idempotent).
+
+        Created last so legacy databases (which gain ``account_id`` columns
+        and a rebuilt ``portfolio_decisions`` table earlier in ``_migrate``)
+        end up with the same final schema as fresh ones. All consumers are
+        read-only dashboard/report queries; index maintenance is amortized
+        against the existing per-transaction writes.
+        """
+        self.store.connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_portfolio_runtime_sessions_account
+                ON portfolio_runtime_sessions(account_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_account_ts
+                ON portfolio_decisions(account_id, decision_timestamp);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_session_id
+                ON portfolio_decisions(session_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_orders_decision_id
+                ON portfolio_orders(decision_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_fills_client_order_id
+                ON portfolio_fills(client_order_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_ownership_adjustments_account
+                ON portfolio_ownership_adjustments(account_id, consumed_quantity);
+            """
+        )
 
     def _rebuild_decisions_unique_constraint(self) -> None:
         """Replace the pre-account UNIQUE(configuration_digest, timestamp, market)

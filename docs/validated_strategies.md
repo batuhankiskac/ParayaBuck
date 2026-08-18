@@ -60,6 +60,25 @@ Low realized variance (AHXZ monthly construction on 1d bars), weekly decisions.
 - equity enabled: YES, crypto enabled: YES
 - `live.enabled: false` — LIVE is never enabled by this mission.
 
+## Cadence research variants (2026-08-18 cadence mission)
+
+RESEARCH-validated identities, NOT the production selection. v1 above
+remains the frozen PAPER specification; nothing in this section changes v1.
+
+| Identity | Alpha (identical to v1) | Cadence | Evidence (net, canonical window) |
+|---|---|---|---|
+| `equity_residual_momentum_v2` | same parameters as v1 | weekly (`rebalance_frequency: weekly`) | 2017-01-03..2026-07-30: ret +84.6% (v1 +59.2%), CAGR 6.61% (4.98%), Sharpe 0.62 (0.47), maxDD 19.7% (25.4%); better at 1x/2x/3x costs; WF 9/16 folds |
+| `crypto_low_variance_v2` | same parameters as v1 | 96h (`rebalance_hours: 96`) | 2021-04-01..2026-07-31: ret +6.56% (v1 +4.61%), CAGR 1.20% (0.85%), Sharpe 0.23 (0.17), maxDD 13.3% (13.2%); better at 1x/2x, WF 7/10 (v1 8/10) |
+
+The v2 classes carry their cadence in the strategy parameters so the
+configuration digest and persisted decision identity are distinct from v1.
+Promoting a v2 (config name + cadence parameter) is an operator decision
+after this research; v1 stays reproducible. `crypto_low_variance_v2` with
+`rebalance_hours: 72` was evaluated and REJECTED (strictly dominated).
+Full evidence: `data/research/cadence_research_2026_08/` and
+`docs/capital_utilization_cadence_verdict.md` (includes the equity weekly
+ASX-dependence and recent-window caveats).
+
 ## What is NOT frozen here
 
 Strategy parameters are frozen; everything around them (robustness evidence,

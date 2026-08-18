@@ -1653,11 +1653,7 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
         (cfg.universe.equity.active_universe_path, active_payload),
         (cfg.universe.crypto.active_universe_path, active_crypto_payload),
     ):
-        if Path(path).exists():
-            try:
-                store.update(json.loads(Path(path).read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
-                continue
+        store.update(_dashboard_load_json(path))
     shortlist = candidate_payload.get("shortlist_symbols")
     crypto_candidates = active_crypto_payload.get("candidate_symbols")
     for market_key, selection, pool_size in (
@@ -2159,6 +2155,38 @@ def _dashboard_runtime() -> Any:
 # static/display inputs (the settings file) and short-lived payload slices.
 _dashboard_config_cache: dict[tuple[str, int], Any] = {}
 _dashboard_config_cache_lock = threading.Lock()
+
+# Parsed universe JSON files (active/candidate scans). The candidate file can
+# be tens of MB and is re-parsed by BOTH _dashboard_universe and
+# _strategy_metadata on every payload build. Keyed by (path, mtime_ns) so the
+# scanner rewriting a file invalidates it on the next build; bounded FIFO so
+# repeated scanner rewrites cannot grow the cache without limit.
+_dashboard_json_cache: dict[tuple[str, int], dict[str, Any]] = {}
+_dashboard_json_cache_lock = threading.Lock()
+_DASHBOARD_JSON_CACHE_MAX_ENTRIES = 8
+
+
+def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
+    """Read + parse one JSON file, cached per (path, mtime); {} on any error."""
+    target = Path(path)
+    try:
+        key = (str(target), target.stat().st_mtime_ns)
+    except OSError:
+        return {}
+    with _dashboard_json_cache_lock:
+        cached = _dashboard_json_cache.get(key)
+        if cached is not None or key in _dashboard_json_cache:
+            return cached
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    with _dashboard_json_cache_lock:
+        if len(_dashboard_json_cache) >= _DASHBOARD_JSON_CACHE_MAX_ENTRIES:
+            # FIFO eviction of the oldest entry.
+            _dashboard_json_cache.pop(next(iter(_dashboard_json_cache)), None)
+        _dashboard_json_cache[key] = data
+    return data
 
 
 def _dashboard_config_key() -> tuple[str, int] | None:
@@ -2864,18 +2892,10 @@ def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, An
     ):
         active: dict[str, Any] = {}
         candidates: dict[str, Any] = {}
-        active_file = Path(active_path)
-        if active_file.exists():
-            try:
-                active.update(json.loads(active_file.read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
-                pass
+        active.update(_dashboard_load_json(active_path))
         candidate_file = Path(candidate_path) if candidate_path else None
-        if candidate_file is not None and candidate_file.exists():
-            try:
-                candidates.update(json.loads(candidate_file.read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
-                pass
+        if candidate_file is not None:
+            candidates.update(_dashboard_load_json(candidate_path))
         shortlist = candidates.get("shortlist_symbols")
         candidate_symbols = active.get("candidate_symbols", ())
         candidate_items = (

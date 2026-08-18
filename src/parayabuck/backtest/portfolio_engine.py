@@ -426,7 +426,16 @@ class PortfolioBacktestEngine:
         signal_bars: list[Bar] | None = None,
         corporate_actions: list[CorporateAction] | None = None,
         cash_rates: list[CashRateObservation] | None = None,
+        prepared_inputs: tuple[list[Bar], list[Bar]] | None = None,
     ) -> PortfolioBacktestResult:
+        """Run the event loop.
+
+        ``prepared_inputs`` is an optimization hook: ``(ordered, decision_bars)``
+        already deduplicated, timestamp/symbol-sorted and watermark-filtered.
+        It is deterministic (dedup/sort are pure functions of the input), so
+        reusing one preparation across identical trial runs yields identical
+        results while skipping the per-trial sort of the full bar set.
+        """
         # Orders pending from a restored state survive the fresh-run reset so
         # a restart resumes fills exactly where the interrupted run left off.
         restored_pending = [order for order in self._pending]
@@ -447,11 +456,14 @@ class PortfolioBacktestEngine:
         self._pending.extend(restored_pending)
         if cash_rate_annualized is not None:
             self.cash_rate_annualized = float(cash_rate_annualized)
-        ordered = sorted(self._deduplicate(bars), key=lambda bar: (bar.timestamp, bar.symbol))
-        decision_bars = sorted(
-            self._deduplicate(signal_bars if signal_bars is not None else bars),
-            key=lambda bar: (bar.timestamp, bar.symbol),
-        )
+        if prepared_inputs is not None:
+            ordered, decision_bars = prepared_inputs
+        else:
+            ordered = sorted(self._deduplicate(bars), key=lambda bar: (bar.timestamp, bar.symbol))
+            decision_bars = sorted(
+                self._deduplicate(signal_bars if signal_bars is not None else bars),
+                key=lambda bar: (bar.timestamp, bar.symbol),
+            )
         watermark = self.state.last_processed_bar
         if watermark:
             cutoff = datetime.fromisoformat(watermark)

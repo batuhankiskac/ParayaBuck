@@ -188,6 +188,7 @@ def run_product_backtest(
     corporate_actions: list[CorporateAction] | None = None,
     universe: PointInTimeUniverse | None = None,
     data_feed: str | None = None,
+    prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -197,20 +198,30 @@ def run_product_backtest(
         parameters or selection.parameters,
         timeframe=strategy_timeframe or selection.timeframe,
     )
-    available = [
-        bar
-        for bar in bars
-        if bar.market == market
-        and bar.timeframe == strategy.timeframe
-        and (end is None or bar.timestamp <= end)
-    ]
-    filtered = [bar for bar in available if start is None or bar.timestamp >= start]
-    if not filtered:
-        raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
-    if universe is None:
-        universe = build_product_universe(
-            config, bars, market=market, end=end, timeframe=strategy.timeframe
-        )
+    if prepared_inputs is None:
+        available = [
+            bar
+            for bar in bars
+            if bar.market == market
+            and bar.timeframe == strategy.timeframe
+            and (end is None or bar.timestamp <= end)
+        ]
+        filtered = [bar for bar in available if start is None or bar.timestamp >= start]
+        if not filtered:
+            raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
+        warmup = [bar for bar in available if start is not None and bar.timestamp < start]
+        if universe is None:
+            universe = build_product_universe(
+                config, bars, market=market, end=end, timeframe=strategy.timeframe
+            )
+        prepared = None
+    else:
+        filtered, warmup, (ordered, decision_bars) = prepared_inputs
+        if not filtered:
+            raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
+        if universe is None:
+            raise ValueError("prepared_inputs requires an explicit universe")
+        prepared = (ordered, decision_bars)
     risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
     engine = PortfolioBacktestEngine(
@@ -236,8 +247,12 @@ def run_product_backtest(
             minimum_order_notional=config.execution.minimum_order_notional,
         ),
     )
-    warmup = [bar for bar in available if start is not None and bar.timestamp < start]
-    result = engine.run(filtered, warmup=warmup, corporate_actions=corporate_actions)
+    result = engine.run(
+        filtered,
+        warmup=warmup,
+        corporate_actions=corporate_actions,
+        prepared_inputs=prepared,
+    )
     report = build_portfolio_report(
         result,
         strategy_name=strategy.name,
@@ -366,6 +381,11 @@ def optimize_grid(
     # never on strategy parameters: build it once per window and reuse it for
     # every combination instead of rebuilding (and re-ranking) it per trial.
     train_universe = build_product_universe(config, bars, market=market, end=train_end)
+    # The per-trial bar preprocessing (window filter, dedup, sort) is likewise
+    # trial-invariant: prepare it once per window and reuse it.
+    train_prepared = _prepared_window(
+        bars, market, selection.timeframe, train_start, train_end
+    )
     ranked: list[dict[str, object]] = []
     for values in itertools.product(*(grid[key] for key in keys)):
         parameters = {**baseline, **dict(zip(keys, values, strict=True))}
@@ -383,6 +403,7 @@ def optimize_grid(
             persist_artifacts=False,
             corporate_actions=corporate_actions,
             universe=train_universe,
+            prepared_inputs=train_prepared,
         )
         result = run.result
         ranked.append(
@@ -411,6 +432,7 @@ def optimize_grid(
         if not isinstance(best_parameters, dict):
             raise TypeError("Optimization parameters must be a mapping")
         oos_universe = build_product_universe(config, bars, market=market, end=oos_end)
+        oos_prepared = _prepared_window(bars, market, selection.timeframe, oos_start, oos_end)
         oos = run_product_backtest(
             config,
             bars,
@@ -423,6 +445,7 @@ def optimize_grid(
             output_dir=output_dir,
             corporate_actions=corporate_actions,
             universe=oos_universe,
+            prepared_inputs=oos_prepared,
         )
         payload["out_of_sample"] = {
             "parameters": best["parameters"],
@@ -438,6 +461,40 @@ def optimize_grid(
     )
     payload["output"] = str(path)
     return payload
+
+
+def _prepared_window(
+    bars: list[Bar],
+    market: Market,
+    timeframe: str,
+    start: datetime | None,
+    end: datetime | None,
+) -> tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]]:
+    """Precompute the per-window engine inputs for a backtest trial.
+
+    Mirrors ``run_product_backtest``'s window filter plus the engine's
+    deterministic dedup/sort, so every trial of an optimization grid can
+    reuse one preparation. Returns ``(filtered, warmup, (ordered,
+    decision_bars))`` exactly as ``engine.run(prepared_inputs=...)`` expects.
+    """
+    available = [
+        bar
+        for bar in bars
+        if bar.market == market
+        and bar.timeframe == timeframe
+        and (end is None or bar.timestamp <= end)
+    ]
+    filtered = [bar for bar in available if start is None or bar.timestamp >= start]
+    warmup = [bar for bar in available if start is not None and bar.timestamp < start]
+    ordered = sorted(
+        PortfolioBacktestEngine._deduplicate(filtered),
+        key=lambda bar: (bar.timestamp, bar.symbol),
+    )
+    decision_bars = sorted(
+        PortfolioBacktestEngine._deduplicate(filtered),
+        key=lambda bar: (bar.timestamp, bar.symbol),
+    )
+    return filtered, warmup, (ordered, decision_bars)
 
 
 def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:

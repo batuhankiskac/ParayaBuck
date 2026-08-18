@@ -55,7 +55,8 @@ PIT universe (end=deploy) and cost model; only the initial
 Equity catch-up adds +0.26pp avg 30d (idle capital deployed); crypto shows a
 small negative 30d delta (-0.39pp) — earlier deployment into the sampled
 bear-heavy crypto windows — within one standard deviation of per-start noise,
-with no drawdown materiality (avg maxDD +0.3pp equity). No lookahead (universe
+with no drawdown materiality (avg maxDD +0.75pp equity, +0.30pp crypto;
+median deltas ≈ 0). No lookahead (universe
 hash asserted equal across variants), no duplicates (0), no risk bypass.
 
 ## 3. Equity cadence — monthly vs weekly
@@ -73,11 +74,11 @@ costs; only the cadence differs.
 | turnover / fees | 50.9x / $62 | 132.4x / $182 | higher, still 0.03% of equity |
 | avg exposure | 46.2% | 47.3% | better |
 | cost stress 1x/2x/3x | 59.2/56.8/54.5 | 84.6/75.3/68.5 | better at every level |
-| walk-forward (16 folds) | 9/16 losses… median +1.86% | wins 9/16, median +3.67% | better |
+| walk-forward (16 folds) | 9/16 positive, median +1.86% | 10/16 positive, median +3.67% (wins vs monthly 9/16) | better |
 | concentration top-1/top-3 | 6.4%/16.1% | 5.3%/14.0% | less concentrated |
 
 Verdict: weekly improves every headline full-window metric (CAGR ↑, Sharpe ↑,
-Sortino ↑, maxDD ↓, utilization ↑, cost-robust at 1x/2x/3x, WF 9/16 folds,
+Sortino ↑, maxDD ↓, utilization ↑, cost-robust at 1x/2x/3x, WF 10/16 folds,
 concentration shares lower). Two material caveats, disclosed:
 
 - **Top-name dependence**: ASX-drop jackknife (fresh engines, no cache):
@@ -87,8 +88,9 @@ concentration shares lower). Two material caveats, disclosed:
 - **Recent-window sensitivity**: the mission's 2024-01-01..2025-06-30 smoke
   window REVERSES direction (monthly CAGR 7.56% vs weekly 7.42%, monthly
   maxDD 6.6% vs weekly 13.9%, WF positive 75% vs 50%). The full-window
-  walk-forward (2019-01 anchored, 16 folds) favors weekly (9/16 wins,
-  median +3.67% vs +1.86%), but the edge is not uniform across sub-periods.
+  walk-forward (2019-01 anchored, 16 folds) favors weekly (10/16 positive
+  folds vs 9/16; beats monthly in 9/16 folds, median +3.67% vs +1.86%), but
+  the edge is not uniform across sub-periods.
 
 Verdict: B — VALIDATE WEEKLY AS NEW V2 (`equity_residual_momentum_v2`),
 with the ASX-dependence and window-sensitivity caveats disclosed; v1 stays

@@ -1,0 +1,24 @@
+{
+ "monthly": {
+  "base_return": 0.5921,
+  "drop_return": 0.6114,
+  "delta_return": 0.0192,
+  "base_cagr": 0.0498,
+  "drop_cagr": 0.0511,
+  "base_sharpe": 0.4736,
+  "drop_sharpe": 0.4826,
+  "base_maxdd": 0.2545,
+  "drop_maxdd": 0.2657
+ },
+ "weekly": {
+  "base_return": 0.8461,
+  "drop_return": 0.7872,
+  "delta_return": -0.059,
+  "base_cagr": 0.0661,
+  "drop_cagr": 0.0625,
+  "base_sharpe": 0.6237,
+  "drop_sharpe": 0.5984,
+  "base_maxdd": 0.1968,
+  "drop_maxdd": 0.1869
+ }
+}

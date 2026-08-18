@@ -1,0 +1,433 @@
+{
+  "meta": {
+    "mission": "capital-utilization & cadence wave 1 - equity leg",
+    "strategy": "equity_residual_momentum_v1",
+    "strategy_parameters": {
+      "formation_bars": 252,
+      "skip_bars": 21,
+      "beta_window_bars": 273,
+      "residual_vol_window": 63,
+      "top_n": 8,
+      "max_single_weight": 0.1,
+      "ivol_reject_quantile": 0.7,
+      "exclude_symbols": [
+        "SPY"
+      ]
+    },
+    "cadence_candidates": {
+      "monthly": "control - frozen spec (v1 baseline)",
+      "weekly": {
+        "rebalance_frequency": "weekly",
+        "note": "strategy ignores the key in its math; rebalance_policy_for maps it to RebalancePolicy(weekly)"
+      }
+    },
+    "dataset": "equity_1200_2016_2026.csv",
+    "evaluation_window": [
+      "2017-01-03T00:00:00+00:00",
+      "2026-07-30T23:59:59+00:00"
+    ],
+    "warmup": "2016 full year (formation + beta + scanner lookback)",
+    "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+    "universe": {
+      "snapshots": 2657,
+      "avg_candidate_pool": 300,
+      "methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded"
+    },
+    "smoke": false,
+    "baseline_reference": "docs/strategy_robustness.md: return +59.21%, CAGR 4.98%, Sharpe 0.47, Sortino 0.60, maxDD 25.45%, turnover 50.9, 113 rebalances, 300 trades"
+  },
+  "fold_windows": [
+    "2019-01-02T00:00:00+00:00",
+    "2019-07-01T00:00:00+00:00",
+    "2019-12-28T00:00:00+00:00",
+    "2020-06-25T00:00:00+00:00",
+    "2020-12-22T00:00:00+00:00",
+    "2021-06-20T00:00:00+00:00",
+    "2021-12-17T00:00:00+00:00",
+    "2022-06-15T00:00:00+00:00",
+    "2022-12-12T00:00:00+00:00",
+    "2023-06-10T00:00:00+00:00",
+    "2023-12-07T00:00:00+00:00",
+    "2024-06-04T00:00:00+00:00",
+    "2024-12-01T00:00:00+00:00",
+    "2025-05-30T00:00:00+00:00",
+    "2025-11-26T00:00:00+00:00",
+    "2026-05-25T00:00:00+00:00"
+  ],
+  "window_note": "identical anchored 6-month folds for BOTH candidates, 24-month warmup; same PIT universe object",
+  "folds": [
+    {
+      "fold": 1,
+      "start": "2019-01-02T00:00:00+00:00",
+      "end": "2019-07-01T00:00:00+00:00",
+      "monthly_return": 0.127201,
+      "monthly_sharpe": 3.869392,
+      "monthly_max_drawdown": 0.017969,
+      "monthly_trades": 17,
+      "monthly_rebalances": 6,
+      "weekly_return": 0.106485,
+      "weekly_sharpe": 3.195846,
+      "weekly_max_drawdown": 0.017592,
+      "weekly_trades": 42,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 2,
+      "start": "2019-07-01T00:00:00+00:00",
+      "end": "2019-12-28T00:00:00+00:00",
+      "monthly_return": 0.009257,
+      "monthly_sharpe": 0.323165,
+      "monthly_max_drawdown": 0.03867,
+      "monthly_trades": 19,
+      "monthly_rebalances": 6,
+      "weekly_return": 0.006469,
+      "weekly_sharpe": 0.239779,
+      "weekly_max_drawdown": 0.04185,
+      "weekly_trades": 42,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 3,
+      "start": "2019-12-28T00:00:00+00:00",
+      "end": "2020-06-25T00:00:00+00:00",
+      "monthly_return": -0.005444,
+      "monthly_sharpe": 0.068809,
+      "monthly_max_drawdown": 0.190222,
+      "monthly_trades": 14,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.050433,
+      "weekly_sharpe": 0.603454,
+      "weekly_max_drawdown": 0.137286,
+      "weekly_trades": 43,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 4,
+      "start": "2020-06-25T00:00:00+00:00",
+      "end": "2020-12-22T00:00:00+00:00",
+      "monthly_return": 0.197975,
+      "monthly_sharpe": 2.332002,
+      "monthly_max_drawdown": 0.063016,
+      "monthly_trades": 17,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.243727,
+      "weekly_sharpe": 2.934825,
+      "weekly_max_drawdown": 0.061438,
+      "weekly_trades": 30,
+      "weekly_rebalances": 27
+    },
+    {
+      "fold": 5,
+      "start": "2020-12-22T00:00:00+00:00",
+      "end": "2021-06-20T00:00:00+00:00",
+      "monthly_return": -0.079109,
+      "monthly_sharpe": -0.968086,
+      "monthly_max_drawdown": 0.14288,
+      "monthly_trades": 20,
+      "monthly_rebalances": 7,
+      "weekly_return": -0.087102,
+      "weekly_sharpe": -1.11127,
+      "weekly_max_drawdown": 0.13394,
+      "weekly_trades": 36,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 6,
+      "start": "2021-06-20T00:00:00+00:00",
+      "end": "2021-12-17T00:00:00+00:00",
+      "monthly_return": -0.04589,
+      "monthly_sharpe": -0.827718,
+      "monthly_max_drawdown": 0.075859,
+      "monthly_trades": 19,
+      "monthly_rebalances": 7,
+      "weekly_return": -0.029393,
+      "weekly_sharpe": -0.514761,
+      "weekly_max_drawdown": 0.086106,
+      "weekly_trades": 47,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 7,
+      "start": "2021-12-17T00:00:00+00:00",
+      "end": "2022-06-15T00:00:00+00:00",
+      "monthly_return": -0.074946,
+      "monthly_sharpe": -1.23,
+      "monthly_max_drawdown": 0.10668,
+      "monthly_trades": 20,
+      "monthly_rebalances": 7,
+      "weekly_return": -0.024622,
+      "weekly_sharpe": -0.376403,
+      "weekly_max_drawdown": 0.085811,
+      "weekly_trades": 43,
+      "weekly_rebalances": 27
+    },
+    {
+      "fold": 8,
+      "start": "2022-06-15T00:00:00+00:00",
+      "end": "2022-12-12T00:00:00+00:00",
+      "monthly_return": 0.120014,
+      "monthly_sharpe": 2.184188,
+      "monthly_max_drawdown": 0.052937,
+      "monthly_trades": 19,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.060067,
+      "weekly_sharpe": 1.185698,
+      "weekly_max_drawdown": 0.067352,
+      "weekly_trades": 48,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 9,
+      "start": "2022-12-12T00:00:00+00:00",
+      "end": "2023-06-10T00:00:00+00:00",
+      "monthly_return": -0.008254,
+      "monthly_sharpe": -0.159369,
+      "monthly_max_drawdown": 0.050022,
+      "monthly_trades": 26,
+      "monthly_rebalances": 7,
+      "weekly_return": -0.019826,
+      "weekly_sharpe": -0.391351,
+      "weekly_max_drawdown": 0.051693,
+      "weekly_trades": 54,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 10,
+      "start": "2023-06-10T00:00:00+00:00",
+      "end": "2023-12-07T00:00:00+00:00",
+      "monthly_return": 0.027895,
+      "monthly_sharpe": 0.629173,
+      "monthly_max_drawdown": 0.09071,
+      "monthly_trades": 21,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.032842,
+      "weekly_sharpe": 0.724027,
+      "weekly_max_drawdown": 0.076054,
+      "weekly_trades": 44,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 11,
+      "start": "2023-12-07T00:00:00+00:00",
+      "end": "2024-06-04T00:00:00+00:00",
+      "monthly_return": 0.045084,
+      "monthly_sharpe": 0.993036,
+      "monthly_max_drawdown": 0.044682,
+      "monthly_trades": 20,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.09913,
+      "weekly_sharpe": 2.115723,
+      "weekly_max_drawdown": 0.03877,
+      "weekly_trades": 47,
+      "weekly_rebalances": 27
+    },
+    {
+      "fold": 12,
+      "start": "2024-06-04T00:00:00+00:00",
+      "end": "2024-12-01T00:00:00+00:00",
+      "monthly_return": 0.060744,
+      "monthly_sharpe": 1.520922,
+      "monthly_max_drawdown": 0.044553,
+      "monthly_trades": 17,
+      "monthly_rebalances": 6,
+      "weekly_return": 0.08329,
+      "weekly_sharpe": 2.073783,
+      "weekly_max_drawdown": 0.025505,
+      "weekly_trades": 44,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 13,
+      "start": "2024-12-01T00:00:00+00:00",
+      "end": "2025-05-30T00:00:00+00:00",
+      "monthly_return": -0.007658,
+      "monthly_sharpe": -0.076825,
+      "monthly_max_drawdown": 0.062986,
+      "monthly_trades": 17,
+      "monthly_rebalances": 6,
+      "weekly_return": -0.055945,
+      "weekly_sharpe": -0.983414,
+      "weekly_max_drawdown": 0.136999,
+      "weekly_trades": 45,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 14,
+      "start": "2025-05-30T00:00:00+00:00",
+      "end": "2025-11-26T00:00:00+00:00",
+      "monthly_return": 0.036845,
+      "monthly_sharpe": 0.82107,
+      "monthly_max_drawdown": 0.040776,
+      "monthly_trades": 17,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.040607,
+      "weekly_sharpe": 0.901552,
+      "weekly_max_drawdown": 0.039519,
+      "weekly_trades": 42,
+      "weekly_rebalances": 27
+    },
+    {
+      "fold": 15,
+      "start": "2025-11-26T00:00:00+00:00",
+      "end": "2026-05-25T00:00:00+00:00",
+      "monthly_return": 0.08362,
+      "monthly_sharpe": 1.26332,
+      "monthly_max_drawdown": 0.076153,
+      "monthly_trades": 27,
+      "monthly_rebalances": 7,
+      "weekly_return": 0.058841,
+      "weekly_sharpe": 0.922003,
+      "weekly_max_drawdown": 0.089196,
+      "weekly_trades": 51,
+      "weekly_rebalances": 26
+    },
+    {
+      "fold": 16,
+      "start": "2026-05-25T00:00:00+00:00",
+      "end": "2026-07-30T23:59:59+00:00",
+      "monthly_return": -0.016082,
+      "monthly_sharpe": -0.694859,
+      "monthly_max_drawdown": 0.048167,
+      "monthly_trades": 7,
+      "monthly_rebalances": 3,
+      "weekly_return": -0.013797,
+      "weekly_sharpe": -0.446813,
+      "weekly_max_drawdown": 0.043573,
+      "weekly_trades": 21,
+      "weekly_rebalances": 10
+    }
+  ],
+  "summary": {
+    "monthly": {
+      "positive_fold_count": 9,
+      "total_fold_count": 16,
+      "positive_fold_ratio": 0.5625,
+      "mean_fold_return": 0.029453,
+      "median_fold_return": 0.018576,
+      "worst_fold_return": -0.079109,
+      "best_fold_return": 0.197975,
+      "mean_fold_sharpe": 0.628,
+      "mean_fold_max_drawdown": 0.071643
+    },
+    "weekly": {
+      "positive_fold_count": 10,
+      "total_fold_count": 16,
+      "positive_fold_ratio": 0.625,
+      "mean_fold_return": 0.03445,
+      "median_fold_return": 0.036725,
+      "worst_fold_return": -0.087102,
+      "best_fold_return": 0.243727,
+      "mean_fold_sharpe": 0.692,
+      "mean_fold_max_drawdown": 0.070793
+    }
+  },
+  "calendar_year_returns": {
+    "note": "calendar-year returns from the 1x full-window reports; 2017 and 2026 are partial (2017 starts 2017-01-03; 2026 ends 2026-07-30)",
+    "years": {
+      "monthly": [
+        {
+          "year": 2017,
+          "portfolio_return": 0.101656,
+          "benchmark_return": 0.185662
+        },
+        {
+          "year": 2018,
+          "portfolio_return": -0.081594,
+          "benchmark_return": -0.06316
+        },
+        {
+          "year": 2019,
+          "portfolio_return": 0.130299,
+          "benchmark_return": 0.286988
+        },
+        {
+          "year": 2020,
+          "portfolio_return": 0.182638,
+          "benchmark_return": 0.162809
+        },
+        {
+          "year": 2021,
+          "portfolio_return": -0.084428,
+          "benchmark_return": 0.269098
+        },
+        {
+          "year": 2022,
+          "portfolio_return": 0.000962,
+          "benchmark_return": -0.194816
+        },
+        {
+          "year": 2023,
+          "portfolio_return": 0.061802,
+          "benchmark_return": 0.242868
+        },
+        {
+          "year": 2024,
+          "portfolio_return": 0.020589,
+          "benchmark_return": 0.233048
+        },
+        {
+          "year": 2025,
+          "portfolio_return": 0.076297,
+          "benchmark_return": 0.163527
+        },
+        {
+          "year": 2026,
+          "portfolio_return": 0.10134,
+          "benchmark_return": 0.08765
+        }
+      ],
+      "weekly": [
+        {
+          "year": 2017,
+          "portfolio_return": 0.119492,
+          "benchmark_return": 0.185662
+        },
+        {
+          "year": 2018,
+          "portfolio_return": -0.039834,
+          "benchmark_return": -0.06316
+        },
+        {
+          "year": 2019,
+          "portfolio_return": 0.115544,
+          "benchmark_return": 0.286988
+        },
+        {
+          "year": 2020,
+          "portfolio_return": 0.299368,
+          "benchmark_return": 0.162809
+        },
+        {
+          "year": 2021,
+          "portfolio_return": -0.083628,
+          "benchmark_return": 0.269098
+        },
+        {
+          "year": 2022,
+          "portfolio_return": 0.006669,
+          "benchmark_return": -0.194816
+        },
+        {
+          "year": 2023,
+          "portfolio_return": 0.057144,
+          "benchmark_return": 0.242868
+        },
+        {
+          "year": 2024,
+          "portfolio_return": 0.103871,
+          "benchmark_return": 0.233048
+        },
+        {
+          "year": 2025,
+          "portfolio_return": 0.012147,
+          "benchmark_return": 0.163527
+        },
+        {
+          "year": 2026,
+          "portfolio_return": 0.087489,
+          "benchmark_return": 0.08765
+        }
+      ]
+    }
+  }
+}

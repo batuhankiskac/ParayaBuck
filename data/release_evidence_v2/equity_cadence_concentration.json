@@ -1,0 +1,181 @@
+{
+  "meta": {
+    "mission": "capital-utilization & cadence wave 1 - equity leg",
+    "strategy": "equity_residual_momentum_v1",
+    "strategy_parameters": {
+      "formation_bars": 252,
+      "skip_bars": 21,
+      "beta_window_bars": 273,
+      "residual_vol_window": 63,
+      "top_n": 8,
+      "max_single_weight": 0.1,
+      "ivol_reject_quantile": 0.7,
+      "exclude_symbols": [
+        "SPY"
+      ]
+    },
+    "cadence_candidates": {
+      "monthly": "control - frozen spec (v1 baseline)",
+      "weekly": {
+        "rebalance_frequency": "weekly",
+        "note": "strategy ignores the key in its math; rebalance_policy_for maps it to RebalancePolicy(weekly)"
+      }
+    },
+    "dataset": "equity_1200_2016_2026.csv",
+    "evaluation_window": [
+      "2017-01-03T00:00:00+00:00",
+      "2026-07-30T23:59:59+00:00"
+    ],
+    "warmup": "2016 full year (formation + beta + scanner lookback)",
+    "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+    "universe": {
+      "snapshots": 2657,
+      "avg_candidate_pool": 300,
+      "methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded"
+    },
+    "smoke": false,
+    "baseline_reference": "docs/strategy_robustness.md: return +59.21%, CAGR 4.98%, Sharpe 0.47, Sortino 0.60, maxDD 25.45%, turnover 50.9, 113 rebalances, 300 trades"
+  },
+  "monthly": {
+    "top": [
+      {
+        "symbol": "ASX",
+        "realized_pnl": 7991.265163288362,
+        "share_of_total_realized_pnl": 0.135
+      },
+      {
+        "symbol": "AHR",
+        "realized_pnl": 6488.450490176286,
+        "share_of_total_realized_pnl": 0.1096
+      },
+      {
+        "symbol": "ATI",
+        "realized_pnl": 5546.314374052663,
+        "share_of_total_realized_pnl": 0.0937
+      }
+    ],
+    "total_realized_pnl": 59214.89
+  },
+  "weekly": {
+    "top": [
+      {
+        "symbol": "ASX",
+        "realized_pnl": 9086.133998170579,
+        "share_of_total_realized_pnl": 0.1074
+      },
+      {
+        "symbol": "ARKW",
+        "realized_pnl": 7602.662947370025,
+        "share_of_total_realized_pnl": 0.0899
+      },
+      {
+        "symbol": "BA",
+        "realized_pnl": 7173.877482893392,
+        "share_of_total_realized_pnl": 0.0848
+      }
+    ],
+    "total_realized_pnl": 84614.57
+  },
+  "jackknife": {
+    "monthly": {
+      "base": {
+        "return": 0.592149,
+        "cagr": 0.049785,
+        "sharpe": 0.473556,
+        "max_drawdown": 0.254497,
+        "trades": 300
+      },
+      "drops": {
+        "ASX": {
+          "dropped": {
+            "return": 0.61139,
+            "cagr": 0.051103,
+            "sharpe": 0.482555,
+            "max_drawdown": 0.265688,
+            "trades": 299
+          },
+          "delta_return_pp": 1.9241,
+          "delta_cagr_pp": 0.1318,
+          "delta_sharpe": 0.009,
+          "delta_max_drawdown_pp": 1.1191
+        },
+        "AHR": {
+          "dropped": {
+            "return": 0.61031,
+            "cagr": 0.051029,
+            "sharpe": 0.481086,
+            "max_drawdown": 0.254497,
+            "trades": 300
+          },
+          "delta_return_pp": 1.8161,
+          "delta_cagr_pp": 0.1244,
+          "delta_sharpe": 0.0075,
+          "delta_max_drawdown_pp": 0.0
+        },
+        "ATI": {
+          "dropped": {
+            "return": 0.656476,
+            "cagr": 0.054137,
+            "sharpe": 0.509684,
+            "max_drawdown": 0.254497,
+            "trades": 295
+          },
+          "delta_return_pp": 6.4327,
+          "delta_cagr_pp": 0.4352,
+          "delta_sharpe": 0.0361,
+          "delta_max_drawdown_pp": 0.0
+        }
+      }
+    },
+    "weekly": {
+      "base": {
+        "return": 0.846146,
+        "cagr": 0.066143,
+        "sharpe": 0.623703,
+        "max_drawdown": 0.196808,
+        "trades": 784
+      },
+      "drops": {
+        "ASX": {
+          "dropped": {
+            "return": 0.787152,
+            "cagr": 0.062532,
+            "sharpe": 0.598361,
+            "max_drawdown": 0.186935,
+            "trades": 781
+          },
+          "delta_return_pp": -5.8994,
+          "delta_cagr_pp": -0.3611,
+          "delta_sharpe": -0.0253,
+          "delta_max_drawdown_pp": -0.9873
+        },
+        "ARKW": {
+          "dropped": {
+            "return": 0.935228,
+            "cagr": 0.071404,
+            "sharpe": 0.671328,
+            "max_drawdown": 0.179112,
+            "trades": 796
+          },
+          "delta_return_pp": 8.9082,
+          "delta_cagr_pp": 0.5261,
+          "delta_sharpe": 0.0476,
+          "delta_max_drawdown_pp": -1.7696
+        },
+        "BA": {
+          "dropped": {
+            "return": 0.713387,
+            "cagr": 0.057864,
+            "sharpe": 0.555761,
+            "max_drawdown": 0.196808,
+            "trades": 785
+          },
+          "delta_return_pp": -13.2759,
+          "delta_cagr_pp": -0.8279,
+          "delta_sharpe": -0.0679,
+          "delta_max_drawdown_pp": 0.0
+        }
+      }
+    }
+  }
+}

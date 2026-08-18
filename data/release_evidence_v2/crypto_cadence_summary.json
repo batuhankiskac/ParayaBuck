@@ -1,0 +1,1537 @@
+{
+  "baseline_validation": {
+    "bit_identical_metrics": {
+      "cagr": {
+        "reference": 0.008484,
+        "this_run": 0.008484
+      },
+      "max_drawdown": {
+        "reference": 0.131654,
+        "this_run": 0.131654
+      },
+      "profit_factor": {
+        "reference": 1.109,
+        "this_run": 1.109
+      },
+      "rebalance_count": {
+        "reference": 263,
+        "this_run": 263
+      },
+      "return": {
+        "reference": 0.046073,
+        "this_run": 0.046073
+      },
+      "sharpe": {
+        "reference": 0.171791,
+        "this_run": 0.171791
+      },
+      "sortino": {
+        "reference": 0.230506,
+        "this_run": 0.230506
+      },
+      "trade_count": {
+        "reference": 124,
+        "this_run": 124
+      },
+      "turnover": {
+        "reference": 13.284977,
+        "this_run": 13.284977
+      }
+    },
+    "drift": {
+      "fees_total": {
+        "cause": "current HEAD (commit bb5e2eb 'codebase deslop') folds the end-of-window liquidation costs (final BTC/ETH position closes) into the reported slippage/spread/fee totals; the bakeoff commit 68331da did not. Net equity is unaffected \u2014 every headline metric is bit-identical, only the fee-total accounting line moved (+$41.44 = ~1.1%)",
+        "diff": 41.44,
+        "pct": 1.1,
+        "reference": 3757.39,
+        "this_run": 3798.83
+      }
+    },
+    "reference": "docs/crypto_bakeoff_validation.md candidate B (validated bit-identically at commit 68331da9430b)"
+  },
+  "candidates": {
+    "168h": {
+      "baseline_validation": {
+        "bit_identical_metrics": {
+          "cagr": {
+            "reference": 0.008484,
+            "this_run": 0.008484
+          },
+          "max_drawdown": {
+            "reference": 0.131654,
+            "this_run": 0.131654
+          },
+          "profit_factor": {
+            "reference": 1.109,
+            "this_run": 1.109
+          },
+          "rebalance_count": {
+            "reference": 263,
+            "this_run": 263
+          },
+          "return": {
+            "reference": 0.046073,
+            "this_run": 0.046073
+          },
+          "sharpe": {
+            "reference": 0.171791,
+            "this_run": 0.171791
+          },
+          "sortino": {
+            "reference": 0.230506,
+            "this_run": 0.230506
+          },
+          "trade_count": {
+            "reference": 124,
+            "this_run": 124
+          },
+          "turnover": {
+            "reference": 13.284977,
+            "this_run": 13.284977
+          }
+        },
+        "drift": {
+          "fees_total": {
+            "cause": "current HEAD (commit bb5e2eb 'codebase deslop') folds the end-of-window liquidation costs (final BTC/ETH position closes) into the reported slippage/spread/fee totals; the bakeoff commit 68331da did not. Net equity is unaffected \u2014 every headline metric is bit-identical, only the fee-total accounting line moved (+$41.44 = ~1.1%)",
+            "diff": 41.44,
+            "pct": 1.1,
+            "reference": 3757.39,
+            "this_run": 3798.83
+          }
+        },
+        "reference": "docs/crypto_bakeoff_validation.md candidate B (validated bit-identically at commit 68331da9430b)"
+      },
+      "cadence_semantics": {
+        "actual_decisions_per_year": 49.36,
+        "asserted_policy_hours": 168,
+        "decisions_total": 263,
+        "expected_decisions_per_year": 52.18,
+        "gap_vs_expected_pct": -5.4,
+        "note": "epoch-hour anchoring: 168h/96h/72h blocks are exact multiples of 24h, so on midnight-UTC 1d bars every block boundary is a decision bar; the residual gap vs theory comes from the LIVE-parity completeness gate (a streamed observation symbol missing a closed bar at the decision timestamp skips that decision)",
+        "pct_decisions_on_epoch_block_boundary": 0.9962
+      },
+      "candidate": "168h",
+      "cost_stress": {
+        "1x": {
+          "avg_cash_ratio": 0.906,
+          "avg_holdings": 2.098,
+          "cagr": 0.008484,
+          "calmar": 0.064444,
+          "concentration": {
+            "max_single_weight": 0.0699,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.3379,
+            "top2_share_of_positive_pnl": 0.6567,
+            "top3_share_of_positive_pnl": 0.9685,
+            "top_1": {
+              "realized_pnl": 4971.51,
+              "symbol": "XRP/USD"
+            },
+            "top_2": {
+              "realized_pnl": 4689.51,
+              "symbol": "LTC/USD"
+            },
+            "top_3": {
+              "realized_pnl": 4588.34,
+              "symbol": "ETH/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.037608,
+          "fees_pct_of_gross_pnl": 0.436892,
+          "fees_total": 3798.83,
+          "gross_return": 0.086951,
+          "max_drawdown": 0.131654,
+          "profit_factor": 1.109,
+          "rebalance_count": 263,
+          "return": 0.046073,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": 0.171791,
+          "sortino": 0.230506,
+          "trade_count": 124,
+          "turnover": 13.284977
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9059,
+          "avg_holdings": 2.11,
+          "cagr": 0.001607,
+          "calmar": 0.011727,
+          "concentration": {
+            "max_single_weight": 0.0699,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.359,
+            "top2_share_of_positive_pnl": 0.6814,
+            "top3_share_of_positive_pnl": 0.9916,
+            "top_1": {
+              "realized_pnl": 4428.19,
+              "symbol": "XRP/USD"
+            },
+            "top_2": {
+              "realized_pnl": 3976.36,
+              "symbol": "LTC/USD"
+            },
+            "top_3": {
+              "realized_pnl": 3825.74,
+              "symbol": "ETH/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.075285,
+          "fees_pct_of_gross_pnl": 0.823595,
+          "fees_total": 7471.12,
+          "gross_return": 0.090713,
+          "max_drawdown": 0.137055,
+          "profit_factor": 1.0197,
+          "rebalance_count": 263,
+          "return": 0.008599,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": 0.056742,
+          "sortino": 0.076115,
+          "trade_count": 124,
+          "turnover": 13.300168
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9058,
+          "avg_holdings": 2.132,
+          "cagr": -0.005424,
+          "calmar": -0.037215,
+          "concentration": {
+            "max_single_weight": 0.07,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.3818,
+            "top2_share_of_positive_pnl": 0.6904,
+            "top3_share_of_positive_pnl": 0.9925,
+            "top_1": {
+              "realized_pnl": 3905.33,
+              "symbol": "XRP/USD"
+            },
+            "top_2": {
+              "realized_pnl": 3156.97,
+              "symbol": "LTC/USD"
+            },
+            "top_3": {
+              "realized_pnl": 3090.34,
+              "symbol": "ETH/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.113033,
+          "fees_pct_of_gross_pnl": 1.156914,
+          "fees_total": 11015.7,
+          "gross_return": 0.095216,
+          "max_drawdown": 0.145742,
+          "profit_factor": 0.9365,
+          "rebalance_count": 263,
+          "return": -0.028579,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": -0.061245,
+          "sortino": -0.082076,
+          "trade_count": 125,
+          "turnover": 13.315793
+        }
+      },
+      "dataset": "crypto_18_1h_extended.csv",
+      "dataset_sha256": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+      "full_period_1x": {
+        "annualized_turnover": 2.4935,
+        "annualized_volatility": 0.059472,
+        "average_holding_days": 32.93,
+        "avg_cash_ratio": 0.906,
+        "avg_holdings_count": 2.098,
+        "band_analysis": {
+          "avg_cost_per_fill": 3.77,
+          "decisions": 263,
+          "fill_ratio": 3.8289,
+          "fills": 1007,
+          "note": "decisions = period starts (band NOT applied); orders = distinct client_order_ids in fills (every crypto order fills next bar, so == orders created); fills = decision-driven fills (liquidation is cost-only, no synthetic fill); trades = closed position events",
+          "order_ratio": 1.3992,
+          "orders": 368,
+          "trades": 124
+        },
+        "cagr": 0.008484,
+        "calmar": 0.064444,
+        "capital_utilization": {
+          "avg_exposure": 0.0938,
+          "days": 1945,
+          "median_exposure": 0.0995,
+          "near_max_threshold": 0.09000000000000001,
+          "note": "daily exposure = sum(position qty x day close) / equity curve, reconstructed from fills + 1d closes (engine parity); near-max = exposure >= 0.09 of the 0.10 sleeve; idle = fully in cash",
+          "pct_days_idle": 0.038,
+          "pct_days_near_max": 0.7738,
+          "pct_days_positive_exposure": 0.962,
+          "time_to_first_deployment_days": 1.0
+        },
+        "churn": {
+          "ab_a_flip_count": 24,
+          "buy_fill_count": 491,
+          "flip_cost": 1127.24,
+          "methodology": "fill-level round trip = any SELL fill of S followed by a BUY fill of S within 7 days (spec definition; contaminated by the 10% participation-cap drip fills); position-level round trip = completed position of S closed and a new position of S opened within 7 days (economic reversal); A->B->A flip = compressed decision-target pair sequence {A,X}->{B,X}->{A,X} with a single-symbol swap (band may suppress the order for a flip; decision-level avoids participation-cap drip transients); reversal cost = fills of S in the exit/rebuy windows; flip cost = unique A/B fills between the two swap decisions + 7 days; costs include slippage+spread+fee",
+          "reversal_cost": 639.07,
+          "reversal_cost_pct_of_total_cost": 0.1682,
+          "round_trip_count_fill_level": 75,
+          "round_trip_count_position_level": 18,
+          "round_trips_per_sell_fill": 0.1453,
+          "round_trips_per_trade": 0.1452,
+          "sell_fill_count": 516,
+          "top_flip_pairs": [
+            {
+              "count": 2,
+              "from": "BCH/USD",
+              "to": "ETH/USD"
+            },
+            {
+              "count": 2,
+              "from": "ETH/USD",
+              "to": "BCH/USD"
+            },
+            {
+              "count": 2,
+              "from": "DOT/USD",
+              "to": "LTC/USD"
+            },
+            {
+              "count": 2,
+              "from": "LTC/USD",
+              "to": "DOT/USD"
+            },
+            {
+              "count": 2,
+              "from": "LTC/USD",
+              "to": "XRP/USD"
+            }
+          ]
+        },
+        "concentration": {
+          "BTC": {
+            "realized_pnl": 330.77,
+            "share_of_fills": 0.0645,
+            "share_of_total_pnl": 0.0718,
+            "share_of_trades": 0.1371
+          },
+          "ETH": {
+            "realized_pnl": 4588.34,
+            "share_of_fills": 0.0715,
+            "share_of_total_pnl": 0.9959,
+            "share_of_trades": 0.2097
+          },
+          "jackknife_note": "symbol jackknife is DEGENERATE here: BTC/USD and ETH/USD are PINNED pool members (config universe.crypto.pinned_symbols) and are the structural low-variance parking spots, so dropping them changes the pinned observation set itself and needs a rebuilt universe \u2014 contrary to the mission's build-universe-once requirement. Baseline 168h jackknife already exists in strategy_validation_v4/candidate_B.json (drop-XRP +4.06%, drop-ETH +2.68%, drop-BTC -1.96%). Not re-run per cadence.",
+          "top1_share_of_positive_pnl": 0.3379,
+          "top1_share_of_total_pnl": 1.0791,
+          "top2_share_of_positive_pnl": 0.6567,
+          "top_1": {
+            "realized_pnl": 4971.51,
+            "symbol": "XRP/USD"
+          },
+          "top_2": {
+            "realized_pnl": 4689.51,
+            "symbol": "LTC/USD"
+          }
+        },
+        "decisions": 263,
+        "decisions_per_year_actual": 49.36,
+        "duration_days": 1946,
+        "fees_pct_of_avg_equity": 0.037608,
+        "fees_pct_of_gross_pnl": 0.436892,
+        "fees_per_turnover": 285.95,
+        "fees_total": 3798.83,
+        "fills": 1007,
+        "gross_return": 0.086951,
+        "max_drawdown": 0.131654,
+        "net_per_turnover": 346.8,
+        "net_pnl": 4607.29,
+        "orders": 368,
+        "per_year": {
+          "2021": {
+            "decisions": 40,
+            "fills": 50,
+            "orders": 50,
+            "trades": 18
+          },
+          "2022": {
+            "decisions": 40,
+            "fills": 48,
+            "orders": 48,
+            "trades": 19
+          },
+          "2023": {
+            "decisions": 48,
+            "fills": 92,
+            "orders": 50,
+            "trades": 15
+          },
+          "2024": {
+            "decisions": 52,
+            "fills": 333,
+            "orders": 97,
+            "trades": 32
+          },
+          "2025": {
+            "decisions": 52,
+            "fills": 280,
+            "orders": 74,
+            "trades": 23
+          },
+          "2026": {
+            "decisions": 31,
+            "fills": 204,
+            "orders": 49,
+            "trades": 17
+          }
+        },
+        "profit_factor": 1.109,
+        "return": 0.046073,
+        "sharpe": 0.171791,
+        "sortino": 0.230506,
+        "trades": 124,
+        "trades_per_year": 23.27,
+        "turnover": 13.284977
+      },
+      "generated_at": "2026-08-18T16:04:42.245390+00:00",
+      "parameters": {
+        "rebalance_hours": 168,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "rebalance_hours": 168,
+      "strategy": "crypto_low_variance_v1",
+      "universe": {
+        "avg_candidate_pool": 11.0,
+        "built_once": true,
+        "hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+        "methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+        "scanner_timeframe": "1h",
+        "snapshots": 2037
+      },
+      "walk_forward": {
+        "best_fold": {
+          "end": "2025-01-01T00:00:00+00:00",
+          "return": 0.043798,
+          "start": "2024-07-01T00:00:00+00:00"
+        },
+        "folds": [
+          {
+            "avg_exposure": 0.0921,
+            "avg_holdings": 1.912,
+            "cagr": -0.174127,
+            "end": "2022-07-01T00:00:00+00:00",
+            "max_drawdown": 0.09051,
+            "return": -0.09051,
+            "sharpe": -2.790341,
+            "start": "2022-01-01T00:00:00+00:00",
+            "trade_count": 10,
+            "turnover": 0.974453
+          },
+          {
+            "avg_exposure": 0.0995,
+            "avg_holdings": 1.989,
+            "cagr": 0.013957,
+            "end": "2023-01-01T00:00:00+00:00",
+            "max_drawdown": 0.029533,
+            "return": 0.007012,
+            "sharpe": 0.242634,
+            "start": "2022-07-01T00:00:00+00:00",
+            "trade_count": 13,
+            "turnover": 1.223707
+          },
+          {
+            "avg_exposure": 0.0873,
+            "avg_holdings": 1.725,
+            "cagr": 0.073933,
+            "end": "2023-07-01T00:00:00+00:00",
+            "max_drawdown": 0.028982,
+            "return": 0.036004,
+            "sharpe": 1.544177,
+            "start": "2023-01-01T00:00:00+00:00",
+            "trade_count": 14,
+            "turnover": 1.35753
+          },
+          {
+            "avg_exposure": 0.0999,
+            "avg_holdings": 2.114,
+            "cagr": 0.074525,
+            "end": "2024-01-01T00:00:00+00:00",
+            "max_drawdown": 0.022763,
+            "return": 0.036899,
+            "sharpe": 1.832275,
+            "start": "2023-07-01T00:00:00+00:00",
+            "trade_count": 5,
+            "turnover": 0.55217
+          },
+          {
+            "avg_exposure": 0.0964,
+            "avg_holdings": 2.29,
+            "cagr": 0.030632,
+            "end": "2024-07-01T00:00:00+00:00",
+            "max_drawdown": 0.043221,
+            "return": 0.015159,
+            "sharpe": 0.553081,
+            "start": "2024-01-01T00:00:00+00:00",
+            "trade_count": 20,
+            "turnover": 1.965595
+          },
+          {
+            "avg_exposure": 0.0871,
+            "avg_holdings": 2.357,
+            "cagr": 0.088754,
+            "end": "2025-01-01T00:00:00+00:00",
+            "max_drawdown": 0.024778,
+            "return": 0.043798,
+            "sharpe": 1.762709,
+            "start": "2024-07-01T00:00:00+00:00",
+            "trade_count": 14,
+            "turnover": 1.398792
+          },
+          {
+            "avg_exposure": 0.099,
+            "avg_holdings": 2.352,
+            "cagr": 0.004704,
+            "end": "2025-07-01T00:00:00+00:00",
+            "max_drawdown": 0.043699,
+            "return": 0.00233,
+            "sharpe": 0.109748,
+            "start": "2025-01-01T00:00:00+00:00",
+            "trade_count": 13,
+            "turnover": 1.305767
+          },
+          {
+            "avg_exposure": 0.0986,
+            "avg_holdings": 2.292,
+            "cagr": 0.056703,
+            "end": "2026-01-01T00:00:00+00:00",
+            "max_drawdown": 0.035924,
+            "return": 0.028194,
+            "sharpe": 1.078968,
+            "start": "2025-07-01T00:00:00+00:00",
+            "trade_count": 14,
+            "turnover": 1.469636
+          },
+          {
+            "avg_exposure": 0.0778,
+            "avg_holdings": 1.923,
+            "cagr": -0.094962,
+            "end": "2026-07-01T00:00:00+00:00",
+            "max_drawdown": 0.059382,
+            "return": -0.048275,
+            "sharpe": -2.249234,
+            "start": "2026-01-01T00:00:00+00:00",
+            "trade_count": 15,
+            "turnover": 1.299092
+          },
+          {
+            "avg_exposure": 0.0921,
+            "avg_holdings": 2.433,
+            "cagr": 0.021431,
+            "end": "2026-07-30T00:00:00+00:00",
+            "max_drawdown": 0.005153,
+            "return": 0.001686,
+            "sharpe": 0.719261,
+            "start": "2026-07-01T00:00:00+00:00",
+            "trade_count": 4,
+            "turnover": 0.232639
+          }
+        ],
+        "mean_fold_return": 0.00323,
+        "median_fold_return": 0.011085,
+        "methodology": "anchored calendar 6-month folds from 2022-01-01 (10 folds), 1x cost, same PIT universe, warmup = all bars before the fold",
+        "negative_fold_count": 2,
+        "positive_fold_count": 8,
+        "positive_fold_ratio": 0.8,
+        "total_fold_count": 10,
+        "worst_fold": {
+          "end": "2022-07-01T00:00:00+00:00",
+          "return": -0.09051,
+          "start": "2022-01-01T00:00:00+00:00"
+        }
+      },
+      "warmup": "2021-01-01 .. 2021-03-31 (harness-wide)",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-31T23:59:59+00:00"
+      ]
+    },
+    "72h": {
+      "cadence_semantics": {
+        "actual_decisions_per_year": 112.99,
+        "asserted_policy_hours": 72,
+        "decisions_total": 602,
+        "expected_decisions_per_year": 121.75,
+        "gap_vs_expected_pct": -7.19,
+        "note": "epoch-hour anchoring: 168h/96h/72h blocks are exact multiples of 24h, so on midnight-UTC 1d bars every block boundary is a decision bar; the residual gap vs theory comes from the LIVE-parity completeness gate (a streamed observation symbol missing a closed bar at the decision timestamp skips that decision)",
+        "pct_decisions_on_epoch_block_boundary": 0.9983
+      },
+      "candidate": "72h",
+      "cost_stress": {
+        "1x": {
+          "avg_cash_ratio": 0.9048,
+          "avg_holdings": 2.922,
+          "cagr": 0.005074,
+          "calmar": 0.036668,
+          "concentration": {
+            "max_single_weight": 0.0633,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.3871,
+            "top2_share_of_positive_pnl": 0.7142,
+            "top3_share_of_positive_pnl": 0.9167,
+            "top_1": {
+              "realized_pnl": 4893.2,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 4135.65,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 2558.82,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.05215,
+          "fees_pct_of_gross_pnl": 0.629278,
+          "fees_total": 5278.1,
+          "gross_return": 0.083875,
+          "max_drawdown": 0.138376,
+          "profit_factor": 1.0556,
+          "rebalance_count": 602,
+          "return": 0.027351,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": 0.114736,
+          "sortino": 0.15552,
+          "trade_count": 175,
+          "turnover": 18.522838
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9051,
+          "avg_holdings": 2.906,
+          "cagr": -0.00321,
+          "calmar": -0.022302,
+          "concentration": {
+            "max_single_weight": 0.0633,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.4597,
+            "top2_share_of_positive_pnl": 0.7654,
+            "top3_share_of_positive_pnl": 0.9564,
+            "top_1": {
+              "realized_pnl": 4179.84,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 2779.6,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 1736.62,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.104682,
+          "fees_pct_of_gross_pnl": 1.056492,
+          "fees_total": 10346.92,
+          "gross_return": 0.097937,
+          "max_drawdown": 0.143948,
+          "profit_factor": 0.9662,
+          "rebalance_count": 602,
+          "return": -0.016997,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": -0.024248,
+          "sortino": -0.032896,
+          "trade_count": 181,
+          "turnover": 18.5933
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9048,
+          "avg_holdings": 2.912,
+          "cagr": -0.013687,
+          "calmar": -0.091558,
+          "concentration": {
+            "max_single_weight": 0.0633,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.5465,
+            "top2_share_of_positive_pnl": 0.8218,
+            "top3_share_of_positive_pnl": 1.0,
+            "top_1": {
+              "realized_pnl": 2976.52,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 1499.23,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 970.32,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.156877,
+          "fees_pct_of_gross_pnl": 1.480648,
+          "fees_total": 15109.2,
+          "gross_return": 0.102045,
+          "max_drawdown": 0.149488,
+          "profit_factor": 0.8642,
+          "rebalance_count": 602,
+          "return": -0.070841,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": -0.200531,
+          "sortino": -0.271826,
+          "trade_count": 179,
+          "turnover": 18.571668
+        }
+      },
+      "dataset": "crypto_18_1h_extended.csv",
+      "dataset_sha256": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+      "full_period_1x": {
+        "annualized_turnover": 3.4766,
+        "annualized_volatility": 0.059579,
+        "average_holding_days": 32.5,
+        "avg_cash_ratio": 0.9048,
+        "avg_holdings_count": 2.922,
+        "band_analysis": {
+          "avg_cost_per_fill": 4.47,
+          "decisions": 602,
+          "fill_ratio": 1.9618,
+          "fills": 1181,
+          "note": "decisions = period starts (band NOT applied); orders = distinct client_order_ids in fills (every crypto order fills next bar, so == orders created); fills = decision-driven fills (liquidation is cost-only, no synthetic fill); trades = closed position events",
+          "order_ratio": 1.0415,
+          "orders": 627,
+          "trades": 175
+        },
+        "baseline_avoidance": {
+          "approximation": "same (symbol, side) fill in the same 168h epoch block as a 168h-baseline fill = overlap (would also occur at 168h); all other faster-cadence fills/trades counted as avoided by the 168h baseline",
+          "fills_avoided": 512,
+          "fills_total": 1181,
+          "pct_fills_avoided_by_168h": 0.4335,
+          "pct_trades_avoided_by_168h": 0.6457,
+          "trades_avoided": 113,
+          "trades_total": 175
+        },
+        "cagr": 0.005074,
+        "calmar": 0.036668,
+        "capital_utilization": {
+          "avg_exposure": 0.095,
+          "days": 1945,
+          "median_exposure": 0.1004,
+          "near_max_threshold": 0.09000000000000001,
+          "note": "daily exposure = sum(position qty x day close) / equity curve, reconstructed from fills + 1d closes (engine parity); near-max = exposure >= 0.09 of the 0.10 sleeve; idle = fully in cash",
+          "pct_days_idle": 0.0134,
+          "pct_days_near_max": 0.7892,
+          "pct_days_positive_exposure": 0.9866,
+          "time_to_first_deployment_days": 1.0
+        },
+        "churn": {
+          "ab_a_flip_count": 50,
+          "buy_fill_count": 572,
+          "flip_cost": 2396.2,
+          "methodology": "fill-level round trip = any SELL fill of S followed by a BUY fill of S within 7 days (spec definition; contaminated by the 10% participation-cap drip fills); position-level round trip = completed position of S closed and a new position of S opened within 7 days (economic reversal); A->B->A flip = compressed decision-target pair sequence {A,X}->{B,X}->{A,X} with a single-symbol swap (band may suppress the order for a flip; decision-level avoids participation-cap drip transients); reversal cost = fills of S in the exit/rebuy windows; flip cost = unique A/B fills between the two swap decisions + 7 days; costs include slippage+spread+fee",
+          "reversal_cost": 1683.41,
+          "reversal_cost_pct_of_total_cost": 0.3189,
+          "round_trip_count_fill_level": 142,
+          "round_trip_count_position_level": 43,
+          "round_trips_per_sell_fill": 0.2332,
+          "round_trips_per_trade": 0.2457,
+          "sell_fill_count": 609,
+          "top_flip_pairs": [
+            {
+              "count": 3,
+              "from": "ETH/USD",
+              "to": "LTC/USD"
+            },
+            {
+              "count": 3,
+              "from": "BCH/USD",
+              "to": "ETH/USD"
+            },
+            {
+              "count": 3,
+              "from": "ETH/USD",
+              "to": "DOGE/USD"
+            },
+            {
+              "count": 3,
+              "from": "LTC/USD",
+              "to": "ETH/USD"
+            },
+            {
+              "count": 3,
+              "from": "LTC/USD",
+              "to": "DOT/USD"
+            }
+          ]
+        },
+        "concentration": {
+          "BTC": {
+            "realized_pnl": 1053.61,
+            "share_of_fills": 0.0754,
+            "share_of_total_pnl": 0.3852,
+            "share_of_trades": 0.1314
+          },
+          "ETH": {
+            "realized_pnl": 4135.65,
+            "share_of_fills": 0.1058,
+            "share_of_total_pnl": 1.5121,
+            "share_of_trades": 0.2686
+          },
+          "jackknife_note": "symbol jackknife is DEGENERATE here: BTC/USD and ETH/USD are PINNED pool members (config universe.crypto.pinned_symbols) and are the structural low-variance parking spots, so dropping them changes the pinned observation set itself and needs a rebuilt universe \u2014 contrary to the mission's build-universe-once requirement. Baseline 168h jackknife already exists in strategy_validation_v4/candidate_B.json (drop-XRP +4.06%, drop-ETH +2.68%, drop-BTC -1.96%). Not re-run per cadence.",
+          "top1_share_of_positive_pnl": 0.3871,
+          "top1_share_of_total_pnl": 1.789,
+          "top2_share_of_positive_pnl": 0.7142,
+          "top_1": {
+            "realized_pnl": 4893.2,
+            "symbol": "LTC/USD"
+          },
+          "top_2": {
+            "realized_pnl": 4135.65,
+            "symbol": "ETH/USD"
+          }
+        },
+        "decisions": 602,
+        "decisions_per_year_actual": 112.99,
+        "duration_days": 1946,
+        "fees_pct_of_avg_equity": 0.05215,
+        "fees_pct_of_gross_pnl": 0.629278,
+        "fees_per_turnover": 284.95,
+        "fees_total": 5278.1,
+        "fills": 1181,
+        "gross_return": 0.083875,
+        "max_drawdown": 0.138376,
+        "net_per_turnover": 147.66,
+        "net_pnl": 2735.12,
+        "orders": 627,
+        "per_year": {
+          "2021": {
+            "decisions": 92,
+            "fills": 80,
+            "orders": 80,
+            "trades": 29
+          },
+          "2022": {
+            "decisions": 92,
+            "fills": 78,
+            "orders": 78,
+            "trades": 28
+          },
+          "2023": {
+            "decisions": 107,
+            "fills": 108,
+            "orders": 68,
+            "trades": 21
+          },
+          "2024": {
+            "decisions": 120,
+            "fills": 357,
+            "orders": 163,
+            "trades": 39
+          },
+          "2025": {
+            "decisions": 121,
+            "fills": 317,
+            "orders": 141,
+            "trades": 29
+          },
+          "2026": {
+            "decisions": 70,
+            "fills": 241,
+            "orders": 97,
+            "trades": 29
+          }
+        },
+        "profit_factor": 1.0556,
+        "return": 0.027351,
+        "sharpe": 0.114736,
+        "sortino": 0.15552,
+        "trades": 175,
+        "trades_per_year": 32.85,
+        "turnover": 18.522838
+      },
+      "generated_at": "2026-08-18T16:04:59.006512+00:00",
+      "parameters": {
+        "rebalance_hours": 72,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "rebalance_hours": 72,
+      "strategy": "crypto_low_variance_v1",
+      "universe": {
+        "avg_candidate_pool": 11.0,
+        "built_once": true,
+        "hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+        "methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+        "scanner_timeframe": "1h",
+        "snapshots": 2037
+      },
+      "walk_forward": {
+        "best_fold": {
+          "end": "2025-01-01T00:00:00+00:00",
+          "return": 0.048999,
+          "start": "2024-07-01T00:00:00+00:00"
+        },
+        "folds": [
+          {
+            "avg_exposure": 0.0955,
+            "avg_holdings": 1.973,
+            "cagr": -0.199113,
+            "end": "2022-07-01T00:00:00+00:00",
+            "max_drawdown": 0.105341,
+            "return": -0.10426,
+            "sharpe": -3.046984,
+            "start": "2022-01-01T00:00:00+00:00",
+            "trade_count": 18,
+            "turnover": 1.8016
+          },
+          {
+            "avg_exposure": 0.0986,
+            "avg_holdings": 1.973,
+            "cagr": 0.039244,
+            "end": "2023-01-01T00:00:00+00:00",
+            "max_drawdown": 0.030635,
+            "return": 0.019594,
+            "sharpe": 0.664193,
+            "start": "2022-07-01T00:00:00+00:00",
+            "trade_count": 14,
+            "turnover": 1.362242
+          },
+          {
+            "avg_exposure": 0.0847,
+            "avg_holdings": 1.692,
+            "cagr": 0.032808,
+            "end": "2023-07-01T00:00:00+00:00",
+            "max_drawdown": 0.033638,
+            "return": 0.016137,
+            "sharpe": 0.740034,
+            "start": "2023-01-01T00:00:00+00:00",
+            "trade_count": 17,
+            "turnover": 1.645594
+          },
+          {
+            "avg_exposure": 0.1027,
+            "avg_holdings": 2.924,
+            "cagr": 0.058921,
+            "end": "2024-01-01T00:00:00+00:00",
+            "max_drawdown": 0.023478,
+            "return": 0.029281,
+            "sharpe": 1.523696,
+            "start": "2023-07-01T00:00:00+00:00",
+            "trade_count": 8,
+            "turnover": 0.729357
+          },
+          {
+            "avg_exposure": 0.0933,
+            "avg_holdings": 2.557,
+            "cagr": 0.010701,
+            "end": "2024-07-01T00:00:00+00:00",
+            "max_drawdown": 0.051348,
+            "return": 0.005321,
+            "sharpe": 0.215225,
+            "start": "2024-01-01T00:00:00+00:00",
+            "trade_count": 25,
+            "turnover": 2.344376
+          },
+          {
+            "avg_exposure": 0.087,
+            "avg_holdings": 2.595,
+            "cagr": 0.099541,
+            "end": "2025-01-01T00:00:00+00:00",
+            "max_drawdown": 0.018946,
+            "return": 0.048999,
+            "sharpe": 1.851619,
+            "start": "2024-07-01T00:00:00+00:00",
+            "trade_count": 19,
+            "turnover": 1.663035
+          },
+          {
+            "avg_exposure": 0.0983,
+            "avg_holdings": 2.791,
+            "cagr": -0.035039,
+            "end": "2025-07-01T00:00:00+00:00",
+            "max_drawdown": 0.051111,
+            "return": -0.017531,
+            "sharpe": -0.60537,
+            "start": "2025-01-01T00:00:00+00:00",
+            "trade_count": 17,
+            "turnover": 1.707124
+          },
+          {
+            "avg_exposure": 0.0958,
+            "avg_holdings": 3.73,
+            "cagr": 0.062682,
+            "end": "2026-01-01T00:00:00+00:00",
+            "max_drawdown": 0.026641,
+            "return": 0.031122,
+            "sharpe": 1.217113,
+            "start": "2025-07-01T00:00:00+00:00",
+            "trade_count": 25,
+            "turnover": 2.324477
+          },
+          {
+            "avg_exposure": 0.0848,
+            "avg_holdings": 3.0,
+            "cagr": -0.095251,
+            "end": "2026-07-01T00:00:00+00:00",
+            "max_drawdown": 0.05895,
+            "return": -0.048426,
+            "sharpe": -1.966551,
+            "start": "2026-01-01T00:00:00+00:00",
+            "trade_count": 19,
+            "turnover": 1.856816
+          },
+          {
+            "avg_exposure": 0.0803,
+            "avg_holdings": 3.0,
+            "cagr": 0.023617,
+            "end": "2026-07-30T00:00:00+00:00",
+            "max_drawdown": 0.003899,
+            "return": 0.001856,
+            "sharpe": 0.883164,
+            "start": "2026-07-01T00:00:00+00:00",
+            "trade_count": 7,
+            "turnover": 0.404181
+          }
+        ],
+        "mean_fold_return": -0.001791,
+        "median_fold_return": 0.010729,
+        "methodology": "anchored calendar 6-month folds from 2022-01-01 (10 folds), 1x cost, same PIT universe, warmup = all bars before the fold",
+        "negative_fold_count": 3,
+        "positive_fold_count": 7,
+        "positive_fold_ratio": 0.7,
+        "total_fold_count": 10,
+        "worst_fold": {
+          "end": "2022-07-01T00:00:00+00:00",
+          "return": -0.10426,
+          "start": "2022-01-01T00:00:00+00:00"
+        }
+      },
+      "warmup": "2021-01-01 .. 2021-03-31 (harness-wide)",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-31T23:59:59+00:00"
+      ]
+    },
+    "96h": {
+      "cadence_semantics": {
+        "actual_decisions_per_year": 85.02,
+        "asserted_policy_hours": 96,
+        "decisions_total": 453,
+        "expected_decisions_per_year": 91.31,
+        "gap_vs_expected_pct": -6.89,
+        "note": "epoch-hour anchoring: 168h/96h/72h blocks are exact multiples of 24h, so on midnight-UTC 1d bars every block boundary is a decision bar; the residual gap vs theory comes from the LIVE-parity completeness gate (a streamed observation symbol missing a closed bar at the decision timestamp skips that decision)",
+        "pct_decisions_on_epoch_block_boundary": 0.9934
+      },
+      "candidate": "96h",
+      "cost_stress": {
+        "1x": {
+          "avg_cash_ratio": 0.9053,
+          "avg_holdings": 2.46,
+          "cagr": 0.011983,
+          "calmar": 0.090428,
+          "concentration": {
+            "max_single_weight": 0.0664,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.4508,
+            "top2_share_of_positive_pnl": 0.7608,
+            "top3_share_of_positive_pnl": 0.8916,
+            "top_1": {
+              "realized_pnl": 4709.18,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 3238.11,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 1365.85,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.045703,
+          "fees_pct_of_gross_pnl": 0.41207,
+          "fees_total": 4804.7,
+          "gross_return": 0.116599,
+          "max_drawdown": 0.132515,
+          "profit_factor": 1.1383,
+          "rebalance_count": 453,
+          "return": 0.065568,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": 0.232833,
+          "sortino": 0.332175,
+          "trade_count": 155,
+          "turnover": 16.222135
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9052,
+          "avg_holdings": 2.487,
+          "cagr": 0.002629,
+          "calmar": 0.01923,
+          "concentration": {
+            "max_single_weight": 0.0665,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.535,
+            "top2_share_of_positive_pnl": 0.8328,
+            "top3_share_of_positive_pnl": 0.9354,
+            "top_1": {
+              "realized_pnl": 3611.47,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 2010.5,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 692.49,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.091628,
+          "fees_pct_of_gross_pnl": 0.808109,
+          "fees_total": 9405.59,
+          "gross_return": 0.11639,
+          "max_drawdown": 0.136725,
+          "profit_factor": 1.0288,
+          "rebalance_count": 453,
+          "return": 0.014098,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": 0.074055,
+          "sortino": 0.105449,
+          "trade_count": 154,
+          "turnover": 16.257571
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9047,
+          "avg_holdings": 2.594,
+          "cagr": -0.006087,
+          "calmar": -0.043063,
+          "concentration": {
+            "max_single_weight": 0.0665,
+            "symbol_count": 12,
+            "top1_share_of_positive_pnl": 0.7629,
+            "top2_share_of_positive_pnl": 0.9887,
+            "top3_share_of_positive_pnl": 1.0,
+            "top_1": {
+              "realized_pnl": 2795.77,
+              "symbol": "LTC/USD"
+            },
+            "top_2": {
+              "realized_pnl": 827.55,
+              "symbol": "ETH/USD"
+            },
+            "top_3": {
+              "realized_pnl": 41.29,
+              "symbol": "XRP/USD"
+            }
+          },
+          "fees_pct_of_avg_equity": 0.137803,
+          "fees_pct_of_gross_pnl": 1.126639,
+          "fees_total": 13821.7,
+          "gross_return": 0.122681,
+          "max_drawdown": 0.141349,
+          "profit_factor": 0.9365,
+          "rebalance_count": 453,
+          "return": -0.032027,
+          "sector_coverage": {
+            "sector_distribution": {
+              "crypto": 12
+            },
+            "sector_known": 12,
+            "traded_symbols": 12
+          },
+          "sharpe": -0.074144,
+          "sortino": -0.105742,
+          "trade_count": 151,
+          "turnover": 16.296688
+        }
+      },
+      "dataset": "crypto_18_1h_extended.csv",
+      "dataset_sha256": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+      "full_period_1x": {
+        "annualized_turnover": 3.0448,
+        "annualized_volatility": 0.058505,
+        "average_holding_days": 30.89,
+        "avg_cash_ratio": 0.9053,
+        "avg_holdings_count": 2.46,
+        "band_analysis": {
+          "avg_cost_per_fill": 4.34,
+          "decisions": 453,
+          "fill_ratio": 2.4459,
+          "fills": 1108,
+          "note": "decisions = period starts (band NOT applied); orders = distinct client_order_ids in fills (every crypto order fills next bar, so == orders created); fills = decision-driven fills (liquidation is cost-only, no synthetic fill); trades = closed position events",
+          "order_ratio": 1.1611,
+          "orders": 526,
+          "trades": 155
+        },
+        "baseline_avoidance": {
+          "approximation": "same (symbol, side) fill in the same 168h epoch block as a 168h-baseline fill = overlap (would also occur at 168h); all other faster-cadence fills/trades counted as avoided by the 168h baseline",
+          "fills_avoided": 407,
+          "fills_total": 1108,
+          "pct_fills_avoided_by_168h": 0.3673,
+          "pct_trades_avoided_by_168h": 0.5871,
+          "trades_avoided": 91,
+          "trades_total": 155
+        },
+        "cagr": 0.011983,
+        "calmar": 0.090428,
+        "capital_utilization": {
+          "avg_exposure": 0.0945,
+          "days": 1945,
+          "median_exposure": 0.0994,
+          "near_max_threshold": 0.09000000000000001,
+          "note": "daily exposure = sum(position qty x day close) / equity curve, reconstructed from fills + 1d closes (engine parity); near-max = exposure >= 0.09 of the 0.10 sleeve; idle = fully in cash",
+          "pct_days_idle": 0.0129,
+          "pct_days_near_max": 0.7856,
+          "pct_days_positive_exposure": 0.9871,
+          "time_to_first_deployment_days": 1.0
+        },
+        "churn": {
+          "ab_a_flip_count": 38,
+          "buy_fill_count": 536,
+          "flip_cost": 1847.35,
+          "methodology": "fill-level round trip = any SELL fill of S followed by a BUY fill of S within 7 days (spec definition; contaminated by the 10% participation-cap drip fills); position-level round trip = completed position of S closed and a new position of S opened within 7 days (economic reversal); A->B->A flip = compressed decision-target pair sequence {A,X}->{B,X}->{A,X} with a single-symbol swap (band may suppress the order for a flip; decision-level avoids participation-cap drip transients); reversal cost = fills of S in the exit/rebuy windows; flip cost = unique A/B fills between the two swap decisions + 7 days; costs include slippage+spread+fee",
+          "reversal_cost": 993.46,
+          "reversal_cost_pct_of_total_cost": 0.2068,
+          "round_trip_count_fill_level": 97,
+          "round_trip_count_position_level": 27,
+          "round_trips_per_sell_fill": 0.1696,
+          "round_trips_per_trade": 0.1742,
+          "sell_fill_count": 572,
+          "top_flip_pairs": [
+            {
+              "count": 4,
+              "from": "LTC/USD",
+              "to": "ETH/USD"
+            },
+            {
+              "count": 3,
+              "from": "BCH/USD",
+              "to": "ETH/USD"
+            },
+            {
+              "count": 3,
+              "from": "ETH/USD",
+              "to": "LTC/USD"
+            },
+            {
+              "count": 3,
+              "from": "LTC/USD",
+              "to": "DOT/USD"
+            },
+            {
+              "count": 2,
+              "from": "ETH/USD",
+              "to": "BCH/USD"
+            }
+          ]
+        },
+        "concentration": {
+          "BTC": {
+            "realized_pnl": 1132.38,
+            "share_of_fills": 0.074,
+            "share_of_total_pnl": 0.1727,
+            "share_of_trades": 0.1419
+          },
+          "ETH": {
+            "realized_pnl": 3238.11,
+            "share_of_fills": 0.1056,
+            "share_of_total_pnl": 0.4939,
+            "share_of_trades": 0.2645
+          },
+          "jackknife_note": "symbol jackknife is DEGENERATE here: BTC/USD and ETH/USD are PINNED pool members (config universe.crypto.pinned_symbols) and are the structural low-variance parking spots, so dropping them changes the pinned observation set itself and needs a rebuilt universe \u2014 contrary to the mission's build-universe-once requirement. Baseline 168h jackknife already exists in strategy_validation_v4/candidate_B.json (drop-XRP +4.06%, drop-ETH +2.68%, drop-BTC -1.96%). Not re-run per cadence.",
+          "top1_share_of_positive_pnl": 0.4508,
+          "top1_share_of_total_pnl": 0.7182,
+          "top2_share_of_positive_pnl": 0.7608,
+          "top_1": {
+            "realized_pnl": 4709.18,
+            "symbol": "LTC/USD"
+          },
+          "top_2": {
+            "realized_pnl": 3238.11,
+            "symbol": "ETH/USD"
+          }
+        },
+        "decisions": 453,
+        "decisions_per_year_actual": 85.02,
+        "duration_days": 1946,
+        "fees_pct_of_avg_equity": 0.045703,
+        "fees_pct_of_gross_pnl": 0.41207,
+        "fees_per_turnover": 296.18,
+        "fees_total": 4804.7,
+        "fills": 1108,
+        "gross_return": 0.116599,
+        "max_drawdown": 0.132515,
+        "net_per_turnover": 404.19,
+        "net_pnl": 6556.75,
+        "orders": 526,
+        "per_year": {
+          "2021": {
+            "decisions": 68,
+            "fills": 73,
+            "orders": 73,
+            "trades": 24
+          },
+          "2022": {
+            "decisions": 71,
+            "fills": 73,
+            "orders": 73,
+            "trades": 26
+          },
+          "2023": {
+            "decisions": 81,
+            "fills": 106,
+            "orders": 63,
+            "trades": 19
+          },
+          "2024": {
+            "decisions": 91,
+            "fills": 356,
+            "orders": 140,
+            "trades": 39
+          },
+          "2025": {
+            "decisions": 89,
+            "fills": 277,
+            "orders": 101,
+            "trades": 24
+          },
+          "2026": {
+            "decisions": 53,
+            "fills": 223,
+            "orders": 76,
+            "trades": 23
+          }
+        },
+        "profit_factor": 1.1383,
+        "return": 0.065568,
+        "sharpe": 0.232833,
+        "sortino": 0.332175,
+        "trades": 155,
+        "trades_per_year": 29.09,
+        "turnover": 16.222135
+      },
+      "generated_at": "2026-08-18T16:04:50.255404+00:00",
+      "parameters": {
+        "rebalance_hours": 96,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "rebalance_hours": 96,
+      "strategy": "crypto_low_variance_v1",
+      "universe": {
+        "avg_candidate_pool": 11.0,
+        "built_once": true,
+        "hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+        "methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+        "scanner_timeframe": "1h",
+        "snapshots": 2037
+      },
+      "walk_forward": {
+        "best_fold": {
+          "end": "2025-01-01T00:00:00+00:00",
+          "return": 0.045872,
+          "start": "2024-07-01T00:00:00+00:00"
+        },
+        "folds": [
+          {
+            "avg_exposure": 0.0965,
+            "avg_holdings": 1.967,
+            "cagr": -0.179196,
+            "end": "2022-07-01T00:00:00+00:00",
+            "max_drawdown": 0.097708,
+            "return": -0.093282,
+            "sharpe": -2.685881,
+            "start": "2022-01-01T00:00:00+00:00",
+            "trade_count": 16,
+            "turnover": 1.624158
+          },
+          {
+            "avg_exposure": 0.0967,
+            "avg_holdings": 1.946,
+            "cagr": 0.047382,
+            "end": "2023-01-01T00:00:00+00:00",
+            "max_drawdown": 0.022955,
+            "return": 0.023612,
+            "sharpe": 0.823239,
+            "start": "2022-07-01T00:00:00+00:00",
+            "trade_count": 14,
+            "turnover": 1.36738
+          },
+          {
+            "avg_exposure": 0.0851,
+            "avg_holdings": 1.681,
+            "cagr": 0.042913,
+            "end": "2023-07-01T00:00:00+00:00",
+            "max_drawdown": 0.027033,
+            "return": 0.021055,
+            "sharpe": 0.953737,
+            "start": "2023-01-01T00:00:00+00:00",
+            "trade_count": 15,
+            "turnover": 1.419117
+          },
+          {
+            "avg_exposure": 0.1034,
+            "avg_holdings": 3.054,
+            "cagr": 0.062271,
+            "end": "2024-01-01T00:00:00+00:00",
+            "max_drawdown": 0.023436,
+            "return": 0.030921,
+            "sharpe": 1.572631,
+            "start": "2023-07-01T00:00:00+00:00",
+            "trade_count": 10,
+            "turnover": 0.948382
+          },
+          {
+            "avg_exposure": 0.0938,
+            "avg_holdings": 2.47,
+            "cagr": 0.017002,
+            "end": "2024-07-01T00:00:00+00:00",
+            "max_drawdown": 0.040972,
+            "return": 0.008442,
+            "sharpe": 0.322113,
+            "start": "2024-01-01T00:00:00+00:00",
+            "trade_count": 23,
+            "turnover": 2.30938
+          },
+          {
+            "avg_exposure": 0.0892,
+            "avg_holdings": 2.649,
+            "cagr": 0.093049,
+            "end": "2025-01-01T00:00:00+00:00",
+            "max_drawdown": 0.024624,
+            "return": 0.045872,
+            "sharpe": 1.804732,
+            "start": "2024-07-01T00:00:00+00:00",
+            "trade_count": 17,
+            "turnover": 1.524376
+          },
+          {
+            "avg_exposure": 0.0989,
+            "avg_holdings": 2.341,
+            "cagr": -0.032946,
+            "end": "2025-07-01T00:00:00+00:00",
+            "max_drawdown": 0.053472,
+            "return": -0.016476,
+            "sharpe": -0.55661,
+            "start": "2025-01-01T00:00:00+00:00",
+            "trade_count": 12,
+            "turnover": 1.231254
+          },
+          {
+            "avg_exposure": 0.0954,
+            "avg_holdings": 3.297,
+            "cagr": 0.03696,
+            "end": "2026-01-01T00:00:00+00:00",
+            "max_drawdown": 0.035255,
+            "return": 0.018464,
+            "sharpe": 0.731188,
+            "start": "2025-07-01T00:00:00+00:00",
+            "trade_count": 15,
+            "turnover": 1.676581
+          },
+          {
+            "avg_exposure": 0.085,
+            "avg_holdings": 3.066,
+            "cagr": -0.098556,
+            "end": "2026-07-01T00:00:00+00:00",
+            "max_drawdown": 0.060857,
+            "return": -0.050151,
+            "sharpe": -2.008375,
+            "start": "2026-01-01T00:00:00+00:00",
+            "trade_count": 18,
+            "turnover": 1.665246
+          },
+          {
+            "avg_exposure": 0.0878,
+            "avg_holdings": 2.767,
+            "cagr": 0.030414,
+            "end": "2026-07-30T00:00:00+00:00",
+            "max_drawdown": 0.004921,
+            "return": 0.002383,
+            "sharpe": 1.027004,
+            "start": "2026-07-01T00:00:00+00:00",
+            "trade_count": 6,
+            "turnover": 0.32841
+          }
+        ],
+        "mean_fold_return": -0.000916,
+        "median_fold_return": 0.013453,
+        "methodology": "anchored calendar 6-month folds from 2022-01-01 (10 folds), 1x cost, same PIT universe, warmup = all bars before the fold",
+        "negative_fold_count": 3,
+        "positive_fold_count": 7,
+        "positive_fold_ratio": 0.7,
+        "total_fold_count": 10,
+        "worst_fold": {
+          "end": "2022-07-01T00:00:00+00:00",
+          "return": -0.093282,
+          "start": "2022-01-01T00:00:00+00:00"
+        }
+      },
+      "warmup": "2021-01-01 .. 2021-03-31 (harness-wide)",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-31T23:59:59+00:00"
+      ]
+    }
+  },
+  "dataset": "crypto_18_1h_extended.csv",
+  "dataset_sha256": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+  "frozen_parameters": {
+    "rebalance_hours": 168,
+    "top_n": 2,
+    "variance_lookback_days": 22
+  },
+  "generated_at": "2026-08-18T16:04:59.012772+00:00",
+  "mission": "crypto cadence bake-off: 168h control vs 96h vs 72h, frozen alpha",
+  "strategy": "crypto_low_variance_v1",
+  "universe": {
+    "avg_candidate_pool": 11.0,
+    "built_once": true,
+    "hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+    "methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+    "scanner_timeframe": "1h",
+    "snapshots": 2037
+  },
+  "warmup": "2021-01-01 .. 2021-03-31 (harness-wide)",
+  "window": [
+    "2021-04-01T00:00:00+00:00",
+    "2026-07-31T23:59:59+00:00"
+  ]
+}

@@ -1,0 +1,524 @@
+{
+  "meta": {
+    "mission": "capital-utilization & cadence wave 1 - equity leg",
+    "strategy": "equity_residual_momentum_v1",
+    "strategy_parameters": {
+      "formation_bars": 252,
+      "skip_bars": 21,
+      "beta_window_bars": 273,
+      "residual_vol_window": 63,
+      "top_n": 8,
+      "max_single_weight": 0.1,
+      "ivol_reject_quantile": 0.7,
+      "exclude_symbols": [
+        "SPY"
+      ]
+    },
+    "cadence_candidates": {
+      "monthly": "control - frozen spec (v1 baseline)",
+      "weekly": {
+        "rebalance_frequency": "weekly",
+        "note": "strategy ignores the key in its math; rebalance_policy_for maps it to RebalancePolicy(weekly)"
+      }
+    },
+    "dataset": "equity_1200_2016_2026.csv",
+    "evaluation_window": [
+      "2017-01-03T00:00:00+00:00",
+      "2026-07-30T23:59:59+00:00"
+    ],
+    "warmup": "2016 full year (formation + beta + scanner lookback)",
+    "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+    "universe": {
+      "snapshots": 2657,
+      "avg_candidate_pool": 300,
+      "methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded"
+    },
+    "smoke": false,
+    "baseline_reference": "docs/strategy_robustness.md: return +59.21%, CAGR 4.98%, Sharpe 0.47, Sortino 0.60, maxDD 25.45%, turnover 50.9, 113 rebalances, 300 trades"
+  },
+  "monthly": {
+    "1x": {
+      "return": 0.592149,
+      "gross_return": 0.61774,
+      "cagr": 0.049785,
+      "sharpe": 0.473556,
+      "sortino": 0.602521,
+      "calmar": 0.19562,
+      "max_drawdown": 0.254497,
+      "profit_factor": 1.4904,
+      "turnover": 50.860789,
+      "fees_total": 1952.98,
+      "fees_pct_of_avg_equity": 0.015819,
+      "fees_pct_of_gross_pnl": 0.031615,
+      "avg_holdings": 5.543,
+      "avg_cash_ratio": 0.5382,
+      "rebalance_count": 113,
+      "trade_count": 300,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 7991.27
+        },
+        "top_2": {
+          "symbol": "AHR",
+          "realized_pnl": 6488.45
+        },
+        "top_3": {
+          "symbol": "ATI",
+          "realized_pnl": 5546.31
+        },
+        "top1_share_of_positive_pnl": 0.064,
+        "top2_share_of_positive_pnl": 0.116,
+        "top3_share_of_positive_pnl": 0.1605,
+        "max_single_weight": 0.115,
+        "symbol_count": 122
+      },
+      "sector_coverage": {
+        "traded_symbols": 122,
+        "sector_known": 8,
+        "sector_distribution": {
+          "other": 114,
+          "technology": 4,
+          "healthcare": 2,
+          "consumer_discretionary": 1,
+          "energy": 1
+        }
+      },
+      "run_seconds": 80.8,
+      "annualized_volatility": 0.117113,
+      "decisions": 113,
+      "orders_created": 113,
+      "rebalances_with_fills": 113,
+      "fills": 717,
+      "trades": 300,
+      "trades_per_year": 31.361,
+      "avg_holding_period_days": 64.446,
+      "turnover_total": 50.860789,
+      "turnover_annualized": 5.3168,
+      "net_pnl_per_turnover": 0.00943,
+      "capital_utilization": {
+        "avg_exposure": 0.461704,
+        "median_exposure": 0.499585,
+        "pct_days_exposure_gt_0": 0.983382,
+        "pct_days_near_max_allocation_ge_0.45": 0.856668,
+        "pct_days_idle_exposure_0": 0.016618,
+        "time_to_first_deployment_days": 58.0,
+        "first_fill_timestamp": "2017-03-02T05:00:00+00:00",
+        "window_start_timestamp": "2017-01-03T05:00:00+00:00",
+        "decision_count": 113,
+        "avg_target_exposure": 0.469011,
+        "median_target_exposure": 0.5,
+        "pct_decisions_target_gt_0": 1.0,
+        "near_max_exposure_definition": "deployed exposure >= 0.45 (90% of the 50% sleeve)"
+      },
+      "band_analysis": {
+        "decisions": 113,
+        "orders_created": 113,
+        "decisions_with_fills": 113,
+        "fills": 717,
+        "decisions_with_zero_orders": 0,
+        "avg_expected_turnover_when_trading": 0.449137,
+        "note": "orders_created = rebalance records with expected_turnover > 0 (engine creates orders only when drift exceeds the 0.5% band AND notional exceeds the $10 minimum); decisions_with_fills = records with realized_turnover > 0"
+      },
+      "deep": {
+        "return": 0.592149,
+        "cagr": 0.049785,
+        "annualized_volatility": 0.117113,
+        "sharpe": 0.473556,
+        "sortino": 0.602521,
+        "calmar": 0.19562,
+        "max_drawdown": 0.254497,
+        "profit_factor": 1.4904,
+        "decisions": 113,
+        "orders_created": 113,
+        "rebalances_with_fills": 113,
+        "fills": 717,
+        "trades": 300,
+        "trades_per_year": 31.361,
+        "avg_holding_period_days": 64.446,
+        "turnover_total": 50.860789,
+        "turnover_annualized": 5.3168,
+        "fees_total": 1952.98,
+        "fees_pct_of_gross_pnl": 0.031615,
+        "fees_pct_of_avg_equity": 0.015819,
+        "net_pnl_per_turnover": 0.00943,
+        "capital_utilization": {
+          "avg_exposure": 0.461704,
+          "median_exposure": 0.499585,
+          "pct_days_exposure_gt_0": 0.983382,
+          "pct_days_near_max_allocation_ge_0.45": 0.856668,
+          "pct_days_idle_exposure_0": 0.016618,
+          "time_to_first_deployment_days": 58.0,
+          "first_fill_timestamp": "2017-03-02T05:00:00+00:00",
+          "window_start_timestamp": "2017-01-03T05:00:00+00:00",
+          "decision_count": 113,
+          "avg_target_exposure": 0.469011,
+          "median_target_exposure": 0.5,
+          "pct_decisions_target_gt_0": 1.0,
+          "near_max_exposure_definition": "deployed exposure >= 0.45 (90% of the 50% sleeve)"
+        },
+        "band_analysis": {
+          "decisions": 113,
+          "orders_created": 113,
+          "decisions_with_fills": 113,
+          "fills": 717,
+          "decisions_with_zero_orders": 0,
+          "avg_expected_turnover_when_trading": 0.449137,
+          "note": "orders_created = rebalance records with expected_turnover > 0 (engine creates orders only when drift exceeds the 0.5% band AND notional exceeds the $10 minimum); decisions_with_fills = records with realized_turnover > 0"
+        }
+      }
+    },
+    "2x": {
+      "return": 0.56826,
+      "gross_return": 0.618662,
+      "cagr": 0.048128,
+      "sharpe": 0.459972,
+      "sortino": 0.585104,
+      "calmar": 0.187889,
+      "max_drawdown": 0.256151,
+      "profit_factor": 1.4712,
+      "turnover": 50.859705,
+      "fees_total": 3813.75,
+      "fees_pct_of_avg_equity": 0.031138,
+      "fees_pct_of_gross_pnl": 0.061645,
+      "avg_holdings": 5.543,
+      "avg_cash_ratio": 0.5381,
+      "rebalance_count": 113,
+      "trade_count": 300,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 7866.53
+        },
+        "top_2": {
+          "symbol": "AHR",
+          "realized_pnl": 6378.74
+        },
+        "top_3": {
+          "symbol": "ATI",
+          "realized_pnl": 5432.29
+        },
+        "top1_share_of_positive_pnl": 0.0642,
+        "top2_share_of_positive_pnl": 0.1162,
+        "top3_share_of_positive_pnl": 0.1605,
+        "max_single_weight": 0.1151,
+        "symbol_count": 122
+      },
+      "sector_coverage": {
+        "traded_symbols": 122,
+        "sector_known": 8,
+        "sector_distribution": {
+          "other": 114,
+          "technology": 4,
+          "healthcare": 2,
+          "consumer_discretionary": 1,
+          "energy": 1
+        }
+      }
+    },
+    "3x": {
+      "return": 0.544586,
+      "gross_return": 0.619853,
+      "cagr": 0.046464,
+      "sharpe": 0.446295,
+      "sortino": 0.567571,
+      "calmar": 0.18023,
+      "max_drawdown": 0.257803,
+      "profit_factor": 1.4521,
+      "turnover": 50.868742,
+      "fees_total": 5645.73,
+      "fees_pct_of_avg_equity": 0.046466,
+      "fees_pct_of_gross_pnl": 0.091082,
+      "avg_holdings": 5.543,
+      "avg_cash_ratio": 0.538,
+      "rebalance_count": 113,
+      "trade_count": 300,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 7743.01
+        },
+        "top_2": {
+          "symbol": "AHR",
+          "realized_pnl": 6270.24
+        },
+        "top_3": {
+          "symbol": "ATI",
+          "realized_pnl": 5319.65
+        },
+        "top1_share_of_positive_pnl": 0.0643,
+        "top2_share_of_positive_pnl": 0.1164,
+        "top3_share_of_positive_pnl": 0.1606,
+        "max_single_weight": 0.1151,
+        "symbol_count": 122
+      },
+      "sector_coverage": {
+        "traded_symbols": 122,
+        "sector_known": 8,
+        "sector_distribution": {
+          "other": 114,
+          "technology": 4,
+          "healthcare": 2,
+          "consumer_discretionary": 1,
+          "energy": 1
+        }
+      }
+    }
+  },
+  "weekly": {
+    "1x": {
+      "return": 0.846146,
+      "gross_return": 0.925494,
+      "cagr": 0.066143,
+      "sharpe": 0.623703,
+      "sortino": 0.833275,
+      "calmar": 0.336078,
+      "max_drawdown": 0.196808,
+      "profit_factor": 1.3966,
+      "turnover": 132.365609,
+      "fees_total": 5758.4,
+      "fees_pct_of_avg_equity": 0.041209,
+      "fees_pct_of_gross_pnl": 0.06222,
+      "avg_holdings": 5.672,
+      "avg_cash_ratio": 0.5271,
+      "rebalance_count": 495,
+      "trade_count": 784,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 9086.13
+        },
+        "top_2": {
+          "symbol": "ARKW",
+          "realized_pnl": 7602.66
+        },
+        "top_3": {
+          "symbol": "BA",
+          "realized_pnl": 7173.88
+        },
+        "top1_share_of_positive_pnl": 0.0534,
+        "top2_share_of_positive_pnl": 0.0981,
+        "top3_share_of_positive_pnl": 0.1403,
+        "max_single_weight": 0.115,
+        "symbol_count": 161
+      },
+      "sector_coverage": {
+        "traded_symbols": 161,
+        "sector_known": 12,
+        "sector_distribution": {
+          "other": 149,
+          "technology": 4,
+          "healthcare": 3,
+          "energy": 2,
+          "consumer_discretionary": 1,
+          "communications": 1,
+          "financial": 1
+        }
+      },
+      "run_seconds": 121.4,
+      "annualized_volatility": 0.112928,
+      "decisions": 495,
+      "orders_created": 466,
+      "rebalances_with_fills": 466,
+      "fills": 1797,
+      "trades": 784,
+      "trades_per_year": 81.956,
+      "avg_holding_period_days": 25.371,
+      "turnover_total": 132.365609,
+      "turnover_annualized": 13.837,
+      "net_pnl_per_turnover": 0.004575,
+      "capital_utilization": {
+        "avg_exposure": 0.472924,
+        "median_exposure": 0.499567,
+        "pct_days_exposure_gt_0": 0.990029,
+        "pct_days_near_max_allocation_ge_0.45": 0.84005,
+        "pct_days_idle_exposure_0": 0.009971,
+        "time_to_first_deployment_days": 35.0,
+        "first_fill_timestamp": "2017-02-07T05:00:00+00:00",
+        "window_start_timestamp": "2017-01-03T05:00:00+00:00",
+        "decision_count": 495,
+        "avg_target_exposure": 0.476554,
+        "median_target_exposure": 0.5,
+        "pct_decisions_target_gt_0": 1.0,
+        "near_max_exposure_definition": "deployed exposure >= 0.45 (90% of the 50% sleeve)"
+      },
+      "band_analysis": {
+        "decisions": 495,
+        "orders_created": 466,
+        "decisions_with_fills": 466,
+        "fills": 1797,
+        "decisions_with_zero_orders": 29,
+        "avg_expected_turnover_when_trading": 0.282687,
+        "note": "orders_created = rebalance records with expected_turnover > 0 (engine creates orders only when drift exceeds the 0.5% band AND notional exceeds the $10 minimum); decisions_with_fills = records with realized_turnover > 0"
+      },
+      "deep": {
+        "return": 0.846146,
+        "cagr": 0.066143,
+        "annualized_volatility": 0.112928,
+        "sharpe": 0.623703,
+        "sortino": 0.833275,
+        "calmar": 0.336078,
+        "max_drawdown": 0.196808,
+        "profit_factor": 1.3966,
+        "decisions": 495,
+        "orders_created": 466,
+        "rebalances_with_fills": 466,
+        "fills": 1797,
+        "trades": 784,
+        "trades_per_year": 81.956,
+        "avg_holding_period_days": 25.371,
+        "turnover_total": 132.365609,
+        "turnover_annualized": 13.837,
+        "fees_total": 5758.4,
+        "fees_pct_of_gross_pnl": 0.06222,
+        "fees_pct_of_avg_equity": 0.041209,
+        "net_pnl_per_turnover": 0.004575,
+        "capital_utilization": {
+          "avg_exposure": 0.472924,
+          "median_exposure": 0.499567,
+          "pct_days_exposure_gt_0": 0.990029,
+          "pct_days_near_max_allocation_ge_0.45": 0.84005,
+          "pct_days_idle_exposure_0": 0.009971,
+          "time_to_first_deployment_days": 35.0,
+          "first_fill_timestamp": "2017-02-07T05:00:00+00:00",
+          "window_start_timestamp": "2017-01-03T05:00:00+00:00",
+          "decision_count": 495,
+          "avg_target_exposure": 0.476554,
+          "median_target_exposure": 0.5,
+          "pct_decisions_target_gt_0": 1.0,
+          "near_max_exposure_definition": "deployed exposure >= 0.45 (90% of the 50% sleeve)"
+        },
+        "band_analysis": {
+          "decisions": 495,
+          "orders_created": 466,
+          "decisions_with_fills": 466,
+          "fills": 1797,
+          "decisions_with_zero_orders": 29,
+          "avg_expected_turnover_when_trading": 0.282687,
+          "note": "orders_created = rebalance records with expected_turnover > 0 (engine creates orders only when drift exceeds the 0.5% band AND notional exceeds the $10 minimum); decisions_with_fills = records with realized_turnover > 0"
+        }
+      }
+    },
+    "2x": {
+      "return": 0.753473,
+      "gross_return": 0.908164,
+      "cagr": 0.060422,
+      "sharpe": 0.575829,
+      "sortino": 0.769734,
+      "calmar": 0.298721,
+      "max_drawdown": 0.20227,
+      "profit_factor": 1.3589,
+      "turnover": 132.293511,
+      "fees_total": 10993.82,
+      "fees_pct_of_avg_equity": 0.081068,
+      "fees_pct_of_gross_pnl": 0.121055,
+      "avg_holdings": 5.677,
+      "avg_cash_ratio": 0.5267,
+      "rebalance_count": 495,
+      "trade_count": 784,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 8623.26
+        },
+        "top_2": {
+          "symbol": "ARKW",
+          "realized_pnl": 7306.93
+        },
+        "top_3": {
+          "symbol": "BA",
+          "realized_pnl": 7035.82
+        },
+        "top1_share_of_positive_pnl": 0.0536,
+        "top2_share_of_positive_pnl": 0.099,
+        "top3_share_of_positive_pnl": 0.1427,
+        "max_single_weight": 0.115,
+        "symbol_count": 161
+      },
+      "sector_coverage": {
+        "traded_symbols": 161,
+        "sector_known": 12,
+        "sector_distribution": {
+          "other": 149,
+          "technology": 4,
+          "healthcare": 3,
+          "energy": 2,
+          "consumer_discretionary": 1,
+          "communications": 1,
+          "financial": 1
+        }
+      }
+    },
+    "3x": {
+      "return": 0.68539,
+      "gross_return": 0.917194,
+      "cagr": 0.056044,
+      "sharpe": 0.539066,
+      "sortino": 0.720666,
+      "calmar": 0.269838,
+      "max_drawdown": 0.207696,
+      "profit_factor": 1.33,
+      "turnover": 132.255365,
+      "fees_total": 16058.58,
+      "fees_pct_of_avg_equity": 0.120908,
+      "fees_pct_of_gross_pnl": 0.175084,
+      "avg_holdings": 5.677,
+      "avg_cash_ratio": 0.5265,
+      "rebalance_count": 495,
+      "trade_count": 784,
+      "concentration": {
+        "top_1": {
+          "symbol": "ASX",
+          "realized_pnl": 8281.89
+        },
+        "top_2": {
+          "symbol": "ARKW",
+          "realized_pnl": 7107.62
+        },
+        "top_3": {
+          "symbol": "BA",
+          "realized_pnl": 6910.22
+        },
+        "top1_share_of_positive_pnl": 0.0537,
+        "top2_share_of_positive_pnl": 0.0997,
+        "top3_share_of_positive_pnl": 0.1445,
+        "max_single_weight": 0.1151,
+        "symbol_count": 161
+      },
+      "sector_coverage": {
+        "traded_symbols": 161,
+        "sector_known": 12,
+        "sector_distribution": {
+          "other": 149,
+          "technology": 4,
+          "healthcare": 3,
+          "energy": 2,
+          "consumer_discretionary": 1,
+          "communications": 1,
+          "financial": 1
+        }
+      }
+    }
+  },
+  "baseline_drift_check": {
+    "expected_from_strategy_robustness.md": {
+      "return": 0.5921,
+      "cagr": 0.0498,
+      "sharpe": 0.47,
+      "sortino": 0.6,
+      "max_drawdown": 0.2545,
+      "rebalances": 113,
+      "trades": 300
+    },
+    "observed_monthly_1x": {
+      "return": 0.592149,
+      "cagr": 0.049785,
+      "sharpe": 0.473556,
+      "sortino": 0.602521,
+      "max_drawdown": 0.254497,
+      "rebalances": 113,
+      "trades": 300
+    },
+    "note": "cost model now includes effective-dated SEC/TAF/CAT fees; small drift expected"
+  }
+}

@@ -705,6 +705,18 @@ class AlpacaBroker:
         if ledger is not None:
             self._reconcile_crypto_exit_state(ledger)
             self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
+        # One broker-wide open-orders fetch for the whole pass instead of a
+        # per-position N+1 (each protected position used to issue its own
+        # get_orders(status=OPEN, symbols=[symbol])). The fetch is lazy (only
+        # when a position actually reaches the protection check) and guarded
+        # so clients without get_orders keep the per-position behavior.
+        # _open_protective_orders replicates the server-side symbol filter
+        # client-side, so per-symbol semantics are identical; the snapshot is
+        # taken once per pass and a mid-pass external cancel is re-verified
+        # on the next 60s cadence exactly like any other protection drift.
+        open_orders: Any = None
+        client = getattr(self, "_client", None)
+        get_orders = getattr(client, "get_orders", None) if client is not None else None
         for position in account.positions:
             is_long = position.qty > 0
             if position.is_flat:
@@ -784,7 +796,15 @@ class AlpacaBroker:
                 # available; otherwise reconcile protects the remaining units.
                 required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
-            has_protection = self._has_protective_order(position.symbol, is_long, required_qty)
+            if open_orders is None and get_orders is not None:
+                open_orders = get_orders(
+                    GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
+                )
+            # Positional open_orders: test doubles monkeypatch this method
+            # with positional-only lambdas and must keep working.
+            has_protection = self._has_protective_order(
+                position.symbol, is_long, required_qty, open_orders
+            )
             if (
                 not has_protection
                 and ownership is not None
@@ -2227,9 +2247,13 @@ class AlpacaBroker:
         )
 
     def _has_protective_order(
-        self, symbol: str, position_is_long: bool, required_qty: float
+        self,
+        symbol: str,
+        position_is_long: bool,
+        required_qty: float,
+        open_orders: Any = None,
     ) -> bool:
-        protective_orders = self._open_protective_orders(symbol, position_is_long)
+        protective_orders = self._open_protective_orders(symbol, position_is_long, open_orders)
         protected = sum(
             (abs(Decimal(str(self._field(order, "qty", 0) or 0))) for order in protective_orders),
             start=Decimal("0"),
@@ -2240,10 +2264,15 @@ class AlpacaBroker:
         self._last_protected_qty = float(protected)
         return matches
 
-    def _open_protective_orders(self, symbol: str, position_is_long: bool) -> list[Any]:
-        orders: Any = self._client.get_orders(
-            GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
-        )
+    def _open_protective_orders(
+        self, symbol: str, position_is_long: bool, open_orders: Any = None
+    ) -> list[Any]:
+        if open_orders is None:
+            orders: Any = self._client.get_orders(
+                GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
+            )
+        else:
+            orders = open_orders
         if isinstance(orders, dict):
             log.warning(
                 "Unexpected get_orders payload shape for %s; treating as no open orders",
@@ -2309,6 +2338,13 @@ class AlpacaBroker:
                 visit(leg, owned)
 
         for order in orders or ():
+            # The per-symbol server filter (symbols=[symbol]) of the legacy
+            # per-position fetch is replicated here so a shared broker-wide
+            # open-orders batch keeps identical per-symbol semantics. An
+            # order with an unknown symbol is never protective for this
+            # position.
+            if not same_symbol(str(self._field(order, "symbol", "")), symbol):
+                continue
             visit(order)
         return protective
 

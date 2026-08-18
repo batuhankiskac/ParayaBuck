@@ -460,6 +460,7 @@ class EngineRuntime:
         # reuses it while it is fresh (<= maximum_account_age_for_entry_seconds)
         # instead of issuing a second full broker account() fetch per batch.
         self._last_account_snapshot: AccountSnapshot | None = None
+        self._last_account_snapshot_at: datetime | None = None
         self._last_reconciliation_at: datetime | None = None
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
@@ -965,6 +966,7 @@ class EngineRuntime:
         try:
             account = self.broker.account()
             self._last_account_snapshot = account
+            self._last_account_snapshot_at = datetime.now(UTC)
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
         except Exception as exc:
@@ -1747,14 +1749,16 @@ class EngineRuntime:
         strictly fresher than the tolerated boundary.
         """
         snapshot = getattr(self, "_last_account_snapshot", None)
-        last_at = getattr(self, "_last_account_at", None)
-        if snapshot is not None and last_at is not None and (
-            datetime.now(UTC) - last_at
+        snapshot_at = getattr(self, "_last_account_snapshot_at", None)
+        if snapshot is not None and snapshot_at is not None and (
+            datetime.now(UTC) - snapshot_at
         ).total_seconds() <= self.config.maximum_account_age_for_entry_seconds:
             return snapshot
         account = self.broker.account()
+        now = datetime.now(UTC)
         self._last_account_snapshot = account
-        self._last_account_at = datetime.now(UTC)
+        self._last_account_snapshot_at = now
+        self._last_account_at = now
         return account
 
     def _account_loop(self) -> None:
@@ -1765,11 +1769,12 @@ class EngineRuntime:
                 worker.last_heartbeat = datetime.now(UTC)
                 try:
                     account = self.broker.account()
-                    # Snapshot first, timestamp second: a concurrent reader
+                    # Snapshot first, timestamps second: a concurrent reader
                     # sees either the old pair (age over-estimated -> fresh
                     # fetch) or the new pair, never a fresh timestamp with an
                     # older snapshot.
                     self._last_account_snapshot = account
+                    self._last_account_snapshot_at = datetime.now(UTC)
                     self._last_account_at = datetime.now(UTC)
                     worker.last_event_at = self._last_account_at
                     worker.last_error = None
@@ -2051,6 +2056,10 @@ class EngineRuntime:
                     market=Market.CRYPTO.value if is_crypto(update.symbol) else Market.EQUITY.value,
                 )
             account = await asyncio.to_thread(self.broker.account)
+            # The fill-path fetch is the freshest snapshot in the system;
+            # share it with the decision-path cache.
+            self._last_account_snapshot = account
+            self._last_account_snapshot_at = datetime.now(UTC)
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
             # A terminal SELL fill may unlock the dependent BUY phase of a

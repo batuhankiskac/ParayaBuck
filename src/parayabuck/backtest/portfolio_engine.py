@@ -37,6 +37,12 @@ from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.backtest.portfolio_engine")
 
+# Largest trailing history window any in-tree strategy reads (the equity
+# residual-momentum beta window of 273 bars + the current bar). Context
+# histories are trimmed to at least this many bars so every strategy's
+# trailing-window reads are preserved exactly.
+_MAX_CONTEXT_HISTORY_BARS = 274
+
 
 class OrderSide(StrEnum):
     BUY = "buy"
@@ -987,12 +993,29 @@ class PortfolioBacktestEngine:
         )
 
     def _build_context(self, timestamp: datetime) -> PortfolioContext:
+        # Strategies read only trailing windows of each symbol's history (the
+        # largest in-tree read is the equity beta window + 1 = 274 bars), so
+        # the per-symbol context history is trimmed to a safe upper bound of
+        # the strategy's own declared minimum. This removes the O(B) full
+        # history copy per bar cycle (O(B^2) over the run) without changing
+        # any value a strategy can observe: membership keys, the last bar,
+        # and every trailing window are preserved, and a symbol with less
+        # history than its window keeps its true (shorter) length.
+        trim = max(self.strategy.minimum_history_bars, _MAX_CONTEXT_HISTORY_BARS)
+        # The market/benchmark series is exempt from trimming: strategies
+        # timestamp-INNER-JOIN stock windows against it, and a stock with
+        # recent data holes spans more calendar time than the benchmark's
+        # trailing window, so the benchmark dict must stay full to preserve
+        # every aligned pair (and therefore the exact scores).
+        benchmark_key = "BTC/USD" if self.strategy.market == Market.CRYPTO else "SPY"
         history: dict[str, tuple[Bar, ...]] = {}
         prices: dict[str, float] = {}
         for (symbol, _timeframe), bars in self._history.items():
             eligible = [bar for bar in bars if bar.timestamp <= timestamp]
             if not eligible:
                 continue
+            if symbol != benchmark_key and len(eligible) > trim:
+                eligible = eligible[-trim:]
             history[symbol] = tuple(eligible)
             # Target sizing uses executable/raw prices; signal history may be
             # total-return adjusted and is intentionally not a cash price.

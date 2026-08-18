@@ -163,4 +163,26 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
         )
 
 
-__all__ = ["CryptoLowVariance1dV1"]
+class CryptoLowVariance1dV2(CryptoLowVariance1dV1):
+    """96h-cadence identity of the validated low-variance alpha.
+
+    RESEARCH-validated cadence variant (2026-08-18 cadence mission): identical
+    signal math and parameters to ``crypto_low_variance_v1`` (lookback 22,
+    top_n 2); only ``rebalance_hours`` differs (96 vs 168). The cadence is a
+    validated strategy parameter, so the configuration digest and persisted
+    decisions are distinct from v1 — v1 stays the frozen production selection
+    until an operator promotes v2.
+    """
+
+    name = "crypto_low_variance_v2"
+    version = "2.0.0"
+    display_name = "Low Realized Variance v2 (96h)"
+    default_rebalance_hours = 96
+    rebalance_policy_declared = "hours:96"
+
+    def _validate_parameters(self) -> None:
+        self.parameters.setdefault("rebalance_hours", self.default_rebalance_hours)
+        super()._validate_parameters()
+
+
+__all__ = ["CryptoLowVariance1dV1", "CryptoLowVariance1dV2"]

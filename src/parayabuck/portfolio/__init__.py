@@ -8,11 +8,17 @@ from parayabuck.portfolio.crypto_cross_sectional_reversal import (
 )
 from parayabuck.portfolio.crypto_high_proximity import CryptoHighProximity1dV1
 from parayabuck.portfolio.crypto_low_disagreement import CryptoLowDisagreement1dV1
-from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV1
+from parayabuck.portfolio.crypto_low_variance import (
+    CryptoLowVariance1dV1,
+    CryptoLowVariance1dV2,
+)
 from parayabuck.portfolio.crypto_time_series import CryptoTimeSeriesMomentumV1
 from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
 from parayabuck.portfolio.equity_long_horizon_momentum import EquityLongHorizonMomentum1dV2
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
+from parayabuck.portfolio.equity_residual_momentum import (
+    EquityResidualMomentum1dV1,
+    EquityResidualMomentum1dV2,
+)
 from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
@@ -25,11 +31,13 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityDynamicTrend1dV1.name: EquityDynamicTrend1dV1,
     EquityLongHorizonMomentum1dV2.name: EquityLongHorizonMomentum1dV2,
     EquityResidualMomentum1dV1.name: EquityResidualMomentum1dV1,
+    EquityResidualMomentum1dV2.name: EquityResidualMomentum1dV2,
     CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
     CryptoCrossSectionalReversal1dV1.name: CryptoCrossSectionalReversal1dV1,
     CryptoTimeSeriesMomentumV1.name: CryptoTimeSeriesMomentumV1,
     CryptoHighProximity1dV1.name: CryptoHighProximity1dV1,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
+    CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
     CryptoLowDisagreement1dV1.name: CryptoLowDisagreement1dV1,
 }
 
@@ -113,10 +121,12 @@ __all__ = [
     "CryptoHighProximity1dV1",
     "CryptoLowDisagreement1dV1",
     "CryptoLowVariance1dV1",
+    "CryptoLowVariance1dV2",
     "CryptoTimeSeriesMomentumV1",
     "EquityDynamicTrend1dV1",
     "EquityLongHorizonMomentum1dV2",
     "EquityResidualMomentum1dV1",
+    "EquityResidualMomentum1dV2",
     "PortfolioContext",
     "PortfolioState",
     "PortfolioStrategy",

@@ -325,4 +325,25 @@ def _volatility(residuals: list[float]) -> float:
     return math.sqrt(sum((value - mean) ** 2 for value in residuals) / (len(residuals) - 1))
 
 
-__all__ = ["EquityResidualMomentum1dV1"]
+class EquityResidualMomentum1dV2(EquityResidualMomentum1dV1):
+    """Weekly-cadence identity of the validated residual-momentum alpha.
+
+    RESEARCH-validated cadence variant (2026-08-18 cadence mission): identical
+    signal math and parameters to ``equity_residual_momentum_v1``; only the
+    rebalance cadence differs (weekly vs monthly). The cadence rides in the
+    strategy parameters (``rebalance_frequency``) so the configuration digest,
+    persisted decisions and dashboard identity are distinct from v1 — v1 stays
+    the frozen production selection until an operator promotes v2.
+    """
+
+    name = "equity_residual_momentum_v2"
+    version = "2.0.0"
+    display_name = "Residual Momentum v2 (weekly)"
+    rebalance_policy_declared = "weekly"
+
+    def _validate_parameters(self) -> None:
+        self.parameters.setdefault("rebalance_frequency", "weekly")
+        super()._validate_parameters()
+
+
+__all__ = ["EquityResidualMomentum1dV1", "EquityResidualMomentum1dV2"]

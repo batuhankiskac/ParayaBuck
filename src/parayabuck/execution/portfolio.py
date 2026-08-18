@@ -13,6 +13,7 @@ from parayabuck.config import RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
+from parayabuck.utils import is_crypto
 
 
 class PortfolioOrderSide(StrEnum):
@@ -371,8 +372,15 @@ class TargetToOrderPlanner:
         version and timestamp never produce the same broker idempotency key.
         """
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
+        # Open orders arrive broker-wide (``all_open_order_symbols``); only
+        # this market's working orders must suppress order placement here. A
+        # cross-market symbol is never canonicalized under this market: an
+        # equity order like IWM must not raise ``Cannot infer crypto
+        # base/quote`` in the crypto planner (and vice versa).
         open_symbols = {
-            canonical_symbol(symbol, market) for symbol in (open_order_symbols or set())
+            canonical_symbol(symbol, market)
+            for symbol in (open_order_symbols or set())
+            if is_crypto(symbol) == (market == Market.CRYPTO)
         }
         positions = {
             canonical_symbol(position.symbol, position.market): position

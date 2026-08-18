@@ -233,6 +233,60 @@ def test_planner_orders_sells_before_buys_across_markets() -> None:
     assert max(sell_indexes) < min(buy_indexes)  # risk-reducing sells first
 
 
+def test_planner_ignores_cross_market_open_orders() -> None:
+    """Open orders from the OTHER market never crash or suppress this
+    market's plan (regression: a working equity IWM order canonicalized as
+    crypto raised ``Cannot infer crypto base/quote`` in the crypto planner
+    and aborted the crypto startup catch-up)."""
+    planner = TargetToOrderPlanner(PortfolioExecutionPolicy())
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+
+    crypto_target = _target(
+        "crypto_low_variance_v1",
+        timestamp,
+        (("BTC/USD", 0.05),),
+    )
+    crypto_orders = planner.plan(
+        crypto_target,
+        _account(),
+        market=Market.CRYPTO,
+        prices={"BTC/USD": 50_000.0},
+        rules={"BTC/USD": AssetTradingRules("BTC/USD", Market.CRYPTO, 1e-8, 1e-8, 1e-8, 1.0)},
+        approved_symbols=("BTC/USD",),
+        open_order_symbols={"IWM", "C", "JNJ"},  # working equity orders only
+    )
+    assert [order.symbol for order in crypto_orders] == ["BTC/USD"]
+
+    # A working BTC/USD order suppresses only the crypto order, and a
+    # working crypto order never leaks into the equity plan.
+    suppressed = planner.plan(
+        crypto_target,
+        _account(),
+        market=Market.CRYPTO,
+        prices={"BTC/USD": 50_000.0},
+        rules={"BTC/USD": AssetTradingRules("BTC/USD", Market.CRYPTO, 1e-8, 1e-8, 1e-8, 1.0)},
+        approved_symbols=("BTC/USD",),
+        open_order_symbols={"BTC/USD"},
+    )
+    assert suppressed == ()
+
+    equity_target = _target(
+        "equity_residual_momentum_v1",
+        timestamp,
+        (("IWM", 0.05),),
+    )
+    equity_orders = planner.plan(
+        equity_target,
+        _account(),
+        market=Market.EQUITY,
+        prices={"IWM": 200.0},
+        rules={"IWM": AssetTradingRules("IWM", Market.EQUITY, 0.01, 0.01, 0.01, 1.0)},
+        approved_symbols=("IWM",),
+        open_order_symbols={"BTC/USD", "ETH/USD"},  # working crypto orders only
+    )
+    assert [order.symbol for order in equity_orders] == ["IWM"]
+
+
 class _SharedBroker:
     """One account shared by both market runtimes."""
 

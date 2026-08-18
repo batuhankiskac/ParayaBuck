@@ -173,20 +173,11 @@ class AlpacaHistoricalData:
         end: datetime | str | None = None,
         adjustment: str = "raw",
     ) -> dict[str, list[Bar]]:
-        if timeframe not in _TIMEFRAMES:
-            raise ValueError(f"Unsupported timeframe: {timeframe}")
-        if adjustment not in {"raw", "splits", "all"}:
-            raise ValueError("adjustment must be one of raw, splits, all")
         if not symbols:
             return {}
-        symbols = [canonical_symbol(symbol) for symbol in symbols]
-        markets = {Market.CRYPTO if is_crypto(symbol) else Market.EQUITY for symbol in symbols}
-        if len(markets) != 1:
-            raise ValueError("Batch requests must not mix equity and crypto symbols")
-        end_at = self._parse_datetime(end) or datetime.now(UTC)
-        start_at = self._parse_datetime(start) or end_at - timedelta(days=180)
-        if start_at >= end_at:
-            raise ValueError("Request window must end after it starts")
+        symbols, market, start_at, end_at = self._resolve_batch_request(
+            symbols, timeframe, start, end, adjustment
+        )
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             # Alpaca caps a single bars response at 10,000 ROWS total, across
@@ -207,18 +198,206 @@ class AlpacaHistoricalData:
                     end_at,
                     minutes,
                     adjustment,
-                    markets.pop(),
+                    market,
                 )
-        else:
-            markets.pop()
         return self._fetch_window(
             symbols,
             timeframe,
             start_at,
             end_at,
             adjustment,
-            markets.pop(),
+            market,
         )
+
+    def _resolve_batch_request(
+        self,
+        symbols: list[str],
+        timeframe: str,
+        start: datetime | str | None,
+        end: datetime | str | None,
+        adjustment: str,
+    ) -> tuple[list[str], Market, datetime, datetime]:
+        """Validate and normalize one batch request; shared by the plain and
+        incremental fetch paths so both enforce identical contracts."""
+        if not symbols:
+            return [], Market.EQUITY, datetime.now(UTC), datetime.now(UTC)
+        if timeframe not in _TIMEFRAMES:
+            raise ValueError(f"Unsupported timeframe: {timeframe}")
+        if adjustment not in {"raw", "splits", "all"}:
+            raise ValueError("adjustment must be one of raw, splits, all")
+        symbols = [canonical_symbol(symbol) for symbol in symbols]
+        markets = {Market.CRYPTO if is_crypto(symbol) else Market.EQUITY for symbol in symbols}
+        if len(markets) != 1:
+            raise ValueError("Batch requests must not mix equity and crypto symbols")
+        end_at = self._parse_datetime(end) or datetime.now(UTC)
+        start_at = self._parse_datetime(start) or end_at - timedelta(days=180)
+        if start_at >= end_at:
+            raise ValueError("Request window must end after it starts")
+        return symbols, markets.pop(), start_at, end_at
+
+    def get_bars_batch_incremental(
+        self,
+        symbols: list[str],
+        timeframe: str,
+        start: datetime | str | None = None,
+        end: datetime | str | None = None,
+        adjustment: str = "raw",
+        *,
+        scope: str,
+        config_digest: str,
+        identity: str = "",
+        overlap_timeframes: int = 2,
+    ) -> dict[str, list[Bar]]:
+        """Cache-assisted incremental batch fetch returning the SAME bars a
+        full ``get_bars_batch`` would return, while downloading only the
+        missing tail.
+
+        Validation (fail closed to a full refetch when ANY check fails):
+
+        * scope digest — the cached rows must have been written under the
+          same ``config_digest`` (recorded via ``scope_meta``); a mismatch
+          means the bars may have been produced under a different
+          configuration.
+        * window head coverage — the cache must reach back to the request
+          start; a cache holding only the tail of the window is never
+          silently served as if it were complete history.
+        * tail freshness — a cache whose newest bar is older than the
+          market/timeframe staleness limit is distrustful (a long-dormant
+          or partially-written cache) and is fully refetched.
+
+        When the cache validates, each symbol downloads only
+        ``[last_cached - overlap_timeframes * step, end]``: the overlap
+        re-fetches every bar that could have been forming (and therefore
+        partial) when it was cached, so closed cached bars (immutable) plus
+        the fresh tail equal a full-window download exactly.
+        """
+        if not symbols:
+            return {}
+        if not scope or not config_digest:
+            raise ValueError("Incremental fetch requires scope and config_digest")
+        symbols, market, start_at, end_at = self._resolve_batch_request(
+            symbols, timeframe, start, end, adjustment
+        )
+        cache = self._cache
+        if not isinstance(cache, WarmupCache):
+            # Fakes/tests without the real cache degrade to the plain fetch.
+            return self.get_bars_batch(symbols, timeframe, start, end, adjustment=adjustment)
+        if market == Market.EQUITY and self._effective_stock_feed_name == "iex":
+            end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
+        feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
+        minutes = TIMEFRAME_MINUTES[timeframe]
+        step = timedelta(minutes=minutes)
+        # Daily bars can be separated by weekend/holiday gaps; the head
+        # tolerance must absorb them or a perfectly good cache is refetched
+        # every time the window start lands on a non-trading day.
+        head_tolerance = timedelta(days=3) if timeframe == "1d" else step
+
+        full: list[str] = []
+        tail: list[str] = []
+        tail_starts: dict[str, datetime] = {}
+        if cache.scope_is_valid(scope, config_digest):
+            for symbol in symbols:
+                cached = self._cached_window(
+                    cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+                )
+                if not cached:
+                    full.append(symbol)
+                    continue
+                if cached[0].timestamp > start_at + head_tolerance:
+                    full.append(symbol)
+                    continue
+                latest = cached[-1].timestamp
+                if self._cache_tail_is_stale(market, timeframe, latest):
+                    full.append(symbol)
+                    continue
+                tail.append(symbol)
+                tail_starts[symbol] = latest
+        else:
+            full = list(symbols)
+
+        fetched: dict[str, list[Bar]] = {}
+        if full:
+            fetched.update(
+                self.get_bars_batch(full, timeframe, start_at, end_at, adjustment=adjustment)
+            )
+        if tail:
+            tail_start = max(start_at, min(tail_starts.values()) - overlap_timeframes * step)
+            tail_rows = len(tail) * int((end_at - tail_start).total_seconds() // 60 // minutes)
+            if tail_rows > _MAX_ROWS_PER_REQUEST:
+                # Defensive: a tail window that alone exceeds the row budget
+                # (only possible with a huge symbol count) is fetched as a
+                # full window so truncation can never occur.
+                fetched.update(
+                    self.get_bars_batch(tail, timeframe, start_at, end_at, adjustment=adjustment)
+                )
+            elif tail_start < end_at:
+                fetched.update(
+                    self._fetch_window(
+                        tail, timeframe, tail_start, end_at, adjustment, market
+                    )
+                )
+            else:
+                # Cache already extends to the request end; nothing to fetch.
+                for symbol in tail:
+                    fetched[symbol] = self._cached_window(
+                        cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+                    )
+        result: dict[str, list[Bar]] = {}
+        for symbol in symbols:
+            cached = self._cached_window(
+                cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+            )
+            merged = {bar.timestamp: bar for bar in cached}
+            merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})
+            result[symbol] = [merged[key] for key in sorted(merged)]
+        cache.scope_set(scope, config_digest, identity)
+        return result
+
+    @staticmethod
+    def _cached_window(
+        cache: WarmupCache,
+        symbol: str,
+        timeframe: str,
+        market: Market,
+        feed_name: str,
+        adjustment: str,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[Bar]:
+        bars = cache.get(
+            symbol,
+            timeframe,
+            market=market,
+            feed=feed_name,
+            start=start_at,
+            end=end_at,
+            adjustment=adjustment,
+        )
+        if market == Market.EQUITY and timeframe != "1d":
+            return [bar for bar in bars if is_regular_equity_time(bar.timestamp)]
+        return bars
+
+    @staticmethod
+    def _cache_tail_is_stale(
+        market: Market,
+        timeframe: str,
+        latest: datetime,
+        now: datetime | None = None,
+    ) -> bool:
+        """Fail-closed staleness limit for incremental reuse.
+
+        These are generous: the head-coverage check is the primary guard
+        against serving an incomplete window. The tail limit exists to
+        refetch a cache that is so old it may predate data corrections or a
+        partially-written table, and to satisfy the fail-closed contract for
+        cache reuse.
+        """
+        now = now or datetime.now(UTC)
+        if market == Market.CRYPTO:
+            return now - latest > timedelta(days=2)
+        if timeframe == "1d":
+            return now - latest > timedelta(days=45)
+        return now - latest > timedelta(days=7)
 
     def _fetch_chunked_windows(
         self,

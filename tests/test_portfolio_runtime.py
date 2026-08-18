@@ -624,16 +624,18 @@ def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.5}
+    # The buy fill is booked net of the crypto taker fee (the acquired
+    # position is 0.25% smaller than the reported fill).
+    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
 
     client = _FakeAlpacaClient()
     client.positions = [
         SimpleNamespace(
             symbol="BTC/USD",
-            qty="0.5",
+            qty="0.49875",
             avg_entry_price="100000",
             current_price="100000",
-            qty_available="0.5",
+            qty_available="0.49875",
             unrealized_pl="0",
             unrealized_intraday_pl="0",
             asset_class="crypto",
@@ -656,12 +658,13 @@ def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
     assert repo.has_order(recorded["id"])
 
     # The protective stop fills: the SELL leg decrements net ownership even
-    # though the broker position may still be open in the snapshot.
+    # though the broker position may still be open in the snapshot. The stop
+    # can only ever sell the acquired (net) quantity.
     repo.apply_trade_update(
         client_order_id=recorded["id"],
         broker_order_id="broker-stop",
         status="fill",
-        cumulative_filled_quantity=0.5,
+        cumulative_filled_quantity=0.49875,
         average_fill_price=99000.0,
         occurred_at=decision_timestamp,
         activity_id="activity-stop",
@@ -784,7 +787,7 @@ def test_emergency_stop_retry_fill_is_attributed_to_accepted_order_id(tmp_path) 
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
-    assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.1})
+    assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.09875})
 
 
 def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
@@ -792,7 +795,7 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
     managed position the broker no longer holds; reconcile must clear it."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_crypto_entry(repo, quantity=0.5)
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.5}
+    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
 
     client = _FakeAlpacaClient()  # no positions, no open orders
     broker = _portfolio_broker(client, repo, tmp_path)
@@ -829,7 +832,7 @@ def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path
 
     broker.reconcile()
 
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.5}
+    assert repo.owned_quantities("acct") == {"BTC/USD": 0.49875}
 
 
 def test_reconcile_protects_portfolio_owned_crypto_with_emergency_stop(
@@ -1115,7 +1118,7 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
     )
     asyncio.run(runtime._handle_trade_update(update))
 
-    assert repo.owned_quantities("acct") == {"BTC/USD": 0.2}
+    assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.19875})
 
 
 def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> None:
@@ -1900,7 +1903,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
         synthetic_sells = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_orders WHERE client_order_id LIKE 'pbp-reconcile-%'"
         ).fetchone()[0]
-    assert adjustments == [("stale_ownership_clear", 0.5, 0.0)]
+    assert adjustments == [("stale_ownership_clear", 0.49875, 0.0)]
     assert synthetic_sells == 0
 
 
@@ -1919,7 +1922,7 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
             symbol="BTC/USD",
             market=Market.CRYPTO,
             side=PortfolioOrderSide.SELL,
-            quantity=0.5,
+            quantity=0.49875,
             reference_price=100000.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="crypto",
@@ -1933,7 +1936,7 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
     client.filled_orders["pbp-exit-sell"] = SimpleNamespace(
         id="broker-exit",
         status="filled",
-        filled_qty="0.5",
+        filled_qty="0.49875",
         filled_avg_price="97500",
         filled_at="2025-01-01T15:00:00+00:00",
     )
@@ -1978,7 +1981,7 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         ).fetchone()
     assert adjustments == 0
     # The recovered fill carries the real exit price, not an invented one.
-    assert fill == (97500.0, 0.5)
+    assert fill == (97500.0, 0.49875)
 
 
 def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> None:
@@ -2000,7 +2003,7 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
             symbol="BTC/USD",
             market=Market.CRYPTO,
             side=PortfolioOrderSide.SELL,
-            quantity=0.5,
+            quantity=0.49875,
             reference_price=100000.0,
             decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
             strategy_name="crypto",
@@ -2032,8 +2035,8 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         role=OrderRole.MANUAL_EXIT,
         symbol="BTC/USD",
         market=Market.CRYPTO,
-        requested_qty=0.5,
-        filled_qty=0.5,
+        requested_qty=0.49875,
+        filled_qty=0.49875,
         average_fill_price=97500.0,
         timestamp=datetime(2025, 1, 1, 15, 0, tzinfo=UTC),
         fee=0.0,
@@ -2053,9 +2056,9 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
         fills = repo.store.connection.execute(
             "SELECT price, quantity FROM portfolio_fills WHERE client_order_id = 'pbp-exit-sell'"
         ).fetchall()
-    assert adjustments == [(0.5, 0.5)]
+    assert adjustments == [(0.49875, 0.49875)]
     # The real fill was booked at the real price.
-    assert fills == [(97500.0, 0.5)]
+    assert fills == [(97500.0, 0.49875)]
 
 
 def test_old_database_with_child_rows_migrates_cleanly(tmp_path) -> None:

@@ -7,11 +7,13 @@ import math
 import threading
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
+from parayabuck.execution.alpaca import _CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioExecutionPolicy,
@@ -889,7 +891,7 @@ class PortfolioStateRepository:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
-                          s.account_id, o.created_at
+                          o.market, s.account_id, o.created_at
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -899,11 +901,24 @@ class PortfolioStateRepository:
             if row is None:
                 return False
             previous = float(row[0] or 0.0)
-            fill_delta = max(0.0, cumulative_filled_quantity - previous)
             reference = float(row[1] or 0.0)
             side = str(row[2])
-            account_id = str(row[3])
-            created_at = str(row[4]) if row[4] is not None else None
+            market = str(row[3] or "")
+            account_id = str(row[4])
+            created_at = str(row[5]) if row[5] is not None else None
+            # Alpaca deducts the taker fee from the acquired units on crypto
+            # buys (position = fill qty * (1 - fee)); the gross fill would
+            # overstate ownership by exactly the fee, and after a partial
+            # exit that constant offset grows beyond the fee-reserve band and
+            # halts the runtime on ownership drift. Book the NET quantity so
+            # repository ownership tracks broker positions exactly. Sells are
+            # left gross: the position drops by the full sold quantity.
+            if side == "buy" and market == "crypto":
+                cumulative_filled_quantity = float(
+                    Decimal(str(cumulative_filled_quantity))
+                    * (Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
+                )
+            fill_delta = max(0.0, cumulative_filled_quantity - previous)
             delay_seconds: float | None = None
             if created_at:
                 try:

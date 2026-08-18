@@ -2,17 +2,10 @@ from __future__ import annotations
 
 from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, StrategySpec
-from parayabuck.portfolio.crypto_cross_sectional import CryptoCrossSectionalMomentum1hV1
-from parayabuck.portfolio.crypto_cross_sectional_reversal import (
-    CryptoCrossSectionalReversal1dV1,
-)
 from parayabuck.portfolio.crypto_low_variance import (
     CryptoLowVariance1dV1,
     CryptoLowVariance1dV2,
 )
-from parayabuck.portfolio.crypto_time_series import CryptoTimeSeriesMomentumV1
-from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
-from parayabuck.portfolio.equity_long_horizon_momentum import EquityLongHorizonMomentum1dV2
 from parayabuck.portfolio.equity_residual_momentum import (
     EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2,
@@ -26,22 +19,16 @@ from parayabuck.portfolio.models import (
 )
 
 _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
-    EquityDynamicTrend1dV1.name: EquityDynamicTrend1dV1,
-    EquityLongHorizonMomentum1dV2.name: EquityLongHorizonMomentum1dV2,
     EquityResidualMomentum1dV1.name: EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2.name: EquityResidualMomentum1dV2,
-    CryptoCrossSectionalMomentum1hV1.name: CryptoCrossSectionalMomentum1hV1,
-    CryptoCrossSectionalReversal1dV1.name: CryptoCrossSectionalReversal1dV1,
-    CryptoTimeSeriesMomentumV1.name: CryptoTimeSeriesMomentumV1,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
 }
 
 # The PRODUCT strategy surface: the identities the PAPER product supports
-# (current validated selections plus frozen historical baselines). Research
-# scripts may still construct rejected/closed families through
-# ``portfolio_strategy_from`` (the factory above) for reproducibility; they
-# are deliberately NOT part of this product list.
+# (current validated selections plus frozen historical baselines). Rejected
+# strategy families are archived in docs/rejected_strategies.md and are NOT
+# constructible at runtime.
 PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
     "equity_residual_momentum_v1",
     "equity_residual_momentum_v2",
@@ -95,12 +82,7 @@ def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) ->
 
 
 def supported_portfolio_strategies() -> tuple[str, ...]:
-    """Names the PAPER product supports: validated selections + frozen v1 baselines.
-
-    Rejected/closed research families stay constructible through
-    ``portfolio_strategy_from`` (research reproducibility) but are NOT listed
-    here: this is the product surface, not the full factory inventory.
-    """
+    """Names the PAPER product supports: validated selections + frozen v1 baselines."""
     return tuple(sorted(PRODUCT_STRATEGY_NAMES))
 
 
@@ -130,13 +112,8 @@ def rebalance_policy_for(
 
 
 __all__ = [
-    "CryptoCrossSectionalMomentum1hV1",
-    "CryptoCrossSectionalReversal1dV1",
     "CryptoLowVariance1dV1",
     "CryptoLowVariance1dV2",
-    "CryptoTimeSeriesMomentumV1",
-    "EquityDynamicTrend1dV1",
-    "EquityLongHorizonMomentum1dV2",
     "EquityResidualMomentum1dV1",
     "EquityResidualMomentum1dV2",
     "PortfolioContext",

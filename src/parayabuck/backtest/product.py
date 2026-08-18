@@ -381,11 +381,16 @@ def optimize_grid(
     # never on strategy parameters: build it once per window and reuse it for
     # every combination instead of rebuilding (and re-ranking) it per trial.
     train_universe = build_product_universe(config, bars, market=market, end=train_end)
+    # Resolve the signal timeframe exactly like run_product_backtest does
+    # (deprecated strategy.timeframe key may be None in production config:
+    # the strategy owns its primary signal timeframe).
+    strategy_timeframe = (
+        selection.timeframe
+        or portfolio_strategy_from(strategy_name or selection.name, parameters=baseline).timeframe
+    )
     # The per-trial bar preprocessing (window filter, dedup, sort) is likewise
     # trial-invariant: prepare it once per window and reuse it.
-    train_prepared = _prepared_window(
-        bars, market, selection.timeframe, train_start, train_end
-    )
+    train_prepared = _prepared_window(bars, market, strategy_timeframe, train_start, train_end)
     ranked: list[dict[str, object]] = []
     for values in itertools.product(*(grid[key] for key in keys)):
         parameters = {**baseline, **dict(zip(keys, values, strict=True))}
@@ -432,7 +437,7 @@ def optimize_grid(
         if not isinstance(best_parameters, dict):
             raise TypeError("Optimization parameters must be a mapping")
         oos_universe = build_product_universe(config, bars, market=market, end=oos_end)
-        oos_prepared = _prepared_window(bars, market, selection.timeframe, oos_start, oos_end)
+        oos_prepared = _prepared_window(bars, market, strategy_timeframe, oos_start, oos_end)
         oos = run_product_backtest(
             config,
             bars,

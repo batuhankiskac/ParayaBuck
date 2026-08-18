@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import statistics
+from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -51,13 +52,29 @@ class PointInTimeUniverse:
     snapshots: tuple[UniverseSnapshot, ...]
     methodology: str
 
+    def __post_init__(self) -> None:
+        # Membership lookups use bisect, which requires effective_at-ascending
+        # snapshots. The builders produce ascending order; enforcing it here
+        # (a no-op for already-sorted input) keeps contains() exact for any
+        # direct construction too.
+        if any(
+            right.effective_at < left.effective_at
+            for left, right in zip(self.snapshots, self.snapshots[1:])
+        ):
+            object.__setattr__(
+                self, "snapshots", tuple(sorted(self.snapshots, key=lambda item: item.effective_at))
+            )
+
     def contains(self, symbol: str, market: Market, timestamp: datetime) -> bool:
         if market != self.market:
             return False
-        eligible = [snapshot for snapshot in self.snapshots if snapshot.effective_at <= timestamp]
-        if not eligible:
+        # Snapshots are effective_at-ascending, so the last snapshot effective
+        # at or before ``timestamp`` is found by bisection (O(log n)) instead
+        # of a linear scan on every universe membership probe.
+        index = bisect_right(self.snapshots, timestamp, key=lambda item: item.effective_at)
+        if index == 0:
             return False
-        return canonical_symbol(symbol, market) in eligible[-1].symbols
+        return canonical_symbol(symbol, market) in self.snapshots[index - 1].symbols
 
     def to_dict(self) -> dict[str, object]:
         coverage = (

@@ -237,3 +237,4 @@ data/historical/crypto_18_extended_report.json
 data/smoke/
 data/historical/equity_1200_2016_2019.csv
 data/historical/equity_1200_2016_2026.csv
+benchmarks_local/

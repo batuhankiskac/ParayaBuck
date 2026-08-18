@@ -103,7 +103,9 @@ class Report:
 def _rusage_rss_bytes() -> int:
     raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     # macOS reports bytes, Linux reports KiB.
-    return raw * 1024 if os.uname().sysname == "Darwin" else raw * 1024
+    if os.uname().sysname == "Darwin":
+        return raw
+    return raw * 1024
 
 
 def rss_bytes() -> int:

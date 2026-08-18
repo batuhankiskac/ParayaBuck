@@ -7,8 +7,12 @@ target construction in isolation (the per-decision hot path).
 from __future__ import annotations
 
 import math
+import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from benchmarks.harness import Report, timeit
 from parayabuck.core.models import Bar, Market

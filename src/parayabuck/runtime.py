@@ -162,6 +162,30 @@ class RuntimeHealth:
     entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
 
 
+def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:
+    """Health-only catch-up snapshot for one portfolio runtime (or none).
+
+    ``status`` is the last startup_catch_up result status (None before the
+    first attempt), ``at`` the UTC attempt timestamp, and
+    ``next_boundary_after`` the next cadence boundary strictly after the last
+    processed timestamp (None when no history has been processed yet).
+    """
+    if runtime is None:
+        return {"status": None, "at": None, "next_boundary_after": None}
+    catch_up_at = getattr(runtime, "startup_catch_up_at", None)
+    previous_timestamp = getattr(runtime, "previous_timestamp", None)
+    next_boundary: str | None = None
+    if previous_timestamp is not None:
+        policy = getattr(runtime, "policy", None)
+        if policy is not None:
+            next_boundary = policy.next_boundary_after(previous_timestamp).isoformat()
+    return {
+        "status": getattr(runtime, "startup_catch_up_status", None),
+        "at": catch_up_at.isoformat() if catch_up_at is not None else None,
+        "next_boundary_after": next_boundary,
+    }
+
+
 @dataclass(frozen=True)
 class _Event:
     kind: str
@@ -631,6 +655,9 @@ class EngineRuntime:
         if self._running and not healthy and state == "running":
             state = "degraded"
         market_health: dict[str, dict[str, object]] = {}
+        portfolio_runtime_by_market = {
+            runtime.market: runtime for runtime in getattr(self, "_portfolio_runtimes", ())
+        }
         for market, worker_name in (
             (Market.EQUITY, "pb-stocks"),
             (Market.CRYPTO, "pb-crypto"),
@@ -678,6 +705,7 @@ class EngineRuntime:
                 "scanner_critical": self._market_operationally_relevant(
                     market, strategy_enabled=market_enabled
                 ),
+                "catch_up": _portfolio_catch_up_health(portfolio_runtime_by_market.get(market)),
             }
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
         last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
@@ -941,6 +969,11 @@ class EngineRuntime:
                     f"Startup account fetch deferred after transient network failure: {exc}"
                 ) from exc
             raise
+        # Seeded warmup history exists and the account snapshot is fresh: a
+        # mid-period start must not leave a fresh account in cash until the
+        # next cadence boundary (backtest decides on its first usable bar).
+        # Catch-up failures are logged, never fatal — normal cadence resumes.
+        self._run_startup_catch_up()
         self._refresh_readiness()
         self._state = "running" if self._has_ready_symbols() else "warming_up"
         record_session = getattr(self.ledger, "record_runtime_session", None)
@@ -2520,6 +2553,46 @@ class EngineRuntime:
                 len(portfolio_result.submitted_order_ids),
             )
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
+
+    def _run_startup_catch_up(self) -> None:
+        """Force an immediate full-target decision on the latest warmup bars.
+
+        A fresh account started mid-period would otherwise sit in cash until
+        the next cadence boundary (the backtest engine decides on its first
+        usable bar). The catch-up is an OPTIMIZATION: any gate, readiness
+        failure or exception blocks only the catch-up and records a
+        ``blocked:...`` status — normal cadence decisions continue exactly as
+        before this mission. No alerts are emitted for catch-up results.
+        """
+        if (
+            not self._running
+            or self._warming_up
+            or self._circuit_breaker_reason is not None
+            or getattr(self, "_reconcile_failed", False)
+        ):
+            return
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            reasons = self._entry_readiness_reasons(portfolio_runtime.market)
+            if reasons:
+                portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
+                continue
+            entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
+            try:
+                with self._portfolio_lock:
+                    result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch)
+            except Exception:
+                log.exception(
+                    "Startup catch-up failed for market=%s; normal cadence continues",
+                    portfolio_runtime.market.value,
+                )
+                portfolio_runtime.startup_catch_up_status = "blocked:startup_catch_up_failed"
+                continue
+            log.info(
+                "Startup catch-up: market=%s status=%s decision_id=%s",
+                portfolio_runtime.market.value,
+                result.status,
+                result.decision_id,
+            )
 
     def _entry_readiness_reasons(self, market: Market | None = None) -> tuple[str, ...]:
         health = self.health()

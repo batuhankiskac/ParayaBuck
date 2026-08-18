@@ -1216,6 +1216,11 @@ class PortfolioRuntime:
             account_id, self.configuration_digest, self.market
         )
         self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
+        # Startup catch-up observability: last attempt status and when it was
+        # attempted (UTC). Set on every startup_catch_up call, including
+        # blocked/early returns; used by the engine health surface.
+        self.startup_catch_up_status: str | None = None
+        self.startup_catch_up_at: datetime | None = None
 
     def seed(self, bars: list[Bar]) -> None:
         """Seed only closed, approved bars without producing a decision.
@@ -1254,6 +1259,81 @@ class PortfolioRuntime:
                     filter(None, (self.previous_timestamp, common_latest))
                 )
 
+    def startup_catch_up(self, *, entry_latch: str | None = None) -> PortfolioRuntimeResult:
+        """Decide immediately on the latest completed warmup bars.
+
+        Restores BACKTEST/PAPER parity: the backtest engine fires its initial
+        decision on the first usable bar (``is_period_start(None, ts)`` is
+        True), while a runtime seeded mid-period would otherwise sit in cash
+        until the next cadence boundary. This forces a full-target decision on
+        the latest closed bars — reusing every existing gate in
+        ``process_closed_bars`` (duplicate decision, rebalance advance/phase,
+        managed-batch completeness, benchmark, high-water, risk overlay,
+        planner, two-phase sells-then-buys, idempotency keys) — only when the
+        deployment has never decided and holds no managed position in this
+        market. Never re-enters after ANY prior decision (restart safety).
+        """
+        self.startup_catch_up_at = datetime.now(UTC)
+        series_by_symbol = dict(self.history)
+        timestamps = [
+            series[-1].timestamp if series else None for series in series_by_symbol.values()
+        ]
+        if any(timestamp is None for timestamp in timestamps) or any(
+            len(series) < self.strategy.minimum_history_bars for series in series_by_symbol.values()
+        ):
+            self.startup_catch_up_status = "warming_up"
+            return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
+        if len({timestamp for timestamp in timestamps}) != 1:
+            self.startup_catch_up_status = "incomplete_strategy_batch"
+            return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
+        timestamp = timestamps[0]
+        assert timestamp is not None
+        if self.repository.has_decision(
+            self.account_id, self.configuration_digest, timestamp, self.market
+        ):
+            self.startup_catch_up_status = "duplicate_decision"
+            return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
+        if (
+            self.repository.latest_decision_timestamp(
+                self.account_id, self.configuration_digest, self.market
+            )
+            is not None
+        ):
+            # Any prior decision for this deployment means the cadence is
+            # already running: a catch-up would be an out-of-cadence re-entry.
+            self.startup_catch_up_status = "catch_up_superseded"
+            return PortfolioRuntimeResult(None, None, None, (), (), "catch_up_superseded")
+        account = self.broker.account()
+        if any(
+            position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
+            for position in account.positions
+        ):
+            # Already invested in this market: never layer a catch-up entry on
+            # top of an existing managed position.
+            self.startup_catch_up_status = "already_invested"
+            return PortfolioRuntimeResult(None, None, None, (), (), "already_invested")
+        # Let a persisted two-phase rebalance advance first; a still-active
+        # rebalance defers the catch-up (submitting fresh BUYs while an older
+        # SELL is working could stack risk-increasing exposure).
+        self.advance_rebalance()
+        current_rebalance = self.repository.current_rebalance_execution(
+            self.account_id, self.market
+        )
+        if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
+            self.startup_catch_up_status = "rebalance_in_progress"
+            return PortfolioRuntimeResult(
+                current_rebalance.decision_id, None, None, (), (), "rebalance_in_progress"
+            )
+        bars = [series[-1] for series in series_by_symbol.values()]
+        result = self.process_closed_bars(
+            bars,
+            entry_latch=entry_latch,
+            force_scheduled=True,
+            decision_origin="startup_catch_up",
+        )
+        self.startup_catch_up_status = result.status
+        return result
+
     def update_symbols(self, symbols: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """Replace ephemeral members without changing the approved policy identity."""
         updated = tuple(dict.fromkeys(canonical_symbol(symbol, self.market) for symbol in symbols))
@@ -1271,7 +1351,12 @@ class PortfolioRuntime:
         return added, removed
 
     def process_closed_bars(
-        self, bars: list[Bar], *, entry_latch: str | None = None
+        self,
+        bars: list[Bar],
+        *,
+        entry_latch: str | None = None,
+        force_scheduled: bool = False,
+        decision_origin: str = "scheduled",
     ) -> PortfolioRuntimeResult:
         eligible = [
             bar
@@ -1293,7 +1378,11 @@ class PortfolioRuntime:
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
                 series.append(bar)
-        scheduled = self.policy.is_period_start(self.previous_timestamp, timestamp)
+        # ``boundary`` is the real cadence; ``scheduled`` additionally honors
+        # a forced catch-up decision (startup catch-up), which must apply the
+        # FULL target like any boundary decision.
+        boundary = self.policy.is_period_start(self.previous_timestamp, timestamp)
+        scheduled = boundary or force_scheduled
         # Receiving a timed-out partial batch explicitly skips that rebalance
         # period. A later day must not turn it into a silent delayed rebalance.
         self.previous_timestamp = timestamp
@@ -1426,6 +1515,14 @@ class PortfolioRuntime:
                 weights=reducing_weights,
                 cash_weight=1.0 - sum(weight.weight for weight in reducing_weights),
                 metadata={**raw_target.metadata, "intermediate_risk_reduction": True},
+            )
+        if force_scheduled:
+            # Tag the decision origin on the FINAL target so both the normal
+            # forced path and any entry-latch/reduction path carry it into the
+            # persisted decision and the returned result.
+            raw_target = replace(
+                raw_target,
+                metadata={**raw_target.metadata, "decision_origin": decision_origin},
             )
         if any(
             canonical_symbol(weight.symbol, self.market) not in self.symbols

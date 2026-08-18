@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.config import Config
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.alpaca import AlpacaBroker
@@ -22,8 +24,9 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.equity_dynamic_trend import EquityDynamicTrend1dV1
-from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
+from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import (
+    REBALANCE_PHASE_SELL_PENDING,
     PortfolioRuntime,
     PortfolioStateRepository,
     configuration_digest,
@@ -2393,3 +2396,493 @@ def test_managed_position_makes_disabled_market_scanner_critical() -> None:
     assert health.healthy is False
     assert health.state == "degraded"
     assert health.markets["crypto"]["scanner_critical"] is True
+
+
+# ---------------------------------------------------------------------------
+# Startup catch-up: backtest/runtime parity decision
+# ---------------------------------------------------------------------------
+
+
+def test_rebalance_policy_next_boundary_after() -> None:
+    """The pure observability helper returns a true boundary strictly after
+    ``previous`` for every cadence (monthly / weekly / hours:N)."""
+    monthly = RebalancePolicy(Market.EQUITY, "monthly")
+    # Mid-month: first day of the next month at the same time-of-day.
+    assert monthly.next_boundary_after(datetime(2025, 1, 15, 14, 30, tzinfo=UTC)) == datetime(
+        2025, 2, 1, 14, 30, tzinfo=UTC
+    )
+    # Already a boundary: exactly one period later.
+    assert monthly.next_boundary_after(datetime(2025, 1, 1, 14, 30, tzinfo=UTC)) == datetime(
+        2025, 2, 1, 14, 30, tzinfo=UTC
+    )
+    # December rolls the year.
+    assert monthly.next_boundary_after(datetime(2025, 12, 31, 9, 0, tzinfo=UTC)) == datetime(
+        2026, 1, 1, 9, 0, tzinfo=UTC
+    )
+
+    weekly = RebalancePolicy(Market.EQUITY, "weekly")
+    # 2025-01-08 is a Wednesday -> the next ISO Monday (2025-01-13).
+    assert weekly.next_boundary_after(datetime(2025, 1, 8, tzinfo=UTC)) == datetime(
+        2025, 1, 13, tzinfo=UTC
+    )
+    # Already a Monday: one week later.
+    assert weekly.next_boundary_after(datetime(2025, 1, 6, tzinfo=UTC)) == datetime(
+        2025, 1, 13, tzinfo=UTC
+    )
+    # Sunday: the next day.
+    assert weekly.next_boundary_after(datetime(2025, 1, 12, tzinfo=UTC)) == datetime(
+        2025, 1, 13, tzinfo=UTC
+    )
+
+    hours = RebalancePolicy(Market.CRYPTO, "hours:24")
+    # Mid-block: the start of the next 24h UTC block.
+    assert hours.next_boundary_after(datetime(2025, 1, 1, 5, 0, tzinfo=UTC)) == datetime(
+        2025, 1, 2, 0, 0, tzinfo=UTC
+    )
+    # Exactly on a block boundary: previous + N hours.
+    assert hours.next_boundary_after(datetime(2025, 1, 1, 0, 0, tzinfo=UTC)) == datetime(
+        2025, 1, 2, 0, 0, tzinfo=UTC
+    )
+
+    # Invariant: the result is always a real boundary strictly after previous.
+    for policy, previous in (
+        (monthly, datetime(2025, 6, 15, 10, 0, tzinfo=UTC)),
+        (weekly, datetime(2025, 6, 17, 10, 0, tzinfo=UTC)),
+        (hours, datetime(2025, 6, 15, 10, 0, tzinfo=UTC)),
+    ):
+        boundary = policy.next_boundary_after(previous)
+        assert boundary > previous
+        assert policy.is_period_start(previous, boundary)
+
+
+def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
+    tmp_path,
+) -> None:
+    """Backtest/runtime parity mismatch, proven deterministically: the SAME
+    completed history, universe and account make the backtest engine decide on
+    its first usable bar while a seeded runtime mid-period reports
+    ``not_scheduled`` — the startup catch-up closes the gap with an immediate
+    full-target decision."""
+    strategy = EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]})
+    bars = _bars()  # 220 daily bars; the last bar is mid-month
+    last_timestamp = max(bar.timestamp for bar in bars)
+    assert (
+        RebalancePolicy(Market.EQUITY, "monthly").next_boundary_after(last_timestamp)
+        > last_timestamp
+    )  # warmup ends between cadence boundaries
+
+    # Backtest: first usable bar is a period start (previous=None), so the
+    # engine decides within the same history instead of waiting for the end.
+    engine = PortfolioBacktestEngine(
+        strategy,
+        RebalancePolicy(Market.EQUITY, "monthly"),
+        starting_equity=100_000.0,
+    )
+    engine.run(bars, liquidate_at_end=False)
+    assert engine._rebalances
+    timestamps = sorted({bar.timestamp for bar in bars})
+    first_usable_index = strategy.minimum_history_bars
+    first_decision_ts = next(
+        timestamps[index]
+        for index in range(first_usable_index, len(timestamps))
+        if timestamps[index].month != timestamps[index - 1].month
+    )
+    assert engine._rebalances[0].decision_timestamp == first_decision_ts
+
+    # Runtime without catch-up: after mid-period warmup the normal cadence
+    # waits for the next boundary -> not_scheduled (the mismatch).
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    runtime.seed(bars)
+    last_batch = [bar for bar in bars if bar.timestamp == last_timestamp]
+    assert runtime.process_closed_bars(last_batch).status == "not_scheduled"
+
+    # Startup catch-up decides immediately with the FULL target (pure buys on
+    # a fresh account) and records the origin.
+    result = runtime.startup_catch_up()
+    assert result.status == "submitted"
+    assert result.target is not None
+    assert result.target.metadata.get("decision_origin") == "startup_catch_up"
+    assert result.target.invested_weight > 0
+    assert result.orders
+    assert all(order.side == PortfolioOrderSide.BUY for order in result.orders)
+    assert len(broker.submitted) == len(result.orders)
+    assert runtime.startup_catch_up_status == "submitted"
+    assert runtime.startup_catch_up_at is not None
+
+
+def test_startup_catch_up_fires_full_target_and_never_reenters(tmp_path) -> None:
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    runtime.seed(_bars())
+    assert runtime.startup_catch_up_status is None
+    assert runtime.startup_catch_up_at is None
+
+    result = runtime.startup_catch_up()
+    assert result.status == "submitted"
+    assert result.target is not None
+    assert result.target.metadata.get("decision_origin") == "startup_catch_up"
+    assert result.orders and all(order.side == PortfolioOrderSide.BUY for order in result.orders)
+    assert runtime.startup_catch_up_status == "submitted"
+    assert runtime.startup_catch_up_at is not None
+    decision = runtime.repository.decision_row(result.decision_id)
+    assert decision is not None
+    assert json.loads(decision["target_json"])["metadata"]["decision_origin"] == "startup_catch_up"
+
+    # Restart-safety: a decision at the same timestamp never re-enters.
+    again = runtime.startup_catch_up()
+    assert again.status == "duplicate_decision"
+    assert runtime.startup_catch_up_status == "duplicate_decision"
+
+
+def test_startup_catch_up_warming_up_with_short_or_empty_history(tmp_path) -> None:
+    runtime = _runtime(tmp_path, _Broker())
+    # No history at all.
+    assert runtime.startup_catch_up().status == "warming_up"
+    assert runtime.startup_catch_up_status == "warming_up"
+    # Too few bars (below minimum_history_bars=151).
+    runtime.seed(_bars()[:40])
+    result = runtime.startup_catch_up()
+    assert result.status == "warming_up"
+    assert runtime.startup_catch_up_status == "warming_up"
+
+
+def test_startup_catch_up_incomplete_strategy_batch_when_timestamps_diverge(
+    tmp_path,
+) -> None:
+    runtime = _runtime(tmp_path, _Broker())
+    bars = _bars()
+    runtime.seed(bars)
+    later = max(bar.timestamp for bar in bars) + timedelta(days=1)
+    runtime.history["AAPL"].append(
+        Bar(later, "AAPL", "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY)
+    )
+    result = runtime.startup_catch_up()
+    assert result.status == "incomplete_strategy_batch"
+    assert runtime.startup_catch_up_status == "incomplete_strategy_batch"
+
+
+def test_startup_catch_up_duplicate_decision_at_same_timestamp(tmp_path) -> None:
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    runtime.seed(bars)
+    last_timestamp = max(bar.timestamp for bar in bars)
+    first = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == last_timestamp],
+        force_scheduled=True,
+        decision_origin="manual_test",
+    )
+    assert first.status == "submitted"
+    result = runtime.startup_catch_up()
+    assert result.status == "duplicate_decision"
+    assert runtime.startup_catch_up_status == "duplicate_decision"
+
+
+def test_startup_catch_up_superseded_after_any_prior_decision(tmp_path) -> None:
+    """Restart safety: any prior decision for this deployment (even at an
+    earlier timestamp) means the cadence is already running — the catch-up
+    never re-enters."""
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    timestamps = sorted({bar.timestamp for bar in bars})
+    earlier = timestamps[runtime.strategy.minimum_history_bars]
+    runtime.seed([bar for bar in bars if bar.timestamp <= earlier])
+    decided = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == earlier],
+        force_scheduled=True,
+        decision_origin="test_origin",
+    )
+    assert decided.status == "submitted"
+    # Warmup later advances past the decision; the catch-up must be superseded.
+    runtime.seed(bars)
+    result = runtime.startup_catch_up()
+    assert result.status == "catch_up_superseded"
+    assert runtime.startup_catch_up_status == "catch_up_superseded"
+
+
+def test_startup_catch_up_already_invested_skips_when_managed_position_exists(
+    tmp_path,
+) -> None:
+    class _InvestedBroker(_Broker):
+        def account(self) -> AccountSnapshot:
+            position = PositionSnapshot(
+                "AAPL",
+                10.0,
+                100.0,
+                100.0,
+                Market.EQUITY,
+                qty_available=10.0,
+                ownership="managed",
+                managed_qty=10.0,
+            )
+            return AccountSnapshot(90_000, 100_000, 100_000, 0.0, positions=(position,))
+
+    runtime = _runtime(tmp_path, _InvestedBroker())
+    runtime.seed(_bars())
+    result = runtime.startup_catch_up()
+    assert result.status == "already_invested"
+    assert runtime.startup_catch_up_status == "already_invested"
+    assert (
+        runtime.repository.latest_decision_timestamp(
+            "unknown", runtime.configuration_digest, Market.EQUITY
+        )
+        is None
+    )
+
+
+def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
+    """A rebalance execution left in flight by a DIFFERENT deployment digest
+    (config change mid-rebalance) defers the catch-up: the gate is scoped to
+    account+market, not the new configuration digest."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    session = repo.begin_session("acct", "legacy-digest", "paper")
+    legacy_target = TargetPortfolio(
+        strategy_name="equity_dynamic_trend_1d_v1",
+        strategy_version="1.0.0",
+        decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        weights=(TargetWeight("AAPL", 0.10, "test"),),
+        cash_weight=0.9,
+    )
+    legacy_risk = RiskOverlayDecision(legacy_target, False, (), 0.0, 0.10)
+    decision_id = repo.record_decision(
+        session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY
+    )
+    repo.save_rebalance_execution(decision_id, "acct", Market.EQUITY, REBALANCE_PHASE_SELL_PENDING)
+    repo.record_order(
+        PortfolioOrderRequest(
+            client_order_id="legacy-sell-1",
+            decision_id=decision_id,
+            symbol="AAPL",
+            market=Market.EQUITY,
+            side=PortfolioOrderSide.SELL,
+            quantity=1.0,
+            reference_price=100.0,
+            decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            strategy_name="equity_dynamic_trend_1d_v1",
+            strategy_version="1.0.0",
+            risk_reducing=True,
+        ),
+        "submitting",
+    )
+    runtime = PortfolioRuntime(
+        EquityDynamicTrend1dV1({"top_n": 2, "exclude_symbols": ["SPY"]}),
+        EQUITY_UNIVERSE,
+        _Broker(),
+        repo,
+        mode="paper",
+        maximum_allocation=0.50,
+        account_id="acct",
+    )
+    runtime.seed(_bars())
+    result = runtime.startup_catch_up()
+    assert result.status == "rebalance_in_progress"
+    assert runtime.startup_catch_up_status == "rebalance_in_progress"
+
+
+def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchanged(
+    tmp_path,
+) -> None:
+    """force_scheduled on mid-period bars applies the FULL target (buys on an
+    empty account); non-forced calls keep the not_scheduled cadence gate and
+    normal scheduled decisions carry no decision_origin label."""
+    broker = _Broker()
+    runtime = _runtime(tmp_path, broker)
+    bars = _bars()
+    runtime.seed(bars)
+    last_timestamp = max(bar.timestamp for bar in bars)
+    last_batch = [bar for bar in bars if bar.timestamp == last_timestamp]
+
+    plain = runtime.process_closed_bars(last_batch)
+    assert plain.status == "not_scheduled"
+    assert plain.target is None
+
+    forced = runtime.process_closed_bars(
+        last_batch, force_scheduled=True, decision_origin="test_origin"
+    )
+    assert forced.status == "submitted"
+    assert forced.target is not None
+    assert forced.target.metadata.get("decision_origin") == "test_origin"
+    assert forced.target.invested_weight > 0
+    assert forced.orders and all(order.side == PortfolioOrderSide.BUY for order in forced.orders)
+
+    # A later normal scheduled decision is not labelled as a catch-up.
+    next_boundary = RebalancePolicy(Market.EQUITY, "monthly").next_boundary_after(last_timestamp)
+    next_batch = [
+        Bar(next_boundary, symbol, "1d", 110.0, 110.0, 110.0, 110.0, 1_000_000, Market.EQUITY)
+        for symbol in EQUITY_UNIVERSE
+    ]
+    scheduled = runtime.process_closed_bars(next_batch)
+    assert scheduled.status == "submitted"
+    assert scheduled.target is not None
+    assert "decision_origin" not in scheduled.target.metadata
+
+
+def test_forced_scheduled_with_entry_latch_caps_entries_and_keeps_origin(tmp_path) -> None:
+    """A forced catch-up under an entry-risk latch still caps risk-increasing
+    entries (SELL-only) and carries the decision_origin on the final target."""
+    broker = _PositionedBroker(
+        (
+            PositionSnapshot(
+                "AAPL",
+                100,
+                100,
+                100,
+                Market.EQUITY,
+                qty_available=100,
+                ownership="managed",
+                managed_qty=100,
+            ),
+        )
+    )
+    runtime = PortfolioRuntime(
+        _FixedTargetStrategy({"AAPL": 0.05, "MSFT": 0.10}),
+        ("AAPL", "MSFT"),
+        broker,
+        PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
+        mode="paper",
+        maximum_allocation=0.50,
+    )
+    bars = _bars()
+    runtime.seed(bars)
+    last_batch = [bar for bar in bars if bar.timestamp == max(b.timestamp for b in bars)]
+    latched = runtime.process_closed_bars(
+        last_batch,
+        entry_latch="daily_loss_limit",
+        force_scheduled=True,
+        decision_origin="startup_catch_up",
+    )
+    assert latched.status == "submitted"
+    assert latched.target is not None
+    assert latched.target.metadata.get("decision_origin") == "startup_catch_up"
+    assert latched.target.metadata.get("entry_risk_latch") == "daily_loss_limit"
+    assert latched.orders
+    assert all(order.side == PortfolioOrderSide.SELL for order in latched.orders)
+    assert all(order.symbol == "AAPL" for order in latched.orders)
+
+
+def test_engine_run_startup_catch_up_guards_skip_when_not_ready() -> None:
+    """The engine skips the catch-up entirely while warming up, halted by a
+    circuit breaker, failed reconciliation, or not running."""
+    runtime = _catch_up_engine()
+    fake = _CatchUpRecorder()
+    runtime._portfolio_runtimes = (fake,)
+    runtime._warming_up = True
+    runtime._run_startup_catch_up()
+    assert fake.calls == []
+    assert fake.startup_catch_up_status is None
+
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._run_startup_catch_up()
+    assert fake.calls == []
+
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = True
+    runtime._run_startup_catch_up()
+    assert fake.calls == []
+
+    runtime._reconcile_failed = False
+    runtime._running = False
+    runtime._run_startup_catch_up()
+    assert fake.calls == []
+
+
+def test_engine_run_startup_catch_up_blocked_by_readiness_reasons() -> None:
+    runtime = _catch_up_engine()
+    runtime._entry_readiness_reasons = lambda _market: (
+        "account_snapshot_stale",
+        "worker_unavailable:pb-stocks",
+    )
+    fake = _CatchUpRecorder()
+    runtime._portfolio_runtimes = (fake,)
+    runtime._run_startup_catch_up()
+    assert fake.calls == []
+    assert (
+        fake.startup_catch_up_status
+        == "blocked:account_snapshot_stale,worker_unavailable:pb-stocks"
+    )
+
+
+def test_engine_run_startup_catch_up_propagates_entry_latch() -> None:
+    runtime = _catch_up_engine()
+    fake = _CatchUpRecorder()
+    runtime._portfolio_runtimes = (fake,)
+    runtime._entry_risk_latch = {Market.EQUITY: "daily_loss_limit", Market.CRYPTO: None}
+    runtime._run_startup_catch_up()
+    assert fake.calls == ["daily_loss_limit"]
+    # A success status is owned by the portfolio runtime itself.
+    assert fake.startup_catch_up_status is None
+
+
+def test_engine_run_startup_catch_up_failure_does_not_halt() -> None:
+    """A catch-up exception is logged and recorded as blocked; the engine is
+    NOT halted (the catch-up is an optimization — normal cadence continues)."""
+    runtime = _catch_up_engine()
+
+    class _BoomCatchUp(_CatchUpRecorder):
+        def startup_catch_up(self, *, entry_latch=None):
+            raise RuntimeError("catch-up boom")
+
+    fake = _BoomCatchUp()
+    runtime._portfolio_runtimes = (fake,)
+    runtime._run_startup_catch_up()
+    assert fake.startup_catch_up_status == "blocked:startup_catch_up_failed"
+    assert runtime._state == "warming_up"  # not halted
+    assert runtime._circuit_breaker_reason is None
+
+
+def test_health_exposes_startup_catch_up_fields() -> None:
+    runtime = _health_runtime()
+    runtime._portfolio_runtimes = (
+        SimpleNamespace(
+            market=Market.EQUITY,
+            startup_catch_up_status="submitted",
+            startup_catch_up_at=datetime(2025, 1, 1, tzinfo=UTC),
+            previous_timestamp=datetime(2025, 1, 15, tzinfo=UTC),
+            policy=RebalancePolicy(Market.EQUITY, "monthly"),
+        ),
+    )
+    health = runtime.health()
+    equity_catch_up = health.markets["equity"]["catch_up"]
+    assert equity_catch_up == {
+        "status": "submitted",
+        "at": "2025-01-01T00:00:00+00:00",
+        "next_boundary_after": "2025-02-01T00:00:00+00:00",
+    }
+    # A market without a portfolio runtime reports an empty catch-up snapshot.
+    assert health.markets["crypto"]["catch_up"] == {
+        "status": None,
+        "at": None,
+        "next_boundary_after": None,
+    }
+
+
+class _CatchUpRecorder:
+    def __init__(self) -> None:
+        self.calls: list[str | None] = []
+        self.startup_catch_up_status: str | None = None
+        self.market = Market.EQUITY
+        self.result_status = "submitted"
+        self.result_decision_id = "catchup-decision-1"
+
+    def startup_catch_up(self, *, entry_latch: str | None = None) -> object:
+        self.calls.append(entry_latch)
+        return SimpleNamespace(status=self.result_status, decision_id=self.result_decision_id)
+
+
+def _catch_up_engine() -> object:
+    from parayabuck.runtime import EngineRuntime
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = True
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._state = "warming_up"
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._portfolio_runtimes = ()
+    runtime._entry_readiness_reasons = lambda _market: []
+    return runtime

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -201,6 +201,36 @@ class RebalancePolicy:
         previous_epoch_hours = int(previous.timestamp()) // (hours * 3600)
         current_epoch_hours = int(current.timestamp()) // (hours * 3600)
         return previous_epoch_hours != current_epoch_hours
+
+    def next_boundary_after(self, previous: datetime) -> datetime:
+        """The earliest period-start boundary strictly after ``previous``.
+
+        Additive observability helper; ``is_period_start`` semantics are
+        unchanged. The result is a true boundary: ``is_period_start(previous,
+        next_boundary_after(previous))`` is always True, and when ``previous``
+        is itself a boundary the result is exactly one period later.
+
+        * monthly: first day of the next calendar month at the same
+          time-of-day;
+        * weekly: the next ISO Monday at the same time-of-day;
+        * hours:N: the next N-hour block start, using the same epoch-hour
+          block arithmetic as ``is_period_start`` (so a boundary timestamp
+          yields ``previous + N hours``).
+        """
+        if self.frequency == "monthly":
+            year = previous.year + (1 if previous.month == 12 else 0)
+            month = 1 if previous.month == 12 else previous.month + 1
+            return previous.replace(year=year, month=month, day=1)
+        if self.frequency == "weekly":
+            # isocalendar().weekday is 1 (Monday) .. 7 (Sunday): days until
+            # the next ISO Monday, 7 when ``previous`` is already a Monday.
+            days_ahead = 8 - previous.isocalendar().weekday
+            return previous + timedelta(days=days_ahead)
+        hours = self.hours
+        assert hours is not None
+        block_seconds = hours * 3600
+        next_start = (int(previous.timestamp()) // block_seconds + 1) * block_seconds
+        return datetime.fromtimestamp(next_start, tz=UTC)
 
 
 @dataclass

@@ -757,6 +757,37 @@ document.addEventListener('DOMContentLoaded', () => {
         unknown: 'Bilinmiyor',
         unavailable: 'Yok'
     };
+
+    // Startup catch-up: explains WHY the bot may legitimately have "0 trades".
+    // status comes from PortfolioRuntime.startup_catch_up (engine health);
+    // blocked:* carries the runtime-level reason verbatim.
+    const CATCH_UP_LABELS = {
+        submitted: 'Uygulandı',
+        sell_phase_submitted: 'Uygulandı (SELL fazı)',
+        catch_up_superseded: 'Gerek yok: karar mevcut',
+        duplicate_decision: 'Gerek yok: kopya önlendi',
+        already_invested: 'Gerek yok: pozisyon var',
+        warming_up: 'Bekliyor: ısınma',
+        incomplete_strategy_batch: 'Bekliyor: eksik parti',
+        rebalance_in_progress: 'Bekliyor: rebalance sürüyor',
+        rebalance_blocked: 'Bekliyor: rebalance kilitli',
+        no_eligible_bars: 'Bekliyor: bar yok',
+        not_scheduled: 'Bekliyor: sıradaki periyot',
+        not_attempted: 'Hazır değil'
+    };
+    const formatCatchUp = (catchUp) => {
+        const status = (catchUp && catchUp.status) || 'not_attempted';
+        if (status.startsWith('blocked:')) {
+            return { label: `Engelli: ${status.slice('blocked:'.length)}`, tooltip: status };
+        }
+        const label = CATCH_UP_LABELS[status] || status || '—';
+        const tooltip = catchUp && catchUp.at
+            ? `Son deneme: ${fmtDateTime(catchUp.at)}`
+            : (catchUp && catchUp.next_boundary_after
+                ? `Sıradaki sınır: ${fmtDateTime(catchUp.next_boundary_after)}`
+                : status || '');
+        return { label, tooltip };
+    };
     const fmtPct = (v) => (v === undefined || v === null || !Number.isFinite(Number(v)))
         ? '—' : Number(v).toFixed(1) + '%';
     const fmtNum = (v, digits = 2) => (v === undefined || v === null || !Number.isFinite(Number(v)))
@@ -809,6 +840,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setText(ids.positions, String(card.positions_count ?? 0));
         setText(ids.allocation, `${fmtPct(card.current_allocation_pct)} / ${fmtPct(card.maximum_allocation_pct)}`);
         setText(ids.nextRebalance, fmtDateTime(card.next_rebalance_at));
+        const catchUp = formatCatchUp(card.startup_catch_up);
+        setText(ids.catchUp, catchUp.label);
+        const catchUpEl = document.getElementById(ids.catchUp);
+        if (catchUpEl) catchUpEl.title = catchUp.tooltip;
         renderHoldingsTable(card.holdings || [], ids.body, isCrypto);
     };
 
@@ -1104,13 +1139,15 @@ document.addEventListener('DOMContentLoaded', () => {
             name: 'equityStrategyName', badge: 'equityStatusBadge', signal: 'equitySignal',
             rebalance: 'equityRebalance', pool: 'equityPool', obs: 'equityObs',
             positions: 'equityPositions', allocation: 'equityAllocation',
-            nextRebalance: 'equityNextRebalance', body: 'equityHoldingsBody'
+            nextRebalance: 'equityNextRebalance', catchUp: 'equityStartupCatchUp',
+            body: 'equityHoldingsBody'
         }, false);
         renderStrategyCard(data.crypto, {
             name: 'cryptoStrategyName', badge: 'cryptoStatusBadge', signal: 'cryptoSignal',
             rebalance: 'cryptoRebalance', lookback: 'cryptoLookback', pool: 'cryptoPool',
             obs: 'cryptoObs', positions: 'cryptoPositions', allocation: 'cryptoAllocation',
-            nextRebalance: 'cryptoNextRebalance', body: 'cryptoHoldingsBody'
+            nextRebalance: 'cryptoNextRebalance', catchUp: 'cryptoStartupCatchUp',
+            body: 'cryptoHoldingsBody'
         }, true);
         // Panels
         renderRiskPanel(data.risk);

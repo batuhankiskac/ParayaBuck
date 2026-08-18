@@ -2390,6 +2390,7 @@ def _dashboard_market_card(
         }
     enabled = bool(selection.enabled)
     market_health = dict((health or {}).get("markets", {}).get(market_key, {}) or {})
+    catch_up = dict(market_health.get("catch_up") or {})
     positions = [
         position
         for position in account.get("positions", [])
@@ -2449,6 +2450,11 @@ def _dashboard_market_card(
             (decision or {}).get("timestamp"),
             (meta or {}).get("rebalance_cadence"),
         ),
+        "startup_catch_up": {
+            "status": catch_up.get("status"),
+            "at": catch_up.get("at"),
+            "next_boundary_after": catch_up.get("next_boundary_after"),
+        },
         "holdings": holdings,
     }
 

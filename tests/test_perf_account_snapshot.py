@@ -5,8 +5,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
 from parayabuck.portfolio.runtime_service import PortfolioRuntime, PortfolioStateRepository

@@ -1748,13 +1748,16 @@ class EngineRuntime:
         ``account_poll_interval_seconds`` by the account loop, which is
         strictly fresher than the tolerated boundary.
         """
-        snapshot = getattr(self, "_last_account_snapshot", None)
-        snapshot_at = getattr(self, "_last_account_snapshot_at", None)
-        if snapshot is not None and snapshot_at is not None and (
-            datetime.now(UTC) - snapshot_at
-        ).total_seconds() <= self.config.maximum_account_age_for_entry_seconds:
+        snapshot: AccountSnapshot | None = getattr(self, "_last_account_snapshot", None)
+        snapshot_at: datetime | None = getattr(self, "_last_account_snapshot_at", None)
+        if (
+            snapshot is not None
+            and snapshot_at is not None
+            and (datetime.now(UTC) - snapshot_at).total_seconds()
+            <= self.config.maximum_account_age_for_entry_seconds
+        ):
             return snapshot
-        account = self.broker.account()
+        account: AccountSnapshot = self.broker.account()
         now = datetime.now(UTC)
         self._last_account_snapshot = account
         self._last_account_snapshot_at = now
@@ -2604,9 +2607,7 @@ class EngineRuntime:
                     kwargs = {"entry_latch": entry_latch}
                     if account is not None:
                         kwargs["account"] = account
-                    portfolio_result = portfolio_runtime.process_closed_bars(
-                        relevant, **kwargs
-                    )
+                    portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
             except OwnershipDriftError:
                 self._circuit_breaker_reason = "ownership_drift"
                 self._state = "halted"
@@ -3297,9 +3298,7 @@ class EngineRuntime:
                 {
                     "name": getattr(runtime.strategy, "name", ""),
                     "timeframe": getattr(runtime.strategy, "timeframe", None),
-                    "minimum_history_bars": getattr(
-                        runtime.strategy, "minimum_history_bars", 0
-                    ),
+                    "minimum_history_bars": getattr(runtime.strategy, "minimum_history_bars", 0),
                     "parameters": getattr(runtime.strategy, "parameters", {}),
                 }
                 for runtime in self._portfolio_runtimes
@@ -3357,9 +3356,7 @@ class EngineRuntime:
                         if fetcher is None:
                             # Fakes/tests without the incremental fetcher use
                             # the plain download contract unchanged.
-                            batched = history.get_bars_batch(
-                                symbol_batch, timeframe, start=start
-                            )
+                            batched = history.get_bars_batch(symbol_batch, timeframe, start=start)
                         else:
                             batched = fetcher(
                                 symbol_batch,

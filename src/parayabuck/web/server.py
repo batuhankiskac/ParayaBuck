@@ -2176,9 +2176,10 @@ def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
     with _dashboard_json_cache_lock:
         cached = _dashboard_json_cache.get(key)
         if cached is not None or key in _dashboard_json_cache:
+            assert cached is not None
             return cached
     try:
-        data = json.loads(target.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         data = {}
     with _dashboard_json_cache_lock:
@@ -2285,14 +2286,16 @@ def _dashboard_readonly_connection() -> sqlite3.Connection | None:
     short-lived connection is opened and the caller must release it with
     :func:`_dashboard_release`. Returns None when the DB is missing.
     """
-    shared = getattr(_dashboard_request_connection, "connection", None)
+    shared: sqlite3.Connection | None = getattr(_dashboard_request_connection, "connection", None)
     if shared is not None:
         return shared
     path = _dashboard_db_path()
     if not path.exists():
         return None
     try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5.0)
+        connection: sqlite3.Connection = sqlite3.connect(
+            f"file:{path}?mode=ro", uri=True, timeout=5.0
+        )
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
     except sqlite3.Error as exc:
@@ -2941,8 +2944,7 @@ def _dashboard_universe(cfg: Any, health: dict[str, Any] | None) -> dict[str, An
         active: dict[str, Any] = {}
         candidates: dict[str, Any] = {}
         active.update(_dashboard_load_json(active_path))
-        candidate_file = Path(candidate_path) if candidate_path else None
-        if candidate_file is not None:
+        if candidate_path is not None:
             candidates.update(_dashboard_load_json(candidate_path))
         shortlist = candidates.get("shortlist_symbols")
         candidate_symbols = active.get("candidate_symbols", ())
@@ -3196,9 +3198,7 @@ def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
 # never feeds trading state, decisions, or the runtime (display-only).
 _DASHBOARD_SNAPSHOT_TTL_SECONDS = 1.5
 _dashboard_snapshot_lock = threading.Lock()
-_dashboard_snapshot: (
-    tuple[float, str, tuple[str, int] | None, dict[str, Any]] | None
-) = None
+_dashboard_snapshot: tuple[float, str, tuple[str, int] | None, dict[str, Any]] | None = None
 
 
 def _dashboard_snapshot_reset() -> None:

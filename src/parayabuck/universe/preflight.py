@@ -524,9 +524,7 @@ def _crypto_observation_set(
         start,
         data_timestamp,
         scope="crypto_observation",
-        config_digest=_observation_scope_digest(
-            crypto_scanner_config_digest(universe), selection
-        ),
+        config_digest=_observation_scope_digest(crypto_scanner_config_digest(universe), selection),
         identity=f"{selection.name}:{strategy.timeframe}",
     )
     # Alpaca's feed includes the forming (in-progress) bar for the current
@@ -637,12 +635,15 @@ def _incremental_history(
     inside ``AlpacaHistoricalData``; the returned merged bars are identical
     to a full-window download.
     """
-    fetcher = getattr(history, "get_bars_batch_incremental", None)
+    fetcher: Callable[..., dict[str, list[Any]]] | None = getattr(
+        history, "get_bars_batch_incremental", None
+    )
     if fetcher is None:
-        return history.get_bars_batch(
+        plain: dict[str, list[Any]] = history.get_bars_batch(
             symbols, timeframe, start=start, end=end, adjustment=adjustment
         )
-    return fetcher(
+        return plain
+    merged: dict[str, list[Any]] = fetcher(
         symbols,
         timeframe,
         start=start,
@@ -652,6 +653,7 @@ def _incremental_history(
         config_digest=config_digest,
         identity=identity,
     )
+    return merged
 
 
 def _observation_scope_digest(base_digest: str, selection: object) -> str:

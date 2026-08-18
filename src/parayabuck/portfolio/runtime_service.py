@@ -1384,6 +1384,7 @@ class PortfolioRuntime:
         entry_latch: str | None = None,
         force_scheduled: bool = False,
         decision_origin: str = "scheduled",
+        account: AccountSnapshot | None = None,
     ) -> PortfolioRuntimeResult:
         eligible = [
             bar
@@ -1458,7 +1459,12 @@ class PortfolioRuntime:
                 (),
                 "rebalance_in_progress",
             )
-        account = self.broker.account()
+        # The engine hands in one immutable snapshot shared across the whole
+        # processing cycle (freshness enforced at the engine level against
+        # maximum_account_age_for_entry_seconds). Direct callers (tests,
+        # startup catch-up) omit it and get a fresh broker fetch, preserving
+        # the historical behavior exactly.
+        account = account or self.broker.account()
         managed = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions

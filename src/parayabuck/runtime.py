@@ -455,6 +455,11 @@ class EngineRuntime:
         self._oldest_received_at: datetime | None = None
         self._event_stats_lock = threading.Lock()
         self._last_account_at: datetime | None = None
+        # Immutable AccountSnapshot shared across a processing cycle. The
+        # account loop refreshes it every poll interval; the decision path
+        # reuses it while it is fresh (<= maximum_account_age_for_entry_seconds)
+        # instead of issuing a second full broker account() fetch per batch.
+        self._last_account_snapshot: AccountSnapshot | None = None
         self._last_reconciliation_at: datetime | None = None
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
@@ -959,6 +964,7 @@ class EngineRuntime:
             self._warming_up = False
         try:
             account = self.broker.account()
+            self._last_account_snapshot = account
             self._last_account_at = datetime.now(UTC)
             self._persist_risk_state(account)
         except Exception as exc:
@@ -1727,6 +1733,30 @@ class EngineRuntime:
         log.info("Engine runtime stopped")
         return True
 
+    def _fresh_account_snapshot(self) -> AccountSnapshot:
+        """The freshest account snapshot, fetched at most once per freshness
+        boundary.
+
+        Returns the account-loop snapshot while it is within
+        ``maximum_account_age_for_entry_seconds`` (the same freshness
+        contract the entry-readiness gate enforces), and otherwise fetches a
+        fresh snapshot from the broker and updates the shared cache. This
+        turns the per-batch decision-path account fetch into a cache read in
+        the common case; the broker is still polled every
+        ``account_poll_interval_seconds`` by the account loop, which is
+        strictly fresher than the tolerated boundary.
+        """
+        snapshot = getattr(self, "_last_account_snapshot", None)
+        last_at = getattr(self, "_last_account_at", None)
+        if snapshot is not None and last_at is not None and (
+            datetime.now(UTC) - last_at
+        ).total_seconds() <= self.config.maximum_account_age_for_entry_seconds:
+            return snapshot
+        account = self.broker.account()
+        self._last_account_snapshot = account
+        self._last_account_at = datetime.now(UTC)
+        return account
+
     def _account_loop(self) -> None:
         worker = self._workers["pb-account"]
         worker.alive = True
@@ -1735,6 +1765,11 @@ class EngineRuntime:
                 worker.last_heartbeat = datetime.now(UTC)
                 try:
                     account = self.broker.account()
+                    # Snapshot first, timestamp second: a concurrent reader
+                    # sees either the old pair (age over-estimated -> fresh
+                    # fetch) or the new pair, never a fresh timestamp with an
+                    # older snapshot.
+                    self._last_account_snapshot = account
                     self._last_account_at = datetime.now(UTC)
                     worker.last_event_at = self._last_account_at
                     worker.last_error = None
@@ -2472,6 +2507,11 @@ class EngineRuntime:
     def _process_portfolio_timestamp(self, bars: list[Bar]) -> None:
         if self._warming_up or self._circuit_breaker_reason is not None:
             return
+        # One immutable account snapshot per processing cycle, shared by every
+        # market's decision in this batch (single broker fetch instead of one
+        # per market). Fetched lazily on the first actual decision; freshness
+        # is enforced against maximum_account_age_for_entry_seconds.
+        account: AccountSnapshot | None = None
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             relevant = [
                 bar
@@ -2495,8 +2535,13 @@ class EngineRuntime:
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             try:
                 with self._portfolio_lock:
+                    if account is None and getattr(self, "broker", None) is not None:
+                        account = self._fresh_account_snapshot()
+                    kwargs = {"entry_latch": entry_latch}
+                    if account is not None:
+                        kwargs["account"] = account
                     portfolio_result = portfolio_runtime.process_closed_bars(
-                        relevant, entry_latch=entry_latch
+                        relevant, **kwargs
                     )
             except OwnershipDriftError:
                 self._circuit_breaker_reason = "ownership_drift"

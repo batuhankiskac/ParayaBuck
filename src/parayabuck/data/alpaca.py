@@ -44,6 +44,18 @@ MIN_CACHE_COVERAGE_PCT = 0.60
 _MAX_ROWS_PER_REQUEST = 10_000
 
 
+def _floor_to_grid(value: datetime, minutes: int) -> datetime:
+    """Floor a UTC timestamp down to the ``minutes`` grid boundary.
+
+    Bars are aligned to the timeframe grid (e.g. hourly bars at ``:00``), so
+    cache reads and head-coverage checks must compare against the floored
+    window start or the first grid-aligned bar is excluded by a raw boundary
+    carrying seconds.
+    """
+    epoch_minutes = int(value.timestamp() // 60)
+    return datetime.fromtimestamp((epoch_minutes - epoch_minutes % minutes) * 60, tz=UTC)
+
+
 class AlpacaHistoricalData:
     """Bounded Alpaca REST client used to warm up the streaming engine."""
 
@@ -287,6 +299,12 @@ class AlpacaHistoricalData:
         feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
         minutes = TIMEFRAME_MINUTES[timeframe]
         step = timedelta(minutes=minutes)
+        # Bars are aligned to the timeframe grid, while request boundaries
+        # carry sub-bucket seconds. Cache reads must use the floored start or
+        # the first (grid-aligned) bar is excluded by ``timestamp >= start``
+        # and silently dropped from a warm reuse. API requests keep the raw
+        # boundary exactly as the plain fetch uses it.
+        grid_start = _floor_to_grid(start_at, minutes)
         # Daily bars can be separated by weekend/holiday gaps; the head
         # tolerance must absorb them or a perfectly good cache is refetched
         # every time the window start lands on a non-trading day.
@@ -298,12 +316,12 @@ class AlpacaHistoricalData:
         if cache.scope_is_valid(scope, config_digest):
             for symbol in symbols:
                 cached = self._cached_window(
-                    cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+                    cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
                 )
                 if not cached:
                     full.append(symbol)
                     continue
-                if cached[0].timestamp > start_at + head_tolerance:
+                if cached[0].timestamp > grid_start + head_tolerance:
                     full.append(symbol)
                     continue
                 latest = cached[-1].timestamp
@@ -321,7 +339,7 @@ class AlpacaHistoricalData:
                 self.get_bars_batch(full, timeframe, start_at, end_at, adjustment=adjustment)
             )
         if tail:
-            tail_start = max(start_at, min(tail_starts.values()) - overlap_timeframes * step)
+            tail_start = max(grid_start, min(tail_starts.values()) - overlap_timeframes * step)
             tail_rows = len(tail) * int((end_at - tail_start).total_seconds() // 60 // minutes)
             if tail_rows > _MAX_ROWS_PER_REQUEST:
                 # Defensive: a tail window that alone exceeds the row budget
@@ -340,12 +358,12 @@ class AlpacaHistoricalData:
                 # Cache already extends to the request end; nothing to fetch.
                 for symbol in tail:
                     fetched[symbol] = self._cached_window(
-                        cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+                        cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
                     )
         result: dict[str, list[Bar]] = {}
         for symbol in symbols:
             cached = self._cached_window(
-                cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+                cache, symbol, timeframe, market, feed_name, adjustment, grid_start, end_at
             )
             merged = {bar.timestamp: bar for bar in cached}
             merged.update({bar.timestamp: bar for bar in fetched.get(symbol, [])})

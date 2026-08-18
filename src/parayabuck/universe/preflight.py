@@ -21,6 +21,7 @@ from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
     CryptoUniverseScanner,
     crypto_candidate_from_bars,
+    crypto_scanner_config_digest,
     validate_active_crypto_universe,
 )
 from parayabuck.universe.scanner import (
@@ -421,11 +422,18 @@ def refresh_crypto_universe(
     )
     end = datetime.now(UTC)
     start = end - timedelta(days=universe.scanner.lookback_days)
-    bars = history.get_bars_batch(
+    bars = _incremental_history(
+        history,
         list(candidate_symbols),
         universe.scanner.historical_timeframe,
-        start=start,
-        end=end,
+        start,
+        end,
+        scope="crypto_scanner",
+        config_digest=crypto_scanner_config_digest(universe),
+        identity=(
+            f"lookback_days={universe.scanner.lookback_days}:"
+            f"timeframe={universe.scanner.historical_timeframe}"
+        ),
     )
     quotes: dict[str, Any] = {}
     try:
@@ -486,11 +494,15 @@ def _crypto_observation_set(
         "BTC/USD", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
     )
     start = data_timestamp - timedelta(days=warmup_days)
-    bars = history.get_bars_batch(
+    bars = _incremental_history(
+        history,
         list(pool),
         strategy.timeframe,
-        start=start,
-        end=data_timestamp,
+        start,
+        data_timestamp,
+        scope="crypto_observation",
+        config_digest=crypto_scanner_config_digest(universe),
+        identity=f"{selection.name}:{strategy.timeframe}",
     )
     # Alpaca's feed includes the forming (in-progress) bar for the current
     # bucket; its partial close must never rank the observation set.
@@ -526,6 +538,44 @@ def _crypto_observation_set(
 
 def _chunks(values: list[str], size: int = 8) -> list[list[str]]:
     return [values[offset : offset + size] for offset in range(0, len(values), size)]
+
+
+def _incremental_history(
+    history: Any,
+    symbols: list[str],
+    timeframe: str,
+    start: datetime,
+    end: datetime,
+    *,
+    scope: str,
+    config_digest: str,
+    identity: str = "",
+    adjustment: str = "raw",
+) -> dict[str, list[Any]]:
+    """Fetch history through the WarmupCache incremental path when available.
+
+    Falls back to a plain ``get_bars_batch`` for clients that do not expose
+    the incremental fetcher (test fakes), preserving the pre-optimization
+    contract exactly. The incremental path validates the cache scope digest,
+    window head coverage and tail freshness (fail closed to a full refetch)
+    inside ``AlpacaHistoricalData``; the returned merged bars are identical
+    to a full-window download.
+    """
+    fetcher = getattr(history, "get_bars_batch_incremental", None)
+    if fetcher is None:
+        return history.get_bars_batch(
+            symbols, timeframe, start=start, end=end, adjustment=adjustment
+        )
+    return fetcher(
+        symbols,
+        timeframe,
+        start=start,
+        end=end,
+        adjustment=adjustment,
+        scope=scope,
+        config_digest=config_digest,
+        identity=identity,
+    )
 
 
 def _bar_to_tuple(bar: Bar) -> tuple[str, float, float, float, float, float]:

@@ -26,7 +26,6 @@ Usage:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import statistics
@@ -46,16 +45,12 @@ from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for  
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
 
 # Reuse the validated-research helpers instead of reinventing them.
-_SPEC = importlib.util.spec_from_file_location(
-    "validate_strategy_candidates", str(REPO / "scripts" / "validate_strategy_candidates.py")
+from scripts.research_helpers import (  # noqa: E402
+    _calendar_fold_window,
+    _cost_stress,
+    _fold_stats,
+    _profit_factor,
 )
-VSC = importlib.util.module_from_spec(_SPEC)
-assert _SPEC and _SPEC.loader
-_SPEC.loader.exec_module(VSC)
-_calendar_fold_window = VSC._calendar_fold_window
-_cost_stress = VSC._cost_stress
-_fold_stats = VSC._fold_stats
-_profit_factor = VSC._profit_factor
 
 OUTPUT_DIR = REPO / "data" / "research" / "cadence_research_2026_08" / "crypto"
 CRYPTO_CSV = REPO / "data" / "historical" / "crypto_18_1h_extended.csv"

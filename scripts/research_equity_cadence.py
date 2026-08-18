@@ -42,7 +42,7 @@ from parayabuck.config import load_config  # noqa: E402
 from parayabuck.core.models import Market  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
-from scripts.validate_strategy_candidates import (  # noqa: E402
+from scripts.research_helpers import (  # noqa: E402
     _cost_stress,
     _fold_stats,
     _fold_window,

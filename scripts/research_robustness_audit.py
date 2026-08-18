@@ -4,8 +4,8 @@
 
 Independent verification of the EQUITY (monthly vs weekly) and CRYPTO (168h vs
 96h vs 72h) cadence candidates through the SAME production harness used by
-paper/live (parayabuck.backtest.product), mirroring the exact patterns of
-scripts/validate_strategy_candidates.py.
+paper/live (parayabuck.backtest.product), mirroring the frozen-candidate methodology of the cadence bake-off
+(scripts/research_equity_cadence.py / research_crypto_cadence.py).
 
 Sections:
   1. baseline reproduction of the documented controls (docs/strategy_robustness.md
@@ -33,7 +33,7 @@ import json
 import statistics
 import sys
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from parayabuck.backtest.product import (
@@ -163,42 +163,7 @@ DATASETS: dict[Market, tuple[Path, str]] = {
 }
 
 
-def _fold_window(
-    start: datetime, end: datetime, step_months: int, warmup_months: int
-) -> list[tuple[datetime, datetime]]:
-    """Anchored walk-forward test windows (train = everything before fold start).
-
-    Mirrors scripts/validate_strategy_candidates.py exactly (the ``warmup_months``
-    argument documents that training uses all data before the fold; the fold
-    itself is the evaluation window).
-    """
-    folds: list[tuple[datetime, datetime]] = []
-    cursor = start
-    while cursor < end:
-        fold_end = min(cursor + timedelta(days=30 * step_months), end)
-        if fold_end - cursor >= timedelta(days=20):
-            folds.append((cursor, fold_end))
-        cursor += timedelta(days=30 * step_months)
-    return folds
-
-
-def _calendar_fold_window(
-    start: datetime, end: datetime, step_months: int
-) -> list[tuple[datetime, datetime]]:
-    """Anchored walk-forward windows aligned to whole calendar months
-    (mirrors scripts/validate_strategy_candidates.py)."""
-    folds: list[tuple[datetime, datetime]] = []
-    cursor = start
-    while cursor < end:
-        month_index = cursor.year * 12 + (cursor.month - 1) + step_months
-        year, month0 = divmod(month_index, 12)
-        month = month0 + 1
-        day = min(cursor.day, calendar_monthrange(year, month))
-        fold_end = min(datetime(year, month, day, tzinfo=cursor.tzinfo), end)
-        if fold_end - cursor >= timedelta(days=20):
-            folds.append((cursor, fold_end))
-        cursor = fold_end
-    return folds
+from scripts.research_helpers import _calendar_fold_window, _fold_window  # noqa: E402
 
 
 def calendar_monthrange(year: int, month: int) -> int:

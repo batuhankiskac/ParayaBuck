@@ -861,6 +861,47 @@ def test_reconcile_protects_portfolio_owned_crypto_with_emergency_stop(
     assert float(stops[0].stop_price) == pytest.approx(expected_stop)
 
 
+def test_reconcile_keeps_full_size_crypto_stop_in_fee_reserve_band(tmp_path) -> None:
+    """Regression: with qty_available == 0 the required quantity is
+    fee-adjusted, so the engine's own full-size protective stop reads
+    "over". It must be kept — not cancelled and re-submitted every cycle
+    (which raised "No available quantity to protect" on the stale
+    pre-cancel snapshot and left the position unprotected)."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="BTC/USD",
+            qty="0.5",
+            avg_entry_price="100000",
+            current_price="100000",
+            qty_available="0",  # fully locked by the working stop
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    client.open_orders = [
+        SimpleNamespace(
+            id="stop-1",
+            client_order_id="parayabuck-stop-aaaa",
+            symbol="BTC/USD",
+            side="sell",
+            type="stop",
+            qty="0.5",
+            stop_price="99000",
+            status="accepted",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    broker.portfolio_owned_quantities = lambda: {"BTC/USD": 0.5}
+
+    broker.reconcile()
+
+    assert client.submitted == []  # no cancel/resubmit churn
+    assert client.open_orders  # the healthy stop is still in place
+
+
 def _decision_target(timestamp: datetime) -> TargetPortfolio:
     return TargetPortfolio(
         weights=(),

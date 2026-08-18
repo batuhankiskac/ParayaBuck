@@ -851,6 +851,25 @@ class AlpacaBroker:
                 # stops on every reconciliation cycle. Oversized protection
                 # must be cancelled and broker-confirmed before replacement.
                 if mismatch == "over":
+                    protected_qty = float(getattr(self, "_last_protected_qty", 0.0))
+                    if position.market == Market.CRYPTO and protected_qty <= total_qty + max(
+                        1e-9, total_qty * 1e-8
+                    ):
+                        # Fee-reserve band: ``required`` was reduced to ~99.75%
+                        # of the position when nothing was sellable
+                        # (qty_available == 0), so the engine's OWN full-size
+                        # stop always reads "over". It covers at most the whole
+                        # position — the healthy protected state. Cancelling it
+                        # to re-submit the same size every cycle churned stops
+                        # and raised "No available quantity to protect" on the
+                        # stale pre-cancel snapshot.
+                        if ownership is not None and ledger is not None:
+                            ledger.set_protection_state(
+                                self._account_id or "unknown",
+                                ownership.entry_client_order_id,
+                                ProtectionState.ACTIVE,
+                            )
+                        continue
                     self._cancel_protective_orders(position.symbol, is_long)
             qty = min(total_qty, available_qty)
             if mismatch == "under":

@@ -902,6 +902,46 @@ def test_reconcile_keeps_full_size_crypto_stop_in_fee_reserve_band(tmp_path) -> 
     assert client.open_orders  # the healthy stop is still in place
 
 
+def test_reconcile_counts_only_remaining_qty_of_partially_filled_stop(tmp_path) -> None:
+    """A partially filled protective stop protects only its still-working
+    remainder: the filled portion must not be counted as protection, and
+    reconcile must keep the remainder (not churn it)."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="PAXG/USD",
+            qty="0.862154915",  # position after the stop sold 0.2608
+            avg_entry_price="4364.597",
+            current_price="4330",
+            qty_available="0",  # fully locked by the working stop
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="crypto",
+        )
+    ]
+    client.open_orders = [
+        SimpleNamespace(
+            id="stop-1",
+            client_order_id="parayabuck-stop-bbbb",
+            symbol="PAXG/USD",
+            side="sell",
+            type="stop_limit",
+            qty="1.122930907",
+            filled_qty="0.260775992",
+            stop_price="4331.86",
+            status="accepted",
+        )
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+    broker.portfolio_owned_quantities = lambda: {"PAXG/USD": 0.862154915}
+
+    broker.reconcile()
+
+    assert client.submitted == []  # no re-submission of the working remainder
+    assert client.open_orders  # the still-working stop is kept
+
+
 def _decision_target(timestamp: datetime) -> TargetPortfolio:
     return TargetPortfolio(
         weights=(),

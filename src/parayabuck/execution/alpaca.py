@@ -1426,7 +1426,13 @@ class AlpacaBroker:
                     stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
                 )
             ):
-                return abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+                # Only the still-working remainder protects the position; an
+                # already-filled portion must never be double-counted.
+                return max(
+                    Decimal("0"),
+                    abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+                    - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
+                )
             return sum(
                 (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
                 start=Decimal("0"),
@@ -2311,7 +2317,12 @@ class AlpacaBroker:
     ) -> bool:
         protective_orders = self._open_protective_orders(symbol, position_is_long, open_orders)
         protected = sum(
-            (abs(Decimal(str(self._field(order, "qty", 0) or 0))) for order in protective_orders),
+            (
+                max(Decimal("0"), abs(Decimal(str(self._field(order, "qty", 0) or 0))) - abs(
+                    Decimal(str(self._field(order, "filled_qty", 0) or 0))
+                ))
+                for order in protective_orders
+            ),
             start=Decimal("0"),
         )
         matches, self._last_protection_mismatch = self._protection_matches(

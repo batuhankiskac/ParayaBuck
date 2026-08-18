@@ -80,9 +80,7 @@ def main() -> int:
 
     results: dict[str, object] = {"rebalance_band": {}, "minimum_order_notional": {}}
     for band in BANDS:
-        cfg = replace(
-            config, execution=replace(config.execution, rebalance_band_pct=band)
-        )
+        cfg = replace(config, execution=replace(config.execution, rebalance_band_pct=band))
         label = f"band_{band:.4f}".replace(".", "p")
         results["rebalance_band"][str(band)] = {
             "equity": _run(cfg, Market.EQUITY, equity_bars, f"eq_{label}"),
@@ -90,9 +88,7 @@ def main() -> int:
         }
         print(f"band {band}: equity+crypto done", file=sys.stderr)
     for notional in MIN_NOTIONALS:
-        cfg = replace(
-            config, execution=replace(config.execution, minimum_order_notional=notional)
-        )
+        cfg = replace(config, execution=replace(config.execution, minimum_order_notional=notional))
         label = f"min_{notional:.0f}"
         results["minimum_order_notional"][str(notional)] = {
             "equity": _run(cfg, Market.EQUITY, equity_bars, f"eq_{label}"),

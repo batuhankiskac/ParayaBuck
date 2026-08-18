@@ -7,6 +7,7 @@ cache-backed (incremental) fetch are byte-identical to a full-window fetch,
 and that the fail-closed rules (digest mismatch, missing window head) force
 a full refetch instead of silently serving a shorter history.
 """
+
 from __future__ import annotations
 
 import random
@@ -18,9 +19,8 @@ from typing import Any
 import pandas as pd
 
 from parayabuck.config import Config
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import Market
 from parayabuck.universe import preflight as preflight_module
-from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
 
 # ---------------------------------------------------------------------------
 # deterministic synthetic bars: values are pure functions of (symbol, ts)
@@ -33,7 +33,7 @@ def _row(symbol: str, timestamp: datetime, market: Market) -> dict[str, Any]:
     rng = random.Random(f"{market.value}|{symbol}")
     drift = 1 + rng.uniform(-0.0002, 0.0004)
     noise = random.Random(f"{symbol}|{timestamp.date().isoformat()}")
-    close = round(100 * (drift ** days) * (1 + noise.uniform(-0.005, 0.005)), 2)
+    close = round(100 * (drift**days) * (1 + noise.uniform(-0.005, 0.005)), 2)
     open_ = round(close * (1 + noise.uniform(-0.004, 0.004)), 2)
     high = round(max(open_, close) * (1 + noise.uniform(0.0, 0.004)), 2)
     low = round(min(open_, close) * (1 - noise.uniform(0.0, 0.004)), 2)
@@ -132,9 +132,9 @@ def _config(tmp_path: Path) -> Config:
 
     from parayabuck.config import (
         CryptoScannerConfig,
+        CryptoUniverseConfig,
         EquityScannerConfig,
         EquityUniverseConfig,
-        CryptoUniverseConfig,
     )
 
     base = Config()
@@ -243,9 +243,7 @@ def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(
         config,
         universe=replace(
             config.universe,
-            crypto=replace(
-                config.universe.crypto, active_universe_max_age_hours=6.0
-            ),
+            crypto=replace(config.universe.crypto, active_universe_max_age_hours=6.0),
         ),
     )
     crypto.bar_rows.clear()
@@ -293,6 +291,7 @@ def test_equity_same_slot_skip_after_close_produces_identical_output(
     a same-slot re-run must skip the whole daily delta pass and produce the
     identical scanner result."""
     from datetime import time as dtime
+
     from parayabuck.markets.timeframes import NEW_YORK
 
     frozen = datetime(2026, 8, 18, 17, 30, tzinfo=NEW_YORK).astimezone(UTC)  # Tue 17:30 ET

@@ -48,6 +48,7 @@ def run(report: Report) -> None:
         market = Market.EQUITY
 
     if bars:
+
         def equity_run() -> None:
             run_product_backtest(
                 config,
@@ -72,6 +73,7 @@ def run(report: Report) -> None:
         )
         report.add(timing)
         if crypto_bars:
+
             def crypto_run() -> None:
                 run_product_backtest(
                     config,
@@ -89,6 +91,13 @@ def run(report: Report) -> None:
 
 
 if __name__ == "__main__":
+    from benchmarks.harness import mb, peak_rss_bytes
+
+    baseline_rss = peak_rss_bytes()
     report = Report()
     run(report)
     report.print_table()
+    print(
+        f"peak RSS delta over benchmark run: {mb(peak_rss_bytes() - baseline_rss):.1f} MB "
+        f"(baseline {mb(baseline_rss):.1f} MB -> {mb(peak_rss_bytes()):.1f} MB)"
+    )

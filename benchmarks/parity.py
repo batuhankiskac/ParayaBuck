@@ -75,10 +75,7 @@ def _run_equity(config) -> dict[str, object]:
         ),
         "fill_count": len(result.fills),
         "weight_history_hash": _sha(
-            [
-                (timestamp.isoformat(), weights)
-                for timestamp, weights in result.weight_history
-            ]
+            [(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]
         ),
         "universe_history_hash": _sha(
             [
@@ -130,10 +127,7 @@ def _run_crypto(config) -> dict[str, object]:
         ),
         "fill_count": len(result.fills),
         "weight_history_hash": _sha(
-            [
-                (timestamp.isoformat(), weights)
-                for timestamp, weights in result.weight_history
-            ]
+            [(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]
         ),
         "universe_history_hash": _sha(
             [

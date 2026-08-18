@@ -36,9 +36,7 @@ def _target(timestamp: datetime) -> TargetPortfolio:
         strategy_name="equity_residual_momentum_v2",
         strategy_version="2.0.0",
         decision_timestamp=timestamp,
-        weights=tuple(
-            TargetWeight(symbol, 0.1, reason="residual_momentum") for symbol in _SYMBOLS
-        ),
+        weights=tuple(TargetWeight(symbol, 0.1, reason="residual_momentum") for symbol in _SYMBOLS),
         cash_weight=0.2,
         universe_version="bench",
         universe_snapshot_id="bench",

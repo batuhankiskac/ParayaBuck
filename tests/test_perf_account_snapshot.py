@@ -163,10 +163,6 @@ def test_decision_cycle_issues_at_most_one_broker_account_fetch(tmp_path) -> Non
     engine._last_account_at = datetime.now(UTC)
     engine._last_account_snapshot_at = datetime.now(UTC) - timedelta(seconds=60)
     engine._process_portfolio_timestamp(
-        [
-            bar
-            for bar in _bars(start + timedelta(days=231), 1)
-            if bar.market == Market.EQUITY
-        ]
+        [bar for bar in _bars(start + timedelta(days=231), 1) if bar.market == Market.EQUITY]
     )
     assert broker.account_calls == 1

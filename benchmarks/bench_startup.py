@@ -38,11 +38,7 @@ def _monkeypatched_constructor(tmp_path: Path):
                 market_state_timeframe=config.runtime.market_state_timeframe,
                 scanner_refresh_hours=config.runtime.scanner_refresh_hours,
             ),
-            **{
-                key: value
-                for key, value in vars(config).items()
-                if key != "runtime"
-            },
+            **{key: value for key, value in vars(config).items() if key != "runtime"},
         )
         real_init(self, api_key, secret_key, config)
 

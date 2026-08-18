@@ -2154,6 +2154,13 @@ def _dashboard_runtime() -> Any:
     return getattr(manager, "runtime", None)
 
 
+# Display-only caches for dashboard payload assembly. None of these can ever
+# affect trading state, decisions, or the runtime: they memoize reads of
+# static/display inputs (the settings file) and short-lived payload slices.
+_dashboard_config_cache: dict[tuple[str, int], Any] = {}
+_dashboard_config_cache_lock = threading.Lock()
+
+
 def _dashboard_runtime_health() -> dict[str, Any] | None:
     runtime = _dashboard_runtime()
     if runtime is None or not hasattr(runtime, "health"):
@@ -2166,10 +2173,35 @@ def _dashboard_runtime_health() -> dict[str, Any] | None:
 
 
 def _dashboard_config() -> Any | None:
+    """The parsed settings Config, cached per file version.
+
+    The dashboard rebuilds its payload on every poll and resolves the ledger
+    path from this config in a dozen places; the YAML parse is pure overhead
+    and the file is static per process. The cache is keyed by (path, mtime)
+    so a settings save (or a swapped config path in tests) invalidates it on
+    the next call. The returned Config is treated as read-only by every
+    consumer. This cache is DISPLAY-ONLY: trading state never reads it.
+    """
     try:
-        return load_config(str(manager.config_path))
+        path = Path(str(manager.config_path))
+        key: tuple[str, int] = (
+            str(path),
+            path.stat().st_mtime_ns if path.exists() else 0,
+        )
+    except OSError:
+        return None
+    with _dashboard_config_cache_lock:
+        cached = _dashboard_config_cache.get(key)
+        if cached is not None or key in _dashboard_config_cache:
+            return cached
+    try:
+        cfg = load_config(str(manager.config_path))
     except Exception:
         return None
+    with _dashboard_config_cache_lock:
+        _dashboard_config_cache.clear()
+        _dashboard_config_cache[key] = cfg
+    return cfg
 
 
 def _dashboard_account_id() -> str:

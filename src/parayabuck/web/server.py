@@ -12,8 +12,8 @@ import sqlite3
 import subprocess
 import threading
 import time
-from collections.abc import Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -2259,7 +2259,7 @@ def _dashboard_account_id() -> str:
         except sqlite3.Error:
             pass
         finally:
-            connection.close()
+            _dashboard_release(connection)
     return "unknown"
 
 
@@ -2272,8 +2272,22 @@ def _dashboard_db_path() -> Path:
     return _DASHBOARD_DEFAULT_DB
 
 
+# Thread-local slot for the ONE read-only connection a payload build shares
+# across every panel (decisions, risk, execution, telemetry). Display-only.
+_dashboard_request_connection: threading.local = threading.local()
+
+
 def _dashboard_readonly_connection() -> sqlite3.Connection | None:
-    """Short-lived read-only ledger connection; None when the DB is missing."""
+    """Read-only ledger connection for the current payload build.
+
+    While :func:`_dashboard_shared_connection` is active every dashboard
+    helper receives the SAME connection (opened lazily here); otherwise a
+    short-lived connection is opened and the caller must release it with
+    :func:`_dashboard_release`. Returns None when the DB is missing.
+    """
+    shared = getattr(_dashboard_request_connection, "connection", None)
+    if shared is not None:
+        return shared
     path = _dashboard_db_path()
     if not path.exists():
         return None
@@ -2284,6 +2298,40 @@ def _dashboard_readonly_connection() -> sqlite3.Connection | None:
     except sqlite3.Error as exc:
         log.warning("Dashboard could not open ledger read-only: %s", exc)
         return None
+
+
+def _dashboard_release(connection: sqlite3.Connection | None) -> None:
+    """Close ``connection`` unless it is the payload-build shared one."""
+    if connection is None:
+        return
+    if getattr(_dashboard_request_connection, "connection", None) is connection:
+        return  # shared: the build context owns its lifecycle
+    try:
+        connection.close()
+    except sqlite3.Error:
+        pass
+
+
+@contextmanager
+def _dashboard_shared_connection() -> Iterator[sqlite3.Connection | None]:
+    """Run one payload build against a single shared read-only connection.
+
+    The connection is opened lazily on first use and closed when the build
+    finishes; helpers releasing it via :func:`_dashboard_release` no-op while
+    the build is active. Display-only: never shared with trading state.
+    """
+    connection = _dashboard_readonly_connection()
+    if connection is not None:
+        _dashboard_request_connection.connection = connection
+    try:
+        yield connection
+    finally:
+        _dashboard_request_connection.connection = None
+        if connection is not None:
+            try:
+                connection.close()
+            except sqlite3.Error:
+                pass
 
 
 def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -2348,7 +2396,7 @@ def _dashboard_market_decisions(account_id: str) -> dict[str, dict[str, Any]]:
     except sqlite3.Error:
         return {}
     finally:
-        connection.close()
+        _dashboard_release(connection)
     latest: dict[str, dict[str, Any]] = {}
     for market, timestamp, strategy_name, target, risk in rows:
         if market in latest:
@@ -2638,7 +2686,7 @@ def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | Non
     except sqlite3.Error:
         return [], None
     finally:
-        connection.close()
+        _dashboard_release(connection)
     incidents = [
         {
             "reason": str(row[0]),
@@ -2787,7 +2835,7 @@ def _dashboard_execution() -> dict[str, Any]:
     except sqlite3.Error as exc:
         log.debug("Dashboard reconciliation-anomaly query skipped: %s", exc)
     finally:
-        connection.close()
+        _dashboard_release(connection)
 
     def _lineage(decision_timestamp: object, strategy_name: object) -> dict[str, Any]:
         return {
@@ -2958,13 +3006,17 @@ def _dashboard_restart_count() -> int | None:
     except sqlite3.Error:
         return 0
     finally:
-        connection.close()
+        _dashboard_release(connection)
     total = int(rows[0][0]) if rows else 0
     return max(0, total - 1)
 
 
 def _dashboard_health(
-    cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]
+    cfg: Any,
+    health: dict[str, Any] | None,
+    account: dict[str, Any],
+    *,
+    runtime_metrics_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """System health panel: workers, queue, freshness, reconciliation, DB."""
     workers = dict((health or {}).get("workers") or {})
@@ -2975,7 +3027,8 @@ def _dashboard_health(
     ]
     refresh = dict((health or {}).get("universe_refresh") or {})
     engine_cfg = getattr(cfg, "engine", None) if cfg is not None else None
-    runtime_metrics_payload = _runtime_metrics_payload(_dashboard_account_id())
+    if runtime_metrics_payload is None:
+        runtime_metrics_payload = _runtime_metrics_payload(_dashboard_account_id())
     restart_count = runtime_metrics_payload.get("restart_count")
     if restart_count is None:
         restart_count = _dashboard_restart_count()
@@ -3088,10 +3141,24 @@ def _telemetry_payload(account_id: str) -> dict[str, Any]:
         log.warning("Dashboard telemetry import failed: %s", exc)
         return {"unavailable": True, "reason": f"telemetry import error: {exc}"}
     db_path = _dashboard_db_path()
+    connection = _dashboard_readonly_connection()
     try:
-        execution = execution_metrics(db_path)
-        forward = forward_metrics(db_path)
-        calibration = cost_calibration(db_path)
+        if connection is not None:
+            # Share the payload-build connection across all three reports.
+            # Fall back to per-report connections when the module predates
+            # the optional _connection parameter (or is a test stub).
+            try:
+                execution = execution_metrics(db_path, _connection=connection)
+                forward = forward_metrics(db_path, _connection=connection)
+                calibration = cost_calibration(db_path, _connection=connection)
+            except TypeError:
+                execution = execution_metrics(db_path)
+                forward = forward_metrics(db_path)
+                calibration = cost_calibration(db_path)
+        else:
+            execution = execution_metrics(db_path)
+            forward = forward_metrics(db_path)
+            calibration = cost_calibration(db_path)
         return {
             "unavailable": False,
             "execution_metrics": execution,
@@ -3101,6 +3168,8 @@ def _telemetry_payload(account_id: str) -> dict[str, Any]:
     except Exception as exc:
         log.warning("Dashboard telemetry failed: %s", exc)
         return {"unavailable": True, "reason": f"telemetry error: {exc}"}
+    finally:
+        _dashboard_release(connection)
 
 
 def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
@@ -3167,11 +3236,20 @@ def _dashboard_payload() -> dict[str, Any]:
 
 def _build_dashboard_payload(engine_state: str) -> dict[str, Any]:
     """Assemble the full dashboard payload (called on snapshot-cache miss)."""
+    with _dashboard_shared_connection():
+        return _build_dashboard_payload_uncached(engine_state)
+
+
+def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
+    """Assemble all panels (single shared read-only connection active)."""
     cfg = _dashboard_config()
     health = _dashboard_runtime_health()
     account = _dashboard_account()
     account_id = _dashboard_account_id()
     decisions = _dashboard_market_decisions(account_id)
+    # runtime_metrics is consumed by BOTH the health panel and the metrics
+    # panel; compute it once per build instead of twice.
+    runtime_metrics_payload = _runtime_metrics_payload(account_id)
     meta: dict[str, Any] = {}
     if cfg is not None:
         try:
@@ -3232,19 +3310,34 @@ def _build_dashboard_payload(engine_state: str) -> dict[str, Any]:
         "risk": _dashboard_safe_panel("risk", lambda: _dashboard_risk(cfg, health, account)),
         "execution": _dashboard_safe_panel("execution", _dashboard_execution),
         "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg, health)),
-        "health": _dashboard_safe_panel("health", lambda: _dashboard_health(cfg, health, account)),
+        "health": _dashboard_safe_panel(
+            "health",
+            lambda: _dashboard_health(
+                cfg, health, account, runtime_metrics_payload=runtime_metrics_payload
+            ),
+        ),
         "explanations": _dashboard_safe_panel(
             "explanations",
             lambda: _dashboard_explanations(cfg, decisions, account),
         ),
-        "metrics": _dashboard_metrics_payload(account_id),
+        "metrics": _dashboard_metrics_payload(
+            account_id, runtime_metrics_payload=runtime_metrics_payload
+        ),
     }
 
 
-def _dashboard_metrics_payload(account_id: str) -> dict[str, Any]:
+def _dashboard_metrics_payload(
+    account_id: str,
+    *,
+    runtime_metrics_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "telemetry": _telemetry_payload(account_id),
-        "runtime_metrics": _runtime_metrics_payload(account_id),
+        "runtime_metrics": (
+            runtime_metrics_payload
+            if runtime_metrics_payload is not None
+            else _runtime_metrics_payload(account_id)
+        ),
     }
 
 

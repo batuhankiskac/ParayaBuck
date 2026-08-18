@@ -156,11 +156,19 @@ def _empty_state() -> dict[str, object]:
 # --------------------------------------------------------------------------
 
 
-def execution_metrics(db_path: str | Path) -> dict[str, object]:
+def execution_metrics(
+    db_path: str | Path,
+    *,
+    _connection: sqlite3.Connection | None = None,
+) -> dict[str, object]:
     """Orders / fills / rejects / fill latency / slippage / fees over the
     runtime ledger, with per-market breakdowns. Pure, read-only, empty-safe.
+
+    ``_connection`` (private) lets a caller share one already-open read-only
+    connection across several reports; the caller owns its lifecycle.
     """
-    connection = _open_readonly(db_path)
+    owns = _connection is None
+    connection = _connection if _connection is not None else _open_readonly(db_path)
     if connection is None:
         return _empty_state()
     try:
@@ -338,7 +346,8 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
             "asof": _iso_now(),
         }
     finally:
-        connection.close()
+        if owns:
+            connection.close()
 
 
 # --------------------------------------------------------------------------
@@ -346,11 +355,19 @@ def execution_metrics(db_path: str | Path) -> dict[str, object]:
 # --------------------------------------------------------------------------
 
 
-def forward_metrics(db_path: str | Path) -> dict[str, object]:
+def forward_metrics(
+    db_path: str | Path,
+    *,
+    _connection: sqlite3.Connection | None = None,
+) -> dict[str, object]:
     """Strategy / execution / portfolio forward-looking quality metrics over
     the persisted decisions, orders, fills and risk state. Read-only.
+
+    ``_connection`` (private) lets a caller share one already-open read-only
+    connection; the caller owns its lifecycle.
     """
-    connection = _open_readonly(db_path)
+    owns = _connection is None
+    connection = _connection if _connection is not None else _open_readonly(db_path)
     if connection is None:
         return _empty_state()
     try:
@@ -605,7 +622,8 @@ def forward_metrics(db_path: str | Path) -> dict[str, object]:
             "asof": _iso_now(),
         }
     finally:
-        connection.close()
+        if owns:
+            connection.close()
 
 
 # --------------------------------------------------------------------------
@@ -653,11 +671,17 @@ def configured_cost_assumptions(config: object | None = None) -> dict[str, objec
 def cost_calibration(
     db_path: str | Path,
     config: object | None = None,
+    *,
+    _connection: sqlite3.Connection | None = None,
 ) -> dict[str, object]:
     """Configured vs observed cost report. REPORT ONLY — never adjusts
     assumptions; observed values feed the report so a human can compare.
+
+    ``_connection`` (private) lets a caller share one already-open read-only
+    connection; the caller owns its lifecycle.
     """
-    connection = _open_readonly(db_path)
+    owns = _connection is None
+    connection = _connection if _connection is not None else _open_readonly(db_path)
     configured = configured_cost_assumptions(config)
     if connection is None:
         empty = _empty_state()
@@ -750,7 +774,8 @@ def cost_calibration(
             "asof": _iso_now(),
         }
     finally:
-        connection.close()
+        if owns:
+            connection.close()
 
 
 # --------------------------------------------------------------------------

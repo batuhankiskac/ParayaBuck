@@ -2345,10 +2345,24 @@ class EngineRuntime:
                     if expected_all.issubset(bars)
                     or now_mono - first_seen[timestamp] >= self.config.event_grace_seconds
                 ]
+                # RuntimeHealth is expensive to build; build it ONCE per loop
+                # iteration (lazily, only when a batch is actually processed)
+                # and reuse it for every readiness gate in this batch.
+                # Unit-test fixtures that stub _entry_readiness_reasons skip
+                # the build entirely.
+                gate = self._entry_readiness_reasons
+                real_gate = getattr(gate, "__func__", None) is getattr(
+                    EngineRuntime, "_entry_readiness_reasons"
+                )
+                batch_health: RuntimeHealth | None = None
                 for timestamp in sorted(closable):
                     bars_by_symbol = pending.pop(timestamp)
                     first_seen.pop(timestamp, None)
-                    self._process_timestamp(timestamp, bars_by_symbol, expected_all)
+                    if batch_health is None and real_gate:
+                        batch_health = self.health()
+                    self._process_timestamp(
+                        timestamp, bars_by_symbol, expected_all, health=batch_health
+                    )
                     processed_batches[timestamp] = frozenset(bars_by_symbol)
                     for bar in bars_by_symbol.values():
                         self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
@@ -2385,7 +2399,11 @@ class EngineRuntime:
                 ):
                     candidate_bars = portfolio_pending.pop(portfolio_key)
                     portfolio_first_seen.pop(portfolio_key, None)
-                    self._process_portfolio_timestamp(list(candidate_bars.values()))
+                    if batch_health is None and real_gate:
+                        batch_health = self.health()
+                    self._process_portfolio_timestamp(
+                        list(candidate_bars.values()), health=batch_health
+                    )
                 if len(processed_batches) > 256:
                     cutoff = max(processed_batches) - timedelta(hours=6)
                     for stale in [ts for ts in processed_batches if ts < cutoff]:
@@ -2466,6 +2484,8 @@ class EngineRuntime:
         timestamp: datetime,
         bars_by_symbol: dict[str, Bar],
         expected: set[str],
+        *,
+        health: RuntimeHealth | None = None,
     ) -> None:
         bars = list(bars_by_symbol.values())
         ingestion = self.market_state.ingest_closed_bars(bars)
@@ -2483,9 +2503,15 @@ class EngineRuntime:
         if self._warming_up:
             return
         self._refresh_readiness()
+        gate = self._entry_readiness_reasons
+        if health is None and getattr(gate, "__func__", None) is getattr(
+            EngineRuntime, "_entry_readiness_reasons"
+        ):
+            health = self.health()
+        gate_kwargs = {"health": health} if health is not None else {}
         market_reasons: dict[Market, tuple[str, ...]] = {}
         for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-            market_reasons[candidate_market] = self._entry_readiness_reasons(candidate_market)
+            market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
         ready_bars = {
             symbol: bar
             for symbol, bar in bars_by_symbol.items()
@@ -2504,7 +2530,9 @@ class EngineRuntime:
         # This cadence updates bar and readiness state only. PortfolioRuntime
         # is the sole strategy/risk/order decision path.
 
-    def _process_portfolio_timestamp(self, bars: list[Bar]) -> None:
+    def _process_portfolio_timestamp(
+        self, bars: list[Bar], *, health: RuntimeHealth | None = None
+    ) -> None:
         if self._warming_up or self._circuit_breaker_reason is not None:
             return
         # One immutable account snapshot per processing cycle, shared by every
@@ -2527,7 +2555,13 @@ class EngineRuntime:
             # are no longer trusted enough to size ANY new rebalance order —
             # not even risk-reducing target sells. Broker-native protective
             # exits (resting stops) continue independently at the broker.
-            if self._entry_readiness_reasons(portfolio_runtime.market):
+            gate = self._entry_readiness_reasons
+            if health is None and getattr(gate, "__func__", None) is getattr(
+                EngineRuntime, "_entry_readiness_reasons"
+            ):
+                health = self.health()
+            gate_kwargs = {"health": health} if health is not None else {}
+            if gate(portfolio_runtime.market, **gate_kwargs):
                 continue
             # An entry-risk latch (daily loss / drawdown) must not freeze the
             # whole decision: risk-reducing SELL exits still run, only
@@ -2639,8 +2673,16 @@ class EngineRuntime:
                 result.decision_id,
             )
 
-    def _entry_readiness_reasons(self, market: Market | None = None) -> tuple[str, ...]:
-        health = self.health()
+    def _entry_readiness_reasons(
+        self,
+        market: Market | None = None,
+        *,
+        health: RuntimeHealth | None = None,
+    ) -> tuple[str, ...]:
+        # health() is expensive; the decision loop builds ONE RuntimeHealth
+        # per batch and shares it across every market's gate in the batch.
+        if health is None:
+            health = self.health()
         reasons: list[str] = []
         if self._state in {"halted", "error", "stop_failed", "stopping", "stopped"}:
             reasons.append(f"runtime_state:{self._state}")

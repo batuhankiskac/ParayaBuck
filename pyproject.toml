@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "parayabuck"
-version = "0.1.0"
+version = "1.0.0"
 description = "Event-driven Alpaca trading engine for US stocks and crypto with a Web UI"
 requires-python = ">=3.11"
 dependencies = [

@@ -1533,7 +1533,11 @@ class AlpacaBroker:
 
         for attempt in range(attempts):
             try:
-                position: Any = self._client.get_open_position(symbol)
+                # Alpaca's position endpoint keys crypto by the legacy
+                # no-slash form (``BTCUSD``); the canonical ``BTC/USD`` 404s.
+                position: Any = self._client.get_open_position(
+                    normalize_symbol(symbol).asset_lookup_symbol
+                )
                 saw_position = True
                 raw_available = (
                     position.get("qty_available")
@@ -1832,7 +1836,9 @@ class AlpacaBroker:
 
     def _position_qty(self, symbol: str) -> float:
         try:
-            position = self._client.get_open_position(normalize_symbol(symbol).trading_symbol)
+            position = self._client.get_open_position(
+                normalize_symbol(symbol).asset_lookup_symbol
+            )
         except Exception as exc:
             message = str(exc).lower()
             if "position does not exist" in message or "404" in message:

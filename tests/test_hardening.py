@@ -208,6 +208,34 @@ def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
     assert looked_up == ["BTCUSD"]
 
 
+def test_crypto_position_lookup_uses_legacy_symbol() -> None:
+    """Regression: the protective-stop and flatten paths looked up positions
+    with the canonical slash form, which Alpaca's position endpoint 404s for
+    crypto ('Not Found'); startup reconciliation then failed with 'No
+    available quantity to protect'. Both lookup helpers must use the legacy
+    asset-lookup symbol."""
+    looked_up: list[str] = []
+    broker = AlpacaBroker.__new__(AlpacaBroker)
+    broker.ledger = None
+    broker._asset_cache = {}
+    broker._client = SimpleNamespace(
+        get_asset=lambda symbol: SimpleNamespace(min_trade_increment=None),
+        get_open_position=lambda symbol: looked_up.append(symbol)
+        or SimpleNamespace(qty="0.5", qty_available="0.5"),
+    )
+    resolved = broker.resolve_available_position_qty("BTC/USD", 1.0)
+    assert resolved.available_qty == pytest.approx(0.5)
+    assert looked_up == ["BTCUSD"]
+    assert broker._position_qty("BTC/USD") == 0.5
+    assert looked_up == ["BTCUSD", "BTCUSD"]
+    # Equity symbols still look themselves up verbatim.
+    broker._client.get_open_position = lambda symbol: looked_up.append(symbol) or SimpleNamespace(
+        qty="2.0", qty_available="2.0"
+    )
+    assert broker._position_qty("IWM") == 2.0
+    assert looked_up == ["BTCUSD", "BTCUSD", "IWM"]
+
+
 def test_bar_store_correction_updates_without_retriggering() -> None:
     store = BarStore()
     timestamp = datetime(2025, 1, 2, 14, 30, tzinfo=UTC)

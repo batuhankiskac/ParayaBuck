@@ -127,8 +127,8 @@
         "concentration_acceptable": {
           "control_top1_share": 0.064,
           "faster_top1_share": 0.0534,
-          "jackknife_delta_return": 0.0,
-          "pass": true
+          "jackknife_delta_return": -0.058994,
+          "pass": false
         },
         "cost_robustness_acceptable": {
           "control_1x_2x_3x_returns": [
@@ -145,7 +145,7 @@
           "faster_1x_to_3x_relative_loss_pct": 19.0,
           "pass": true
         },
-        "dominates": true,
+        "dominates": false,
         "maxdd_better": {
           "control": 0.254497,
           "faster": 0.196808,

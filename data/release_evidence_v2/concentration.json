@@ -1,0 +1,503 @@
+{
+  "crypto": {
+    "crypto_168h": {
+      "concentration": {
+        "max_single_weight": 0.0699,
+        "positive_pnl_total": 14712.27,
+        "symbol_count": 12,
+        "top1_share_of_positive_pnl": 0.3379,
+        "top2_share_of_positive_pnl": 0.6567,
+        "top3_share_of_positive_pnl": 0.9685,
+        "top_1": {
+          "fees": 382.32,
+          "realized_pnl": 4971.51,
+          "symbol": "XRP/USD"
+        },
+        "top_2": {
+          "realized_pnl": 4689.51,
+          "symbol": "LTC/USD"
+        },
+        "top_3": {
+          "realized_pnl": 4588.34,
+          "symbol": "ETH/USD"
+        }
+      },
+      "control": true,
+      "parameters": {
+        "rebalance_hours": 168,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "pinned_analysis": {
+        "btc": {
+          "avg_weight_when_held": 0.0295,
+          "realized_pnl": 330.77,
+          "rebalances_held": 65,
+          "share_of_rebalances": 0.2471
+        },
+        "eth": {
+          "avg_weight_when_held": 0.0409,
+          "realized_pnl": 4588.34,
+          "rebalances_held": 67,
+          "share_of_rebalances": 0.2548
+        },
+        "note": "BTC/USD and ETH/USD are pinned universe members (config universe.crypto.pinned_symbols). Low-variance ranking makes BTC the structural parking spot; the audit documents the pin rather than re-running a jackknife (dropping a pinned symbol would also violate production universe policy).",
+        "pinned_symbols": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "total_rebalances": 263
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    },
+    "crypto_72h": {
+      "concentration": {
+        "max_single_weight": 0.0633,
+        "positive_pnl_total": 12641.28,
+        "symbol_count": 12,
+        "top1_share_of_positive_pnl": 0.3871,
+        "top2_share_of_positive_pnl": 0.7142,
+        "top3_share_of_positive_pnl": 0.9167,
+        "top_1": {
+          "fees": 760.19,
+          "realized_pnl": 4893.2,
+          "symbol": "LTC/USD"
+        },
+        "top_2": {
+          "realized_pnl": 4135.65,
+          "symbol": "ETH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 2558.82,
+          "symbol": "XRP/USD"
+        }
+      },
+      "control": false,
+      "parameters": {
+        "rebalance_hours": 72,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "pinned_analysis": {
+        "btc": {
+          "avg_weight_when_held": 0.0288,
+          "realized_pnl": 1053.61,
+          "rebalances_held": 89,
+          "share_of_rebalances": 0.1478
+        },
+        "eth": {
+          "avg_weight_when_held": 0.0422,
+          "realized_pnl": 4135.65,
+          "rebalances_held": 115,
+          "share_of_rebalances": 0.191
+        },
+        "note": "BTC/USD and ETH/USD are pinned universe members (config universe.crypto.pinned_symbols). Low-variance ranking makes BTC the structural parking spot; the audit documents the pin rather than re-running a jackknife (dropping a pinned symbol would also violate production universe policy).",
+        "pinned_symbols": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "total_rebalances": 602
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    },
+    "crypto_96h": {
+      "concentration": {
+        "max_single_weight": 0.0664,
+        "positive_pnl_total": 10445.52,
+        "symbol_count": 12,
+        "top1_share_of_positive_pnl": 0.4508,
+        "top2_share_of_positive_pnl": 0.7608,
+        "top3_share_of_positive_pnl": 0.8916,
+        "top_1": {
+          "fees": 768.78,
+          "realized_pnl": 4709.18,
+          "symbol": "LTC/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3238.11,
+          "symbol": "ETH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 1365.85,
+          "symbol": "XRP/USD"
+        }
+      },
+      "control": false,
+      "parameters": {
+        "rebalance_hours": 96,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "pinned_analysis": {
+        "btc": {
+          "avg_weight_when_held": 0.0298,
+          "realized_pnl": 1132.38,
+          "rebalances_held": 82,
+          "share_of_rebalances": 0.181
+        },
+        "eth": {
+          "avg_weight_when_held": 0.0401,
+          "realized_pnl": 3238.11,
+          "rebalances_held": 107,
+          "share_of_rebalances": 0.2362
+        },
+        "note": "BTC/USD and ETH/USD are pinned universe members (config universe.crypto.pinned_symbols). Low-variance ranking makes BTC the structural parking spot; the audit documents the pin rather than re-running a jackknife (dropping a pinned symbol would also violate production universe policy).",
+        "pinned_symbols": [
+          "BTC/USD",
+          "ETH/USD"
+        ],
+        "total_rebalances": 453
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    }
+  },
+  "equity": {
+    "equity_monthly": {
+      "concentration": {
+        "max_single_weight": 0.115,
+        "positive_pnl_total": 124794.6,
+        "symbol_count": 122,
+        "top1_share_of_positive_pnl": 0.064,
+        "top2_share_of_positive_pnl": 0.116,
+        "top3_share_of_positive_pnl": 0.1605,
+        "top_1": {
+          "fees": 0.52,
+          "realized_pnl": 7991.27,
+          "symbol": "ASX"
+        },
+        "top_2": {
+          "realized_pnl": 6488.45,
+          "symbol": "AHR"
+        },
+        "top_3": {
+          "realized_pnl": 5546.31,
+          "symbol": "ATI"
+        }
+      },
+      "control": true,
+      "jackknife": {
+        "base": {
+          "avg_cash_ratio": 0.5382,
+          "avg_exposure": 0.4618,
+          "avg_holdings": 5.543,
+          "benchmark_return": 2.29435,
+          "benchmark_symbol": "SPY",
+          "cagr": 0.049785,
+          "calmar": 0.19562,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 38.398503,
+          "duration_days": 3494,
+          "fee_total": 61.53,
+          "fees_pct_of_avg_equity": 0.015819,
+          "fees_pct_of_gross_pnl": 0.031615,
+          "gross_return": 0.61774,
+          "max_drawdown": 0.254497,
+          "maximum_concentration": 0.115,
+          "net_return": 0.592149,
+          "positive_month_ratio": 0.5652,
+          "profit_factor": 1.4904,
+          "rebalance_count": 113,
+          "return": 0.592149,
+          "sharpe": 0.473556,
+          "slippage_cost_total": 1260.97,
+          "sortino": 0.602521,
+          "spread_cost_total": 630.48,
+          "strategy_parameters": {
+            "beta_window_bars": 273,
+            "exclude_symbols": [
+              "SPY"
+            ],
+            "formation_bars": 252,
+            "ivol_reject_quantile": 0.7,
+            "max_single_weight": 0.1,
+            "residual_vol_window": 63,
+            "skip_bars": 21,
+            "top_n": 8
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 1952.98,
+          "trade_count": 300,
+          "turnover": 50.860789,
+          "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+          "universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2017-01-03T05:00:00+00:00",
+            "2026-07-30T04:00:00+00:00"
+          ],
+          "worst_year_return": -0.084428
+        },
+        "caveat": "jackknife removes the symbol from the PIT universe snapshots (symbols and observation set) via dataclasses.replace on the shared universe; the symbol's price bars remain in the warmup/bar set (universe membership is the only thing removed) and the universe hash therefore changes by design",
+        "delta_cagr": 0.001318,
+        "delta_max_drawdown": 0.011191,
+        "delta_return": 0.019241,
+        "delta_sharpe": 0.008999,
+        "dropped_symbol": "ASX",
+        "jackknife": {
+          "avg_cash_ratio": 0.5369,
+          "avg_exposure": 0.4631,
+          "avg_holdings": 5.56,
+          "benchmark_return": 2.29435,
+          "benchmark_symbol": "SPY",
+          "cagr": 0.051103,
+          "calmar": 0.192341,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 38.357725,
+          "duration_days": 3494,
+          "fee_total": 61.42,
+          "fees_pct_of_avg_equity": 0.015765,
+          "fees_pct_of_gross_pnl": 0.03044,
+          "gross_return": 0.6372,
+          "max_drawdown": 0.265688,
+          "maximum_concentration": 0.11,
+          "net_return": 0.61139,
+          "positive_month_ratio": 0.5565,
+          "profit_factor": 1.5182,
+          "rebalance_count": 113,
+          "return": 0.61139,
+          "sharpe": 0.482555,
+          "slippage_cost_total": 1252.13,
+          "sortino": 0.614828,
+          "spread_cost_total": 626.07,
+          "strategy_parameters": {
+            "beta_window_bars": 273,
+            "exclude_symbols": [
+              "SPY"
+            ],
+            "formation_bars": 252,
+            "ivol_reject_quantile": 0.7,
+            "max_single_weight": 0.1,
+            "residual_vol_window": 63,
+            "skip_bars": 21,
+            "top_n": 8
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 1939.62,
+          "trade_count": 299,
+          "turnover": 50.566637,
+          "universe_hash": "db9481f15c431a6a8e2a6d742176946a230da828ac67e7d92d16cce24998417d",
+          "universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded (jackknife: ASX excluded from snapshots)",
+          "window": [
+            "2017-01-03T05:00:00+00:00",
+            "2026-07-30T04:00:00+00:00"
+          ],
+          "worst_year_return": -0.098172
+        },
+        "snapshots_modified": 2657,
+        "top_contributors_after_drop": [
+          {
+            "realized_pnl": 6685.3,
+            "symbol": "ASML"
+          },
+          {
+            "realized_pnl": 6519.55,
+            "symbol": "AHR"
+          },
+          {
+            "realized_pnl": 6106.13,
+            "symbol": "AEM"
+          }
+        ],
+        "universe_hash_full": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+        "universe_hash_jackknife": "db9481f15c431a6a8e2a6d742176946a230da828ac67e7d92d16cce24998417d"
+      },
+      "parameters": {
+        "beta_window_bars": 273,
+        "exclude_symbols": [
+          "SPY"
+        ],
+        "formation_bars": 252,
+        "ivol_reject_quantile": 0.7,
+        "max_single_weight": 0.1,
+        "residual_vol_window": 63,
+        "skip_bars": 21,
+        "top_n": 8
+      },
+      "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+      "window": [
+        "2017-01-03T05:00:00+00:00",
+        "2026-07-30T04:00:00+00:00"
+      ]
+    },
+    "equity_weekly": {
+      "concentration": {
+        "max_single_weight": 0.115,
+        "positive_pnl_total": 170094.05,
+        "symbol_count": 161,
+        "top1_share_of_positive_pnl": 0.0534,
+        "top2_share_of_positive_pnl": 0.0981,
+        "top3_share_of_positive_pnl": 0.1403,
+        "top_1": {
+          "fees": 0.74,
+          "realized_pnl": 9086.13,
+          "symbol": "ASX"
+        },
+        "top_2": {
+          "realized_pnl": 7602.66,
+          "symbol": "ARKW"
+        },
+        "top_3": {
+          "realized_pnl": 7173.88,
+          "symbol": "BA"
+        }
+      },
+      "control": false,
+      "jackknife": {
+        "base": {
+          "avg_cash_ratio": 0.5271,
+          "avg_exposure": 0.4729,
+          "avg_holdings": 5.672,
+          "benchmark_return": 2.29435,
+          "benchmark_symbol": "SPY",
+          "cagr": 0.066143,
+          "calmar": 0.336078,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 43.50376,
+          "duration_days": 3494,
+          "fee_total": 181.52,
+          "fees_pct_of_avg_equity": 0.041209,
+          "fees_pct_of_gross_pnl": 0.06222,
+          "gross_return": 0.925494,
+          "max_drawdown": 0.196808,
+          "maximum_concentration": 0.115,
+          "net_return": 0.846146,
+          "positive_month_ratio": 0.6174,
+          "profit_factor": 1.3966,
+          "rebalance_count": 495,
+          "return": 0.846146,
+          "sharpe": 0.623703,
+          "slippage_cost_total": 3717.92,
+          "sortino": 0.833275,
+          "spread_cost_total": 1858.96,
+          "strategy_parameters": {
+            "beta_window_bars": 273,
+            "exclude_symbols": [
+              "SPY"
+            ],
+            "formation_bars": 252,
+            "ivol_reject_quantile": 0.7,
+            "max_single_weight": 0.1,
+            "rebalance_frequency": "weekly",
+            "residual_vol_window": 63,
+            "skip_bars": 21,
+            "top_n": 8
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 5758.4,
+          "trade_count": 784,
+          "turnover": 132.365609,
+          "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+          "universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2017-01-03T05:00:00+00:00",
+            "2026-07-30T04:00:00+00:00"
+          ],
+          "worst_year_return": -0.083628
+        },
+        "caveat": "jackknife removes the symbol from the PIT universe snapshots (symbols and observation set) via dataclasses.replace on the shared universe; the symbol's price bars remain in the warmup/bar set (universe membership is the only thing removed) and the universe hash therefore changes by design",
+        "delta_cagr": -0.003611,
+        "delta_max_drawdown": -0.009873,
+        "delta_return": -0.058994,
+        "delta_sharpe": -0.025342,
+        "dropped_symbol": "ASX",
+        "jackknife": {
+          "avg_cash_ratio": 0.5276,
+          "avg_exposure": 0.4724,
+          "avg_holdings": 5.664,
+          "benchmark_return": 2.29435,
+          "benchmark_symbol": "SPY",
+          "cagr": 0.062532,
+          "calmar": 0.334512,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 43.307632,
+          "duration_days": 3494,
+          "fee_total": 180.77,
+          "fees_pct_of_avg_equity": 0.041045,
+          "fees_pct_of_gross_pnl": 0.066113,
+          "gross_return": 0.863645,
+          "max_drawdown": 0.186935,
+          "maximum_concentration": 0.115,
+          "net_return": 0.787152,
+          "positive_month_ratio": 0.6087,
+          "profit_factor": 1.3707,
+          "rebalance_count": 495,
+          "return": 0.787152,
+          "sharpe": 0.598361,
+          "slippage_cost_total": 3686.02,
+          "sortino": 0.800718,
+          "spread_cost_total": 1843.01,
+          "strategy_parameters": {
+            "beta_window_bars": 273,
+            "exclude_symbols": [
+              "SPY"
+            ],
+            "formation_bars": 252,
+            "ivol_reject_quantile": 0.7,
+            "max_single_weight": 0.1,
+            "rebalance_frequency": "weekly",
+            "residual_vol_window": 63,
+            "skip_bars": 21,
+            "top_n": 8
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 5709.79,
+          "trade_count": 781,
+          "turnover": 131.842674,
+          "universe_hash": "db9481f15c431a6a8e2a6d742176946a230da828ac67e7d92d16cce24998417d",
+          "universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded (jackknife: ASX excluded from snapshots)",
+          "window": [
+            "2017-01-03T05:00:00+00:00",
+            "2026-07-30T04:00:00+00:00"
+          ],
+          "worst_year_return": -0.072363
+        },
+        "snapshots_modified": 2657,
+        "top_contributors_after_drop": [
+          {
+            "realized_pnl": 8057.2,
+            "symbol": "ARKW"
+          },
+          {
+            "realized_pnl": 7564.8,
+            "symbol": "AEM"
+          },
+          {
+            "realized_pnl": 6155.37,
+            "symbol": "BA"
+          }
+        ],
+        "universe_hash_full": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+        "universe_hash_jackknife": "db9481f15c431a6a8e2a6d742176946a230da828ac67e7d92d16cce24998417d"
+      },
+      "parameters": {
+        "beta_window_bars": 273,
+        "exclude_symbols": [
+          "SPY"
+        ],
+        "formation_bars": 252,
+        "ivol_reject_quantile": 0.7,
+        "max_single_weight": 0.1,
+        "rebalance_frequency": "weekly",
+        "residual_vol_window": 63,
+        "skip_bars": 21,
+        "top_n": 8
+      },
+      "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+      "window": [
+        "2017-01-03T05:00:00+00:00",
+        "2026-07-30T04:00:00+00:00"
+      ]
+    }
+  }
+}

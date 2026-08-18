@@ -1,0 +1,118 @@
+{
+  "crypto": {
+    "benchmark": "BTC/USD",
+    "note": "first (and last) calendar years are partial windows (2021-04-01..2026-07-31); returns are net 1x, chained from the account start (year 1 anchors at starting equity)",
+    "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+    "years": [
+      {
+        "benchmark": -0.21309255963279317,
+        "crypto_168h": -0.002353539137615601,
+        "crypto_72h": 0.023621603036031225,
+        "crypto_96h": 0.045709507478701505,
+        "year": 2021
+      },
+      {
+        "benchmark": -0.6423153151729717,
+        "crypto_168h": -0.08040337326402403,
+        "crypto_72h": -0.08365506416949842,
+        "crypto_96h": -0.06831150379434203,
+        "year": 2022
+      },
+      {
+        "benchmark": 1.5587703878425105,
+        "crypto_168h": 0.08872142051862486,
+        "crypto_72h": 0.07087655936696868,
+        "crypto_96h": 0.07678840530785291,
+        "year": 2023
+      },
+      {
+        "benchmark": 1.2092531734711636,
+        "crypto_168h": 0.058569533990147526,
+        "crypto_72h": 0.05148309305089782,
+        "crypto_96h": 0.05784324819741382,
+        "year": 2024
+      },
+      {
+        "benchmark": -0.06349289146681103,
+        "crypto_168h": 0.031183582553223177,
+        "crypto_72h": 0.011325968196809644,
+        "crypto_96h": 0.004775530217400847,
+        "year": 2025
+      },
+      {
+        "benchmark": -0.26014469664814743,
+        "crypto_168h": -0.04056455123365077,
+        "crypto_72h": -0.0381936915465525,
+        "crypto_96h": -0.044394908484089,
+        "year": 2026
+      }
+    ]
+  },
+  "equity": {
+    "benchmark": "SPY",
+    "note": "first (and last) calendar years are partial windows (2017-01-03..2026-07-30); returns are net 1x, chained from the account start (year 1 anchors at starting equity)",
+    "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+    "years": [
+      {
+        "benchmark": 0.1856622545971396,
+        "equity_monthly": 0.10165572066641748,
+        "equity_weekly": 0.1194916608176293,
+        "year": 2017
+      },
+      {
+        "benchmark": -0.06316026073274883,
+        "equity_monthly": -0.08159396789455853,
+        "equity_weekly": -0.039833861758101774,
+        "year": 2018
+      },
+      {
+        "benchmark": 0.28698816378758796,
+        "equity_monthly": 0.13029860022337347,
+        "equity_weekly": 0.11554413394778984,
+        "year": 2019
+      },
+      {
+        "benchmark": 0.16280876184558024,
+        "equity_monthly": 0.18263762907619263,
+        "equity_weekly": 0.29936838960313916,
+        "year": 2020
+      },
+      {
+        "benchmark": 0.2690981963927854,
+        "equity_monthly": -0.08442804999396702,
+        "equity_weekly": -0.08362798218091672,
+        "year": 2021
+      },
+      {
+        "benchmark": -0.19481640559204982,
+        "equity_monthly": 0.0009624127404452842,
+        "equity_weekly": 0.0066694083077973865,
+        "year": 2022
+      },
+      {
+        "benchmark": 0.24286797583871556,
+        "equity_monthly": 0.061802353265998144,
+        "equity_weekly": 0.057144180209075746,
+        "year": 2023
+      },
+      {
+        "benchmark": 0.23304790557741262,
+        "equity_monthly": 0.020588697526201738,
+        "equity_weekly": 0.10387088017893209,
+        "year": 2024
+      },
+      {
+        "benchmark": 0.16352716352716334,
+        "equity_monthly": 0.07629698490132752,
+        "equity_weekly": 0.012146694760706067,
+        "year": 2025
+      },
+      {
+        "benchmark": 0.08764957766306902,
+        "equity_monthly": 0.10133987430951907,
+        "equity_weekly": 0.08748933703929351,
+        "year": 2026
+      }
+    ]
+  }
+}

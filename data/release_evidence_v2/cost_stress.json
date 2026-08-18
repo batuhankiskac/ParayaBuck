@@ -1,4 +1,450 @@
 {
+  "crypto": {
+    "crypto_168h": {
+      "control": true,
+      "parameters": {
+        "rebalance_hours": 168,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "peer_crosscheck": {
+        "available": false,
+        "note": "no matching candidate entries found in peer JSONs"
+      },
+      "runs": {
+        "1x": {
+          "avg_cash_ratio": 0.906,
+          "avg_exposure": 0.094,
+          "avg_holdings": 2.098,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": 0.008484,
+          "calmar": 0.064444,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 285.949037,
+          "duration_days": 1946,
+          "fee_total": 3391.81,
+          "fees_pct_of_avg_equity": 0.037608,
+          "fees_pct_of_gross_pnl": 0.436892,
+          "gross_return": 0.086951,
+          "max_drawdown": 0.131654,
+          "maximum_concentration": 0.0699,
+          "net_return": 0.046073,
+          "positive_month_ratio": 0.5156,
+          "profit_factor": 1.109,
+          "rebalance_count": 263,
+          "return": 0.046073,
+          "sharpe": 0.171791,
+          "slippage_cost_total": 271.35,
+          "sortino": 0.230506,
+          "spread_cost_total": 135.67,
+          "strategy_parameters": {
+            "rebalance_hours": 168,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 3798.83,
+          "trade_count": 124,
+          "turnover": 13.284977,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.080403
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9059,
+          "avg_exposure": 0.0941,
+          "avg_holdings": 2.11,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": 0.001607,
+          "calmar": 0.011727,
+          "cost_multiplier": 2.0,
+          "cost_per_unit_turnover": 561.731025,
+          "duration_days": 1946,
+          "fee_total": 6670.64,
+          "fees_pct_of_avg_equity": 0.075285,
+          "fees_pct_of_gross_pnl": 0.823595,
+          "gross_return": 0.090713,
+          "max_drawdown": 0.137055,
+          "maximum_concentration": 0.0699,
+          "net_return": 0.008599,
+          "positive_month_ratio": 0.5,
+          "profit_factor": 1.0197,
+          "rebalance_count": 263,
+          "return": 0.008599,
+          "sharpe": 0.056742,
+          "slippage_cost_total": 533.65,
+          "sortino": 0.076115,
+          "spread_cost_total": 266.83,
+          "strategy_parameters": {
+            "rebalance_hours": 168,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 2.0,
+          "total_cost": 7471.12,
+          "trade_count": 124,
+          "turnover": 13.300168,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.085564
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9058,
+          "avg_exposure": 0.0942,
+          "avg_holdings": 2.132,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": -0.005424,
+          "calmar": -0.037215,
+          "cost_multiplier": 3.0,
+          "cost_per_unit_turnover": 827.265507,
+          "duration_days": 1946,
+          "fee_total": 9835.44,
+          "fees_pct_of_avg_equity": 0.113033,
+          "fees_pct_of_gross_pnl": 1.156914,
+          "gross_return": 0.095216,
+          "max_drawdown": 0.145742,
+          "maximum_concentration": 0.07,
+          "net_return": -0.028579,
+          "positive_month_ratio": 0.4844,
+          "profit_factor": 0.9365,
+          "rebalance_count": 263,
+          "return": -0.028579,
+          "sharpe": -0.061245,
+          "slippage_cost_total": 786.84,
+          "sortino": -0.082076,
+          "spread_cost_total": 393.42,
+          "strategy_parameters": {
+            "rebalance_hours": 168,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 3.0,
+          "total_cost": 11015.7,
+          "trade_count": 125,
+          "turnover": 13.315793,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.090699
+        }
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    },
+    "crypto_72h": {
+      "control": false,
+      "parameters": {
+        "rebalance_hours": 72,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "peer_crosscheck": {
+        "available": false,
+        "note": "no matching candidate entries found in peer JSONs"
+      },
+      "runs": {
+        "1x": {
+          "avg_cash_ratio": 0.9048,
+          "avg_exposure": 0.0952,
+          "avg_holdings": 2.922,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": 0.005074,
+          "calmar": 0.036668,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 284.95069,
+          "duration_days": 1946,
+          "fee_total": 4712.58,
+          "fees_pct_of_avg_equity": 0.05215,
+          "fees_pct_of_gross_pnl": 0.629278,
+          "gross_return": 0.083875,
+          "max_drawdown": 0.138376,
+          "maximum_concentration": 0.0633,
+          "net_return": 0.027351,
+          "positive_month_ratio": 0.5625,
+          "profit_factor": 1.0556,
+          "rebalance_count": 602,
+          "return": 0.027351,
+          "sharpe": 0.114736,
+          "slippage_cost_total": 377.01,
+          "sortino": 0.15552,
+          "spread_cost_total": 188.5,
+          "strategy_parameters": {
+            "rebalance_hours": 72,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 5278.1,
+          "trade_count": 175,
+          "turnover": 18.522838,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.083655
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9051,
+          "avg_exposure": 0.0949,
+          "avg_holdings": 2.906,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": -0.00321,
+          "calmar": -0.022302,
+          "cost_multiplier": 2.0,
+          "cost_per_unit_turnover": 556.486715,
+          "duration_days": 1946,
+          "fee_total": 9238.32,
+          "fees_pct_of_avg_equity": 0.104682,
+          "fees_pct_of_gross_pnl": 1.056492,
+          "gross_return": 0.097937,
+          "max_drawdown": 0.143948,
+          "maximum_concentration": 0.0633,
+          "net_return": -0.016997,
+          "positive_month_ratio": 0.5469,
+          "profit_factor": 0.9662,
+          "rebalance_count": 602,
+          "return": -0.016997,
+          "sharpe": -0.024248,
+          "slippage_cost_total": 739.07,
+          "sortino": -0.032896,
+          "spread_cost_total": 369.53,
+          "strategy_parameters": {
+            "rebalance_hours": 72,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 2.0,
+          "total_cost": 10346.92,
+          "trade_count": 181,
+          "turnover": 18.5933,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.091205
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9048,
+          "avg_exposure": 0.0952,
+          "avg_holdings": 2.912,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": -0.013687,
+          "calmar": -0.091558,
+          "cost_multiplier": 3.0,
+          "cost_per_unit_turnover": 813.561997,
+          "duration_days": 1946,
+          "fee_total": 13490.35,
+          "fees_pct_of_avg_equity": 0.156877,
+          "fees_pct_of_gross_pnl": 1.480648,
+          "gross_return": 0.102045,
+          "max_drawdown": 0.149488,
+          "maximum_concentration": 0.0633,
+          "net_return": -0.070841,
+          "positive_month_ratio": 0.5156,
+          "profit_factor": 0.8642,
+          "rebalance_count": 602,
+          "return": -0.070841,
+          "sharpe": -0.200531,
+          "slippage_cost_total": 1079.23,
+          "sortino": -0.271826,
+          "spread_cost_total": 539.62,
+          "strategy_parameters": {
+            "rebalance_hours": 72,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 3.0,
+          "total_cost": 15109.2,
+          "trade_count": 179,
+          "turnover": 18.571668,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.098697
+        }
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    },
+    "crypto_96h": {
+      "control": false,
+      "parameters": {
+        "rebalance_hours": 96,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "peer_crosscheck": {
+        "available": false,
+        "note": "no matching candidate entries found in peer JSONs"
+      },
+      "runs": {
+        "1x": {
+          "avg_cash_ratio": 0.9053,
+          "avg_exposure": 0.0947,
+          "avg_holdings": 2.46,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": 0.011983,
+          "calmar": 0.090428,
+          "cost_multiplier": 1.0,
+          "cost_per_unit_turnover": 296.181791,
+          "duration_days": 1946,
+          "fee_total": 4289.91,
+          "fees_pct_of_avg_equity": 0.045703,
+          "fees_pct_of_gross_pnl": 0.41207,
+          "gross_return": 0.116599,
+          "max_drawdown": 0.132515,
+          "maximum_concentration": 0.0664,
+          "net_return": 0.065568,
+          "positive_month_ratio": 0.5938,
+          "profit_factor": 1.1383,
+          "rebalance_count": 453,
+          "return": 0.065568,
+          "sharpe": 0.232833,
+          "slippage_cost_total": 343.19,
+          "sortino": 0.332175,
+          "spread_cost_total": 171.6,
+          "strategy_parameters": {
+            "rebalance_hours": 96,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 1.0,
+          "total_cost": 4804.7,
+          "trade_count": 155,
+          "turnover": 16.222135,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.068312
+        },
+        "2x": {
+          "avg_cash_ratio": 0.9052,
+          "avg_exposure": 0.0948,
+          "avg_holdings": 2.487,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": 0.002629,
+          "calmar": 0.01923,
+          "cost_multiplier": 2.0,
+          "cost_per_unit_turnover": 578.536127,
+          "duration_days": 1946,
+          "fee_total": 8397.85,
+          "fees_pct_of_avg_equity": 0.091628,
+          "fees_pct_of_gross_pnl": 0.808109,
+          "gross_return": 0.11639,
+          "max_drawdown": 0.136725,
+          "maximum_concentration": 0.0665,
+          "net_return": 0.014098,
+          "positive_month_ratio": 0.5781,
+          "profit_factor": 1.0288,
+          "rebalance_count": 453,
+          "return": 0.014098,
+          "sharpe": 0.074055,
+          "slippage_cost_total": 671.83,
+          "sortino": 0.105449,
+          "spread_cost_total": 335.92,
+          "strategy_parameters": {
+            "rebalance_hours": 96,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 2.0,
+          "total_cost": 9405.59,
+          "trade_count": 154,
+          "turnover": 16.257571,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.075522
+        },
+        "3x": {
+          "avg_cash_ratio": 0.9047,
+          "avg_exposure": 0.0953,
+          "avg_holdings": 2.594,
+          "benchmark_return": 0.102449,
+          "benchmark_symbol": "BTC/USD",
+          "cagr": -0.006087,
+          "calmar": -0.043063,
+          "cost_multiplier": 3.0,
+          "cost_per_unit_turnover": 848.129533,
+          "duration_days": 1946,
+          "fee_total": 12340.8,
+          "fees_pct_of_avg_equity": 0.137803,
+          "fees_pct_of_gross_pnl": 1.126639,
+          "gross_return": 0.122681,
+          "max_drawdown": 0.141349,
+          "maximum_concentration": 0.0665,
+          "net_return": -0.032027,
+          "positive_month_ratio": 0.5469,
+          "profit_factor": 0.9365,
+          "rebalance_count": 453,
+          "return": -0.032027,
+          "sharpe": -0.074144,
+          "slippage_cost_total": 987.27,
+          "sortino": -0.105742,
+          "spread_cost_total": 493.63,
+          "strategy_parameters": {
+            "rebalance_hours": 96,
+            "top_n": 2,
+            "variance_lookback_days": 22
+          },
+          "summary_cost_multiplier": 3.0,
+          "total_cost": 13821.7,
+          "trade_count": 151,
+          "turnover": 16.296688,
+          "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+          "universe_methodology": "daily production scanner policy on trailing 14d metrics; inputs strictly precede snapshot; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+          "window": [
+            "2021-04-01T00:00:00+00:00",
+            "2026-07-30T00:00:00+00:00"
+          ],
+          "worst_year_return": -0.082679
+        }
+      },
+      "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac",
+      "window": [
+        "2021-04-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    }
+  },
   "equity": {
     "equity_monthly": {
       "control": true,

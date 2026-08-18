@@ -84,7 +84,11 @@ concentration shares lower). Two material caveats, disclosed:
 - **Top-name dependence**: ASX-drop jackknife (fresh engines, no cache):
   weekly +84.61% → +78.72% (−5.9pp); monthly +59.21% → +61.13% (+1.9pp).
   The weekly edge is materially ASX-driven; it still beats the monthly
-  baseline by ~19.5pp without its top contributor.
+  baseline by ~19.5pp without its top contributor. The independent audit
+  script applies a stricter concentration gate (top-1 jackknife drop < 5pp),
+  which flags this and reports `dominates=false` for equity weekly in
+  `robustness/verdict.json`; the mission's release gate is the disclosed
+  caveat above — the advantage survives ASX removal.
 - **Recent-window sensitivity**: the mission's 2024-01-01..2025-06-30 smoke
   window REVERSES direction (monthly CAGR 7.56% vs weekly 7.42%, monthly
   maxDD 6.6% vs weekly 13.9%, WF positive 75% vs 50%). The full-window

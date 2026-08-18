@@ -92,8 +92,30 @@ def normalize_symbol(symbol: str, market: Market | None = None) -> SymbolIdentit
     )
 
 
+# canonical_symbol is a pure function of (symbol, market) called millions of
+# times per backtest (per-bar dedup/ingest/fill bookkeeping and per-symbol
+# strategy loops), always with a small closed set of inputs. The cache is a
+# bounded dict keyed by the exact (symbol, market) pair: unhashable or
+# otherwise malformed input falls through to the uncached path so exception
+# behavior is unchanged, and caching never changes the result because
+# normalization has no side effects or hidden state.
+_CANONICAL_CACHE_MAX = 65536
+_canonical_cache: dict[tuple[object, object], str] = {}
+
+
 def canonical_symbol(symbol: str, market: Market | None = None) -> str:
-    return normalize_symbol(symbol, market).canonical
+    key = (symbol, market)
+    try:
+        return _canonical_cache[key]
+    except TypeError:
+        # Unhashable input: uncached, same behavior as before caching.
+        return normalize_symbol(symbol, market).canonical
+    except KeyError:
+        pass
+    canonical = normalize_symbol(symbol, market).canonical
+    if len(_canonical_cache) < _CANONICAL_CACHE_MAX:
+        _canonical_cache[key] = canonical
+    return canonical
 
 
 def split_crypto_pair(symbol: str) -> tuple[str, str]:

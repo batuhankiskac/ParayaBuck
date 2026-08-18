@@ -235,7 +235,12 @@ def test_residual_momentum_aligns_returns_on_timestamps() -> None:
         _bar("STOCK", start + timedelta(days=day), close, Market.EQUITY)
         for day, close in ((0, 100.0), (1, 101.0), (3, 111.0), (4, 112.0), (5, 113.0))
     )
-    aligned = _aligned_returns(stock_bars, spy_bars, window=len(spy_closes) - 1)
+    # The strategy hoists the market close-by-timestamp lookup once per
+    # decision; the contract test builds the same lookup explicitly.
+    market_close_by_timestamp = {bar.timestamp: bar.close for bar in spy_bars}
+    aligned = _aligned_returns(
+        stock_bars, market_close_by_timestamp, window=len(spy_closes) - 1
+    )
     assert aligned is not None
     stock_returns, market_returns = aligned
     # Every aligned pair is the SAME calendar interval: the stock's return

@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -74,8 +74,7 @@ class BacktestManager:
             # Mutual exclusion with the trading runtime: a large in-process
             # backtest must never starve live/PAPER workers. The engine state
             # is read at call time so tests can monkeypatch the singleton.
-            engine = manager
-            engine_state = engine.current_engine_state() if engine is not None else "stopped"
+            engine_state = manager.current_engine_state()
             if engine_state in {
                 "starting",
                 "running",
@@ -455,7 +454,7 @@ class EngineManager:
 
         # Validate the complete temporary configuration before persistence.
         temporary_config = self.config_path.with_name(f".{self.config_path.name}.validate")
-        _atomic_write(
+        atomic_write(
             temporary_config,
             yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
         )
@@ -930,12 +929,10 @@ class EngineManager:
             self.invalidate_live_arming()
             raise ValueError("Live confirmation phrase does not match the verified account")
         now = datetime.now(UTC)
-        self._live_arm_token = LiveArmToken(
-            **{
-                **pending.__dict__,
-                "issued_at": now,
-                "expires_at": now + timedelta(minutes=5),
-            }
+        self._live_arm_token = replace(
+            pending,
+            issued_at=now,
+            expires_at=now + timedelta(minutes=5),
         )
         self._pending_live_arm = None
         self._live_armed = True
@@ -1324,10 +1321,6 @@ def _tracked_secret_warning(root: Path) -> str | None:
     return None
 
 
-def _atomic_write(path: Path, content: str, mode: int | None = None) -> None:
-    atomic_write(path, content, mode)
-
-
 def _quote_dotenv_value(value: str) -> str:
     quote = '"'
     escaped = value.replace(quote, "\\" + quote)
@@ -1353,7 +1346,7 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
     for name, value in managed.items():
         if name not in seen:
             lines.append(f"{name}={_quote_dotenv_value(value)}")
-    _atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
+    atomic_write(path, "\n".join(lines).rstrip() + "\n", 0o600)
 
 
 manager = EngineManager()
@@ -1949,7 +1942,7 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
         raw.setdefault("runtime", {})["mode"] = "paper" if payload.paper else "live"
         if not payload.paper:
             raw.setdefault("live", {})["enabled"] = True
-        _atomic_write(
+        atomic_write(
             manager.config_path,
             yaml.safe_dump(raw, sort_keys=False, default_flow_style=False),
         )
@@ -2071,7 +2064,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
                     "Bot could not stop safely. Use the Durdur button and try again."
                 )
         _atomic_update_credentials(manager.env_path, api_key, secret_key)
-        _atomic_write(
+        atomic_write(
             manager.config_path,
             yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
         )
@@ -2148,6 +2141,11 @@ _DASHBOARD_DEFAULT_DB = Path("data/runtime/parayabuck.sqlite3")
 def _dashboard_runtime() -> Any:
     """The live EngineRuntime instance, or None when stopped (or stubbed)."""
     return getattr(manager, "runtime", None)
+
+
+def _manager_engine_state() -> str:
+    """Current engine state via the module manager (getattr tolerates stubs)."""
+    return getattr(manager, "current_engine_state", lambda: "stopped")()
 
 
 # Display-only caches for dashboard payload assembly. None of these can ever
@@ -2361,8 +2359,8 @@ def _dashboard_mode(cfg: Any) -> dict[str, Any]:
         runtime_mode = str(getattr(configured_mode, "value", None) or configured_mode or "paper")
         live_enabled = bool(getattr(getattr(cfg, "live", None), "enabled", False))
     paper = bool(getattr(manager, "is_paper_mode", lambda: True)())
+    engine_state = _manager_engine_state()
     live_configured = bool(runtime_mode == "live" and live_enabled)
-    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
     live_active = bool(live_configured and engine_state in {"running", "warming_up", "degraded"})
     live_disabled = bool(live_configured and not live_active)
     return {
@@ -3035,7 +3033,7 @@ def _dashboard_health(
     if restart_count is None:
         restart_count = _dashboard_restart_count()
     return {
-        "engine_state": getattr(manager, "current_engine_state", lambda: "stopped")(),
+        "engine_state": _manager_engine_state(),
         "healthy": (health or {}).get("healthy"),
         "workers": workers,
         "restart_count": restart_count,
@@ -3211,7 +3209,7 @@ def _dashboard_snapshot_reset() -> None:
 def _dashboard_payload() -> dict[str, Any]:
     """Full aggregated dashboard payload; each panel degrades on failure."""
     global _dashboard_snapshot
-    engine_state = getattr(manager, "current_engine_state", lambda: "stopped")()
+    engine_state = _manager_engine_state()
     config_key = _dashboard_config_key()
     now = time.monotonic()
     with _dashboard_snapshot_lock:
@@ -3370,52 +3368,50 @@ async def dashboard_overview() -> dict[str, Any]:
     return await asyncio.to_thread(_dashboard_payload)
 
 
+async def _dashboard_panel(key: str) -> dict[str, Any]:
+    """One dashboard panel from the shared snapshot payload."""
+    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
+    return cast(dict[str, Any], payload[key])
+
+
 @app.get("/api/equity")
 async def dashboard_equity() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["equity"])
+    return await _dashboard_panel("equity")
 
 
 @app.get("/api/crypto")
 async def dashboard_crypto() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["crypto"])
+    return await _dashboard_panel("crypto")
 
 
 @app.get("/api/risk")
 async def dashboard_risk() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["risk"])
+    return await _dashboard_panel("risk")
 
 
 @app.get("/api/execution")
 async def dashboard_execution() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["execution"])
+    return await _dashboard_panel("execution")
 
 
 @app.get("/api/universe")
 async def dashboard_universe() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["universe"])
+    return await _dashboard_panel("universe")
 
 
 @app.get("/api/health")
 async def dashboard_health() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["health"])
+    return await _dashboard_panel("health")
 
 
 @app.get("/api/explanations")
 async def dashboard_explanations() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["explanations"])
+    return await _dashboard_panel("explanations")
 
 
 @app.get("/api/metrics")
 async def dashboard_metrics() -> dict[str, Any]:
-    payload: dict[str, Any] = await asyncio.to_thread(_dashboard_payload)
-    return cast(dict[str, Any], payload["metrics"])
+    return await _dashboard_panel("metrics")
 
 
 # WebSockets

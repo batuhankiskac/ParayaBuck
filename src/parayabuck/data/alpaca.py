@@ -551,23 +551,9 @@ class AlpacaHistoricalData:
             end_at = min(end_at, datetime.now(UTC) - timedelta(minutes=15, seconds=5))
         feed_name = "crypto" if market == Market.CRYPTO else self._effective_stock_feed_name
         cached = {
-            symbol: [
-                bar
-                for bar in self._cache.get(
-                    symbol,
-                    timeframe,
-                    market=market,
-                    feed=feed_name,
-                    start=start_at,
-                    end=end_at,
-                    adjustment=adjustment,
-                )
-                if (
-                    market != Market.EQUITY
-                    or timeframe == "1d"
-                    or is_regular_equity_time(bar.timestamp)
-                )
-            ]
+            symbol: self._cached_window(
+                self._cache, symbol, timeframe, market, feed_name, adjustment, start_at, end_at
+            )
             for symbol in symbols
         }
         fresh_cached = {

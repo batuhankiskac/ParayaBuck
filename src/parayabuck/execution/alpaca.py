@@ -54,9 +54,9 @@ _CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
     """Emit one execution alert without ever affecting order flow.
 
-    The ``parayabuck.monitoring.alerts`` module lands in the same release
-    batch; the import is guarded so a missing (or broken) alerts module
-    degrades to a logged no-op instead of failing a submission or a fill.
+    The ``parayabuck.monitoring.alerts`` import is guarded so a missing (or
+    broken) alerts module degrades to a logged no-op instead of failing a
+    submission or a fill.
     """
     try:
         from parayabuck.monitoring import alerts
@@ -1481,7 +1481,7 @@ class AlpacaBroker:
         return float(rounded)
 
     def _wait_for_fill(
-        self, order_id: str, intent: OrderIntent, qty: float, timeout: float = 5.0
+        self, order_id: str, intent: OrderIntent, timeout: float = 5.0
     ) -> tuple[OrderState, Fill | None]:
         deadline = time.monotonic() + timeout
         fill: Fill | None = None
@@ -1784,7 +1784,7 @@ class AlpacaBroker:
                 if "available" in payload:
                     return max(0.0, float(payload["available"]))
                 message = str(payload.get("message", ""))
-            except (TypeError, ValueError, json.JSONDecodeError):
+            except (TypeError, ValueError):
                 pass
         match = re.search(r"available:\s*([0-9]+(?:\.[0-9]+)?)", message)
         return max(0.0, float(match.group(1))) if match else 0.0
@@ -1861,9 +1861,7 @@ class AlpacaBroker:
 
     def _position_qty(self, symbol: str) -> float:
         try:
-            position = self._client.get_open_position(
-                normalize_symbol(symbol).asset_lookup_symbol
-            )
+            position = self._client.get_open_position(normalize_symbol(symbol).asset_lookup_symbol)
         except Exception as exc:
             message = str(exc).lower()
             if "position does not exist" in message or "404" in message:
@@ -2085,7 +2083,7 @@ class AlpacaBroker:
             position.strategy,
             client_order_id=client_id,
         )
-        state, fill = self._wait_for_fill(broker_id, intent, qty, timeout=5.0)
+        state, fill = self._wait_for_fill(broker_id, intent, timeout=5.0)
         if fill is not None:
             ledger.apply_execution_event(
                 ExecutionEvent(
@@ -2129,7 +2127,6 @@ class AlpacaBroker:
             terminal_state, final_fill = self._wait_for_fill(
                 broker_id,
                 intent,
-                qty,
                 timeout=getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0),
             )
             if final_fill is not None:
@@ -2318,9 +2315,11 @@ class AlpacaBroker:
         protective_orders = self._open_protective_orders(symbol, position_is_long, open_orders)
         protected = sum(
             (
-                max(Decimal("0"), abs(Decimal(str(self._field(order, "qty", 0) or 0))) - abs(
-                    Decimal(str(self._field(order, "filled_qty", 0) or 0))
-                ))
+                max(
+                    Decimal("0"),
+                    abs(Decimal(str(self._field(order, "qty", 0) or 0)))
+                    - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
+                )
                 for order in protective_orders
             ),
             start=Decimal("0"),

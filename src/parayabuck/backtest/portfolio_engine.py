@@ -666,8 +666,25 @@ class PortfolioBacktestEngine:
         ]
         concentration = max(single_values) / equity if equity > 0 and single_values else 0.0
         self._holdings_history.append((len(active), cash_ratio, concentration))
-        # Persist holdings after every completed bar (fills included) so a
-        # restart resumes the exact allocation of the last processed bar.
+        # Persist holdings/cash/prices after every completed bar (fills
+        # included) so a restart resumes the exact allocation of the last
+        # processed bar.
+        self._sync_state_bookkeeping()
+        self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
+        self.state.last_processed_bar = timestamp.isoformat()
+        # Persist the daily-loss/high-water lifecycle alongside holdings/cash
+        # at every completed cycle so a restart resumes the same risk state.
+        self.state.peak_equity = self._peak_equity
+        self.state.day_start_equity = self._day_start_equity
+        self.state.last_observed_equity = self._last_observed_equity
+        self.state.risk_session_date = (
+            self._risk_session_date.isoformat() if self._risk_session_date is not None else None
+        )
+        if self.state_path is not None:
+            self.save_state()
+
+    def _sync_state_bookkeeping(self) -> None:
+        """Mirror live positions, cash and prices into the persisted state."""
         self.state.holdings = {
             symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0
         }
@@ -688,18 +705,6 @@ class PortfolioBacktestEngine:
         }
         self.state.cash = self._cash
         self.state.last_prices = dict(self._last_price)
-        self.state.pending_orders = tuple(self._order_to_dict(order) for order in self._pending)
-        self.state.last_processed_bar = timestamp.isoformat()
-        # Persist the daily-loss/high-water lifecycle alongside holdings/cash
-        # at every completed cycle so a restart resumes the same risk state.
-        self.state.peak_equity = self._peak_equity
-        self.state.day_start_equity = self._day_start_equity
-        self.state.last_observed_equity = self._last_observed_equity
-        self.state.risk_session_date = (
-            self._risk_session_date.isoformat() if self._risk_session_date is not None else None
-        )
-        if self.state_path is not None:
-            self.save_state()
 
     def _equity(self) -> float:
         return self._cash + sum(
@@ -1392,26 +1397,7 @@ class PortfolioBacktestEngine:
         benchmark_calmar = (
             benchmark_cagr / benchmark_max_drawdown if benchmark_max_drawdown > 0 else 0.0
         )
-        self.state.holdings = {
-            symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0
-        }
-        self.state.avg_prices = {
-            symbol: position.avg_price
-            for symbol, position in self._positions.items()
-            if position.qty > 0
-        }
-        self.state.entry_fees = {
-            symbol: position.entry_fee
-            for symbol, position in self._positions.items()
-            if position.qty > 0
-        }
-        self.state.realized_pnl_accumulators = {
-            symbol: position.realized_pnl_accumulator
-            for symbol, position in self._positions.items()
-            if position.qty > 0
-        }
-        self.state.cash = self._cash
-        self.state.last_prices = dict(self._last_price)
+        self._sync_state_bookkeeping()
         return PortfolioBacktestResult(
             starting_equity=self.starting_equity,
             ending_equity=ending,
@@ -1448,7 +1434,7 @@ class PortfolioBacktestEngine:
             average_holdings_count=(
                 sum(holdings_counts) / len(holdings_counts) if holdings_counts else 0.0
             ),
-            average_cash_ratio=sum(cash_ratios) / len(cash_ratios) if cash_ratios else 0.0,
+            average_cash_ratio=avg_cash_ratio,
             rebalance_count=len(self._rebalances),
             closed_positions=len(self._closed_position_events),
             per_symbol=per_symbol,

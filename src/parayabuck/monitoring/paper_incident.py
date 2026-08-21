@@ -256,7 +256,8 @@ def _read_local_ledger(
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     source = Path(path).resolve()
     uri = f"file:{source}?mode=ro"
-    with sqlite3.connect(uri, uri=True) as connection:
+    connection = sqlite3.connect(uri, uri=True)
+    try:
         connection.row_factory = sqlite3.Row
         tables = {
             str(row[0])
@@ -272,6 +273,8 @@ def _read_local_ledger(
             if "managed_positions" in tables
             else []
         )
+    finally:
+        connection.close()
     return orders, positions
 
 

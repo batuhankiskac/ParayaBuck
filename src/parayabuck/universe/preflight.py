@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -18,7 +19,12 @@ from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.markets.timeframes import NEW_YORK, equity_day_bar_is_closed
+from parayabuck.markets.timeframes import (
+    NEW_YORK,
+    bar_is_closed,
+    bars_to_calendar_days,
+    equity_day_bar_is_closed,
+)
 from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
     CryptoUniverseScanner,
@@ -211,6 +217,7 @@ def refresh_equity_universe(
     historical_requests = 0
     bars_downloaded = 0
     by_symbol: dict[str, list[Bar]] = {}
+    skip_symbols: set[str] = set()
     if refresh_mode == "incremental":
         missing_history = [symbol for symbol in sorted(allowed) if symbol not in cached_history]
         if missing_history:
@@ -328,7 +335,7 @@ def refresh_equity_universe(
         len(result.observation_set),
         refresh_mode,
         len(by_symbol),
-        len(skip_symbols) if refresh_mode == "incremental" else 0,
+        len(skip_symbols),
         time.monotonic() - started,
     )
     return result
@@ -348,9 +355,6 @@ def _equity_observation_set(
     become the streamed observation set. Without an enabled strategy the
     scanner's eligibility-quality set stays as the fail-safe stream set.
     """
-    from dataclasses import replace
-
-    from parayabuck.markets.timeframes import bars_to_calendar_days
     from parayabuck.portfolio import portfolio_strategy_from
     from parayabuck.universe.observation_set import build_observation_set
 
@@ -499,9 +503,6 @@ def _crypto_observation_set(
     """Strategy-alpha observation set for crypto (same contract as equity):
     the configured strategy ranks the eligible pool on batch history and the
     top ``maximum_stream_symbols`` plus pins become the streamed set."""
-    from dataclasses import replace
-
-    from parayabuck.markets.timeframes import bars_to_calendar_days
     from parayabuck.portfolio import portfolio_strategy_from
     from parayabuck.universe.observation_set import build_observation_set
 
@@ -529,7 +530,6 @@ def _crypto_observation_set(
     )
     # Alpaca's feed includes the forming (in-progress) bar for the current
     # bucket; its partial close must never rank the observation set.
-    from parayabuck.markets.timeframes import bar_is_closed
 
     now = datetime.now(UTC)
     closed_bars = {
@@ -674,8 +674,6 @@ def _observation_scope_digest(base_digest: str, selection: object) -> str:
     gate cache reuse: any change fails closed to a full refetch instead of
     silently serving a shorter window.
     """
-    import hashlib
-
     payload = {
         "base": base_digest,
         "name": getattr(selection, "name", ""),

@@ -2216,12 +2216,16 @@ class EngineRuntime:
             if corrected:
                 self._put_event("correction", closed)
                 continue
-            if timeframe == self.app_config.runtime.execution_timeframe:
-                self._put_event("primary", closed)
-            elif timeframe == self.app_config.runtime.market_state_timeframe:
-                self._put_event("higher", closed)
-            if timeframe in self._strategy_timeframes:
-                self._put_event("portfolio", closed)
+            self._emit_finalized_bar(timeframe, closed)
+
+    def _emit_finalized_bar(self, timeframe: str, bar: Bar) -> None:
+        """Queue one finalized bar for every cadence it feeds."""
+        if timeframe == self.app_config.runtime.execution_timeframe:
+            self._put_event("primary", bar)
+        elif timeframe == self.app_config.runtime.market_state_timeframe:
+            self._put_event("higher", bar)
+        if timeframe in self._strategy_timeframes:
+            self._put_event("portfolio", bar)
 
     async def _process_crypto_protection(self, bar: Bar, source: str) -> None:
         """Feed a crypto price observation to the protective-stop watcher.
@@ -2505,12 +2509,7 @@ class EngineRuntime:
                     finalized[timeframe].extend(aggregator.flush_session_close(now))
         for timeframe, bars in finalized.items():
             for bar in bars:
-                if timeframe == self.app_config.runtime.execution_timeframe:
-                    self._put_event("primary", bar)
-                elif timeframe == self.app_config.runtime.market_state_timeframe:
-                    self._put_event("higher", bar)
-                if timeframe in self._strategy_timeframes:
-                    self._put_event("portfolio", bar)
+                self._emit_finalized_bar(timeframe, bar)
 
     def _process_timestamp(
         self,
@@ -2545,14 +2544,12 @@ class EngineRuntime:
         market_reasons: dict[Market, tuple[str, ...]] = {}
         for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
             market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
-        ready_bars = {
-            symbol: bar
-            for symbol, bar in bars_by_symbol.items()
-            if symbol not in self._not_ready_symbols
+        if not any(
+            symbol not in self._not_ready_symbols
             and not self._engine_has_symbol_gap(symbol)
             and not market_reasons[bar.market]
-        }
-        if not ready_bars:
+            for symbol, bar in bars_by_symbol.items()
+        ):
             return
         missing = tuple(sorted(expected - set(bars_by_symbol)))
         if missing:
@@ -3233,8 +3230,6 @@ class EngineRuntime:
         if worker is None or not worker.alive:
             return False
         now = datetime.now(UTC)
-        from parayabuck.markets.timeframes import is_regular_equity_time
-
         event_required = market == Market.CRYPTO or is_regular_equity_time(now)
         if not event_required:
             return True

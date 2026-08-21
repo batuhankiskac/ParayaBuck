@@ -15,7 +15,6 @@ from parayabuck.config import Config
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
@@ -23,6 +22,7 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskLimits,
     RiskOverlayDecision,
 )
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight

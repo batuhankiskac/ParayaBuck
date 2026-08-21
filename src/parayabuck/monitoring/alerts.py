@@ -25,6 +25,7 @@ import logging
 import os
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -173,7 +174,6 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
     also POSTed (fire-and-forget) to the configured webhook URL. Per-kind
     throttling coalesces repeat failures within the throttle window.
     """
-    global _delivered_counts
     try:
         if kind not in ALERT_KINDS:
             log.error("Ignored alert with unknown kind=%r", kind)
@@ -219,8 +219,6 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
 
 
 def _now_iso() -> str:
-    from datetime import UTC, datetime
-
     return datetime.now(UTC).isoformat()
 
 

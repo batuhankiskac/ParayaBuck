@@ -559,7 +559,10 @@ def forward_metrics(
                     ),
                 },
                 "rebalances": {
-                    "count": len(decisions_by_market),
+                    # One persisted portfolio_decisions row == one rebalance
+                    # decision, so the total is the decision count (the
+                    # by_market map below stays per-market).
+                    "count": decision_count,
                     "by_market": {
                         market: len(decisions) for market, decisions in decisions_by_market.items()
                     },

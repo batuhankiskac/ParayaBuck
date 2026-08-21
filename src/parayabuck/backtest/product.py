@@ -491,11 +491,7 @@ def _prepared_window(
     ]
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
-    ordered = sorted(
-        PortfolioBacktestEngine._deduplicate(filtered),
-        key=lambda bar: (bar.timestamp, bar.symbol),
-    )
-    decision_bars = sorted(
+    ordered = decision_bars = sorted(
         PortfolioBacktestEngine._deduplicate(filtered),
         key=lambda bar: (bar.timestamp, bar.symbol),
     )

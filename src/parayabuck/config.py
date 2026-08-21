@@ -6,6 +6,7 @@ import warnings
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -620,6 +621,40 @@ class Config:
         return (*equity, *crypto)
 
 
+def _strategy_from_raw(
+    defaults: MarketStrategyConfig, enabled_default: bool, raw: dict[str, Any]
+) -> MarketStrategyConfig:
+    """Merge one ``strategy.<market>`` YAML block over the packaged defaults."""
+    base = {
+        "enabled": enabled_default,
+        "name": defaults.name,
+        # No market default timeframe: the STRATEGY supplies it.
+        "timeframe": None,
+        "maximum_allocation": defaults.maximum_allocation,
+        "parameters": defaults.parameters,
+    }
+    return MarketStrategyConfig(**{**base, **dict(raw)})
+
+
+def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
+    """Resolve the strategy's signal timeframe from the strategy itself.
+
+    The primary (or a validated alternative explicitly selected in the YAML)
+    comes from the strategy class, so a configured name NEVER inherits another
+    market default.
+    """
+    from dataclasses import replace
+
+    from parayabuck.portfolio import portfolio_strategy_from
+
+    return replace(
+        strategy,
+        timeframe=portfolio_strategy_from(
+            strategy.name, strategy.parameters, timeframe=strategy.timeframe
+        ).timeframe,
+    )
+
+
 def load_config(config_path: str | None = None) -> Config:
     load_dotenv()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
@@ -720,60 +755,18 @@ def load_config(config_path: str | None = None) -> Config:
                 stacklevel=2,
             )
     default_strategy = StrategyConfig()
-    equity_strategy = MarketStrategyConfig(
-        **{
-            **{
-                "enabled": (
-                    default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled
-                ),
-                "name": default_strategy.equity.name,
-                # No market default timeframe: the STRATEGY supplies it.
-                "timeframe": None,
-                "maximum_allocation": default_strategy.equity.maximum_allocation,
-                "parameters": default_strategy.equity.parameters,
-            },
-            **dict(strategy_raw.get("equity", {})),
-        }
+    equity_strategy = _strategy_from_raw(
+        default_strategy.equity,
+        default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled,
+        strategy_raw.get("equity", {}),
     )
-    crypto_strategy = MarketStrategyConfig(
-        **{
-            **{
-                "enabled": (
-                    default_strategy.crypto.enabled
-                    if "crypto" in strategy_raw
-                    else crypto_universe.enabled
-                ),
-                "name": default_strategy.crypto.name,
-                "timeframe": None,
-                "maximum_allocation": default_strategy.crypto.maximum_allocation,
-                "parameters": default_strategy.crypto.parameters,
-            },
-            **dict(strategy_raw.get("crypto", {})),
-        }
+    crypto_strategy = _strategy_from_raw(
+        default_strategy.crypto,
+        default_strategy.crypto.enabled if "crypto" in strategy_raw else crypto_universe.enabled,
+        strategy_raw.get("crypto", {}),
     )
-    # The strategy owns its signal timeframe: resolve the primary (or a
-    # validated alternative explicitly selected in the YAML) from the strategy
-    # itself, so a configured name NEVER inherits another market default.
-    from dataclasses import replace
-
-    from parayabuck.portfolio import portfolio_strategy_from
-
-    equity_strategy = replace(
-        equity_strategy,
-        timeframe=portfolio_strategy_from(
-            equity_strategy.name,
-            equity_strategy.parameters,
-            timeframe=equity_strategy.timeframe,
-        ).timeframe,
-    )
-    crypto_strategy = replace(
-        crypto_strategy,
-        timeframe=portfolio_strategy_from(
-            crypto_strategy.name,
-            crypto_strategy.parameters,
-            timeframe=crypto_strategy.timeframe,
-        ).timeframe,
-    )
+    equity_strategy = _resolved_timeframe(equity_strategy)
+    crypto_strategy = _resolved_timeframe(crypto_strategy)
     alpaca_raw = dict(raw.get("alpaca", {}))
     legacy_paper = alpaca_raw.pop("paper", None)
     if legacy_paper is False:

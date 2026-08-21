@@ -104,19 +104,25 @@ class TimeframeAggregator:
         )
 
     def _aggregate(self, components: dict[datetime, Bar], timestamp: datetime) -> Bar:
-        ordered = [components[key] for key in sorted(components)]
-        first, last = ordered[0], ordered[-1]
-        return Bar(
-            timestamp=timestamp,
-            symbol=first.symbol,
-            timeframe=self.timeframe,
-            open=first.open,
-            high=max(bar.high for bar in ordered),
-            low=min(bar.low for bar in ordered),
-            close=last.close,
-            volume=sum(bar.volume for bar in ordered),
-            market=first.market,
+        return _combine_bars(
+            [components[key] for key in sorted(components)], timestamp, self.timeframe
         )
+
+
+def _combine_bars(ordered: list[Bar], timestamp: datetime, timeframe: str) -> Bar:
+    """Build one aggregated bar from time-ordered component bars."""
+    first, last = ordered[0], ordered[-1]
+    return Bar(
+        timestamp=timestamp,
+        symbol=first.symbol,
+        timeframe=timeframe,
+        open=first.open,
+        high=max(bar.high for bar in ordered),
+        low=min(bar.low for bar in ordered),
+        close=last.close,
+        volume=sum(bar.volume for bar in ordered),
+        market=first.market,
+    )
 
 
 def aggregate_historical_bars(
@@ -157,19 +163,7 @@ def aggregate_historical_bars(
         )
         if require_complete and (len(ordered) != expected or not contiguous):
             continue
-        result.append(
-            Bar(
-                timestamp=bucket,
-                symbol=ordered[0].symbol,
-                timeframe=target_timeframe,
-                open=ordered[0].open,
-                high=max(bar.high for bar in ordered),
-                low=min(bar.low for bar in ordered),
-                close=ordered[-1].close,
-                volume=sum(bar.volume for bar in ordered),
-                market=ordered[0].market,
-            )
-        )
+        result.append(_combine_bars(ordered, bucket, target_timeframe))
     return result
 
 

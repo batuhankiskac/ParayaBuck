@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import threading
@@ -1998,8 +1999,6 @@ class PortfolioRuntime:
 
 
 def _decision_id(account_id: str, checksum: str, timestamp: datetime, market: Market) -> str:
-    import hashlib
-
     return hashlib.sha256(
         f"{account_id}|{checksum}|{timestamp.isoformat()}|{market.value}".encode()
     ).hexdigest()[:24]
@@ -2013,8 +2012,6 @@ def configuration_digest(
     risk_limits: PortfolioRiskLimits | None = None,
     execution_policy: PortfolioExecutionPolicy | None = None,
 ) -> str:
-    import hashlib
-
     payload = json.dumps(
         {
             "strategy": strategy.name,

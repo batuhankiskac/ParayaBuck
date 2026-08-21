@@ -1131,9 +1131,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (totalPnlEl) {
             totalPnlEl.className = 'metric-value ' + (totalPnl > 0 ? 'positive' : (totalPnl < 0 ? 'negative' : ''));
         }
-        setText('engineStatusValue', STRATEGY_STATUS_LABELS[data.engine_state] || data.engine_state || '—');
-        setText('engineStatusSub', data.engine_error ? data.engine_error : 'Durum açıklaması');
-        setText('lastReconValue', fmtDateTime(data.account && data.account.last_reconciliation_at));
         // Strategy cards
         renderStrategyCard(data.equity, {
             name: 'equityStrategyName', badge: 'equityStatusBadge', signal: 'equitySignal',

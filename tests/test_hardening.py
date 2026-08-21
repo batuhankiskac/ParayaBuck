@@ -40,9 +40,9 @@ from parayabuck.markets.symbols import (
     same_symbol,
     split_crypto_pair,
 )
-from parayabuck.utils import is_crypto
 from parayabuck.runtime import EngineRuntime, WorkerHealth, _Event, _EventQueue, _symbol_batches
 from parayabuck.runtime_state import RuntimeMarketState
+from parayabuck.utils import is_crypto
 from parayabuck.web import server
 from tests.helpers import apply_entry_fill
 
@@ -220,8 +220,9 @@ def test_crypto_position_lookup_uses_legacy_symbol() -> None:
     broker._asset_cache = {}
     broker._client = SimpleNamespace(
         get_asset=lambda symbol: SimpleNamespace(min_trade_increment=None),
-        get_open_position=lambda symbol: looked_up.append(symbol)
-        or SimpleNamespace(qty="0.5", qty_available="0.5"),
+        get_open_position=lambda symbol: (
+            looked_up.append(symbol) or SimpleNamespace(qty="0.5", qty_available="0.5")
+        ),
     )
     resolved = broker.resolve_available_position_qty("BTC/USD", 1.0)
     assert resolved.available_qty == pytest.approx(0.5)
@@ -229,8 +230,8 @@ def test_crypto_position_lookup_uses_legacy_symbol() -> None:
     assert broker._position_qty("BTC/USD") == 0.5
     assert looked_up == ["BTCUSD", "BTCUSD"]
     # Equity symbols still look themselves up verbatim.
-    broker._client.get_open_position = lambda symbol: looked_up.append(symbol) or SimpleNamespace(
-        qty="2.0", qty_available="2.0"
+    broker._client.get_open_position = lambda symbol: (
+        looked_up.append(symbol) or SimpleNamespace(qty="2.0", qty_available="2.0")
     )
     assert broker._position_qty("IWM") == 2.0
     assert looked_up == ["BTCUSD", "BTCUSD", "IWM"]

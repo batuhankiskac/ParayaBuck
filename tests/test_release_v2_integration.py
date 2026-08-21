@@ -29,11 +29,11 @@ from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     portfolio_risk_limits_from_config,
 )
+from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.runtime_service import (

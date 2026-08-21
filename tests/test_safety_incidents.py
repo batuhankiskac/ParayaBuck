@@ -129,6 +129,35 @@ def test_daily_loss_breach_restored_on_same_day_restart(tmp_path: Path) -> None:
     ledger.close()
 
 
+def test_corrupt_risk_state_row_is_ignored_not_raised(tmp_path: Path) -> None:
+    """A risk_state row with an unparsable updated_at (or a payload missing
+    fields) must not fail runtime startup: the row is treated as absent and
+    the state is rebuilt from the account, per the fail-safe contract."""
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    today = datetime.now(UTC).date()
+    with ledger.connection as connection:
+        connection.execute(
+            "INSERT INTO risk_state(account_id, session_date, payload, updated_at) "
+            "VALUES ('acct', ?, ?, ?)",
+            (today.isoformat(), '{"day_start_equity": 10000.0}', "not-a-timestamp"),
+        )
+    assert ledger.load_risk_state("acct", today) is None
+
+    with ledger.connection as connection:
+        connection.execute(
+            "UPDATE risk_state SET updated_at = ?, payload = ? "
+            "WHERE account_id = 'acct' AND session_date = ?",
+            (
+                datetime.now(UTC).isoformat(),
+                '{"peak_equity": 1.0}',
+                today.isoformat(),
+            ),
+        )
+    # Valid timestamp but missing required payload fields: same treatment.
+    assert ledger.load_risk_state("acct", today) is None
+    ledger.close()
+
+
 def test_new_session_clears_session_scoped_state_but_keeps_persistent_incident(
     tmp_path: Path,
 ) -> None:

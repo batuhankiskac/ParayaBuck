@@ -251,6 +251,9 @@ class EngineManager:
         self._pending_live_arm: LiveArmToken | None = None
         self._live_arm_token: LiveArmToken | None = None
         self._ws_tickets: dict[str, tuple[str, float]] = {}
+        # issue_ws_ticket rebuilds the map while consume_ws_ticket pops from
+        # it; concurrent issuers must not drop each other's fresh tickets.
+        self._ws_tickets_lock = threading.Lock()
         self._paper_mode_cache: tuple[int, bool] | None = None
         # Bounded autonomous startup recovery (Web auto-start path only):
         # attempt counter, next-attempt deadline (time.monotonic()), and the
@@ -1260,15 +1263,17 @@ class EngineManager:
         # Prune expired entries: a ticket fetched but never consumed (page
         # closed before the WebSocket connected) must not accumulate forever.
         now = time.monotonic()
-        self._ws_tickets = {
-            ticket: value for ticket, value in self._ws_tickets.items() if now < value[1]
-        }
         ticket = secrets.token_urlsafe(24)
-        self._ws_tickets[ticket] = (kind, now + 30.0)
+        with self._ws_tickets_lock:
+            self._ws_tickets = {
+                key: value for key, value in self._ws_tickets.items() if now < value[1]
+            }
+            self._ws_tickets[ticket] = (kind, now + 30.0)
         return ticket
 
     def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
-        value = self._ws_tickets.pop(ticket, None)
+        with self._ws_tickets_lock:
+            value = self._ws_tickets.pop(ticket, None)
         return bool(value and value[0] == kind and time.monotonic() < value[1])
 
 

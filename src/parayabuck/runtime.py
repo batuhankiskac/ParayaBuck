@@ -2136,14 +2136,20 @@ class EngineRuntime:
                             return
                         else:
                             self._market_entry_halts[market] = f"{name}_restart_limit"
-                        log.exception("%s stream worker restart limit reached", name)
-                        runtime_metrics_store.record_event("circuit_breaker")
-                        alerts.emit(
-                            "circuit_breaker",
-                            message=f"{name} stream worker restart limit reached; entries halted",
-                            reason=f"{name}_restart_limit",
-                            market=market.value,
-                        )
+                        if worker.restart_count == 6:
+                            # Edge-triggered: the alert/metric fire once at the
+                            # threshold crossing; retries past it only re-assert
+                            # the halt above until a verified reconnect clears it.
+                            log.exception("%s stream worker restart limit reached", name)
+                            runtime_metrics_store.record_event("circuit_breaker")
+                            alerts.emit(
+                                "circuit_breaker",
+                                message=(
+                                    f"{name} stream worker restart limit reached; entries halted"
+                                ),
+                                reason=f"{name}_restart_limit",
+                                market=market.value,
+                            )
                     delay = min(16.0, 2 ** (worker.restart_count - 1))
                     log.warning(
                         "%s stream worker failed; retrying in %.1fs: %s",

@@ -1493,27 +1493,28 @@ class ExecutionLedger:
             return None
         try:
             payload = json.loads(row[0])
-        except (TypeError, ValueError):
-            # A corrupt/truncated risk_state row must not fail runtime startup:
+            return RiskState(
+                account_id=account_id,
+                session_date=session_date,
+                day_start_equity=float(payload["day_start_equity"]),
+                peak_equity=float(payload["peak_equity"]),
+                realized_pnl=float(payload["realized_pnl"]),
+                unrealized_pnl=float(payload["unrealized_pnl"]),
+                fees=float(payload["fees"]),
+                consecutive_losses=int(payload["consecutive_losses"]),
+                circuit_breaker_reason=payload.get("circuit_breaker_reason"),
+                updated_at=datetime.fromisoformat(str(row[1])),
+            )
+        except (TypeError, ValueError, KeyError):
+            # A corrupt/truncated risk_state row (bad JSON payload, missing
+            # field, or unparsable updated_at) must not fail runtime startup:
             # the state is treated as absent and rebuilt from the account.
             log.warning(
-                "Ignoring corrupt risk_state payload for account=%s session=%s",
+                "Ignoring corrupt risk_state row for account=%s session=%s",
                 account_id,
                 session_date,
             )
             return None
-        return RiskState(
-            account_id=account_id,
-            session_date=session_date,
-            day_start_equity=float(payload["day_start_equity"]),
-            peak_equity=float(payload["peak_equity"]),
-            realized_pnl=float(payload["realized_pnl"]),
-            unrealized_pnl=float(payload["unrealized_pnl"]),
-            fees=float(payload["fees"]),
-            consecutive_losses=int(payload["consecutive_losses"]),
-            circuit_breaker_reason=payload.get("circuit_breaker_reason"),
-            updated_at=datetime.fromisoformat(row[1]),
-        )
 
     def save_safety_incident(
         self,

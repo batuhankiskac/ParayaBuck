@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -77,6 +78,33 @@ def test_engine_manager_refuses_second_runtime(state: str) -> None:
 
     with pytest.raises(ValueError, match=f"already {state}"):
         manager.start_engine()
+
+
+def test_concurrent_ws_ticket_issuance_never_drops_tickets() -> None:
+    """issue_ws_ticket prunes by rebuilding the map while consume pops from
+    it. Without the lock, two concurrent issuers could rebuild from the same
+    snapshot and silently drop each other's fresh tickets (spurious 1008)."""
+    manager = server.EngineManager()
+    workers = 8
+    per_worker = 25
+    errors: list[Exception] = []
+
+    def issue(batch: int) -> list[str]:
+        try:
+            return [manager.issue_ws_ticket("stream") for _ in range(per_worker)]
+        except Exception as exc:  # pragma: no cover - surfaced via assertion
+            errors.append(exc)
+            return []
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        issued = [ticket for batch in pool.map(issue, range(workers)) for ticket in batch]
+
+    assert not errors
+    assert len(issued) == workers * per_worker
+    # Every ticket survived the concurrent prune-rebuild cycles and consumes
+    # exactly once; the map holds no stragglers afterwards.
+    assert all(manager.consume_ws_ticket(ticket, "stream") for ticket in issued)
+    assert not manager._ws_tickets
 
 
 def test_reset_safety_lock_does_not_deadlock_on_state_lock() -> None:

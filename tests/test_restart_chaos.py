@@ -17,16 +17,17 @@ Levels used:
 - universe module: scanner persist -> validate/load round trip.
 """
 
-from __future__ import annotations
-
 import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
+from parayabuck import runtime as runtime_module
 from parayabuck.config import Config, EquityUniverseConfig
 from parayabuck.core.models import (
     AccountSnapshot,
@@ -50,7 +51,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioStateRepository,
 )
-from parayabuck.runtime import EngineRuntime
+from parayabuck.runtime import EngineRuntime, WorkerHealth
 from parayabuck.universe.scanner import (
     EquityCandidate,
     EquityUniverseScanner,
@@ -835,3 +836,46 @@ def test_restart_with_managed_symbol_outside_scanner_universe_stays_pinned(
     assert "BTC/USD" in runtime._managed_pin_symbols
     assert "BTC/USD" in runtime._symbols_by_market[Market.CRYPTO]
     ledger.close()
+
+
+def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any) -> None:
+    """The circuit-breaker alert/metric fire once at the restart-limit
+    crossing; retries past the limit keep the halt asserted but must not
+    re-emit every backoff iteration (alert spam). A verified reconnect resets
+    restart_count, which re-arms the edge."""
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    now = datetime.now(UTC)
+    worker = WorkerHealth(started_at=now, last_heartbeat=now, restart_count=5, alive=True)
+    runtime._workers = {"pb-stocks": worker}
+    runtime._running = True
+    runtime._state = "running"
+    runtime._circuit_breaker_reason = None
+    runtime._market_entry_halts = {Market.EQUITY: None}
+
+    emitted: list[str] = []
+    recorded: list[str] = []
+    monkeypatch.setattr(runtime_module.alerts, "emit", lambda kind, **_: emitted.append(kind))
+    monkeypatch.setattr(
+        runtime_module.runtime_metrics_store,
+        "record_event",
+        lambda event: recorded.append(event),
+    )
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _seconds: None)
+
+    def always_failing() -> None:
+        raise RuntimeError("simulated stream outage")
+
+    thread = threading.Thread(target=runtime._run_stream_worker, args=("pb-stocks", always_failing))
+    thread.start()
+    deadline = time.monotonic() + 5.0
+    while worker.restart_count < 7 and time.monotonic() < deadline:
+        time.sleep(0.001)
+    runtime._running = False
+    thread.join(timeout=5.0)
+
+    assert not thread.is_alive()
+    assert worker.restart_count >= 7
+    # Halt stays asserted across retries; exactly one alert and one metric.
+    assert runtime._market_entry_halts[Market.EQUITY] == "pb-stocks_restart_limit"
+    assert emitted == ["circuit_breaker"]
+    assert recorded == ["circuit_breaker"]

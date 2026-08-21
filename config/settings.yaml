@@ -106,6 +106,14 @@ universe:
     - RENDER/USD
     - ONDO/USD
     - HYPE/USD
+    # 2026-08-21 (docs/optimization_experiments_2026_08.md, D4): widened the
+    # alpha-search pool 18 -> 22 pairs; control strategy improved (+6.56% ->
+    # +9.64%, Sharpe 0.23 -> 0.32, maxDD flat) on the widened PIT universe.
+    # Scanner eligibility gates still apply per pair.
+    - SHIB/USD
+    - GRT/USD
+    - CRV/USD
+    - PEPE/USD
     allowlist_symbols: []
     denylist_symbols: []
     active_universe_path: data/runtime/active_crypto_universe.json
@@ -132,7 +140,11 @@ strategy:
   equity:
     enabled: true
     name: equity_residual_momentum_v2
-    maximum_allocation: 0.50
+    # 2026-08-21 operator decision (docs/optimization_experiments_2026_08.md,
+    # B3/D1): sleeve raised 0.50 -> 0.60 on walk-forward evidence (11/16 folds
+    # beat 0.50; Sharpe 0.62 -> 0.71 with dividends). The risk overlay still
+    # caps gross at 0.60.
+    maximum_allocation: 0.60
     parameters:
       formation_bars: 252
       skip_bars: 21
@@ -150,7 +162,11 @@ strategy:
     # disabled.
     enabled: true
     name: crypto_low_variance_v2
-    maximum_allocation: 0.10
+    # 2026-08-21 operator decision (docs/optimization_experiments_2026_08.md,
+    # A1): sleeve halved 0.10 -> 0.05. Over 2021-2026 the crypto sleeve added
+    # +0.68pp combined CAGR but deepened combined maxDD by +6.35pp; halving
+    # keeps most of the diversification at half the drawdown contribution.
+    maximum_allocation: 0.05
     parameters:
       variance_lookback_days: 22
       top_n: 2

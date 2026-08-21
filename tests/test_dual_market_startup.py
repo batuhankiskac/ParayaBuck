@@ -142,8 +142,9 @@ def _assert_frozen_config():
     assert config.live.enabled is False
     assert config.strategy.equity.name == "equity_residual_momentum_v2"
     assert config.strategy.crypto.name == "crypto_low_variance_v2"
-    assert config.strategy.equity.maximum_allocation == 0.50
-    assert config.strategy.crypto.maximum_allocation == 0.10
+    # 2026-08-21 operator decisions: docs/optimization_experiments_2026_08.md
+    assert config.strategy.equity.maximum_allocation == 0.60
+    assert config.strategy.crypto.maximum_allocation == 0.05
     risk = config.risk
     assert risk.max_crypto_exposure_pct == 0.10
     assert risk.max_crypto_position_pct == 0.05

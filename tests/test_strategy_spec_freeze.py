@@ -90,7 +90,10 @@ def test_production_equity_selection_is_v2(config: Config) -> None:
     equity = config.strategy.equity
     assert equity.enabled is True
     assert equity.name == "equity_residual_momentum_v2"
-    assert equity.maximum_allocation == 0.50
+    # 2026-08-21 operator decision: sleeve 0.50 -> 0.60 on walk-forward
+    # evidence; see docs/optimization_experiments_2026_08.md (B3/D1). The
+    # alpha parameters below remain the frozen validated spec.
+    assert equity.maximum_allocation == 0.60
     assert _params_dict(equity.parameters) == PRODUCTION_EQUITY_PARAMETERS
     strategy = portfolio_strategy_from(equity.name, equity.parameters)
     assert rebalance_policy_for(strategy).frequency == "weekly"
@@ -98,9 +101,11 @@ def test_production_equity_selection_is_v2(config: Config) -> None:
 
 def test_production_crypto_selection_is_v2(config: Config) -> None:
     crypto = config.strategy.crypto
+    # 2026-08-21 operator decision: sleeve 0.10 -> 0.05 (drawdown evidence,
+    # docs/optimization_experiments_2026_08.md A1).
+    assert crypto.maximum_allocation == 0.05
     assert crypto.enabled is True
     assert crypto.name == "crypto_low_variance_v2"
-    assert crypto.maximum_allocation == 0.10
     assert _params_dict(crypto.parameters) == PRODUCTION_CRYPTO_PARAMETERS
     strategy = portfolio_strategy_from(crypto.name, crypto.parameters)
     assert rebalance_policy_for(strategy).hours == 96

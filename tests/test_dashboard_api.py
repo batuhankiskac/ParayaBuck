@@ -235,7 +235,7 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(
     assert equity["strategy"]["display_name"] == "Residual Momentum v2 (weekly)"
     assert equity["strategy"]["signal_timeframe"] == "1d"
     assert equity["strategy"]["rebalance_cadence"] == "weekly"
-    assert equity["maximum_allocation_pct"] == 50.0
+    assert equity["maximum_allocation_pct"] == 60.0
     assert equity["eligible_pool"] is not None  # shortlist count
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
@@ -243,7 +243,7 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(
     assert crypto["name"] == "crypto_low_variance_v2"
     assert crypto["strategy"]["display_name"] == "Low Realized Variance v2 (96h)"
     assert crypto["strategy"]["rebalance_cadence"] == "hours:96"
-    assert crypto["maximum_allocation_pct"] == 10.0
+    assert crypto["maximum_allocation_pct"] == 5.0
 
 
 def test_dashboard_risk_panel_exposes_policies_and_state(

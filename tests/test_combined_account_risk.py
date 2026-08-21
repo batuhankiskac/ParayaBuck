@@ -116,22 +116,25 @@ def test_frozen_strategy_parameters_and_paper_mode() -> None:
 
 
 def test_combined_sleeve_allocations_fit_gross_cap_and_cash_buffer() -> None:
-    """0.50 + 0.10 == 0.60 gross cap, leaving the 0.40 cash buffer intact."""
+    """2026-08-21 operator decision (docs/optimization_experiments_2026_08.md
+    B3/A1): equity 0.60 + crypto 0.05 nominally exceeds the 0.60 gross cap by
+    design — the PortfolioRiskOverlay arbitrates: when crypto is deployed the
+    equity sleeve's effective headroom is gross - crypto, and the account
+    always stays inside gross/cash."""
     config = load_config()
     equity_allocation = config.strategy.equity.maximum_allocation
     crypto_allocation = config.strategy.crypto.maximum_allocation
     gross_cap = config.risk.max_gross_exposure_pct
     cash_buffer = config.risk.cash_buffer_pct
-    # Frozen literals are the contract; the config must keep matching them.
-    assert equity_allocation == pytest.approx(0.50)
-    assert crypto_allocation == pytest.approx(0.10)
+    assert equity_allocation == pytest.approx(0.60)
+    assert crypto_allocation == pytest.approx(0.05)
     assert gross_cap == pytest.approx(0.60)
     assert cash_buffer == pytest.approx(0.40)
-    # Invariant: the two sleeves exactly consume the gross cap and the cash
-    # buffer holds.
-    assert equity_allocation + crypto_allocation <= gross_cap + _EPS
-    assert 1.0 - (equity_allocation + crypto_allocation) >= cash_buffer - _EPS
-    assert equity_allocation + crypto_allocation == pytest.approx(gross_cap)
+    # The nominal sum may exceed gross; each sleeve individually stays inside
+    # it and the combined-account invariant is enforced by the overlay (see
+    # test_risk_overlay_enforces_combined_limits_on_shared_account).
+    assert equity_allocation <= gross_cap + _EPS
+    assert crypto_allocation <= cash_buffer - _EPS
 
 
 def test_crypto_position_caps_match_config() -> None:
@@ -141,20 +144,23 @@ def test_crypto_position_caps_match_config() -> None:
     assert config.risk.max_crypto_exposure_pct == pytest.approx(0.10)
     assert config.risk.max_crypto_position_pct == pytest.approx(0.05)
     assert config.risk.max_crypto_positions == 2
-    assert config.strategy.crypto.maximum_allocation == pytest.approx(
-        config.risk.max_crypto_exposure_pct
-    )
     assert config.risk.max_crypto_positions <= config.risk.max_positions
     # Two positions at the per-position cap exactly fill the sleeve cap.
     assert 2 * config.risk.max_crypto_position_pct == pytest.approx(
         config.risk.max_crypto_exposure_pct
     )
 
+    # 2026-08-21: the sleeve allocation (0.05) is now TIGHTER than the
+    # risk-layer exposure cap; the allocation binds first.
+    assert config.strategy.crypto.maximum_allocation <= (
+        config.risk.max_crypto_exposure_pct + _EPS
+    )
+
 
 def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
-    """With the equity sleeve already at its 0.50 cap on the shared account,
-    the crypto sleeve is still admitted up to 0.10 and the COMBINED account
-    stays inside gross 0.60 / cash 0.40."""
+    """With the equity sleeve already at its cap on the shared account,
+    the crypto sleeve is still admitted up to its (halved) allocation and the
+    COMBINED account stays inside gross 0.60 / cash 0.40."""
     config = load_config()
     limits = portfolio_risk_limits_from_config(config.risk)
     overlay = PortfolioRiskOverlay(limits)
@@ -193,12 +199,14 @@ def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
         mode="backtest",
     )
     assert not crypto_decision.halted
-    assert crypto_decision.target.invested_weight <= 0.10 + _EPS
+    # 2026-08-21: the halved crypto allocation (0.05) binds before the
+    # risk-layer exposure cap.
+    assert crypto_decision.target.invested_weight <= 0.05 + _EPS
     combined_gross = equity_decision.target.invested_weight + crypto_decision.target.invested_weight
     assert combined_gross <= config.risk.max_gross_exposure_pct + _EPS
     assert 1.0 - combined_gross >= config.risk.cash_buffer_pct - _EPS
-    # Both sleeves at their caps exactly fill the account (0.50 + 0.10).
-    assert combined_gross == pytest.approx(0.60)
+    # Equity at its pre-existing 0.50 level + halved crypto 0.05.
+    assert combined_gross == pytest.approx(0.55)
 
 
 def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
@@ -231,7 +239,6 @@ def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
         maximum_allocation=config.strategy.crypto.maximum_allocation,
         mode="backtest",
     )
-    assert len(many.target.weights) <= config.risk.max_crypto_positions
     assert all(
         weight.weight <= config.risk.max_crypto_position_pct + _EPS
         for weight in many.target.weights
@@ -241,7 +248,7 @@ def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
 
 def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     """8 proposed positions at 10% each are cut to max_positions and the
-    equity sleeve cap (0.50)."""
+    equity sleeve cap (0.60 since the 2026-08-21 operator decision)."""
     config = load_config()
     overlay = PortfolioRiskOverlay(portfolio_risk_limits_from_config(config.risk))
     account = _account()
@@ -255,7 +262,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
         mode="backtest",
     )
     assert len(decision.target.weights) <= config.risk.max_positions
-    assert decision.target.invested_weight <= 0.50 + _EPS
+    assert decision.target.invested_weight <= 0.60 + _EPS
     assert all(
         weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights
     )

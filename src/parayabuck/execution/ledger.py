@@ -778,48 +778,6 @@ class ExecutionLedger:
             updated_at=datetime.fromisoformat(str(row[25])) if row[25] else None,
         )
 
-    def register_protective_stop_replacement(
-        self,
-        account_id: str,
-        entry_client_order_id: str,
-        *,
-        stop_price: float,
-        client_order_id: str,
-        broker_order_id: str,
-    ) -> None:
-        """Persist an acknowledged broker-side atomic stop replacement."""
-        if stop_price <= 0:
-            raise ValueError("Current stop must be positive")
-        if not client_order_id or not broker_order_id:
-            raise ValueError("Replacement stop identifiers are required")
-        with self._lock:
-            self.connection.execute("BEGIN IMMEDIATE")
-            try:
-                cursor = self.connection.execute(
-                    """
-                    UPDATE managed_positions
-                    SET current_stop=?, protective_stop_client_order_id=?,
-                        protective_stop_broker_order_id=?, stop_state='open',
-                        protection_state='active', updated_at=?
-                    WHERE account_id=? AND entry_client_order_id=?
-                      AND status IN ('open', 'manual_intervention_required')
-                    """,
-                    (
-                        stop_price,
-                        client_order_id,
-                        broker_order_id,
-                        datetime.now(UTC).isoformat(),
-                        account_id,
-                        entry_client_order_id,
-                    ),
-                )
-                if cursor.rowcount != 1:
-                    raise KeyError("Managed position not found for stop replacement")
-                self.connection.commit()
-            except Exception:
-                self.connection.rollback()
-                raise
-
     def managed_for_account(self, account_id: str) -> dict[str, ManagedPosition]:
         rows = self.managed_entries_for_account(account_id)
         result: dict[str, ManagedPosition] = {}

@@ -426,13 +426,13 @@ class TargetToOrderPlanner:
                 # in depth against an external-position BUY.
                 continue
             side = PortfolioOrderSide.BUY if delta > 0 else PortfolioOrderSide.SELL
-            quantity = _floor_increment(abs(delta), rule.quantity_increment)
+            quantity = floor_increment(abs(delta), rule.quantity_increment)
             if position is not None and side == PortfolioOrderSide.SELL:
                 available = (
                     position.qty_available if position.qty_available is not None else position.qty
                 )
                 quantity = min(quantity, max(0.0, available))
-                quantity = _floor_increment(quantity, rule.quantity_increment)
+                quantity = floor_increment(quantity, rule.quantity_increment)
             if quantity < rule.minimum_order_size:
                 continue
             if quantity * price < max(
@@ -465,10 +465,26 @@ class TargetToOrderPlanner:
         )
 
 
-def _floor_increment(value: float, increment: float) -> float:
+def floor_increment(value: float, increment: float) -> float:
+    """Floor ``value`` to a whole multiple of the broker ``increment``.
+
+    Single source of truth for order-quantity rounding: used by the planner,
+    by AlpacaBroker submission/fill-verification paths and by the portfolio
+    repository so all three can never disagree on a floored quantity.
+    """
     raw = Decimal(str(value))
     step = Decimal(str(increment))
     return float((raw / step).to_integral_value(rounding=ROUND_DOWN) * step)
+
+
+def floor_increment_decimal(value: Decimal, increment: Decimal) -> Decimal:
+    """``floor_increment`` for callers already holding exact ``Decimal`` values.
+
+    Same operation sequence as :func:`floor_increment` — divide, round down to
+    a whole multiple, multiply back — without a float round-trip that could
+    perturb broker-exact quantities.
+    """
+    return (value / increment).to_integral_value(rounding=ROUND_DOWN) * increment
 
 
 def _decision_id(target: TargetPortfolio) -> str:
@@ -496,4 +512,6 @@ __all__ = [
     "PortfolioRiskOverlay",
     "RiskOverlayDecision",
     "TargetToOrderPlanner",
+    "floor_increment",
+    "floor_increment_decimal",
 ]

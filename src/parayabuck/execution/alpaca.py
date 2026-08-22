@@ -39,6 +39,7 @@ from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
     PortfolioOrderSide,
+    floor_increment_decimal,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
@@ -48,7 +49,7 @@ from parayabuck.utils.objects import field_value
 
 log = get_logger("parayabuck.execution.alpaca")
 
-_CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
+CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
 
 
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
@@ -243,7 +244,7 @@ class AlpacaBroker:
                 )
             total_owned = ledger_owned + repo_owned
             fee_reserve = (
-                float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+                float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
             )
             if (
                 managed is None
@@ -566,7 +567,7 @@ class AlpacaBroker:
         drift fail-closed.
         """
         fee_reserve = (
-            float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+            float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
         )
         shortfall = max(0.0, owned_qty * fee_reserve - abs(raw_qty))
         if shortfall <= 1e-12:
@@ -587,7 +588,7 @@ class AlpacaBroker:
         rules = self.asset_trading_rules(order.symbol, order.market)
         quantity = Decimal(str(order.quantity))
         increment = Decimal(str(rules.quantity_increment))
-        quantity = (quantity / increment).to_integral_value(rounding=ROUND_DOWN) * increment
+        quantity = floor_increment_decimal(quantity, increment)
         if quantity < Decimal(str(rules.minimum_order_size)):
             _emit_alert(
                 "order_rejected",
@@ -738,7 +739,7 @@ class AlpacaBroker:
                 tolerance = max(1e-9, ownership.owned_qty * 1e-8)
                 minimum_fee_adjusted_qty = ownership.owned_qty
                 if position.market == Market.CRYPTO:
-                    minimum_fee_adjusted_qty *= float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
+                    minimum_fee_adjusted_qty *= float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 if (
                     position.market == Market.CRYPTO
                     and abs(position.qty) + tolerance < minimum_fee_adjusted_qty
@@ -794,7 +795,7 @@ class AlpacaBroker:
                 # up to 0.25% smaller than the raw position quantity. Only use
                 # this tolerance when Alpaca confirms nothing remains
                 # available; otherwise reconcile protects the remaining units.
-                required_qty = total_qty * float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
+                required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
             if open_orders is None and get_orders is not None:
                 open_orders = get_orders(
@@ -1577,7 +1578,7 @@ class AlpacaBroker:
                     )
                 available = abs(Decimal(str(raw_available or 0)))
                 qty = min(requested, available)
-                qty = (qty / step).to_integral_value(rounding=ROUND_DOWN) * step
+                qty = floor_increment_decimal(qty, step)
                 if qty > 0:
                     if qty < requested:
                         log.info(
@@ -1614,8 +1615,8 @@ class AlpacaBroker:
             return QuantityResolution(True, 0.0, "broker_position_no_available_qty")
         if not reserve_fee_on_lookup_failure:
             return QuantityResolution(False, 0.0, "broker_lookup_failed")
-        requested *= Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE
-        requested = (requested / step).to_integral_value(rounding=ROUND_DOWN) * step
+        requested *= Decimal(1) - CRYPTO_TAKER_FEE_RESERVE
+        requested = floor_increment_decimal(requested, step)
         return QuantityResolution(False, float(requested), "verified_fill_fee_reserve")
 
     def _submit_stop(
@@ -1758,8 +1759,7 @@ class AlpacaBroker:
             return None
 
     def _round_qty_down(self, symbol: str, qty: float) -> float:
-        step = self._qty_step(symbol)
-        return float((Decimal(str(qty)) / step).to_integral_value(rounding=ROUND_DOWN) * step)
+        return float(floor_increment_decimal(Decimal(str(qty)), self._qty_step(symbol)))
 
     def _qty_step(self, symbol: str) -> Decimal:
         """The asset's minimum trade increment, or a conservative default."""

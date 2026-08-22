@@ -14,6 +14,11 @@ from dotenv import load_dotenv
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
 
+# Single source of truth for the default ledger location: monitoring/metrics
+# and the web dashboard fall back to this path when config resolution fails,
+# and they must never point at a different database than the writer.
+DEFAULT_DECISION_DB_PATH = "data/runtime/parayabuck.sqlite3"
+
 
 class RuntimeMode(StrEnum):
     DISABLED = "disabled"
@@ -26,7 +31,7 @@ class RuntimeConfig:
     mode: RuntimeMode = RuntimeMode.PAPER
     execution_timeframe: str = "5m"
     market_state_timeframe: str = "5m"
-    decision_db_path: str = "data/runtime/parayabuck.sqlite3"
+    decision_db_path: str = DEFAULT_DECISION_DB_PATH
     scanner_refresh_hours: float = 24.0
 
     def __post_init__(self) -> None:

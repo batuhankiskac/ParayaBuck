@@ -189,6 +189,15 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     hmac_secret = os.getenv(config.live.operator_approval_key_env, "")
     if not key or not secret:
         raise SystemExit("Live Alpaca credentials are required")
+    if len(hmac_secret) < 32:
+        # Fail here, BEFORE the live-endpoint broker probe, with the same
+        # clean SystemExit style as every other missing prerequisite —
+        # LiveOperatorApproval.calculated_signature would only raise a raw
+        # ValueError at signing time.
+        raise SystemExit(
+            f"{config.live.operator_approval_key_env} must be set to a key of "
+            "at least 32 characters"
+        )
     equity_universe = config.universe.equity
     if (
         config.strategy.equity.enabled

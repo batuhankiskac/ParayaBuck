@@ -14,7 +14,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.execution.alpaca import _CRYPTO_TAKER_FEE_RESERVE
+from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioExecutionPolicy,
@@ -24,7 +24,7 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskOverlay,
     RiskOverlayDecision,
     TargetToOrderPlanner,
-    _floor_increment,
+    floor_increment,
 )
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -917,7 +917,7 @@ class PortfolioStateRepository:
             if side == "buy" and market == "crypto":
                 cumulative_filled_quantity = float(
                     Decimal(str(cumulative_filled_quantity))
-                    * (Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
+                    * (Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 )
             fill_delta = max(0.0, cumulative_filled_quantity - previous)
             delay_seconds: float | None = None
@@ -1953,7 +1953,7 @@ class PortfolioRuntime:
                 PortfolioOrderRequest(
                     **{
                         **asdict(order),
-                        "quantity": _floor_increment(
+                        "quantity": floor_increment(
                             order.quantity * scale,
                             self.broker.asset_trading_rules(
                                 order.symbol, self.market

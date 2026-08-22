@@ -4,6 +4,10 @@ import math
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.markets.timeframes")
+
 TIMEFRAME_MINUTES: dict[str, int] = {
     "1m": 1,
     "5m": 5,
@@ -103,6 +107,7 @@ def bars_to_calendar_days(
     anchor: date | None = None
     if end_date is not None:
         anchor = end_date if isinstance(end_date, date) else end_date.date()
+    calendar_error: Exception | None = None
     try:
         from pandas_market_calendars import get_calendar
 
@@ -117,7 +122,8 @@ def bars_to_calendar_days(
             start = today - timedelta(days=days)
             try:
                 sessions = calendar.schedule(start_date=start, end_date=today)
-            except Exception:
+            except Exception as exc:
+                calendar_error = exc
                 break
             if len(sessions) >= needed_sessions:
                 low, high = 2, days
@@ -132,8 +138,16 @@ def bars_to_calendar_days(
                         low = mid + 1
                 return low
             days += max(2, days // 4)
-    except Exception:
-        pass
+    except Exception as exc:
+        calendar_error = exc
+    if calendar_error is not None:
+        # The heuristic below over-provisions, so data stays sufficient — but
+        # a broken pandas-market-calendars install would otherwise silently
+        # resize every warmup window for the life of the process.
+        log.warning(
+            "NYSE calendar unavailable; using Mon-Fri session estimate: %s",
+            calendar_error,
+        )
     # Mon-Fri density with a holiday buffer.
     return max(2, math.ceil(needed_sessions * 7 / 5 * 1.1))
 

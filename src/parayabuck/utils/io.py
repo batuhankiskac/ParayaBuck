@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -18,10 +19,15 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
+    fdopen_entered = False
     try:
         if mode is not None:
             os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            # fdopen took ownership of the descriptor: the with-block closes
+            # it. Before this point (e.g. a failed fchmod) the finally below
+            # must close it or every failed write leaks one fd forever.
+            fdopen_entered = True
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
@@ -34,6 +40,9 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
         finally:
             os.close(directory_fd)
     finally:
+        if not fdopen_entered:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
         if temporary.exists():
             temporary.unlink()
 

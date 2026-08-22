@@ -4,11 +4,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-
-if TYPE_CHECKING:
-    from parayabuck.markets.regime import RegimeAssessment
 
 
 class Market(StrEnum):
@@ -166,90 +162,6 @@ class Bar:
         if not self.low <= self.close <= self.high or self.volume < 0:
             raise ValueError("Invalid close or volume")
 
-
-@dataclass(frozen=True)
-class Signal:
-    symbol: str
-    market: Market
-    direction: Direction
-    strategy: str
-    score: float
-    confidence: float
-    entry_price: float
-    invalidation_price: float
-    target_price: float
-    timestamp: datetime
-    reasons: tuple[str, ...] = ()
-    regime: Regime = Regime.UNKNOWN
-    signal_id: str = field(default_factory=lambda: uuid4().hex)
-    strategy_version: str = "1.0.0"
-    exit_policy: ExitPolicy = field(default_factory=ExitPolicy)
-    volatility_at_entry: float | None = None
-    minimum_risk_reward: float | None = None
-    reentry_cooldown_bars: int = 0
-    normalized_expected_r: float | None = None
-
-    def __post_init__(self) -> None:
-        if self.timestamp.tzinfo is None:
-            raise ValueError("Signal timestamps must be timezone-aware")
-        if (
-            not math.isfinite(self.score)
-            or not math.isfinite(self.confidence)
-            or not 0 <= self.score <= 100
-            or not 0 <= self.confidence <= 1
-        ):
-            raise ValueError("Signal score/confidence out of range")
-        prices = (self.entry_price, self.invalidation_price, self.target_price)
-        if any(not math.isfinite(value) for value in prices) or min(prices) <= 0:
-            raise ValueError("Signal prices must be positive")
-        if not self.strategy_version.strip():
-            raise ValueError("Strategy version cannot be empty")
-        if self.volatility_at_entry is not None and (
-            not math.isfinite(self.volatility_at_entry) or self.volatility_at_entry <= 0
-        ):
-            raise ValueError("Entry volatility must be finite and positive")
-        if self.minimum_risk_reward is not None and (
-            not math.isfinite(self.minimum_risk_reward) or self.minimum_risk_reward <= 0
-        ):
-            raise ValueError("Minimum risk/reward must be finite and positive")
-        if self.reentry_cooldown_bars < 0:
-            raise ValueError("Re-entry cooldown cannot be negative")
-        if self.normalized_expected_r is not None and not math.isfinite(self.normalized_expected_r):
-            raise ValueError("Normalized expected R must be finite")
-
-
-@dataclass(frozen=True)
-class StrategyContext:
-    """Everything a signal strategy may observe at a decision point."""
-
-    regime: RegimeAssessment
-    position: PositionSnapshot | None = None
-    higher_timeframe_regime: Regime = Regime.UNKNOWN
-    benchmark_regime: Regime = Regime.UNKNOWN
-    relative_strength: float | None = None
-
-
-@dataclass(frozen=True)
-class ConditionEvaluation:
-    """One explainable strategy gate with machine-readable values."""
-
-    code: str
-    passed: bool
-    actual: Any
-    expected: str
-    explanation: str
-
-
-@dataclass(frozen=True)
-class StrategyEvaluation:
-    """A strategy result together with the evidence used to reach it."""
-
-    strategy: str
-    fired: bool
-    summary: str
-    conditions: tuple[ConditionEvaluation, ...] = ()
-    metrics: dict[str, Any] | None = None
-    signal: Signal | None = None
 
 
 @dataclass(frozen=True)

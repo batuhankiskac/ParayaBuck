@@ -100,17 +100,18 @@ def crypto_candidate_from_bars(
         daily_dollar_volumes[day] = daily_dollar_volumes.get(day, 0.0) + (
             float(getattr(bar, "close")) * float(getattr(bar, "volume"))
         )
-    true_ranges: list[float] = []
+    # Inline true-range math (finite values only, unlike
+    # features.indicators.true_ranges which would propagate NaN/inf into the
+    # ATR average). Named ``ranges`` so it does not shadow that helper.
+    ranges: list[float] = []
     for previous, current in pairwise(ordered):
         high = float(getattr(current, "high"))
         low = float(getattr(current, "low"))
         previous_close = float(getattr(previous, "close"))
         if all(math.isfinite(value) for value in (high, low, previous_close)):
-            true_ranges.append(
-                max(high - low, abs(high - previous_close), abs(low - previous_close))
-            )
+            ranges.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
     price = float(getattr(ordered[-1], "close")) if ordered else 0.0
-    atr_window = true_ranges[-14:]
+    atr_window = ranges[-14:]
     atr_pct = statistics.mean(atr_window) / price if atr_window and price > 0 else 0.0
     correlation = None
     if canonical != "BTC/USD" and btc_bars:

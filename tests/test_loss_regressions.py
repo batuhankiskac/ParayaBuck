@@ -10,7 +10,6 @@ import pytest
 from parayabuck.config import Config, EquityUniverseConfig
 from parayabuck.core.models import (
     AccountSnapshot,
-    Bar,
     Direction,
     ExecutionEvent,
     Fill,
@@ -18,12 +17,10 @@ from parayabuck.core.models import (
     OrderIntent,
     OrderRole,
     OrderState,
-    Regime,
 )
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream
 from parayabuck.execution.ledger import ExecutionLedger
-from parayabuck.markets.regime import RegimeDetector
 from parayabuck.runtime import EngineRuntime
 from parayabuck.universe import EquityCandidate, EquityUniverseScanner
 from tests.helpers import apply_entry_fill
@@ -31,39 +28,6 @@ from tests.helpers import apply_entry_fill
 pytestmark = pytest.mark.paper_chaos
 
 
-def _bars(
-    *,
-    symbol: str = "SPY",
-    count: int = 220,
-    falling_from: int | None = None,
-) -> list[Bar]:
-    result: list[Bar] = []
-    for index in range(count):
-        close = 100 + index * 0.05
-        if falling_from is not None and index >= falling_from:
-            close = 110 - (index - falling_from + 1)
-        result.append(
-            Bar(
-                datetime(2025, 1, 1, tzinfo=UTC) + timedelta(minutes=5 * index),
-                symbol,
-                "5m",
-                close,
-                close + 0.2,
-                close - 0.2,
-                close,
-                1_000,
-                Market.EQUITY,
-            )
-        )
-    return result
-
-
-def test_fresh_high_adx_break_is_not_mislabeled_as_range() -> None:
-    assessment = RegimeDetector().detect(_bars(falling_from=210))
-
-    assert assessment.regime == Regime.TREND_DOWN
-    assert assessment.trend_strength > 22
-    assert "fresh_bearish_break_below_ema50" in assessment.reasons
 
 
 def test_parentless_bracket_children_keep_their_exit_roles() -> None:

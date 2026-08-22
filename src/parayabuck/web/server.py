@@ -30,7 +30,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
-from parayabuck.config import load_config
+from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config
 from parayabuck.core.models import Market
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
@@ -44,12 +44,27 @@ log = get_logger("parayabuck.web.server")
 # the final value, so the loop never busy-spins or floods the logs.
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 
+# Engine states in which the runtime owns workers/resources. Single source of
+# truth for every guard that must treat the engine as "active" (backtest
+# exclusion, has_active_runtime) — adding a state here updates all of them
+# together.
+_ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
+    {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
+)
+# start_engine's own guard excludes "starting": the auto-start retry loop
+# legitimately re-enters start_engine from that state after a transient
+# failure (its dedicated retry-pending guard below handles manual starts).
+_START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
+
 
 class BacktestManager:
     """Runs the production-strategy backtest CLI in a background thread."""
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        # Public + reentrant: EngineManager.start_engine holds it across its
+        # own guard so the engine↔backtest exclusion is atomic (no TOCTOU),
+        # while is_running can still be called under it.
+        self.lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._thread_factory = threading.Thread
         self.state = "idle"
@@ -64,26 +79,18 @@ class BacktestManager:
 
     @property
     def is_running(self) -> bool:
-        with self._lock:
+        with self.lock:
             return self.state == "running" and self._thread is not None and self._thread.is_alive()
 
     def start(self, payload: dict[str, Any]) -> str:
-        with self._lock:
+        with self.lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
             # Mutual exclusion with the trading runtime: a large in-process
             # backtest must never starve live/PAPER workers. The engine state
             # is read at call time so tests can monkeypatch the singleton.
             engine_state = manager.current_engine_state()
-            if engine_state in {
-                "starting",
-                "running",
-                "warming_up",
-                "degraded",
-                "halted",
-                "stopping",
-                "stop_failed",
-            }:
+            if engine_state in _ACTIVE_ENGINE_STATES:
                 raise ValueError(
                     "A Web backtest cannot start while the trading engine is "
                     f"active ({engine_state}); stop the engine first"
@@ -157,7 +164,7 @@ class BacktestManager:
                 self.owner = owner
 
             def write(self, text: str) -> int:
-                with self.owner._lock:
+                with self.owner.lock:
                     self.owner.progress.extend(text.splitlines())
                     if len(self.owner.progress) > 300:
                         self.owner.progress = self.owner.progress[-300:]
@@ -185,7 +192,7 @@ class BacktestManager:
                     universe = json.loads(universe_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 error = f"Rapor okunamadı: {exc}"
-        with self._lock:
+        with self.lock:
             self.state = "error" if error else "done"
             self.error = error
             self.summary = summary
@@ -195,7 +202,7 @@ class BacktestManager:
 
     def status(self) -> dict[str, Any]:
         is_running = self.is_running
-        with self._lock:
+        with self.lock:
             return {
                 "state": "running" if is_running else self.state,
                 "run_id": self.run_id,
@@ -261,6 +268,10 @@ class EngineManager:
         self._retry_attempt = 0
         self._retry_next_at: float | None = None
         self._retry_task: asyncio.Task[None] | None = None
+        # The loop owning _retry_task: Task.cancel() is not thread-safe, but
+        # stop_engine runs on a to_thread worker and must cancel via
+        # loop.call_soon_threadsafe instead.
+        self._retry_task_loop: asyncio.AbstractEventLoop | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -339,15 +350,7 @@ class EngineManager:
 
     def has_active_runtime(self) -> bool:
         with self._state_lock:
-            return self.runtime is not None or self.engine_state in {
-                "starting",
-                "running",
-                "warming_up",
-                "degraded",
-                "halted",
-                "stopping",
-                "stop_failed",
-            }
+            return self.runtime is not None or self.engine_state in _ACTIVE_ENGINE_STATES
 
     def _validated_settings_payload(self, payload: SettingsPayload) -> ValidatedSettings:
         """Validate a settings save and build the full settings.yaml mapping.
@@ -494,33 +497,30 @@ class EngineManager:
     def start_engine(self, *, auto_start: bool = False) -> None:
         # Mutual exclusion with the Web backtest runner: the engine must not
         # start while an expensive in-process backtest is using the process.
-        if backtest_manager.is_running:
-            raise ValueError(
-                "A Web backtest is still running; wait for it to finish "
-                "before starting the trading engine"
-            )
-        with self._state_lock:
-            if self.runtime is not None or self.engine_state in {
-                "running",
-                "warming_up",
-                "degraded",
-                "halted",
-                "stopping",
-                "stop_failed",
-            }:
-                raise ValueError(f"Engine is already {self.engine_state}")
-            # The auto-start retry loop re-enters while its own failed
-            # attempt left the state at 'starting'. A manual start during
-            # a pending retry is refused so two runtimes can never race.
-            if self.engine_state == "starting" and not auto_start:
-                if self._retry_task is not None:
-                    raise ValueError(
-                        "Engine auto-start retry is in progress; wait for "
-                        "it to finish or stop the engine"
-                    )
-                raise ValueError("Engine is already starting")
-            self.engine_state = "starting"
-            self.last_engine_error = None
+        # The backtest lock is taken FIRST on both paths (BacktestManager.start
+        # re-reads the engine state under it), so the two guards cannot
+        # interleave the way two independent checks could.
+        with backtest_manager.lock:
+            if backtest_manager.is_running:
+                raise ValueError(
+                    "A Web backtest is still running; wait for it to finish "
+                    "before starting the trading engine"
+                )
+            with self._state_lock:
+                if self.runtime is not None or self.engine_state in _START_ENGINE_BLOCKING_STATES:
+                    raise ValueError(f"Engine is already {self.engine_state}")
+                # The auto-start retry loop re-enters while its own failed
+                # attempt left the state at 'starting'. A manual start during
+                # a pending retry is refused so two runtimes can never race.
+                if self.engine_state == "starting" and not auto_start:
+                    if self._retry_task is not None:
+                        raise ValueError(
+                            "Engine auto-start retry is in progress; wait for "
+                            "it to finish or stop the engine"
+                        )
+                    raise ValueError("Engine is already starting")
+                self.engine_state = "starting"
+                self.last_engine_error = None
 
         key, secret = self.get_credentials()
         if not key or not secret:
@@ -683,14 +683,22 @@ class EngineManager:
         self._retry_attempt = 0
         self._retry_next_at = None
         self._retry_task = None
+        self._retry_task_loop = None
 
     def _cancel_pending_retry(self) -> None:
         """Cancel a sleeping auto-start retry, if any; safe from any thread."""
         with self._state_lock:
             task = self._retry_task
+            loop = self._retry_task_loop
             self._reset_retry_state()
             if task is not None and not task.done():
-                task.cancel()
+                if loop is not None and not loop.is_closed():
+                    # Task.cancel() schedules via loop.call_soon, which is
+                    # documented as not thread-safe; this runs on a worker
+                    # thread whenever stop_engine is to_thread'ed.
+                    loop.call_soon_threadsafe(task.cancel)
+                else:
+                    task.cancel()
 
     async def auto_start_engine(self) -> None:
         """Bounded autonomous startup recovery for the Web auto-start path.
@@ -719,6 +727,7 @@ class EngineManager:
                         self._retry_attempt = attempt
                         self._retry_next_at = time.monotonic() + delay
                         self._retry_task = asyncio.current_task()
+                        self._retry_task_loop = asyncio.get_running_loop()
                         self.last_engine_error = f"transient: {exc}; retry in {delay}s"
                     log.warning(
                         "Automatic engine start attempt %d failed transiently (%s); "
@@ -1100,6 +1109,7 @@ class EngineManager:
         # and the configuration digests the engine will compute at start.
         key, secret = self.get_credentials()
         account_id: str | None = None
+        account_probe_error: str | None = None
         if key and secret:
             try:
                 from parayabuck.execution.alpaca import AlpacaBroker
@@ -1110,8 +1120,11 @@ class EngineManager:
                     account_id = live_broker.account_id
                 finally:
                     live_broker.close()
-            except Exception:
-                account_id = None
+            except Exception as exc:
+                # The preflight exists to diagnose exactly this: an operator
+                # preparing to arm LIVE must see WHY the identity probe failed.
+                account_probe_error = str(exc)
+                log.warning("Live account probe failed during preflight: %s", exc)
         expected_digests: tuple[str, ...] | None = None
         digest_error: str | None = None
         try:
@@ -1160,7 +1173,10 @@ class EngineManager:
         elif account_id is None:
             binding_state = "unverifiable"
             binding_missing = (
-                "cannot verify the live account binding without reachable live credentials"
+                "cannot verify the live account binding: "
+                f"live account probe failed: {account_probe_error}"
+                if account_probe_error is not None
+                else "cannot verify the live account binding without reachable live credentials"
             )
         elif expected_digests is None:
             binding_state = "unverifiable"
@@ -2126,14 +2142,14 @@ async def backtest_status() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Trading dashboard API (Phase 7). Read-only operator views over the SAME
+# Trading dashboard API. Read-only operator views over the SAME
 # state /api/status and /api/account expose — no secrets, no mutations, no
 # new ledgers. Every panel degrades to an explicit unavailable/error field
 # instead of raising, so the dashboard stays readable while the engine is
-# stopped, the ledger is missing, or a batch module has not landed yet.
+# stopped, the ledger is missing, or an optional module import fails.
 # ---------------------------------------------------------------------------
 
-_DASHBOARD_DEFAULT_DB = Path("data/runtime/parayabuck.sqlite3")
+_DASHBOARD_DEFAULT_DB = Path(DEFAULT_DECISION_DB_PATH)
 
 
 def _dashboard_runtime() -> Any:
@@ -2753,7 +2769,7 @@ def _dashboard_risk(
 
 
 def _fill_expected_vs_actual(order: dict[str, Any], fill: dict[str, Any]) -> dict[str, Any] | None:
-    """Worker B's per-order expected-vs-actual comparison; None on degrade."""
+    """Per-order expected-vs-actual slippage telemetry; None on degrade."""
     try:
         from parayabuck.execution.telemetry import expected_vs_actual
     except Exception:
@@ -2990,19 +3006,23 @@ def _dashboard_database_state() -> dict[str, Any]:
 
 
 def _dashboard_restart_count() -> int | None:
-    """Restart count fallback (Worker D's runtime_metrics is authoritative;
-    this mirrors its formula only when that module has not landed)."""
+    """Fallback restart count when the runtime_metrics payload omits it.
+
+    Delegates the formula to ``monitoring.metrics.runtime_session_restart_count``
+    so the dashboard can never drift from the authoritative accounting.
+    """
     connection = _dashboard_readonly_connection()
     if connection is None:
         return 0
     try:
-        rows = connection.execute("SELECT COUNT(*) FROM runtime_sessions").fetchall()
-    except sqlite3.Error:
+        # Lazy import mirrors the other monitoring.metrics call sites.
+        from parayabuck.monitoring.metrics import runtime_session_restart_count
+
+        return runtime_session_restart_count(connection)
+    except (ImportError, sqlite3.Error):
         return 0
     finally:
         _dashboard_release(connection)
-    total = int(rows[0][0]) if rows else 0
-    return max(0, total - 1)
 
 
 def _dashboard_health(
@@ -3119,7 +3139,7 @@ def _dashboard_explanations(
 
 
 def _telemetry_payload() -> dict[str, Any]:
-    """Worker B's execution/forward/cost telemetry; degrades explicitly."""
+    """Execution/forward/cost telemetry for the dashboard; degrades explicitly."""
     try:
         from parayabuck.execution.telemetry import (
             cost_calibration,
@@ -3167,7 +3187,7 @@ def _telemetry_payload() -> dict[str, Any]:
 
 
 def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
-    """Worker D's runtime_metrics; degrades explicitly while it lands."""
+    """Authoritative runtime metrics (restarts, sessions) for the dashboard."""
     try:
         from parayabuck.monitoring.metrics import runtime_metrics
 
@@ -3175,7 +3195,7 @@ def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
     except ImportError:
         return {
             "unavailable": True,
-            "reason": "parayabuck.monitoring.metrics is not available yet",
+            "reason": "parayabuck.monitoring.metrics is not available",
         }
     except Exception as exc:
         log.warning("Dashboard runtime metrics failed: %s", exc)

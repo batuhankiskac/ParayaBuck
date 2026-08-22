@@ -163,12 +163,6 @@ class PortfolioStrategy(ABC):
 
     # -- typed parameter access (values are validated in _validate_parameters)
 
-    def param_str(self, name: str, default: str) -> str:
-        value = self.parameters.get(name, default)
-        if not isinstance(value, str):
-            raise ValueError(f"{name} must be a string")
-        return value
-
     def param_int(self, name: str, default: int) -> int:
         value = self.parameters.get(name, default)
         if not isinstance(value, (int, float)):
@@ -179,14 +173,6 @@ class PortfolioStrategy(ABC):
         value = self.parameters.get(name, default)
         if not isinstance(value, (int, float)):
             raise ValueError(f"{name} must be numeric")
-        return float(value)
-
-    def param_optional_float(self, name: str) -> float | None:
-        value = self.parameters.get(name)
-        if value is None:
-            return None
-        if not isinstance(value, (int, float)):
-            raise ValueError(f"{name} must be numeric or null")
         return float(value)
 
 

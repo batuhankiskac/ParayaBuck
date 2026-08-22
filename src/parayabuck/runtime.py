@@ -276,6 +276,17 @@ class _EventQueue:
 class EngineRuntime:
     """Web-manageable streaming runtime for the ParayaBuck engine."""
 
+    # Serialize the check-then-spawn sequences in _schedule_reconcile and
+    # _schedule_warmup_retry. Class-level so the lock exists even when a
+    # test constructs an instance via __new__ and so two threads can never
+    # create competing locks on first use.
+    _reconcile_spawn_lock = threading.Lock()
+    _warmup_retry_spawn_lock = threading.Lock()
+    # Fallback for partially constructed runtimes (EngineRuntime.__new__ in
+    # tests): fully constructed instances shadow this with their own
+    # __init__-created lock, keeping per-instance isolation.
+    _ingestion_lock = threading.Lock()
+
     def __init__(self, api_key: str, secret_key: str, config: Config) -> None:
         self._validate_execution_mode(config)
         self.api_key = api_key
@@ -1662,32 +1673,44 @@ class EngineRuntime:
                     stream.stop()
                 except Exception as exc:
                     log.warning("Stream stop warning: %s", exc)
-            for thread in self._threads:
-                thread.join(timeout=5)
-            alive = [thread.name for thread in self._threads if thread.is_alive()]
-            reconcile_thread = self._reconcile_thread
-            if reconcile_thread is not None:
-                reconcile_thread.join(timeout=30)
-                if reconcile_thread.is_alive():
-                    alive.append(reconcile_thread.name)
-            warmup_thread = self._warmup_retry_thread
-            if warmup_thread is not None:
-                warmup_thread.join(timeout=30)
-                if warmup_thread.is_alive():
-                    alive.append(warmup_thread.name)
-            if alive:
-                self._state = "stop_failed"
-                log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
-                return False
-            # Release broker/data HTTP session pools on every start/stop cycle.
-            for candidate in (self.broker, self._historical):
-                close = getattr(candidate, "close", None)
-                if close is None:
-                    continue
-                try:
-                    close()
-                except Exception as exc:
-                    log.warning("Session close warning during stop: %s", exc)
+        # The join phase runs on EVERY stop attempt, not only the first: a
+        # prior attempt may have timed out (stop_failed) with workers still
+        # finishing. Re-running it guarantees storage below is closed only
+        # once no worker can still be mid-write.
+        # getattr defaults: partially constructed runtimes (tests use
+        # EngineRuntime.__new__) may stop before start() created the workers.
+        for thread in getattr(self, "_threads", ()):
+            thread.join(timeout=5)
+        alive = [
+            thread.name for thread in getattr(self, "_threads", ()) if thread.is_alive()
+        ]
+        reconcile_thread = getattr(self, "_reconcile_thread", None)
+        if reconcile_thread is not None:
+            reconcile_thread.join(timeout=30)
+            if reconcile_thread.is_alive():
+                alive.append(reconcile_thread.name)
+        warmup_thread = getattr(self, "_warmup_retry_thread", None)
+        if warmup_thread is not None:
+            warmup_thread.join(timeout=30)
+            if warmup_thread.is_alive():
+                alive.append(warmup_thread.name)
+        if alive:
+            self._state = "stop_failed"
+            log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
+            return False
+        # Release broker/data HTTP session pools on every start/stop cycle,
+        # only after every worker joined (never under a stuck request).
+        for candidate in (
+            getattr(self, "broker", None),
+            getattr(self, "_historical", None),
+        ):
+            close = getattr(candidate, "close", None)
+            if close is None:
+                continue
+            try:
+                close()
+            except Exception as exc:
+                log.warning("Session close warning during stop: %s", exc)
         # A stop from a halted/error state (or while a circuit breaker is
         # active) is an unexpected shutdown: alert and record the session as
         # such. Graceful stops just close the session row.
@@ -1986,11 +2009,15 @@ class EngineRuntime:
             try:
                 with self._portfolio_lock:
                     result = portfolio_runtime.advance_rebalance()
-            except Exception as exc:
-                log.error(
-                    "Two-phase rebalance advance failed: market=%s error=%s",
+            except Exception:
+                # The bar-path twin of this handler (in _process_timestamp)
+                # halts with a circuit breaker; here the persisted two-phase
+                # state stays pending and every later trade update retries —
+                # so the traceback is the only forensic record of a persistent
+                # failure. Keep it, unlike the old single-line log.error.
+                log.exception(
+                    "Two-phase rebalance advance failed: market=%s",
                     market.value,
-                    exc,
                 )
                 continue
             if result is not None and result.status == "rebalance_blocked":
@@ -2330,9 +2357,15 @@ class EngineRuntime:
                         portfolio_pending.setdefault(portfolio_key, {})[item.bar.symbol] = item.bar
                         portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                     elif item.kind == "higher":
-                        self.market_state.seed([item.bar])
+                        # Every market_state writer shares _ingestion_lock so
+                        # a concurrent hot-swap commit (which seeds under the
+                        # same lock) can never interleave with a BarStore
+                        # read-modify-write and lose a bar.
+                        with self._ingestion_lock:
+                            self.market_state.seed([item.bar])
                     elif item.kind == "correction":
-                        self.market_state.ingest_corrections([item.bar])
+                        with self._ingestion_lock:
+                            self.market_state.ingest_corrections([item.bar])
                     elif item.bar.timestamp <= max(
                         self._series_watermarks.get(
                             (item.bar.symbol, item.bar.timeframe),
@@ -2358,7 +2391,8 @@ class EngineRuntime:
                                 item.bar.timestamp,
                             )
                         else:
-                            self.market_state.ingest_corrections([item.bar])
+                            with self._ingestion_lock:
+                                self.market_state.ingest_corrections([item.bar])
                             log.debug(
                                 "Late finalized bar ingested as correction: symbol=%s "
                                 "timeframe=%s timestamp=%s",
@@ -2517,7 +2551,10 @@ class EngineRuntime:
         health: RuntimeHealth | None = None,
     ) -> None:
         bars = list(bars_by_symbol.values())
-        ingestion = self.market_state.ingest_closed_bars(bars)
+        # Same shared-writer discipline as the "higher"/"correction" branches
+        # above: the hot-swap commit seeds under _ingestion_lock.
+        with self._ingestion_lock:
+            ingestion = self.market_state.ingest_closed_bars(bars)
         gap_bars = [
             bar
             for bar, mutation in zip(ingestion.bars, ingestion.mutations, strict=True)
@@ -2774,7 +2811,13 @@ class EngineRuntime:
                 start=previous.timestamp,
                 end=bar.timestamp,
             )
-            if backfill and self.market_state.repair_gap(backfill):
+            # Lock only the mutation: history.get_bars above is a network
+            # fetch and must never hold _ingestion_lock against a hot-swap.
+            repaired = False
+            if backfill:
+                with self._ingestion_lock:
+                    repaired = self.market_state.repair_gap(backfill)
+            if repaired:
                 log.info(
                     "Historical gap repaired: %s %s %s..%s",
                     bar.symbol,
@@ -2820,17 +2863,22 @@ class EngineRuntime:
             self._state = "running"
 
     def _schedule_warmup_retry(self) -> None:
-        current = getattr(self, "_warmup_retry_thread", None)
-        if current is not None and current.is_alive():
-            return
-        self._last_warmup_retry_at = time.monotonic()
-        thread = threading.Thread(
-            target=self._retry_incomplete_warmup,
-            name="pb-warmup-retry",
-            daemon=True,
-        )
-        self._warmup_retry_thread = thread
-        thread.start()
+        # Reached from the decision loop, the universe-refresh thread and the
+        # retry thread itself: keep check-spawn-assign atomic so overlapping
+        # callers cannot start duplicate pb-warmup-retry threads and orphan
+        # the overwritten reference (never joined by stop).
+        with self._warmup_retry_spawn_lock:
+            current = getattr(self, "_warmup_retry_thread", None)
+            if current is not None and current.is_alive():
+                return
+            self._last_warmup_retry_at = time.monotonic()
+            thread = threading.Thread(
+                target=self._retry_incomplete_warmup,
+                name="pb-warmup-retry",
+                daemon=True,
+            )
+            self._warmup_retry_thread = thread
+            thread.start()
 
     def _retry_incomplete_warmup(self) -> None:
         history = self._historical
@@ -2975,17 +3023,22 @@ class EngineRuntime:
 
     def _schedule_reconcile(self) -> None:
         """Run the expensive broker scan without stalling finalized-bar decisions."""
-        current = self._reconcile_thread
-        if current is not None and current.is_alive():
-            log.warning("Periodic reconciliation still running; overlapping scan skipped")
-            return
-        thread = threading.Thread(
-            target=self._reconcile_safely,
-            name="pb-reconcile",
-            daemon=True,
-        )
-        self._reconcile_thread = thread
-        thread.start()
+        # Called from both the trade-update stream thread and the decision
+        # loop: the is_alive() check, the assignment and start() must be one
+        # atomic step or two callers can spawn duplicate pb-reconcile threads
+        # and orphan the overwritten Thread reference (never joined by stop).
+        with self._reconcile_spawn_lock:
+            current = self._reconcile_thread
+            if current is not None and current.is_alive():
+                log.warning("Periodic reconciliation still running; overlapping scan skipped")
+                return
+            thread = threading.Thread(
+                target=self._reconcile_safely,
+                name="pb-reconcile",
+                daemon=True,
+            )
+            self._reconcile_thread = thread
+            thread.start()
 
     def start_new_risk_epoch(self) -> float:
         """Operator-verified drawdown-baseline reset (explicit recovery path

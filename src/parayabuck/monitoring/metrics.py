@@ -27,9 +27,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from parayabuck.config import DEFAULT_DECISION_DB_PATH
+
 log = logging.getLogger("parayabuck.monitoring.metrics")
 
-DEFAULT_DATABASE_PATH = "data/runtime/parayabuck.sqlite3"
+DEFAULT_DATABASE_PATH = DEFAULT_DECISION_DB_PATH
 
 # Process-local counters incremented by the engine at state transitions.
 # Persisted equivalents exist for restart count (runtime_sessions) and
@@ -163,6 +165,22 @@ def _sessions_metrics(connection: sqlite3.Connection) -> dict[str, object]:
         "restart_count": max(0, total - 1),
         "latest_started_at": latest,
     }
+
+
+def runtime_session_restart_count(connection: sqlite3.Connection) -> int:
+    """Restart count from persisted sessions: starts minus one, clamped at 0.
+
+    Each ``runtime_sessions`` row records one engine start; the first start is
+    not a restart. Crashed sessions never get an end marker and are still
+    counted as starts, so a crash-and-restart cycle increments correctly.
+    Public single source of truth: the web dashboard's fallback path calls
+    this instead of restating the formula.
+    """
+    if not _table_exists(connection, "runtime_sessions"):
+        return 0
+    rows = _query_rows(connection, "SELECT COUNT(*) FROM runtime_sessions")
+    total = int(rows[0][0]) if rows else 0
+    return max(0, total - 1)
 
 
 def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -> dict[str, object]:

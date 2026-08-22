@@ -27,7 +27,6 @@ from parayabuck.core.models import (
     OrderRole,
     OrderState,
     PositionSnapshot,
-    Signal,
 )
 from parayabuck.data.aggregator import TimeframeAggregator
 from parayabuck.data.buffers import BarMutation, BarRevision, BarStore
@@ -49,36 +48,10 @@ from tests.helpers import apply_entry_fill
 pytestmark = pytest.mark.paper_chaos
 
 
-def test_market_models_reject_non_finite_values_and_naive_signal_time() -> None:
+def test_market_models_reject_non_finite_values() -> None:
     aware = datetime.now(UTC)
     with pytest.raises(ValueError, match="finite"):
         Bar(aware, "AAPL", "5m", 100, 101, 99, 100, math.nan, Market.EQUITY)
-    with pytest.raises(ValueError, match="positive"):
-        Signal(
-            "AAPL",
-            Market.EQUITY,
-            Direction.LONG,
-            "test",
-            80,
-            0.8,
-            math.nan,
-            95,
-            110,
-            aware,
-        )
-    with pytest.raises(ValueError, match="timezone-aware"):
-        Signal(
-            "AAPL",
-            Market.EQUITY,
-            Direction.LONG,
-            "test",
-            80,
-            0.8,
-            100,
-            95,
-            110,
-            datetime.now(),
-        )
 
 
 def test_execution_ledger_preserves_and_moves_legacy_decision_orders(

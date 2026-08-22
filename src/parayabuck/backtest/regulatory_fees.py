@@ -21,8 +21,13 @@ Rates verified against primary sources as of 2026-08:
   Assessment 1) — first invoice Nov 2024 for Oct 2024 transactions,
   $0.000013; CAT Fee 2025-1 — $0.000022 for Jan through Jun 2025
   transactions (first invoice Feb 2025); CAT Fee 2025-2 — $0.000009 for Jul
-  through Nov 2025 transactions (first invoice Aug 2025); CAT Fee Alert
-  2025-4 — both 2025 fees cease after the Dec 2025 invoice, which covered
+  through Nov 2025 transactions (first invoice Aug 2025). Every rate above
+  is one component billed IN ADDITION to the fees still in effect (each
+  fee alert says so explicitly): the schedule below therefore stores the
+  CUMULATIVE per-share total — $0.000048 Oct-Dec 2024, $0.000035 Jan-Jun
+  2025 (2025-1 + HA1) and $0.000022 Jul-Nov 2025 (2025-2 + HA1).
+  CAT Fee Alert 2025-4 — both 2025 fees cease after the Dec 2025 invoice,
+  which covered
   Nov 2025 transactions; the 2026 funding model — CAT Fee 2026-1 ($0.000001)
   + Historical Assessment 1A ($0.000002), first invoice Jun 2026 for May
   2026 transactions. CAT invoicing began in 2024, so earlier years carry

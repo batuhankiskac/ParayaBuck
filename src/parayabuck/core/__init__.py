@@ -9,7 +9,6 @@ from parayabuck.core.models import (
     OrderState,
     PositionSnapshot,
     Regime,
-    Signal,
     TrailingStopType,
 )
 
@@ -24,6 +23,5 @@ __all__ = [
     "OrderState",
     "PositionSnapshot",
     "Regime",
-    "Signal",
     "TrailingStopType",
 ]

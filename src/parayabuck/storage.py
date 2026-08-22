@@ -6,7 +6,13 @@ from pathlib import Path
 
 
 class SQLiteStore:
-    """Shared SQLite connection and transaction lock for one runtime database."""
+    """Shared SQLite connection and transaction lock for one runtime database.
+
+    The runtime database is opened once per process and shared between the
+    execution ledger and the portfolio repository via ``store.connection`` and
+    ``store.lock``. ``acquire``/``release`` track ownership so the last
+    holder closes the connection; callers never close ``connection`` directly.
+    """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
@@ -20,12 +26,14 @@ class SQLiteStore:
         self._closed = False
 
     def acquire(self) -> None:
+        """Claim shared ownership of the connection; raises if already closed."""
         with self.lock:
             if self._closed:
                 raise RuntimeError("SQLite store is closed")
             self._references += 1
 
     def release(self) -> None:
+        """Release one ownership claim; closes the connection on last release."""
         with self.lock:
             if self._references <= 0:
                 return

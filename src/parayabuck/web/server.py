@@ -965,13 +965,7 @@ class EngineManager:
         credentials, the approval HMAC key, or approval-file contents.
         """
         items: list[dict[str, Any]] = []
-        raw: dict[str, Any] = {}
-        config_error: str | None = None
-        try:
-            if self.config_path.exists():
-                raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError) as exc:
-            config_error = str(exc)
+        raw, config_error = self._load_raw_config_for_prerequisites()
         live_cfg = raw.get("live", {}) if isinstance(raw.get("live", {}), dict) else {}
         runtime_cfg = raw.get("runtime", {}) if isinstance(raw.get("runtime", {}), dict) else {}
 
@@ -992,7 +986,39 @@ class EngineManager:
                 }
             )
 
-        # 1. live.enabled
+        self._append_live_config_checks(item, live_cfg, runtime_cfg)
+        approval, approval_error, hmac_key, approval_path = self._check_approval_signature(
+            item, live_cfg
+        )
+        key, secret = self.get_credentials()
+        account_id, account_probe_error = self._probe_live_account(key, secret)
+        expected_digests, digest_error = self._resolve_live_configuration_digests()
+        self._append_live_binding_check(
+            item, approval, account_id, account_probe_error, expected_digests, digest_error
+        )
+        self._append_live_session_checks(item, key, secret)
+        return {
+            "all_met": all(entry["satisfied"] for entry in items),
+            "items": items,
+            "config_error": config_error,
+        }
+
+    def _load_raw_config_for_prerequisites(
+        self,
+    ) -> tuple[dict[str, Any], str | None]:
+        try:
+            if self.config_path.exists():
+                raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
+                return raw, None
+        except (OSError, yaml.YAMLError) as exc:
+            return {}, str(exc)
+        return {}, None
+    def _append_live_config_checks(
+        self,
+        item: Callable[..., None],
+        live_cfg: dict[str, Any],
+        runtime_cfg: dict[str, Any],
+    ) -> None:
         live_enabled = bool(live_cfg.get("enabled", False))
         item(
             "config_live_enabled",
@@ -1000,8 +1026,6 @@ class EngineManager:
             live_enabled,
             "live.enabled is false in settings.yaml" if not live_enabled else None,
         )
-
-        # 2. runtime.mode=live
         mode_live = str(runtime_cfg.get("mode", "paper")).lower() == "live"
         item(
             "runtime_mode_live",
@@ -1009,8 +1033,6 @@ class EngineManager:
             mode_live,
             "runtime.mode is not 'live' in settings.yaml" if not mode_live else None,
         )
-
-        # 3. live.hard_dollar_cap>0
         try:
             cap = float(live_cfg.get("hard_dollar_cap", 0) or 0)
         except (TypeError, ValueError):
@@ -1024,8 +1046,6 @@ class EngineManager:
             if not cap_ok
             else None,
         )
-
-        # 4. PARAYABUCK_ENABLE_LIVE=YES
         env_ok = os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
         item(
             "enable_live_env",
@@ -1036,8 +1056,11 @@ class EngineManager:
             else None,
         )
 
-        # 5-8. Operator approval file: presence, HMAC key, signature+expiry,
-        # and the account/config binding.
+    def _check_approval_signature(
+        self,
+        item: Callable[..., None],
+        live_cfg: dict[str, Any],
+    ) -> tuple[LiveOperatorApproval | None, str | None, str, str]:
         approval_path = str(live_cfg.get("operator_approval_path") or "")
         key_env_name = str(
             live_cfg.get("operator_approval_key_env") or "PARAYABUCK_OPERATOR_APPROVAL_KEY"
@@ -1065,7 +1088,6 @@ class EngineManager:
             if not key_ok
             else None,
         )
-
         approval: LiveOperatorApproval | None = None
         approval_error: str | None = None
         if file_ok and key_ok:
@@ -1075,7 +1097,7 @@ class EngineManager:
                     operator_id=str(parsed.get("operator_id", "")),
                     account_id=str(parsed.get("account_id", "")),
                     configuration_digests=tuple(
-                        str(item) for item in parsed.get("configuration_digests", ())
+                        str(entry) for entry in parsed.get("configuration_digests", ())
                     ),
                     maximum_dollar_exposure=float(parsed.get("maximum_dollar_exposure", 0)),
                     approved_at=datetime.fromisoformat(str(parsed.get("approved_at", ""))),
@@ -1103,30 +1125,29 @@ class EngineManager:
             signature_ok,
             approval_error if not signature_ok else None,
         )
+        return approval, approval_error, hmac_key, approval_path
 
-        # Binding checks need the LIVE account identity (read-only broker
-        # probe against the live endpoint, exactly like request_live_arming)
-        # and the configuration digests the engine will compute at start.
-        key, secret = self.get_credentials()
-        account_id: str | None = None
-        account_probe_error: str | None = None
-        if key and secret:
+    def _probe_live_account(
+        self, key: str | None, secret: str | None
+    ) -> tuple[str | None, str | None]:
+        if not key or not secret:
+            return None, None
+        try:
+            from parayabuck.execution.alpaca import AlpacaBroker
+
+            live_broker = AlpacaBroker(key, secret, paper=False)
             try:
-                from parayabuck.execution.alpaca import AlpacaBroker
+                live_broker.account()
+                return live_broker.account_id, None
+            finally:
+                live_broker.close()
+        except Exception as exc:
+            log.warning("Live account probe failed during preflight: %s", exc)
+            return None, str(exc)
 
-                live_broker = AlpacaBroker(key, secret, paper=False)
-                try:
-                    live_broker.account()
-                    account_id = live_broker.account_id
-                finally:
-                    live_broker.close()
-            except Exception as exc:
-                # The preflight exists to diagnose exactly this: an operator
-                # preparing to arm LIVE must see WHY the identity probe failed.
-                account_probe_error = str(exc)
-                log.warning("Live account probe failed during preflight: %s", exc)
-        expected_digests: tuple[str, ...] | None = None
-        digest_error: str | None = None
+    def _resolve_live_configuration_digests(
+        self,
+    ) -> tuple[tuple[str, ...] | None, str | None]:
         try:
             cfg = load_config(str(self.config_path))
             from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
@@ -1161,10 +1182,19 @@ class EngineManager:
                         portfolio_risk_limits_from_config(cfg.risk),
                     )
                 )
-            expected_digests = tuple(digests)
+            return tuple(digests), None
         except Exception as exc:
-            digest_error = str(exc)
+            return None, str(exc)
 
+    def _append_live_binding_check(
+        self,
+        item: Callable[..., None],
+        approval: LiveOperatorApproval | None,
+        account_id: str | None,
+        account_probe_error: str | None,
+        expected_digests: tuple[str, ...] | None,
+        digest_error: str | None,
+    ) -> None:
         binding_state = "ok"
         binding_missing: str | None = None
         if approval is None:
@@ -1197,7 +1227,12 @@ class EngineManager:
             binding_state,
         )
 
-        # 9. Web-path account-suffix phrase (LiveArmToken) for this process.
+    def _append_live_session_checks(
+        self,
+        item: Callable[..., None],
+        key: str | None,
+        secret: str | None,
+    ) -> None:
         armed = bool(self._live_armed and self._live_arm_token is not None)
         item(
             "web_arm_token",
@@ -1207,8 +1242,6 @@ class EngineManager:
             if not armed
             else None,
         )
-
-        # 10. Credentials present.
         creds_ok = bool(key and secret)
         item(
             "credentials",
@@ -1216,8 +1249,6 @@ class EngineManager:
             creds_ok,
             "Alpaca API key and secret are required (settings)" if not creds_ok else None,
         )
-
-        # 11. Engine not running.
         engine_idle = not self.has_active_runtime()
         item(
             "engine_stopped",
@@ -1225,12 +1256,6 @@ class EngineManager:
             engine_idle,
             "stop the engine before arming live mode" if not engine_idle else None,
         )
-
-        return {
-            "all_met": all(entry["satisfied"] for entry in items),
-            "items": items,
-            "config_error": config_error,
-        }
 
     def _require_valid_live_arm(
         self, key: str, secret: str, *, consume: bool = False

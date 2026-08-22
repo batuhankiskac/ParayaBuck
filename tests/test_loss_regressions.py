@@ -28,8 +28,6 @@ from tests.helpers import apply_entry_fill
 pytestmark = pytest.mark.paper_chaos
 
 
-
-
 def test_parentless_bracket_children_keep_their_exit_roles() -> None:
     updates = []
     stream = AlpacaTradingUpdateStream.__new__(AlpacaTradingUpdateStream)

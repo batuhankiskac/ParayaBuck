@@ -10,6 +10,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 from requests.exceptions import RequestException
 
@@ -114,10 +115,15 @@ _WARMUP_RETRY_SECONDS = 600.0
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
 
 
+class _StrategyTimeframes(Protocol):
+    timeframe: str
+    required_timeframes: tuple[str, ...]
+
+
 def required_aggregation_timeframes(
     execution_timeframe: str,
     market_state_timeframe: str,
-    strategy_specs: Sequence[tuple[object, tuple[str, ...], float]],
+    strategy_specs: Sequence[tuple[_StrategyTimeframes, tuple[str, ...], float]],
 ) -> frozenset[str]:
     """The union of cadences the bar aggregation pipeline must produce.
 
@@ -128,8 +134,8 @@ def required_aggregation_timeframes(
     """
     timeframes: set[str] = {execution_timeframe, market_state_timeframe}
     for strategy, _symbols, _cap in strategy_specs:
-        timeframes.add(strategy.timeframe)  # type: ignore[attr-defined]
-        timeframes.update(strategy.required_timeframes)  # type: ignore[attr-defined]
+        timeframes.add(strategy.timeframe)
+        timeframes.update(strategy.required_timeframes)
     return frozenset(timeframes)
 
 
@@ -584,8 +590,59 @@ class EngineRuntime:
 
     def health(self) -> RuntimeHealth:
         now = datetime.now(UTC)
-        # Some lightweight diagnostics construct a runtime via ``__new__``.
-        # A temporary lock keeps health reporting safe for those snapshots too.
+        workers, market_enabled, symbols_by_market = self._snapshot_health_state()
+        queue_age = (
+            max(0.0, (now - self._oldest_received_at).total_seconds())
+            if self._oldest_received_at is not None
+            else 0.0
+        )
+        required = self._required_workers(workers, market_enabled, symbols_by_market)
+        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        alive = all(
+            self._is_worker_healthy(workers, name, now, heartbeat_ttl) for name in required
+        )
+        account_fresh = (
+            self._last_account_at is not None
+            and (now - self._last_account_at).total_seconds()
+            <= self.config.maximum_account_age_for_entry_seconds
+        )
+        scanner_status = dict(getattr(self, "_universe_refresh_status", {}))
+        scanner_degraded = any(
+            status in {"refresh_failed", "apply_failed"}
+            and self._market_operationally_relevant(market)
+            for market, status in ((Market(key), status) for key, status in scanner_status.items())
+        )
+        healthy = (
+            self._running
+            and self._state == "running"
+            and alive
+            and queue_age <= self.config.maximum_queue_age_seconds
+            and account_fresh
+            and self._circuit_breaker_reason is None
+            and not scanner_degraded
+        )
+        state = (
+            "degraded"
+            if self._running and not healthy and self._state == "running"
+            else self._state
+        )
+        market_health = self._build_market_health(
+            market_enabled, symbols_by_market, workers, scanner_status, now, heartbeat_ttl
+        )
+        return self._assemble_runtime_health(
+            state=state,
+            healthy=healthy,
+            queue_age=queue_age,
+            workers=workers,
+            market_health=market_health,
+            scanner_status=scanner_status,
+        )
+
+    def _snapshot_health_state(
+        self,
+    ) -> tuple[
+        dict[str, WorkerHealth], dict[Market, bool], dict[Market, set[str]]
+    ]:
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
             workers = dict(self._workers)
@@ -610,11 +667,14 @@ class EngineRuntime:
                     },
                 ).items()
             }
-        queue_age = (
-            max(0.0, (now - self._oldest_received_at).total_seconds())
-            if self._oldest_received_at is not None
-            else 0.0
-        )
+        return workers, market_enabled, symbols_by_market
+
+    def _required_workers(
+        self,
+        workers: dict[str, WorkerHealth],
+        market_enabled: dict[Market, bool],
+        symbols_by_market: dict[Market, set[str]],
+    ) -> set[str]:
         required = {"pb-decisions", "pb-trade-updates", "pb-account"}
         if "pb-universe-refresh" in workers:
             required.add("pb-universe-refresh")
@@ -622,58 +682,44 @@ class EngineRuntime:
             required.add("pb-stocks")
         if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
             required.add("pb-crypto")
-        heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
+        return required
 
-        def worker_healthy(name: str) -> bool:
-            worker = workers.get(name)
-            if worker is None or not worker.alive:
-                return False
-            if name == "pb-trade-updates":
+    def _is_worker_healthy(
+        self,
+        workers: dict[str, WorkerHealth],
+        name: str,
+        now: datetime,
+        heartbeat_ttl: float,
+    ) -> bool:
+        worker = workers.get(name)
+        if worker is None or not worker.alive:
+            return False
+        if name == "pb-trade-updates":
+            return True
+        if name in {"pb-stocks", "pb-crypto"}:
+            market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
+            event_required = market == Market.CRYPTO or is_regular_equity_time(now)
+            if not event_required:
                 return True
-            if name in {"pb-stocks", "pb-crypto"}:
-                market = Market.EQUITY if name == "pb-stocks" else Market.CRYPTO
-                event_required = market == Market.CRYPTO or is_regular_equity_time(now)
-                if not event_required:
-                    return True
-                return bool(
-                    worker.last_event_at
-                    and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
-                )
-            return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
+            return bool(
+                worker.last_event_at
+                and (now - worker.last_event_at).total_seconds() <= max(180.0, heartbeat_ttl)
+            )
+        return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
 
-        alive = all(worker_healthy(name) for name in required)
-        account_fresh = (
-            self._last_account_at is not None
-            and (now - self._last_account_at).total_seconds()
-            <= self.config.maximum_account_age_for_entry_seconds
-        )
-        # A scanner failure is operationally critical only for markets that
-        # are actually relevant: the strategy is enabled, a managed position
-        # exists, or an open managed order/protection exists. A disabled
-        # market with no positions failing its discovery API must not take
-        # the whole trading runtime down — it is informational/degraded.
-        scanner_status = dict(getattr(self, "_universe_refresh_status", {}))
-        scanner_degraded = any(
-            status in {"refresh_failed", "apply_failed"}
-            and self._market_operationally_relevant(market)
-            for market, status in ((Market(key), status) for key, status in scanner_status.items())
-        )
-        healthy = (
-            self._running
-            and self._state == "running"
-            and alive
-            and queue_age <= self.config.maximum_queue_age_seconds
-            and account_fresh
-            and self._circuit_breaker_reason is None
-            and not scanner_degraded
-        )
-        state = self._state
-        if self._running and not healthy and state == "running":
-            state = "degraded"
-        market_health: dict[str, dict[str, object]] = {}
+    def _build_market_health(
+        self,
+        market_enabled: dict[Market, bool],
+        symbols_by_market: dict[Market, set[str]],
+        workers: dict[str, WorkerHealth],
+        scanner_status: dict[str, str],
+        now: datetime,
+        heartbeat_ttl: float,
+    ) -> dict[str, dict[str, object]]:
         portfolio_runtime_by_market = {
             runtime.market: runtime for runtime in getattr(self, "_portfolio_runtimes", ())
         }
+        market_health: dict[str, dict[str, object]] = {}
         for market, worker_name in (
             (Market.EQUITY, "pb-stocks"),
             (Market.CRYPTO, "pb-crypto"),
@@ -684,9 +730,6 @@ class EngineRuntime:
             not_ready_symbols: set[str] = getattr(self, "_not_ready_symbols", set())
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
-            # A sparse symbol (for example a low-volume IEX instrument) must
-            # not keep an otherwise usable market in warmup forever. The
-            # decision loop already excludes not-ready symbols individually.
             ready = not enabled or not symbols or ready_symbol_count > 0
             event_required = market == Market.CRYPTO or is_regular_equity_time(now)
             stream_healthy = (
@@ -723,6 +766,18 @@ class EngineRuntime:
                 ),
                 "catch_up": _portfolio_catch_up_health(portfolio_runtime_by_market.get(market)),
             }
+        return market_health
+
+    def _assemble_runtime_health(
+        self,
+        *,
+        state: str,
+        healthy: bool,
+        queue_age: float,
+        workers: dict[str, WorkerHealth],
+        market_health: dict[str, dict[str, object]],
+        scanner_status: dict[str, str],
+    ) -> RuntimeHealth:
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
         last_universe_refresh = getattr(self, "_last_universe_refresh_at", None)
         next_universe_refresh = getattr(self, "_next_universe_refresh_at", None)
@@ -1681,9 +1736,7 @@ class EngineRuntime:
         # EngineRuntime.__new__) may stop before start() created the workers.
         for thread in getattr(self, "_threads", ()):
             thread.join(timeout=5)
-        alive = [
-            thread.name for thread in getattr(self, "_threads", ()) if thread.is_alive()
-        ]
+        alive = [thread.name for thread in getattr(self, "_threads", ()) if thread.is_alive()]
         reconcile_thread = getattr(self, "_reconcile_thread", None)
         if reconcile_thread is not None:
             reconcile_thread.join(timeout=30)

@@ -163,7 +163,6 @@ class Bar:
             raise ValueError("Invalid close or volume")
 
 
-
 @dataclass(frozen=True)
 class PositionSnapshot:
     symbol: str

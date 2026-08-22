@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from dataclasses import replace
 from enum import StrEnum
 from itertools import pairwise
 
@@ -29,10 +30,16 @@ class BarStore:
             lambda: deque(maxlen=self.capacity)
         )
 
+    def _normalize(self, bar: Bar, canonical: str) -> Bar:
+        """Return ``bar`` with a canonical symbol, preserving validation."""
+        if bar.symbol == canonical:
+            return bar
+        return replace(bar, symbol=canonical)
+
     def upsert(self, bar: Bar, revision: BarRevision = BarRevision.FINAL) -> BarMutation:
         key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
         series = self._bars[key]
-        normalized = bar if bar.symbol == key[0] else Bar(**{**bar.__dict__, "symbol": key[0]})
+        normalized = self._normalize(bar, key[0])
         if series and normalized.timestamp == series[-1].timestamp:
             if normalized == series[-1]:
                 return BarMutation.DUPLICATE
@@ -68,15 +75,20 @@ class BarStore:
         return mutation
 
     def get(self, symbol: str, timeframe: str) -> list[Bar]:
-        return list(self._bars[(canonical_symbol(symbol), timeframe)])
+        key = (canonical_symbol(symbol), timeframe)
+        series = self._bars.get(key)
+        if series is None:
+            return []
+        return list(series)
 
     def seed(self, bars: list[Bar]) -> None:
         grouped: dict[tuple[str, str], dict[object, Bar]] = {}
         for bar in bars:
             key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
             if key not in grouped:
-                grouped[key] = {item.timestamp: item for item in self._bars[key]}
-            normalized = bar if bar.symbol == key[0] else Bar(**{**bar.__dict__, "symbol": key[0]})
+                existing = self._bars.get(key)
+                grouped[key] = {item.timestamp: item for item in existing} if existing else {}
+            normalized = self._normalize(bar, key[0])
             grouped[key][normalized.timestamp] = normalized
         for key, by_timestamp in grouped.items():
             self._bars[key] = deque(

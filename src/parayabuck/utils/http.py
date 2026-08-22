@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 from requests import Session
@@ -17,8 +18,9 @@ def patch_session_timeout(session: Session, timeout: float) -> None:
     """
     original_request = session.request
 
+    @functools.wraps(original_request)
     def patched(method: str, url: str, **kwargs: Any) -> Any:
-        if not kwargs.get("timeout"):
+        if "timeout" not in kwargs:
             kwargs["timeout"] = timeout
         return original_request(method, url, **kwargs)
 

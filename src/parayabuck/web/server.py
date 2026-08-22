@@ -1013,6 +1013,7 @@ class EngineManager:
         except (OSError, yaml.YAMLError) as exc:
             return {}, str(exc)
         return {}, None
+
     def _append_live_config_checks(
         self,
         item: Callable[..., None],

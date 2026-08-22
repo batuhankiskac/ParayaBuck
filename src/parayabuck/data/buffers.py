@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import replace
+from datetime import datetime
 from enum import StrEnum
 from itertools import pairwise
 
@@ -82,7 +83,7 @@ class BarStore:
         return list(series)
 
     def seed(self, bars: list[Bar]) -> None:
-        grouped: dict[tuple[str, str], dict[object, Bar]] = {}
+        grouped: dict[tuple[str, str], dict[datetime, Bar]] = {}
         for bar in bars:
             key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe)
             if key not in grouped:

@@ -66,8 +66,17 @@ class ExecutionLedger:
     def _migrate(self) -> None:
         with self._lock:
             migrate_legacy_decision_orders(self.connection)
-            self.connection.executescript(
-                """
+            self._create_initial_schema()
+            self._migrate_v2_managed_positions()
+            self._migrate_v3_active_position_index()
+            self._migrate_v4_circuit_breaker_backfill()
+            self._migrate_v5_execution_quality_columns()
+            self._migrate_v6_watermark()
+            self.connection.commit()
+
+    def _create_initial_schema(self) -> None:
+        self.connection.executescript(
+            """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL
                 );
@@ -183,90 +192,89 @@ class ExecutionLedger:
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (1, CURRENT_TIMESTAMP);
                 """
-            )
-            self._ensure_column("managed_positions", "entry_filled_qty", "REAL NOT NULL DEFAULT 0")
-            self._ensure_column("managed_positions", "exit_filled_qty", "REAL NOT NULL DEFAULT 0")
-            self._ensure_column(
-                "managed_positions", "remaining_owned_qty", "REAL NOT NULL DEFAULT 0"
-            )
-            self._ensure_column("managed_positions", "realized_pnl", "REAL NOT NULL DEFAULT 0")
-            self._ensure_column("managed_positions", "entry_fees", "REAL NOT NULL DEFAULT 0")
-            self._ensure_column("managed_positions", "exit_fees", "REAL NOT NULL DEFAULT 0")
-            self._ensure_column(
-                "managed_positions",
-                "protection_state",
-                "TEXT NOT NULL DEFAULT 'unprotected'",
-            )
-            self._ensure_column("managed_positions", "protective_stop_client_order_id", "TEXT")
-            self._ensure_column("managed_positions", "protective_stop_broker_order_id", "TEXT")
-            self._ensure_column(
-                "managed_positions", "stop_state", "TEXT NOT NULL DEFAULT 'pending'"
-            )
-            self._ensure_column(
-                "managed_positions", "target_state", "TEXT NOT NULL DEFAULT 'watching'"
-            )
-            self._ensure_column("managed_positions", "exit_client_order_id", "TEXT")
-            self._ensure_column("managed_positions", "exit_broker_order_id", "TEXT")
-            self._ensure_column("managed_positions", "updated_at", "TEXT")
-            self._ensure_column("managed_positions", "current_stop", "REAL")
-            self.connection.execute(
-                """
+        )
+
+    def _migrate_v2_managed_positions(self) -> None:
+        self._ensure_column("managed_positions", "entry_filled_qty", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("managed_positions", "exit_filled_qty", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("managed_positions", "remaining_owned_qty", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("managed_positions", "realized_pnl", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("managed_positions", "entry_fees", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("managed_positions", "exit_fees", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column(
+            "managed_positions",
+            "protection_state",
+            "TEXT NOT NULL DEFAULT 'unprotected'",
+        )
+        self._ensure_column("managed_positions", "protective_stop_client_order_id", "TEXT")
+        self._ensure_column("managed_positions", "protective_stop_broker_order_id", "TEXT")
+        self._ensure_column("managed_positions", "stop_state", "TEXT NOT NULL DEFAULT 'pending'")
+        self._ensure_column("managed_positions", "target_state", "TEXT NOT NULL DEFAULT 'watching'")
+        self._ensure_column("managed_positions", "exit_client_order_id", "TEXT")
+        self._ensure_column("managed_positions", "exit_broker_order_id", "TEXT")
+        self._ensure_column("managed_positions", "updated_at", "TEXT")
+        self._ensure_column("managed_positions", "current_stop", "REAL")
+        self.connection.execute(
+            """
                 UPDATE managed_positions
                 SET entry_filled_qty=owned_qty, remaining_owned_qty=owned_qty
                 WHERE entry_filled_qty=0 AND remaining_owned_qty=0 AND owned_qty>0
                 """
-            )
-            self.connection.execute(
-                """
+        )
+        self.connection.execute(
+            """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (2, CURRENT_TIMESTAMP)
                 """
-            )
-            self.connection.execute(
-                """
+        )
+        self.connection.execute(
+            """
                 UPDATE managed_positions
                 SET updated_at=COALESCE(updated_at, opened_at)
                 """
-            )
-            self.connection.execute(
-                """
+        )
+        self.connection.execute(
+            """
                 UPDATE managed_positions
                 SET current_stop=COALESCE(current_stop, original_stop)
                 """
-            )
-            # A symbol may have historical rows, but never two positions that
-            # still claim ownership.  The table primary key intentionally
-            # includes the entry id for audit history, so enforce the runtime
-            # ownership rule separately with a partial unique index.
-            self.connection.execute(
-                """
+        )
+
+    def _migrate_v3_active_position_index(self) -> None:
+        # A symbol may have historical rows, but never two positions that
+        # still claim ownership.  The table primary key intentionally
+        # includes the entry id for audit history, so enforce the runtime
+        # ownership rule separately with a partial unique index.
+        self.connection.execute(
+            """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_managed_position
                 ON managed_positions(account_id, canonical_symbol)
                 WHERE status IN ('open', 'manual_intervention_required')
                 """
-            )
-            self.connection.execute(
-                """
+        )
+        self.connection.execute(
+            """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (3, CURRENT_TIMESTAMP)
                 """
-            )
-            # v4: persistent circuit-breaker incidents. A halt persisted in the
-            # SESSION_SCOPED risk_state row (with a non-null
-            # circuit_breaker_reason) must fail safe across the session-day
-            # boundary, so the LATEST such row per account backfills an
-            # incident. The backfill is gated on the version stamp: it runs
-            # exactly once, otherwise an operator-reset incident would be
-            # resurrected from a historical row on the next open. INSERT OR
-            # IGNORE keeps it idempotent even if a crash lands between the
-            # backfill and the stamp.
-            applied_versions = {
-                int(row[0])
-                for row in self.connection.execute("SELECT version FROM schema_migrations")
-            }
-            if 4 not in applied_versions:
-                self.connection.execute(
-                    """
+        )
+
+    def _migrate_v4_circuit_breaker_backfill(self) -> None:
+        # v4: persistent circuit-breaker incidents. A halt persisted in the
+        # SESSION_SCOPED risk_state row (with a non-null
+        # circuit_breaker_reason) must fail safe across the session-day
+        # boundary, so the LATEST such row per account backfills an
+        # incident. The backfill is gated on the version stamp: it runs
+        # exactly once, otherwise an operator-reset incident would be
+        # resurrected from a historical row on the next open. INSERT OR
+        # IGNORE keeps it idempotent even if a crash lands between the
+        # backfill and the stamp.
+        applied_versions = {
+            int(row[0]) for row in self.connection.execute("SELECT version FROM schema_migrations")
+        }
+        if 4 not in applied_versions:
+            self.connection.execute(
+                """
                     INSERT OR IGNORE INTO safety_incidents(
                         account_id, reason, scope, activated_at, updated_at
                     )
@@ -289,49 +297,52 @@ class ExecutionLedger:
                           LIMIT 1
                       )
                     """
-                )
-                self.connection.execute(
-                    """
+            )
+            self.connection.execute(
+                """
                     INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                     VALUES (4, CURRENT_TIMESTAMP)
                     """
-                )
-            # v5: execution-quality capture columns on the authoritative
-            # ``orders`` record (decision timestamp, signal/reference price,
-            # target weight, spread estimate, submission/fill timestamps, fill
-            # delay, observed slippage and fees). All columns are nullable
-            # except actual_fee so legacy rows remain valid; the telemetry
-            # layer aggregates whatever is present and reports None otherwise.
-            for column, definition in (
-                ("decision_timestamp", "TEXT"),
-                ("target_weight", "REAL"),
-                ("reference_price", "REAL"),
-                ("spread_estimate_bps", "REAL"),
-                ("submitted_at", "TEXT"),
-                ("filled_at", "TEXT"),
-                ("fill_delay_seconds", "REAL"),
-                ("slippage_bps", "REAL"),
-                ("actual_fee", "REAL NOT NULL DEFAULT 0"),
-            ):
-                self._ensure_column("orders", column, definition)
-            self.connection.execute(
-                """
+            )
+
+    def _migrate_v5_execution_quality_columns(self) -> None:
+        # v5: execution-quality capture columns on the authoritative
+        # ``orders`` record (decision timestamp, signal/reference price,
+        # target weight, spread estimate, submission/fill timestamps, fill
+        # delay, observed slippage and fees). All columns are nullable
+        # except actual_fee so legacy rows remain valid; the telemetry
+        # layer aggregates whatever is present and reports None otherwise.
+        for column, definition in (
+            ("decision_timestamp", "TEXT"),
+            ("target_weight", "REAL"),
+            ("reference_price", "REAL"),
+            ("spread_estimate_bps", "REAL"),
+            ("submitted_at", "TEXT"),
+            ("filled_at", "TEXT"),
+            ("fill_delay_seconds", "REAL"),
+            ("slippage_bps", "REAL"),
+            ("actual_fee", "REAL NOT NULL DEFAULT 0"),
+        ):
+            self._ensure_column("orders", column, definition)
+        self.connection.execute(
+            """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (5, CURRENT_TIMESTAMP)
                 """
-            )
-            # v6: persisted fill-activity reconciliation watermark. The
-            # per-minute reconcile previously rescanned the FULL fill-activity
-            # history every pass; the watermark lets it sync incrementally
-            # from a bounded window while keeping the same idempotent
-            # fee/fill-recovery application.
-            self.connection.execute(
-                """
+        )
+
+    def _migrate_v6_watermark(self) -> None:
+        # v6: persisted fill-activity reconciliation watermark. The
+        # per-minute reconcile previously rescanned the FULL fill-activity
+        # history every pass; the watermark lets it sync incrementally
+        # from a bounded window while keeping the same idempotent
+        # fee/fill-recovery application.
+        self.connection.execute(
+            """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
                 VALUES (6, CURRENT_TIMESTAMP)
                 """
-            )
-            self.connection.commit()
+        )
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {str(row[1]) for row in self.connection.execute(f"PRAGMA table_info({table})")}

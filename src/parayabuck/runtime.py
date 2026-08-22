@@ -598,9 +598,7 @@ class EngineRuntime:
         )
         required = self._required_workers(workers, market_enabled, symbols_by_market)
         heartbeat_ttl = max(30.0, self.config.account_poll_interval_seconds * 3)
-        alive = all(
-            self._is_worker_healthy(workers, name, now, heartbeat_ttl) for name in required
-        )
+        alive = all(self._is_worker_healthy(workers, name, now, heartbeat_ttl) for name in required)
         account_fresh = (
             self._last_account_at is not None
             and (now - self._last_account_at).total_seconds()
@@ -640,9 +638,7 @@ class EngineRuntime:
 
     def _snapshot_health_state(
         self,
-    ) -> tuple[
-        dict[str, WorkerHealth], dict[Market, bool], dict[Market, set[str]]
-    ]:
+    ) -> tuple[dict[str, WorkerHealth], dict[Market, bool], dict[Market, set[str]]]:
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
             workers = dict(self._workers)

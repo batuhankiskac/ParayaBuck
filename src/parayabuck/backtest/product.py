@@ -51,7 +51,7 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
             missing = sorted(required - set(reader.fieldnames or ()))
             raise ValueError(f"CSV is missing required columns: {', '.join(missing)}")
         for raw in reader:
-            timestamp = datetime.fromisoformat(str(raw["timestamp"]).replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(str(raw["timestamp"]))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             market = Market(str(raw.get("market") or default_market.value).lower())
@@ -91,7 +91,7 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
                 f"Corporate-action CSV is missing required columns: {', '.join(missing)}"
             )
         for raw in reader:
-            timestamp = datetime.fromisoformat(str(raw["timestamp"]).replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(str(raw["timestamp"]))
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             action_type = CorporateActionType(str(raw["action_type"]).lower())
@@ -278,8 +278,7 @@ def run_product_backtest(
             ),
             "data_feed": (
                 data_feed
-                if data_feed
-                else "offline csv (feed unknown; downloader used the configured historical feed)"
+                or "offline csv (feed unknown; downloader used the configured historical feed)"
             ),
             "data_feed_note": (
                 "IEX historical data reflects one exchange's prints, not the "

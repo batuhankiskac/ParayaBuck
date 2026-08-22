@@ -152,9 +152,7 @@ def test_crypto_position_caps_match_config() -> None:
 
     # 2026-08-21: the sleeve allocation (0.05) is now TIGHTER than the
     # risk-layer exposure cap; the allocation binds first.
-    assert config.strategy.crypto.maximum_allocation <= (
-        config.risk.max_crypto_exposure_pct + _EPS
-    )
+    assert config.strategy.crypto.maximum_allocation <= (config.risk.max_crypto_exposure_pct + _EPS)
 
 
 def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:

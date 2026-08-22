@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from itertools import pairwise
 
 from parayabuck.core.models import Bar
 
@@ -47,7 +48,7 @@ def true_ranges(bars: Sequence[Bar]) -> list[float]:
             abs(current.high - previous.close),
             abs(current.low - previous.close),
         )
-        for previous, current in zip(bars[:-1], bars[1:], strict=False)
+        for previous, current in pairwise(bars)
     ]
 
 
@@ -65,7 +66,7 @@ def adx(bars: list[Bar], period: int = 14) -> float | None:
     ranges = true_ranges(window)
     plus_dm: list[float] = []
     minus_dm: list[float] = []
-    for previous, current in zip(window[:-1], window[1:], strict=True):
+    for previous, current in pairwise(window):
         up = current.high - previous.high
         down = previous.low - current.low
         plus_dm.append(up if up > down and up > 0 else 0.0)
@@ -90,7 +91,7 @@ def directional_indicators(bars: list[Bar], period: int = 14) -> tuple[float, fl
     true_range = sum(true_ranges(window))
     plus_dm = 0.0
     minus_dm = 0.0
-    for previous, current in zip(window[:-1], window[1:], strict=True):
+    for previous, current in pairwise(window):
         up = current.high - previous.high
         down = previous.low - current.low
         plus_dm += up if up > down and up > 0 else 0.0

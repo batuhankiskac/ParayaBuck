@@ -142,7 +142,8 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             stock_returns, market_returns = aligned
             beta = _ols_beta(stock_returns, market_returns)
             residuals = [
-                stock - beta * market for stock, market in zip(stock_returns, market_returns)
+                stock - beta * market
+                for stock, market in zip(stock_returns, market_returns, strict=True)
             ]
             score = _compounded_return(residuals[-formation - skip : -skip])
             residual_vol = _volatility(residuals[-vol_window:])
@@ -309,7 +310,7 @@ def _ols_beta(stock_returns: list[float], market_returns: list[float]) -> float:
         return 0.0
     covariance = sum(
         (stock - stock_mean) * (market - market_mean)
-        for stock, market in zip(stock_returns, market_returns)
+        for stock, market in zip(stock_returns, market_returns, strict=True)
     ) / (len(stock_returns) - 1)
     return covariance / variance
 

@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from itertools import groupby
+from itertools import groupby, pairwise
 from pathlib import Path
 
 from parayabuck.backtest.stats import sample_stddev
@@ -438,7 +438,7 @@ class PortfolioBacktestEngine:
         """
         # Orders pending from a restored state survive the fresh-run reset so
         # a restart resumes fills exactly where the interrupted run left off.
-        restored_pending = [order for order in self._pending]
+        restored_pending = list(self._pending)
         self._pending = []
         self._fills = []
         self._rebalances = []
@@ -944,7 +944,7 @@ class PortfolioBacktestEngine:
         if self.risk_overlay is not None:
             risk = self.risk_overlay.apply(
                 target,
-                self._account_snapshot(timestamp),
+                self._account_snapshot(),
                 market=self.strategy.market,
                 approved_symbols=tuple(context.history),
                 maximum_allocation=self.maximum_allocation,
@@ -977,7 +977,7 @@ class PortfolioBacktestEngine:
         self._last_observed_equity = equity
         self._peak_equity = max(self._peak_equity, equity)
 
-    def _account_snapshot(self, timestamp: datetime) -> AccountSnapshot:
+    def _account_snapshot(self) -> AccountSnapshot:
         """Observational snapshot of the portfolio for the risk overlay.
 
         This never mutates risk state: daily-loss and high-water bookkeeping
@@ -1151,7 +1151,7 @@ class PortfolioBacktestEngine:
             )
         )
         self._weight_history.append(
-            (decision, dict((weight.symbol, weight.weight) for weight in target.weights))
+            (decision, {weight.symbol: weight.weight for weight in target.weights})
         )
         self._record_risk_contribution(target)
         symbols = self._universe_symbols(decision)
@@ -1241,9 +1241,9 @@ class PortfolioBacktestEngine:
         value = 1.0
         index = 0
         active_rate = self.cash_rate_annualized
-        # Adjacent-pair iteration intentionally has one fewer element on the
-        # right-hand side; ``strict=True`` would reject every non-trivial run.
-        for previous, current in zip(timestamps, timestamps[1:]):
+        # Adjacent-pair iteration on purpose: each accrual interval spans
+        # previous->current, so one fewer pair than timestamps is expected.
+        for previous, current in pairwise(timestamps):
             while index < len(observations) and observations[index].timestamp <= previous:
                 active_rate = observations[index].annualized_rate
                 index += 1
@@ -1335,7 +1335,7 @@ class PortfolioBacktestEngine:
             day = (bar.timestamp.year, bar.timestamp.month, bar.timestamp.day)
             benchmark_closes_by_day[day] = bar.close
         portfolio_by_day: dict[tuple[int, int, int], float] = {}
-        for ts, value in zip(curve_timestamps, curve):
+        for ts, value in zip(curve_timestamps, curve, strict=True):
             portfolio_by_day[(ts.year, ts.month, ts.day)] = value
         excess: list[float] = []
         benchmark_days = sorted(benchmark_closes_by_day)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from enum import StrEnum
+from itertools import pairwise
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
@@ -86,7 +87,7 @@ class BarStore:
     def is_contiguous(self, symbol: str, timeframe: str) -> bool:
         series = self.get(symbol, timeframe)
         expected_seconds = timeframe_duration(timeframe).total_seconds()
-        for previous, current in zip(series, series[1:], strict=True):
+        for previous, current in pairwise(series):
             if current.market == Market.EQUITY:
                 continue
             if (current.timestamp - previous.timestamp).total_seconds() > expected_seconds:

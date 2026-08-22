@@ -917,7 +917,7 @@ class PortfolioStateRepository:
             if side == "buy" and market == "crypto":
                 cumulative_filled_quantity = float(
                     Decimal(str(cumulative_filled_quantity))
-                    * (Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
+                    * (Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
                 )
             fill_delta = max(0.0, cumulative_filled_quantity - previous)
             delay_seconds: float | None = None
@@ -1326,7 +1326,7 @@ class PortfolioRuntime:
         ):
             self.startup_catch_up_status = "warming_up"
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
-        if len({timestamp for timestamp in timestamps}) != 1:
+        if len(set(timestamps)) != 1:
             self.startup_catch_up_status = "incomplete_strategy_batch"
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         timestamp = timestamps[0]
@@ -2030,16 +2030,16 @@ def configuration_digest(
 
 
 __all__ = [
-    "configuration_digest",
+    "REBALANCE_PHASE_BLOCKED",
+    "REBALANCE_PHASE_BUY_PENDING",
+    "REBALANCE_PHASE_BUY_READY",
+    "REBALANCE_PHASE_COMPLETE",
+    "REBALANCE_PHASE_SELL_PENDING",
+    "PortfolioDecisionService",
     "PortfolioRuntime",
     "PortfolioRuntimeBroker",
     "PortfolioRuntimeResult",
-    "PortfolioDecisionService",
     "PortfolioStateRepository",
     "RebalanceExecutionState",
-    "REBALANCE_PHASE_SELL_PENDING",
-    "REBALANCE_PHASE_BUY_READY",
-    "REBALANCE_PHASE_BUY_PENDING",
-    "REBALANCE_PHASE_COMPLETE",
-    "REBALANCE_PHASE_BLOCKED",
+    "configuration_digest",
 ]

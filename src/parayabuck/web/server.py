@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -509,17 +509,16 @@ class EngineManager:
                 "stop_failed",
             }:
                 raise ValueError(f"Engine is already {self.engine_state}")
-            if self.engine_state == "starting":
-                # The auto-start retry loop re-enters while its own failed
-                # attempt left the state at 'starting'. A manual start during
-                # a pending retry is refused so two runtimes can never race.
-                if not auto_start:
-                    if self._retry_task is not None:
-                        raise ValueError(
-                            "Engine auto-start retry is in progress; wait for "
-                            "it to finish or stop the engine"
-                        )
-                    raise ValueError("Engine is already starting")
+            # The auto-start retry loop re-enters while its own failed
+            # attempt left the state at 'starting'. A manual start during
+            # a pending retry is refused so two runtimes can never race.
+            if self.engine_state == "starting" and not auto_start:
+                if self._retry_task is not None:
+                    raise ValueError(
+                        "Engine auto-start retry is in progress; wait for "
+                        "it to finish or stop the engine"
+                    )
+                raise ValueError("Engine is already starting")
             self.engine_state = "starting"
             self.last_engine_error = None
 
@@ -1125,15 +1124,13 @@ class EngineManager:
             from parayabuck.universe.scanner import scanner_config_digest
 
             digests: list[str] = []
-            for market, selection, symbols, universe_version in (
+            for selection, symbols, universe_version in (
                 (
-                    Market.EQUITY,
                     cfg.strategy.equity,
                     load_active_symbols(cfg.universe.equity, log_rejection=False),
                     scanner_config_digest(cfg.universe.equity),
                 ),
                 (
-                    Market.CRYPTO,
                     cfg.strategy.crypto,
                     load_active_crypto_symbols(cfg.universe.crypto, log_rejection=False),
                     crypto_scanner_config_digest(cfg.universe.crypto),
@@ -1379,10 +1376,8 @@ async def app_lifespan(_app: FastAPI) -> Any:
             # retry interval: cancel the retry so the task settles promptly.
             # An in-flight start attempt is still allowed to finish.
             manager._cancel_pending_retry()
-            try:
+            with suppress(asyncio.CancelledError):
                 await auto_start_task
-            except asyncio.CancelledError:
-                pass
         # Uvicorn shutting down must also release Alpaca's stock and crypto
         # sockets. Daemon threads alone remain active long enough to collide
         # with a newly launched process and trigger the connection limit.
@@ -1402,10 +1397,8 @@ class WebSocketLogHandler(logging.Handler):
         with manager._log_queues_lock:
             subscribers = tuple(manager.log_queues)
         for queue, loop in subscribers:
-            try:
+            with suppress(Exception):
                 loop.call_soon_threadsafe(_enqueue_log, queue, log_entry)
-            except Exception:
-                pass
 
 
 def _enqueue_log(target: asyncio.Queue[dict[str, Any]], entry: dict[str, Any]) -> None:
@@ -1879,7 +1872,7 @@ async def start_engine() -> dict[str, str]:
         await asyncio.to_thread(manager.start_engine)
         return {"status": "started", "message": "Bot engine started successfully."}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/api/engine/stop")
@@ -1955,7 +1948,7 @@ async def toggle_mode(payload: ModePayload) -> dict[str, Any]:
         manager.reset_broker()  # Force broker reset
         return {"status": "success", "paper": payload.paper}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception:
         log.exception("Trading-mode toggle failed with an unexpected error")
         raise HTTPException(status_code=500, detail="Trading mode could not be changed") from None
@@ -1976,7 +1969,7 @@ async def request_live_arming() -> dict[str, str]:
             "account_suffix": suffix,
         }
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/live/arming/confirm")
@@ -1988,7 +1981,7 @@ async def confirm_live_arming(payload: LiveConfirmationPayload) -> dict[str, str
             "message": "Live mode armed for this server process. Start remains a separate action.",
         }
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/ws-ticket")
@@ -1996,7 +1989,7 @@ async def websocket_ticket(payload: WebSocketTicketPayload) -> dict[str, str]:
     try:
         return {"ticket": manager.issue_ws_ticket(payload.kind)}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/settings")
@@ -2111,7 +2104,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
             "app_restart_required": app_restart_required,
         }
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception:
         log.exception("Settings save failed with an unexpected error")
         raise HTTPException(status_code=500, detail="Settings could not be saved") from None
@@ -2312,10 +2305,8 @@ def _dashboard_release(connection: sqlite3.Connection | None) -> None:
         return
     if getattr(_dashboard_request_connection, "connection", None) is connection:
         return  # shared: the build context owns its lifecycle
-    try:
+    with suppress(sqlite3.Error):
         connection.close()
-    except sqlite3.Error:
-        pass
 
 
 @contextmanager
@@ -2334,10 +2325,8 @@ def _dashboard_shared_connection() -> Iterator[sqlite3.Connection | None]:
     finally:
         _dashboard_request_connection.connection = None
         if connection is not None:
-            try:
+            with suppress(sqlite3.Error):
                 connection.close()
-            except sqlite3.Error:
-                pass
 
 
 def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -2604,7 +2593,7 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
         from parayabuck.data.cache import WarmupCache
         from parayabuck.portfolio.momentum import realized_volatility
     except Exception:
-        return {symbol: None for symbol in symbols}
+        return dict.fromkeys(symbols)
     try:
         cache = WarmupCache()
         try:
@@ -2634,7 +2623,7 @@ def _crypto_realized_vols(symbols: list[str]) -> dict[str, float | None]:
         finally:
             cache.close()
     except Exception:
-        return {symbol: None for symbol in symbols}
+        return dict.fromkeys(symbols)
     _crypto_vol_cache[cache_key] = result
     return result
 
@@ -3076,7 +3065,7 @@ def _dashboard_health(
 
 
 def _dashboard_explanations(
-    cfg: Any, decisions: dict[str, dict[str, Any]], account: dict[str, Any]
+    decisions: dict[str, dict[str, Any]], account: dict[str, Any]
 ) -> dict[str, Any]:
     """Per-holding structured reasons from persisted decision metadata."""
     result: dict[str, Any] = {}
@@ -3129,7 +3118,7 @@ def _dashboard_explanations(
     return result
 
 
-def _telemetry_payload(account_id: str) -> dict[str, Any]:
+def _telemetry_payload() -> dict[str, Any]:
     """Worker B's execution/forward/cost telemetry; degrades explicitly."""
     try:
         from parayabuck.execution.telemetry import (
@@ -3321,7 +3310,7 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         ),
         "explanations": _dashboard_safe_panel(
             "explanations",
-            lambda: _dashboard_explanations(cfg, decisions, account),
+            lambda: _dashboard_explanations(decisions, account),
         ),
         "metrics": _dashboard_metrics_payload(
             account_id, runtime_metrics_payload=runtime_metrics_payload
@@ -3335,7 +3324,7 @@ def _dashboard_metrics_payload(
     runtime_metrics_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
-        "telemetry": _telemetry_payload(account_id),
+        "telemetry": _telemetry_payload(),
         "runtime_metrics": (
             runtime_metrics_payload
             if runtime_metrics_payload is not None
@@ -3441,15 +3430,13 @@ async def websocket_stream(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {"type": "update", "account": account_data, "status": status_data}
             )
-            try:
-                # The browser never sends messages; this paces the loop and,
-                # unlike asyncio.sleep, detects a dead peer: writing to a lost
-                # connection only logs "socket.send() raised exception." in
-                # asyncio instead of raising, so receive() is the only way to
-                # notice the disconnect.
+            # The browser never sends messages; this paces the loop and,
+            # unlike asyncio.sleep, detects a dead peer: writing to a lost
+            # connection only logs "socket.send() raised exception." in
+            # asyncio instead of raising, so receive() is the only way to
+            # notice the disconnect.
+            with suppress(TimeoutError):
                 await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
-            except TimeoutError:
-                pass
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception as exc:

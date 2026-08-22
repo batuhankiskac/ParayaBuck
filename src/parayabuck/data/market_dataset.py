@@ -124,30 +124,32 @@ class MarketDataset:
             ("signal", self.signal_bars),
             ("executable", self.executable_bars),
         ):
-            for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol)):
-                payload.append(
-                    (
-                        label,
-                        bar.timestamp.isoformat(),
-                        canonical_symbol(bar.symbol, bar.market),
-                        bar.open,
-                        bar.high,
-                        bar.low,
-                        bar.close,
-                        bar.volume,
-                    )
+            payload.extend(
+                (
+                    label,
+                    bar.timestamp.isoformat(),
+                    canonical_symbol(bar.symbol, bar.market),
+                    bar.open,
+                    bar.high,
+                    bar.low,
+                    bar.close,
+                    bar.volume,
                 )
-        for rate in sorted(self.cash_rates, key=lambda item: item.timestamp):
-            payload.append(("cash_rate", rate.timestamp.isoformat(), rate.annualized_rate))
+                for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol))
+            )
+        payload.extend(
+            ("cash_rate", rate.timestamp.isoformat(), rate.annualized_rate)
+            for rate in sorted(self.cash_rates, key=lambda item: item.timestamp)
+        )
         return hashlib.sha256(
             json.dumps(payload, separators=(",", ":"), sort_keys=False).encode()
         ).hexdigest()
 
 
 __all__ = [
+    "CashRateObservation",
     "CorporateAction",
     "CorporateActionType",
     "DatasetLineage",
-    "CashRateObservation",
     "MarketDataset",
 ]

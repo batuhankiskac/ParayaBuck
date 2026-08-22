@@ -717,7 +717,7 @@ def _tuples_to_bars(
 
 
 def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandidate:
-    candidate = equity_candidate_from_bars(
+    return equity_candidate_from_bars(
         symbol,
         bars,
         expected_bar_count=20,
@@ -729,7 +729,6 @@ def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandida
         tradable=bool(getattr(asset, "tradable", False)),
         status=str(getattr(asset, "status", "")).lower().split(".")[-1],
     )
-    return candidate
 
 
 def _crypto_asset_symbol(asset: Any) -> str | None:

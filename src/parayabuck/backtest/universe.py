@@ -6,6 +6,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from itertools import pairwise
 
 from parayabuck.config import (
     CryptoScannerConfig,
@@ -57,10 +58,7 @@ class PointInTimeUniverse:
         # snapshots. The builders produce ascending order; enforcing it here
         # (a no-op for already-sorted input) keeps contains() exact for any
         # direct construction too.
-        if any(
-            right.effective_at < left.effective_at
-            for left, right in zip(self.snapshots, self.snapshots[1:])
-        ):
+        if any(right.effective_at < left.effective_at for left, right in pairwise(self.snapshots)):
             object.__setattr__(
                 self, "snapshots", tuple(sorted(self.snapshots, key=lambda item: item.effective_at))
             )
@@ -201,7 +199,7 @@ def build_trailing_point_in_time_universe(
         if period == previous_period:
             continue
         previous_period = period
-        for symbol, series in window.items():
+        for series in window.values():
             while series and series[0].timestamp < cutoff:
                 series.popleft()
         window = {symbol: series for symbol, series in window.items() if series}

@@ -9,6 +9,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 
 from parayabuck.config import CryptoUniverseConfig
@@ -100,7 +101,7 @@ def crypto_candidate_from_bars(
             float(getattr(bar, "close")) * float(getattr(bar, "volume"))
         )
     true_ranges: list[float] = []
-    for previous, current in zip(ordered, ordered[1:], strict=False):
+    for previous, current in pairwise(ordered):
         high = float(getattr(current, "high"))
         low = float(getattr(current, "low"))
         previous_close = float(getattr(previous, "close"))
@@ -135,7 +136,7 @@ def _return_correlation(left_bars: Sequence[object], right_bars: Sequence[object
     def returns(items: Sequence[object]) -> dict[datetime, float]:
         ordered = sorted(items, key=lambda item: getattr(item, "timestamp"))
         result: dict[datetime, float] = {}
-        for previous, current in zip(ordered, ordered[1:], strict=False):
+        for previous, current in pairwise(ordered):
             previous_close = float(getattr(previous, "close"))
             current_close = float(getattr(current, "close"))
             timestamp = getattr(current, "timestamp")

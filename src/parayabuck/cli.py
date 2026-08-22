@@ -513,7 +513,7 @@ def _parse_grid(items: list[str]) -> dict[str, list[object]]:
 
 
 def _date(value: str, *, end_of_day: bool = False) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     if end_of_day and len(value) == 10:

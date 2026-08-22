@@ -24,6 +24,7 @@ import json
 import math
 import sqlite3
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +96,7 @@ def _percentile(sorted_values: list[float], percentile: float) -> float | None:
     if len(sorted_values) == 1:
         return sorted_values[0]
     rank = (percentile / 100.0) * (len(sorted_values) - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = min(lower + 1, len(sorted_values) - 1)
     weight = rank - lower
     return sorted_values[lower] * (1.0 - weight) + sorted_values[upper] * weight
@@ -355,6 +356,67 @@ def execution_metrics(
 # --------------------------------------------------------------------------
 
 
+def _turnover_and_churn_by_market(
+    decisions_by_market: dict[str, list[tuple[str, str, str, str]]],
+) -> tuple[dict[str, list[float]], dict[str, list[float]], dict[str, int]]:
+    """Per-market decision turnover, candidate-pool sizes and universe churn.
+
+    Derived purely from persisted ``portfolio_decisions.target_json`` rows:
+    turnover is half the L1 weight distance between consecutive decisions,
+    churn counts consecutive pairs whose universe_version changed.
+    """
+    turnover_by_market: dict[str, list[float]] = {}
+    candidate_pool_by_market: dict[str, list[float]] = {}
+    universe_versions_by_market: dict[str, list[tuple[str, str]]] = {}
+    for market, decisions in decisions_by_market.items():
+        weights_by_decision: list[tuple[str, dict[str, float], int]] = []
+        for _decision_id, timestamp, _strategy, target_json in decisions:
+            try:
+                raw = json.loads(target_json)
+            except (TypeError, ValueError):
+                continue
+            weights = {
+                str(item.get("symbol", "")): float(item.get("weight", 0.0))
+                for item in raw.get("weights", ())
+                if isinstance(item, dict)
+            }
+            metadata = raw.get("metadata") or {}
+            qualified = metadata.get("qualified_symbols")
+            pool_size: int | None = None
+            if isinstance(qualified, (int, float)):
+                pool_size = int(qualified)
+            elif weights:
+                pool_size = len(weights)
+            if pool_size is not None:
+                candidate_pool_by_market.setdefault(market, []).append(float(pool_size))
+            weights_by_decision.append((str(timestamp), weights, pool_size or 0))
+            universe_versions_by_market.setdefault(market, []).append(
+                (str(timestamp), str(raw.get("universe_version", "")))
+            )
+        for (_previous_ts, previous_w, _), (_current_ts, current_w, _) in pairwise(
+            weights_by_decision
+        ):
+            symbols = set(previous_w) | set(current_w)
+            turnover = (
+                sum(
+                    abs(previous_w.get(symbol, 0.0) - current_w.get(symbol, 0.0))
+                    for symbol in symbols
+                )
+                / 2.0
+            )
+            turnover_by_market.setdefault(market, []).append(turnover)
+
+    churn_by_market: dict[str, int] = {}
+    for market, entries in universe_versions_by_market.items():
+        churn_by_market[market] = sum(
+            previous_version != current_version
+            for (_previous_ts, previous_version), (_current_ts, current_version) in pairwise(
+                entries
+            )
+        )
+    return turnover_by_market, candidate_pool_by_market, churn_by_market
+
+
 def forward_metrics(
     db_path: str | Path,
     *,
@@ -389,62 +451,12 @@ def forward_metrics(
                 )
                 decision_count += 1
         if _table_exists(connection, "portfolio_orders"):
-            for row in _query(
-                connection,
-                "SELECT 1 FROM portfolio_orders",
-            ):
-                rebalance_orders += 1
+            rows = _query(connection, "SELECT COUNT(*) FROM portfolio_orders")
+            rebalance_orders = int(rows[0][0]) if rows else 0
 
-        turnover_by_market: dict[str, list[float]] = {}
-        candidate_pool_by_market: dict[str, list[float]] = {}
-        universe_versions_by_market: dict[str, list[tuple[str, str]]] = {}
-        for market, decisions in decisions_by_market.items():
-            weights_by_decision: list[tuple[str, dict[str, float], int]] = []
-            for decision_id, timestamp, strategy, target_json in decisions:
-                try:
-                    raw = json.loads(target_json)
-                except (TypeError, ValueError):
-                    continue
-                weights = {
-                    str(item.get("symbol", "")): float(item.get("weight", 0.0))
-                    for item in raw.get("weights", ())
-                    if isinstance(item, dict)
-                }
-                metadata = raw.get("metadata") or {}
-                qualified = metadata.get("qualified_symbols")
-                pool_size: int | None = None
-                if isinstance(qualified, (int, float)):
-                    pool_size = int(qualified)
-                elif weights:
-                    pool_size = len(weights)
-                if pool_size is not None:
-                    candidate_pool_by_market.setdefault(market, []).append(float(pool_size))
-                weights_by_decision.append((str(timestamp), weights, pool_size or 0))
-                universe_versions_by_market.setdefault(market, []).append(
-                    (str(timestamp), str(raw.get("universe_version", "")))
-                )
-            for (previous_ts, previous_w, _), (current_ts, current_w, _) in zip(
-                weights_by_decision, weights_by_decision[1:], strict=False
-            ):
-                symbols = set(previous_w) | set(current_w)
-                turnover = (
-                    sum(
-                        abs(previous_w.get(symbol, 0.0) - current_w.get(symbol, 0.0))
-                        for symbol in symbols
-                    )
-                    / 2.0
-                )
-                turnover_by_market.setdefault(market, []).append(turnover)
-
-        churn_by_market: dict[str, int] = {}
-        for market, entries in universe_versions_by_market.items():
-            churn = 0
-            for (previous_ts, previous_v), (current_ts, current_v) in zip(
-                entries, entries[1:], strict=False
-            ):
-                if previous_v != current_v:
-                    churn += 1
-            churn_by_market[market] = churn
+        turnover_by_market, candidate_pool_by_market, churn_by_market = (
+            _turnover_and_churn_by_market(decisions_by_market)
+        )
 
         execution: dict[str, int] = {}
         if _table_exists(connection, "portfolio_orders"):

@@ -243,7 +243,7 @@ class AlpacaBroker:
                 )
             total_owned = ledger_owned + repo_owned
             fee_reserve = (
-                float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+                float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
             )
             if (
                 managed is None
@@ -566,7 +566,7 @@ class AlpacaBroker:
         drift fail-closed.
         """
         fee_reserve = (
-            float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
+            float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
         )
         shortfall = max(0.0, owned_qty * fee_reserve - abs(raw_qty))
         if shortfall <= 1e-12:
@@ -738,7 +738,7 @@ class AlpacaBroker:
                 tolerance = max(1e-9, ownership.owned_qty * 1e-8)
                 minimum_fee_adjusted_qty = ownership.owned_qty
                 if position.market == Market.CRYPTO:
-                    minimum_fee_adjusted_qty *= float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
+                    minimum_fee_adjusted_qty *= float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
                 if (
                     position.market == Market.CRYPTO
                     and abs(position.qty) + tolerance < minimum_fee_adjusted_qty
@@ -794,7 +794,7 @@ class AlpacaBroker:
                 # up to 0.25% smaller than the raw position quantity. Only use
                 # this tolerance when Alpaca confirms nothing remains
                 # available; otherwise reconcile protects the remaining units.
-                required_qty = total_qty * float(Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE)
+                required_qty = total_qty * float(Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
             if open_orders is None and get_orders is not None:
                 open_orders = get_orders(
@@ -1075,7 +1075,7 @@ class AlpacaBroker:
                 or datetime.now(UTC).isoformat()
             )
             try:
-                occurred_at = datetime.fromisoformat(str(timestamp_raw).replace("Z", "+00:00"))
+                occurred_at = datetime.fromisoformat(str(timestamp_raw))
                 if occurred_at.tzinfo is None:
                     occurred_at = occurred_at.replace(tzinfo=UTC)
             except ValueError:
@@ -1429,17 +1429,17 @@ class AlpacaBroker:
                 # Only the still-working remainder protects the position; an
                 # already-filled portion must never be double-counted.
                 return max(
-                    Decimal("0"),
+                    Decimal(0),
                     abs(Decimal(str(self._field(order, "qty", 0) or 0)))
                     - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
                 )
             return sum(
                 (protective_qty(leg) for leg in (self._field(order, "legs") or ())),
-                start=Decimal("0"),
+                start=Decimal(0),
             )
 
         ids = {parent_order_ids} if isinstance(parent_order_ids, str) else parent_order_ids
-        protected = Decimal("0")
+        protected = Decimal(0)
         for parent_order_id in ids:
             parent: Any = self._client.get_order_by_id(
                 parent_order_id,
@@ -1614,7 +1614,7 @@ class AlpacaBroker:
             return QuantityResolution(True, 0.0, "broker_position_no_available_qty")
         if not reserve_fee_on_lookup_failure:
             return QuantityResolution(False, 0.0, "broker_lookup_failed")
-        requested *= Decimal("1") - _CRYPTO_TAKER_FEE_RESERVE
+        requested *= Decimal(1) - _CRYPTO_TAKER_FEE_RESERVE
         requested = (requested / step).to_integral_value(rounding=ROUND_DOWN) * step
         return QuantityResolution(False, float(requested), "verified_fill_fee_reserve")
 
@@ -1661,7 +1661,7 @@ class AlpacaBroker:
             if market == Market.CRYPTO:
                 offset = Decimal(
                     str(getattr(self, "crypto_stop_limit_offset_bps", 25.0))
-                ) / Decimal("10000")
+                ) / Decimal(10000)
                 stop_decimal = Decimal(str(stop_price))
                 distance_steps = max(
                     1,
@@ -2316,13 +2316,13 @@ class AlpacaBroker:
         protected = sum(
             (
                 max(
-                    Decimal("0"),
+                    Decimal(0),
                     abs(Decimal(str(self._field(order, "qty", 0) or 0)))
                     - abs(Decimal(str(self._field(order, "filled_qty", 0) or 0))),
                 )
                 for order in protective_orders
             ),
-            start=Decimal("0"),
+            start=Decimal(0),
         )
         matches, self._last_protection_mismatch = self._protection_matches(
             protected, Decimal(str(required_qty))

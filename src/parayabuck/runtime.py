@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import queue
 import threading
@@ -99,9 +100,7 @@ def _is_transient_network_error(exc: BaseException) -> bool:
         if isinstance(current, RequestException):
             response = getattr(current, "response", None)
             status = getattr(response, "status_code", None)
-            if status is not None and status != 429 and status < 500:
-                return False
-            return True
+            return status is None or status == 429 or status >= 500
         if isinstance(current, (ConnectionError, TimeoutError)):
             return True
         current = current.__cause__ or current.__context__
@@ -1577,7 +1576,7 @@ class EngineRuntime:
                     (*references, *equity_pins, *sorted(self._symbols_by_market[Market.EQUITY]))
                 )
             )
-            if len(set((*references, *equity_pins))) > maximum:
+            if len({*references, *equity_pins}) > maximum:
                 raise RuntimeError(
                     "Managed equity pins and references exceed the configured IEX stream limit"
                 )
@@ -1654,14 +1653,10 @@ class EngineRuntime:
             try:
                 self._events.put_nowait(None)
             except queue.Full:
-                try:
+                with contextlib.suppress(queue.Empty):
                     self._events.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
+                with contextlib.suppress(queue.Full):
                     self._events.put_nowait(None)
-                except queue.Full:
-                    pass
             for stream in (self.stream, self.trading_updates):
                 try:
                     stream.stop()
@@ -1829,9 +1824,7 @@ class EngineRuntime:
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
         previous = dict(getattr(self, "_entry_risk_latch", {}))
-        new_latch = {
-            market: (breach if breach is not None else None) for market in self._entry_risk_latch
-        }
+        new_latch: dict[Market, str | None] = dict.fromkeys(self._entry_risk_latch, breach)
         # Alert only on latch TRANSITIONS (the account loop re-evaluates this
         # every poll); a persistent breach must not re-alert per poll. Compare
         # per market so a future market-specific latch stays correct.
@@ -1869,9 +1862,9 @@ class EngineRuntime:
         with getattr(self, "_state_lock", threading.RLock()):
             self._state = "halted"
         self._circuit_breaker_reason = "ownership_drift"
-        self._entry_risk_latch = {
-            market: "ownership_drift" for market in getattr(self, "_entry_risk_latch", {})
-        }
+        self._entry_risk_latch = dict.fromkeys(
+            getattr(self, "_entry_risk_latch", {}), "ownership_drift"
+        )
         self._persist_safety_state("ownership_drift")
         log.critical("Ownership drift detected; runtime halted and safety state persisted")
         runtime_metrics_store.record_event("circuit_breaker")
@@ -1949,9 +1942,9 @@ class EngineRuntime:
             # from the persisted incident so the halt is visible immediately
             # after restart; the first account poll re-evaluates it against
             # the broker state (a recovered breach clears it).
-            self._entry_risk_latch = {
-                market: "portfolio_drawdown_halt" for market in self._entry_risk_latch
-            }
+            self._entry_risk_latch = dict.fromkeys(
+                self._entry_risk_latch, "portfolio_drawdown_halt"
+            )
             runtime_metrics_store.record_event("drawdown_halt")
             alerts.emit(
                 "drawdown_halt",
@@ -2073,9 +2066,12 @@ class EngineRuntime:
             )
             snapshot_provider = getattr(self.broker, "snapshot_if_fresh", None)
             cached = None
-            if snapshot_provider is not None and self._last_account_at is not None:
-                if (now - self._last_account_at).total_seconds() <= freshness:
-                    cached = snapshot_provider(freshness)
+            if (
+                snapshot_provider is not None
+                and self._last_account_at is not None
+                and (now - self._last_account_at).total_seconds() <= freshness
+            ):
+                cached = snapshot_provider(freshness)
             if cached is not None:
                 account = cached
             else:
@@ -2134,8 +2130,7 @@ class EngineRuntime:
                                 reason=self._circuit_breaker_reason,
                             )
                             return
-                        else:
-                            self._market_entry_halts[market] = f"{name}_restart_limit"
+                        self._market_entry_halts[market] = f"{name}_restart_limit"
                         if worker.restart_count == 6:
                             # Edge-triggered: the alert/metric fire once at the
                             # threshold crossing; retries past it only re-assert
@@ -2352,7 +2347,6 @@ class EngineRuntime:
                             processed_batches[item.bar.timestamp] = batch | {item.bar.symbol}
                             expected: set[str] = getattr(self, "_expected_all_symbols", set())
                             self._process_timestamp(
-                                item.bar.timestamp,
                                 {item.bar.symbol: item.bar},
                                 expected - (batch | {item.bar.symbol}),
                             )
@@ -2394,8 +2388,8 @@ class EngineRuntime:
                 # Unit-test fixtures that stub _entry_readiness_reasons skip
                 # the build entirely.
                 gate = self._entry_readiness_reasons
-                real_gate = getattr(gate, "__func__", None) is getattr(
-                    EngineRuntime, "_entry_readiness_reasons"
+                real_gate = (
+                    getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons
                 )
                 batch_health: RuntimeHealth | None = None
                 for timestamp in sorted(closable):
@@ -2403,9 +2397,7 @@ class EngineRuntime:
                     first_seen.pop(timestamp, None)
                     if batch_health is None and real_gate:
                         batch_health = self.health()
-                    self._process_timestamp(
-                        timestamp, bars_by_symbol, expected_all, health=batch_health
-                    )
+                    self._process_timestamp(bars_by_symbol, expected_all, health=batch_health)
                     processed_batches[timestamp] = frozenset(bars_by_symbol)
                     for bar in bars_by_symbol.values():
                         self._series_watermarks[(bar.symbol, bar.timeframe)] = max(
@@ -2519,7 +2511,6 @@ class EngineRuntime:
 
     def _process_timestamp(
         self,
-        timestamp: datetime,
         bars_by_symbol: dict[str, Bar],
         expected: set[str],
         *,
@@ -2542,8 +2533,8 @@ class EngineRuntime:
             return
         self._refresh_readiness()
         gate = self._entry_readiness_reasons
-        if health is None and getattr(gate, "__func__", None) is getattr(
-            EngineRuntime, "_entry_readiness_reasons"
+        if health is None and (
+            getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons
         ):
             health = self.health()
         gate_kwargs = {"health": health} if health is not None else {}
@@ -2592,8 +2583,8 @@ class EngineRuntime:
             # not even risk-reducing target sells. Broker-native protective
             # exits (resting stops) continue independently at the broker.
             gate = self._entry_readiness_reasons
-            if health is None and getattr(gate, "__func__", None) is getattr(
-                EngineRuntime, "_entry_readiness_reasons"
+            if health is None and (
+                getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons
             ):
                 health = self.health()
             gate_kwargs = {"health": health} if health is not None else {}
@@ -3113,9 +3104,7 @@ class EngineRuntime:
             market_halts = getattr(self, "_market_entry_halts", None)
             if market_halts is not None:
                 self._verify_market_halts(market_halts)
-            self._entry_risk_latch = {
-                market: None for market in getattr(self, "_entry_risk_latch", {})
-            }
+            self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
             self._persist_risk_state(account)
         if self._running and self._state == "halted":
             self._state = "running"

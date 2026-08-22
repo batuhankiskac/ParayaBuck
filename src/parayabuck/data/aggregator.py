@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from itertools import pairwise
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES
@@ -159,7 +160,7 @@ def aggregate_historical_bars(
         ordered = sorted(components, key=lambda item: item.timestamp)
         contiguous = all(
             current.timestamp - previous.timestamp == source_delta
-            for previous, current in zip(ordered, ordered[1:])
+            for previous, current in pairwise(ordered)
         )
         if require_complete and (len(ordered) != expected or not contiguous):
             continue

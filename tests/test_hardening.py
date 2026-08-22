@@ -304,7 +304,7 @@ def test_partial_primary_batch_updates_market_state_without_legacy_decision(
     runtime._entry_readiness_reasons = lambda _market=None: ()
     runtime._engine_has_symbol_gap = lambda _symbol: False
 
-    runtime._process_timestamp(timestamp, {"AAPL": bar}, {"AAPL", "MSFT"})
+    runtime._process_timestamp({"AAPL": bar}, {"AAPL", "MSFT"})
 
     assert ingested == [("AAPL",)]
     assert "Ranking universe is partial; missing symbols: MSFT" in caplog.text
@@ -477,7 +477,6 @@ def test_crypto_gap_quarantines_only_affected_symbol_in_operational_state() -> N
     runtime.health = lambda: SimpleNamespace(queue_age_seconds=0)
 
     runtime._process_timestamp(
-        timestamp,
         {"BTC/USD": btc, "AVAX/USD": avax},
         {"BTC/USD", "AVAX/USD"},
     )

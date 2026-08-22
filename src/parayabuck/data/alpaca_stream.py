@@ -129,10 +129,10 @@ class AlpacaBarStream:
         added_crypto = tuple(sorted(desired_crypto - current_crypto))
         removed_crypto = tuple(sorted(current_crypto - desired_crypto))
 
-        stock_handler = getattr(self, "_stock_handler")
-        stock_updated_handler = getattr(self, "_stock_updated_handler")
-        crypto_handler = getattr(self, "_crypto_handler")
-        crypto_updated_handler = getattr(self, "_crypto_updated_handler")
+        stock_handler = self._stock_handler
+        stock_updated_handler = self._stock_updated_handler
+        crypto_handler = self._crypto_handler
+        crypto_updated_handler = self._crypto_updated_handler
         applied: list[tuple[object, tuple[str, ...], tuple[str, ...], Any, Any]] = []
         try:
             self._update_market_subscription(

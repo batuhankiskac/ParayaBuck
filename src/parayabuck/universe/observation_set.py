@@ -78,10 +78,7 @@ def build_observation_set(
         strategy_name = strategy.name
         # Rankers must only ever return pool members; guard defensively.
         ranked = tuple(symbol for symbol in ranked if symbol in available)
-        if ranked:
-            source = "strategy_alpha"
-        else:
-            source = "no_ranker"
+        source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
         fill = tuple(
             symbol for symbol in scanner_fallback if symbol not in reserved and symbol not in ranked

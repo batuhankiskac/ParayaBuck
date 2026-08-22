@@ -440,9 +440,9 @@ def _benchmark_monthly_returns(benchmark_bars: tuple[Bar, ...]) -> dict[tuple[in
 def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
     benchmark_bars = sorted(result.benchmark_bars, key=lambda bar: bar.timestamp)
     benchmark_by_date: dict[datetime, float] = {bar.timestamp: bar.close for bar in benchmark_bars}
-    portfolio_by_date: dict[datetime, float] = {}
-    for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True):
-        portfolio_by_date[timestamp] = equity
+    portfolio_by_date: dict[datetime, float] = dict(
+        zip(result.curve_timestamps, result.equity_curve, strict=True)
+    )
     common_dates = sorted(set(portfolio_by_date) & set(benchmark_by_date))
     # Build (portfolio, benchmark) pairs jointly: filtering the two series
     # independently desynchronizes them when only one leg has a non-positive

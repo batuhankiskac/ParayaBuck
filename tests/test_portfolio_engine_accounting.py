@@ -662,7 +662,7 @@ def test_daily_loss_limit_triggers_on_single_day_drop() -> None:
     # lower on that position, a ~1.5% equity loss that is past the 0.5%
     # daily-loss limit. The day-start equity must be the previous session's
     # closing equity (100 030), not the post-close equity of the loss day.
-    snapshot = engine._account_snapshot(bars[-1].timestamp)
+    snapshot = engine._account_snapshot()
     assert snapshot.daily_pnl == pytest.approx(500.0 * (97.0 - 100.0), abs=10.0)
     assert snapshot.daily_pnl / snapshot.equity <= -0.01
     # The decision on the loss day is halted by the overlay: the target is
@@ -769,7 +769,7 @@ def test_weekly_strategy_risk_state_updates_on_non_rebalance_days() -> None:
     # The day-start equity after the run is Friday's closing equity: the new
     # session (week 2 Monday) started from the previous session's close.
     assert engine._day_start_equity == pytest.approx(cash_after_entry + first_fill.qty * 90.0)
-    snapshot = engine._account_snapshot(bars[-1].timestamp)
+    snapshot = engine._account_snapshot()
     assert snapshot.daily_pnl == pytest.approx(first_fill.qty * (88.0 - 90.0), abs=10.0)
 
 

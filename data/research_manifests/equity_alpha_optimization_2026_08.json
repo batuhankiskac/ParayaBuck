@@ -1,0 +1,248 @@
+{
+ "mission": "equity_alpha_optimization_2026_08",
+ "phase": 2,
+ "declared_before_results": true,
+ "research_commit": "3c5e57d7a88f7855e7154550f7a97e878b7d1643",
+ "config_digest_sha256": "5129057f7113293edf276f61202f477df63260288ad107eebf9b022a9b2180bb",
+ "python_version": "3.14.7",
+ "dataset": {
+  "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+  "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+  "dividends_csv": "data/historical/equity_1200_dividends.csv",
+  "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+ },
+ "control_parameters": {
+  "formation_bars": 252,
+  "skip_bars": 21,
+  "beta_window_bars": 273,
+  "residual_vol_window": 63,
+  "top_n": 8,
+  "max_single_weight": 0.1,
+  "ivol_reject_quantile": 0.7,
+  "exclude_symbols": "['SPY']",
+  "rebalance_frequency": "weekly"
+ },
+ "cost_assumptions": {
+  "slippage_bps": 2,
+  "spread_bps": 2,
+  "commission": 0,
+  "equity_taf_per_share": 0.000195,
+  "equity_taf_cap": 9.79,
+  "equity_cat_per_share": 3e-06,
+  "equity_sec_fee_rate": 2.06e-05,
+  "equity_use_effective_dated_fees": true,
+  "initial_cash": 100000,
+  "stress_multipliers": [
+   1,
+   2,
+   3,
+   5
+  ]
+ },
+ "walk_forward": {
+  "method": "anchored 6-month windows; warmup = all prior bars; folds tile 2017-01-03 .. 2026-07-30",
+  "fold_step_months": 6,
+  "eval_start": "2017-01-03",
+  "eval_end": "2026-07-30",
+  "fold_count_expected": 20
+ },
+ "recent_period": {
+  "start": "2022-01-01",
+  "end": "2026-07-30",
+  "rationale": "survivorship-bias mitigation; more decision weight"
+ },
+ "regime_rule": {
+  "name": "SPY trailing-return + realized-vol vs rolling median (predeclared, frozen)",
+  "spy_return_window_days": 252,
+  "spy_vol_window_days": 63,
+  "spy_vol_median_window_years": 3,
+  "exposure_multiplier_elevated": 0.5,
+  "fallback": "NORMAL (no scaling) until rolling-median history is sufficient; no future data"
+ },
+ "bootstrap": {
+  "method": "block bootstrap, fixed 20-trading-day blocks, with replacement",
+  "block": 20,
+  "resamples": 2000,
+  "seed": 202608230
+ },
+ "variants": {
+  "control": {
+   "base": "AlphaResearchControl",
+   "overrides": {}
+  },
+  "a3": {
+   "base": "AlphaResearchA3",
+   "overrides": {}
+  },
+  "h25": {
+   "base": "AlphaResearchH25",
+   "overrides": {
+    "blend_alpha_raw": 0.75
+   }
+  },
+  "h50": {
+   "base": "AlphaResearchH50",
+   "overrides": {
+    "blend_alpha_raw": 0.5
+   }
+  },
+  "h75": {
+   "base": "AlphaResearchH75",
+   "overrides": {
+    "blend_alpha_raw": 0.25
+   }
+  },
+  "mh_raw": {
+   "base": "AlphaResearchMHRaw",
+   "overrides": {
+    "multi_horizon_standardized": false
+   }
+  },
+  "mh_std": {
+   "base": "AlphaResearchMHStd",
+   "overrides": {
+    "multi_horizon_standardized": true
+   }
+  },
+  "control_sqrt": {
+   "base": "AlphaResearchControlSqrt",
+   "overrides": {}
+  },
+  "h50_sqrt": {
+   "base": "AlphaResearchH50Sqrt",
+   "overrides": {
+    "blend_alpha_raw": 0.5
+   }
+  },
+  "mhstd_sqrt": {
+   "base": "AlphaResearchMHStdSqrt",
+   "overrides": {
+    "multi_horizon_standardized": true
+   }
+  },
+  "control_regime": {
+   "base": "AlphaResearchControlRegime",
+   "overrides": {}
+  },
+  "a3_regime": {
+   "base": "AlphaResearchA3Regime",
+   "overrides": {}
+  },
+  "h50_regime": {
+   "base": "AlphaResearchH50Regime",
+   "overrides": {
+    "blend_alpha_raw": 0.5
+   }
+  },
+  "mhstd_regime": {
+   "base": "AlphaResearchMHStdRegime",
+   "overrides": {
+    "multi_horizon_standardized": true
+   }
+  },
+  "control_hyst": {
+   "base": "AlphaResearchControlHyst",
+   "overrides": {}
+  }
+ },
+ "frozen_parameters": {
+  "formation_bars": 252,
+  "skip_bars": 21,
+  "beta_window_bars": 273,
+  "residual_vol_window": 63,
+  "top_n": 8,
+  "max_single_weight": 0.1,
+  "ivol_reject_quantile": 0.7,
+  "exclude_symbols": "['SPY']",
+  "rebalance_frequency": "weekly"
+ },
+ "candidate_definitions": {
+  "C0": "CONTROL: corrected production v2 residual momentum (raw compounded residual return, ivol filter, inverse-vol sizing, weekly)",
+  "A3": "standardized residual score (compounded/stdev) + ivol filter + EQUAL weights",
+  "H25": "blend 0.75 raw + 0.25 standardized, both percentile-ranked cross-sectionally",
+  "H50": "blend 0.50 raw + 0.50 standardized, percentile-ranked",
+  "H75": "blend 0.25 raw + 0.75 standardized, percentile-ranked",
+  "MH_RAW": "mean of percentile ranks of raw residual momentum at 6-1/9-1/12-1 months (126/189/252 formation, skip 21; beta window 273)",
+  "MH_STD": "same, but each horizon score standardized by its own window stdev before rank normalization",
+  "CONTROL_SQRT": "CONTROL ranking + sqrt-inverse-vol sizing (1/sqrt(ivol)), same caps",
+  "H50_SQRT": "H50 ranking + sqrt-inverse-vol sizing",
+  "MHSTD_SQRT": "MH_STD ranking + sqrt-inverse-vol sizing",
+  "CONTROL_REGIME": "CONTROL + SPY regime derating (ELEVATED: trailing 252d return < 0 AND 63d vol > 3y rolling median; multiplier 0.5; applied after alpha weights, before risk overlay)",
+  "A3_REGIME": "A3 + same regime rule",
+  "H50_REGIME": "H50 + same regime rule",
+  "MHSTD_REGIME": "MH_STD + same regime rule",
+  "CONTROL_HYST": "CONTROL + rank hysteresis (entry <= 8, hold <= 12, refill from best eligible)"
+ },
+ "combination_discipline": [
+  "H50 + sqrt-ivol",
+  "MH_STD + sqrt-ivol",
+  "A3 + regime",
+  "H50 + regime",
+  "MH_STD + regime"
+ ],
+ "not_tested": [
+  "3m/18m/24m horizons",
+  "other blend ratios",
+  "other exponent sizing",
+  "regime parameter tuning",
+  "combined mega-strategy"
+ ],
+ "promotion_rule": {
+  "declare_before_looking": true,
+  "reject_if_any": [
+   "full-period Sharpe < CONTROL + 0.04 AND Calmar improvement < 10%",
+   "maxDD worse than CONTROL by > 2pp",
+   "2022+ materially worse than CONTROL",
+   "median walk-forward fold return worse than CONTROL by > 1pp",
+   "beats CONTROL in < 10 of the 19 folds on return or Sharpe while losing on the other",
+   "advantage disappears at 3x transaction costs",
+   "top-1 stock > 15% of positive PnL",
+   "jackknife destroys the advantage",
+   "obvious single-year dependence",
+   "lookahead / execution-parity violation"
+  ],
+  "strong_promotion_extra": [
+   "full-period Sharpe improvement >= +0.08",
+   "maxDD lower by >= 3pp",
+   "positive candidate-vs-control median fold delta",
+   "2022+ advantage",
+   "cost robustness",
+   "bootstrap P(Sharpe > CONTROL) >= 70%"
+  ]
+ },
+ "commands": [
+  ".venv/bin/python scripts/research_equity_alpha_optimization.py --variants control",
+  ".venv/bin/python scripts/research_equity_alpha_optimization.py --variants a3,h25,h50,h75,mh_raw,mh_std",
+  ".venv/bin/python scripts/research_equity_alpha_optimization.py --variants control_sqrt,h50_sqrt,mhstd_sqrt,control_regime,a3_regime,h50_regime,mhstd_regime,control_hyst",
+  ".venv/bin/python scripts/research_equity_alpha_optimization.py --aggregate",
+  ".venv/bin/python -m pytest -q",
+  ".venv/bin/python -m ruff check .",
+  ".venv/bin/python -m ruff format --check .",
+  ".venv/bin/python -m mypy src"
+ ],
+ "results_sha256": {
+  "control.json": "5afa0d7c16d53e3e64be8605696c53c0a0be66a8c92f70211391e67378e6cf8c",
+  "a3.json": "0a5cdc2febb9cf5086681ec23d7fa7f5dd45ed95d2b5906425cc070c19408745",
+  "h25.json": "735c8581079d7df1a4ed3c3c0478e0272e612d1bbdd991c670e6b034b95de696",
+  "h50.json": "39b7ccca83b1e8a216d7824bfc2f34a651929bd7214623d31e1785ceffe8f538",
+  "h75.json": "9608b6191d6768102cc533d62909e5f8d966b0b435fe2cd2a70d7bf9805a3424",
+  "mh_raw.json": "b24512e2b1db44bc64347e891c556adddb459c7b580a286529094c20f43668f7",
+  "mh_std.json": "e4a432f21fcdf20660814e4aa36fe99e2c829323a482e1603a0c968feb42ecc0",
+  "control_sqrt.json": "8bcff8c86418cdc599cc063beb24200cc0b8ba81aa66a1c954493fc9f09ae9c0",
+  "h50_sqrt.json": "c3c14c78f74cbf1df9b98f14291a0e1aeac099221d5d064ccfcf46c1e91c6a0a",
+  "mhstd_sqrt.json": "7db1014233bc0ae4096046721887ab6818bfe0d038229bc979e0a822e501acc3",
+  "control_regime.json": "776f3490eb7d605b5571f4299b99be099e306553c861c2d475de998571a85e27",
+  "a3_regime.json": "8d429a59a32f7a7bccbf5ad5a39b713715bde04ce9b10d212808620dd9afb33c",
+  "h50_regime.json": "8e7ab2a26b231e0d8071d7ca5a95e37ba0c6ffd091e080bc11f32f7ad4880177",
+  "mhstd_regime.json": "51751d6752a37447d8ae10a31451c441870e4761a05ddce112ebab41e94a482a",
+  "control_hyst.json": "95e4edbefd5587662d82c3f262d00ce6ae945abcc2c47c4a7c6de37c0ceed214",
+  "summary.json": "82768b9a6fad9f0bc19fd412e7b8516084473f47f8411bfc43e85cf3bda3af96",
+  "fold_deltas.json": "b9824d2dae4ece01e09277bdc254f62391b5265ae2c1bad4ea7c372c04e4d653",
+  "recent_period.json": "e3dba6e934d1dd78239411ddba9f974097933572aafc8902e2fc6382fcb8308b",
+  "annual_results.json": "c3936a27e1bbc28700c5ea90f8526447c5883082be98d68e5b0e83a0919f68f7",
+  "cost_stress.json": "735befc4a9270a69dea9e19dd7df3c769f8e5c5fd833942996abccb415345a0f",
+  "jackknife.json": "8b4f663903c342318db8a13ba40e736781792bb3e85a2ea93e31bdc21163bdec",
+  "regime_analysis.json": "79ce7dd50e136a32c95da64747585629746ce218eee28d234245f889e8822626",
+  "bootstrap.json": "a6f4ec0464de14afdb5d70b75a42e67e706d253ca30d89344996adb4e1c8a766"
+ }
+}

@@ -53,6 +53,15 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     ``rank_candidates`` reuses the EXACT scoring of ``decide`` so the live
     observation set (stream limit != opportunity universe) is selected by the
     same alpha the strategy trades.
+
+    Research hooks (defaults preserve production math exactly; the 2026-08
+    alpha-optimization mission subclasses them):
+        ``_transform_cross_sectional_scores`` — once-per-decision re-scoring
+            of the eligible pool (blend / multi-horizon consensus);
+        ``_select_names`` — selection-boundary modification (hysteresis);
+        ``_post_target_weights`` — post-sizing exposure scaling (regime),
+            applied BEFORE the engine risk overlay so existing caps stay
+            authoritative.
     """
 
     name = "equity_residual_momentum_v1"
@@ -128,6 +137,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
 
         scored: list[tuple[float, str]] = []
         residual_vols: dict[str, float] = {}
+        residuals_by_symbol: dict[str, list[float]] = {}
         # The momentum window needs formation + skip aligned return pairs; the
         # volatility window and the beta floor are smaller by construction.
         minimum_aligned = max(formation + skip, vol_window + 1, _MIN_BETA_RETURNS)
@@ -154,7 +164,15 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 continue
             scored.append((score, symbol))
             residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
+            residuals_by_symbol[symbol] = residuals
 
+        # Cross-sectional RESEARCH hook: variants may RE-SCORE the qualified
+        # pool as a cross-section (raw/standardized blends, multi-horizon
+        # consensus) without touching the shared beta/residual/eligibility
+        # pipeline. Default: per-symbol scores pass through unchanged.
+        scored = self._transform_cross_sectional_scores(
+            scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
+        )
         # Defensive filter: reject the extreme idiosyncratic-volatility names
         # (lottery-like tail) before ranking, not as a second alpha signal.
         # ``reject_quantile_threshold`` keeps ~q of the qualified pool (ties
@@ -195,6 +213,54 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         )
         return [(score, symbol) for score, symbol in scored if residual_vols[symbol] <= threshold]
 
+    def _transform_cross_sectional_scores(
+        self,
+        scored: list[tuple[float, str]],
+        residuals_by_symbol: dict[str, list[float]],
+        residual_vols: dict[str, float],
+        *,
+        formation: int,
+        skip: int,
+    ) -> list[tuple[float, str]]:
+        """Cross-sectional research scoring hook (see ``_score_candidates``).
+
+        Runs once per decision over the eligible pool with every symbol's
+        residual series and 63-bar annualized residual vols available, so
+        variants may compute BLENDED or MULTI-HORIZON cross-sectional scores
+        deterministically without re-running the beta/residual pipeline.
+        Default: the underlying per-symbol scores pass through unchanged.
+        """
+        return scored
+
+    def _select_names(
+        self,
+        ranked: tuple[tuple[float, str], ...],
+        residual_vols: dict[str, float],
+        context: PortfolioContext,
+        top_n: int,
+    ) -> tuple[str, ...]:
+        """Position-selection hook (see ``decide``) — ranking unchanged.
+
+        Default: the best ``top_n`` scores. Research may override to encode
+        hysteresis around the selection boundary without touching math: the
+        overlay's per-position/rank caps remain in force on the result.
+        """
+        return tuple(symbol for _score, symbol in ranked[:top_n])
+
+    def _post_target_weights(
+        self,
+        weights: dict[str, float],
+        context: PortfolioContext,
+    ) -> dict[str, float]:
+        """Post-sizing hook running AFTER alpha target weights are set and
+        BEFORE the engine risk overlay sees them.
+
+        Default: pass-through. Research variants may scale the allocation
+        (e.g. market-regime exposure derating) here; existing per-position
+        and gross-exposure caps are then applied on the scaled targets.
+        """
+        return weights
+
     def _position_weights(
         self, selected: tuple[str, ...], residual_vols: dict[str, float]
     ) -> dict[str, float]:
@@ -216,8 +282,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         ranked, residual_vols = self._score_candidates(context)
         if not ranked:
             return self._cash_portfolio(context, "no_qualified_candidates")
-        selected = tuple(symbol for _score, symbol in ranked[:top_n])
-        weights = dict(self._position_weights(selected, residual_vols))
+        selected = self._select_names(ranked, residual_vols, context, top_n)
+        weights = dict(
+            self._post_target_weights(self._position_weights(selected, residual_vols), context)
+        )
         # Alpha rank travels with the target (1 = best): the risk overlay's
         # position-count enforcement retains the strategy's best-ranked
         # names instead of inventing a second ranking from target weights.

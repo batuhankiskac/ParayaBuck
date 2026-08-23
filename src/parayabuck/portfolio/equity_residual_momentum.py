@@ -12,6 +12,7 @@ from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, Target
 from parayabuck.portfolio.momentum import (
     annualize_period_volatility,
     inverse_volatility_weights,
+    reject_quantile_threshold,
 )
 
 # Residual-momentum literature defaults: 12-month formation / 1-month skip
@@ -145,7 +146,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 stock - beta * market
                 for stock, market in zip(stock_returns, market_returns, strict=True)
             ]
-            score = _compounded_return(residuals[-formation - skip : -skip])
+            score = self._candidate_score(residuals, formation=formation, skip=skip)
             residual_vol = _volatility(residuals[-vol_window:])
             if not math.isfinite(score) or not math.isfinite(residual_vol):
                 continue
@@ -156,13 +157,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
 
         # Defensive filter: reject the extreme idiosyncratic-volatility names
         # (lottery-like tail) before ranking, not as a second alpha signal.
-        if scored:
-            sorted_vols = sorted(residual_vols[symbol] for _score, symbol in scored)
-            cutoff = min(len(sorted_vols) - 1, int(ivol_quantile * len(sorted_vols)))
-            threshold = sorted_vols[cutoff]
-            scored = [
-                (score, symbol) for score, symbol in scored if residual_vols[symbol] <= threshold
-            ]
+        # ``reject_quantile_threshold`` keeps ~q of the qualified pool (ties
+        # kept); the previous ``int(q * n)`` index over-retained one name
+        # (q*n + 1 of n), materially so for small pools.
+        scored = self._apply_ivol_filter(scored, residual_vols, ivol_quantile)
         scored.sort(key=lambda item: (-item[0], item[1]))
         return tuple(scored), residual_vols
 
@@ -170,9 +168,45 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         ranked, _vols = self._score_candidates(context)
         return tuple(symbol for _score, symbol in ranked)
 
+    def _candidate_score(self, residuals: list[float], *, formation: int, skip: int) -> float:
+        """Ranking score over the formation window (skip excluded).
+
+        Default: compounded residual return. Research variants may
+        standardize (score / residual stdev) by overriding ONLY this hook so
+        every variant shares the exact beta/residual/filter pipeline.
+        """
+        return _compounded_return(residuals[-formation - skip : -skip])
+
+    def _apply_ivol_filter(
+        self,
+        scored: list[tuple[float, str]],
+        residual_vols: dict[str, float],
+        quantile: float,
+    ) -> list[tuple[float, str]]:
+        """Defensive idiosyncratic-vol rejection (see module docstring).
+
+        Separated as a hook so ablations can disable it explicitly instead
+        of abusing parameter values outside their validated ranges.
+        """
+        if not scored:
+            return scored
+        threshold = reject_quantile_threshold(
+            [residual_vols[symbol] for _score, symbol in scored], quantile
+        )
+        return [(score, symbol) for score, symbol in scored if residual_vols[symbol] <= threshold]
+
+    def _position_weights(
+        self, selected: tuple[str, ...], residual_vols: dict[str, float]
+    ) -> dict[str, float]:
+        """Sizing for the selected names (inverse-vol, capped). Hook."""
+        return dict(
+            inverse_volatility_weights(
+                selected, residual_vols, maximum_weight=self.param_float("max_single_weight", 0.10)
+            )
+        )
+
     def decide(self, context: PortfolioContext) -> TargetPortfolio:
         top_n = self.param_int("top_n", 8)
-        cap = self.param_float("max_single_weight", 0.10)
         beta_window = self.param_int("beta_window_bars", _DEFAULT_BETA_WINDOW_BARS)
 
         benchmark_key = canonical_symbol(context.benchmark_symbol, Market.EQUITY)
@@ -183,9 +217,18 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         if not ranked:
             return self._cash_portfolio(context, "no_qualified_candidates")
         selected = tuple(symbol for _score, symbol in ranked[:top_n])
-        weights = dict(inverse_volatility_weights(selected, residual_vols, maximum_weight=cap))
+        weights = dict(self._position_weights(selected, residual_vols))
+        # Alpha rank travels with the target (1 = best): the risk overlay's
+        # position-count enforcement retains the strategy's best-ranked
+        # names instead of inventing a second ranking from target weights.
+        rank_by_symbol = {symbol: index for index, symbol in enumerate(selected, start=1)}
         targets = tuple(
-            TargetWeight(symbol, weight, reason="residual_momentum")
+            TargetWeight(
+                symbol,
+                weight,
+                reason="residual_momentum",
+                rank=rank_by_symbol[symbol],
+            )
             for symbol, weight in sorted(weights.items())
             if weight > 0
         )

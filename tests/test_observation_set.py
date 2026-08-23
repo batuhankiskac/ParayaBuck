@@ -113,10 +113,11 @@ def test_observation_set_uses_strategy_alpha_and_pins() -> None:
     )
     assert observation.source == "strategy_alpha"
     assert observation.observation_set[0] == "SPY"  # pinned first
-    # Top residual-momentum names fill the stream slots; JPM (residual < 0
-    # vs SPY) is ranked but does not fit the two remaining slots.
+    # Top residual-momentum names fill the stream slots; the corrected
+    # nearest-rank ivol quantile (3 qualified at q=0.70 -> keep 2) rejects
+    # JPM outright, so only two names are ranked for the two free slots.
     assert observation.observation_set == ("SPY", "AAPL", "MSFT")
-    assert observation.alpha_scored_count >= 3
+    assert observation.alpha_scored_count == 2
 
 
 def test_observation_set_falls_back_when_no_ranker() -> None:

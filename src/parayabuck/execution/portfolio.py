@@ -202,6 +202,13 @@ class PortfolioRiskOverlay:
         desired = {
             canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights
         }
+        # Strategy alpha priority per canonical symbol (0 = unranked). When
+        # the strategy declares ranks, position-count enforcement below
+        # retains best-ranked names; otherwise the legacy target-weight
+        # order applies unchanged.
+        rank_by_symbol = {
+            canonical_symbol(weight.symbol, market): weight.rank for weight in target.weights
+        }
         if mode not in {"backtest", "paper", "live"}:
             raise ValueError(f"Unsupported portfolio execution mode: {mode}")
         per_asset = (
@@ -257,12 +264,25 @@ class PortfolioRiskOverlay:
             if market == Market.CRYPTO
             else self.limits.maximum_positions
         )
-        kept_symbols = {
-            symbol
-            for symbol, _weight in sorted(desired.items(), key=lambda item: (-item[1], item[0]))[
-                :position_limit
-            ]
-        }
+        # Position-count policy: the LIMIT is risk enforcement and stays
+        # intact, but WHO survives must follow the strategy's declared alpha
+        # rank when one exists. Sorting by target weight instead would invent
+        # a second ranking system: inverse-vol sizing (and the per-asset cap,
+        # which pins several names at exactly the cap) is not alpha, so
+        # weight order can evict the strategy's best ideas on symbol-order
+        # tie-breaks. Unranked targets keep the legacy weight ordering.
+        if any(rank > 0 for rank in rank_by_symbol.values()):
+            priority = sorted(
+                desired,
+                key=lambda symbol: (
+                    rank_by_symbol.get(symbol, 0) or math.inf,
+                    -desired[symbol],
+                    symbol,
+                ),
+            )
+        else:
+            priority = sorted(desired, key=lambda symbol: (-desired[symbol], symbol))
+        kept_symbols = set(priority[:position_limit])
         if len(desired) > len(kept_symbols):
             desired = {
                 symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols

@@ -37,12 +37,18 @@ class TargetWeight:
     symbol: str
     weight: float
     reason: str = ""
+    # Strategy alpha priority (1 = best) carried into risk enforcement so a
+    # position-count limit retains the strategy's best-ranked names. 0 =
+    # unranked (the overlay then falls back to target-weight order).
+    rank: int = 0
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("Target weight symbol cannot be empty")
         if not math.isfinite(self.weight) or not 0.0 <= self.weight <= MAX_WEIGHT:
             raise ValueError(f"Target weight must be in [0, 1]: {self.weight}")
+        if self.rank < 0:
+            raise ValueError(f"Target weight rank must be non-negative: {self.rank}")
 
 
 @dataclass(frozen=True)
@@ -108,7 +114,12 @@ class TargetPortfolio:
             "decision_timestamp": self.decision_timestamp.isoformat(),
             "data_timestamp": self.data_timestamp.isoformat() if self.data_timestamp else None,
             "weights": [
-                {"symbol": weight.symbol, "weight": weight.weight, "reason": weight.reason}
+                {
+                    "symbol": weight.symbol,
+                    "weight": weight.weight,
+                    "reason": weight.reason,
+                    "rank": weight.rank,
+                }
                 for weight in self.weights
             ],
             "cash_weight": self.cash_weight,
@@ -128,6 +139,7 @@ class TargetPortfolio:
                 symbol=str(weight["symbol"]),
                 weight=float(weight["weight"]),
                 reason=str(weight.get("reason", "")),
+                rank=int(weight.get("rank", 0)),
             )
             for weight in dict(raw).get("weights", ())
         )

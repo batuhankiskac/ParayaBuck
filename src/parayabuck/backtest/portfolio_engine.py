@@ -270,6 +270,7 @@ class PortfolioBacktestEngine:
         cash_rate_annualized: float = 0.0,
         risk_limits: PortfolioRiskLimits | None = None,
         maximum_allocation: float = 1.0,
+        enforce_drawdown_halt: bool = False,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -328,6 +329,11 @@ class PortfolioBacktestEngine:
         self.cash_rate_annualized = float(cash_rate_annualized)
         self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
         self.maximum_allocation = maximum_allocation
+        # Research backtests default to SHADOW drawdown halts (the alpha curve
+        # keeps trading; breaches are recorded as events). Production-policy
+        # simulations opt into real enforcement plus an operator-reset policy
+        # through ``_risk_epoch_policy``.
+        self.enforce_drawdown_halt = bool(enforce_drawdown_halt)
         self.state = state or PortfolioState(
             strategy_name=strategy.name, strategy_version=strategy.version
         )
@@ -879,6 +885,10 @@ class PortfolioBacktestEngine:
         self._pending = remaining
 
     def _decide(self, timestamp: datetime) -> None:
+        # Production-policy hook (no-op in research runs): a simulation
+        # subclass may rebase the drawdown peak here to model an operator
+        # risk-epoch reset BEFORE this cycle's overlay evaluation.
+        self._risk_epoch_policy(timestamp)
         market = self.strategy.market
         previous = self._previous_timestamp[market]
         self._previous_timestamp[market] = timestamp
@@ -931,6 +941,7 @@ class PortfolioBacktestEngine:
                     weight.symbol,
                     min(weight.weight, current_weights.get(weight.symbol, 0.0)),
                     "intermediate_risk_reduction_only",
+                    rank=weight.rank,
                 )
                 for weight in target.weights
                 if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
@@ -952,7 +963,8 @@ class PortfolioBacktestEngine:
                 # Research backtests record drawdown breaches as shadow
                 # events instead of halting: the peak is monotonic, so an
                 # enforced halt would freeze the alpha curve permanently.
-                enforce_drawdown_halt=False,
+                # Production-policy simulations set the ctor flag to enforce.
+                enforce_drawdown_halt=self.enforce_drawdown_halt,
             )
             target = risk.target
         self._rebalance_number += 1
@@ -976,6 +988,21 @@ class PortfolioBacktestEngine:
             self._risk_session_date = session
         self._last_observed_equity = equity
         self._peak_equity = max(self._peak_equity, equity)
+
+    def _risk_epoch_policy(self, timestamp: datetime) -> None:
+        """Operator reset policy for production-policy simulations.
+
+        Default: never reset (P0). Simulations override this to rebase the
+        drawdown peak via :meth:`reset_peak_equity` under a PREDECLARED
+        deterministic policy. It runs before every decision cycle.
+        """
+
+    def reset_peak_equity(self) -> float:
+        """Research mirror of the runtime's operator risk-epoch reset: rebase
+        the drawdown peak to the current equity so a latched drawdown halt
+        can clear. Never called in default research runs."""
+        self._peak_equity = self._equity()
+        return self._peak_equity
 
     def _account_snapshot(self) -> AccountSnapshot:
         """Observational snapshot of the portfolio for the risk overlay.

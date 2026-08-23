@@ -19,6 +19,29 @@ def realized_volatility(closes: list[float], window: int) -> float:
     return math.sqrt(variance)
 
 
+def reject_quantile_threshold(values: list[float], quantile: float) -> float:
+    """Nearest-rank empirical ``quantile``-threshold on index space [0, n-1].
+
+    Contract: keeping the values ``<= threshold`` retains approximately the
+    lowest ``quantile`` fraction of a distinct-valued sample — exactly
+    ``floor(quantile * (n - 1)) + 1`` of n values — and rejects approximately
+    the highest ``1 - quantile`` fraction. The classic ``sorted[int(q * n)]``
+    index keeps one value too many (q*n + 1 of n), which materially over-retains
+    for small candidate pools.
+
+    Ties at the threshold are KEPT: equal values carry no distinguishing
+    information, so retention may exceed the nominal fraction when ties
+    straddle the cut. Deterministic for any input order. Requires a
+    non-empty sample; ``quantile`` must be in [0, 1].
+    """
+    if not values:
+        raise ValueError("reject_quantile_threshold requires a non-empty sample")
+    if not 0 <= quantile <= 1:
+        raise ValueError("quantile must be in [0, 1]")
+    ordered = sorted(values)
+    return ordered[int(quantile * (len(ordered) - 1))]
+
+
 def annualize_period_volatility(period_volatility: float, bars_per_year: float) -> float:
     return period_volatility * math.sqrt(bars_per_year)
 
@@ -85,4 +108,5 @@ __all__ = [
     "diagonal_portfolio_volatility",
     "inverse_volatility_weights",
     "realized_volatility",
+    "reject_quantile_threshold",
 ]

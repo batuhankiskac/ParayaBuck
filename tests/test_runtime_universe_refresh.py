@@ -382,7 +382,9 @@ def test_hot_swap_stages_warmup_bars_and_seeds_after_membership_commit() -> None
         Market.EQUITY,
     )
 
-    def get_bars_batch(symbols, timeframe, *, start):
+    def get_bars_batch(symbols, timeframe, *, start, adjustment="raw"):
+        # The warmup contract now passes the adjustment basis explicitly
+        # (raw for execution state, splits for the strategy signal series).
         return {symbol: [bar] for symbol in symbols}
 
     runtime._historical = SimpleNamespace(get_bars_batch=get_bars_batch)

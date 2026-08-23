@@ -170,8 +170,10 @@ def test_equity_explanations_cover_selected_holdings_with_required_keys() -> Non
     target = strategy.decide(_equity_context(holdings={"AAA": 30.0, "BBB": 7.5}))
     explanations = target.metadata["explanations"]
     assert isinstance(explanations, dict)
-    # The ivol filter rejects the highest-vol name, so 5 of 6 qualify and all
-    # are selected (top_n=8): explanations must cover exactly the targets.
+    # The ivol filter rejects the two highest-vol names under the corrected
+    # nearest-rank quantile (6 qualified, q=0.70 -> keep 4), and all kept
+    # names are selected (top_n=8): explanations must cover exactly the
+    # targets.
     assert set(explanations) == {weight.symbol for weight in target.weights}
     for symbol, explanation in explanations.items():
         assert set(explanation) == {
@@ -224,6 +226,19 @@ def test_equity_high_idio_vol_name_is_filtered_out_of_explanations() -> None:
     target = strategy.decide(_equity_context())
     assert "FFF" not in target.metadata["selected_symbols"]
     assert "FFF" not in target.metadata["explanations"]
+
+
+def test_equity_target_weights_carry_alpha_rank_for_risk_overlay() -> None:
+    """decide() must stamp each selected weight with its 1-based alpha rank
+    so the risk overlay's position-count enforcement retains the strategy's
+    best-ranked names instead of re-ranking by target weight."""
+    strategy = EquityResidualMomentum1dV1()
+    context = _equity_context()
+    ranked, _vols = strategy._score_candidates(context)
+    target = strategy.decide(context)
+    expected = {symbol: index for index, (score, symbol) in enumerate(ranked, start=1)}
+    for weight in target.weights:
+        assert weight.rank == expected[weight.symbol] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +333,10 @@ def test_equity_observation_set_metadata() -> None:
     )
     assert result.strategy_name == "equity_residual_momentum_v1"
     assert result.source == "strategy_alpha"
-    assert result.alpha_scored_count == len(result.ranked_pool) == 5
+    # ivol filter under the corrected nearest-rank quantile: 6 qualified
+    # names at q=0.70 keep floor(0.70 * (6-1)) + 1 = 4 (rejects the two
+    # highest-idio-vol names; the pre-fix int(q*n) index kept 5 of 6).
+    assert result.alpha_scored_count == len(result.ranked_pool) == 4
     assert "SPY" not in result.ranked_pool
     assert result.observation_set == result.ranked_pool[:3]
 

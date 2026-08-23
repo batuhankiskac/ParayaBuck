@@ -21,6 +21,7 @@ from parayabuck.core.models import (
     Market,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
+from parayabuck.data.adjustment import split_ratio
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
@@ -110,6 +111,9 @@ def _is_transient_network_error(exc: BaseException) -> bool:
 
 _WARMUP_SYMBOL_BATCH_SIZE = 8
 _WARMUP_RETRY_SECONDS = 600.0
+# How often the split-adjustment reconciler compares raw vs split-adjusted
+# daily tails (hourly; a split is applied at most one check after it trades).
+_SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
 # Per-market scanner-refresh backoff (seconds) after a failed scheduled
 # refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
@@ -997,6 +1001,16 @@ class EngineRuntime:
                     daemon=True,
                 )
             )
+            # Split-adjustment reconciler: keeps the strategy's split-basis
+            # signal history continuous across corporate actions that happen
+            # while the engine lives (see data/adjustment.py).
+            self._threads.append(
+                threading.Thread(
+                    target=self._signal_adjustment_loop,
+                    name="pb-signal-adjustment",
+                    daemon=True,
+                )
+            )
         if crypto:
             self._threads.append(
                 threading.Thread(
@@ -1423,7 +1437,7 @@ class EngineRuntime:
             )
         with state_lock:
             self._not_ready_symbols.update(newly_added)
-        staged: dict[tuple[str, str], list[Bar]] = {}
+        staged: dict[tuple[str, str], tuple[list[Bar], list[Bar]]] = {}
         try:
             if newly_added and self._historical is not None:
                 staged = (
@@ -1480,13 +1494,16 @@ class EngineRuntime:
                 # New members were staged during warmup but could only be
                 # seeded now that the runtimes include them; seeding inside
                 # this transaction keeps the transition atomic.
-                for (symbol, timeframe), bars in staged.items():
-                    self.market_state.seed(bars)
+                for (symbol, timeframe), (raw_tail, signal_tail) in staged.items():
+                    # RAW bars feed the execution-side market state; the
+                    # strategy's signal history receives its own SPLITS-basis
+                    # series (crypto: the same RAW bars).
+                    self.market_state.seed(raw_tail)
                     for runtime in self._portfolio_runtimes:
                         if runtime.strategy.timeframe == timeframe and (
                             is_crypto(symbol) == (runtime.market == Market.CRYPTO)
                         ):
-                            runtime.seed(bars)
+                            runtime.seed(signal_tail)
                 self.symbols = sorted(
                     self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO]
                 )
@@ -2854,11 +2871,16 @@ class EngineRuntime:
         if previous is None:
             return
         try:
+            # RAW basis: this repairs the EXECUTION-side market state, whose
+            # bars are as-traded stream truth. The strategy's signal history
+            # is a separate splits-basis series bridged by
+            # data/adjustment.py and must never be fed mixed bases here.
             backfill = history.get_bars(
                 bar.symbol,
                 bar.timeframe,
                 start=previous.timestamp,
                 end=bar.timestamp,
+                adjustment="raw",
             )
             # Lock only the mutation: history.get_bars above is a network
             # fetch and must never hold _ingestion_lock against a hot-swap.
@@ -2887,6 +2909,68 @@ class EngineRuntime:
                 bar.timeframe,
                 exc,
             )
+
+    # -- split-adjustment reconciliation (signal-history continuity) --------
+
+    def _signal_adjustment_loop(self) -> None:
+        worker = self._workers["pb-signal-adjustment"]
+        worker.alive = True
+        try:
+            while self._running:
+                self._stop_event.wait(_SIGNAL_ADJUSTMENT_CHECK_SECONDS)
+                if not self._running:
+                    break
+                try:
+                    self._reconcile_signal_adjustments()
+                except Exception as exc:
+                    worker.last_error = str(exc)
+                    log.warning("Signal adjustment reconciliation failed: %s", exc)
+        finally:
+            worker.alive = False
+
+    def _reconcile_signal_adjustments(self) -> None:
+        """Keep every equity runtime's signal history on one splits basis.
+
+        Compares fresh raw vs split-adjusted daily tails per streamed symbol;
+        their ratio on the newest common completed bar is exactly the
+        cumulative split factor since the warmup download (Alpaca rebases its
+        splits series retroactively). A detected split rewrites only the
+        bars appended to the signal history since the previous check — those
+        entered unscaled — and raises the factor for future appends.
+        """
+        history = self._historical
+        if history is None:
+            return
+        equity_symbols = sorted(self._symbols_by_market.get(Market.EQUITY, ()))
+        runtimes = [
+            runtime
+            for runtime in self._portfolio_runtimes
+            if runtime.market == Market.EQUITY and getattr(runtime, "signal_split_factor", None)
+        ]
+        if not equity_symbols or not runtimes:
+            return
+        end = datetime.now(UTC)
+        start = end - timedelta(days=14)
+        raw = history.get_bars_batch(equity_symbols, "1d", start=start, end=end, adjustment="raw")
+        adjusted = history.get_bars_batch(
+            equity_symbols, "1d", start=start, end=end, adjustment="splits"
+        )
+        for symbol in equity_symbols:
+            detected = split_ratio(raw.get(symbol, ()), adjusted.get(symbol, ()))
+            if detected is None:
+                continue
+            _timestamp, ratio = detected
+            with self._portfolio_lock:
+                for runtime in runtimes:
+                    rewritten = runtime.apply_split_factor(symbol, ratio)
+                    if rewritten:
+                        log.warning(
+                            "Split adjustment applied: %s ratio=%.4f rewrote %d "
+                            "signal-history bar(s)",
+                            symbol,
+                            ratio,
+                            rewritten,
+                        )
 
     def _refresh_readiness(self) -> None:
         for symbol in tuple(self._not_ready_symbols):
@@ -3386,6 +3470,10 @@ class EngineRuntime:
             "timeframes": sorted(self.aggregators),
             "execution_timeframe": self.app_config.runtime.execution_timeframe,
             "market_state_timeframe": self.app_config.runtime.market_state_timeframe,
+            # The signal-history adjustment basis is part of the cache
+            # identity: switching it must fail the scope closed to a full
+            # refetch (rows are additionally keyed by adjustment).
+            "signal_adjustment_basis": {"EQUITY": "splits", "CRYPTO": "raw"},
             "strategies": [
                 {
                     "name": getattr(runtime.strategy, "name", ""),
@@ -3407,8 +3495,15 @@ class EngineRuntime:
         *,
         retry: bool,
         staged_only: bool = False,
-    ) -> dict[tuple[str, str], list[Bar]] | None:
+    ) -> dict[tuple[str, str], tuple[list[Bar], list[Bar]]] | None:
         """Download warmup history for ``symbols``.
+
+        EQUITY symbols are fetched on TWO explicit bases: RAW seeds the
+        execution-side market state (as-traded stream truth), SPLITS seeds
+        the portfolio runtimes' strategy signal history (the same basis as
+        backtest research data; bridged across live splits by
+        ``data/adjustment.py``). Crypto has no corporate actions: one RAW
+        fetch feeds both consumers.
 
         With ``staged_only`` the bars are returned without seeding: the
         caller (universe hot-swap) commits the membership first and seeds
@@ -3416,7 +3511,7 @@ class EngineRuntime:
         dropped. Otherwise bars are seeded into the market state and every
         matching portfolio runtime under the ingestion and portfolio locks.
         """
-        staged: dict[tuple[str, str], list[Bar]] = {}
+        staged: dict[tuple[str, str], tuple[list[Bar], list[Bar]]] = {}
         warmup_digest = self._warmup_config_digest()
         groups = (
             (Market.EQUITY, [symbol for symbol in symbols if not is_crypto(symbol)]),
@@ -3445,34 +3540,53 @@ class EngineRuntime:
                     try:
                         start = _warmup_start(symbol_batch[0], timeframe, requested_bars)
                         fetcher = getattr(history, "get_bars_batch_incremental", None)
-                        if fetcher is None:
-                            # Fakes/tests without the incremental fetcher use
-                            # the plain download contract unchanged.
-                            batched = history.get_bars_batch(symbol_batch, timeframe, start=start)
-                        else:
-                            batched = fetcher(
-                                symbol_batch,
+
+                        def _fetch(
+                            adjustment: str,
+                            scope: str,
+                            batch: list[str] = symbol_batch,
+                            window_start: str = start,
+                        ) -> dict[str, list[Bar]]:
+                            if fetcher is None:
+                                # Fakes/tests without the incremental fetcher
+                                # use the plain download contract unchanged.
+                                return history.get_bars_batch(
+                                    batch, timeframe, start=window_start, adjustment=adjustment
+                                )
+                            result: dict[str, list[Bar]] = fetcher(
+                                batch,
                                 timeframe,
-                                start=start,
-                                scope="runtime_warmup",
+                                start=window_start,
+                                adjustment=adjustment,
+                                scope=scope,
                                 config_digest=warmup_digest,
                                 identity=f"{timeframe}:{requested_bars}",
                             )
+                            return result
+
+                        execution_bars = _fetch("raw", "runtime_warmup")
+                        signal_bars = (
+                            _fetch("splits", "runtime_warmup_signal")
+                            if market == Market.EQUITY
+                            else execution_bars
+                        )
                         for symbol in symbol_batch:
-                            bars = batched.get(symbol, [])
+                            raw_tail = execution_bars.get(symbol, [])[-requested_bars:]
+                            signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
                             if staged_only:
-                                staged[(symbol, timeframe)] = bars[-requested_bars:]
+                                staged[(symbol, timeframe)] = (raw_tail, signal_tail)
                             else:
                                 with self._ingestion_lock, self._portfolio_lock:
-                                    self.market_state.seed(bars[-requested_bars:])
+                                    self.market_state.seed(raw_tail)
                                     for runtime in self._portfolio_runtimes:
-                                        runtime.seed(bars[-requested_bars:])
-                            if len(bars) < requested_bars:
+                                        if runtime.market == market:
+                                            runtime.seed(signal_tail)
+                            if len(signal_tail) < requested_bars:
                                 log.warning(
                                     "Warmup not ready %s %s: %d/%d bars",
                                     symbol,
                                     timeframe,
-                                    len(bars),
+                                    len(signal_tail),
                                     requested_bars,
                                 )
                     except Exception as exc:

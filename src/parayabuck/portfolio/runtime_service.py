@@ -14,6 +14,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
+from parayabuck.data.adjustment import scale_bar, scale_history_since
 from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -1247,6 +1248,20 @@ class PortfolioRuntime:
         self.risk_overlay = PortfolioRiskOverlay(risk_limits)
         self.planner = TargetToOrderPlanner(self.execution_policy)
         self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
+        # Split-adjustment bridge (equity only): warmup seeds the strategy
+        # history on the SPLITS basis while live aggregation appends RAW
+        # bars. ``signal_split_factor`` is the cumulative split ratio since
+        # the warmup download (raw / adjusted; 1.0 until a split happens);
+        # incoming raw bars are scaled BY it so the whole series stays on
+        # one explicit basis. ``unscaled_since[symbol]`` is the oldest bar
+        # timestamp appended since the last reconciliation — exactly the
+        # window a late split detection must rewrite.
+        if self.market == Market.EQUITY:
+            self.signal_split_factor: dict[str, float] = dict.fromkeys(self.symbols, 1.0)
+            self.unscaled_since: dict[str, datetime | None] = dict.fromkeys(self.symbols)
+        else:
+            self.signal_split_factor = {}
+            self.unscaled_since = {}
         self.configuration_digest = configuration_digest(
             strategy,
             mode,
@@ -1388,10 +1403,73 @@ class PortfolioRuntime:
         removed = tuple(sorted(current - desired))
         for symbol in added:
             self.history[symbol] = []
+            if self.market == Market.EQUITY:
+                # Hot-swapped members warm up on the splits basis like every
+                # other symbol: factor 1.0, nothing appended unscaled yet.
+                self.signal_split_factor[symbol] = 1.0
+                self.unscaled_since[symbol] = None
         for symbol in removed:
             self.history.pop(symbol, None)
+            if self.market == Market.EQUITY:
+                self.signal_split_factor.pop(symbol, None)
+                self.unscaled_since.pop(symbol, None)
         self.symbols = updated
         return added, removed
+
+    def _append_signal_bar(self, bar: Bar) -> None:
+        """Append one completed bar to the strategy's signal history.
+
+        Equity bars arrive from the RAW stream but the history is kept on
+        the SPLITS basis downloaded at warmup (which PREDATES any later
+        split, i.e. the larger pre-split scale): multiply by the cumulative
+        split factor and remember the window a late split detection may
+        need to rewrite (see ``apply_split_factor``). Crypto bars pass
+        through untouched.
+        """
+        symbol = canonical_symbol(bar.symbol, bar.market)
+        series = self.history[symbol]
+        if series and series[-1].timestamp >= bar.timestamp:
+            return
+        if self.market == Market.EQUITY:
+            factor = self.signal_split_factor.get(symbol, 1.0)
+            if self.unscaled_since.get(symbol) is None:
+                self.unscaled_since[symbol] = bar.timestamp
+            if factor != 1.0:
+                bar = scale_bar(bar, factor)
+        series.append(bar)
+
+    def apply_split_factor(self, symbol: str, ratio: float) -> int:
+        """Record a measured CUMULATIVE split ratio for ``symbol``.
+
+        ``ratio`` is the absolute raw/adjusted measurement since the warmup
+        download (idempotent: re-measuring the same state is a no-op). The
+        INCREMENT over the currently stored factor divides every bar
+        appended to the signal history SINCE the last reconciliation (those
+        entered on the raw basis); the stored factor becomes ``ratio`` for
+        future stream appends. Bars warmed up on the splits basis are
+        untouched. Returns the number of rewritten bars (0 when nothing was
+        appended since the last check — the new factor still applies to
+        future bars). No-op for crypto.
+        """
+        if self.market != Market.EQUITY:
+            return 0
+        canonical = canonical_symbol(symbol, self.market)
+        series = self.history.get(canonical)
+        if series is None:
+            return 0
+        previous = self.signal_split_factor.get(canonical, 1.0)
+        increment = ratio / previous if previous > 0 else ratio
+        since = self.unscaled_since.get(canonical)
+        rewritten = 0
+        if since is not None and abs(increment - 1.0) > 1e-12:
+            adjusted = scale_history_since(tuple(series), increment, since)
+            rewritten = sum(
+                1 for before, after in zip(series, adjusted, strict=True) if before is not after
+            )
+            series[:] = list(adjusted)
+            self.unscaled_since[canonical] = None
+        self.signal_split_factor[canonical] = ratio
+        return rewritten
 
     def process_closed_bars(
         self,
@@ -1418,10 +1496,7 @@ class PortfolioRuntime:
             if bar.timestamp == timestamp
         }
         for bar in sorted(eligible, key=lambda item: (item.timestamp, item.symbol)):
-            symbol = canonical_symbol(bar.symbol, bar.market)
-            series = self.history[symbol]
-            if not series or series[-1].timestamp < bar.timestamp:
-                series.append(bar)
+            self._append_signal_bar(bar)
         # ``boundary`` is the real cadence; ``scheduled`` additionally honors
         # a forced catch-up decision (startup catch-up), which must apply the
         # FULL target like any boundary decision.
@@ -1541,6 +1616,7 @@ class PortfolioRuntime:
                         weight.symbol,
                         min(weight.weight, current_weights.get(weight.symbol, 0.0)),
                         "entry_risk_latch_reduction",
+                        rank=weight.rank,
                     )
                     for weight in raw_target.weights
                     if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
@@ -1568,6 +1644,7 @@ class PortfolioRuntime:
                     weight.symbol,
                     min(weight.weight, current_weights.get(weight.symbol, 0.0)),
                     "intermediate_risk_reduction_only",
+                    rank=weight.rank,
                 )
                 for weight in raw_target.weights
                 if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0

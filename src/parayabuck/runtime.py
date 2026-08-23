@@ -1087,11 +1087,12 @@ class EngineRuntime:
                 self._workers["pb-signal-adjustment"] = WorkerHealth(
                     datetime.now(UTC), datetime.now(UTC)
                 )
-            threading.Thread(
+            self._signal_adjustment_thread = threading.Thread(
                 target=self._signal_adjustment_loop,
                 name="pb-signal-adjustment",
                 daemon=True,
-            ).start()
+            )
+            self._signal_adjustment_thread.start()
         try:
             account = self.broker.account()
             self._last_account_snapshot = account
@@ -1814,6 +1815,14 @@ class EngineRuntime:
             warmup_thread.join(timeout=30)
             if warmup_thread.is_alive():
                 alive.append(warmup_thread.name)
+        # The signal-adjustment monitor MUST be joined before the historical
+        # data client below is closed: a late verification pass would otherwise
+        # hit a dead HTTP session mid-request.
+        signal_adjustment_thread = getattr(self, "_signal_adjustment_thread", None)
+        if signal_adjustment_thread is not None:
+            signal_adjustment_thread.join(timeout=10)
+            if signal_adjustment_thread.is_alive():
+                alive.append(signal_adjustment_thread.name)
         if alive:
             self._state = "stop_failed"
             log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
@@ -3008,15 +3017,18 @@ class EngineRuntime:
     def _record_signal_adjustment_success(
         self, verified_through_by_symbol: dict[str, datetime]
     ) -> None:
-        """Record a successful reconciliation. Exactly ONE recovery alert is
-        emitted per failure episode: repeated healthy checks stay silent."""
+        """Record a successful reconciliation. "Recovery" is reserved for the
+        FAILED -> healthy transition: initial unknown -> healthy is silent
+        (the RuntimeHealth `signal_adjustment` block already reports it), so
+        exactly one recovery alert exists per failure episode and repeated
+        healthy checks never emit duplicates."""
         state = self._signal_adjustment_state()
-        was_healthy = state["healthy"] is True
+        was_failed = state["healthy"] is False
         state["healthy"] = True
         state["last_success_at"] = datetime.now(UTC)
         state["verified_through_by_symbol"] = dict(verified_through_by_symbol)
         state["last_error"] = None
-        if not was_healthy:
+        if was_failed:
             runtime_metrics_store.record_event("signal_adjustment_recovery")
             alerts.emit(
                 "signal_adjustment_recovery",
@@ -3101,15 +3113,33 @@ class EngineRuntime:
         if not symbols:
             return True
         end = datetime.now(UTC)
+        # The coverage REQUIREMENT comes from what the strategy can actually
+        # READ — the oldest bar of its trailing required window — NOT from
+        # the network request boundary: Alpaca's inclusive `start` yields a
+        # first daily bar at/after it (later still across weekends/holidays),
+        # so comparing provider_oldest against the request start would fail
+        # every honest response. We derive the strategy-required oldest
+        # timestamp, then request with a safety margin BEFORE it.
         required_bars = max(
             (runtime.strategy.minimum_history_bars + 1 for runtime in runtimes),
             default=1,
         )
+        stored_oldest: list[datetime] = []
+        for runtime in runtimes:
+            for series in runtime.history.values():
+                if series:
+                    stored_oldest.append(series[0].timestamp)
         from parayabuck.markets.timeframes import bars_to_calendar_days
 
-        calendar_days = bars_to_calendar_days("SPY", "1d", required_bars)
-        calendar_days += _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS
-        start = end - timedelta(days=calendar_days)
+        fallback_span = bars_to_calendar_days("SPY", "1d", required_bars)
+        if stored_oldest:
+            strategy_required_oldest = min(stored_oldest)
+        else:
+            strategy_required_oldest = end - timedelta(days=fallback_span)
+        start = min(
+            strategy_required_oldest - timedelta(days=_SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS),
+            end - timedelta(days=fallback_span),
+        )
         try:
             adjusted = history_client.get_bars_batch(
                 symbols, "1d", start=start, end=end, adjustment="splits"
@@ -3117,7 +3147,7 @@ class EngineRuntime:
         except Exception as exc:
             self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
             return False
-        required_oldest = start
+        required_oldest = strategy_required_oldest
         inadequate = [
             symbol
             for symbol in symbols

@@ -106,6 +106,21 @@ No corporate-action handling existed anywhere in the live path.
   no cross-symbol watermark (`test_empty_provider_response_fails_closed`,
   `test_partial_symbol_response_fails_closed`,
   `test_per_symbol_verified_through_is_required`).
+* **Adequacy vs the request boundary.** Coverage is measured against the
+  STRATEGY-required oldest BAR (the oldest bar of each runtime's trailing
+  window), never against the inclusive network `start`: a daily API returns
+  its first bar at/after start and later still across weekends/holidays.
+  The request itself goes out with the safety margin BEFORE that required
+  bar. Regressions drive a window-honoring fake through intraday starts,
+  weekend starts whose first returned bar is Monday, and genuinely
+  insufficient archives (fail closed, one failure alert, no adoption).
+* **Shutdown ordering.** `stop()` stores and JOINS the post-warmup
+  `pb-signal-adjustment` thread before closing the historical data client;
+  the regression proves the worker has exited before `_historical.close()`
+  runs (`test_shutdown_joins_signal_adjustment_before_client_close`).
+* **Alert semantics.** "Recovery" fires only for failed→healthy; the
+  initial unknown→healthy transition is silent (RuntimeHealth already
+  reports it), keeping exactly one recovery per failure episode.
 * **Startup race eliminated.** `pb-signal-adjustment` no longer starts with
   the thread fan-out (it previously raced `_warmup()`); it launches only
   AFTER warmup completes, and every monitor pass refuses to run while
@@ -118,7 +133,7 @@ No corporate-action handling existed anywhere in the live path.
   recovery; repeated failed or repeated healthy checks stay silent.
 * **EXECUTION = raw**, unchanged everywhere.
 
-Tests: `tests/test_signal_adjustment_parity.py` carries 20 regressions:
+Tests: `tests/test_signal_adjustment_parity.py` carries 24 regressions:
 the deterministic multi-split cumulative-basis case (4:1 → >14d → 2:1 ⇒
 factor 8, not 2), forward+reverse splits, idempotent re-reconciliation, no
 double-scaling of already-authoritative bars, restart and hot-swap between

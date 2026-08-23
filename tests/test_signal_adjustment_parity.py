@@ -167,22 +167,37 @@ def test_hot_swap_between_splits_resets_verification_state() -> None:
 
 
 class FakeHistory:
+    """Fake provider that HONORS the requested [start, end] window like the
+    real API: only bars inside it are returned, and the first daily bar can
+    legitimately land after ``start`` (intraday/weekend/holiday starts)."""
+
     def __init__(
         self,
         raw: dict[str, list[Bar]] | None = None,
         splits: dict[str, list[Bar]] | None = None,
         error: Exception | None = None,
+        *,
+        honor_window: bool = False,
     ) -> None:
         self.raw = raw or {}
         self.splits = splits or {}
         self.error = error
+        self.honor_window = honor_window
         self.calls: list[tuple[tuple[str, ...], str]] = []
+        self.requested_windows: list[tuple[datetime, datetime]] = []
 
     def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # noqa: ANN001
         self.calls.append((tuple(symbols), adjustment))
+        self.requested_windows.append((start, end))
         if self.error is not None:
             raise self.error
-        return dict(self.raw if adjustment == "raw" else self.splits)
+        source = self.raw if adjustment == "raw" else self.splits
+        if not self.honor_window:
+            return dict(source)
+        filtered: dict[str, list[Bar]] = {}
+        for symbol, bars in source.items():
+            filtered[symbol] = [bar for bar in bars if start <= bar.timestamp <= end]
+        return filtered
 
 
 def _engine_with_equity_runtime(symbols: tuple[str, ...]):
@@ -229,8 +244,8 @@ def test_split_day_decision_waits_for_verified_signal_basis(monkeypatch) -> None
         "AAA": dates[-1],
         "BBB": dates[-1],
     }
-    # First-ever success transitions the state: exactly one recovery event.
-    assert [kind for kind, _kw in events] == ["signal_adjustment_recovery"]
+    # First-ever success is SILENT: "recovery" is reserved for failed->healthy.
+    assert [kind for kind, _kw in events] == []
 
     # A split rebase between verifications forces the latch until repaired.
     rebased = {"AAA": [_bar("AAA", d, (100.0 - i) / 4.0) for i, d in enumerate(dates)]}
@@ -556,3 +571,145 @@ def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> N
     equity_ns2.history["AAA"].append(decision_bar)
     engine2._process_portfolio_timestamp([decision_bar])
     assert captured2["entry_latch"] == "signal_adjustment_unverified"
+
+
+# --------------------------------------------------------------------------- #
+# Coverage adequacy: requirement from STRATEGY history, not request boundary
+# --------------------------------------------------------------------------- #
+
+
+def _window_engine_with_history(
+    stored: list[Bar],
+    provider: dict[str, list[Bar]],
+    *,
+    honor_window: bool = True,
+):
+    engine, equity = _engine_with_equity_runtime(("AAA",))
+    equity.history["AAA"] = list(stored)
+    fake = FakeHistory(raw={}, splits=provider, honor_window=honor_window)
+    engine._historical = fake
+    return engine, equity, fake
+
+
+def test_intraday_request_start_still_verifies(monkeypatch) -> None:
+    """Request start lands mid-session; the first returned daily bar is
+    necessarily AFTER it. Adequacy compares against the strategy-required
+    oldest BAR, so verification still succeeds."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    odd = _TS0.replace(hour=7, minute=37)  # an intraday, non-bar timestamp
+    dates = [odd + timedelta(days=i) for i in range(30)]
+    stored = [_bar("AAA", d if i else odd, 100.0 + i) for i, d in enumerate(dates)]
+    provider = {"AAA": list(stored)}
+    engine, _equity, fake = _window_engine_with_history(stored, provider)
+
+    assert engine.verify_equity_signal_basis() is True
+    requested_start, _requested_end = fake.requested_windows[0]
+    # The request boundary inherits the odd intraday time of the strategy's
+    # oldest bar, so it cannot coincide with any daily bar timestamp.
+    assert (requested_start.hour, requested_start.minute) == (7, 37)
+    first_returned = min(
+        bar.timestamp for bar in provider["AAA"] if bar.timestamp >= requested_start
+    )
+    assert first_returned > requested_start  # API semantics: bar AFTER start
+    # ...yet verification succeeded because adequacy is measured against the
+    # strategy-required oldest BAR (inside covered territory).
+
+
+def test_weekend_start_first_bar_monday_still_verifies(monkeypatch) -> None:
+    """Start falls on a Saturday/Sunday; the provider's first daily bar is
+    Monday's. Adequacy still holds because the strategy-required oldest bar
+    sits inside covered territory."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    # The strategy's trailing window begins WEDNESDAY Jun 11 (its oldest
+    # readable bar); start = that bar minus the 10-day margin lands on a
+    # SUNDAY. The provider archive begins the MONDAY before it — its own
+    # boundary is after the weekend request start yet still at/before the
+    # strategy requirement, exactly like a real historical endpoint.
+    anchor = datetime(2025, 6, 11, 4, 0, tzinfo=UTC)  # Wednesday (strategy oldest)
+    dates = [anchor + timedelta(days=i) for i in range(30)]
+    stored = [_bar("AAA", d, 200.0 + i) for i, d in enumerate(dates)]
+    monday_before = datetime(2025, 6, 9, 4, 0, tzinfo=UTC)
+    provider_dates = [monday_before + timedelta(days=i) for i in range(32)]
+    provider_series = [_bar("AAA", d, 200.0 + i) for i, d in enumerate(provider_dates)]
+    assert provider_series[0].timestamp.weekday() == 0
+    engine, _equity, fake = _window_engine_with_history(stored, {"AAA": provider_series})
+
+    assert engine.verify_equity_signal_basis() is True
+    requested_start, _end = fake.requested_windows[0]
+    assert requested_start.weekday() in (5, 6)  # Saturday/Sunday request start
+    returned_first = min(bar.timestamp for bar in provider_series)
+    assert returned_first.weekday() == 0  # Monday first returned bar
+    assert returned_first > requested_start
+    # Adequacy held because the requirement is the strategy's oldest BAR,
+    # which the provider window covers with room to spare.
+
+
+def test_genuinely_insufficient_history_still_fails_closed(monkeypatch) -> None:
+    """A provider that cannot cover back to the strategy-required oldest bar
+    must fail closed — no adoption, no watermarks, one failure alert."""
+    events: list[str] = []
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: events.append(kind))}),
+    )
+    dates = [_TS0 + timedelta(days=i, hours=4) for i in range(30)]
+    stored = [_bar("AAA", d, 100.0 + i) for i, d in enumerate(dates)]
+    short_provider = {"AAA": list(stored[-3:])}
+    engine, equity, _fake = _window_engine_with_history(stored, short_provider, honor_window=True)
+
+    assert engine.verify_equity_signal_basis() is False
+    assert equity.signal_verified_through_by_symbol == {}
+    assert equity.history["AAA"] == stored
+    assert events.count("signal_adjustment_failure") == 1
+
+
+def test_shutdown_joins_signal_adjustment_before_client_close() -> None:
+    """stop() joins pb-signal-adjustment BEFORE closing the historical data
+    client: no worker may touch a dead HTTP session."""
+    import queue as queue_module
+    import threading
+
+    from parayabuck.runtime import EngineRuntime
+
+    order: list[str] = []
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._running = True
+    engine._state = "running"
+    engine._circuit_breaker_reason = None
+    engine._stop_event = threading.Event()
+    engine._events = queue_module.Queue()
+    engine.stream = type("S", (), {"stop": staticmethod(lambda: None)})()
+    engine.trading_updates = type("T", (), {"stop": staticmethod(lambda: None)})()
+    engine._threads = []
+    engine._reconcile_thread = None
+    engine._warmup_retry_thread = None
+    engine._storage_closed = True  # skip SQLite teardown in this test
+    engine._runtime_session_id = None
+    engine.broker = type("B", (), {"close": staticmethod(lambda: None)})()
+
+    def _historical_close() -> None:
+        thread = engine._signal_adjustment_thread
+        order.append(f"close:worker_alive={thread.is_alive()}")
+
+    engine._historical = type("H", (), {"close": staticmethod(_historical_close)})()
+
+    started = threading.Event()
+
+    def monitor_body() -> None:
+        started.set()
+        engine._stop_event.wait(60)  # simulates the hourly wait
+        order.append("worker_exited")
+
+    engine._signal_adjustment_thread = threading.Thread(target=monitor_body, daemon=True)
+    engine._signal_adjustment_thread.start()
+    assert started.wait(timeout=5)
+
+    assert engine.stop() is True
+    assert not engine._signal_adjustment_thread.is_alive()
+    assert order == ["worker_exited", "close:worker_alive=False"]

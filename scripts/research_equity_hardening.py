@@ -28,8 +28,17 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import platform
+import statistics
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from research_helpers import (
+    dataset_identity,
+    git_head,
+    run_identity,
+    sha256_of_file,
+)
 
 from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestEngine,
@@ -63,6 +72,9 @@ REPO = Path(__file__).resolve().parents[1]
 EQUITY_CSV = REPO / "data/historical/equity_1200_2016_2026.csv"
 DIVIDENDS_CSV = REPO / "data/historical/equity_1200_dividends.csv"
 OUT_DIR = REPO / "data/research/equity_hardening_2026_08"
+# COMMITTED outside the gitignored data/research/ tree: the predeclaration is
+# a reproducibility contract, not a disposable artifact.
+MANIFEST_PATH = REPO / "data/research_manifests/equity_hardening_2026_08.json"
 
 EVAL_START = datetime(2017, 1, 3, tzinfo=UTC)
 EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
@@ -368,7 +380,7 @@ def summarize_folds(results: list[tuple[datetime, datetime, PortfolioBacktestRes
     ]
     returns = [item["return"] for item in stats]
     sharpes = [item["sharpe"] for item in stats]
-    median_return = sorted(returns)[len(returns) // 2] if returns else 0.0
+    median_return = statistics.median(returns) if returns else 0.0
     return {
         "folds": stats,
         "fold_count": len(stats),
@@ -378,7 +390,7 @@ def summarize_folds(results: list[tuple[datetime, datetime, PortfolioBacktestRes
         "positive_fold_ratio": (
             round(sum(1 for value in returns if value > 0) / len(returns), 4) if returns else 0.0
         ),
-        "median_fold_sharpe": sorted(sharpes)[len(sharpes) // 2] if sharpes else 0.0,
+        "median_fold_sharpe": statistics.median(sharpes) if sharpes else 0.0,
     }
 
 
@@ -495,6 +507,49 @@ def run_variant(
     return artifact
 
 
+def load_and_validate_manifest() -> dict:
+    """The committed predeclaration is authoritative: the runner refuses to
+    execute when its built-in VARIANTS drift from the declared contract."""
+    if not MANIFEST_PATH.exists():
+        raise SystemExit(
+            f"predeclaration manifest missing: {MANIFEST_PATH} (commit it; "
+            "research without a predeclared contract is not runnable here)"
+        )
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    declared = manifest.get("variants", {})
+    built_in = {
+        variant_id: {
+            "base": cls.__name__,
+            "overrides": {
+                key: str(value) if isinstance(value, list) else value
+                for key, value in overrides.items()
+            },
+        }
+        for variant_id, (cls, overrides) in VARIANTS.items()
+    }
+    normalized = {
+        variant_id: {
+            "base": spec["base"],
+            "overrides": {
+                key: str(value) if isinstance(value, list) else value
+                for key, value in spec["overrides"].items()
+            },
+        }
+        for variant_id, spec in declared.items()
+    }
+    if normalized != built_in:
+        drift = {
+            key
+            for key in set(normalized) | set(built_in)
+            if normalized.get(key) != built_in.get(key)
+        }
+        raise SystemExit(
+            "VARIANTS drifted from the committed predeclaration: "
+            f"{sorted(drift)}. Update the code AND the manifest together."
+        )
+    return manifest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -504,8 +559,18 @@ def main() -> int:
     )
     parser.add_argument("--skip-jackknife", action="store_true")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--refresh-manifest-hashes",
+        action="store_true",
+        help="after running, write sha256 of each generated artifact into the "
+        "committed predeclaration manifest (results section)",
+    )
     arguments = parser.parse_args()
+    manifest = load_and_validate_manifest()
     requested = [item.strip() for item in arguments.variants.split(",") if item.strip()]
+    unknown_check = [item for item in requested if item not in manifest.get("variants", {})]
+    if unknown_check:
+        raise SystemExit(f"variants absent from the predeclaration: {unknown_check}")
     unknown = [item for item in requested if item not in VARIANTS]
     if unknown:
         raise SystemExit(f"unknown variants: {unknown}")
@@ -572,6 +637,10 @@ def main() -> int:
             smoke=arguments.smoke,
         )
         artifact["identity"] = {
+            **run_identity(config),
+            "dataset": dataset_identity(),
+            "python_version": platform.python_version(),
+            "head_commit": git_head(),
             "eval_start": EVAL_START.date().isoformat(),
             "eval_end": EVAL_END.date().isoformat(),
             "fold_step_months": FOLD_STEP_MONTHS,
@@ -589,6 +658,16 @@ def main() -> int:
             f"({(datetime.now(UTC) - started).total_seconds():.0f}s) -> {path.name}",
             flush=True,
         )
+    if arguments.refresh_manifest_hashes and not arguments.smoke:
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        results: dict[str, str] = {}
+        for variant_id in VARIANTS:
+            path = OUT_DIR / f"{variant_id}.json"
+            if path.exists():
+                results[f"{variant_id}.json"] = sha256_of_file(path)
+        manifest["results_sha256"] = results
+        MANIFEST_PATH.write_text(json.dumps(manifest, indent=1) + "\n")
+        print(f"manifest hashes refreshed ({len(results)} artifacts)")
     return 0
 
 

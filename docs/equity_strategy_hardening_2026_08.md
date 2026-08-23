@@ -12,7 +12,10 @@ Three correctness bugs were confirmed at HEAD and fixed:
    observation-set ranker fetched SPLITS: three different bases for the same
    alpha. Live continuation had no corporate-action handling at all, so any
    split welded a fake −50%/−75% "return" into the trailing 273-bar window
-   (~13 months of corrupted scores per event).
+   (~13 months of corrupted scores per event). Follow-up hardening replaced
+   the cumulative-factor bridge with PROVIDER-AUTHORITATIVE signal history,
+   verified by one batched raw+splits reconciliation before any finalized
+   equity decision; unverifiable basis fails closed for new equity entries.
 2. **top_n / max_positions conflict** — the risk overlay enforced its
    position count by sorting TARGET WEIGHTS (ties → symbol order). After
    inverse-vol sizing and the 10% cap pinned several names at exactly 10%,
@@ -76,29 +79,34 @@ Canonical reproduction used the production harness:
 
 No corporate-action handling existed anywhere in the live path.
 
-### Contract implemented (one explicit basis per domain)
+### Contract implemented (v2: provider authority; one explicit basis per domain)
 
-* **SIGNAL = splits**: backtest CSVs (unchanged), runtime warmup now fetches
-  `adjustment="splits"` into `PortfolioRuntime.history`; observation-set
-  ranking already did.
+* **SIGNAL = provider split-adjusted daily history.** Warmup seeds it from
+  `adjustment="splits"`; stream-aggregated RAW bars are appended only as a
+  PROVISIONAL intraday tail. Before ANY finalized equity 1d decision passes
+  its gate, ONE batched pair of fetches (raw + splits tails, all symbols,
+  two REST calls total) either CONFIRMS every overlapping close against the
+  provider or REBUILDS each symbol's history from the provider wholesale
+  (`data/adjustment.py::authoritative_signal_history`). Any number of
+  forward/reverse splits since the last verification is absorbed by
+  construction — there is no cumulative factor to drift.
 * **EXECUTION = raw**: streamed bars, market-state seeding, gap repair stay
-  as-traded (explicitly commented at `_repair_gap`).
-* **Bridge** (`src/parayabuck/data/adjustment.py`): stream bars entering the
-  signal history are multiplied by a per-symbol cumulative split factor; an
-  hourly reconciler (`pb-signal-adjustment` thread) compares fresh raw vs
-  splits tails — their ratio on the OLDEST common bar is exactly the
-  cumulative split factor since download — and rewrites only the unscaled
-  window (`unscaled_since` marker) via `apply_split_factor`.
-* Warmup cache: rows are keyed `(feed,symbol,market,timeframe,adjustment,…)`
-  (already scoped); the warmup scope digest now includes the signal basis, so
-  switching bases fails closed to a full refetch.
-* Hot-swap stages BOTH bases and seeds each domain atomically after commit.
-* Crypto untouched (no corporate actions).
+  as-traded.
+* **Fail closed**: if the batched verification cannot run or rebuild, the
+  decision proceeds with an entry latch (`signal_adjustment_unverified`) —
+  targets capped at current weights, so risk-reducing exits flow and NO new
+  equity entries are sized on an unverified basis. Crypto is never gated.
+* **Decision-race elimination**: the previous hourly background reconciler
+  could leave a split-day decision unverified for up to an hour; the check
+  now runs synchronously in the decision path (`_equity_signal_basis_latch`)
+  and is throttled to at most once per hour of successful state.
+* **Operations**: `pb-signal-adjustment` is a required health worker with
+  heartbeat, last-success/staleness tracking (>26h ⇒ degraded), alerting on
+  failure AND recovery (`signal_adjustment_failure` / `_recovery` events),
+  metrics counters, and a `signal_adjustment` block in RuntimeHealth
+  (verified / stale / verified_through / entry_gate_reason).
 
-Tests: `tests/test_signal_adjustment_parity.py` — synthetic 4:1 split proves
-the bridged series never sees −75%; detector math, rewrite windows,
-factor-map lifecycle across hot-swaps, crypto pass-through. Warmup contract
-covered via updated fake-history fixtures (`test_runtime_universe_refresh.py`).
+Tests: `tests/test_signal_adjustment_parity.py` covers the deterministic multi-split regression (4:1 → >14d → 2:1 ⇒ cumulative factor 8, not 2), forward+reverse splits, idempotent re-reconciliation, no double-scaling of already-authoritative bars, restart and hot-swap between splits, split-day decision gating, worker-failure entry blocking and recovery.
 
 ## 4. top_n / max_positions semantics (FIXED)
 
@@ -152,13 +160,16 @@ operator's verified epoch reset). Predeclared policies P0–P3 in
 
 Results (identical inputs, only halt enforcement differs):
 
-| curve | return | Δreturn | Sharpe | maxDD | avg expo | halt episodes | latched cycles (of 2440) |
-|---|---|---|---|---|---|---|---|
-| alpha (shadow, reference) | +125.3% | — | 0.658 | 27.4% | 0.50 | 1 decision-day breach | — |
-| P0 never reset | +18.9% | **−106.4pp** | 0.420 | 9.8% | 0.10 | 1 (2018-06-27, permanent) | 1194+ |
-| P1 reset after 10 up-or-flat sessions | +120.1% | −5.2pp | **0.721** | **21.2%** | 0.43 | 9 | 1194 |
-| P2 reset at rebalance once dd<5% again | +24.9% | −100.4pp | 0.388 | 12.9% | 0.16 | 6 | 56 |
-| P3 fixed 20-trading-day delay | +114.0% | −11.3pp | 0.644 | 25.9% | 0.48 | 26 | 500 |
+Latched-cycle metrics now include the still-open final episode (previously
+P0's true cost was invisible). Cycle counts are of 2,440 daily cycles:
+
+| curve | return | Δreturn | Sharpe | maxDD | avg expo | halt episodes | latched cycles | open episode |
+|---|---|---|---|---|---|---|---|---|
+| alpha (shadow, reference) | +125.3% | — | 0.658 | 27.4% | 0.50 | 1 decision-day breach | — | — |
+| P0 never reset | +18.9% | **−106.4pp** | 0.420 | 9.8% | 0.10 | 1 (2018-06-27, permanent) | 2033 | yes, 2033 cyc |
+| P1 reset after 10 up-or-flat sessions | +120.1% | −5.2pp | **0.721** | **21.2%** | 0.43 | 9 | 1209 | yes, tail 15 cyc |
+| P2 reset at rebalance once dd<5% again | +24.9% | −100.4pp | 0.388 | 12.9% | 0.16 | 6 | 1663 | yes, 1607 cyc (deadlock) |
+| P3 fixed 20-trading-day delay | +114.0% | −11.3pp | 0.644 | 25.9% | 0.48 | 26 | 515 | yes, tail 15 cyc |
 
 Findings:
 
@@ -173,9 +184,12 @@ Findings:
   de-risk precisely during drawdowns; its cost vs alpha is −5.2pp over 9.5y.
 * The alpha curve's own shadow-event count badly underestimates operational
   halt frequency: one weekly-decision breach vs 9–26 cycle-level episodes.
-* Recommendation: KEEP the 5% limit; adopt a P1-style stabilization-reset
-  runbook (operator action stays manual and verified as today). NOT changed
-  automatically here.
+* Recommendation: 5% remains unchanged; reset-policy sensitivity was
+  demonstrated, but the threshold itself was NOT independently calibrated by
+  this experiment (it was held fixed across all scenarios). A P1-style
+  stabilization-reset runbook is the highest-value operational change;
+  operator action stays manual and verified as today. Nothing changed
+  automatically.
 
 ## 8. Standardized residual momentum (Candidate A)
 
@@ -184,10 +198,10 @@ window) — Blitz/Huij/Martens standardization; ablations predeclared.
 
 | variant | return | Sharpe | maxDD | median fold | worst fold | folds won vs control | top-1 PnL share |
 |---|---|---|---|---|---|---|---|
-| control | +125.3% | 0.658 | 27.4% | +4.03% | −11.1% | — | 6.4% |
-| A1 std + ivol + inv-vol | +124.0% | 0.716 | 23.0% | +3.38% | −8.4% | 9/20 | 6.5% |
-| A2 std, no ivol filter | +180.4% | 0.723 | 31.8% | +3.50% | −12.7% | 10/20 | 7.7% |
-| A3 std + ivol + equal size | +135.7% | 0.710 | 23.4% | +4.32% | −10.1% | 9/20 | 7.8% |
+| control | +125.3% | 0.658 | 27.4% | +3.93% | −11.1% | — | 6.4% |
+| A1 std + ivol + inv-vol | +124.0% | 0.716 | 23.0% | +3.23% | −8.4% | 9/20 | 6.5% |
+| A2 std, no ivol filter | +180.4% | 0.723 | 31.8% | +3.44% | −12.7% | 10/20 | 7.7% |
+| A3 std + ivol + equal size | +135.7% | 0.710 | 23.4% | +3.53% | −10.1% | 9/20 | 7.8% |
 
 Cost stress (full window, 2x/3x) and jackknife artifacts per variant under
 `data/research/equity_hardening_2026_08/{a1,a2,a3}.json`: no candidate shows
@@ -221,9 +235,9 @@ fees stay ≤14% of gross PnL everywhere.
 
 | beta window | return | Sharpe | maxDD | median fold |
 |---|---|---|---|---|
-| 273 (control) | +125.3% | 0.658 | 27.4% | +4.03% |
-| 504 | +123.4% | 0.648 | 26.1% | +3.88% |
-| 756 | +80.2% | 0.511 | 28.6% | +1.24% |
+| 273 (control) | +125.3% | 0.658 | 27.4% | +3.93% |
+| 504 | +123.4% | 0.648 | 26.1% | +2.82% |
+| 756 | +80.2% | 0.511 | 28.6% | +0.62% |
 
 Longer estimation windows do NOT stabilize performance here — they dilute the
 formation-window information the beta feeds. Verdict: **REJECT** (504 =
@@ -243,11 +257,11 @@ accounting unchanged):
 
 | variant | return | Sharpe | maxDD | median fold |
 |---|---|---|---|---|
-| price-signal control | +125.3% | 0.658 | 27.4% | +4.03% |
-| total-return signal | +115.6% | 0.639 | 28.6% | +1.43% |
+| price-signal control | +125.3% | 0.658 | 27.4% | +3.93% |
+| total-return signal | +115.6% | 0.639 | 28.6% | +1.17% |
 
 Total-return signaling is WORSE on every reported dimension (−9.7pp return,
-median fold −2.6pp). Mechanism: reinvesting dividends mechanically lifts
+median fold −2.8pp). Mechanism: reinvesting dividends mechanically lifts
 formation-window scores of high-yield names, dragging selection toward slower
 payers away from pure residual price momentum. Dividends belong in ACCOUNT
 P&L, not alpha ranking. (An earlier run showing "identical to control" was a
@@ -258,9 +272,9 @@ verification, fixed, re-run.) Verdict: **KEEP** split-adjusted price signals.
 
 | top_n | return | Sharpe | maxDD | median fold |
 |---|---|---|---|---|
-| 6 | +123.5% | 0.646 | 28.1% | +4.06% |
-| 8 (=control) | +125.3% | 0.658 | 27.4% | +4.03% |
-| 9 | +124.7% | 0.677 | 25.7% | +4.00% |
+| 6 | +123.5% | 0.646 | 28.1% | +4.04% |
+| 8 (=control) | +125.3% | 0.658 | 27.4% | +3.93% |
+| 9 | +124.7% | 0.677 | 25.7% | +3.90% |
 
 The documented prior claim ("top_n=9 materially better") does NOT survive the
 semantics fix: differences are ≤0.8pp return and within fold noise. Verdict:
@@ -308,11 +322,24 @@ provider. Backtest documentation must carry this limitation (it does, via
 3. Daily-loss latch between weekly decisions is evaluated only at decision
    points in both curves (documented approximation).
 4. Cash yield: no interest on idle cash modeled in either curve.
-5. Reconciler thread is new infrastructure: monitor `pb-signal-adjustment`
-   worker health and split-adjustment warnings in PAPER before considering
-   LIVE.
+5. Signal-basis verification adds two batched REST calls per decision day;
+   monitor `signal_adjustment` in RuntimeHealth and the
+   `signal_adjustment_failure`/`_recovery` alerts. Sustained provider
+   outages now fail closed for NEW equity entries by design — exits are
+   unaffected; verify this behavior in PAPER during a deliberate outage
+   drill before considering LIVE.
 
 ## 15. Reproduction commands
+
+Reproducibility contract (committed OUTSIDE the gitignored data/research/
+tree): `data/research_manifests/equity_hardening_2026_08.json` carries the
+audited HEAD, dataset SHA256s, the exact predeclared variants (base class +
+parameter overrides), the production config digest, Python version, the exact
+commands, and sha256 of every generated result artifact. The research runner
+REFUSES to execute unless its built-in VARIANTS match that manifest exactly,
+and every result artifact embeds full identity (commit, config digest,
+dataset hashes, python). Refresh result hashes with
+`--refresh-manifest-hashes` after intentional reruns.
 
 ```bash
 # gates
@@ -334,7 +361,7 @@ provider. Backtest documentation must carry this limitation (it does, via
 
 | Item | Classification | Evidence | Recommendation |
 |---|---|---|---|
-| split parity | FIXED | §3, parity tests, bridge + reconciler | keep |
+| split parity | FIXED — under multiple corporate actions and runtime failure scenarios | §3: provider-authoritative history absorbs any number of forward/reverse splits; batched pre-decision verification fails closed on unverified basis; worker-failure/staleness gate entries with exits flowing; restart/hot-swap/idempotence covered by tests | keep |
 | top_n/max_positions conflict | FIXED | §4, deterministic tests, baseline delta | keep |
 | ivol quantile | FIXED | §5, edge-case tests | keep |
 | standardized score (A1/A3) | RESEARCH PASS | §8: Sharpe +0.06, maxDD −4pp, but 9/20 fold wins | separate promotion decision |
@@ -342,5 +369,5 @@ provider. Backtest documentation must carry this limitation (it does, via
 | longer beta 504/756 | REJECT | §9: neutral/worse, 756 −45pp | keep 273 |
 | total-return signal | KEEP (price signal) | §10: TR worse on every metric (−9.7pp) | keep price basis |
 | top_n 6/8/9 | KEEP top_n=8 | §11: prior topn9 claim does not survive | keep 8 |
-| 5% production halt | REPORTED (policy finding) | §7: cost ranges −5pp..−106pp by reset discipline | adopt P1-style runbook manually |
+| 5% production halt | REPORTED (policy finding) | §7: cost ranges −11pp..−106pp incl. OPEN episodes; threshold not recalibrated | adopt P1-style runbook manually; calibrate threshold separately |
 | survivorship bias | UNSOLVED (provider limitation) | §12: 1193/1194 trade through end | document; prefer recent windows |

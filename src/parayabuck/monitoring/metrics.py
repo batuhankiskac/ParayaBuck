@@ -49,6 +49,8 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
         "drawdown_halt",
         "risk_epoch_reset",
         "circuit_breaker",
+        "signal_adjustment_failure",
+        "signal_adjustment_recovery",
         "data_gap",
         "order_rejected",
         "ambiguous_order",

@@ -46,6 +46,8 @@ ALERT_KINDS: frozenset[str] = frozenset(
         "drawdown_halt",
         "risk_epoch_reset",
         "circuit_breaker",
+        "signal_adjustment_failure",
+        "signal_adjustment_recovery",
     }
 )
 

@@ -1,29 +1,28 @@
-"""Corporate-action adjustment bridge between SIGNAL and EXECUTION price bases.
+"""Corporate-action basis authority for the strategy's SIGNAL history.
 
-The equity residual-momentum strategy scores on SPLIT-ADJUSTED daily bars
-(one explicit corporate-action basis across BACKTEST research data, PAPER
-warmup and LIVE continuation), while streamed intraday aggregation produces
-RAW as-traded prices for execution state. A stock split occurring while the
-engine lives would otherwise weld a fake -50%/-75% "return" into the
-strategy's signal history at the seam.
+Two price domains exist and must never be conflated:
 
-Contract implemented here:
+* EXECUTION domain: RAW as-traded stream bars (market state, gap repair,
+  order sizing) — untouched by this module.
+* SIGNAL domain: the provider's SPLIT-ADJUSTED daily history. The provider
+  rebases that series retroactively on every corporate action, so it is the
+  only authority on what the strategy should have seen historically.
 
-* warmup seeds the strategy's signal history on the ``splits`` basis;
-* every bar appended to that history from the RAW stream is MULTIPLIED by
-  a per-symbol cumulative split factor (1.0 until a split is detected):
-  the stored basis predates the split, so its magnitude is the LARGER
-  pre-split scale;
-* a periodic reconciler compares fresh raw vs splits tails from the
-  provider; their ratio IS the cumulative split factor since the warmup
-  download (Alpaca rebases its splits series retroactively, so
-  ``raw_close / splits_close`` on the newest completed bar equals the
-  product of split ratios that happened in between);
-* bars appended unscaled between the split date and its detection are
-  rescaled once, deterministically, by the same ratio.
+Design (v2, replacing the fragile cumulative-factor transformation of raw
+stream bars):
 
-All functions here are pure and deterministic so the bridge is testable
-without network or engine machinery.
+* Warmup seeds the runtime signal history from ``adjustment="splits"``.
+* Stream-aggregated RAW bars are appended PROVISIONALLY so intraday state
+  works; they equal the current provider basis except on a split day.
+* Before any finalized equity 1d decision is allowed through, ONE batched
+  pair of fetches (raw + splits tails for every active symbol) either
+  VERIFIES the provisional history against the provider or REBUILDS it
+  from the provider (authoritative), absorbing any number of splits,
+  forward or reverse, that happened since the last verification.
+* If the provider cannot be reached, the basis is UNVERIFIABLE: new equity
+  entries fail closed while risk-reducing exits keep flowing.
+
+All functions here are pure and deterministic.
 """
 
 from __future__ import annotations
@@ -32,73 +31,78 @@ from datetime import datetime
 
 from parayabuck.core.models import Bar
 
-# A measured raw/splits close ratio within this band of 1.0 is treated as
-# "no split" (provider rounding noise only). Real splits move the ratio far
-# outside it; reverse splits show up as ratios below 1.
+# A raw vs split-adjusted close difference within this relative band is
+# provider rounding noise, not a corporate action.
 SPLIT_RATIO_TOLERANCE = 0.005
 
 
-def scale_bar(bar: Bar, factor: float) -> Bar:
-    """Multiply one bar's OHLC by ``factor`` (volume untouched)."""
-    if factor == 1.0:
-        return bar
-    return bar.__class__(
-        timestamp=bar.timestamp,
-        symbol=bar.symbol,
-        timeframe=bar.timeframe,
-        open=bar.open * factor,
-        high=bar.high * factor,
-        low=bar.low * factor,
-        close=bar.close * factor,
-        volume=bar.volume,
-        market=bar.market,
-    )
+def close_matches(left: float, right: float, tolerance: float = SPLIT_RATIO_TOLERANCE) -> bool:
+    if left <= 0 or right <= 0:
+        return False
+    return abs(left - right) / right <= tolerance
 
 
-def scale_history_since(bars: tuple[Bar, ...], factor: float, since: datetime) -> tuple[Bar, ...]:
-    """Multiply OHLC of every bar at/after ``since`` by ``factor``.
-
-    Used when a split is detected AFTER unscaled raw bars already entered the
-    signal history: those bars (and only those — earlier bars are already on
-    the warmup's adjusted basis) are rewritten once onto the stored basis,
-    oldest-first order preserved.
-    """
-    if factor == 1.0:
-        return bars
-    return tuple(scale_bar(bar, factor) if bar.timestamp >= since else bar for bar in bars)
-
-
-def split_ratio(
-    raw_bars: list[Bar] | tuple[Bar, ...],
-    splits_bars: list[Bar] | tuple[Bar, ...],
-    *,
+def detect_basis_break(
+    stored: tuple[Bar, ...],
+    provider_splits: list[Bar] | tuple[Bar, ...],
     tolerance: float = SPLIT_RATIO_TOLERANCE,
-) -> tuple[datetime, float] | None:
-    """Cumulative split factor since the signal basis was downloaded.
+) -> bool:
+    """True when stored history disagrees with the provider's splits series
+    on any common timestamp — i.e. a corporate action rebased the basis
+    since the stored bars were written."""
+    adjusted = {bar.timestamp: bar.close for bar in provider_splits}
+    for bar in stored:
+        reference = adjusted.get(bar.timestamp)
+        if reference is not None and not close_matches(bar.close, reference, tolerance):
+            return True
+    return False
 
-    A provider's splits-adjusted series EQUALS the raw series on every bar
-    after the most recent split ex-date and diverges only on earlier bars,
-    so the informative measurement sits on the OLDEST commonly completed
-    bar of the two fresh tails (the reconciler's lookback window must reach
-    before the suspected ex-date — hourly checks against a multi-day window
-    trivially satisfy this). Returns ``(timestamp, ratio)`` with ``ratio =
-    raw_close / splits_close`` (>1 after forward splits) measured there, or
-    None when no common completed bar exists or the ratio is within
-    ``tolerance`` of 1 (provider rounding noise, not a corporate action).
+
+def authoritative_signal_history(
+    stored: tuple[Bar, ...],
+    provider_splits: list[Bar] | tuple[Bar, ...],
+) -> tuple[tuple[Bar, ...], bool]:
+    """Rebuild the strategy signal history with the PROVIDER as authority.
+
+    Returns ``(merged, changed)``. Every timestamp the provider covers is
+    taken verbatim from the provider (retroactively rebased, so any number
+    of forward/reverse splits since the warmup download is absorbed by
+    construction); stored bars STRICTLY NEWER than the newest provider bar
+    survive as provisional tail bars — their basis is post-action by
+    definition once every covered timestamp is rebased. ``changed`` is True
+    whenever the rebuilt series differs from ``stored`` in timestamps or
+    overlapping closes (repairs, replacements, or stale provisional bars
+    the provider no longer lists).
     """
-    adjusted = {bar.timestamp: bar.close for bar in splits_bars}
-    candidates = [
-        (bar.timestamp, bar.close)
-        for bar in raw_bars
-        if bar.timestamp in adjusted and bar.close > 0 and adjusted[bar.timestamp] > 0
-    ]
-    if not candidates:
-        return None
-    timestamp, raw_close = min(candidates, key=lambda item: item[0])
-    ratio = raw_close / adjusted[timestamp]
-    if abs(ratio - 1.0) <= tolerance:
-        return None
-    return timestamp, ratio
+    provider_by_ts: dict[datetime, Bar] = {bar.timestamp: bar for bar in provider_splits}
+    newest_provider = max(provider_by_ts) if provider_by_ts else None
+    tail = tuple(
+        bar for bar in stored if newest_provider is not None and bar.timestamp > newest_provider
+    )
+    ordered_provider = [provider_by_ts[key] for key in sorted(provider_by_ts)]
+    merged = tuple([*ordered_provider, *tail])
+    changed = len(merged) != len(stored)
+    if not changed:
+        for fresh, old in zip(merged, stored):
+            if fresh.timestamp != old.timestamp or not close_matches(fresh.close, old.close):
+                changed = True
+                break
+    return merged, changed
 
 
-__all__ = ["SPLIT_RATIO_TOLERANCE", "scale_bar", "scale_history_since", "split_ratio"]
+def verify_against_provider(
+    stored: tuple[Bar, ...],
+    provider_splits: list[Bar] | tuple[Bar, ...],
+    tolerance: float = SPLIT_RATIO_TOLERANCE,
+) -> bool:
+    """Whether EVERY overlapping stored bar matches the provider basis."""
+    return not detect_basis_break(stored, provider_splits, tolerance)
+
+
+__all__ = [
+    "SPLIT_RATIO_TOLERANCE",
+    "authoritative_signal_history",
+    "close_matches",
+    "detect_basis_break",
+    "verify_against_provider",
+]

@@ -14,7 +14,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
-from parayabuck.data.adjustment import scale_bar, scale_history_since
+from parayabuck.data.adjustment import verify_against_provider
 from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -1248,20 +1248,14 @@ class PortfolioRuntime:
         self.risk_overlay = PortfolioRiskOverlay(risk_limits)
         self.planner = TargetToOrderPlanner(self.execution_policy)
         self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
-        # Split-adjustment bridge (equity only): warmup seeds the strategy
-        # history on the SPLITS basis while live aggregation appends RAW
-        # bars. ``signal_split_factor`` is the cumulative split ratio since
-        # the warmup download (raw / adjusted; 1.0 until a split happens);
-        # incoming raw bars are scaled BY it so the whole series stays on
-        # one explicit basis. ``unscaled_since[symbol]`` is the oldest bar
-        # timestamp appended since the last reconciliation — exactly the
-        # window a late split detection must rewrite.
-        if self.market == Market.EQUITY:
-            self.signal_split_factor: dict[str, float] = dict.fromkeys(self.symbols, 1.0)
-            self.unscaled_since: dict[str, datetime | None] = dict.fromkeys(self.symbols)
-        else:
-            self.signal_split_factor = {}
-            self.unscaled_since = {}
+        # Split-basis bridge (equity only): warmup seeds this history on the
+        # SPLITS basis; live aggregation appends RAW bars PROVISIONALLY.
+        # Before any scheduled decision, EngineRuntime verifies the series
+        # against a batched provider splits tail and REPLACES it wholesale
+        # when the provider rebased (data/adjustment.py). The runtime keeps
+        # no cumulative factor math — the provider is the sole authority.
+        self.signal_verified_through: datetime | None = None
+        self.signal_last_verified_at: datetime | None = None
         self.configuration_digest = configuration_digest(
             strategy,
             mode,
@@ -1403,73 +1397,69 @@ class PortfolioRuntime:
         removed = tuple(sorted(current - desired))
         for symbol in added:
             self.history[symbol] = []
-            if self.market == Market.EQUITY:
-                # Hot-swapped members warm up on the splits basis like every
-                # other symbol: factor 1.0, nothing appended unscaled yet.
-                self.signal_split_factor[symbol] = 1.0
-                self.unscaled_since[symbol] = None
         for symbol in removed:
             self.history.pop(symbol, None)
-            if self.market == Market.EQUITY:
-                self.signal_split_factor.pop(symbol, None)
-                self.unscaled_since.pop(symbol, None)
+        # New members arrive unverified: warmup seeding is followed by the
+        # normal batched provider verification before any decision.
+        self.signal_verified_through = None
+        self.signal_last_verified_at = None
         self.symbols = updated
         return added, removed
 
     def _append_signal_bar(self, bar: Bar) -> None:
         """Append one completed bar to the strategy's signal history.
 
-        Equity bars arrive from the RAW stream but the history is kept on
-        the SPLITS basis downloaded at warmup (which PREDATES any later
-        split, i.e. the larger pre-split scale): multiply by the cumulative
-        split factor and remember the window a late split detection may
-        need to rewrite (see ``apply_split_factor``). Crypto bars pass
-        through untouched.
+        Equity bars arrive from the RAW stream and are appended
+        PROVISIONALLY: they sit on the current as-traded basis, which equals
+        the provider's splits basis except on a split day. Scheduled
+        decisions never run before EngineRuntime verified/rebuilt this
+        history against a batched provider splits tail (fail closed).
+        Crypto bars pass through untouched.
         """
         symbol = canonical_symbol(bar.symbol, bar.market)
         series = self.history[symbol]
         if series and series[-1].timestamp >= bar.timestamp:
             return
-        if self.market == Market.EQUITY:
-            factor = self.signal_split_factor.get(symbol, 1.0)
-            if self.unscaled_since.get(symbol) is None:
-                self.unscaled_since[symbol] = bar.timestamp
-            if factor != 1.0:
-                bar = scale_bar(bar, factor)
         series.append(bar)
 
-    def apply_split_factor(self, symbol: str, ratio: float) -> int:
-        """Record a measured CUMULATIVE split ratio for ``symbol``.
+    def signal_history_matches_provider(self, provider_splits: dict[str, list[Bar]]) -> bool:
+        """Whether every equity symbol's stored history agrees with the
+        provider's split-adjusted closes on overlapping timestamps."""
+        if self.market != Market.EQUITY:
+            return True
+        for symbol, series in self.history.items():
+            provider = provider_splits.get(symbol)
+            if provider is None:
+                continue
+            if not verify_against_provider(tuple(series), provider):
+                return False
+        return True
 
-        ``ratio`` is the absolute raw/adjusted measurement since the warmup
-        download (idempotent: re-measuring the same state is a no-op). The
-        INCREMENT over the currently stored factor divides every bar
-        appended to the signal history SINCE the last reconciliation (those
-        entered on the raw basis); the stored factor becomes ``ratio`` for
-        future stream appends. Bars warmed up on the splits basis are
-        untouched. Returns the number of rewritten bars (0 when nothing was
-        appended since the last check — the new factor still applies to
-        future bars). No-op for crypto.
-        """
+    def adopt_authoritative_signal_history(
+        self, provider_splits: dict[str, list[Bar]], verified_through: datetime | None
+    ) -> int:
+        """Replace each symbol's signal history with the PROVIDER series,
+        keeping only strictly newer provisional stream bars. Returns the
+        number of symbols whose history changed."""
+        from parayabuck.data.adjustment import authoritative_signal_history
+
         if self.market != Market.EQUITY:
             return 0
-        canonical = canonical_symbol(symbol, self.market)
-        series = self.history.get(canonical)
-        if series is None:
-            return 0
-        previous = self.signal_split_factor.get(canonical, 1.0)
-        increment = ratio / previous if previous > 0 else ratio
-        since = self.unscaled_since.get(canonical)
-        rewritten = 0
-        if since is not None and abs(increment - 1.0) > 1e-12:
-            adjusted = scale_history_since(tuple(series), increment, since)
-            rewritten = sum(
-                1 for before, after in zip(series, adjusted, strict=True) if before is not after
+        changed_symbols = 0
+        for symbol, series in self.history.items():
+            provider = provider_splits.get(symbol)
+            if not provider:
+                continue
+            merged, changed = authoritative_signal_history(tuple(series), provider)
+            if changed:
+                self.history[symbol] = list(merged)
+                changed_symbols += 1
+        if verified_through is not None:
+            self.signal_verified_through = max(
+                self.signal_verified_through or verified_through, verified_through
             )
-            series[:] = list(adjusted)
-            self.unscaled_since[canonical] = None
-        self.signal_split_factor[canonical] = ratio
-        return rewritten
+        self.signal_last_verified_at = datetime.now(UTC)
+        return changed_symbols
 
     def process_closed_bars(
         self,

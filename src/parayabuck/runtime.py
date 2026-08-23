@@ -21,7 +21,6 @@ from parayabuck.core.models import (
     Market,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
-from parayabuck.data.adjustment import split_ratio
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
@@ -114,6 +113,8 @@ _WARMUP_RETRY_SECONDS = 600.0
 # How often the split-adjustment reconciler compares raw vs split-adjusted
 # daily tails (hourly; a split is applied at most one check after it trades).
 _SIGNAL_ADJUSTMENT_CHECK_SECONDS = 3600.0
+# Calendar days of raw/splits daily tails fetched per batched verification.
+_SIGNAL_ADJUSTMENT_LOOKBACK_DAYS = 14
 # Per-market scanner-refresh backoff (seconds) after a failed scheduled
 # refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
@@ -169,6 +170,7 @@ class RuntimeHealth:
     last_reconciliation_at: str | None = None
     universe_refresh: dict[str, object] = field(default_factory=dict)
     entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
+    signal_adjustment: dict[str, object] = field(default_factory=dict)
 
 
 def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:
@@ -680,6 +682,8 @@ class EngineRuntime:
             required.add("pb-universe-refresh")
         if market_enabled.get(Market.EQUITY, False) and symbols_by_market.get(Market.EQUITY):
             required.add("pb-stocks")
+            if "pb-signal-adjustment" in workers:
+                required.add("pb-signal-adjustment")
         if market_enabled.get(Market.CRYPTO, False) and symbols_by_market.get(Market.CRYPTO):
             required.add("pb-crypto")
         return required
@@ -830,7 +834,37 @@ class EngineRuntime:
                 market.value: reason
                 for market, reason in getattr(self, "_entry_risk_latch", {}).items()
             },
+            signal_adjustment=self.signal_adjustment_status(),
         )
+
+    def signal_adjustment_status(self) -> dict[str, object]:
+        """Operational visibility for the equity signal-basis verifier."""
+        state = self._signal_adjustment_state()
+        last_success = state["last_success_at"]
+        stale = not self._equity_signal_basis_verified() and bool(
+            getattr(self, "_symbols_by_market", {}).get(Market.EQUITY)
+        )
+        return {
+            "verified": self._equity_signal_basis_verified(),
+            "stale": stale,
+            "last_success_at": (
+                last_success.isoformat() if isinstance(last_success, datetime) else None
+            ),
+            "last_failure_at": (
+                state["last_failure_at"].isoformat()
+                if isinstance(state["last_failure_at"], datetime)
+                else None
+            ),
+            "last_error": state["last_error"],
+            "verified_through": (
+                state["verified_through"].isoformat()
+                if isinstance(state["verified_through"], datetime)
+                else None
+            ),
+            "entry_gate_reason": (
+                None if self._equity_signal_basis_verified() else "signal_adjustment_unverified"
+            ),
+        }
 
     def start(self) -> None:
         if self._running:
@@ -2693,10 +2727,19 @@ class EngineRuntime:
             gate_kwargs = {"health": health} if health is not None else {}
             if gate(portfolio_runtime.market, **gate_kwargs):
                 continue
-            # An entry-risk latch (daily loss / drawdown) must not freeze the
-            # whole decision: risk-reducing SELL exits still run, only
-            # entries are blocked.
+            # An entry-risk latch (daily loss / drawdown / unverified signal
+            # basis) must not freeze the whole decision: risk-reducing SELL
+            # exits still run, only entries are blocked. The equity signal
+            # basis is verified synchronously here (batched, at most hourly)
+            # so a finalized daily decision NEVER executes on an
+            # unverified corporate-action basis.
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
+            if portfolio_runtime.market == Market.EQUITY:
+                basis_reason = self._equity_signal_basis_latch()
+                if basis_reason is not None:
+                    entry_latch = (
+                        basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
+                    )
             try:
                 with self._portfolio_lock:
                     if account is None and getattr(self, "broker", None) is not None:
@@ -2784,6 +2827,12 @@ class EngineRuntime:
                 portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
                 continue
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
+            if portfolio_runtime.market == Market.EQUITY:
+                basis_reason = self._equity_signal_basis_latch()
+                if basis_reason is not None:
+                    entry_latch = (
+                        basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
+                    )
             try:
                 with self._portfolio_lock:
                     result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch)
@@ -2910,67 +2959,180 @@ class EngineRuntime:
                 exc,
             )
 
-    # -- split-adjustment reconciliation (signal-history continuity) --------
+    # -- equity signal-basis authority (provider splits series) -------------
+
+    def _signal_adjustment_state(self) -> dict[str, datetime | str | None]:
+        state: dict[str, datetime | str | None] | None = getattr(self, "_signal_adjustment", None)
+        if state is None:
+            state = {
+                "last_success_at": None,
+                "last_failure_at": None,
+                "last_error": None,
+                "verified_through": None,
+            }
+            self._signal_adjustment = state
+        return state
+
+    def _record_signal_adjustment_success(self, verified_through: datetime) -> None:
+        state = self._signal_adjustment_state()
+        recovered = state["last_success_at"] is None or state["last_failure_at"] is not None
+        state["last_success_at"] = datetime.now(UTC)
+        state["verified_through"] = verified_through
+        state["last_error"] = None
+        if recovered:
+            runtime_metrics_store.record_event("signal_adjustment_recovery")
+            alerts.emit(
+                "signal_adjustment_recovery",
+                message="Equity signal basis verified against provider split-adjusted history",
+                verified_through=verified_through.isoformat(),
+            )
+
+    def _record_signal_adjustment_failure(self, error: str) -> None:
+        state = self._signal_adjustment_state()
+        first_failure = state["last_failure_at"] is None and state["last_success_at"] is None
+        degraded = state["last_success_at"] is not None
+        state["last_failure_at"] = datetime.now(UTC)
+        state["last_error"] = error
+        if first_failure or degraded:
+            runtime_metrics_store.record_event("signal_adjustment_failure")
+            alerts.emit(
+                "signal_adjustment_failure",
+                message=(
+                    "Equity signal basis UNVERIFIED; new equity entries fail "
+                    "closed until a batched provider reconciliation succeeds"
+                ),
+                error=error,
+            )
+
+    def _equity_signal_basis_verified(self) -> bool:
+        """Fresh verification within the last hour counts as verified."""
+        if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
+            return True  # no equity universe: nothing to verify
+        state = self._signal_adjustment_state()
+        last_success = state["last_success_at"]
+        if not isinstance(last_success, datetime):
+            return False
+        age = (datetime.now(UTC) - last_success).total_seconds()
+        return age <= _SIGNAL_ADJUSTMENT_CHECK_SECONDS
+
+    def verify_equity_signal_basis(self) -> bool:
+        """Batched verification/reconciliation BEFORE any equity decision.
+
+        TWO provider calls total (not per symbol): raw + split-adjusted
+        daily tails for every active equity symbol. Each PortfolioRuntime's
+        signal history is then either CONFIRMED against the provider's
+        split-adjusted closes or REBUILT from them wholesale (absorbing any
+        number of corporate actions since the last verification). Returns
+        True when every equity runtime's signal basis is provider-authority
+        clean; False means UNVERIFIABLE — callers must fail closed for new
+        equity entries while risk-reducing exits keep flowing.
+        """
+        history_client = getattr(self, "_historical", None)
+        runtimes = [
+            runtime
+            for runtime in self._portfolio_runtimes
+            if runtime.market == Market.EQUITY and runtime.history
+        ]
+        if history_client is None or not runtimes:
+            return True
+        symbols = sorted(self._symbols_by_market.get(Market.EQUITY, ()))
+        if not symbols:
+            return True
+        end = datetime.now(UTC)
+        start = end - timedelta(days=_SIGNAL_ADJUSTMENT_LOOKBACK_DAYS)
+        try:
+            adjusted = history_client.get_bars_batch(
+                symbols, "1d", start=start, end=end, adjustment="splits"
+            )
+            raw = history_client.get_bars_batch(
+                symbols, "1d", start=start, end=end, adjustment="raw"
+            )
+        except Exception as exc:
+            self._record_signal_adjustment_failure(str(exc))
+            return False
+        provider_by_runtime: list[tuple[PortfolioRuntime, dict[str, list[Bar]]]] = []
+        newest_common: datetime | None = None
+        raw_timestamps: set[datetime] = set()
+        for bars in raw.values():
+            raw_timestamps.update(bar.timestamp for bar in bars)
+        for runtime in runtimes:
+            provider: dict[str, list[Bar]] = {
+                symbol: adjusted.get(symbol, []) for symbol in runtime.symbols
+            }
+            provider_by_runtime.append((runtime, provider))
+        for bars in adjusted.values():
+            for bar in bars:
+                if bar.timestamp in raw_timestamps and (
+                    newest_common is None or bar.timestamp > newest_common
+                ):
+                    newest_common = bar.timestamp
+        changed_total = 0
+        broken = False
+        for runtime, provider in provider_by_runtime:
+            try:
+                changed_total += runtime.adopt_authoritative_signal_history(provider, newest_common)
+            except Exception as exc:
+                self._record_signal_adjustment_failure(f"rebuild failed: {exc}")
+                broken = True
+        if broken:
+            return False
+        self._record_signal_adjustment_success(newest_common or end)
+        if changed_total:
+            log.warning(
+                "Signal history rebuilt from provider authority: %d symbol(s) rebased",
+                changed_total,
+            )
+        return True
+
+    def _equity_signal_basis_latch(self) -> str | None:
+        """Latch reason when equity signals are unverified/stale, else None.
+
+        Runs the batched verification at most once per hour (and always when
+        the previous attempt failed). Unverifiable basis FAILS CLOSED for
+        new equity entries; risk-reducing exits keep flowing because callers
+        only cap targets at current weights.
+        """
+        if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
+            return None
+        if not self._equity_signal_basis_verified():
+            if not self.verify_equity_signal_basis():
+                return "signal_adjustment_unverified"
+        return None
 
     def _signal_adjustment_loop(self) -> None:
+        """Health monitor for the equity signal basis.
+
+        Not decision-critical: decisions verify synchronously. This loop
+        keeps a heartbeat, refreshes verification during quiet periods so a
+        split is absorbed before the next session, detects staleness and
+        emits failure/recovery transitions.
+        """
         worker = self._workers["pb-signal-adjustment"]
         worker.alive = True
         try:
             while self._running:
-                self._stop_event.wait(_SIGNAL_ADJUSTMENT_CHECK_SECONDS)
-                if not self._running:
-                    break
+                worker.last_heartbeat = datetime.now(UTC)
                 try:
-                    self._reconcile_signal_adjustments()
-                except Exception as exc:
+                    self.verify_equity_signal_basis()
+                except Exception as exc:  # defensive: never kill the monitor
                     worker.last_error = str(exc)
-                    log.warning("Signal adjustment reconciliation failed: %s", exc)
+                    log.warning("Signal adjustment monitor pass failed: %s", exc)
+                # Staleness detection: equity active but nothing verified for
+                # over a full trading day + buffer means the basis cannot be
+                # trusted even if no exception fired (empty responses etc.).
+                state = self._signal_adjustment_state()
+                last_success = state["last_success_at"]
+                if (
+                    getattr(self, "_symbols_by_market", {}).get(Market.EQUITY)
+                    and isinstance(last_success, datetime)
+                    and datetime.now(UTC) - last_success > timedelta(hours=26)
+                ):
+                    self._record_signal_adjustment_failure(
+                        "stale: no successful reconciliation in over 26h"
+                    )
+                self._stop_event.wait(_SIGNAL_ADJUSTMENT_CHECK_SECONDS)
         finally:
             worker.alive = False
-
-    def _reconcile_signal_adjustments(self) -> None:
-        """Keep every equity runtime's signal history on one splits basis.
-
-        Compares fresh raw vs split-adjusted daily tails per streamed symbol;
-        their ratio on the newest common completed bar is exactly the
-        cumulative split factor since the warmup download (Alpaca rebases its
-        splits series retroactively). A detected split rewrites only the
-        bars appended to the signal history since the previous check — those
-        entered unscaled — and raises the factor for future appends.
-        """
-        history = self._historical
-        if history is None:
-            return
-        equity_symbols = sorted(self._symbols_by_market.get(Market.EQUITY, ()))
-        runtimes = [
-            runtime
-            for runtime in self._portfolio_runtimes
-            if runtime.market == Market.EQUITY and getattr(runtime, "signal_split_factor", None)
-        ]
-        if not equity_symbols or not runtimes:
-            return
-        end = datetime.now(UTC)
-        start = end - timedelta(days=14)
-        raw = history.get_bars_batch(equity_symbols, "1d", start=start, end=end, adjustment="raw")
-        adjusted = history.get_bars_batch(
-            equity_symbols, "1d", start=start, end=end, adjustment="splits"
-        )
-        for symbol in equity_symbols:
-            detected = split_ratio(raw.get(symbol, ()), adjusted.get(symbol, ()))
-            if detected is None:
-                continue
-            _timestamp, ratio = detected
-            with self._portfolio_lock:
-                for runtime in runtimes:
-                    rewritten = runtime.apply_split_factor(symbol, ratio)
-                    if rewritten:
-                        log.warning(
-                            "Split adjustment applied: %s ratio=%.4f rewrote %d "
-                            "signal-history bar(s)",
-                            symbol,
-                            ratio,
-                            rewritten,
-                        )
 
     def _refresh_readiness(self) -> None:
         for symbol in tuple(self._not_ready_symbols):

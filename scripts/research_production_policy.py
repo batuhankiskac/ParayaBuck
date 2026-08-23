@@ -25,8 +25,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 from datetime import datetime
 from pathlib import Path
+
+from research_helpers import run_identity
 
 from parayabuck.backtest.portfolio_engine import (
     PortfolioBacktestEngine,
@@ -86,6 +89,7 @@ class ProductionPolicyEngine(PortfolioBacktestEngine):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.policy_id = policy_id
+        self.open_halt_episode_cycles = 0
         self._latched = False
         self._halt_started_at: datetime | None = None
         self._healthy_streak = 0
@@ -116,6 +120,7 @@ class ProductionPolicyEngine(PortfolioBacktestEngine):
             self.halts.append({"at": timestamp.isoformat()})
         if self._latched:
             self._cycles_since_halt += 1
+            self.open_halt_episode_cycles = self._cycles_since_halt
         else:
             return
         if self.policy_id == "P0":
@@ -156,14 +161,24 @@ class ProductionPolicyEngine(PortfolioBacktestEngine):
         self._halt_started_at = None
         self._healthy_streak = 0
         self._cycles_since_halt = 0
+        self.open_halt_episode_cycles = 0
 
 
 def _policy_metrics(
     result: PortfolioBacktestResult, engine: ProductionPolicyEngine
 ) -> dict[str, object]:
     latched_cycles = sum(int(reset.get("latched_cycles", 0)) for reset in engine.resets)
-    durations = [int(reset["latched_cycles"]) for reset in engine.resets] or [0]
+    durations = [int(reset["latched_cycles"]) for reset in engine.resets]
+    open_cycles = int(getattr(engine, "open_halt_episode_cycles", 0) or 0)
+    if open_cycles:
+        # The still-open final episode (e.g. P0 never resets) IS part of the
+        # operational cost: count it and report it explicitly.
+        durations.append(open_cycles)
+        latched_cycles += open_cycles
+    median_duration = statistics.median(durations) if durations else 0.0
     return {
+        "open_halt_episode": open_cycles > 0,
+        "open_halt_episode_cycles": open_cycles,
         "return": round(result.total_return, 6),
         "cagr": round(result.cagr, 6),
         "sharpe": round(result.sharpe, 6),
@@ -179,7 +194,7 @@ def _policy_metrics(
         "halt_count": len(engine.halts),
         "reset_count": len(engine.resets),
         "total_latched_cycles_estimate": latched_cycles,
-        "median_halt_duration_cycles": sorted(durations)[len(durations) // 2],
+        "median_halt_duration_cycles": median_duration,
         "halts": engine.halts[:50],
         "resets": engine.resets[:50],
     }
@@ -260,6 +275,7 @@ def main() -> int:
             "turnover_delta": round(production["turnover"] - alpha_metrics["turnover"], 4),
         }
     artifacts["deltas_vs_alpha"] = deltas
+    artifacts["identity"] = run_identity(config)
     path = OUT_DIR / f"production_policy{suffix}.json"
     path.write_text(json.dumps(artifacts, indent=1))
     print(f"wrote {path}")

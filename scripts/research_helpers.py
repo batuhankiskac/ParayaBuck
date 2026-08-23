@@ -11,10 +11,108 @@ Research-only utilities: never imported by src/ or tests/.
 from __future__ import annotations
 
 import calendar
-from datetime import datetime, timedelta
+import hashlib
+import json
+import platform
+import subprocess
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from parayabuck.backtest.product import run_product_backtest
 from parayabuck.core.models import Market
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _sha256_file(path: str | Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def git_head() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO_ROOT
+    ).stdout.strip()
+
+
+def dataset_identity() -> dict[str, object]:
+    """Hashes of the historical datasets every equity research run consumes."""
+    bars = REPO_ROOT / "data/historical/equity_1200_2016_2026.csv"
+    dividends = REPO_ROOT / "data/historical/equity_1200_dividends.csv"
+    return {
+        "bars_csv": str(bars.relative_to(REPO_ROOT)),
+        "bars_sha256": _sha256_file(bars),
+        "dividends_csv": str(dividends.relative_to(REPO_ROOT)),
+        "dividends_sha256": _sha256_file(dividends),
+    }
+
+
+def config_digest(config) -> str:  # noqa: ANN001
+    """Stable digest of everything economic in the loaded configuration."""
+    payload = {
+        "equity_strategy": {
+            "name": config.strategy.equity.name,
+            "parameters": dict(config.strategy.equity.parameters),
+            "maximum_allocation": config.strategy.equity.maximum_allocation,
+        },
+        "risk": {
+            key: getattr(config.risk, key)
+            for key in (
+                "max_position_pct",
+                "max_positions",
+                "max_gross_exposure_pct",
+                "cash_buffer_pct",
+                "daily_loss_limit_pct",
+                "max_drawdown_pct",
+                "max_crypto_exposure_pct",
+                "max_crypto_position_pct",
+                "max_crypto_positions",
+            )
+        },
+        "backtest": {
+            key: getattr(config.backtest, key)
+            for key in (
+                "initial_cash",
+                "slippage_bps",
+                "spread_bps",
+                "commission",
+                "crypto_taker_fee_bps",
+                "equity_taf_per_share",
+                "equity_taf_cap",
+                "equity_cat_per_share",
+                "equity_sec_fee_rate",
+                "equity_use_effective_dated_fees",
+                "scanner_rebalance",
+            )
+        },
+        "execution": {
+            "rebalance_band_pct": config.execution.rebalance_band_pct,
+            "minimum_order_notional": config.execution.minimum_order_notional,
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, default=str).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def run_identity(config) -> dict[str, object]:  # noqa: ANN001
+    return {
+        "head_commit": git_head(),
+        "python_version": platform.python_version(),
+        "dataset": dataset_identity(),
+        "config_digest_sha256": config_digest(config),
+        "generated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def sha256_of_file(path: str | Path) -> str:
+    return _sha256_file(path)
+
+
+def main() -> None:
+    raise SystemExit("library only")
+
+
+if __name__ == "__main__":
+    main()
 
 
 def _fold_window(

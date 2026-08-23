@@ -1,0 +1,87 @@
+{
+ "mission": "equity_hardening_2026_08",
+ "declared_before_results": true,
+ "head_commit": "2ac8d4452eb108b9350a4e3a9287f6c8624c8188",
+ "python_version": "3.14.7",
+ "dataset": {
+  "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+  "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+  "dividends_csv": "data/historical/equity_1200_dividends.csv",
+  "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+ },
+ "control_parameters": {
+  "formation_bars": 252,
+  "skip_bars": 21,
+  "beta_window_bars": 273,
+  "residual_vol_window": 63,
+  "top_n": 8,
+  "max_single_weight": 0.1,
+  "ivol_reject_quantile": 0.7,
+  "exclude_symbols": "['SPY']",
+  "rebalance_frequency": "weekly"
+ },
+ "variants": {
+  "control": {
+   "base": "HardeningControl",
+   "overrides": {}
+  },
+  "a1": {
+   "base": "HardeningStdA1",
+   "overrides": {}
+  },
+  "a2": {
+   "base": "HardeningStdA2NoIvol",
+   "overrides": {}
+  },
+  "a3": {
+   "base": "HardeningStdA3Equal",
+   "overrides": {}
+  },
+  "b504": {
+   "base": "HardeningControl",
+   "overrides": {
+    "beta_window_bars": 504
+   }
+  },
+  "b756": {
+   "base": "HardeningControl",
+   "overrides": {
+    "beta_window_bars": 756
+   }
+  },
+  "c_tr": {
+   "base": "HardeningControl",
+   "overrides": {}
+  },
+  "topn6": {
+   "base": "HardeningControl",
+   "overrides": {
+    "top_n": 6
+   }
+  },
+  "topn9": {
+   "base": "HardeningControl",
+   "overrides": {
+    "top_n": 9
+   }
+  }
+ },
+ "commands": [
+  ".venv/bin/python scripts/research_equity_hardening.py --variants control,a1,a2,a3,b504,b756,c_tr,topn6,topn9",
+  ".venv/bin/python scripts/research_production_policy.py",
+  ".venv/bin/python -m parayabuck.cli backtest --market equity --data data/historical/equity_1200_2016_2026.csv --corporate-actions data/historical/equity_1200_dividends.csv --output-dir <dir>"
+ ],
+ "promotion_rule": "No promotion from full-window return alone; improvement must be distributed across folds/symbols/regimes and survive 3x costs.",
+ "results_sha256": {
+  "control.json": "07610552f3b3e300c4939bd87c001635e4f94f30d5b66c071faf9092ac6608f0",
+  "a1.json": "682af5f05ac40a17ddc81803fad1e0db5cd1930ed601ab1ff96d4caaae7c1ab0",
+  "a2.json": "efb60476c63c6e58a4f27d162f99d8a3411e9f0e95976e332ab396c4ef2190e9",
+  "a3.json": "abf64f20dfd85a50ca24d0f7761067b9071c4fc80676871a6b06beffd2a15396",
+  "b504.json": "c686cdfd2f5c4c436f3bc9f5cc9e19731937556f5c42a94f13ca64e0a162a2cc",
+  "b756.json": "9257759a4fb75388dffc6b8a88140aa5e27145c1768508cb9622a5769e2ce8d2",
+  "c_tr.json": "3818b999546244baaea24904ca7177b1cf09370267b3a076ef44702f32c6e185",
+  "topn6.json": "a8865d23c7b4eedacd313bdbf79dfc1c81d9adc585e2c7ed911e3630e10b2c1c",
+  "topn9.json": "51434b2afbc067efa9b98f2b84678a03e3bb81639a65bebe03f75e17db76dd9a",
+  "production_policy.json": "8377931f95599c6125bc97afa03eeb2d729cfbe2eed505ed08463168c5b37341"
+ }
+}

@@ -640,7 +640,7 @@ def main() -> int:
             **run_identity(config),
             "dataset": dataset_identity(),
             "python_version": platform.python_version(),
-            "head_commit": git_head(),
+            "research_commit": git_head(),
             "eval_start": EVAL_START.date().isoformat(),
             "eval_end": EVAL_END.date().isoformat(),
             "fold_step_months": FOLD_STEP_MONTHS,

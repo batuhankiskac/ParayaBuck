@@ -1,7 +1,8 @@
 {
  "mission": "equity_hardening_2026_08",
  "declared_before_results": true,
- "head_commit": "2ac8d4452eb108b9350a4e3a9287f6c8624c8188",
+ "research_commit": "a2f9f931c2f3bbcdd9b729a3c9be693e05fb3ccf",
+ "config_digest_sha256": "5129057f7113293edf276f61202f477df63260288ad107eebf9b022a9b2180bb",
  "python_version": "3.14.7",
  "dataset": {
   "bars_csv": "data/historical/equity_1200_2016_2026.csv",

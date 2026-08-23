@@ -2969,6 +2969,17 @@ class _CatchUpRecorder:
         self.market = Market.EQUITY
         self.result_status = "submitted"
         self.result_decision_id = "catchup-decision-1"
+        # Signal-basis gating reads the newest seeded bar; the recorder
+        # carries an empty history so the gate short-circuits to None.
+        self.history: dict[str, list] = {}
+        self.symbols: tuple[str, ...] = ()
+        self.strategy = SimpleNamespace(timeframe="1d", minimum_history_bars=1)
+        self.signal_verified_through_by_symbol: dict = {}
+        self.signal_last_verified_at = None
+        self.previous_timestamp = None
+
+    def adopt_authoritative_signal_history(self, provider, watermarks) -> int:
+        return 0
 
     def startup_catch_up(self, *, entry_latch: str | None = None) -> object:
         self.calls.append(entry_latch)

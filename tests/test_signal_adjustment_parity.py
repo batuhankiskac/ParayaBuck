@@ -13,11 +13,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from parayabuck.core.models import Bar, Market
+from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import (
     SPLIT_RATIO_TOLERANCE,
-    authoritative_signal_history,
     detect_basis_break,
+    merge_provider_authority,
 )
 from parayabuck.portfolio.runtime_service import PortfolioRuntime
 
@@ -36,13 +36,15 @@ def _economic_path(start: float, count: int) -> list[float]:
     return [start * (1.0002**index) for index in range(count)]
 
 
-def _bare_runtime(symbol: str = "AAA") -> PortfolioRuntime:
+def _bare_runtime(symbol: str = "AAA", *, minimum_history_bars: int = 10) -> PortfolioRuntime:
     runtime = object.__new__(PortfolioRuntime)
     runtime.market = Market.EQUITY
-    runtime.strategy = type("S", (), {"timeframe": "1d"})()
+    runtime.strategy = type(
+        "S", (), {"timeframe": "1d", "minimum_history_bars": minimum_history_bars}
+    )()
     runtime.symbols = (symbol,)
     runtime.history = {symbol: []}
-    runtime.signal_verified_through = None
+    runtime.signal_verified_through_by_symbol = {}
     runtime.signal_last_verified_at = None
     runtime.previous_timestamp = None
     return runtime
@@ -72,7 +74,7 @@ def test_two_splits_outside_reconcile_window_preserve_cumulative_basis() -> None
     ]
     assert detect_basis_break(tuple(stored), provider_now)
 
-    merged, changed = authoritative_signal_history(tuple(stored), provider_now)
+    merged, changed = merge_provider_authority(tuple(stored), provider_now)
     assert changed
     # Cumulative factor vs the ORIGINAL warmup basis is 8 everywhere covered.
     assert merged[0].close == pytest.approx(economic[0] / 8.0)
@@ -89,8 +91,8 @@ def test_repeated_same_split_is_idempotent() -> None:
     economic = _economic_path(100.0, 5)
     provider = [_bar("AAA", date, close / 2.0) for date, close in zip(dates, economic)]
     stored = list(provider)
-    first_changed = authoritative_signal_history(tuple(stored), provider)[1]
-    second, second_changed = authoritative_signal_history(tuple(stored), provider)
+    first_changed = merge_provider_authority(tuple(stored), provider)[1]
+    second, second_changed = merge_provider_authority(tuple(stored), provider)
     assert not first_changed or True  # equal content => unchanged either way
     assert not second_changed
     assert [bar.close for bar in second] == [bar.close for bar in stored]
@@ -112,7 +114,7 @@ def test_reverse_split_after_forward_split() -> None:
         for index, (date, close) in enumerate(zip(dates, economic))
     ]
     assert detect_basis_break(tuple(raw_as_traded), provider)
-    merged, changed = authoritative_signal_history(tuple(raw_as_traded), provider)
+    merged, changed = merge_provider_authority(tuple(raw_as_traded), provider)
     assert changed
     assert merged[0].close == pytest.approx(economic[0] / 2.0)
     assert merged[-1].close == pytest.approx(economic[-1] / 2.0)
@@ -125,7 +127,7 @@ def test_already_scaled_window_is_not_rescaled() -> None:
     dates = _days(4)
     provider = [_bar("AAA", date, 50.0 + index) for index, date in enumerate(dates)]
     stored = (*provider, _bar("AAA", dates[-1] + timedelta(days=1), 51.0))
-    merged, changed = authoritative_signal_history(stored, provider)
+    merged, changed = merge_provider_authority(stored, provider)
     assert not changed
     assert merged == stored  # identity preserved: nothing rewritten
     for original, kept in zip(stored[: len(provider)], merged):
@@ -143,23 +145,23 @@ def test_adopt_authoritative_history_updates_verification_state() -> None:
     economic = _economic_path(200.0, 3)
     runtime.seed([_bar("AAA", dates[0], economic[0])])  # warmup B0
     provider = [_bar("AAA", date, close / 4.0) for date, close in zip(dates, economic)]
-    changed = runtime.adopt_authoritative_signal_history({"AAA": provider}, dates[-1])
+    changed = runtime.adopt_authoritative_signal_history({"AAA": provider}, {"AAA": dates[-1]})
     assert changed == 1
     assert [b.close for b in runtime.history["AAA"]] == [c / 4.0 for c in economic]
-    assert runtime.signal_verified_through == dates[-1]
+    assert runtime.signal_verified_through_by_symbol == {"AAA": dates[-1]}
     assert runtime.signal_last_verified_at is not None
     # Second identical adoption changes nothing.
-    assert runtime.adopt_authoritative_signal_history({"AAA": provider}, dates[-1]) == 0
+    assert runtime.adopt_authoritative_signal_history({"AAA": provider}, {"AAA": dates[-1]}) == 0
 
 
 def test_hot_swap_between_splits_resets_verification_state() -> None:
     runtime = _bare_runtime()
-    runtime.adopt_authoritative_signal_history({"AAA": [_bar("AAA", _TS0, 50.0)]}, _TS0)
+    runtime.adopt_authoritative_signal_history({"AAA": [_bar("AAA", _TS0, 50.0)]}, {"AAA": _TS0})
     assert runtime.signal_last_verified_at is not None
     added, removed = runtime.update_symbols(("AAA", "BBB"))
     assert added == ("BBB",) and removed == ()
     # Membership changed while splits may have happened: fail conservative.
-    assert runtime.signal_verified_through is None
+    assert runtime.signal_verified_through_by_symbol == {}
     assert runtime.signal_last_verified_at is None
     assert "AAA" in runtime.history and "BBB" in runtime.history
 
@@ -217,23 +219,26 @@ def test_split_day_decision_waits_for_verified_signal_basis(monkeypatch) -> None
     fake = FakeHistory(raw=raws, splits=provider)
     engine._historical = fake
 
-    latch = engine._equity_signal_basis_latch()
-    assert latch is None  # verified clean
-    bases = {adjustment for _syms, adjustment in fake.calls}
-    assert bases == {"raw", "splits"}
-    symbol_sets = {syms for syms, _a in fake.calls}
-    assert symbol_sets == {("AAA", "BBB")}  # one batched call per basis
-    assert equity.signal_verified_through == dates[-1]
+    latch = engine._equity_signal_basis_latch(dates[-1])
+    assert latch is None  # verified clean through the decision timestamp
+    # ONE batched SPLITS call for ALL symbols covering the full window.
+    assert len(fake.calls) == 1
+    syms, adjustment = fake.calls[0]
+    assert adjustment == "splits" and set(syms) == {"AAA", "BBB"}
+    assert equity.signal_verified_through_by_symbol == {
+        "AAA": dates[-1],
+        "BBB": dates[-1],
+    }
     # First-ever success transitions the state: exactly one recovery event.
     assert [kind for kind, _kw in events] == ["signal_adjustment_recovery"]
 
     # A split rebase between verifications forces the latch until repaired.
     rebased = {"AAA": [_bar("AAA", d, (100.0 - i) / 4.0) for i, d in enumerate(dates)]}
     fake.splits = {**provider, **rebased}
+    fake.raw = {}
     equity.history["AAA"] = [_bar("AAA", d, 100.0 - i) for i, d in enumerate(dates)]
-    equity.signal_last_verified_at = datetime.now(UTC) - timedelta(hours=2)
-    engine._signal_adjustment["last_success_at"] = equity.signal_last_verified_at
-    latch = engine._equity_signal_basis_latch()
+    engine._signal_adjustment["healthy"] = None  # force re-verification
+    latch = engine._equity_signal_basis_latch(dates[-1])
     assert latch is None  # repaired in the same synchronous pass
     assert [b.close for b in equity.history["AAA"]] == [(100.0 - i) / 4.0 for i in range(3)]
 
@@ -267,16 +272,16 @@ def test_successful_reconcile_recovers_entry_readiness(monkeypatch) -> None:
     dates = _days(2)
     provider = {"AAA": [_bar("AAA", d, 40.0 + i) for i, d in enumerate(dates)]}
     failing = FakeHistory(error=RuntimeError("down"))
-    working = FakeHistory(raw=provider, splits=provider)
+    working = FakeHistory(raw={}, splits=provider)
     engine._historical = failing
 
-    assert engine._equity_signal_basis_latch() == "signal_adjustment_unverified"
+    assert engine._equity_signal_basis_latch(dates[-1]) == "signal_adjustment_unverified"
     engine._historical = working
-    assert engine._equity_signal_basis_latch() is None
+    assert engine._equity_signal_basis_latch(dates[-1]) is None
     assert engine.signal_adjustment_status()["entry_gate_reason"] is None
-    assert "signal_adjustment_failure" in events
-    assert "signal_adjustment_recovery" in events
-    assert equity.signal_verified_through == dates[-1]
+    assert events.count("signal_adjustment_failure") == 1  # exactly once per episode
+    assert events.count("signal_adjustment_recovery") == 1
+    assert equity.signal_verified_through_by_symbol == {"AAA": dates[-1]}
 
 
 def test_restart_between_splits_lands_on_provider_authority() -> None:
@@ -293,7 +298,7 @@ def test_restart_between_splits_lands_on_provider_authority() -> None:
     ]
     for bar in raw_stream:
         pre_restart._append_signal_bar(bar)
-    pre_restart.adopt_authoritative_signal_history({"AAA": provider_now[:-1]}, dates[-2])
+    pre_restart.adopt_authoritative_signal_history({"AAA": provider_now[:-1]}, {"AAA": dates[-2]})
 
     post_restart = _bare_runtime()
     post_restart.seed(list(provider_now))
@@ -308,10 +313,10 @@ def test_crypto_runtime_is_never_touched_by_the_bridge() -> None:
     runtime.market = Market.CRYPTO
     runtime.symbols = ("BTC/USD",)
     runtime.history = {"BTC/USD": [_bar("BTC/USD", _TS0, 50_000.0)]}
-    runtime.signal_verified_through = None
+    runtime.signal_verified_through_by_symbol = {}
     runtime.signal_last_verified_at = None
     assert runtime.signal_history_matches_provider({}) is True
-    assert runtime.adopt_authoritative_signal_history({}, _TS0) == 0
+    assert runtime.adopt_authoritative_signal_history({}, {"BTC/USD": _TS0}) == 0
     bar = _bar("BTC/USD", _TS0 + timedelta(days=1), 51_000.0)
     bar = Bar(bar.timestamp, "BTC/USD", "1d", *([51_000.0] * 4), 1_000, Market.CRYPTO)
     runtime._append_signal_bar(bar)
@@ -325,3 +330,229 @@ def test_tolerance_rejects_rounding_noise_only() -> None:
     breaking = [_bar("AAA", d, 25.0) for d in dates]
     assert not detect_basis_break(tuple(noisy), provider)
     assert detect_basis_break(tuple(breaking), provider)
+
+
+# --------------------------------------------------------------------------- #
+# Final-signal-basis mission regressions
+# --------------------------------------------------------------------------- #
+
+
+def test_short_provider_tail_never_truncates_long_history() -> None:
+    """300 stored daily bars vs a 10-bar provider tail: reconciliation must
+    retain every out-of-scope bar and return a full-length series."""
+    dates = _days(300)
+    stored = [_bar("AAA", date, 100.0 + index) for index, date in enumerate(dates)]
+    provider = [_bar("AAA", date, 100.0 + 290 + offset) for offset, date in enumerate(dates[-10:])]
+    merged, changed = merge_provider_authority(tuple(stored), provider)
+    assert len(merged) == 300
+    # Overlap replaced by equal-close provider bars is NOT a change worth
+    # reporting; only content differences count.
+    # Old history outside provider coverage is retained verbatim.
+    assert merged[0] is stored[0]
+    assert merged[289] is stored[289]
+    # Overlap bars are replaced by the provider objects themselves.
+    assert merged[-1] is provider[-1]
+
+
+def test_short_provider_tail_through_runtime_adoption() -> None:
+    runtime = _bare_runtime(minimum_history_bars=274)
+    dates = _days(300)
+    runtime.history["AAA"] = [_bar("AAA", d, 100.0 + i) for i, d in enumerate(dates)]
+    provider = [_bar("AAA", d, 100.0 + i) for i, d in enumerate(dates[-10:])]
+    changed = runtime.adopt_authoritative_signal_history({"AAA": provider}, {"AAA": dates[-1]})
+    assert len(runtime.history["AAA"]) == 300
+    assert changed == 0 or changed == 1  # content-equal merges report unchanged
+    assert runtime.signal_verified_through_by_symbol == {"AAA": dates[-1]}
+    del changed
+
+
+def test_signal_adjustment_does_not_race_startup_warmup(monkeypatch) -> None:
+    """Two guards: (a) seed() monotonicity would PERMANENTLY drop warmup bars
+    if a short verification ran first; (b) the monitor pass refuses to fetch
+    while _warming_up."""
+    # (a) prove the hazard the ordering prevents:
+    runtime = _bare_runtime()
+    dates = _days(30)
+    runtime.seed([_bar("AAA", d, 100.0) for d in dates])  # full warmup first
+    runtime.seed([_bar("AAA", dates[-1], 100.0)])  # late short tail: no-op
+    assert len(runtime.history["AAA"]) == 30
+    truncated = _bare_runtime()
+    truncated.seed([_bar("AAA", dates[-1], 100.0)])  # WRONG order: tail first
+    truncated.seed([_bar("AAA", d, 100.0) for d in dates])
+    assert len(truncated.history["AAA"]) < 30  # warmup bars lost forever
+
+    # (b) monitor pass must not fetch during warmup:
+    from parayabuck.runtime import WorkerHealth
+
+    engine, _equity = _engine_with_equity_runtime(("AAA",))
+    fake = FakeHistory(raw={}, splits={"AAA": [_bar("AAA", _TS0, 50.0)]})
+    engine._historical = fake
+    worker = WorkerHealth(datetime.now(UTC), datetime.now(UTC))
+    engine._warming_up = True
+    engine._signal_adjustment_monitor_pass(worker)
+    assert fake.calls == []  # startup-race guard held
+    engine._warming_up = False
+    engine._signal_adjustment_monitor_pass(worker)
+    assert len(fake.calls) == 1
+
+
+def test_provider_lag_on_split_day_blocks_new_entries(monkeypatch) -> None:
+    """Provider has not published the decision-day bar yet: even a previously
+    healthy basis fails closed for that day's entries."""
+    events: list[str] = []
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: events.append(kind))}),
+    )
+    engine, equity = _engine_with_equity_runtime(("AAA",))
+    dates = _days(3)
+    lagging = {"AAA": [_bar("AAA", d, 40.0 + i) for i, d in enumerate(dates[:-1])]}
+    engine._historical = FakeHistory(raw={}, splits=lagging)
+
+    reason = engine._equity_signal_basis_latch(dates[-1])
+    assert reason == "signal_adjustment_unverified"
+    assert "signal_adjustment_failure" in events
+    # Nothing was adopted: fail closed means no partial state changes.
+    assert equity.signal_verified_through_by_symbol == {}
+    status = engine.signal_adjustment_status()
+    assert status["entry_gate_reason"] == "signal_adjustment_unverified"
+
+
+def test_empty_provider_response_fails_closed(monkeypatch) -> None:
+    engine, _equity = _engine_with_equity_runtime(("AAA",))
+    stored = [_bar("AAA", d, 50.0) for d in _days(3)]
+    _equity.history["AAA"] = list(stored)
+    engine._historical = FakeHistory(raw={}, splits={})
+
+    assert engine.verify_equity_signal_basis() is False
+    assert _equity.history["AAA"] == stored  # untouched
+
+
+def test_partial_symbol_response_fails_closed(monkeypatch) -> None:
+    engine, equity = _engine_with_equity_runtime(("AAA", "BBB"))
+    dates = _days(3)
+    stored_a = [_bar("AAA", d, 100.0 - i) for i, d in enumerate(dates)]
+    stored_b = [_bar("BBB", d, 50.0 + i) for i, d in enumerate(dates)]
+    equity.history = {"AAA": list(stored_a), "BBB": list(stored_b)}
+    only_a = {"AAA": [_bar("AAA", d, 100.0 - i) for i, d in enumerate(dates)]}
+    engine._historical = FakeHistory(raw={}, splits=only_a)
+
+    assert engine.verify_equity_signal_basis() is False
+    # NO partial adoption: AAA stays exactly as stored despite good coverage.
+    assert equity.history["AAA"] == stored_a
+    assert equity.history["BBB"] == stored_b
+    assert equity.signal_verified_through_by_symbol == {}
+
+
+def test_per_symbol_verified_through_is_required(monkeypatch) -> None:
+    """A watermark on ONE symbol never authorizes another symbol's day: the
+    gate re-verifies until EVERY required symbol reaches the timestamp."""
+    engine, equity = _engine_with_equity_runtime(("AAA", "BBB"))
+    dates = _days(2)
+    provider = {
+        "AAA": [_bar("AAA", d, 10.0 + i) for i, d in enumerate(dates)],
+        "BBB": [_bar("BBB", d, 20.0 + i) for i, d in enumerate(dates)],
+    }
+    engine._historical = FakeHistory(raw={}, splits=provider)
+
+    # Simulate a stale partial watermark set from an earlier epoch.
+    engine._signal_adjustment_state().update(
+        {
+            "healthy": True,
+            "last_success_at": datetime.now(UTC),
+            "verified_through_by_symbol": {"AAA": dates[-1]},
+        }
+    )
+    assert engine._equity_signal_basis_verified(dates[-1]) is False  # BBB missing
+    latch = engine._equity_signal_basis_latch(dates[-1])
+    assert latch is None  # synchronous verification completed BOTH symbols
+    assert equity.signal_verified_through_by_symbol == {
+        "AAA": dates[-1],
+        "BBB": dates[-1],
+    }
+
+
+def _process_engine(provider: dict[str, list[Bar]], dates: list[datetime]):
+    """Full integration fixture driving _process_portfolio_timestamp."""
+    import threading
+    from types import SimpleNamespace
+
+    from parayabuck.runtime import EngineRuntime
+
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._warming_up = False
+    engine._circuit_breaker_reason = None
+    engine._symbols_by_market = {Market.EQUITY: {"AAA"}, Market.CRYPTO: set()}
+    engine._portfolio_lock = threading.RLock()
+    engine._last_portfolio_status = {}
+    engine._historical = FakeHistory(raw={}, splits=provider)
+    equity = _bare_runtime(minimum_history_bars=274)
+    equity.symbols = ("AAA",)
+    captured: dict[str, object] = {}
+
+    def fake_process(bars, *, entry_latch=None, **kwargs):  # noqa: ANN001
+        captured["entry_latch"] = entry_latch
+        captured["bars"] = list(bars)
+        return SimpleNamespace(status="captured", orders=(), submitted_order_ids=())
+
+    portfolio_runtime = SimpleNamespace(
+        market=Market.EQUITY,
+        symbols=("AAA",),
+        strategy=SimpleNamespace(timeframe="1d", minimum_history_bars=274, name="equity_test"),
+        process_closed_bars=fake_process,
+        history={"AAA": [_bar("AAA", d, 40.0) for d in dates[:-1]]},
+        signal_verified_through_by_symbol={},
+        signal_last_verified_at=None,
+        previous_timestamp=None,
+    )
+    # Verification adopts THROUGH the runtime: bind the real method.
+    portfolio_runtime.adopt_authoritative_signal_history = lambda provider, watermarks: (
+        PortfolioRuntime.adopt_authoritative_signal_history(portfolio_runtime, provider, watermarks)
+    )
+    engine._portfolio_runtimes = (portfolio_runtime,)
+    # Instance attribute shadows the bound readiness gate (always open).
+    engine._entry_readiness_reasons = lambda market, **kwargs: ()
+    engine.broker = SimpleNamespace(
+        account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0.0, positions=())
+    )
+    # Freshness machinery is irrelevant here: the pipeline only needs A
+    # snapshot to proceed past its None-check.
+    engine._fresh_account_snapshot = lambda: AccountSnapshot(
+        10_000, 10_000, 10_000, 0.0, positions=()
+    )
+    return engine, captured
+
+
+def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> None:
+    """Integration: the finalized decision-day bar itself must be covered by
+    per-symbol provider watermarks BEFORE any entry-bearing decision runs;
+    provider lag on that exact bar blocks entries through the real pipeline."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    # A decision day anchored to NOW so the fixture can span the real
+    # full-history window the verifier demands (~minimum_history_bars).
+    decision_ts = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
+    span_days = 420
+    window_dates = [decision_ts - timedelta(days=offset) for offset in range(span_days)][::-1]
+    decision_bar = _bar("AAA", decision_ts, 42.0)
+
+    def _series(count: int) -> list[Bar]:
+        return [_bar("AAA", d, 40.0 + i) for i, d in enumerate(window_dates[:count])]
+
+    # Provider covers the ENTIRE required window INCLUDING the decision-day
+    # bar: the decision passes clean.
+    engine, captured = _process_engine({"AAA": _series(span_days)}, window_dates)
+    equity_ns = engine._portfolio_runtimes[0]
+    equity_ns.history["AAA"].append(decision_bar)
+    engine._process_portfolio_timestamp([decision_bar])
+    assert captured["entry_latch"] is None
+
+    # Provider LAGS (missing exactly the decision-day bar): fail closed.
+    lagging = {"AAA": _series(span_days - 1)}
+    engine2, captured2 = _process_engine(lagging, window_dates)
+    equity_ns2 = engine2._portfolio_runtimes[0]
+    equity_ns2.history["AAA"].append(decision_bar)
+    engine2._process_portfolio_timestamp([decision_bar])
+    assert captured2["entry_latch"] == "signal_adjustment_unverified"

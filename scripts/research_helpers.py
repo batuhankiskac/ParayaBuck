@@ -29,6 +29,7 @@ def _sha256_file(path: str | Path) -> str:
 
 
 def git_head() -> str:
+    """The commit that produced/produces the research outputs."""
     return subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO_ROOT
     ).stdout.strip()
@@ -95,7 +96,7 @@ def config_digest(config) -> str:  # noqa: ANN001
 
 def run_identity(config) -> dict[str, object]:  # noqa: ANN001
     return {
-        "head_commit": git_head(),
+        "research_commit": git_head(),
         "python_version": platform.python_version(),
         "dataset": dataset_identity(),
         "config_digest_sha256": config_digest(config),

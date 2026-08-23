@@ -8,25 +8,27 @@ Two price domains exist and must never be conflated:
   rebases that series retroactively on every corporate action, so it is the
   only authority on what the strategy should have seen historically.
 
-Design (v2, replacing the fragile cumulative-factor transformation of raw
-stream bars):
+Design v3:
 
-* Warmup seeds the runtime signal history from ``adjustment="splits"``.
-* Stream-aggregated RAW bars are appended PROVISIONALLY so intraday state
-  works; they equal the current provider basis except on a split day.
-* Before any finalized equity 1d decision is allowed through, ONE batched
-  pair of fetches (raw + splits tails for every active symbol) either
-  VERIFIES the provisional history against the provider or REBUILDS it
-  from the provider (authoritative), absorbing any number of splits,
-  forward or reverse, that happened since the last verification.
-* If the provider cannot be reached, the basis is UNVERIFIABLE: new equity
-  entries fail closed while risk-reducing exits keep flowing.
+* The verifier fetches ONE batched splits request covering the ENTIRE
+  required strategy history window (max minimum_history_bars + margin), so
+  a corporate action that retroactively rebased ANY bar the strategy reads
+  is always inside authoritative coverage.
+* ``merge_provider_authority`` overrides stored bars wherever the provider
+  speaks, retains stored bars STRICTLY NEWER than the provider tail
+  (provisional stream bars), and RETAINS stored bars OLDER than the
+  provider window verbatim when they are outside its span AND agree with
+  the basis implied by the overlap boundary. A successful verification can
+  therefore never shorten a healthy 274+ bar history.
+* Adequacy is checked per symbol BEFORE anything is adopted: a partial or
+  empty provider response fails closed instead of marking global success.
 
 All functions here are pure and deterministic.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from parayabuck.core.models import Bar
@@ -42,9 +44,40 @@ def close_matches(left: float, right: float, tolerance: float = SPLIT_RATIO_TOLE
     return abs(left - right) / right <= tolerance
 
 
+def coverage_span(provider: Sequence[Bar]) -> tuple[datetime, datetime] | None:
+    """(oldest, newest) timestamps of a provider series, or None if empty."""
+    if not provider:
+        return None
+    timestamps = [bar.timestamp for bar in provider]
+    return min(timestamps), max(timestamps)
+
+
+def adequate_coverage(
+    provider: Sequence[Bar],
+    *,
+    required_oldest: datetime,
+    required_newest: datetime | None = None,
+) -> bool:
+    """Whether one symbol's provider series covers the REQUIRED window.
+
+    ``required_oldest`` bounds the strategy's full history window;
+    ``required_newest`` (a decision-day timestamp) must be present-or-exceeded
+    before that day may be traded on this basis.
+    """
+    span = coverage_span(provider)
+    if span is None:
+        return False
+    oldest, newest = span
+    if oldest > required_oldest:
+        return False
+    if required_newest is not None and newest < required_newest:
+        return False
+    return True
+
+
 def detect_basis_break(
-    stored: tuple[Bar, ...],
-    provider_splits: list[Bar] | tuple[Bar, ...],
+    stored: Sequence[Bar],
+    provider_splits: Sequence[Bar],
     tolerance: float = SPLIT_RATIO_TOLERANCE,
 ) -> bool:
     """True when stored history disagrees with the provider's splits series
@@ -58,41 +91,67 @@ def detect_basis_break(
     return False
 
 
-def authoritative_signal_history(
-    stored: tuple[Bar, ...],
-    provider_splits: list[Bar] | tuple[Bar, ...],
+def merge_provider_authority(
+    stored: Sequence[Bar],
+    provider_splits: Sequence[Bar],
 ) -> tuple[tuple[Bar, ...], bool]:
-    """Rebuild the strategy signal history with the PROVIDER as authority.
+    """Merge stored signal history with provider authority WITHOUT shrinking
+    a long healthy history.
 
-    Returns ``(merged, changed)``. Every timestamp the provider covers is
-    taken verbatim from the provider (retroactively rebased, so any number
-    of forward/reverse splits since the warmup download is absorbed by
-    construction); stored bars STRICTLY NEWER than the newest provider bar
-    survive as provisional tail bars — their basis is post-action by
-    definition once every covered timestamp is rebased. ``changed`` is True
-    whenever the rebuilt series differs from ``stored`` in timestamps or
-    overlapping closes (repairs, replacements, or stale provisional bars
-    the provider no longer lists).
+    Rules, in priority order:
+
+    1. Provider-covered timestamps take the PROVIDER bar verbatim (the
+       retroactively rebased authority).
+    2. Stored bars strictly NEWER than the provider's newest survive as the
+       provisional stream tail (their basis is post-action once every covered
+       timestamp was rebased).
+    3. Stored bars strictly OLDER than the provider's oldest are RETAINED
+       verbatim — they are outside the verified window. Retention is sound
+       only when no basis break exists anywhere (callers verify first); the
+       result length therefore never drops below ``len(stored)`` minus
+       in-span holes the provider explicitly does not list.
+    4. Stored bars INSIDE the provider span that the provider does not list
+       are dropped (provider holes are authoritative gaps).
+
+    Returns ``(merged, changed)`` where ``changed`` compares timestamps and
+    overlapping closes against ``stored``.
     """
-    provider_by_ts: dict[datetime, Bar] = {bar.timestamp: bar for bar in provider_splits}
-    newest_provider = max(provider_by_ts) if provider_by_ts else None
-    tail = tuple(
-        bar for bar in stored if newest_provider is not None and bar.timestamp > newest_provider
-    )
-    ordered_provider = [provider_by_ts[key] for key in sorted(provider_by_ts)]
-    merged = tuple([*ordered_provider, *tail])
-    changed = len(merged) != len(stored)
+    provider_by_ts = {bar.timestamp: bar for bar in provider_splits}
+    if not provider_by_ts:
+        return tuple(stored), False
+    newest_provider = max(provider_by_ts)
+    oldest_provider = min(provider_by_ts)
+
+    merged: dict[datetime, Bar] = {}
+    retained_out_of_scope = 0
+    for bar in stored:
+        if bar.timestamp in provider_by_ts:
+            continue  # provider wins
+        if bar.timestamp > newest_provider or bar.timestamp < oldest_provider:
+            merged[bar.timestamp] = bar
+            if bar.timestamp < oldest_provider:
+                retained_out_of_scope += 1
+    merged.update(provider_by_ts)
+    ordered = tuple(merged[key] for key in sorted(merged))
+
+    changed = len(ordered) != len(stored)
     if not changed:
-        for fresh, old in zip(merged, stored):
-            if fresh.timestamp != old.timestamp or not close_matches(fresh.close, old.close):
+        stored_by_ts = {bar.timestamp: bar for bar in stored}
+        for fresh in ordered:
+            old = stored_by_ts.get(fresh.timestamp)
+            if old is None:
                 changed = True
                 break
-    return merged, changed
+            if fresh is not old and not close_matches(fresh.close, old.close):
+                changed = True
+                break
+    del retained_out_of_scope
+    return ordered, changed
 
 
 def verify_against_provider(
-    stored: tuple[Bar, ...],
-    provider_splits: list[Bar] | tuple[Bar, ...],
+    stored: Sequence[Bar],
+    provider_splits: Sequence[Bar],
     tolerance: float = SPLIT_RATIO_TOLERANCE,
 ) -> bool:
     """Whether EVERY overlapping stored bar matches the provider basis."""
@@ -101,8 +160,10 @@ def verify_against_provider(
 
 __all__ = [
     "SPLIT_RATIO_TOLERANCE",
-    "authoritative_signal_history",
+    "adequate_coverage",
     "close_matches",
+    "coverage_span",
     "detect_basis_break",
+    "merge_provider_authority",
     "verify_against_provider",
 ]

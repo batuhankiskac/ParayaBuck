@@ -79,34 +79,52 @@ Canonical reproduction used the production harness:
 
 No corporate-action handling existed anywhere in the live path.
 
-### Contract implemented (v2: provider authority; one explicit basis per domain)
+### Contract implemented (v3: FULL-WINDOW provider authority)
 
-* **SIGNAL = provider split-adjusted daily history.** Warmup seeds it from
-  `adjustment="splits"`; stream-aggregated RAW bars are appended only as a
-  PROVISIONAL intraday tail. Before ANY finalized equity 1d decision passes
-  its gate, ONE batched pair of fetches (raw + splits tails, all symbols,
-  two REST calls total) either CONFIRMS every overlapping close against the
-  provider or REBUILDS each symbol's history from the provider wholesale
-  (`data/adjustment.py::authoritative_signal_history`). Any number of
-  forward/reverse splits since the last verification is absorbed by
-  construction — there is no cumulative factor to drift.
-* **EXECUTION = raw**: streamed bars, market-state seeding, gap repair stay
-  as-traded.
-* **Fail closed**: if the batched verification cannot run or rebuild, the
-  decision proceeds with an entry latch (`signal_adjustment_unverified`) —
-  targets capped at current weights, so risk-reducing exits flow and NO new
-  equity entries are sized on an unverified basis. Crypto is never gated.
-* **Decision-race elimination**: the previous hourly background reconciler
-  could leave a split-day decision unverified for up to an hour; the check
-  now runs synchronously in the decision path (`_equity_signal_basis_latch`)
-  and is throttled to at most once per hour of successful state.
-* **Operations**: `pb-signal-adjustment` is a required health worker with
-  heartbeat, last-success/staleness tracking (>26h ⇒ degraded), alerting on
-  failure AND recovery (`signal_adjustment_failure` / `_recovery` events),
-  metrics counters, and a `signal_adjustment` block in RuntimeHealth
-  (verified / stale / verified_through / entry_gate_reason).
+* **SIGNAL = provider split-adjusted daily history over the ENTIRE required
+  strategy window.** Before any finalized equity 1d decision passes its
+  gate, ONE batched splits request fetches `max(minimum_history_bars)+1`
+  bars (+10-day margin) of calendar coverage for every active equity
+  symbol. A short tail is NEVER used as authority for a long history:
+  `merge_provider_authority` overrides overlap with the provider, retains
+  strictly-newer provisional stream bars, and RETAINS out-of-scope older
+  history — a successful verification can never shorten a healthy 274+ bar
+  history (`test_short_provider_tail_never_truncates_long_history`: 300
+  stored bars vs a 10-bar provider tail ⇒ 300 bars out, old prefix retained
+  verbatim).
+* **Decision-bar invariant.** The gate requires, for EVERY required symbol,
+  `signal_verified_through_by_symbol[s] >= decision_timestamp`, where the
+  decision timestamp is the newest finalized bar in the processed batch. If
+  the provider has not published that bar yet, the decision runs latched as
+  `signal_adjustment_unverified` — risk-reducing exits flow, NO new entries
+  (`test_decision_requires_verified_through_decision_timestamp`,
+  integration through `_process_portfolio_timestamp`;
+  `test_provider_lag_on_split_day_blocks_new_entries`).
+* **Fail closed on partial/empty responses.** Adequacy is enforced per
+  symbol BEFORE anything is adopted; one missing/inadequate symbol fails
+  the whole check and leaves every history untouched — no partial adoption,
+  no cross-symbol watermark (`test_empty_provider_response_fails_closed`,
+  `test_partial_symbol_response_fails_closed`,
+  `test_per_symbol_verified_through_is_required`).
+* **Startup race eliminated.** `pb-signal-adjustment` no longer starts with
+  the thread fan-out (it previously raced `_warmup()`); it launches only
+  AFTER warmup completes, and every monitor pass refuses to run while
+  `_warming_up`. The regression proves the hazard itself — monotonic
+  `seed()` permanently drops warmup bars behind a pre-seeded short tail —
+  and both guards
+  (`test_signal_adjustment_does_not_race_startup_warmup`).
+* **Exactly-once alert transitions.** An explicit healthy/failed state
+  machine emits ONE failure alert per episode and ONE recovery alert per
+  recovery; repeated failed or repeated healthy checks stay silent.
+* **EXECUTION = raw**, unchanged everywhere.
 
-Tests: `tests/test_signal_adjustment_parity.py` covers the deterministic multi-split regression (4:1 → >14d → 2:1 ⇒ cumulative factor 8, not 2), forward+reverse splits, idempotent re-reconciliation, no double-scaling of already-authoritative bars, restart and hot-swap between splits, split-day decision gating, worker-failure entry blocking and recovery.
+Tests: `tests/test_signal_adjustment_parity.py` carries 20 regressions:
+the deterministic multi-split cumulative-basis case (4:1 → >14d → 2:1 ⇒
+factor 8, not 2), forward+reverse splits, idempotent re-reconciliation, no
+double-scaling of already-authoritative bars, restart and hot-swap between
+splits, short-tail truncation, startup race, split-day gating, worker
+failure blocking entries, recovery, provider lag, empty/partial responses
+and per-symbol watermarks.
 
 ## 4. top_n / max_positions semantics (FIXED)
 
@@ -361,7 +379,7 @@ dataset hashes, python). Refresh result hashes with
 
 | Item | Classification | Evidence | Recommendation |
 |---|---|---|---|
-| split parity | FIXED — under multiple corporate actions and runtime failure scenarios | §3: provider-authoritative history absorbs any number of forward/reverse splits; batched pre-decision verification fails closed on unverified basis; worker-failure/staleness gate entries with exits flowing; restart/hot-swap/idempotence covered by tests | keep |
+| split parity | FIXED — multiple corporate actions, short-tail verification, startup races and provider failures included | §3 v3: full-window batched provider authority (300-bar proof), per-symbol verified_through >= decision timestamp through the real pipeline, fail-closed on lag/empty/partial, post-warmup-only verifier, exactly-once alerts | keep |
 | top_n/max_positions conflict | FIXED | §4, deterministic tests, baseline delta | keep |
 | ivol quantile | FIXED | §5, edge-case tests | keep |
 | standardized score (A1/A3) | RESEARCH PASS | §8: Sharpe +0.06, maxDD −4pp, but 9/20 fold wins | separate promotion decision |

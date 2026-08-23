@@ -1254,7 +1254,7 @@ class PortfolioRuntime:
         # against a batched provider splits tail and REPLACES it wholesale
         # when the provider rebased (data/adjustment.py). The runtime keeps
         # no cumulative factor math — the provider is the sole authority.
-        self.signal_verified_through: datetime | None = None
+        self.signal_verified_through_by_symbol: dict[str, datetime] = {}
         self.signal_last_verified_at: datetime | None = None
         self.configuration_digest = configuration_digest(
             strategy,
@@ -1401,7 +1401,7 @@ class PortfolioRuntime:
             self.history.pop(symbol, None)
         # New members arrive unverified: warmup seeding is followed by the
         # normal batched provider verification before any decision.
-        self.signal_verified_through = None
+        self.signal_verified_through_by_symbol = {}
         self.signal_last_verified_at = None
         self.symbols = updated
         return added, removed
@@ -1436,12 +1436,19 @@ class PortfolioRuntime:
         return True
 
     def adopt_authoritative_signal_history(
-        self, provider_splits: dict[str, list[Bar]], verified_through: datetime | None
+        self,
+        provider_splits: dict[str, list[Bar]],
+        verified_through_by_symbol: dict[str, datetime],
     ) -> int:
-        """Replace each symbol's signal history with the PROVIDER series,
-        keeping only strictly newer provisional stream bars. Returns the
-        number of symbols whose history changed."""
-        from parayabuck.data.adjustment import authoritative_signal_history
+        """Replace each symbol's signal history with the PROVIDER series for
+        covered timestamps (retaining out-of-scope older history and newer
+        provisional bars), and record PER-SYMBOL verification watermarks.
+
+        Returns the number of symbols whose history changed. Callers MUST
+        verify per-symbol adequacy first; this method never decides whether
+        a basis is trustworthy. No-op for crypto.
+        """
+        from parayabuck.data.adjustment import merge_provider_authority
 
         if self.market != Market.EQUITY:
             return 0
@@ -1450,14 +1457,15 @@ class PortfolioRuntime:
             provider = provider_splits.get(symbol)
             if not provider:
                 continue
-            merged, changed = authoritative_signal_history(tuple(series), provider)
+            merged, changed = merge_provider_authority(tuple(series), provider)
             if changed:
                 self.history[symbol] = list(merged)
                 changed_symbols += 1
-        if verified_through is not None:
-            self.signal_verified_through = max(
-                self.signal_verified_through or verified_through, verified_through
-            )
+        for symbol, verified_through in verified_through_by_symbol.items():
+            if symbol in self.history and verified_through is not None:
+                previous = self.signal_verified_through_by_symbol.get(symbol)
+                if previous is None or verified_through > previous:
+                    self.signal_verified_through_by_symbol[symbol] = verified_through
         self.signal_last_verified_at = datetime.now(UTC)
         return changed_symbols
 

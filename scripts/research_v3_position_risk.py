@@ -408,29 +408,34 @@ def run_chained_window(
         corporate_actions=actions,
     )
     # Chain curves: second curve scaled to start at res0 ending
-    # For metrics, compute chained return etc via helper
     from parayabuck.validation import chain_equity_curves, chained_cumulative_metrics
 
     chained_curve = chain_equity_curves([list(res0.equity_curve), list(res1.equity_curve)])
-    # Compute synthetic result with chained metrics? We return a synthetic PortfolioBacktestResult-like dict via stats?
-    # Instead, construct a synthetic result object with combined curve for stats; easier: return res1 but with ending equity chained and combined curve
-    # We will synthesize a new result by copying res1 and patching equity_curve and metrics
-    # To keep types, we create a simple object with needed attributes for stats_for_result
-    # Use dataclass replace
+    chained_times = list(res0.curve_timestamps) + list(res1.curve_timestamps)
     from dataclasses import replace
 
-    # Recompute metrics from chained curve
-    metrics = chained_cumulative_metrics(chained_curve)
-    # Patch res1
+    combined_return = (
+        chained_curve[-1] / chained_curve[0] - 1 if chained_curve and chained_curve[0] > 0 else 0
+    )
+    chained_metrics = chained_cumulative_metrics(chained_curve)
     synthetic = replace(
         res1,
         starting_equity=res0.starting_equity,
         ending_equity=chained_curve[-1] if chained_curve else res1.ending_equity,
-        total_return=metrics["total_return"],
-        cagr=metrics["cagr"],
-        max_drawdown=metrics["max_drawdown"],
+        total_return=combined_return,
+        gross_return=combined_return,
+        cagr=chained_metrics.get("cagr", res1.cagr),
+        sharpe=chained_metrics.get("cumulative_sharpe", res1.sharpe),
+        sortino=chained_metrics.get("sortino", res1.sortino),
+        calmar=chained_metrics.get("calmar", res1.calmar),
+        max_drawdown=chained_metrics.get("cumulative_max_drawdown", res1.max_drawdown),
         equity_curve=tuple(chained_curve),
-        # Keep other fields from res1; duration etc approximate
+        curve_timestamps=tuple(chained_times),
+        fills=tuple(list(res0.fills) + list(res1.fills)),
+        realized_pnl_events=tuple(list(res0.realized_pnl_events) + list(res1.realized_pnl_events)),
+        closed_position_events=tuple(
+            list(res0.closed_position_events) + list(res1.closed_position_events)
+        ),
     )
     return synthetic
 

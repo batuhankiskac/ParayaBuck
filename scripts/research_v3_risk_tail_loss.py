@@ -1065,9 +1065,9 @@ def main():
     print(f"Research V3 Risk Tail Loss: head {head} cfg {cfg_digest} py {pyver}")
 
     # Load data
-    bars = load_csv_bars(str(EQUITY_CSV))
+    bars = load_csv_bars(str(EQUITY_CSV), default_market=Market.EQUITY)
     dividends = load_csv_corporate_actions(str(DIVIDENDS_CSV))
-    universe = build_product_universe(bars)  # PIT universe via product helper
+    universe = build_product_universe(config, bars, market=Market.EQUITY, end=EVAL_END)
     # Build bars_by_symbol for ATR/stop
     bars_by_symbol = defaultdict(list)
     for b in bars:

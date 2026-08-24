@@ -8,8 +8,8 @@ production not promoted.
 | item | value |
 |---|---|
 | mission | equity_mh_raw_promotion_2026_08 |
-| implementation commit | `2c4234170cba8fdcedafc649e11de36227dc1db0` (COMMIT A) |
-| results/report commit | see COMMIT B HEAD below |
+| implementation commit | `bda700270b4853bcffd47218dfebcef8fc3677b0` (COMMIT C) |
+| results/report commit | COMMIT D (see Reproducibility; HEAD reported at mission close) |
 | python | 3.14.7 |
 | config digest | `5129057f7113293edf276f61202f477df63260288ad107eebf9b022a9b2180bb` |
 | bars SHA256 | `3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a` |
@@ -131,8 +131,9 @@ advantage is not a 2020 artifact.
 2025-2026): MH_RAW **+143.0%** vs CONTROL **+73.3%** (+69.7pp). 2024 was
 MH_RAW's only weak year (+11.6% vs +30.0% CONTROL — the two 2024 folds are
 its worst deltas), but the edge is not dependent on any single year:
-8/10 full calendar years beat CONTROL (2017, 2021, 2024 are the losses;
-2026 partial-year also positive).
+**8/10 full calendar years beat CONTROL** — wins 2018, 2019, 2020, 2021
+(MH −5.8% > CONTROL −7.1%), 2022, 2023, 2025, 2026; losses only **2017**
+(+12.3% vs +15.4%) and **2024** (+11.6% vs +30.0%).
 
 ## 11. Do 3x/5x cost stress preserve the edge?
 
@@ -215,9 +216,18 @@ selection divergence 97% of decisions, mean |Δweight| 0.47/decision).
 - COMMIT A (`2c42341…`): frozen implementation + validation manifest +
   tests; contains every line of code required to reproduce. No generated
   results in COMMIT A.
-- All artifacts generated strictly from COMMIT A; every artifact records
-  `implementation_commit` and `research_commit` = `2c42341…`.
-- COMMIT B (this report + aggregate artifacts + result SHA256 manifest
-  update): `results_sha256` in the manifest pins every generated artifact.
-- Full gates at COMMIT A: pytest 676 passed; ruff check clean; ruff format
+- COMMIT B (`32126af…`): report + aggregates + hashes. Superseded on the
+  temporal-window provenance issue below; its alpha/fold/cost/jackknife
+  numbers remain valid (same implementation as A).
+- COMMIT C (`bda7002…`): provenance patch — the chained cumulative
+  temporal math (`chain_equity_curves` / `chained_cumulative_metrics`) is
+  now part of the frozen validation contract with deterministic tests
+  (two-segment chain reports `(1+r1)*(1+r2)-1`, cross-boundary maxDD and
+  joined-curve Sharpe); runner gains `--temporal-only`; manifest
+  `results_sha256` EMPTY. No results in COMMIT C.
+- COMMIT D (this report + refreshed artifacts): temporal-exclusion windows
+  (exclude-2020 / exclude-2024) re-run strictly from COMMIT C; every
+  artifact records `implementation_commit == research_commit == COMMIT C`;
+  `results_sha256` in the manifest pins every generated artifact.
+- Full gates at COMMIT C: pytest 680 passed; ruff check clean; ruff format
   clean; mypy clean (70 source files).

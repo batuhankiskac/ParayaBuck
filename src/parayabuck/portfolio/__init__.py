@@ -10,6 +10,7 @@ from parayabuck.portfolio.equity_residual_momentum import (
     EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2,
 )
+from parayabuck.portfolio.equity_residual_momentum_v3 import EquityResidualMomentum1dV3
 from parayabuck.portfolio.models import (
     PortfolioState,
     RebalancePolicy,
@@ -21,6 +22,10 @@ from parayabuck.portfolio.models import (
 _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityResidualMomentum1dV1.name: EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2.name: EquityResidualMomentum1dV2,
+    # v3 (MH_RAW consensus) is the 2026-08 promotion-validation candidate: it
+    # is CONSTRUCTIBLE (parity tests, offline shadow replay) but NOT enabled
+    # anywhere — config/settings.yaml still selects v2, nothing selects v3.
+    EquityResidualMomentum1dV3.name: EquityResidualMomentum1dV3,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
 }
@@ -28,7 +33,8 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
 # The PRODUCT strategy surface: the identities the PAPER product supports
 # (current validated selections plus frozen historical baselines). Rejected
 # strategy families are archived in docs/rejected_strategies.md and are NOT
-# constructible at runtime.
+# constructible at runtime. v3 is intentionally absent here: it remains a
+# promotion candidate, constructible for validation but not product-enabled.
 PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
     "equity_residual_momentum_v1",
     "equity_residual_momentum_v2",
@@ -116,6 +122,7 @@ __all__ = [
     "CryptoLowVariance1dV2",
     "EquityResidualMomentum1dV1",
     "EquityResidualMomentum1dV2",
+    "EquityResidualMomentum1dV3",
     "PortfolioContext",
     "PortfolioState",
     "PortfolioStrategy",

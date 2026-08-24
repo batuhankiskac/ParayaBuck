@@ -8,10 +8,16 @@ pass-through identities).
 from __future__ import annotations
 
 import math
+import sys
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
-from parayabuck.portfolio.research_alpha import (
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from parayabuck.portfolio.research_alpha import (  # noqa: E402
     ELEVATED,
     NORMAL,
     _compounded,
@@ -259,3 +265,92 @@ def test_hysteresis_deterministic_tie_behavior() -> None:
     second = hysteresis_selection(ranked, {"S2": 10.0}, top_n=2)
     assert first == second
     assert first[0] in {"S1", "S3", "S2"}
+
+
+# --------------------------------------------------------------------------- #
+# MH_RAW semantics freeze (promotion-validation mission 2026-08)
+# --------------------------------------------------------------------------- #
+
+
+def test_positive_12m_gate_runs_before_multi_horizon_consensus() -> None:
+    """Regression for ``positive_12m_gate = true``.
+
+    The research MH_RAW variant's positive 12-1 gate is inherited from the
+    production base pipeline: a symbol with negative 12-1 residual momentum
+    never reaches ``_transform_cross_sectional_scores`` even when its 6-1
+    residual momentum is strongly positive. If someone moves the gate after
+    the consensus (or removes it), this test fails.
+    """
+    import math as _math
+
+    import research_equity_alpha_optimization as research  # noqa: F811
+
+    from parayabuck.core.models import Bar, Market
+    from parayabuck.portfolio.base import PortfolioContext
+
+    n = 300
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    flat = [100.0] * n
+
+    def path(segments: list[tuple[int, float]]) -> list[float]:
+        closes: list[float] = []
+        current = 100.0
+        for bars, pct in segments:
+            for _ in range(bars):
+                current *= 1.0 + pct
+                closes.append(current)
+        while len(closes) < n:
+            current *= 1.0 + segments[-1][1]
+            closes.append(current)
+        return closes[:n]
+
+    def noisy(closes: list[float], phase: float) -> list[float]:
+        # Deterministic noise keeps residual vol strictly positive (the base
+        # pipeline rejects zero-vol names), identical to the parity suite.
+        return [
+            close * (1.0 + 0.004 * _math.sin(index * 1.7 + phase))
+            for index, close in enumerate(closes)
+        ]
+
+    def bars(symbol: str, closes: list[float]) -> tuple[Bar, ...]:
+        return tuple(
+            Bar(start + timedelta(days=index), symbol, "1d", c, c, c, c, 1_000_000, Market.EQUITY)
+            for index, c in enumerate(closes)
+        )
+
+    class Universe:
+        def contains(self, symbol: str, market: Market, timestamp: datetime) -> bool:
+            return True
+
+    pos = noisy(path([(300, 0.004)]), 0.0)
+    pos2 = noisy(path([(300, 0.004)]), 1.7)
+    pos3 = noisy(path([(300, 0.004)]), 3.1)
+    pos4 = noisy(path([(300, 0.004)]), 4.4)
+    neg12 = noisy(path([(180, -0.005), (120, 0.0045)]), 2.0)  # 12-1 < 0 but 6-1 > 0
+    history = {
+        "SPY": bars("SPY", flat),
+        "GOOD": bars("GOOD", pos),
+        "GOOD2": bars("GOOD2", pos2),
+        "GOOD3": bars("GOOD3", pos3),
+        "GOOD4": bars("GOOD4", pos4),
+        "GATE12": bars("GATE12", neg12),
+    }
+    context = PortfolioContext(
+        decision_timestamp=start + timedelta(days=n - 1),
+        market=Market.EQUITY,
+        timeframe="1d",
+        history=history,
+        universe=Universe(),
+        universe_version="test",
+        equity=100_000.0,
+        holdings={},
+        prices={},
+        benchmark_symbol="SPY",
+    )
+    variant = research.build_strategy("mh_raw", dict(research._FROZEN))
+    ranked, _vols = variant._score_candidates(context)
+    symbols = [symbol for _score, symbol in ranked]
+    assert "GATE12" not in symbols
+    assert "GOOD" in symbols
+    assert "GOOD2" in symbols
+    assert len(symbols) == 3  # 4 eligible, ivol filter keeps ~70%

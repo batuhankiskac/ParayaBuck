@@ -1125,10 +1125,14 @@ def axon_counterfactual(
         for cid in ["P1", "P2", "P3"]:
             cf = axon_row["counterfactuals"].get(cid, {})
             if cf.get("matched"):
+                # Handle both key names (worst10 row uses impact_reduction_vs_control, separate AXON row uses impact_reduction)
+                imp_red = cf.get("impact_reduction")
+                if imp_red is None:
+                    imp_red = cf.get("impact_reduction_vs_control")
                 axon_answers[cid] = {
                     "would_reduce": cf["dollar_reduction"] > 0,
                     "dollar_reduction": cf["dollar_reduction"],
-                    "impact_reduction": cf["impact_reduction"],
+                    "impact_reduction": imp_red,
                     "control_impact": axon_ref["realized_pnl_over_equity_at_entry"],
                     "counterfactual_impact": cf["estimated_impact_same_path"],
                 }

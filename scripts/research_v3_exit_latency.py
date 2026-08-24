@@ -1281,11 +1281,9 @@ def jackknife_for_candidate(
         def _universe_without(univ, banned: frozenset[str]):
             snaps = []
             for snap in univ.snapshots:
-                filtered_symbols = tuple(s for s in snap.symbols if s not in banned)
-                filtered_obs = tuple(s for s in snap.observation_symbols if s not in banned)
-                snaps.append(
-                    replace(snap, symbols=filtered_symbols, observation_symbols=filtered_obs)
-                )
+                filtered_symbols = frozenset(s for s in snap.symbols if s not in banned)
+                filtered_obs = frozenset(s for s in snap.observation_set if s not in banned)
+                snaps.append(replace(snap, symbols=filtered_symbols, observation_set=filtered_obs))
             return replace(univ, snapshots=tuple(snaps))
 
         uni2 = _universe_without(universe, frozenset({sym}))
@@ -1304,10 +1302,11 @@ def jackknife_for_candidate(
         def _uw2(univ, banned):
             snaps = []
             for snap in univ.snapshots:
-                fs = tuple(s for s in snap.symbols if s not in banned)
-                fo = tuple(s for s in snap.observation_symbols if s not in banned)
-                snaps.append(rep2(snap, symbols=fs, observation_symbols=fo))
+                fs = frozenset(s for s in snap.symbols if s not in banned)
+                fo = frozenset(s for s in snap.observation_set if s not in banned)
+                snaps.append(rep2(snap, symbols=fs, observation_set=fo))
             return rep2(univ, snapshots=tuple(snaps))
+
 
         uni3 = _uw2(universe, frozenset(top[:3]))
         res3 = run_window(config, candidate_id, uni3, bars, actions, start=EVAL_START, end=EVAL_END)

@@ -1,0 +1,55 @@
+{
+  "evidence_classes": {
+    "VERIFIED_TERMINATION": {
+      "definition": "Provider asset status = inactive AND historical bars stop AND no mapped successor continues (e.g., via asof rename chain). Strong evidence of delisting/merger.",
+      "example": "ATTO 2023-07-21 termination, inactive, no successor"
+    },
+    "RENAMED_SUCCESSOR": {
+      "definition": "Bars stop under ticker but provider asof mapping links successor entity (e.g., FB->META). Valid from/to defined by rename date, bars assigned to ONE entity, no duplicate same-date bars across aliases.",
+      "example": "FB 2012-05-18→2022-06-08, META 2022-06-09→present"
+    },
+    "POSSIBLE_DELISTING": {
+      "definition": "Inactive + bars terminate but no direct event metadata (no rename link). Inferred from status + bar termination coherence.",
+      "example": "Inactive OTC with last bar 2019-03-15, tradable false"
+    },
+    "DATA_GAP": {
+      "definition": "Active asset but history unexpectedly terminates before dataset end or has severe gaps (>20% missing vs expected trading days). Not termination, likely data outage or feed limitation.",
+      "example": "Active NASDAQ with last bar 2024-01-10 but expected 2026-07-30"
+    },
+    "UNKNOWN": {
+      "definition": "Ambiguous: insufficient data, conflicting status, or short history (<63 bars). Do NOT convert UNKNOWN directly into delisting event.",
+      "example": "Symbol with 10 bars, first 2025-01-01"
+    }
+  },
+  "pit_quality_tiers": {
+    "TIER_A_VERIFIED_PIT": {
+      "definition": "Historical existence/termination supported by strong provider evidence (active/inactive status + asof mapping + bar continuity). Highest confidence.",
+      "criteria": ["asset ID stable", "asof mapping verified", "bars continuous through rename where applicable", "evidence_class VERIFIED_TERMINATION or RENAMED"],
+      "expected_count": "To be determined after full probe"
+    },
+    "TIER_B_RECONSTRUCTED_PIT": {
+      "definition": "Historical lifetime inferred from inactive status + historical bars + rename mapping with coherent evidence but no exact official listing/delisting event.",
+      "criteria": ["inactive status", "historical bars present for >=252 sessions", "coherent first/last vs status", "no exact event metadata"],
+      "expected_count": "To be determined"
+    },
+    "TIER_C_APPROXIMATE": {
+      "definition": "Only bar-presence based lifetime is available (first/last observed bar). No status or rename mapping support.",
+      "criteria": ["bar presence only", "may include survivors with late entry"],
+      "expected_count": "To be determined"
+    },
+    "TIER_D_UNUSABLE": {
+      "definition": "Ambiguous identity, severe gaps, invalid mapping, insufficient data (<63 bars or >20% missing).",
+      "criteria": ["<63 bars", "severe gaps", "conflicting mapping"],
+      "expected_count": "To be determined"
+    }
+  },
+  "current_dataset_mapping": {
+    "note": "Current dataset's 1193/1194 survivors would be classified as TIER_C_APPROXIMATE at best, since no provider evidence for termination was used. This is why it is survivorship-biased.",
+    "survivor_tier": "C"
+  },
+  "preferred_wording": {
+    "if_TIER_A_coverage_justifies": "fully point-in-time",
+    "otherwise": "survivorship-aware reconstructed universe",
+    "avoid": "survivorship-free universe"
+  }
+}

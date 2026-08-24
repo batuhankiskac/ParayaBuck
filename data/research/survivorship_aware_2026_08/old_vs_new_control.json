@@ -1,0 +1,1683 @@
+{
+  "old": {
+    "return": 1.6648,
+    "cagr": 0.107847,
+    "sharpe": 0.821377,
+    "sortino": 1.100939,
+    "calmar": 0.489502,
+    "max_drawdown": 0.220319,
+    "turnover": 137.980041,
+    "average_exposure": 0.5482,
+    "average_holdings": 5.5584,
+    "fees_total": 7593.97,
+    "starting_equity": 100000,
+    "ending_equity": 266479.96,
+    "per_symbol": [
+      {
+        "symbol": "A",
+        "pnl": -944.73
+      },
+      {
+        "symbol": "AAAU",
+        "pnl": 3153.01
+      },
+      {
+        "symbol": "AAMI",
+        "pnl": -1120.68
+      },
+      {
+        "symbol": "AAON",
+        "pnl": 4139.01
+      },
+      {
+        "symbol": "AAP",
+        "pnl": 1144.63
+      },
+      {
+        "symbol": "AAPL",
+        "pnl": 4463.28
+      },
+      {
+        "symbol": "ABBV",
+        "pnl": 1168.27
+      },
+      {
+        "symbol": "ABCB",
+        "pnl": 81.24
+      },
+      {
+        "symbol": "ABG",
+        "pnl": -2777.34
+      },
+      {
+        "symbol": "ABR",
+        "pnl": -430.75
+      },
+      {
+        "symbol": "ABT",
+        "pnl": 1079.68
+      },
+      {
+        "symbol": "ABVX",
+        "pnl": 652.72
+      },
+      {
+        "symbol": "ACAD",
+        "pnl": 6823.79
+      },
+      {
+        "symbol": "ACGL",
+        "pnl": 285.25
+      },
+      {
+        "symbol": "ACHC",
+        "pnl": 1426.24
+      },
+      {
+        "symbol": "ACIW",
+        "pnl": 99.2
+      },
+      {
+        "symbol": "ACM",
+        "pnl": 1899.93
+      },
+      {
+        "symbol": "ACN",
+        "pnl": 422.82
+      },
+      {
+        "symbol": "ADBE",
+        "pnl": 7577.15
+      },
+      {
+        "symbol": "ADC",
+        "pnl": 194.71
+      },
+      {
+        "symbol": "ADI",
+        "pnl": 87.95
+      },
+      {
+        "symbol": "ADM",
+        "pnl": -391.08
+      },
+      {
+        "symbol": "ADNT",
+        "pnl": 300.24
+      },
+      {
+        "symbol": "ADP",
+        "pnl": -462.39
+      },
+      {
+        "symbol": "ADSK",
+        "pnl": 1014.9
+      },
+      {
+        "symbol": "ADT",
+        "pnl": -2761.74
+      },
+      {
+        "symbol": "AEE",
+        "pnl": -925.24
+      },
+      {
+        "symbol": "AEIS",
+        "pnl": -1849.52
+      },
+      {
+        "symbol": "AEM",
+        "pnl": 14585.41
+      },
+      {
+        "symbol": "AEO",
+        "pnl": 11125.99
+      },
+      {
+        "symbol": "AEP",
+        "pnl": -614.01
+      },
+      {
+        "symbol": "AER",
+        "pnl": -510.83
+      },
+      {
+        "symbol": "AES",
+        "pnl": 1684.93
+      },
+      {
+        "symbol": "AFG",
+        "pnl": 597.24
+      },
+      {
+        "symbol": "AFL",
+        "pnl": 667.36
+      },
+      {
+        "symbol": "AGCO",
+        "pnl": -3408.38
+      },
+      {
+        "symbol": "AGI",
+        "pnl": 2221.0
+      },
+      {
+        "symbol": "AGO",
+        "pnl": -2079.17
+      },
+      {
+        "symbol": "AGRO",
+        "pnl": -609.65
+      },
+      {
+        "symbol": "AGX",
+        "pnl": -3352.73
+      },
+      {
+        "symbol": "AHCO",
+        "pnl": -5085.34
+      },
+      {
+        "symbol": "AHR",
+        "pnl": 6460.74
+      },
+      {
+        "symbol": "AIG",
+        "pnl": -3934.15
+      },
+      {
+        "symbol": "AIS",
+        "pnl": -6193.0
+      },
+      {
+        "symbol": "AIT",
+        "pnl": -351.52
+      },
+      {
+        "symbol": "AIZ",
+        "pnl": 1781.9
+      },
+      {
+        "symbol": "AJG",
+        "pnl": 2118.55
+      },
+      {
+        "symbol": "AKAM",
+        "pnl": -2586.57
+      },
+      {
+        "symbol": "AKR",
+        "pnl": -1619.21
+      },
+      {
+        "symbol": "ALB",
+        "pnl": -1375.97
+      },
+      {
+        "symbol": "ALC",
+        "pnl": 213.94
+      },
+      {
+        "symbol": "ALGM",
+        "pnl": -1969.21
+      },
+      {
+        "symbol": "ALGN",
+        "pnl": -6977.88
+      },
+      {
+        "symbol": "ALGT",
+        "pnl": 173.81
+      },
+      {
+        "symbol": "ALK",
+        "pnl": 101.48
+      },
+      {
+        "symbol": "ALKS",
+        "pnl": -5497.71
+      },
+      {
+        "symbol": "ALL",
+        "pnl": -884.86
+      },
+      {
+        "symbol": "ALLE",
+        "pnl": -2649.35
+      },
+      {
+        "symbol": "ALLY",
+        "pnl": -900.03
+      },
+      {
+        "symbol": "ALNY",
+        "pnl": -4301.88
+      },
+      {
+        "symbol": "ALRM",
+        "pnl": 1069.9
+      },
+      {
+        "symbol": "ALSN",
+        "pnl": -4334.25
+      },
+      {
+        "symbol": "ALV",
+        "pnl": 481.95
+      },
+      {
+        "symbol": "AM",
+        "pnl": -2181.73
+      },
+      {
+        "symbol": "AMAT",
+        "pnl": 19936.57
+      },
+      {
+        "symbol": "AMD",
+        "pnl": 4479.98
+      },
+      {
+        "symbol": "AME",
+        "pnl": 396.48
+      },
+      {
+        "symbol": "AMG",
+        "pnl": -5277.32
+      },
+      {
+        "symbol": "AMGN",
+        "pnl": -262.16
+      },
+      {
+        "symbol": "AMLP",
+        "pnl": 580.17
+      },
+      {
+        "symbol": "AMN",
+        "pnl": -1599.18
+      },
+      {
+        "symbol": "AMP",
+        "pnl": 19.58
+      },
+      {
+        "symbol": "AMRC",
+        "pnl": -1297.98
+      },
+      {
+        "symbol": "AMRX",
+        "pnl": -2224.19
+      },
+      {
+        "symbol": "AMT",
+        "pnl": 2874.51
+      },
+      {
+        "symbol": "AMTD",
+        "pnl": -673.5
+      },
+      {
+        "symbol": "AMX",
+        "pnl": -813.39
+      },
+      {
+        "symbol": "AMZN",
+        "pnl": 1725.77
+      },
+      {
+        "symbol": "AN",
+        "pnl": -1509.95
+      },
+      {
+        "symbol": "ANDE",
+        "pnl": -659.68
+      },
+      {
+        "symbol": "ANET",
+        "pnl": -7874.89
+      },
+      {
+        "symbol": "ANF",
+        "pnl": 6273.04
+      },
+      {
+        "symbol": "ANIP",
+        "pnl": 1586.24
+      },
+      {
+        "symbol": "AON",
+        "pnl": 599.44
+      },
+      {
+        "symbol": "AORT",
+        "pnl": 277.65
+      },
+      {
+        "symbol": "APA",
+        "pnl": 757.99
+      },
+      {
+        "symbol": "APC",
+        "pnl": -597.9
+      },
+      {
+        "symbol": "APD",
+        "pnl": -1871.93
+      },
+      {
+        "symbol": "APG",
+        "pnl": 3246.47
+      },
+      {
+        "symbol": "APGE",
+        "pnl": -3331.31
+      },
+      {
+        "symbol": "APH",
+        "pnl": 6791.94
+      },
+      {
+        "symbol": "APO",
+        "pnl": -362.16
+      },
+      {
+        "symbol": "APPF",
+        "pnl": 2488.62
+      },
+      {
+        "symbol": "ARCB",
+        "pnl": 3869.98
+      },
+      {
+        "symbol": "ARES",
+        "pnl": -1919.12
+      },
+      {
+        "symbol": "ARGT",
+        "pnl": -2993.83
+      },
+      {
+        "symbol": "ARGX",
+        "pnl": 3359.32
+      },
+      {
+        "symbol": "ARKB",
+        "pnl": -183.87
+      },
+      {
+        "symbol": "ARKF",
+        "pnl": 6158.54
+      },
+      {
+        "symbol": "ARKG",
+        "pnl": 9925.3
+      },
+      {
+        "symbol": "ARKK",
+        "pnl": 4096.52
+      },
+      {
+        "symbol": "ARKQ",
+        "pnl": -3073.08
+      },
+      {
+        "symbol": "ARKW",
+        "pnl": 11275.79
+      },
+      {
+        "symbol": "ARMK",
+        "pnl": -5370.56
+      },
+      {
+        "symbol": "AROC",
+        "pnl": 1608.52
+      },
+      {
+        "symbol": "ARQT",
+        "pnl": -1743.59
+      },
+      {
+        "symbol": "ARWR",
+        "pnl": 5575.4
+      },
+      {
+        "symbol": "AS",
+        "pnl": -2476.02
+      },
+      {
+        "symbol": "ASB",
+        "pnl": 10.12
+      },
+      {
+        "symbol": "ASH",
+        "pnl": -1778.89
+      },
+      {
+        "symbol": "ASHR",
+        "pnl": 39.35
+      },
+      {
+        "symbol": "ASML",
+        "pnl": 6707.77
+      },
+      {
+        "symbol": "ASND",
+        "pnl": 3307.03
+      },
+      {
+        "symbol": "ASO",
+        "pnl": -3519.61
+      },
+      {
+        "symbol": "ASR",
+        "pnl": 285.05
+      },
+      {
+        "symbol": "ASX",
+        "pnl": 15857.67
+      },
+      {
+        "symbol": "ATAT",
+        "pnl": 838.48
+      },
+      {
+        "symbol": "ATEC",
+        "pnl": -3774.19
+      },
+      {
+        "symbol": "ATEN",
+        "pnl": -3529.74
+      },
+      {
+        "symbol": "ATI",
+        "pnl": 1324.3
+      },
+      {
+        "symbol": "ATKR",
+        "pnl": 522.05
+      },
+      {
+        "symbol": "ATMU",
+        "pnl": 3270.22
+      },
+      {
+        "symbol": "ATO",
+        "pnl": -121.94
+      },
+      {
+        "symbol": "ATRC",
+        "pnl": -2222.18
+      },
+      {
+        "symbol": "ATRO",
+        "pnl": 4569.16
+      },
+      {
+        "symbol": "AU",
+        "pnl": 371.79
+      },
+      {
+        "symbol": "AVA",
+        "pnl": -165.93
+      },
+      {
+        "symbol": "AVAV",
+        "pnl": -2552.02
+      },
+      {
+        "symbol": "AVB",
+        "pnl": 214.71
+      },
+      {
+        "symbol": "AVGO",
+        "pnl": 14529.11
+      },
+      {
+        "symbol": "AVNT",
+        "pnl": 267.26
+      },
+      {
+        "symbol": "AVPT",
+        "pnl": -5746.13
+      },
+      {
+        "symbol": "AVT",
+        "pnl": -836.57
+      },
+      {
+        "symbol": "AVTR",
+        "pnl": -398.01
+      },
+      {
+        "symbol": "AVY",
+        "pnl": 462.4
+      },
+      {
+        "symbol": "AWI",
+        "pnl": -1060.24
+      },
+      {
+        "symbol": "AWK",
+        "pnl": -483.02
+      },
+      {
+        "symbol": "AWR",
+        "pnl": -545.58
+      },
+      {
+        "symbol": "AX",
+        "pnl": 251.46
+      },
+      {
+        "symbol": "AXGN",
+        "pnl": -824.25
+      },
+      {
+        "symbol": "AXON",
+        "pnl": -4744.95
+      },
+      {
+        "symbol": "AXP",
+        "pnl": -339.8
+      },
+      {
+        "symbol": "AXS",
+        "pnl": 6137.27
+      },
+      {
+        "symbol": "AXSM",
+        "pnl": -1082.65
+      },
+      {
+        "symbol": "AXTA",
+        "pnl": 414.79
+      },
+      {
+        "symbol": "AYI",
+        "pnl": 814.96
+      },
+      {
+        "symbol": "AZO",
+        "pnl": 10393.33
+      },
+      {
+        "symbol": "AZTA",
+        "pnl": 1762.45
+      },
+      {
+        "symbol": "AZZ",
+        "pnl": -2096.77
+      },
+      {
+        "symbol": "B",
+        "pnl": 3223.04
+      },
+      {
+        "symbol": "BA",
+        "pnl": 6641.68
+      },
+      {
+        "symbol": "BAC",
+        "pnl": -1874.41
+      },
+      {
+        "symbol": "BAH",
+        "pnl": 77.76
+      },
+      {
+        "symbol": "BALL",
+        "pnl": 5220.38
+      },
+      {
+        "symbol": "BAM",
+        "pnl": 1901.29
+      },
+      {
+        "symbol": "BAND",
+        "pnl": 4768.54
+      },
+      {
+        "symbol": "BAP",
+        "pnl": 1.92
+      },
+      {
+        "symbol": "BAR",
+        "pnl": 1966.57
+      },
+      {
+        "symbol": "BAX",
+        "pnl": 462.08
+      },
+      {
+        "symbol": "BBIO",
+        "pnl": 1688.6
+      },
+      {
+        "symbol": "GOOGL",
+        "pnl": -138.98
+      },
+      {
+        "symbol": "JPM",
+        "pnl": 1964.21
+      },
+      {
+        "symbol": "MSFT",
+        "pnl": 5072.26
+      },
+      {
+        "symbol": "NVDA",
+        "pnl": 16755.87
+      },
+      {
+        "symbol": "XLE",
+        "pnl": 570.81
+      },
+      {
+        "symbol": "XOM",
+        "pnl": 6404.72
+      }
+    ]
+  },
+  "new": {
+    "return": 1.467241,
+    "cagr": 0.098965,
+    "sharpe": 0.769018,
+    "sortino": 1.022159,
+    "calmar": 0.466488,
+    "max_drawdown": 0.21215,
+    "turnover": 136.786526,
+    "average_exposure": 0.5996,
+    "average_holdings": 6.3526,
+    "fees_total": 7041.06,
+    "starting_equity": 100000,
+    "ending_equity": 246724.12,
+    "per_symbol": [
+      {
+        "symbol": "A",
+        "pnl": -245.49
+      },
+      {
+        "symbol": "AAAU",
+        "pnl": 2909.72
+      },
+      {
+        "symbol": "AAMI",
+        "pnl": -1037.61
+      },
+      {
+        "symbol": "AAON",
+        "pnl": 3796.36
+      },
+      {
+        "symbol": "AAP",
+        "pnl": 692.14
+      },
+      {
+        "symbol": "AAPL",
+        "pnl": 3755.12
+      },
+      {
+        "symbol": "ABBV",
+        "pnl": -410.52
+      },
+      {
+        "symbol": "ABCB",
+        "pnl": 1080.35
+      },
+      {
+        "symbol": "ABG",
+        "pnl": -2522.43
+      },
+      {
+        "symbol": "ABR",
+        "pnl": -421.04
+      },
+      {
+        "symbol": "ABT",
+        "pnl": 1237.2
+      },
+      {
+        "symbol": "ABVX",
+        "pnl": 594.92
+      },
+      {
+        "symbol": "ACAD",
+        "pnl": 6267.62
+      },
+      {
+        "symbol": "ACGL",
+        "pnl": 84.46
+      },
+      {
+        "symbol": "ACHC",
+        "pnl": 3068.89
+      },
+      {
+        "symbol": "ACIW",
+        "pnl": 194.35
+      },
+      {
+        "symbol": "ACM",
+        "pnl": 47.99
+      },
+      {
+        "symbol": "ACN",
+        "pnl": 390.59
+      },
+      {
+        "symbol": "ADBE",
+        "pnl": 6788.82
+      },
+      {
+        "symbol": "ADC",
+        "pnl": 132.33
+      },
+      {
+        "symbol": "ADI",
+        "pnl": -566.07
+      },
+      {
+        "symbol": "ADM",
+        "pnl": 556.17
+      },
+      {
+        "symbol": "ADNT",
+        "pnl": 271.45
+      },
+      {
+        "symbol": "ADP",
+        "pnl": -1796.2
+      },
+      {
+        "symbol": "ADSK",
+        "pnl": 1052.07
+      },
+      {
+        "symbol": "ADT",
+        "pnl": -2533.1
+      },
+      {
+        "symbol": "AEE",
+        "pnl": -899.13
+      },
+      {
+        "symbol": "AEIS",
+        "pnl": -1460.37
+      },
+      {
+        "symbol": "AEM",
+        "pnl": 13390.49
+      },
+      {
+        "symbol": "AEO",
+        "pnl": 10115.31
+      },
+      {
+        "symbol": "AEP",
+        "pnl": -564.32
+      },
+      {
+        "symbol": "AER",
+        "pnl": -468.54
+      },
+      {
+        "symbol": "AES",
+        "pnl": 566.23
+      },
+      {
+        "symbol": "AFG",
+        "pnl": 834.39
+      },
+      {
+        "symbol": "AFL",
+        "pnl": 612.11
+      },
+      {
+        "symbol": "AGCO",
+        "pnl": -3206.77
+      },
+      {
+        "symbol": "AGI",
+        "pnl": 2032.81
+      },
+      {
+        "symbol": "AGIO",
+        "pnl": 343.14
+      },
+      {
+        "symbol": "AGO",
+        "pnl": -101.47
+      },
+      {
+        "symbol": "AGRO",
+        "pnl": -553.7
+      },
+      {
+        "symbol": "AGX",
+        "pnl": -3104.22
+      },
+      {
+        "symbol": "AHCO",
+        "pnl": -4624.39
+      },
+      {
+        "symbol": "AHR",
+        "pnl": 6806.15
+      },
+      {
+        "symbol": "AIG",
+        "pnl": -3631.7
+      },
+      {
+        "symbol": "AIS",
+        "pnl": -5733.96
+      },
+      {
+        "symbol": "AIT",
+        "pnl": -322.42
+      },
+      {
+        "symbol": "AIZ",
+        "pnl": 1036.37
+      },
+      {
+        "symbol": "AJG",
+        "pnl": 1945.83
+      },
+      {
+        "symbol": "AKAM",
+        "pnl": -2711.61
+      },
+      {
+        "symbol": "AKR",
+        "pnl": -1485.16
+      },
+      {
+        "symbol": "ALB",
+        "pnl": -4904.87
+      },
+      {
+        "symbol": "ALC",
+        "pnl": 196.23
+      },
+      {
+        "symbol": "ALGM",
+        "pnl": -1806.18
+      },
+      {
+        "symbol": "ALGN",
+        "pnl": -5369.53
+      },
+      {
+        "symbol": "ALGT",
+        "pnl": 155.93
+      },
+      {
+        "symbol": "ALK",
+        "pnl": 93.07
+      },
+      {
+        "symbol": "ALKS",
+        "pnl": -5095.61
+      },
+      {
+        "symbol": "ALL",
+        "pnl": -660.11
+      },
+      {
+        "symbol": "ALLY",
+        "pnl": -859.6
+      },
+      {
+        "symbol": "ALNY",
+        "pnl": -4143.72
+      },
+      {
+        "symbol": "ALRM",
+        "pnl": 973.08
+      },
+      {
+        "symbol": "ALSN",
+        "pnl": -4394.93
+      },
+      {
+        "symbol": "ALV",
+        "pnl": 1331.87
+      },
+      {
+        "symbol": "AM",
+        "pnl": -1993.86
+      },
+      {
+        "symbol": "AMAT",
+        "pnl": 17246.28
+      },
+      {
+        "symbol": "AMD",
+        "pnl": 4252.23
+      },
+      {
+        "symbol": "AME",
+        "pnl": 130.52
+      },
+      {
+        "symbol": "AMG",
+        "pnl": -4250.24
+      },
+      {
+        "symbol": "AMGN",
+        "pnl": -241.47
+      },
+      {
+        "symbol": "AMLP",
+        "pnl": 532.14
+      },
+      {
+        "symbol": "AMN",
+        "pnl": -1512.08
+      },
+      {
+        "symbol": "AMP",
+        "pnl": 17.05
+      },
+      {
+        "symbol": "AMRC",
+        "pnl": -1180.62
+      },
+      {
+        "symbol": "AMRX",
+        "pnl": -2052.53
+      },
+      {
+        "symbol": "AMT",
+        "pnl": 2370.63
+      },
+      {
+        "symbol": "AMTD",
+        "pnl": -438.85
+      },
+      {
+        "symbol": "AMX",
+        "pnl": 344.92
+      },
+      {
+        "symbol": "AMZN",
+        "pnl": 2147.71
+      },
+      {
+        "symbol": "AN",
+        "pnl": -1485.79
+      },
+      {
+        "symbol": "ANDE",
+        "pnl": -610.81
+      },
+      {
+        "symbol": "ANET",
+        "pnl": -5763.68
+      },
+      {
+        "symbol": "ANF",
+        "pnl": 6269.23
+      },
+      {
+        "symbol": "ANGI",
+        "pnl": 150.01
+      },
+      {
+        "symbol": "ANIP",
+        "pnl": 1458.87
+      },
+      {
+        "symbol": "AON",
+        "pnl": -22.42
+      },
+      {
+        "symbol": "AORT",
+        "pnl": 256.24
+      },
+      {
+        "symbol": "APA",
+        "pnl": 701.8
+      },
+      {
+        "symbol": "APC",
+        "pnl": -541.3
+      },
+      {
+        "symbol": "APD",
+        "pnl": -730.06
+      },
+      {
+        "symbol": "APG",
+        "pnl": 2978.07
+      },
+      {
+        "symbol": "APGE",
+        "pnl": -3073.89
+      },
+      {
+        "symbol": "APH",
+        "pnl": 6248.27
+      },
+      {
+        "symbol": "APO",
+        "pnl": -87.33
+      },
+      {
+        "symbol": "APPF",
+        "pnl": 2282.6
+      },
+      {
+        "symbol": "ARCB",
+        "pnl": 3558.74
+      },
+      {
+        "symbol": "ARES",
+        "pnl": -664.7
+      },
+      {
+        "symbol": "ARGT",
+        "pnl": -2746.51
+      },
+      {
+        "symbol": "ARGX",
+        "pnl": 3027.5
+      },
+      {
+        "symbol": "ARKB",
+        "pnl": -169.69
+      },
+      {
+        "symbol": "ARKF",
+        "pnl": 5612.62
+      },
+      {
+        "symbol": "ARKG",
+        "pnl": 9488.52
+      },
+      {
+        "symbol": "ARKK",
+        "pnl": 3741.22
+      },
+      {
+        "symbol": "ARKQ",
+        "pnl": -2794.66
+      },
+      {
+        "symbol": "ARKW",
+        "pnl": 11181.85
+      },
+      {
+        "symbol": "ARMK",
+        "pnl": -2296.58
+      },
+      {
+        "symbol": "AROC",
+        "pnl": 1475.36
+      },
+      {
+        "symbol": "ARWR",
+        "pnl": 5170.72
+      },
+      {
+        "symbol": "AS",
+        "pnl": -2277.2
+      },
+      {
+        "symbol": "ASB",
+        "pnl": 10.14
+      },
+      {
+        "symbol": "ASH",
+        "pnl": -1633.34
+      },
+      {
+        "symbol": "ASHR",
+        "pnl": 39.3
+      },
+      {
+        "symbol": "ASML",
+        "pnl": 5022.11
+      },
+      {
+        "symbol": "ASND",
+        "pnl": 3050.88
+      },
+      {
+        "symbol": "ASO",
+        "pnl": -2437.91
+      },
+      {
+        "symbol": "ASR",
+        "pnl": 261.45
+      },
+      {
+        "symbol": "ASX",
+        "pnl": 14676.0
+      },
+      {
+        "symbol": "ATAT",
+        "pnl": 771.15
+      },
+      {
+        "symbol": "ATEC",
+        "pnl": -3482.37
+      },
+      {
+        "symbol": "ATEN",
+        "pnl": -3268.11
+      },
+      {
+        "symbol": "ATI",
+        "pnl": 695.3
+      },
+      {
+        "symbol": "ATKR",
+        "pnl": 2517.44
+      },
+      {
+        "symbol": "ATMU",
+        "pnl": 2999.49
+      },
+      {
+        "symbol": "ATO",
+        "pnl": -112.22
+      },
+      {
+        "symbol": "ATRC",
+        "pnl": -2025.98
+      },
+      {
+        "symbol": "ATRO",
+        "pnl": 2599.95
+      },
+      {
+        "symbol": "AU",
+        "pnl": 339.5
+      },
+      {
+        "symbol": "AVA",
+        "pnl": -165.71
+      },
+      {
+        "symbol": "AVAV",
+        "pnl": -2340.75
+      },
+      {
+        "symbol": "AVB",
+        "pnl": 198.57
+      },
+      {
+        "symbol": "AVGO",
+        "pnl": 13042.17
+      },
+      {
+        "symbol": "AVNT",
+        "pnl": 243.59
+      },
+      {
+        "symbol": "AVPT",
+        "pnl": -5270.62
+      },
+      {
+        "symbol": "AVT",
+        "pnl": -769.59
+      },
+      {
+        "symbol": "AVTR",
+        "pnl": -406.06
+      },
+      {
+        "symbol": "AVY",
+        "pnl": 889.76
+      },
+      {
+        "symbol": "AWI",
+        "pnl": -1743.28
+      },
+      {
+        "symbol": "AWK",
+        "pnl": 796.85
+      },
+      {
+        "symbol": "AWR",
+        "pnl": -531.83
+      },
+      {
+        "symbol": "AX",
+        "pnl": 340.51
+      },
+      {
+        "symbol": "AXE",
+        "pnl": -96.06
+      },
+      {
+        "symbol": "AXGN",
+        "pnl": -763.13
+      },
+      {
+        "symbol": "AXON",
+        "pnl": -4352.87
+      },
+      {
+        "symbol": "AXP",
+        "pnl": -309.09
+      },
+      {
+        "symbol": "AXS",
+        "pnl": 5628.52
+      },
+      {
+        "symbol": "AXSM",
+        "pnl": -262.25
+      },
+      {
+        "symbol": "AXTA",
+        "pnl": 380.45
+      },
+      {
+        "symbol": "AYI",
+        "pnl": 615.19
+      },
+      {
+        "symbol": "AZO",
+        "pnl": 8933.04
+      },
+      {
+        "symbol": "AZZ",
+        "pnl": -1923.18
+      },
+      {
+        "symbol": "B",
+        "pnl": 1483.84
+      },
+      {
+        "symbol": "BA",
+        "pnl": 6172.18
+      },
+      {
+        "symbol": "BAC",
+        "pnl": -1722.69
+      },
+      {
+        "symbol": "BAH",
+        "pnl": -975.82
+      },
+      {
+        "symbol": "BALL",
+        "pnl": 5745.34
+      },
+      {
+        "symbol": "BAND",
+        "pnl": 545.13
+      },
+      {
+        "symbol": "BAP",
+        "pnl": 308.33
+      },
+      {
+        "symbol": "BAR",
+        "pnl": 3263.3
+      },
+      {
+        "symbol": "BAX",
+        "pnl": 626.26
+      },
+      {
+        "symbol": "BBIO",
+        "pnl": 1434.58
+      },
+      {
+        "symbol": "CADE",
+        "pnl": -5585.47
+      },
+      {
+        "symbol": "ESRX",
+        "pnl": -240.49
+      },
+      {
+        "symbol": "GOOGL",
+        "pnl": -133.79
+      },
+      {
+        "symbol": "IAC",
+        "pnl": -833.13
+      },
+      {
+        "symbol": "JPM",
+        "pnl": 1848.04
+      },
+      {
+        "symbol": "KSU",
+        "pnl": -1267.47
+      },
+      {
+        "symbol": "MSFT",
+        "pnl": 2187.23
+      },
+      {
+        "symbol": "NVDA",
+        "pnl": 16253.76
+      },
+      {
+        "symbol": "ORBK",
+        "pnl": -124.58
+      },
+      {
+        "symbol": "TIF",
+        "pnl": -1074.71
+      },
+      {
+        "symbol": "TSLA",
+        "pnl": 2244.87
+      },
+      {
+        "symbol": "VER",
+        "pnl": 327.48
+      },
+      {
+        "symbol": "XLE",
+        "pnl": 655.18
+      },
+      {
+        "symbol": "XOM",
+        "pnl": 4249.33
+      }
+    ]
+  },
+  "delta_return": -0.197559,
+  "delta_sharpe": -0.052359,
+  "delta_maxDD": -0.008169,
+  "old_folds": [
+    {
+      "start": "2017-01-03T00:00:00+00:00",
+      "end": "2017-07-03T00:00:00+00:00",
+      "return": 0.048609,
+      "sharpe": 1.250881,
+      "max_drawdown": 0.038671
+    },
+    {
+      "start": "2017-07-03T00:00:00+00:00",
+      "end": "2018-01-03T00:00:00+00:00",
+      "return": 0.085246,
+      "sharpe": 2.46039,
+      "max_drawdown": 0.043346
+    },
+    {
+      "start": "2018-01-03T00:00:00+00:00",
+      "end": "2018-07-03T00:00:00+00:00",
+      "return": 0.028329,
+      "sharpe": 0.577277,
+      "max_drawdown": 0.055029
+    },
+    {
+      "start": "2018-07-03T00:00:00+00:00",
+      "end": "2019-01-03T00:00:00+00:00",
+      "return": -0.041581,
+      "sharpe": -0.651631,
+      "max_drawdown": 0.106144
+    },
+    {
+      "start": "2019-01-03T00:00:00+00:00",
+      "end": "2019-07-03T00:00:00+00:00",
+      "return": 0.209028,
+      "sharpe": 5.440789,
+      "max_drawdown": 0.014797
+    },
+    {
+      "start": "2019-07-03T00:00:00+00:00",
+      "end": "2020-01-03T00:00:00+00:00",
+      "return": 0.038906,
+      "sharpe": 1.070323,
+      "max_drawdown": 0.040217
+    },
+    {
+      "start": "2020-01-03T00:00:00+00:00",
+      "end": "2020-07-03T00:00:00+00:00",
+      "return": 0.096512,
+      "sharpe": 0.852481,
+      "max_drawdown": 0.168064
+    },
+    {
+      "start": "2020-07-03T00:00:00+00:00",
+      "end": "2021-01-03T00:00:00+00:00",
+      "return": 0.271985,
+      "sharpe": 2.761511,
+      "max_drawdown": 0.070468
+    },
+    {
+      "start": "2021-01-03T00:00:00+00:00",
+      "end": "2021-07-03T00:00:00+00:00",
+      "return": 0.001163,
+      "sharpe": 0.101938,
+      "max_drawdown": 0.113601
+    },
+    {
+      "start": "2021-07-03T00:00:00+00:00",
+      "end": "2022-01-03T00:00:00+00:00",
+      "return": -0.034992,
+      "sharpe": -0.52916,
+      "max_drawdown": 0.097146
+    },
+    {
+      "start": "2022-01-03T00:00:00+00:00",
+      "end": "2022-07-03T00:00:00+00:00",
+      "return": -0.071556,
+      "sharpe": -0.942649,
+      "max_drawdown": 0.102863
+    },
+    {
+      "start": "2022-07-03T00:00:00+00:00",
+      "end": "2023-01-03T00:00:00+00:00",
+      "return": 0.057362,
+      "sharpe": 1.062621,
+      "max_drawdown": 0.064602
+    },
+    {
+      "start": "2023-01-03T00:00:00+00:00",
+      "end": "2023-07-03T00:00:00+00:00",
+      "return": 0.065236,
+      "sharpe": 1.154995,
+      "max_drawdown": 0.049495
+    },
+    {
+      "start": "2023-07-03T00:00:00+00:00",
+      "end": "2024-01-03T00:00:00+00:00",
+      "return": 0.091294,
+      "sharpe": 1.443791,
+      "max_drawdown": 0.065454
+    },
+    {
+      "start": "2024-01-03T00:00:00+00:00",
+      "end": "2024-07-03T00:00:00+00:00",
+      "return": 0.081244,
+      "sharpe": 1.531028,
+      "max_drawdown": 0.06546
+    },
+    {
+      "start": "2024-07-03T00:00:00+00:00",
+      "end": "2025-01-03T00:00:00+00:00",
+      "return": 0.032459,
+      "sharpe": 0.653643,
+      "max_drawdown": 0.05071
+    },
+    {
+      "start": "2025-01-03T00:00:00+00:00",
+      "end": "2025-07-03T00:00:00+00:00",
+      "return": -0.032982,
+      "sharpe": -0.507439,
+      "max_drawdown": 0.138187
+    },
+    {
+      "start": "2025-07-03T00:00:00+00:00",
+      "end": "2026-01-03T00:00:00+00:00",
+      "return": 0.08458,
+      "sharpe": 1.468507,
+      "max_drawdown": 0.03509
+    },
+    {
+      "start": "2026-01-03T00:00:00+00:00",
+      "end": "2026-07-03T00:00:00+00:00",
+      "return": 0.123108,
+      "sharpe": 1.217483,
+      "max_drawdown": 0.120279
+    },
+    {
+      "start": "2026-07-03T00:00:00+00:00",
+      "end": "2026-07-30T00:00:00+00:00",
+      "return": -0.045637,
+      "sharpe": -4.260614,
+      "max_drawdown": 0.052427
+    }
+  ],
+  "new_folds": [
+    {
+      "start": "2017-01-03T00:00:00+00:00",
+      "end": "2017-07-03T00:00:00+00:00",
+      "return": 0.04096,
+      "sharpe": 1.036191,
+      "max_drawdown": 0.033038
+    },
+    {
+      "start": "2017-07-03T00:00:00+00:00",
+      "end": "2018-01-03T00:00:00+00:00",
+      "return": 0.085808,
+      "sharpe": 2.421654,
+      "max_drawdown": 0.037647
+    },
+    {
+      "start": "2018-01-03T00:00:00+00:00",
+      "end": "2018-07-03T00:00:00+00:00",
+      "return": 0.046162,
+      "sharpe": 0.878097,
+      "max_drawdown": 0.04743
+    },
+    {
+      "start": "2018-07-03T00:00:00+00:00",
+      "end": "2019-01-03T00:00:00+00:00",
+      "return": -0.062032,
+      "sharpe": -1.007944,
+      "max_drawdown": 0.116714
+    },
+    {
+      "start": "2019-01-03T00:00:00+00:00",
+      "end": "2019-07-03T00:00:00+00:00",
+      "return": 0.19074,
+      "sharpe": 5.13341,
+      "max_drawdown": 0.014386
+    },
+    {
+      "start": "2019-07-03T00:00:00+00:00",
+      "end": "2020-01-03T00:00:00+00:00",
+      "return": 0.031584,
+      "sharpe": 0.83797,
+      "max_drawdown": 0.038944
+    },
+    {
+      "start": "2020-01-03T00:00:00+00:00",
+      "end": "2020-07-03T00:00:00+00:00",
+      "return": 0.037079,
+      "sharpe": 0.432962,
+      "max_drawdown": 0.163036
+    },
+    {
+      "start": "2020-07-03T00:00:00+00:00",
+      "end": "2021-01-03T00:00:00+00:00",
+      "return": 0.257425,
+      "sharpe": 2.645193,
+      "max_drawdown": 0.072684
+    },
+    {
+      "start": "2021-01-03T00:00:00+00:00",
+      "end": "2021-07-03T00:00:00+00:00",
+      "return": -0.032965,
+      "sharpe": -0.28286,
+      "max_drawdown": 0.145887
+    },
+    {
+      "start": "2021-07-03T00:00:00+00:00",
+      "end": "2022-01-03T00:00:00+00:00",
+      "return": -0.009515,
+      "sharpe": -0.09664,
+      "max_drawdown": 0.089466
+    },
+    {
+      "start": "2022-01-03T00:00:00+00:00",
+      "end": "2022-07-03T00:00:00+00:00",
+      "return": -0.086976,
+      "sharpe": -1.136929,
+      "max_drawdown": 0.112761
+    },
+    {
+      "start": "2022-07-03T00:00:00+00:00",
+      "end": "2023-01-03T00:00:00+00:00",
+      "return": 0.056732,
+      "sharpe": 1.049102,
+      "max_drawdown": 0.064602
+    },
+    {
+      "start": "2023-01-03T00:00:00+00:00",
+      "end": "2023-07-03T00:00:00+00:00",
+      "return": 0.065236,
+      "sharpe": 1.154995,
+      "max_drawdown": 0.049495
+    },
+    {
+      "start": "2023-07-03T00:00:00+00:00",
+      "end": "2024-01-03T00:00:00+00:00",
+      "return": 0.091294,
+      "sharpe": 1.443791,
+      "max_drawdown": 0.065454
+    },
+    {
+      "start": "2024-01-03T00:00:00+00:00",
+      "end": "2024-07-03T00:00:00+00:00",
+      "return": 0.081244,
+      "sharpe": 1.531028,
+      "max_drawdown": 0.06546
+    },
+    {
+      "start": "2024-07-03T00:00:00+00:00",
+      "end": "2025-01-03T00:00:00+00:00",
+      "return": 0.032459,
+      "sharpe": 0.653643,
+      "max_drawdown": 0.05071
+    },
+    {
+      "start": "2025-01-03T00:00:00+00:00",
+      "end": "2025-07-03T00:00:00+00:00",
+      "return": -0.031811,
+      "sharpe": -0.486587,
+      "max_drawdown": 0.138187
+    },
+    {
+      "start": "2025-07-03T00:00:00+00:00",
+      "end": "2026-01-03T00:00:00+00:00",
+      "return": 0.089835,
+      "sharpe": 1.53773,
+      "max_drawdown": 0.03509
+    },
+    {
+      "start": "2026-01-03T00:00:00+00:00",
+      "end": "2026-07-03T00:00:00+00:00",
+      "return": 0.126943,
+      "sharpe": 1.242411,
+      "max_drawdown": 0.117231
+    },
+    {
+      "start": "2026-07-03T00:00:00+00:00",
+      "end": "2026-07-30T00:00:00+00:00",
+      "return": -0.045637,
+      "sharpe": -4.260614,
+      "max_drawdown": 0.052427
+    }
+  ],
+  "attribution": {
+    "survivor_pnl": 139865.8,
+    "nonsurvivor_pnl": -8894.44,
+    "total_pnl": 130971.36
+  },
+  "note": "Frozen V3 CONTROL, same economics, different datasets. Survivorship-aware dataset includes 224 recovered inactive histories (demo sample)."
+}

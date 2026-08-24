@@ -238,3 +238,4 @@ data/smoke/
 data/historical/equity_1200_2016_2019.csv
 data/historical/equity_1200_2016_2026.csv
 benchmarks_local/
+data/historical/equity_survivorship_aware_2016_2026_v2.csv

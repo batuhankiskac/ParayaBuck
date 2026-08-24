@@ -65,7 +65,7 @@ EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
 RECENT_START = datetime(2022, 1, 1, tzinfo=UTC)
 RESULT_SCHEMA_VERSION = "1.0.0"
 BOOTSTRAP_BLOCK = 20
-BOOTSTRAP_RESAMPLES = 2000
+BOOTSTRAP_RESAMPLES = 800  # reduced for wall-clock; still block bootstrap, seed 202608240
 BOOTSTRAP_SEED = 202608240
 COST_LEVELS = [1, 2, 3, 5]
 
@@ -187,7 +187,12 @@ def run_window(
     if end is not None:
         available = [b for b in available if b.timestamp <= end]
     filtered = available if start is None else [b for b in available if b.timestamp >= start]
-    warmup = [] if start is None else [b for b in available if b.timestamp < start]
+    # Speed: limit warmup to 400 (strategy needs 274).
+    if start is None:
+        warmup = []
+    else:
+        all_warm = [b for b in available if b.timestamp < start]
+        warmup = all_warm[-400:] if len(all_warm) > 400 else all_warm
     engine = make_base_engine(
         config,
         strategy,

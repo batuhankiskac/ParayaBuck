@@ -74,6 +74,8 @@ from parayabuck.validation import (
     FOLD_COUNT_DECLARED,
     assert_fold_contract,
     calendar_fold_windows,
+    chain_equity_curves,
+    chained_cumulative_metrics,
     paired_fold_deltas,
     promotion_gates,
     temporal_diagnostic_windows,
@@ -266,16 +268,18 @@ def run_segments(
 
     Every segment after the first starts its own fresh engine seeded with
     the previous segment's ending equity and warms up on ALL bars before its
-    start (the excluded segment between the two is never traded). Returns a
-    dict with the last segment's result plus CUMULATIVE statistics over the
-    chained equity curve (the reported return of an exclusion window is the
-    compound of its traded segments, relative to the original starting
-    equity — never the last segment's standalone return).
+    start (the excluded segment between the two is never traded). Returns the
+    last segment's result plus the canonical CUMULATIVE statistics of the
+    joined continuous equity curve (``parayabuck.validation`` — the same
+    helpers the contract tests lock): the reported return of an exclusion
+    window is the COMPOUND of its traded segments relative to the original
+    starting equity (``(1 + r1) * (1 + r2) - 1`` for two segments), and the
+    Sharpe / maxDD come from the JOINED curve — never the last segment's
+    standalone values.
     """
     result: PortfolioBacktestResult | None = None
-    chained_curve: list[float] = []
-    chained_times: list[datetime] = []
-    for index, (start, end) in enumerate(segments):
+    segment_curves: list[list[float]] = []
+    for _index, (start, end) in enumerate(segments):
         result, _strategy = run_window(
             config,
             variant_id,
@@ -286,43 +290,16 @@ def run_segments(
             actions=actions,
             starting_equity=result.ending_equity if result is not None else None,
         )
-        if index == 0:
-            chained_curve = list(result.equity_curve)
-            chained_times = list(result.curve_timestamps)
-        else:
-            chained_curve.extend(result.equity_curve[1:])
-            chained_times.extend(result.curve_timestamps[1:])
+        segment_curves.append(list(result.equity_curve))
     assert result is not None
-    # Cumulative statistics over the CHAINED equity curve (levels are
-    # continuous across segments because each new engine is seeded with the
-    # previous segment's ending equity). Return/sharpe/maxDD describe the
-    # whole chained window RELATIVE TO THE ORIGINAL starting equity — never
-    # the last segment's standalone values.
-    daily_returns = [
-        chained_curve[index] / chained_curve[index - 1] - 1
-        for index in range(1, len(chained_curve))
-        if chained_curve[index - 1] > 0 and chained_curve[index] > 0
-    ]
-    mean = statistics.fmean(daily_returns) if daily_returns else 0.0
-    variance = (
-        sum((value - mean) ** 2 for value in daily_returns) / (len(daily_returns) - 1)
-        if len(daily_returns) > 1
-        else 0.0
-    )
-    sharpe = mean / math.sqrt(variance) * math.sqrt(252.0) if variance > 0 else 0.0
-    peak = 1.0
-    running = 1.0
-    maxdd = 0.0
-    for value in daily_returns:
-        running *= 1.0 + value
-        peak = max(peak, running)
-        maxdd = max(maxdd, (peak - running) / peak)
+    chained = chain_equity_curves(segment_curves)
+    metrics = chained_cumulative_metrics(chained)
     return {
         "last": result,
-        "cumulative_return": chained_curve[-1] / chained_curve[0] - 1.0,
-        "cumulative_sharpe": sharpe,
-        "cumulative_max_drawdown": maxdd,
-        "chained_curve": chained_curve,
+        "cumulative_return": metrics["cumulative_return"],
+        "cumulative_sharpe": metrics["cumulative_sharpe"],
+        "cumulative_max_drawdown": metrics["cumulative_max_drawdown"],
+        "chained_curve": chained,
     }
 
 
@@ -1058,6 +1035,27 @@ def aggregate() -> int:
     return 0
 
 
+def _identity_block(manifest: dict, config: Config) -> dict[str, object]:
+    """The artifact identity block: implementation_commit == research_commit
+    == the running checkout (COMMIT A/C provenance contract)."""
+    return {
+        "mission": manifest["mission"],
+        "implementation_commit": git_head(),
+        "research_commit": git_head(),
+        "python_version": platform.python_version(),
+        "dataset": dataset_identity(),
+        "config_digest_sha256": config_digest(config),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "eval_start": EVAL_START.date().isoformat(),
+        "eval_end": EVAL_END.date().isoformat(),
+        "recent_start": RECENT_START.date().isoformat(),
+        "fold_step_months": FOLD_STEP_MONTHS,
+        "fold_count_declared": FOLD_COUNT_DECLARED,
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "survivorship_bias_limitation": True,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1068,6 +1066,15 @@ def main() -> int:
     parser.add_argument("--aggregate", action="store_true", help="write aggregate artifacts")
     parser.add_argument(
         "--smoke", action="store_true", help="short smoke run (no jackknife/stress)"
+    )
+    parser.add_argument(
+        "--temporal-only",
+        action="store_true",
+        help=(
+            "re-run ONLY the temporal sensitivity windows for existing variant "
+            "artifacts and rewrite their temporal_windows + identity (keeps the "
+            "full-period/folds/costs/jackknife numbers intact)"
+        ),
     )
     parser.add_argument(
         "--refresh-manifest-hashes",
@@ -1110,6 +1117,38 @@ def main() -> int:
     spy_daily = spy_daily_regimes(bars)
     print(f"universe ready; {len(spy_daily)} SPY days classified", flush=True)
 
+    if args.temporal_only:
+        for variant_id in requested:
+            path = OUT_DIR / f"{variant_id}.json"
+            if not path.exists():
+                raise SystemExit(
+                    f"{path} missing — a full variant run must exist before --temporal-only"
+                )
+            artifact = json.loads(path.read_text())
+            temporal: dict[str, object] = {}
+            for name, segments in temporal_diagnostic_windows(
+                EVAL_START, EVAL_END, RECENT_START
+            ).items():
+                chained = run_segments(
+                    config, variant_id, universe, bars, segments, actions=actions
+                )
+                temporal[name] = {
+                    "return": round(chained["cumulative_return"], 6),
+                    "sharpe": round(chained["cumulative_sharpe"], 6),
+                    "max_drawdown": round(chained["cumulative_max_drawdown"], 6),
+                    "cagr": round(chained["last"].cagr, 6),
+                    "segments": [[s.date().isoformat(), e.date().isoformat()] for s, e in segments],
+                }
+            artifact["temporal_windows"] = temporal
+            artifact["identity"] = _identity_block(manifest, config)
+            path.write_text(json.dumps(artifact, indent=1))
+            print(
+                f"{variant_id}: temporal windows re-run at {git_head()[:8]} -> {path.name}",
+                flush=True,
+            )
+        print("temporal-only rerun complete; run --aggregate next")
+        return 0
+
     own_top: dict[str, list[str]] = {}
     control_top: list[str] | None = None
     control_artifact_path = OUT_DIR / "control.json"
@@ -1151,26 +1190,7 @@ def main() -> int:
             control_top=control_top if variant_id != "control" else None,
             spy_daily=spy_daily,
         )
-        artifact["identity"] = {
-            "mission": manifest["mission"],
-            # COMMIT A contract: the checkout running the validation IS the
-            # implementation commit; both fields record it (fixes the phase-2
-            # provenance gap where the manifest pointed at 3c5e57d while the
-            # harness lived in 81b4fac).
-            "implementation_commit": git_head(),
-            "research_commit": git_head(),
-            "python_version": platform.python_version(),
-            "dataset": dataset_identity(),
-            "config_digest_sha256": config_digest(config),
-            "generated_at": datetime.now(UTC).isoformat(),
-            "eval_start": EVAL_START.date().isoformat(),
-            "eval_end": EVAL_END.date().isoformat(),
-            "recent_start": RECENT_START.date().isoformat(),
-            "fold_step_months": FOLD_STEP_MONTHS,
-            "fold_count_declared": FOLD_COUNT_DECLARED,
-            "schema_version": RESULT_SCHEMA_VERSION,
-            "survivorship_bias_limitation": True,
-        }
+        artifact["identity"] = _identity_block(manifest, config)
         suffix = "_smoke" if args.smoke else ""
         path = OUT_DIR / f"{variant_id}{suffix}.json"
         path.write_text(json.dumps(artifact, indent=1))

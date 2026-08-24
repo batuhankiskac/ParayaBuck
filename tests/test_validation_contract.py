@@ -8,6 +8,7 @@ temporal sensitivity windows, and the §9 promotion rubric.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,6 +17,8 @@ from parayabuck.validation import (
     FOLD_COUNT_DECLARED,
     assert_fold_contract,
     calendar_fold_windows,
+    chain_equity_curves,
+    chained_cumulative_metrics,
     paired_fold_deltas,
     promotion_gates,
     temporal_diagnostic_windows,
@@ -319,3 +322,83 @@ def test_promotion_gate_each_failure_flips_its_gate() -> None:
 
 def test_promotion_rubric_constants_match_mission() -> None:
     assert FOLD_COUNT_DECLARED == 20
+
+
+# --------------------------------------------------------------------------- #
+# Chained (temporal-exclusion) cumulative math — provenance contract
+# --------------------------------------------------------------------------- #
+
+
+def test_two_segment_chain_reports_compound_not_last_segment() -> None:
+    """A two-segment synthetic chain must report
+
+        cumulative_return = (1 + r1) * (1 + r2) - 1
+
+    and NOT merely segment2's standalone return."""
+    # Segment 1: 100 -> 110 (+10%); segment 2 seeded at 110 -> 121 (+10%).
+    joined = chain_equity_curves([[100.0, 110.0], [110.0, 121.0]])
+    assert joined == [100.0, 110.0, 121.0]
+    metrics = chained_cumulative_metrics(joined)
+    # Compound: 1.10 * 1.10 - 1 = 0.21. Segment2 alone would be 0.10.
+    assert metrics["cumulative_return"] == 0.21
+    assert metrics["cumulative_return"] != 0.10
+    # Unequal segment lengths and three segments.
+    joined3 = chain_equity_curves([[100.0, 105.0], [105.0], [105.0, 126.0]])
+    assert chained_cumulative_metrics(joined3)["cumulative_return"] == 0.26
+    # Single-segment chain degrades to that segment's own return.
+    assert chained_cumulative_metrics([100.0, 110.0])["cumulative_return"] == 0.10
+
+
+def test_chained_maxdd_uses_joined_curve_across_boundary() -> None:
+    """A drawdown spanning a segment boundary must be measured on the joined
+    continuous curve, not per-segment."""
+    # Segment 1: 100 -> 120 -> 90  (per-segment maxDD 25%).
+    # Segment 2 (seeded at 90): 90 -> 60 (per-segment maxDD 33.3%).
+    # Joined: 100 -> 120 -> 90 -> 60 has peak 120 and trough 60 -> 50%.
+    joined = chain_equity_curves([[100.0, 120.0, 90.0], [90.0, 60.0]])
+    metrics = chained_cumulative_metrics(joined)
+    assert metrics["cumulative_max_drawdown"] == pytest.approx(0.5, abs=1e-9)
+    assert metrics["cumulative_return"] == pytest.approx(-0.4, abs=1e-9)
+
+
+def test_chained_sharpe_uses_joined_daily_returns() -> None:
+    """Cumulative Sharpe is computed from the JOINED curve's daily returns."""
+    # Segment 1: deterministic high-vol oscillation; segment 2: calm drift.
+    seg1 = [100.0]
+    for _ in range(20):
+        seg1.append(seg1[-1] * 1.01)
+        seg1.append(seg1[-1] * 0.99)
+    seg2 = [seg1[-1]]
+    for _ in range(20):
+        seg2.append(seg2[-1] * 1.0005)
+    joined = chain_equity_curves([seg1, seg2])
+    daily = [joined[i] / joined[i - 1] - 1 for i in range(1, len(joined))]
+    mean = sum(daily) / len(daily)
+    variance = sum((v - mean) ** 2 for v in daily) / (len(daily) - 1)
+    expected = mean / math.sqrt(variance) * math.sqrt(252.0)
+    computed = chained_cumulative_metrics(joined)["cumulative_sharpe"]
+    # float64 daily compounding accumulates tiny rounding; the join-dropping
+    # assertion below proves cross-boundary sensitivity with a large margin,
+    # so a loose tolerance here is safe.
+    assert computed == pytest.approx(expected, abs=1e-6)
+    # The join point (last of seg1 -> first of seg2) contributes a real daily
+    # return; dropping it would change the Sharpe — proving the joined curve
+    # is the source, not per-segment statistics.
+    droppped = daily[1:]
+    mean2 = sum(droppped) / len(droppped)
+    variance2 = sum((v - mean2) ** 2 for v in droppped) / (len(droppped) - 1)
+    different = mean2 / math.sqrt(variance2) * math.sqrt(252.0)
+    assert chained_cumulative_metrics(joined)["cumulative_sharpe"] != pytest.approx(
+        different, abs=1e-12
+    )
+
+
+def test_chain_helpers_empty_and_degenerate_inputs() -> None:
+    assert chain_equity_curves([]) == []
+    assert chain_equity_curves([[], [100.0]]) == []
+    flat = chained_cumulative_metrics([])
+    assert flat == {
+        "cumulative_return": 0.0,
+        "cumulative_sharpe": 0.0,
+        "cumulative_max_drawdown": 0.0,
+    }

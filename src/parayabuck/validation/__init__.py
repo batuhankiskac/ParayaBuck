@@ -10,7 +10,12 @@ Deterministic building blocks for the 2026-08 promotion-validation run:
   fold comparison (median / mean / p25 / wins) used by both the artifact
   aggregator and the report generator;
 * ``promotion_gate`` — the exact mission rubric (§9), evaluated ONLY from
-  already-generated artifact numbers.
+  already-generated artifact numbers;
+* ``chain_equity_curves`` / ``chained_cumulative_metrics`` — the ONE
+  canonical cumulative math for multi-segment (temporal-exclusion) windows:
+  joined continuous equity curve, cumulative return = compound of segment
+  returns, cumulative Sharpe and maxDD from the JOINED curve (never the
+  last segment's standalone values).
 
 Nothing here touches the backtest engine: every function is pure and
 unit-testable, so the contract is locked before any run.
@@ -18,6 +23,7 @@ unit-testable, so the contract is locked before any run.
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -195,6 +201,66 @@ def _percentile(values: Sequence[float], q: float) -> float:
     return ordered[int(q * (len(ordered) - 1))] if ordered else 0.0
 
 
+def chain_equity_curves(segment_curves: Sequence[Sequence[float]]) -> list[float]:
+    """Join per-segment equity-level curves into ONE continuous curve.
+
+    Each segment after the first is seeded with the previous segment's
+    ending equity, so its first level duplicates the previous segment's
+    last level; the join keeps the shared point once. The result is the
+    equity curve of the CHAINED window (excluded spans simply absent),
+    exactly what the engine would have produced had the segments run as one
+    continuous account.
+    """
+    if not segment_curves:
+        return []
+    joined = list(segment_curves[0])
+    for curve in segment_curves[1:]:
+        if len(curve) > 1:
+            joined.extend(curve[1:])
+    return joined
+
+
+def chained_cumulative_metrics(curve: Sequence[float]) -> dict[str, float]:
+    """Cumulative return / Sharpe / maxDD over a joined chained curve.
+
+    ``cumulative_return = curve[-1] / curve[0] - 1`` — the COMPOUND of the
+    segment returns (for two segments: ``(1 + r1) * (1 + r2) - 1``), never
+    the last segment's standalone return. Sharpe and maxDD are computed
+    from the daily returns of the JOINED continuous curve (levels already
+    continuous across segments), so a drawdown that spans a segment
+    boundary is measured across the whole window.
+    """
+    if not curve or curve[0] <= 0 or curve[-1] <= 0:
+        return {
+            "cumulative_return": 0.0,
+            "cumulative_sharpe": 0.0,
+            "cumulative_max_drawdown": 0.0,
+        }
+    cumulative_return = curve[-1] / curve[0] - 1.0
+    daily = [
+        curve[index] / curve[index - 1] - 1
+        for index in range(1, len(curve))
+        if curve[index - 1] > 0 and curve[index] > 0
+    ]
+    mean = statistics.fmean(daily) if daily else 0.0
+    variance = (
+        sum((value - mean) ** 2 for value in daily) / (len(daily) - 1) if len(daily) > 1 else 0.0
+    )
+    sharpe = mean / math.sqrt(variance) * math.sqrt(252.0) if variance > 0 else 0.0
+    peak = 1.0
+    running = 1.0
+    maxdd = 0.0
+    for value in daily:
+        running *= 1.0 + value
+        peak = max(peak, running)
+        maxdd = max(maxdd, (peak - running) / peak)
+    return {
+        "cumulative_return": round(cumulative_return, 6),
+        "cumulative_sharpe": round(sharpe, 6),
+        "cumulative_max_drawdown": round(maxdd, 6),
+    }
+
+
 def promotion_gates(
     *,
     control: Mapping[str, Any],
@@ -320,6 +386,8 @@ __all__ = [
     "YEAR_WIND_MIN",
     "assert_fold_contract",
     "calendar_fold_windows",
+    "chained_cumulative_metrics",
+    "chain_equity_curves",
     "paired_fold_deltas",
     "promotion_gates",
     "temporal_diagnostic_windows",

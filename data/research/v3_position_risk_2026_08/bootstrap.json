@@ -1,0 +1,36 @@
+{
+  "implementation_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "research_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "bootstrap": {
+    "P0": {
+      "mean": 1.982401,
+      "p5": 0.504491,
+      "p95": 4.128974,
+      "resamples": 2000,
+      "block": 20
+    },
+    "P1": {
+      "mean": 1.925112,
+      "p5": 0.479769,
+      "p95": 4.061872,
+      "resamples": 2000,
+      "block": 20
+    },
+    "P2": {
+      "mean": 1.565509,
+      "p5": 0.291555,
+      "p95": 3.373344,
+      "resamples": 2000,
+      "block": 20
+    },
+    "P3": {
+      "mean": 1.941328,
+      "p5": 0.481097,
+      "p95": 4.076739,
+      "resamples": 2000,
+      "block": 20
+    }
+  },
+  "schema_version": "1.0.0"
+}

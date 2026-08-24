@@ -1,0 +1,145 @@
+{
+  "implementation_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "research_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "cost_stress": {
+    "1x": {
+      "P0": {
+        "return": 1.6648,
+        "sharpe": 0.821377,
+        "max_drawdown": 0.220319,
+        "cagr": 0.107847,
+        "turnover": 137.980041,
+        "fees_total": 7593.97
+      },
+      "P1": {
+        "return": 1.64205,
+        "sharpe": 0.831144,
+        "max_drawdown": 0.244086,
+        "cagr": 0.106855,
+        "turnover": 128.284487,
+        "fees_total": 6899.16
+      },
+      "P2": {
+        "return": 1.310855,
+        "sharpe": 0.742272,
+        "max_drawdown": 0.239785,
+        "cagr": 0.091471,
+        "turnover": 127.238449,
+        "fees_total": 6332.94
+      },
+      "P3": {
+        "return": 1.629167,
+        "sharpe": 0.815991,
+        "max_drawdown": 0.230348,
+        "cagr": 0.106289,
+        "turnover": 136.973155,
+        "fees_total": 7501.83
+      }
+    },
+    "2x": {
+      "P0": {
+        "return": 1.557278,
+        "sharpe": 0.789643,
+        "max_drawdown": 0.226084,
+        "cagr": 0.103089,
+        "turnover": 137.893305,
+        "fees_total": 14838.64
+      },
+      "P1": {
+        "return": 1.54176,
+        "sharpe": 0.800742,
+        "max_drawdown": 0.248432,
+        "cagr": 0.102388,
+        "turnover": 128.183053,
+        "fees_total": 13502.27
+      },
+      "P2": {
+        "return": 1.223578,
+        "sharpe": 0.710933,
+        "max_drawdown": 0.243739,
+        "cagr": 0.087089,
+        "turnover": 127.118585,
+        "fees_total": 12396.45
+      },
+      "P3": {
+        "return": 1.522614,
+        "sharpe": 0.783764,
+        "max_drawdown": 0.236011,
+        "cagr": 0.101517,
+        "turnover": 136.859528,
+        "fees_total": 14654.37
+      }
+    },
+    "3x": {
+      "P0": {
+        "return": 1.449982,
+        "sharpe": 0.756511,
+        "max_drawdown": 0.231808,
+        "cagr": 0.09816,
+        "turnover": 137.786637,
+        "fees_total": 21729.68
+      },
+      "P1": {
+        "return": 1.444538,
+        "sharpe": 0.769895,
+        "max_drawdown": 0.253735,
+        "cagr": 0.097904,
+        "turnover": 128.059117,
+        "fees_total": 19808.56
+      },
+      "P2": {
+        "return": 1.164677,
+        "sharpe": 0.689654,
+        "max_drawdown": 0.247607,
+        "cagr": 0.084044,
+        "turnover": 126.894547,
+        "fees_total": 18365.0
+      },
+      "P3": {
+        "return": 1.419882,
+        "sharpe": 0.751414,
+        "max_drawdown": 0.241635,
+        "cagr": 0.096742,
+        "turnover": 136.756993,
+        "fees_total": 21472.11
+      }
+    },
+    "5x": {
+      "P0": {
+        "return": 1.253158,
+        "sharpe": 0.691799,
+        "max_drawdown": 0.243135,
+        "cagr": 0.088591,
+        "turnover": 137.603272,
+        "fees_total": 34556.01
+      },
+      "P1": {
+        "return": 1.258948,
+        "sharpe": 0.707434,
+        "max_drawdown": 0.26345,
+        "cagr": 0.088883,
+        "turnover": 127.826616,
+        "fees_total": 31583.94
+      },
+      "P2": {
+        "return": 1.006402,
+        "sharpe": 0.627938,
+        "max_drawdown": 0.255008,
+        "cagr": 0.075477,
+        "turnover": 126.675926,
+        "fees_total": 29359.93
+      },
+      "P3": {
+        "return": 1.224932,
+        "sharpe": 0.686012,
+        "max_drawdown": 0.252764,
+        "cagr": 0.087158,
+        "turnover": 136.524954,
+        "fees_total": 34139.26
+      }
+    }
+  },
+  "note": "Every level is independent rerun with scaled costs. No heuristic.",
+  "schema_version": "1.0.0"
+}

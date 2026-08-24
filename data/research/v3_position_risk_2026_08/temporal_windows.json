@@ -1,0 +1,138 @@
+{
+  "implementation_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "research_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "temporal_windows": {
+    "window_2017_2021": {
+      "P0": {
+        "return": 0.859185,
+        "sharpe": 0.963095,
+        "max_drawdown": 0.169462,
+        "cagr": 0.132201
+      },
+      "P1": {
+        "return": 0.787429,
+        "sharpe": 0.928435,
+        "max_drawdown": 0.182005,
+        "cagr": 0.123314
+      },
+      "P2": {
+        "return": 0.632073,
+        "sharpe": 0.810801,
+        "max_drawdown": 0.181119,
+        "cagr": 0.103048
+      },
+      "P3": {
+        "return": 0.860651,
+        "sharpe": 0.965588,
+        "max_drawdown": 0.170664,
+        "cagr": 0.13238
+      }
+    },
+    "window_2022_2026": {
+      "P0": {
+        "return": 0.395378,
+        "sharpe": 0.613094,
+        "max_drawdown": 0.146576,
+        "cagr": 0.075675
+      },
+      "P1": {
+        "return": 0.45735,
+        "sharpe": 0.696652,
+        "max_drawdown": 0.139905,
+        "cagr": 0.085959
+      },
+      "P2": {
+        "return": 0.358093,
+        "sharpe": 0.590681,
+        "max_drawdown": 0.125737,
+        "cagr": 0.069315
+      },
+      "P3": {
+        "return": 0.401601,
+        "sharpe": 0.628347,
+        "max_drawdown": 0.143474,
+        "cagr": 0.076724
+      }
+    },
+    "window_2023_2026": {
+      "P0": {
+        "return": 0.461457,
+        "sharpe": 0.860412,
+        "max_drawdown": 0.146576,
+        "cagr": 0.112233
+      },
+      "P1": {
+        "return": 0.48983,
+        "sharpe": 0.926785,
+        "max_drawdown": 0.139905,
+        "cagr": 0.118245
+      },
+      "P2": {
+        "return": 0.420457,
+        "sharpe": 0.843208,
+        "max_drawdown": 0.125737,
+        "cagr": 0.103396
+      },
+      "P3": {
+        "return": 0.452855,
+        "sharpe": 0.860698,
+        "max_drawdown": 0.143474,
+        "cagr": 0.110394
+      }
+    },
+    "exclude_2020": {
+      "P0": {
+        "return": 0.926267,
+        "sharpe": 0.688742,
+        "max_drawdown": 0.202041,
+        "cagr": 0.058579
+      },
+      "P1": {
+        "return": 0.887787,
+        "sharpe": 0.679826,
+        "max_drawdown": 0.23159,
+        "cagr": 0.059634
+      },
+      "P2": {
+        "return": 0.762251,
+        "sharpe": 0.624279,
+        "max_drawdown": 0.23266,
+        "cagr": 0.050346
+      },
+      "P3": {
+        "return": 0.888827,
+        "sharpe": 0.675576,
+        "max_drawdown": 0.212342,
+        "cagr": 0.056546
+      }
+    },
+    "exclude_2024": {
+      "P0": {
+        "return": 1.413112,
+        "sharpe": 0.809297,
+        "max_drawdown": 0.220319,
+        "cagr": 0.086486
+      },
+      "P1": {
+        "return": 1.334393,
+        "sharpe": 0.795697,
+        "max_drawdown": 0.244086,
+        "cagr": 0.098637
+      },
+      "P2": {
+        "return": 1.041972,
+        "sharpe": 0.696534,
+        "max_drawdown": 0.239785,
+        "cagr": 0.073211
+      },
+      "P3": {
+        "return": 1.38283,
+        "sharpe": 0.802649,
+        "max_drawdown": 0.230348,
+        "cagr": 0.080119
+      }
+    }
+  },
+  "schema_version": "1.0.0"
+}

@@ -1,0 +1,590 @@
+{
+  "implementation_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "research_commit": "bfb88a4383252468e722bf7c0b60d930665abdbb",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "axon_counterfactual": {
+    "control_worst10_counterfactual": [
+      {
+        "control": {
+          "symbol": "ARES",
+          "entry_time": "2020-03-03T05:00:00+00:00",
+          "account_equity_at_entry": 139794.57,
+          "initial_weight": 0.100719,
+          "position_notional": 14079.97,
+          "realized_pnl": -4613.16,
+          "account_impact": -0.033,
+          "mae_over_equity": 0.045026,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2020-03-03T05:00:00+00:00",
+            "candidate_weight": 0.085588,
+            "candidate_qty": 318.233917,
+            "candidate_notional": 11625.39,
+            "candidate_realized_pnl": -3808.94,
+            "candidate_account_impact": -0.028042,
+            "estimated_pnl_same_price_path": -3808.94,
+            "estimated_impact_same_path": -0.027247,
+            "impact_reduction_vs_control": -0.005753,
+            "dollar_reduction": -804.22,
+            "weight_ratio": 0.8498
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2020-03-03T05:00:00+00:00",
+            "candidate_weight": 0.075571,
+            "candidate_qty": 275.255875,
+            "candidate_notional": 10055.36,
+            "candidate_realized_pnl": -3294.53,
+            "candidate_account_impact": -0.02476,
+            "estimated_pnl_same_price_path": -3294.54,
+            "estimated_impact_same_path": -0.023567,
+            "impact_reduction_vs_control": -0.009433,
+            "dollar_reduction": -1318.62,
+            "weight_ratio": 0.7503
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2020-03-03T05:00:00+00:00",
+            "candidate_weight": 0.093441,
+            "candidate_qty": 354.875169,
+            "candidate_notional": 12963.93,
+            "candidate_realized_pnl": -4247.5,
+            "candidate_account_impact": -0.030615,
+            "estimated_pnl_same_price_path": -4247.5,
+            "estimated_impact_same_path": -0.030384,
+            "impact_reduction_vs_control": -0.002616,
+            "dollar_reduction": -365.66,
+            "weight_ratio": 0.9277
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "AXON",
+          "entry_time": "2025-02-19T05:00:00+00:00",
+          "account_equity_at_entry": 231054.38,
+          "initial_weight": 0.100344,
+          "position_notional": 23184.99,
+          "realized_pnl": -6670.93,
+          "account_impact": -0.028872,
+          "mae_over_equity": 0.031532,
+          "is_AXON": true
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.085078,
+            "candidate_qty": 27.316551,
+            "candidate_notional": 19127.32,
+            "candidate_realized_pnl": -5503.43,
+            "candidate_account_impact": -0.024479,
+            "estimated_pnl_same_price_path": -5503.43,
+            "estimated_impact_same_path": -0.023819,
+            "impact_reduction_vs_control": -0.005053,
+            "dollar_reduction": -1167.5,
+            "weight_ratio": 0.8479
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.074975,
+            "candidate_qty": 21.73196,
+            "candidate_notional": 15216.94,
+            "candidate_realized_pnl": -4378.31,
+            "candidate_account_impact": -0.021572,
+            "estimated_pnl_same_price_path": -4378.31,
+            "estimated_impact_same_path": -0.018949,
+            "impact_reduction_vs_control": -0.009923,
+            "dollar_reduction": -2292.62,
+            "weight_ratio": 0.7472
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.100362,
+            "candidate_qty": 33.027124,
+            "candidate_notional": 23125.92,
+            "candidate_realized_pnl": -6653.93,
+            "candidate_account_impact": -0.028877,
+            "estimated_pnl_same_price_path": -6653.93,
+            "estimated_impact_same_path": -0.028798,
+            "impact_reduction_vs_control": -7.4e-05,
+            "dollar_reduction": -17.0,
+            "weight_ratio": 1.0002
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "AHCO",
+          "entry_time": "2021-04-13T04:00:00+00:00",
+          "account_equity_at_entry": 198900.16,
+          "initial_weight": 0.102939,
+          "position_notional": 20474.67,
+          "realized_pnl": -5085.34,
+          "account_impact": -0.025567,
+          "mae_over_equity": 0.027122,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2021-04-13T04:00:00+00:00",
+            "candidate_weight": 0.086901,
+            "candidate_qty": 449.815443,
+            "candidate_notional": 16715.66,
+            "candidate_realized_pnl": -4151.7,
+            "candidate_account_impact": -0.021584,
+            "estimated_pnl_same_price_path": -4151.71,
+            "estimated_impact_same_path": -0.020873,
+            "impact_reduction_vs_control": -0.004694,
+            "dollar_reduction": -933.63,
+            "weight_ratio": 0.8442
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2021-04-06T04:00:00+00:00",
+            "candidate_weight": 0.075024,
+            "candidate_qty": 343.310415,
+            "candidate_notional": 13187.07,
+            "candidate_realized_pnl": -3597.95,
+            "candidate_account_impact": -0.020469,
+            "estimated_pnl_same_price_path": -3275.3,
+            "estimated_impact_same_path": -0.016467,
+            "impact_reduction_vs_control": -0.0091,
+            "dollar_reduction": -1810.04,
+            "weight_ratio": 0.7288
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2021-04-13T04:00:00+00:00",
+            "candidate_weight": 0.102945,
+            "candidate_qty": 552.434753,
+            "candidate_notional": 20529.11,
+            "candidate_realized_pnl": -5098.86,
+            "candidate_account_impact": -0.025569,
+            "estimated_pnl_same_price_path": -5098.86,
+            "estimated_impact_same_path": -0.025635,
+            "impact_reduction_vs_control": 6.8e-05,
+            "dollar_reduction": 13.52,
+            "weight_ratio": 1.0001
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "ALKS",
+          "entry_time": "2021-10-26T04:00:00+00:00",
+          "account_equity_at_entry": 191530.23,
+          "initial_weight": 0.093313,
+          "position_notional": 17872.36,
+          "realized_pnl": -4817.6,
+          "account_impact": -0.025153,
+          "mae_over_equity": 0.026564,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": false,
+            "note": "no matching entry within 10d"
+          },
+          "P2": {
+            "matched": false,
+            "note": "no matching entry within 10d"
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2021-10-26T04:00:00+00:00",
+            "candidate_weight": 0.109703,
+            "candidate_qty": 668.990188,
+            "candidate_notional": 21038.49,
+            "candidate_realized_pnl": -5435.79,
+            "candidate_account_impact": -0.028344,
+            "estimated_pnl_same_price_path": -5671.05,
+            "estimated_impact_same_path": -0.029609,
+            "impact_reduction_vs_control": 0.004456,
+            "dollar_reduction": 853.45,
+            "weight_ratio": 1.1756
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "AVPT",
+          "entry_time": "2025-02-19T05:00:00+00:00",
+          "account_equity_at_entry": 231054.38,
+          "initial_weight": 0.101156,
+          "position_notional": 23372.63,
+          "realized_pnl": -5575.8,
+          "account_impact": -0.024132,
+          "mae_over_equity": 0.031785,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.085766,
+            "candidate_qty": 989.037467,
+            "candidate_notional": 19282.12,
+            "candidate_realized_pnl": -4599.96,
+            "candidate_account_impact": -0.02046,
+            "estimated_pnl_same_price_path": -4599.96,
+            "estimated_impact_same_path": -0.019909,
+            "impact_reduction_vs_control": -0.004223,
+            "dollar_reduction": -975.84,
+            "weight_ratio": 0.8479
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.075582,
+            "candidate_qty": 786.838818,
+            "candidate_notional": 15340.09,
+            "candidate_realized_pnl": -3659.55,
+            "candidate_account_impact": -0.018031,
+            "estimated_pnl_same_price_path": -3659.55,
+            "estimated_impact_same_path": -0.015838,
+            "impact_reduction_vs_control": -0.008294,
+            "dollar_reduction": -1916.25,
+            "weight_ratio": 0.7472
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2025-02-19T05:00:00+00:00",
+            "candidate_weight": 0.101174,
+            "candidate_qty": 1195.797471,
+            "candidate_notional": 23313.08,
+            "candidate_realized_pnl": -5561.6,
+            "candidate_account_impact": -0.024136,
+            "estimated_pnl_same_price_path": -5561.59,
+            "estimated_impact_same_path": -0.02407,
+            "impact_reduction_vs_control": -6.2e-05,
+            "dollar_reduction": -14.21,
+            "weight_ratio": 1.0002
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "ALGN",
+          "entry_time": "2018-10-23T04:00:00+00:00",
+          "account_equity_at_entry": 119673.41,
+          "initial_weight": 0.078302,
+          "position_notional": 9370.62,
+          "realized_pnl": -2733.52,
+          "account_impact": -0.022841,
+          "mae_over_equity": 0.026324,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2018-10-23T04:00:00+00:00",
+            "candidate_weight": 0.078194,
+            "candidate_qty": 29.88607,
+            "candidate_notional": 9144.89,
+            "candidate_realized_pnl": -2667.67,
+            "candidate_account_impact": -0.02281,
+            "estimated_pnl_same_price_path": -2667.67,
+            "estimated_impact_same_path": -0.022291,
+            "impact_reduction_vs_control": -0.00055,
+            "dollar_reduction": -65.85,
+            "weight_ratio": 0.9986
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2018-10-23T04:00:00+00:00",
+            "candidate_weight": 0.07328,
+            "candidate_qty": 27.416517,
+            "candidate_notional": 8389.23,
+            "candidate_realized_pnl": -2447.24,
+            "candidate_account_impact": -0.021377,
+            "estimated_pnl_same_price_path": -2447.24,
+            "estimated_impact_same_path": -0.020449,
+            "impact_reduction_vs_control": -0.002392,
+            "dollar_reduction": -286.28,
+            "weight_ratio": 0.9359
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2018-10-23T04:00:00+00:00",
+            "candidate_weight": 0.065353,
+            "candidate_qty": 25.326372,
+            "candidate_notional": 7749.66,
+            "candidate_realized_pnl": -2260.67,
+            "candidate_account_impact": -0.019064,
+            "estimated_pnl_same_price_path": -2260.67,
+            "estimated_impact_same_path": -0.01889,
+            "impact_reduction_vs_control": -0.003951,
+            "dollar_reduction": -472.85,
+            "weight_ratio": 0.8346
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "ALLE",
+          "entry_time": "2020-03-03T05:00:00+00:00",
+          "account_equity_at_entry": 139794.57,
+          "initial_weight": 0.122944,
+          "position_notional": 17186.91,
+          "realized_pnl": -2649.35,
+          "account_impact": -0.018952,
+          "mae_over_equity": 0.037112,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2020-03-03T05:00:00+00:00",
+            "candidate_weight": 0.106074,
+            "candidate_qty": 130.737727,
+            "candidate_notional": 14408.03,
+            "candidate_realized_pnl": -2152.72,
+            "candidate_account_impact": -0.015849,
+            "estimated_pnl_same_price_path": -2220.99,
+            "estimated_impact_same_path": -0.015888,
+            "impact_reduction_vs_control": -0.003064,
+            "dollar_reduction": -428.36,
+            "weight_ratio": 0.8628
+          },
+          "P2": {
+            "matched": false,
+            "note": "no matching entry within 10d"
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2020-03-03T05:00:00+00:00",
+            "candidate_weight": 0.123187,
+            "candidate_qty": 154.343786,
+            "candidate_notional": 17090.94,
+            "candidate_realized_pnl": -2622.8,
+            "candidate_account_impact": -0.018905,
+            "estimated_pnl_same_price_path": -2634.56,
+            "estimated_impact_same_path": -0.018846,
+            "impact_reduction_vs_control": -0.000106,
+            "dollar_reduction": -14.79,
+            "weight_ratio": 1.002
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "ADM",
+          "entry_time": "2022-03-29T04:00:00+00:00",
+          "account_equity_at_entry": 187819.57,
+          "initial_weight": 0.108452,
+          "position_notional": 20369.32,
+          "realized_pnl": -3494.38,
+          "account_impact": -0.018605,
+          "mae_over_equity": 0.023339,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2022-03-29T04:00:00+00:00",
+            "candidate_weight": 0.093734,
+            "candidate_qty": 193.041921,
+            "candidate_notional": 16941.63,
+            "candidate_realized_pnl": -2863.79,
+            "candidate_account_impact": -0.015845,
+            "estimated_pnl_same_price_path": -2906.36,
+            "estimated_impact_same_path": -0.015474,
+            "impact_reduction_vs_control": -0.003131,
+            "dollar_reduction": -588.02,
+            "weight_ratio": 0.8643
+          },
+          "P2": {
+            "matched": false,
+            "note": "no matching entry within 10d"
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2022-03-29T04:00:00+00:00",
+            "candidate_weight": 0.1098,
+            "candidate_qty": 229.684968,
+            "candidate_notional": 20222.63,
+            "candidate_realized_pnl": -3472.55,
+            "candidate_account_impact": -0.018854,
+            "estimated_pnl_same_price_path": -3469.22,
+            "estimated_impact_same_path": -0.018471,
+            "impact_reduction_vs_control": -0.000134,
+            "dollar_reduction": -25.16,
+            "weight_ratio": 1.0124
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "NVDA",
+          "entry_time": "2022-04-05T04:00:00+00:00",
+          "account_equity_at_entry": 186535.94,
+          "initial_weight": 0.089194,
+          "position_notional": 16637.91,
+          "realized_pnl": -3384.53,
+          "account_impact": -0.018144,
+          "mae_over_equity": 0.020216,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2022-04-05T04:00:00+00:00",
+            "candidate_weight": 0.106609,
+            "candidate_qty": 741.563253,
+            "candidate_notional": 19118.11,
+            "candidate_realized_pnl": -6003.96,
+            "candidate_account_impact": -0.03348,
+            "estimated_pnl_same_price_path": -3889.06,
+            "estimated_impact_same_path": -0.020849,
+            "impact_reduction_vs_control": 0.002705,
+            "dollar_reduction": 504.53,
+            "weight_ratio": 1.1952
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2022-04-05T04:00:00+00:00",
+            "candidate_weight": 0.0897,
+            "candidate_qty": 564.80747,
+            "candidate_notional": 14794.54,
+            "candidate_realized_pnl": -4806.22,
+            "candidate_account_impact": -0.02914,
+            "estimated_pnl_same_price_path": -3009.55,
+            "estimated_impact_same_path": -0.016134,
+            "impact_reduction_vs_control": -0.00201,
+            "dollar_reduction": -374.98,
+            "weight_ratio": 1.0057
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2022-04-05T04:00:00+00:00",
+            "candidate_weight": 0.057857,
+            "candidate_qty": 388.67944,
+            "candidate_notional": 10594.69,
+            "candidate_realized_pnl": -2155.2,
+            "candidate_account_impact": -0.011769,
+            "estimated_pnl_same_price_path": -2155.2,
+            "estimated_impact_same_path": -0.011554,
+            "impact_reduction_vs_control": -0.00659,
+            "dollar_reduction": -1229.33,
+            "weight_ratio": 0.6487
+          }
+        }
+      },
+      {
+        "control": {
+          "symbol": "ALB",
+          "entry_time": "2021-11-30T05:00:00+00:00",
+          "account_equity_at_entry": 186318.18,
+          "initial_weight": 0.115214,
+          "position_notional": 21466.39,
+          "realized_pnl": -3313.07,
+          "account_impact": -0.017782,
+          "mae_over_equity": 0.022941,
+          "is_AXON": false
+        },
+        "counterfactuals": {
+          "P1": {
+            "matched": true,
+            "candidate_entry_time": "2021-11-30T05:00:00+00:00",
+            "candidate_weight": 0.098337,
+            "candidate_qty": 65.260513,
+            "candidate_notional": 17681.52,
+            "candidate_realized_pnl": -2818.41,
+            "candidate_account_impact": -0.015675,
+            "estimated_pnl_same_price_path": -2728.92,
+            "estimated_impact_same_path": -0.014647,
+            "impact_reduction_vs_control": -0.003135,
+            "dollar_reduction": -584.15,
+            "weight_ratio": 0.8535
+          },
+          "P2": {
+            "matched": true,
+            "candidate_entry_time": "2021-11-30T05:00:00+00:00",
+            "candidate_weight": 0.082051,
+            "candidate_qty": 49.394356,
+            "candidate_notional": 13500.65,
+            "candidate_realized_pnl": -2251.07,
+            "candidate_account_impact": -0.013681,
+            "estimated_pnl_same_price_path": -2083.66,
+            "estimated_impact_same_path": -0.011183,
+            "impact_reduction_vs_control": -0.006599,
+            "dollar_reduction": -1229.41,
+            "weight_ratio": 0.7122
+          },
+          "P3": {
+            "matched": true,
+            "candidate_entry_time": "2021-11-30T05:00:00+00:00",
+            "candidate_weight": 0.100068,
+            "candidate_qty": 68.446543,
+            "candidate_notional": 18631.82,
+            "candidate_realized_pnl": -3072.03,
+            "candidate_account_impact": -0.016499,
+            "estimated_pnl_same_price_path": -2875.59,
+            "estimated_impact_same_path": -0.015434,
+            "impact_reduction_vs_control": -0.002348,
+            "dollar_reduction": -437.48,
+            "weight_ratio": 0.8685
+          }
+        }
+      }
+    ],
+    "axon_reference": {
+      "symbol": "AXON",
+      "entry_time": "2025-02-19T05:00:00+00:00",
+      "entry_decision_timestamp": "2025-02-18T05:00:00+00:00",
+      "exit_time": "2025-02-25T05:00:00+00:00",
+      "entry_price_avg": 700.21,
+      "entry_qty": 33.111481,
+      "account_equity_at_entry": 231054.38,
+      "position_notional_at_entry": 23184.99,
+      "initial_position_weight": 0.100344,
+      "realized_pnl": -6670.93,
+      "realized_pnl_over_equity_at_entry": -0.028872,
+      "mae_notional": 7285.63,
+      "mae_over_equity_at_entry": 0.031532,
+      "mae_return_pct": -0.314239,
+      "worst_low": 480.1767,
+      "first_crossing": {
+        "-5%": "2025-02-19T05:00:00+00:00",
+        "-7.5%": "2025-02-19T05:00:00+00:00",
+        "-10%": "2025-02-19T05:00:00+00:00",
+        "-15%": "2025-02-19T05:00:00+00:00"
+      },
+      "days_held": 6
+    },
+    "axon_specific_answers": {
+      "P1": {
+        "would_reduce": false,
+        "dollar_reduction": -1167.5,
+        "impact_reduction": -0.005053,
+        "control_impact": -0.028872,
+        "counterfactual_impact": -0.023819
+      },
+      "P2": {
+        "would_reduce": false,
+        "dollar_reduction": -2292.62,
+        "impact_reduction": -0.009923,
+        "control_impact": -0.028872,
+        "counterfactual_impact": -0.018949
+      },
+      "P3": {
+        "would_reduce": false,
+        "dollar_reduction": -17.0,
+        "impact_reduction": -7.4e-05,
+        "control_impact": -0.028872,
+        "counterfactual_impact": -0.028798
+      },
+      "P3_ES_before_entry_annualized": 0.48633,
+      "P3_ES_note": "Do NOT claim P3 predicted AXON unless ES metric was actually elevated BEFORE entry; compare ES to normal residual vol."
+    },
+    "note": "All account-loss percentages use realized_position_pnl / account_equity_at_entry. Candidate counterfactual uses same underlying price path via weight scaling; do not misattribute candidate worst % to AXON row."
+  },
+  "schema_version": "1.0.0"
+}

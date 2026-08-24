@@ -64,32 +64,92 @@
  "walk_forward": {
   "method": "anchored walk-forward; warmup = all prior bars; folds tile 2017-01-03 .. 2026-07-30",
   "fold_step_months": 6,
-  "boundary_rule": "true calendar months via relativedelta(months=6) — NEVER timedelta(days=180)",
+  "boundary_rule": "true calendar months via relativedelta(months=6) \u2014 NEVER timedelta(days=180)",
   "eval_start": "2017-01-03",
   "eval_end": "2026-07-30",
   "fold_count_expected": 20,
   "fold_count_assert": "runner must assert actual_fold_count == declared_fold_count or abort",
   "folds_exact": [
-   ["2017-01-03", "2017-07-03"],
-   ["2017-07-03", "2018-01-03"],
-   ["2018-01-03", "2018-07-03"],
-   ["2018-07-03", "2019-01-03"],
-   ["2019-01-03", "2019-07-03"],
-   ["2019-07-03", "2020-01-03"],
-   ["2020-01-03", "2020-07-03"],
-   ["2020-07-03", "2021-01-03"],
-   ["2021-01-03", "2021-07-03"],
-   ["2021-07-03", "2022-01-03"],
-   ["2022-01-03", "2022-07-03"],
-   ["2022-07-03", "2023-01-03"],
-   ["2023-01-03", "2023-07-03"],
-   ["2023-07-03", "2024-01-03"],
-   ["2024-01-03", "2024-07-03"],
-   ["2024-07-03", "2025-01-03"],
-   ["2025-01-03", "2025-07-03"],
-   ["2025-07-03", "2026-01-03"],
-   ["2026-01-03", "2026-07-03"],
-   ["2026-07-03", "2026-07-30"]
+   [
+    "2017-01-03",
+    "2017-07-03"
+   ],
+   [
+    "2017-07-03",
+    "2018-01-03"
+   ],
+   [
+    "2018-01-03",
+    "2018-07-03"
+   ],
+   [
+    "2018-07-03",
+    "2019-01-03"
+   ],
+   [
+    "2019-01-03",
+    "2019-07-03"
+   ],
+   [
+    "2019-07-03",
+    "2020-01-03"
+   ],
+   [
+    "2020-01-03",
+    "2020-07-03"
+   ],
+   [
+    "2020-07-03",
+    "2021-01-03"
+   ],
+   [
+    "2021-01-03",
+    "2021-07-03"
+   ],
+   [
+    "2021-07-03",
+    "2022-01-03"
+   ],
+   [
+    "2022-01-03",
+    "2022-07-03"
+   ],
+   [
+    "2022-07-03",
+    "2023-01-03"
+   ],
+   [
+    "2023-01-03",
+    "2023-07-03"
+   ],
+   [
+    "2023-07-03",
+    "2024-01-03"
+   ],
+   [
+    "2024-01-03",
+    "2024-07-03"
+   ],
+   [
+    "2024-07-03",
+    "2025-01-03"
+   ],
+   [
+    "2025-01-03",
+    "2025-07-03"
+   ],
+   [
+    "2025-07-03",
+    "2026-01-03"
+   ],
+   [
+    "2026-01-03",
+    "2026-07-03"
+   ],
+   [
+    "2026-07-03",
+    "2026-07-30"
+   ]
   ]
  },
  "recent_period": {
@@ -99,21 +159,42 @@
  },
  "temporal_windows": {
   "window_2017_2021": [
-   ["2017-01-03", "2022-01-01"]
+   [
+    "2017-01-03",
+    "2022-01-01"
+   ]
   ],
   "window_2022_2026": [
-   ["2022-01-01", "2026-07-30"]
+   [
+    "2022-01-01",
+    "2026-07-30"
+   ]
   ],
   "window_2023_2026": [
-   ["2023-01-01", "2026-07-30"]
+   [
+    "2023-01-01",
+    "2026-07-30"
+   ]
   ],
   "exclude_2020": [
-   ["2017-01-03", "2020-01-01"],
-   ["2021-01-01", "2026-07-30"]
+   [
+    "2017-01-03",
+    "2020-01-01"
+   ],
+   [
+    "2021-01-01",
+    "2026-07-30"
+   ]
   ],
   "exclude_2024": [
-   ["2017-01-03", "2024-01-01"],
-   ["2025-01-01", "2026-07-30"]
+   [
+    "2017-01-03",
+    "2024-01-01"
+   ],
+   [
+    "2025-01-01",
+    "2026-07-30"
+   ]
   ]
  },
  "temporal_windows_note": {
@@ -149,7 +230,7 @@
   "seed": 202608230
  },
  "promotion_rubric": {
-  "source": "mission 2026-08 MH_RAW promotion-validation §9 (frozen, unmodified)",
+  "source": "mission 2026-08 MH_RAW promotion-validation \u00a79 (frozen, unmodified)",
   "gates": [
    "full-period Sharpe improvement >= +0.08",
    "maxDD improvement >= 3pp",
@@ -166,7 +247,21 @@
   ],
   "rejection": "any material result change since phase 2 must be reported; no massaging of the rubric"
  },
- "results_sha256": {},
+ "results_sha256": {
+  "control.json": "7bda97b40483494ef5c1f2dd49ec778ed32cb5629b71012266087776c75f4220",
+  "mh_raw.json": "6b8bdb55ce61888578bb70556cb5948ea728d92dba70020a6cf50cebb18ce376",
+  "summary.json": "9480af4efd05d907fbf760231b9e6678eb884e33616c441870fbc97bf844aac5",
+  "fold_deltas.json": "3ed56f367387db8c2af916236a6f0532e9c8bcdeacb35583903553325db68832",
+  "recent_period.json": "197d5f92a55103bac85c2a8f4405e4cf5ca61293d9e8899c6436bf104164d331",
+  "annual_results.json": "ae8e2cc6f01780174fceb14b9c39f3e005921a32c941da90e8d5e87446b6c38a",
+  "cost_stress.json": "f1d66c19a39ff41caaa4bb11fa90801bbbf76c7924bf1f766c5bf19bd0e6a2ae",
+  "jackknife.json": "0a827c9ce2f164d8f9cf43b078ddb1e944cbc8a17dcabe343fdf2365171f5363",
+  "regime_analysis.json": "f40e477f97e466a5ae549967abf7b1a7131a7a1145d23ac7d7466b26ca85d750",
+  "temporal_windows.json": "18c8a9c0362325180452f98bb4f19cfe7cb41f112d0a83720dfe23e35d9a464e",
+  "bootstrap.json": "0cd835c8477b754f4b364d7832288e29b59f6c153075424fdf81c92e9a7b27b9",
+  "promotion_gate.json": "63f652c4183a4adb8cca29e8d80b97e205c890e888186b712104001a5978f8a2",
+  "shadow_log.json": "8476930b62968dd08143bceba6328da0a1c07b664a41fd1917020e5fd5ea5a14"
+ },
  "commands": [
   ".venv/bin/python -m pytest -q",
   ".venv/bin/python -m ruff check .",

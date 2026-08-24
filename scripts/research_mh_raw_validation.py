@@ -261,16 +261,20 @@ def run_segments(
     segments: list[tuple[datetime, datetime]],
     *,
     actions: list[CorporateAction] | None,
-) -> PortfolioBacktestResult:
+) -> dict[str, object]:
     """Run a multi-segment window as a CHAINED backtest.
 
     Every segment after the first starts its own fresh engine seeded with
     the previous segment's ending equity and warms up on ALL bars before its
-    start (the excluded segment between the two is never traded). Returns the
-    final segment's result; the reported return is relative to the original
-    starting equity.
+    start (the excluded segment between the two is never traded). Returns a
+    dict with the last segment's result plus CUMULATIVE statistics over the
+    chained equity curve (the reported return of an exclusion window is the
+    compound of its traded segments, relative to the original starting
+    equity — never the last segment's standalone return).
     """
     result: PortfolioBacktestResult | None = None
+    chained_curve: list[float] = []
+    chained_times: list[datetime] = []
     for index, (start, end) in enumerate(segments):
         result, _strategy = run_window(
             config,
@@ -282,8 +286,44 @@ def run_segments(
             actions=actions,
             starting_equity=result.ending_equity if result is not None else None,
         )
+        if index == 0:
+            chained_curve = list(result.equity_curve)
+            chained_times = list(result.curve_timestamps)
+        else:
+            chained_curve.extend(result.equity_curve[1:])
+            chained_times.extend(result.curve_timestamps[1:])
     assert result is not None
-    return result
+    # Cumulative statistics over the CHAINED equity curve (levels are
+    # continuous across segments because each new engine is seeded with the
+    # previous segment's ending equity). Return/sharpe/maxDD describe the
+    # whole chained window RELATIVE TO THE ORIGINAL starting equity — never
+    # the last segment's standalone values.
+    daily_returns = [
+        chained_curve[index] / chained_curve[index - 1] - 1
+        for index in range(1, len(chained_curve))
+        if chained_curve[index - 1] > 0 and chained_curve[index] > 0
+    ]
+    mean = statistics.fmean(daily_returns) if daily_returns else 0.0
+    variance = (
+        sum((value - mean) ** 2 for value in daily_returns) / (len(daily_returns) - 1)
+        if len(daily_returns) > 1
+        else 0.0
+    )
+    sharpe = mean / math.sqrt(variance) * math.sqrt(252.0) if variance > 0 else 0.0
+    peak = 1.0
+    running = 1.0
+    maxdd = 0.0
+    for value in daily_returns:
+        running *= 1.0 + value
+        peak = max(peak, running)
+        maxdd = max(maxdd, (peak - running) / peak)
+    return {
+        "last": result,
+        "cumulative_return": chained_curve[-1] / chained_curve[0] - 1.0,
+        "cumulative_sharpe": sharpe,
+        "cumulative_max_drawdown": maxdd,
+        "chained_curve": chained_curve,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -795,12 +835,12 @@ def run_variant(
         for name, segments in temporal_diagnostic_windows(
             EVAL_START, EVAL_END, RECENT_START
         ).items():
-            result = run_segments(config, variant_id, universe, bars, segments, actions=actions)
+            chained = run_segments(config, variant_id, universe, bars, segments, actions=actions)
             temporal[name] = {
-                "return": round(result.net_return, 6),
-                "sharpe": round(result.sharpe, 6),
-                "max_drawdown": round(result.max_drawdown, 6),
-                "cagr": round(result.cagr, 6),
+                "return": round(chained["cumulative_return"], 6),
+                "sharpe": round(chained["cumulative_sharpe"], 6),
+                "max_drawdown": round(chained["cumulative_max_drawdown"], 6),
+                "cagr": round(chained["last"].cagr, 6),
                 "segments": [[s.date().isoformat(), e.date().isoformat()] for s, e in segments],
             }
 

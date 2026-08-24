@@ -187,12 +187,7 @@ def run_window(
     if end is not None:
         available = [b for b in available if b.timestamp <= end]
     filtered = available if start is None else [b for b in available if b.timestamp >= start]
-    # Speed: limit warmup to 400 (strategy needs 274).
-    if start is None:
-        warmup = []
-    else:
-        all_warm = [b for b in available if b.timestamp < start]
-        warmup = all_warm[-400:] if len(all_warm) > 400 else all_warm
+    warmup = [] if start is None else [b for b in available if b.timestamp < start]
     engine = make_base_engine(
         config,
         strategy,

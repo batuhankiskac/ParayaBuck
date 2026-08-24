@@ -7,10 +7,10 @@
       "gates": {
         "1_sharpe_ge_control": true,
         "2_return_within_5pp": true,
-        "3_tail_improves_20pct": true,
+        "3_tail_improves_20pct": false,
         "4_top5_not_worsen": true,
         "5_maxDD_le_control": false,
-        "6_median_fold_delta_ge_0": false,
+        "6_median_fold_delta_ge_0": true,
         "7_sharpe_wins_ge_10": true,
         "8_2022_sharpe_ge_control": true,
         "9_3x_cost_preserves": true,
@@ -22,13 +22,13 @@
       },
       "all_pass": false,
       "sharpe_wins": 12,
-      "median_delta": -1
+      "median_delta": 0.001402
     },
     "P2": {
       "gates": {
         "1_sharpe_ge_control": false,
         "2_return_within_5pp": false,
-        "3_tail_improves_20pct": true,
+        "3_tail_improves_20pct": false,
         "4_top5_not_worsen": true,
         "5_maxDD_le_control": false,
         "6_median_fold_delta_ge_0": false,
@@ -43,7 +43,7 @@
       },
       "all_pass": false,
       "sharpe_wins": 8,
-      "median_delta": -1
+      "median_delta": -0.009726
     },
     "P3": {
       "gates": {
@@ -52,7 +52,7 @@
         "3_tail_improves_20pct": false,
         "4_top5_not_worsen": true,
         "5_maxDD_le_control": false,
-        "6_median_fold_delta_ge_0": false,
+        "6_median_fold_delta_ge_0": true,
         "7_sharpe_wins_ge_10": true,
         "8_2022_sharpe_ge_control": true,
         "9_3x_cost_preserves": false,
@@ -64,7 +64,7 @@
       },
       "all_pass": false,
       "sharpe_wins": 12,
-      "median_delta": -1
+      "median_delta": 0.000115
     }
   },
   "manifest": {

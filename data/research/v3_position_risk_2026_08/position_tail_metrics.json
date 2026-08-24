@@ -5,8 +5,11 @@
   "tail_metrics": {
     "P0": {
       "worst_position_loss_over_equity": -0.033,
-      "p95_loss_over_equity": -0.000419,
-      "p99_loss_over_equity": -0.000137,
+      "worst_position_loss_magnitude_over_equity": 0.033,
+      "p95_loss_over_equity": -0.01617,
+      "p99_loss_over_equity": -0.024132,
+      "p95_loss_magnitude_over_equity": 0.01617,
+      "p99_loss_magnitude_over_equity": 0.024132,
       "p95_mae_over_equity": 0.017808,
       "p99_mae_over_equity": 0.026564,
       "loss_concentration": {
@@ -22,12 +25,15 @@
         "-0.025": 4,
         "-0.030": 1
       },
-      "note": "All using contemporaneous account_equity_at_entry. Worst is most negative."
+      "note": "Loss severity = abs(realized_pnl/equity_at_entry) for losing episodes; p95/p99 magnitude are 95th/99th percentiles of POSITIVE severity (severe tail). All using contemporaneous equity."
     },
     "P1": {
       "worst_position_loss_over_equity": -0.03348,
-      "p95_loss_over_equity": -0.000246,
-      "p99_loss_over_equity": -5.3e-05,
+      "worst_position_loss_magnitude_over_equity": 0.03348,
+      "p95_loss_over_equity": -0.014253,
+      "p99_loss_over_equity": -0.02281,
+      "p95_loss_magnitude_over_equity": 0.014253,
+      "p99_loss_magnitude_over_equity": 0.02281,
       "p95_mae_over_equity": 0.0157,
       "p99_mae_over_equity": 0.022897,
       "loss_concentration": {
@@ -43,12 +49,15 @@
         "-0.025": 3,
         "-0.030": 1
       },
-      "note": "All using contemporaneous account_equity_at_entry. Worst is most negative."
+      "note": "Loss severity = abs(realized_pnl/equity_at_entry) for losing episodes; p95/p99 magnitude are 95th/99th percentiles of POSITIVE severity (severe tail). All using contemporaneous equity."
     },
     "P2": {
       "worst_position_loss_over_equity": -0.02914,
-      "p95_loss_over_equity": -0.000236,
-      "p99_loss_over_equity": -4.7e-05,
+      "worst_position_loss_magnitude_over_equity": 0.02914,
+      "p95_loss_over_equity": -0.012395,
+      "p99_loss_over_equity": -0.022513,
+      "p95_loss_magnitude_over_equity": 0.012395,
+      "p99_loss_magnitude_over_equity": 0.022513,
       "p95_mae_over_equity": 0.013864,
       "p99_mae_over_equity": 0.021566,
       "loss_concentration": {
@@ -64,12 +73,15 @@
         "-0.025": 3,
         "-0.030": 0
       },
-      "note": "All using contemporaneous account_equity_at_entry. Worst is most negative."
+      "note": "Loss severity = abs(realized_pnl/equity_at_entry) for losing episodes; p95/p99 magnitude are 95th/99th percentiles of POSITIVE severity (severe tail). All using contemporaneous equity."
     },
     "P3": {
       "worst_position_loss_over_equity": -0.030615,
-      "p95_loss_over_equity": -0.000368,
-      "p99_loss_over_equity": -0.000137,
+      "worst_position_loss_magnitude_over_equity": 0.030615,
+      "p95_loss_over_equity": -0.015266,
+      "p99_loss_over_equity": -0.024136,
+      "p95_loss_magnitude_over_equity": 0.015266,
+      "p99_loss_magnitude_over_equity": 0.024136,
       "p95_mae_over_equity": 0.017179,
       "p99_mae_over_equity": 0.024975,
       "loss_concentration": {
@@ -85,7 +97,7 @@
         "-0.025": 4,
         "-0.030": 1
       },
-      "note": "All using contemporaneous account_equity_at_entry. Worst is most negative."
+      "note": "Loss severity = abs(realized_pnl/equity_at_entry) for losing episodes; p95/p99 magnitude are 95th/99th percentiles of POSITIVE severity (severe tail). All using contemporaneous equity."
     }
   },
   "schema_version": "1.0.0"

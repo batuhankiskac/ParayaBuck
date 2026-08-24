@@ -7,25 +7,27 @@
 
 ---
 
-## 1. Provenance — COMMIT A / COMMIT A2 / COMMIT B
+## 1. Provenance — COMMIT A / COMMIT A2 / COMMIT B / COMMIT C (Correction)
 
 | Field | Value |
 |-------|-------|
 | `COMMIT A` (original predeclaration, `5954d00`) | `5954d004520e731e1b0ceffaa6273be3a518529d` |
 | `COMMIT A2` (approved, cost-stress fix) | `c1f44c26582c2f818045e3892a47835ebce66328` |
 | `COMMIT A2 corrected` (chained-window fix) | `012eb54ed09e09298ce2eb8a9e166338faab9073` |
-| `COMMIT A2 final` (axon key fix, **frozen implementation that generated results**) | `bfb88a4383252468e722bf7c0b60d930665abdbb` |
-| `research_commit` (artifacts) | `bfb88a4383252468e722bf7c0b60d930665abdbb` (all 13 artifacts record this) |
-| `COMMIT B` (this report + artifacts) | *to be created after this file* |
+| `COMMIT A2 final` (axon key fix, **frozen economic implementation that generated results**) | `bfb88a4383252468e722bf7c0b60d930665abdbb` |
+| `COMMIT B` (original results) | `d404667c53dbed47434774c1b97901d373b71967` (`d404667`) — generated from `bfb88a4` |
+| `COMMIT C` (this correction, **no economic rerun**) | *this commit* — corrects derived aggregation only |
+| `original economic implementation` | `bfb88a4` (frozen, no candidate economics changed) |
+| `original results commit` | `d404667` |
 | Python | `3.14.7` |
 | `config_digest` | `458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31` |
 | `strategy.equity.name` | `equity_residual_momentum_v3` `3.0.0` |
 | `runtime.mode` | `paper` |
 | `live.enabled` | `false` |
 | `strategy.equity.maximum_allocation` | `0.60` |
-| `test_count` | `baseline_before_A 702` · `A gate 721` · `A2 gate 726` (726 passed at A2) |
+| `test_count` | `baseline_before_A 702` · `A gate 721` · `A2 gate 726` (726 passed at A2/C) |
 
-**Candidate definitions are semantically identical to COMMIT A** — JSON formatting changed, semantics did not. Promotion rubric, 20 fold boundaries, datasets, bootstrap seed unchanged. `results_sha256` was `{}` at A/A2; artifacts now carry `bfb88a4`.
+**Correction note (COMMIT C):** No candidate economics rerun/changed. Derived aggregation bugs corrected: (1) fold median now consumes `paired["return_delta"]["median"]` (`P1 +0.001402`, `P2 -0.009726`, `P3 +0.000115`) instead of missing `median_paired_return_delta` (-1); (2) loss percentile now uses severity `abs(pnl/equity)` with `p95/p99 magnitude` (severe tail, `p99 ~0.024` not `0.00005` mild), with `(control-candidate)/control` improvement; (3) gate 11 literal (`own top3 must satisfy gates 1-3`, short-circuit if 1 or 2 fails). `walk_forward.json`, `temporal_windows.json`, `cost_stress.json`, `jackknife.json` unchanged — only `position_tail_metrics.json`, `promotion_verdict.json`, and this report corrected. **Verdict unchanged** because gate 5 (`maxDD 0.244/0.239/0.230 > 0.2203`) fails independently for all. Candidate definitions **semantically identical** to COMMIT A (JSON formatting changed, semantics not).
 
 **Manifest:** `data/research_manifests/v3_position_risk_optimization_2026_08.json` — `declared_before_results:true`, `no_results_yet:true` at A; updated provenance at A2 to record `original_predeclaration_commit = 5954d00`. The self-reference placeholder `pending_A2_will_be_this_commit` does not require A3; artifacts correctly record `bfb88a4`.
 
@@ -158,17 +160,16 @@ Not mixed initially; no `P2+P3`.
 
 ---
 
-## 8. Position Loss Metrics (§9) — Contemporaneous Equity
+## 8. Position Loss Metrics (§9) — Contemporaneous Equity — **Corrected: Loss Severity = abs(pnl/equity)**
 
-| Candidate | Worst / equity | p95 loss / eq | p99 loss / eq | p95 MAE / eq | p99 MAE / eq | top1 | top3 | top5 | top10 | # > -1% | > -1.5% | > -2% | > -2.5% | > -3% |
-|-----------|---------------|---------------|---------------|--------------|--------------|------|------|------|-------|---------|---------|-------|---------|-------|
-| **P0** | **-0.0330** (-3.30% `ARES 2020-03-03`) | -0.000419 | -0.000137 | 0.017808 | 0.026564 | 0.0211 | 0.0549 | 0.0848 | 0.1466 | 52 | 20 | 6 | 4 | 1 |
-| **P1** | -0.03348 | -0.000246 | -0.000053 | 0.01570 | 0.022897 | 0.0199 | 0.0535 | 0.0806 | 0.1414 | 45 | 16 | 8 | 3 | 1 |
-| **P2** | **-0.02914** (best worst) | -0.000236 | -0.000047 | 0.013864 | 0.021566 | 0.0174 | 0.0467 | 0.0730 | 0.1308 | 38 | 11 | 8 | 3 | 0 |
-| **P3** | -0.030615 | -0.000368 | -0.000137 | 0.017179 | 0.024975 | 0.0213 | 0.0565 | 0.0871 | 0.1510 | 53 | 18 | 5 | 4 | 1 |
+| Candidate | Worst magnitude / eq | p95 magnitude / eq | p99 magnitude / eq | p95 MAE / eq | p99 MAE / eq | top1 | top3 | top5 | top10 | # > -1% | > -1.5% | > -2% | > -2.5% | > -3% |
+|-----------|----------------------|--------------------|--------------------|--------------|--------------|------|------|------|-------|---------|---------|-------|---------|-------|
+| **P0** | **0.03300** (3.30% `ARES 2020-03-03`) | 0.01617 | 0.024132 | 0.017808 | 0.026564 | 0.0211 | 0.0549 | 0.0848 | 0.1466 | 52 | 20 | 6 | 4 | 1 |
+| **P1** | 0.03348 | 0.014253 | 0.02281 | 0.01570 | 0.022897 | 0.0199 | 0.0535 | 0.0806 | 0.1414 | 45 | 16 | 8 | 3 | 1 |
+| **P2** | **0.02914** (best worst, 11.7% better) | 0.012395 | 0.022513 | 0.013864 | 0.021566 | 0.0174 | 0.0467 | 0.0730 | 0.1308 | 38 | 11 | 8 | 3 | 0 |
+| **P3** | 0.030615 | 0.015266 | 0.024136 | 0.017179 | 0.024975 | 0.0213 | 0.0565 | 0.0871 | 0.1510 | 53 | 18 | 5 | 4 | 1 |
 
-*Worst single is not AXON for any candidate — worst is `ARES`. P2 improves worst by `(0.033-0.02914)/0.033=11.7%` (<20% threshold) and p99 by `65%`, but concentration not materially better. P1 worst slightly worse (+1.5%). P3 worst improves `7.2%`, not reaching 20%.*
-
+*Worst single is not AXON for any candidate — worst is `ARES`. With correct severity percentiles (positive magnitude, severe tail), p95/p99 are now large (severe) not near-zero mild. P2 improves worst by `(0.033-0.02914)/0.033=11.7%` (<20%) and p99 by `6.7%`, P1 p99 by `5.5%`, P3 worst `7.2%` — none reach 20% threshold. Legacy fields `p95_loss_over_equity = -magnitude` kept for compatibility.*
 ---
 
 ## 9. Ex-Ante Risk Diagnostics (§6) — CONTROL Only
@@ -337,28 +338,29 @@ Fold excerpt (P0 vs P1, first 3 of 20):
 ---
 
 ## 12. Promotion Rubric — 14 Gates Individually (§12)
+## 12. Promotion Rubric — 14 Gates Individually (§12) — **Corrected**
 
-**Corrected evaluation** (using true `paired_fold_deltas.return_delta.median` etc; JSON `promotion_verdict.json` contains buggy `median -1` due to key mismatch, but underlying `walk_forward.json` is correct and recomputed here; candidate definitions are semantically identical so verdict unchanged):
+**Fixed aggregation (fold median, loss severity, gate 11 literal).** Using true `paired_fold_deltas.return_delta.median` (`P1 +0.001402`, `P2 -0.009726`, `P3 +0.000115`) and loss severity `abs(pnl/equity)` with `p95/p99 magnitude` (`(control-candidate)/control`), and gate 11 literal (`own top3 must satisfy gates 1-3`; short-circuit if 1 or 2 fails). `walk_forward.json`, `temporal_windows.json`, `cost_stress.json`, `jackknife.json` unchanged — only derived `position_tail_metrics.json`/`promotion_verdict.json` corrected. Verdict unchanged because gate 5 (`maxDD`) fails for all.
 
 | Gate | Criterion | P1 DIVERSIFY_7 | P2 DIVERSIFY_8 | P3 TAIL_ES_126 |
 |------|-----------|---------------|---------------|---------------|
 | **1** | Sharpe ≥ CONTROL | **PASS** `0.8311 ≥ 0.8214` | FAIL `0.7423 < 0.8214` | FAIL `0.8160 < 0.8214` |
 | **2** | Return ≥ CONTROL -5pp (`≥1.6148`) | **PASS** `1.6420` | FAIL `1.3109 < 1.6148` | **PASS** `1.6292` |
-| **3** | Worst OR p99 improves ≥20% | **PASS** `p99  -0.000053 vs -0.000137` → `61%` | **PASS** `worst -0.02914 (11.7%)` no, but `p99 65%` → PASS | FAIL `worst 7.2%`, `p99 0%` |
-| **4** | Top-5 concentration not worsen (+0.02 tol) | **PASS** `0.0806 ≤ 0.0848+0.02` | **PASS** `0.0730` | **PASS** `0.0871` (slightly worse +0.0023 but within tol? `0.0871 ≤ 0.1048` → PASS) |
+| **3** | Worst magnitude OR p99 magnitude improves ≥20% ` (control-candidate)/control` | **FAIL** `worst 0.03348 vs 0.033 (-1.5% worse)`, `p99 0.02281 vs 0.024132 (5.5%)` | **FAIL** `worst 11.7%`, `p99 6.7%` | **FAIL** `worst 7.2%`, `p99 -0.02%` |
+| **4** | Top-5 concentration not worsen (+0.02 tol) | **PASS** `0.0806 ≤ 0.0848+0.02` | **PASS** `0.0730` | **PASS** `0.0871` |
 | **5** | maxDD ≤ CONTROL (`≤0.2203`) | **FAIL** `0.2441 > 0.2203` | **FAIL** `0.2398 >` | **FAIL** `0.2303 >` |
 | **6** | Median paired 20-fold return delta ≥0 | **PASS** `+0.001402` | FAIL `-0.009726` | **PASS** `+0.000115` |
 | **7** | ≥10/20 Sharpe wins | **PASS** `12/20` | FAIL `8/20` | **PASS** `12/20` |
 | **8** | 2022+ Sharpe ≥ CONTROL (`≥0.6131`) | **PASS** `0.6967` | FAIL `0.5907` | **PASS** `0.6283` |
-| **9** | 3x preserves Sharpe ≥ CONTROL 3x OR within 0.02 with better tail | **PASS** `0.7699 ≥ 0.7565` | FAIL `0.6897 <` and not within 0.02 | FAIL `0.7514` within 0.02 but tail not better (gate3 fail) |
+| **9** | 3x preserves Sharpe ≥ CONTROL 3x OR within 0.02 with better tail | **PASS** `0.7699 ≥ 0.7565` | FAIL `0.6897 <` | FAIL `0.7514` within 0.02 but tail not better (gate3 fail) |
 | **10** | No one-year dependency | **PASS** | **PASS** | **PASS** |
-| **11** | No single-symbol dependency (`drop own top3 still ≥ CONTROL -5pp`) | **FAIL** `1.344 <1.6148` | **FAIL** `1.045` | **FAIL** `1.438 <1.6148` |
+| **11** | No single-symbol dependency (`drop own top3 still satisfies gates 1-3` literal; short-circuit if 1 or 2 fails) | **FAIL** `drop top3 1.3443/0.7584` → `g1 false` (Sharpe 0.758 <0.821) `g2 false` (return 1.344<1.614) → **FAIL** | **FAIL** `1.0459/0.6551` → `g1/g2 false` | **FAIL** `1.4380/0.7721` → `g1 false` |
 | **12** | Avg exposure within CONTROL ±5pp (`0.5482 ±0.05` → `[0.4982,0.5982]`) | **PASS** `0.5531` | **PASS** `0.5564` | **PASS** `0.5456` |
 | **13** | No lookahead | **PASS** | **PASS** | **PASS** (`strictly through decision timestamp`, verified) |
 | **14** | Ranking identity unchanged | **PASS** | **PASS** | **PASS** (`P3 parity`: selected names identical, only weights differ) |
-| **ALL** | **Requires all 14** | **FAIL** (fails 5,11) | **FAIL** (fails 1,2,5,6,7,8,9,11) | **FAIL** (fails 1,3,5,9,11) |
+| **ALL** | **Requires all 14** | **FAIL** (fails 3,5,11) | **FAIL** (fails 1,2,3,5,6,7,8,9,11) | **FAIL** (fails 1,3,5,9,11) |
 
-*No candidate passes all 14.*
+*No candidate passes all 14. Correction note: previously gate 6 used wrong key (`median_paired_return_delta` → `-1`, now `return_delta.median`), gate 3 used mild near-zero percentiles, gate 11 not literal — all corrected, verdict unchanged because gate 5 fails independently.*
 
 ---
 

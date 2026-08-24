@@ -27,10 +27,8 @@ Semantics contract (frozen; see the validation manifest):
 
 This module has NO research-module dependency: the minimal consensus math
 is promoted here as pure, deterministic production code (bit-identical to
-the researched helper; parity is locked by tests). The strategy is NOT
-selected in ``config/settings.yaml`` (production stays on v2) and is not
-enabled for trading; it exists for validation, parity tests and the
-offline shadow replay.
+the researched helper; parity is locked by tests). The strategy is selected
+for PAPER in ``config/settings.yaml``; LIVE remains disabled.
 """
 
 from __future__ import annotations
@@ -97,8 +95,12 @@ def multi_horizon_consensus(
     horizons_order = sorted(set(horizons))
     if any(horizon < skip for horizon in horizons_order):
         raise ValueError("every horizon must be larger than skip")
+    # A qualified pool with fewer than two symbols cannot support a
+    # cross-sectional percentile rank.  Return no consensus so the shared
+    # portfolio pipeline can take its normal cash/risk-off fallback instead of
+    # turning a thin PAPER universe into a runtime exception.
     if len(residuals_by_symbol) < 2:
-        raise ValueError("multi-horizon consensus needs at least two eligible symbols")
+        return {}
     per_horizon: list[dict[str, float]] = []
     for horizon in horizons_order:
         scores: dict[str, float] = {}
@@ -118,8 +120,13 @@ def multi_horizon_consensus(
         per_horizon.append(percentile_ranks(scores))
     if len(per_horizon) < 2:
         return {}
+    common_symbols = set(per_horizon[0]).intersection(
+        *(set(horizon_scores) for horizon_scores in per_horizon[1:])
+    )
+    if len(common_symbols) < 2:
+        return {}
     consensus: dict[str, float] = {}
-    for symbol in per_horizon[0]:
+    for symbol in sorted(common_symbols):
         consensus[symbol] = sum(horizon[symbol] for horizon in per_horizon) / len(per_horizon)
     return consensus
 
@@ -137,6 +144,7 @@ class EquityResidualMomentum1dV3(EquityResidualMomentum1dV2):
     display_name = "Residual Momentum v3 (MH-RAW consensus)"
     rebalance_policy_declared = "weekly"
     cadence_label = "weekly"
+    _include_paper_telemetry_details = True
 
     _HORIZONS = _DEFAULT_HORIZONS
 
@@ -150,7 +158,10 @@ class EquityResidualMomentum1dV3(EquityResidualMomentum1dV2):
         skip: int,
     ) -> list[tuple[float, str]]:
         consensus = multi_horizon_consensus(residuals_by_symbol, self._HORIZONS, skip)
-        return [(consensus[symbol], symbol) for _score, symbol in scored]
+        # A symbol can be absent from an individual horizon when direct users
+        # supply incomplete histories.  Keep only fully rankable names and
+        # fail closed to the inherited cash fallback if none remain.
+        return [(consensus[symbol], symbol) for _score, symbol in scored if symbol in consensus]
 
     # ``decide`` is inherited: the positive-12m gate, ivol filter, selection,
     # inverse-vol sizing, risk overlay and explanation metadata are the exact

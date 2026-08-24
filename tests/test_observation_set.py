@@ -9,6 +9,9 @@ regression and the required-timeframes aggregation contract.
 
 from __future__ import annotations
 
+import json
+import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -20,6 +23,7 @@ from parayabuck.config import (
 )
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import portfolio_strategy_from
+from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.equity_residual_momentum import (
     _aligned_returns,
     _ols_beta,
@@ -120,6 +124,76 @@ def test_observation_set_uses_strategy_alpha_and_pins() -> None:
     assert observation.alpha_scored_count == 2
 
 
+def test_v3_observation_set_uses_v3_rank_candidates_not_v2() -> None:
+    params = {
+        "formation_bars": 252,
+        "skip_bars": 21,
+        "beta_window_bars": 273,
+        "residual_vol_window": 63,
+        "top_n": 8,
+        "max_single_weight": 0.10,
+        "ivol_reject_quantile": 0.70,
+        "exclude_symbols": ["SPY"],
+        "rebalance_frequency": "weekly",
+    }
+    v2 = portfolio_strategy_from("equity_residual_momentum_v2", params)
+    v3 = portfolio_strategy_from("equity_residual_momentum_v3", params)
+    specs = (
+        (0.003, 0.0001),
+        (0.0005, 0.004),
+        (0.002, 0.002),
+        (0.0015, 0.0025),
+        (0.0025, 0.0005),
+        (0.001, 0.003),
+    )
+    history = {"SPY": _series("SPY", 0.0)}
+    for index, (older, recent) in enumerate(specs):
+        closes: list[float] = []
+        current = 100.0
+        for day in range(300):
+            current *= 1.0 + (older if day < 180 else recent)
+            closes.append(current * (1.0 + 0.0001 * math.sin(day * 1.7 + index)))
+        history[f"S{index}"] = tuple(
+            _bar(
+                f"S{index}",
+                datetime(2024, 1, 1, 4, 0, tzinfo=UTC) + timedelta(days=day),
+                close,
+                Market.EQUITY,
+            )
+            for day, close in enumerate(closes)
+        )
+    pool = tuple(history)
+    decision_timestamp = datetime(2024, 10, 26, 4, 0, tzinfo=UTC)
+    context = PortfolioContext(
+        decision_timestamp=decision_timestamp,
+        market=Market.EQUITY,
+        timeframe="1d",
+        history=history,
+        universe=None,
+        universe_version="test",
+        equity=100_000.0,
+        holdings={},
+        prices={},
+        benchmark_symbol="SPY",
+    )
+    v2_ranked = v2.rank_candidates(context)
+    v3_ranked = v3.rank_candidates(context)
+    assert v2_ranked != v3_ranked
+    observation = build_observation_set(
+        v3,
+        history,
+        pool,
+        market=Market.EQUITY,
+        timeframe="1d",
+        decision_timestamp=decision_timestamp,
+        maximum_stream_symbols=3,
+        pinned_symbols=("SPY",),
+    )
+    assert observation.source == "strategy_alpha"
+    assert observation.observation_set == ("SPY", "S3", "S2")
+    assert observation.observation_set == ("SPY", *v3_ranked[:2])
+
+
 def test_observation_set_falls_back_when_no_ranker() -> None:
     observation = build_observation_set(
         None,
@@ -170,8 +244,6 @@ def test_validate_and_load_return_the_observation_set(tmp_path) -> None:
 
 
 def test_observation_set_outside_pool_is_rejected(tmp_path) -> None:
-    import json
-
     config = EquityUniverseConfig(
         maximum_stream_symbols=3,
         reference_symbols=("SPY",),
@@ -187,6 +259,30 @@ def test_observation_set_outside_pool_is_rejected(tmp_path) -> None:
     (tmp_path / "active.json").write_text(json.dumps(raw), encoding="utf-8")
     symbols, status = validate_active_universe(config)
     assert symbols == () and status == "observation_outside_pool"
+
+
+def test_active_universe_rejects_observation_set_from_old_strategy(tmp_path) -> None:
+    config = EquityUniverseConfig(
+        maximum_stream_symbols=3,
+        reference_symbols=("SPY",),
+        active_universe_path=str(tmp_path / "active.json"),
+        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_version="3.0.0",
+        observation_strategy_timeframe="1d",
+    )
+    result = EquityUniverseScanner(config).scan(
+        [EquityCandidate("AAPL", 200, 600_000_000, 0.03, 1.0, 2, "technology")],
+        data_timestamp=datetime.now(UTC),
+    )
+    stale = replace(
+        result,
+        observation_strategy_name="equity_residual_momentum_v2",
+        observation_strategy_version="2.0.0",
+        observation_strategy_timeframe="1d",
+    )
+    EquityUniverseScanner(config).persist(stale)
+    symbols, status = validate_active_universe(config)
+    assert symbols == () and status == "observation_strategy_mismatch"
 
 
 def test_crypto_pool_and_observation_set_contract(tmp_path) -> None:

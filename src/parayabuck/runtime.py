@@ -2754,7 +2754,14 @@ class EngineRuntime:
             ):
                 health = self.health()
             gate_kwargs = {"health": health} if health is not None else {}
-            if gate(portfolio_runtime.market, **gate_kwargs):
+            readiness_reasons = gate(portfolio_runtime.market, **gate_kwargs)
+            if readiness_reasons:
+                if portfolio_runtime.strategy.name == "equity_residual_momentum_v3":
+                    log.info(
+                        "V3 PAPER decision skipped: strategy=%s reason=%s",
+                        portfolio_runtime.strategy.name,
+                        ",".join(readiness_reasons),
+                    )
                 continue
             # An entry-risk latch (daily loss / drawdown / unverified signal
             # basis) must not freeze the whole decision: risk-reducing SELL
@@ -2832,6 +2839,33 @@ class EngineRuntime:
                 len(portfolio_result.orders),
                 len(portfolio_result.submitted_order_ids),
             )
+            if portfolio_runtime.strategy.name == "equity_residual_momentum_v3" and (
+                portfolio_result.status
+                not in {"not_scheduled", "warming_up", "incomplete_strategy_batch"}
+            ):
+                observability = (
+                    portfolio_result.target.metadata.get("paper_observability", {})
+                    if portfolio_result.target is not None
+                    else {}
+                )
+                log.info(
+                    "V3 PAPER decision telemetry: strategy=%s version=%s status=%s "
+                    "decision_timestamp=%s signal_verified_through=%s qualified=%s "
+                    "ranked=%s selected=%s gross_after=%s planned_delta=%s blocked=%s",
+                    portfolio_runtime.strategy.name,
+                    portfolio_result.target.strategy_version
+                    if portfolio_result.target is not None
+                    else "",
+                    portfolio_result.status,
+                    observability.get("decision_timestamp"),
+                    observability.get("signal_verified_through"),
+                    observability.get("qualified_symbol_count"),
+                    observability.get("ranked_symbol_count"),
+                    observability.get("selected_symbols"),
+                    observability.get("risk_overlay_gross_after"),
+                    observability.get("symbols"),
+                    observability.get("blocked_or_skipped_reason"),
+                )
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
 
     def _run_startup_catch_up(self) -> None:

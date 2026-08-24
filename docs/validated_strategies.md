@@ -60,12 +60,11 @@ Low realized variance (AHXZ monthly construction on 1d bars), weekly decisions.
 - equity enabled: YES, crypto enabled: YES
 - `live.enabled: false` — LIVE is never enabled by this mission.
 
-## Production selections (v2, promoted 2026-08-18)
+## Historical cadence selections (v2, promoted 2026-08-18)
 
-The cadence-validated v2 identities ARE the current PAPER production
-selection (`config/settings.yaml`): same alpha as the frozen v1 baselines,
-new cadence. v1 remains the frozen historical baseline and stays
-reproducible.
+The cadence-validated v2 identities were the prior PAPER selections: same
+alpha as the frozen v1 baselines, new cadence. v1 and v2 remain frozen and
+reproducible; the current equity selection is recorded below.
 
 | Identity | Alpha (identical to v1) | Cadence | Evidence (net, canonical window) |
 |---|---|---|---|
@@ -80,6 +79,15 @@ REJECTED (strictly dominated). Full evidence:
 `scripts/research_{equity_cadence,crypto_cadence,robustness_audit,deployment_start}.py`,
 and summarized in `docs/capital_utilization_cadence_verdict.md` (includes
 the equity weekly ASX-dependence and recent-window caveats).
+
+## Current PAPER equity promotion (v3, 2026-08-24)
+
+`equity_residual_momentum_v3` is the current PAPER equity identity. It keeps
+the production eligibility, positive 12-1 gate, risk overlay, inverse-vol
+sizing, and weekly cadence while replacing only the cross-sectional score with
+the frozen raw 6-1/9-1/12-1 percentile-rank consensus. Operational evidence
+and the no-data soak status are recorded in
+`docs/mh_raw_v3_paper_promotion_2026_08.md`; no LIVE readiness is implied.
 
 ## What is NOT frozen here
 

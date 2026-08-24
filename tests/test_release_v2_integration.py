@@ -60,6 +60,7 @@ V1_EQUITY = {
 V1_CRYPTO = {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 168}
 V2_EQUITY = {**V1_EQUITY, "rebalance_frequency": "weekly"}
 V2_CRYPTO = {**V1_CRYPTO, "rebalance_hours": 96}
+V3_EQUITY = {**V1_EQUITY, "rebalance_frequency": "weekly"}
 
 
 def _daily_bars(
@@ -454,3 +455,165 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
 
     v2_equity.close()
     v2_crypto.close()
+
+
+def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
+    tmp_path: Path,
+) -> None:
+    """V3 promotion consumes existing V2 holdings through the normal planner.
+
+    No strategy-change liquidation path is allowed: the V3 target, current
+    broker positions, ownership ledger, pending orders and restart guards are
+    all exercised on one deterministic fake PAPER account.
+    """
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    client = _FakeAlpacaClient()
+    broker = _broker(client, repo, tmp_path)
+    bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
+    days = sorted({bar.timestamp for bar in bars})
+
+    v2 = _runtime(
+        "equity_residual_momentum_v2",
+        V2_EQUITY,
+        EQUITY_SYMBOLS,
+        repo,
+        broker,
+        Market.EQUITY,
+        maximum_allocation=0.60,
+    )
+    v2.seed([bar for bar in bars if bar.timestamp <= days[299]])
+    v2_result = v2.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == days[299]],
+        force_scheduled=True,
+        decision_origin="v2_paper_seed",
+    )
+    assert v2_result.status == "submitted"
+    assert v2_result.orders
+    _fill_orders(v2_result, repo, client)
+    v2.close()
+    held_symbols = {
+        position.symbol for position in client.positions if position.asset_class == "us_equity"
+    }
+    assert held_symbols
+
+    v3 = _runtime(
+        "equity_residual_momentum_v3",
+        V3_EQUITY,
+        EQUITY_SYMBOLS,
+        repo,
+        broker,
+        Market.EQUITY,
+        maximum_allocation=0.60,
+    )
+    v3.seed([bar for bar in bars if bar.timestamp <= days[299]])
+    assert v3.startup_catch_up().status == "already_invested"
+    first = v3.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == days[300]],
+        force_scheduled=True,
+    )
+    assert first.status in {"submitted", "sell_phase_submitted"}
+    assert first.target is not None
+    assert first.target.strategy_name == "equity_residual_momentum_v3"
+    assert first.target.strategy_version == "3.0.0"
+    assert len(first.target.weights) <= 6
+    assert all(weight.weight <= 0.10 for weight in first.target.weights)
+    assert first.target.invested_weight <= 0.60
+    paper_observability = first.target.metadata["paper_observability"]
+    assert paper_observability["strategy_name"] == "equity_residual_momentum_v3"
+    assert paper_observability["decision_timestamp"] == days[300].isoformat()
+    assert paper_observability["symbols"]
+
+    by_symbol = {}
+    for order in first.orders:
+        by_symbol.setdefault(order.symbol, set()).add(order.side)
+        assert order.strategy_name == "equity_residual_momentum_v3"
+        assert order.strategy_version == "3.0.0"
+    assert all(len(sides) == 1 for sides in by_symbol.values())
+    assert all(
+        not (order.side == PortfolioOrderSide.SELL and order.quantity > 100.0)
+        for order in first.orders
+    )
+
+    with repo.store.lock:
+        before_orders = repo.store.connection.execute(
+            "SELECT COUNT(*) FROM portfolio_orders"
+        ).fetchone()[0]
+        before_decisions = repo.store.connection.execute(
+            "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
+            ("equity_residual_momentum_v3",),
+        ).fetchone()[0]
+    v3.close()
+
+    restarted = _runtime(
+        "equity_residual_momentum_v3",
+        V3_EQUITY,
+        EQUITY_SYMBOLS,
+        repo,
+        broker,
+        Market.EQUITY,
+        maximum_allocation=0.60,
+    )
+    restarted.seed([bar for bar in bars if bar.timestamp <= days[300]])
+    duplicate = restarted.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == days[300]],
+        force_scheduled=True,
+    )
+    assert duplicate.status == "duplicate_decision"
+    with repo.store.lock:
+        after_orders = repo.store.connection.execute(
+            "SELECT COUNT(*) FROM portfolio_orders"
+        ).fetchone()[0]
+        after_decisions = repo.store.connection.execute(
+            "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
+            ("equity_residual_momentum_v3",),
+        ).fetchone()[0]
+    assert (after_orders, after_decisions) == (before_orders, before_decisions)
+    restarted.close()
+
+
+def test_v3_runtime_signal_basis_latch_blocks_entries_until_verified(
+    tmp_path: Path,
+) -> None:
+    """The shared production entry latch applies to V3 without new math."""
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    client = _FakeAlpacaClient()
+    broker = _broker(client, repo, tmp_path)
+    bars = _daily_bars(EQUITY_SYMBOLS, 360, Market.EQUITY)
+    days = sorted({bar.timestamp for bar in bars})
+    runtime = _runtime(
+        "equity_residual_momentum_v3",
+        V3_EQUITY,
+        EQUITY_SYMBOLS,
+        repo,
+        broker,
+        Market.EQUITY,
+        maximum_allocation=0.60,
+    )
+    runtime.seed([bar for bar in bars if bar.timestamp <= days[299]])
+
+    blocked = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == days[300]],
+        force_scheduled=True,
+        entry_latch="signal_adjustment_unverified",
+    )
+    assert blocked.target is not None
+    assert all(order.side != PortfolioOrderSide.BUY for order in blocked.orders)
+    assert (
+        blocked.target.metadata["paper_observability"]["blocked_or_skipped_reason"]
+        == "signal_adjustment_unverified"
+    )
+
+    verified_through = {symbol: days[301] for symbol in EQUITY_SYMBOLS}
+    runtime.signal_verified_through_by_symbol = verified_through
+    proceeded = runtime.process_closed_bars(
+        [bar for bar in bars if bar.timestamp == days[301]],
+        force_scheduled=True,
+    )
+    assert proceeded.status == "submitted"
+    assert any(order.side == PortfolioOrderSide.BUY for order in proceeded.orders)
+    assert proceeded.target is not None
+    assert (
+        proceeded.target.metadata["paper_observability"]["signal_verified_through"]
+        == days[301].isoformat()
+    )
+    runtime.close()

@@ -1274,6 +1274,77 @@ class PortfolioRuntime:
         self.startup_catch_up_status: str | None = None
         self.startup_catch_up_at: datetime | None = None
 
+    def _with_paper_observability(
+        self,
+        target: TargetPortfolio,
+        risk: RiskOverlayDecision,
+        account: AccountSnapshot,
+        orders: tuple[PortfolioOrderRequest, ...],
+        *,
+        entry_latch: str | None,
+    ) -> TargetPortfolio:
+        """Attach V3 PAPER diagnostics after decisions are complete.
+
+        Every value here is derived from already-computed targets, the account
+        snapshot, risk result, or planned orders. It is persisted for
+        operations and deliberately cannot participate in strategy math.
+        """
+        if self.strategy.name != "equity_residual_momentum_v3":
+            return target
+        verified = {
+            symbol: timestamp.isoformat()
+            for symbol, timestamp in sorted(self.signal_verified_through_by_symbol.items())
+        }
+        verified_through = min(verified.values()) if verified else None
+        current_positions = {
+            canonical_symbol(position.symbol, position.market): float(position.qty)
+            for position in account.positions
+            if position.market == self.market and not position.is_flat
+        }
+        planned_delta: dict[str, float] = {}
+        for order in orders:
+            signed_quantity = (
+                order.quantity if order.side == PortfolioOrderSide.BUY else -order.quantity
+            )
+            planned_delta[order.symbol] = planned_delta.get(order.symbol, 0.0) + signed_quantity
+        target_weights = {weight.symbol: weight.weight for weight in target.weights}
+        symbols = sorted(set(current_positions) | set(target_weights) | set(planned_delta))
+        qualified_raw = target.metadata.get("qualified_symbols", 0)
+        ranked_raw = target.metadata.get("ranked_symbols", 0)
+        selected_raw = target.metadata.get("selected_symbols", ())
+        qualified_count = int(qualified_raw) if isinstance(qualified_raw, (int, float)) else 0
+        ranked_count = int(ranked_raw) if isinstance(ranked_raw, (int, float)) else 0
+        selected_symbols = list(selected_raw) if isinstance(selected_raw, (list, tuple)) else []
+        details = {
+            symbol: {
+                "target_weight": float(target_weights.get(symbol, 0.0)),
+                "current_position": float(current_positions.get(symbol, 0.0)),
+                "planned_order_delta": float(planned_delta.get(symbol, 0.0)),
+            }
+            for symbol in symbols
+        }
+        reason = entry_latch or str(target.metadata.get("risk_off_detail", "")) or None
+        return replace(
+            target,
+            metadata={
+                **target.metadata,
+                "paper_observability": {
+                    "strategy_name": target.strategy_name,
+                    "strategy_version": target.strategy_version,
+                    "decision_timestamp": target.decision_timestamp.isoformat(),
+                    "signal_verified_through": verified_through,
+                    "signal_verified_through_by_symbol": verified,
+                    "qualified_symbol_count": qualified_count,
+                    "ranked_symbol_count": ranked_count,
+                    "selected_symbols": selected_symbols,
+                    "risk_overlay_gross_after": float(risk.gross_after),
+                    "cash_weight": float(target.cash_weight),
+                    "blocked_or_skipped_reason": reason,
+                    "symbols": details,
+                },
+            },
+        )
+
     def seed(self, bars: list[Bar]) -> None:
         """Seed only closed, approved bars without producing a decision.
 
@@ -1700,6 +1771,15 @@ class PortfolioRuntime:
             open_order_symbols=self.broker.all_open_order_symbols(),
             decision_id=decision_id,
         )
+        observed_target = self._with_paper_observability(
+            risk.target,
+            risk,
+            account,
+            planned,
+            entry_latch=entry_latch,
+        )
+        if observed_target is not risk.target:
+            risk = replace(risk, target=observed_target)
         decision_id = self.repository.record_decision(
             self.session_id,
             self.account_id,

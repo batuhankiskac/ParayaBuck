@@ -64,7 +64,7 @@ sudo systemctl status parayabuck
 sudo journalctl -u parayabuck -f
 ```
 
-## Google Cloud update procedure (PAPER v2 release)
+## Google Cloud update procedure (PAPER v3 release)
 
 1. **Stop safely**
 
@@ -126,7 +126,7 @@ sudo journalctl -u parayabuck -f
    ```
 
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, `equity_residual_momentum_v2` (weekly) and `crypto_low_variance_v2`
+   badge, `equity_residual_momentum_v3` (weekly) and `crypto_low_variance_v2`
    (96h) cards, engine running, catch-up status per card.
 
 9. **Verify the persisted catch-up decision** (fresh account only):
@@ -141,7 +141,7 @@ sudo journalctl -u parayabuck -f
    Expect `origin='startup_catch_up'` for the newest rows; later scheduled
    decisions carry `'scheduled'`. An account that already holds managed
    positions shows catch-up status `already_invested` (positions stay
-   managed; the first v2 boundary rebalances them normally) — never a
+   managed; the first v3 boundary rebalances them normally) — never a
    duplicate order set.
 
 ## Rollback

@@ -134,16 +134,15 @@ universe:
 strategy:
   # The strategy owns its signal timeframe; strategy.*.timeframe is a
   # deprecated compatibility key and intentionally omitted here.
-  # equity_residual_momentum_v2 — CADENCE-VALIDATED v2 (2026-08-18 cadence
-  # mission): same validated alpha as v1, weekly rebalance. v1 stays frozen
-  # as the historical baseline. LIVE remains disabled.
+  # equity_residual_momentum_v3 — MH_RAW (2026-08) frozen PAPER identity:
+  # positive 12-1 residual gate, raw 6/9/12 rank consensus, existing ivol
+  # filter, top_n and inverse-vol sizing. v1/v2 stay frozen historical
+  # identities. LIVE remains disabled.
   equity:
     enabled: true
-    name: equity_residual_momentum_v2
-    # 2026-08-21 operator decision (docs/optimization_experiments_2026_08.md,
-    # B3/D1): sleeve raised 0.50 -> 0.60 on walk-forward evidence (11/16 folds
-    # beat 0.50; Sharpe 0.62 -> 0.71 with dividends). The risk overlay still
-    # caps gross at 0.60.
+    name: equity_residual_momentum_v3
+    # Existing PAPER equity sleeve; promotion changes only the strategy
+    # identity, not the allocation or risk policy.
     maximum_allocation: 0.60
     parameters:
       formation_bars: 252

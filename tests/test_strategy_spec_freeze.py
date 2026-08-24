@@ -6,8 +6,8 @@ A. HISTORICAL SPEC FREEZE (v1)
    reproducible, with exact historical parameter specs. v2 evidence is
    defined relative to v1, so this freeze is permanent.
 
-B. CURRENT PRODUCTION SELECTION
-   The PAPER config selects the approved v2 identities with their exact
+   B. CURRENT PRODUCTION SELECTION
+   The PAPER config selects the approved v3/v2 identities with their exact
    cadence parameters. A config change here is a deliberate promotion, not
    drift: the v1 freeze above still protects the baselines.
 
@@ -52,7 +52,7 @@ CRYPTO_FROZEN_PARAMETERS = {
     "rebalance_hours": 168,
 }
 
-# --- B. PRODUCTION v2 SELECTIONS (current PAPER) -----------------------------
+# --- B. CURRENT PAPER SELECTIONS ---------------------------------------------
 PRODUCTION_EQUITY_PARAMETERS = {
     **EQUITY_FROZEN_PARAMETERS,
     "rebalance_frequency": "weekly",
@@ -86,10 +86,10 @@ def _params_dict(raw: dict[str, object]) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
-def test_production_equity_selection_is_v2(config: Config) -> None:
+def test_production_equity_selection_is_v3(config: Config) -> None:
     equity = config.strategy.equity
     assert equity.enabled is True
-    assert equity.name == "equity_residual_momentum_v2"
+    assert equity.name == "equity_residual_momentum_v3"
     # 2026-08-21 operator decision: sleeve 0.50 -> 0.60 on walk-forward
     # evidence; see docs/optimization_experiments_2026_08.md (B3/D1). The
     # alpha parameters below remain the frozen validated spec.
@@ -119,6 +119,7 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
     assert registered == {
         "equity_residual_momentum_v1",
         "equity_residual_momentum_v2",
+        "equity_residual_momentum_v3",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
     }

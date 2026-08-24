@@ -110,6 +110,9 @@ class ScannerResult:
     # alpha ranking replaces it when a candidate ranker is configured.
     observation_set: tuple[str, ...] = ()
     observation_eliminated: dict[str, str] = field(default_factory=dict)
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
+    observation_strategy_timeframe: str | None = None
 
 
 class EquityUniverseScanner:
@@ -342,7 +345,14 @@ def _issuer_key(symbol: str) -> str:
 
 
 def scanner_config_digest(config: EquityUniverseConfig) -> str:
-    payload = json.dumps(asdict(config), sort_keys=True).encode()
+    payload_dict = asdict(config)
+    for key in (
+        "observation_strategy_name",
+        "observation_strategy_version",
+        "observation_strategy_timeframe",
+    ):
+        payload_dict.pop(key, None)
+    payload = json.dumps(payload_dict, sort_keys=True).encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -360,6 +370,14 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
             "config_digest"
         ) != scanner_config_digest(config):
             return (), "digest_mismatch"
+        expected_strategy_name = config.observation_strategy_name
+        if expected_strategy_name and (
+            payload.get("observation_strategy_name") != expected_strategy_name
+            or payload.get("observation_strategy_version") != config.observation_strategy_version
+            or payload.get("observation_strategy_timeframe")
+            != config.observation_strategy_timeframe
+        ):
+            return (), "observation_strategy_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:

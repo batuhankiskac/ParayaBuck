@@ -264,13 +264,13 @@ kill-switch. Policy now:
 - None of these are required by, or misleading about, the current product
   runtime.
 
-## Strategy → order trace (enabled: `equity_residual_momentum_v2` / `crypto_low_variance_v2`)
+## Strategy → order trace (enabled: `equity_residual_momentum_v3` / `crypto_low_variance_v2`)
 
 `AlpacaBarStream` → `EngineRuntime._on_bar` → `TimeframeAggregator` (5m→1d)
 → event queue → `_decision_loop` → `_process_portfolio_timestamp` →
 readiness gate → `PortfolioRuntime.process_closed_bars` →
 `PortfolioDecisionService.build_context` →
-`EquityResidualMomentum1dV2.decide` / `CryptoLowVariance1dV2.decide`
+`EquityResidualMomentum1dV3.decide` / `CryptoLowVariance1dV2.decide`
 → `TargetPortfolio` → entry-latch/intermediate caps → `PortfolioRiskOverlay`
 → `TargetToOrderPlanner.plan` (SELL-first, deterministic `pbp-` client ids)
 → two-phase persisted rebalance → `_submit_orders`

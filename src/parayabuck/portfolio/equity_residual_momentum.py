@@ -72,6 +72,9 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     supported_timeframes = ("1d",)
     rebalance_policy_declared = "monthly"
     cadence_label = "monthly"
+    # V3 enables additional persisted PAPER diagnostics from exact scoring
+    # outputs. This flag is observability-only and never affects targets.
+    _include_paper_telemetry_details = False
 
     @property
     def minimum_history_bars(self) -> int:
@@ -313,6 +316,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             parameters=self.parameter_tuple(),
             metadata={
                 "qualified_symbols": len(ranked),
+                "ranked_symbols": len(ranked),
                 "selected_symbols": selected,
                 "ivol_filter_quantile": self.param_float("ivol_reject_quantile", 0.70),
                 "hypothesis": (
@@ -320,7 +324,13 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                     "timestamp-aligned returns), top idiosyncratic-volatility "
                     f"names rejected, {self.cadence_label}, inverse-vol sized"
                 ),
-                "explanations": _equity_explanations(context, ranked, residual_vols, weights),
+                "explanations": _equity_explanations(
+                    context,
+                    ranked,
+                    residual_vols,
+                    weights,
+                    include_paper_telemetry=self._include_paper_telemetry_details,
+                ),
             },
         )
 
@@ -345,6 +355,8 @@ def _equity_explanations(
     ranked: tuple[tuple[float, str], ...],
     residual_vols: dict[str, float],
     weights: dict[str, float],
+    *,
+    include_paper_telemetry: bool = False,
 ) -> dict[str, dict[str, float | int]]:
     """Concise per-holding decision reasons for the selected names.
 
@@ -363,13 +375,20 @@ def _equity_explanations(
         # pool_vols is sorted, so the count of values <= the symbol's vol is
         # its bisect index (identical to the linear scan it replaces).
         below_or_equal = bisect_right(pool_vols, residual_vols[symbol])
-        explanations[symbol] = {
+        explanation: dict[str, float | int] = {
             "alpha_rank": rank,
             "residual_momentum_score": score,
             "idio_vol_percentile": round(below_or_equal / pool_size, 4),
             "target_weight": weights[symbol],
             "current_weight": float(context.holdings.get(symbol, 0.0)),
         }
+        if include_paper_telemetry:
+            # For V3 this is the final equal-mean consensus score. Preserve
+            # the existing score field for compatibility and add explicit
+            # operator-facing PAPER names.
+            explanation["consensus_score"] = score
+            explanation["residual_volatility"] = residual_vols[symbol]
+        explanations[symbol] = explanation
     return explanations
 
 

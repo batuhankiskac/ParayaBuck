@@ -1,7 +1,7 @@
 # Paper Operations
 
 Operational contract for the ParayaBuck PAPER runtime (dual-market:
-`equity_residual_momentum_v2` on 1d weekly cadence, `crypto_low_variance_v2`
+`equity_residual_momentum_v3` on 1d weekly cadence, `crypto_low_variance_v2`
 on 1d 96h cadence). v1 identities remain frozen historical baselines
 (`equity_residual_momentum_v1` monthly, `crypto_low_variance_v1` 168h).
 This document is a companion to

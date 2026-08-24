@@ -79,6 +79,7 @@ def test_new_strategies_are_registered() -> None:
     assert {
         "equity_residual_momentum_v1",
         "equity_residual_momentum_v2",
+        "equity_residual_momentum_v3",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
     } <= registered

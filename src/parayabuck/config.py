@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import os
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -391,6 +391,13 @@ class EquityUniverseConfig:
     trade_reference_symbols: bool = False
     active_universe_max_age_hours: float = 36.0
     require_scanner_config_digest_match: bool = True
+    # Runtime-only identity of the strategy that produced the persisted
+    # strategy-alpha observation set.  These fields are deliberately excluded
+    # from the scanner digest: changing alpha must invalidate the observation
+    # snapshot without pretending that scanner economics changed.
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
+    observation_strategy_timeframe: str | None = None
     scanner: EquityScannerConfig = field(default_factory=EquityScannerConfig)
 
     def __post_init__(self) -> None:
@@ -650,8 +657,6 @@ def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
     comes from the strategy class, so a configured name NEVER inherits another
     market default.
     """
-    from dataclasses import replace
-
     from parayabuck.portfolio import portfolio_strategy_from
 
     return replace(
@@ -774,6 +779,20 @@ def load_config(config_path: str | None = None) -> Config:
     )
     equity_strategy = _resolved_timeframe(equity_strategy)
     crypto_strategy = _resolved_timeframe(crypto_strategy)
+    if equity_strategy.enabled and equity.dynamic_selection_enabled:
+        from parayabuck.portfolio import portfolio_strategy_from
+
+        resolved_equity = portfolio_strategy_from(
+            equity_strategy.name,
+            equity_strategy.parameters,
+            timeframe=equity_strategy.timeframe,
+        )
+        equity = replace(
+            equity,
+            observation_strategy_name=resolved_equity.name,
+            observation_strategy_version=resolved_equity.version,
+            observation_strategy_timeframe=resolved_equity.timeframe,
+        )
     alpaca_raw = dict(raw.get("alpaca", {}))
     legacy_paper = alpaca_raw.pop("paper", None)
     if legacy_paper is False:

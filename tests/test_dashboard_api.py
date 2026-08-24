@@ -230,9 +230,9 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(
     equity = overview["equity"]
     crypto = overview["crypto"]
 
-    assert equity["name"] == "equity_residual_momentum_v2"
+    assert equity["name"] == "equity_residual_momentum_v3"
     assert equity["status"] == "stopped"
-    assert equity["strategy"]["display_name"] == "Residual Momentum v2 (weekly)"
+    assert equity["strategy"]["display_name"] == "Residual Momentum v3 (MH-RAW consensus)"
     assert equity["strategy"]["signal_timeframe"] == "1d"
     assert equity["strategy"]["rebalance_cadence"] == "weekly"
     assert equity["maximum_allocation_pct"] == 60.0

@@ -395,6 +395,9 @@ def _equity_observation_set(
     return replace(
         result,
         observation_set=observation.observation_set,
+        observation_strategy_name=strategy.name,
+        observation_strategy_version=strategy.version,
+        observation_strategy_timeframe=strategy.timeframe,
         observation_eliminated={
             **result.observation_eliminated,
             "observation_source": observation.source,

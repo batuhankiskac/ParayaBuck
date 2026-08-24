@@ -26,6 +26,8 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import (
     EquityResidualMomentum1dV3,
@@ -165,16 +167,16 @@ def _decided(strategy, context) -> dict[str, tuple[float, int]]:
 
 
 # --------------------------------------------------------------------------- #
-# Scenario 0 — identity & registration (production may NOT select v3 yet)
+# Scenario 0 — identity & registration (v3 is PAPER-product enabled)
 # --------------------------------------------------------------------------- #
 
 
-def test_v3_identity_and_not_product_enabled() -> None:
+def test_v3_identity_and_product_enabled() -> None:
     v3 = _production_v3()
     assert v3.name == "equity_residual_momentum_v3"
     assert v3.version == "3.0.0"
     assert dict(v3.parameter_tuple())["rebalance_frequency"] == "weekly"
-    assert "equity_residual_momentum_v3" not in supported_portfolio_strategies()
+    assert "equity_residual_momentum_v3" in supported_portfolio_strategies()
 
 
 # --------------------------------------------------------------------------- #
@@ -200,6 +202,22 @@ def test_target_parity_ordinary_snapshot() -> None:
     paths = _paths()
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV", "OUTU"})
     assert _decided(_research_mh_raw(), context) == _decided(_production_v3(), context)
+
+
+def test_v3_paper_diagnostics_reuse_final_scoring_outputs() -> None:
+    paths = _paths()
+    context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV"})
+    target = _production_v3().decide(context)
+    assert target.metadata["ranked_symbols"] == target.metadata["qualified_symbols"]
+    explanations = target.metadata["explanations"]
+    assert isinstance(explanations, dict)
+    for symbol, explanation in explanations.items():
+        assert explanation["consensus_score"] == explanation["residual_momentum_score"]
+        assert explanation["residual_volatility"] > 0.0
+        assert explanation["alpha_rank"] >= 1
+        assert explanation["target_weight"] == pytest.approx(
+            next(weight.weight for weight in target.weights if weight.symbol == symbol)
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -318,3 +336,25 @@ def test_consensus_math_parity_research_vs_production() -> None:
     assert multi_horizon_consensus(tied, [126, 189, 252], 21) == horizon_consensus_scores(
         tied, [126, 189, 252], 21, standardized=False
     )
+
+
+def test_consensus_fails_closed_for_thin_or_incomplete_pools() -> None:
+    from parayabuck.portfolio.equity_residual_momentum_v3 import multi_horizon_consensus
+
+    assert multi_horizon_consensus({}, [126, 189, 252], 21) == {}
+    assert multi_horizon_consensus({"ONLY": [0.001] * 300}, [126, 189, 252], 21) == {}
+    incomplete = {
+        "A": [0.001] * 300,
+        "B": [0.002] * 273,
+        "SHORT": [0.003] * 250,
+    }
+    consensus = multi_horizon_consensus(incomplete, [126, 189, 252], 21)
+    assert set(consensus) == {"A", "B"}
+
+
+def test_v3_thin_qualified_pool_returns_cash_target() -> None:
+    context = _context(_paths(), {"AAA"})
+    target = _production_v3().decide(context)
+    assert target.weights == ()
+    assert target.cash_weight == 1.0
+    assert target.metadata["risk_off_detail"] == "no_qualified_candidates"

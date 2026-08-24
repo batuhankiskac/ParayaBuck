@@ -196,7 +196,7 @@ promotion database, holdout lock or GREEN/RED runtime gate. Rejected
 strategy families are archived (implementation removed) in
 `docs/rejected_strategies.md`.
 
-## 8. Strategy registry (as of the PAPER v2 release)
+## 8. Strategy registry (as of the PAPER v3 release)
 
 **The complete registry** — `_PORTFOLIO_STRATEGY_FACTORIES` and
 `supported_portfolio_strategies()` (config-selectable):
@@ -204,7 +204,8 @@ strategy families are archived (implementation removed) in
 | name | market | primary timeframe | supported | rebalance | status |
 |---|---|---|---|---|---|
 | `equity_residual_momentum_v1` | equity | 1d | 1d | monthly | frozen historical baseline |
-| `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | PAPER production selection (2026-08-18) |
+| `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | frozen prior PAPER identity (superseded 2026-08-24) |
+| `equity_residual_momentum_v3` | equity | 1d | 1d | weekly | PAPER production selection (2026-08-24) |
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
 | `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | PAPER production selection (2026-08-18) |
 

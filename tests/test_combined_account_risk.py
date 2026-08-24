@@ -34,7 +34,8 @@ from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 _EPS = 1e-9
 
 # Frozen validated specs (docs/validated_strategies.md, strategy freeze).
-# v1 = historical baselines; production selection is v2 (same alpha, new cadence).
+# v1/v2 = historical baselines; production selection is v3 (same weekly
+# cadence, frozen MH_RAW scoring identity).
 _FROZEN_EQUITY_PARAMETERS = {
     "formation_bars": 252,
     "skip_bars": 21,
@@ -104,12 +105,12 @@ def _target(
 
 
 def test_frozen_strategy_parameters_and_paper_mode() -> None:
-    """The config still selects exactly the validated production specs (v2
-    cadence identities, same alpha as the frozen v1 baselines); runtime mode
+    """The config selects the validated V3 equity and V2 crypto PAPER specs;
+    runtime mode
     stays paper (no live enablement)."""
     config = load_config()
     assert config.runtime.mode == RuntimeMode.PAPER
-    assert config.strategy.equity.name == "equity_residual_momentum_v2"
+    assert config.strategy.equity.name == "equity_residual_momentum_v3"
     assert dict(config.strategy.equity.parameters) == _PRODUCTION_EQUITY_PARAMETERS
     assert config.strategy.crypto.name == "crypto_low_variance_v2"
     assert dict(config.strategy.crypto.parameters) == _PRODUCTION_CRYPTO_PARAMETERS

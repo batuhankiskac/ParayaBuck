@@ -1,4 +1,8 @@
-# MH_RAW Promotion Validation — 2026-08
+# MH_RAW Promotion Validation — 2026-08 (historical research record)
+
+This document records the pre-PAPER research gate. The product enablement
+decision is recorded separately in `docs/mh_raw_v3_paper_promotion_2026_08.md`;
+the research numbers and frozen semantics below are unchanged.
 
 Mission: validate the researched MH_RAW candidate for promotion under a
 corrected reproducibility contract. No parameters were searched, no horizons

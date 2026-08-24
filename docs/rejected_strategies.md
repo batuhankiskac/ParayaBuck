@@ -12,6 +12,7 @@ The PAPER product strategy surface is exactly:
 
     equity_residual_momentum_v1
     equity_residual_momentum_v2
+    equity_residual_momentum_v3
     crypto_low_variance_v1
     crypto_low_variance_v2
 

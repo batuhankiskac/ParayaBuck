@@ -26,7 +26,7 @@ import platform
 import random
 import statistics
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from research_helpers import config_digest, dataset_identity, git_head
@@ -187,7 +187,12 @@ def run_window(
     if end is not None:
         available = [b for b in available if b.timestamp <= end]
     filtered = available if start is None else [b for b in available if b.timestamp >= start]
-    warmup = [] if start is None else [b for b in available if b.timestamp < start]
+    # Fold warmup: only 550 calendar days (~400 trading) before start suffices for beta 273.
+    if start is None:
+        warmup = []
+    else:
+        cutoff = start - timedelta(days=550)
+        warmup = [b for b in available if cutoff <= b.timestamp < start]
     engine = make_base_engine(
         config,
         strategy,
@@ -934,12 +939,13 @@ def run_folds_for_candidate(
                 and b.timestamp >= start
                 and b.timestamp <= end
             ]
+            cutoff = start - timedelta(days=550)
             warmup = [
                 b
                 for b in bars
                 if b.market == Market.EQUITY
                 and b.timeframe == strategy.timeframe
-                and b.timestamp < start
+                and cutoff <= b.timestamp < start
             ]
             bars_by_symbol = defaultdict(list)
             for b in bars:
@@ -1004,12 +1010,13 @@ def run_folds_for_candidate(
                     and b.timestamp >= start
                     and b.timestamp <= end
                 ]
+                cutoff2 = start - timedelta(days=550)
                 warmup = [
                     b
                     for b in bars
                     if b.market == Market.EQUITY
                     and b.timeframe == strategy.timeframe
-                    and b.timestamp < start
+                    and cutoff2 <= b.timestamp < start
                 ]
                 eng = ProductionPolicyEngine(
                     strategy,
@@ -1398,12 +1405,13 @@ def main():
                         and b.timestamp >= seg_start
                         and b.timestamp <= seg_end
                     ]
+                    warm_cut = seg_start - timedelta(days=550)
                     warm = [
                         b
                         for b in bars
                         if b.market == Market.EQUITY
                         and b.timeframe == build_v3_strategy().timeframe
-                        and b.timestamp < seg_start
+                        and warm_cut <= b.timestamp < seg_start
                     ]
                     eng = StopEngine(
                         build_v3_strategy(),

@@ -1,0 +1,308 @@
+{
+  "mission": "v3_position_risk_optimization_2026_08",
+  "declared_before_results": true,
+  "no_results_yet": true,
+  "baseline_identity": {
+    "git_head": "f558d4605e24b07b895c6ad1a7ed924c457a29e5",
+    "python_version": "3.14.7",
+    "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+    "strategy": {
+      "equity": {
+        "name": "equity_residual_momentum_v3",
+        "version": "3.0.0",
+        "maximum_allocation": 0.6,
+        "parameters": {
+          "formation_bars": 252,
+          "skip_bars": 21,
+          "beta_window_bars": 273,
+          "residual_vol_window": 63,
+          "top_n": 8,
+          "max_single_weight": 0.1,
+          "ivol_reject_quantile": 0.7,
+          "exclude_symbols": ["SPY"],
+          "rebalance_frequency": "weekly"
+        }
+      },
+      "crypto": {
+        "name": "crypto_low_variance_v2",
+        "maximum_allocation": 0.05
+      }
+    },
+    "risk_config": {
+      "max_position_pct": 0.1,
+      "max_crypto_exposure_pct": 0.1,
+      "max_crypto_position_pct": 0.05,
+      "max_crypto_positions": 2,
+      "cash_buffer_pct": 0.4,
+      "max_gross_exposure_pct": 0.6,
+      "max_positions": 6,
+      "daily_loss_limit_pct": 0.005,
+      "max_drawdown_pct": 0.05
+    },
+    "execution": {
+      "rebalance_band_pct": 0.005,
+      "minimum_order_notional": 10
+    },
+    "backtest": {
+      "initial_cash": 100000,
+      "slippage_bps": 2,
+      "spread_bps": 2,
+      "commission": 0,
+      "crypto_taker_fee_bps": 25,
+      "equity_use_effective_dated_fees": true
+    },
+    "runtime": {
+      "mode": "paper",
+      "live_enabled": false,
+      "strategy_equity_name": "equity_residual_momentum_v3",
+      "version": "3.0.0"
+    },
+    "test_count_at_declaration": 702,
+    "dataset_identity": {
+      "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+      "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+      "dividends_csv": "data/historical/equity_1200_dividends.csv",
+      "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0",
+      "corporate_actions": "dividends_only_splits_embedded",
+      "adjustment": "splits"
+    }
+  },
+  "frozen_parameters_note": "THIS IS RESEARCH ONLY. PAPER equity_residual_momentum_v3 frozen. DO NOT modify PAPER config, equity_residual_momentum_v3 alpha ranking, positive 12m gate, 6/9/12 consensus, beta, ivol eligibility, entry cadence, exit cadence, add stops, add daily alpha exits, add take profit, modify crypto, enable LIVE. All candidates must use identical V3 symbol selection, identical weekly decisions, identical cost model, identical universe, identical signal basis. Only POSITION SIZING / CONCENTRATION may differ.",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0",
+    "assert_at_runtime": true
+  },
+  "evaluation_window": {
+    "eval_start": "2017-01-03T00:00:00+00:00",
+    "eval_end": "2026-07-30T00:00:00+00:00",
+    "recent_start": "2022-01-01T00:00:00+00:00"
+  },
+  "walk_forward": {
+    "method": "calendar_fold_windows",
+    "step_months": 6,
+    "fold_count_declared": 20,
+    "folds_exact": [
+      ["2017-01-03T00:00:00+00:00", "2017-07-03T00:00:00+00:00"],
+      ["2017-07-03T00:00:00+00:00", "2018-01-03T00:00:00+00:00"],
+      ["2018-01-03T00:00:00+00:00", "2018-07-03T00:00:00+00:00"],
+      ["2018-07-03T00:00:00+00:00", "2019-01-03T00:00:00+00:00"],
+      ["2019-01-03T00:00:00+00:00", "2019-07-03T00:00:00+00:00"],
+      ["2019-07-03T00:00:00+00:00", "2020-01-03T00:00:00+00:00"],
+      ["2020-01-03T00:00:00+00:00", "2020-07-03T00:00:00+00:00"],
+      ["2020-07-03T00:00:00+00:00", "2021-01-03T00:00:00+00:00"],
+      ["2021-01-03T00:00:00+00:00", "2021-07-03T00:00:00+00:00"],
+      ["2021-07-03T00:00:00+00:00", "2022-01-03T00:00:00+00:00"],
+      ["2022-01-03T00:00:00+00:00", "2022-07-03T00:00:00+00:00"],
+      ["2022-07-03T00:00:00+00:00", "2023-01-03T00:00:00+00:00"],
+      ["2023-01-03T00:00:00+00:00", "2023-07-03T00:00:00+00:00"],
+      ["2023-07-03T00:00:00+00:00", "2024-01-03T00:00:00+00:00"],
+      ["2024-01-03T00:00:00+00:00", "2024-07-03T00:00:00+00:00"],
+      ["2024-07-03T00:00:00+00:00", "2025-01-03T00:00:00+00:00"],
+      ["2025-01-03T00:00:00+00:00", "2025-07-03T00:00:00+00:00"],
+      ["2025-07-03T00:00:00+00:00", "2026-01-03T00:00:00+00:00"],
+      ["2026-01-03T00:00:00+00:00", "2026-07-03T00:00:00+00:00"],
+      ["2026-07-03T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]
+    ],
+    "note": "Anchored walk-forward using calendar_fold_windows (relativedelta months=6), final fold clipped at eval_end. EVERY fold is an independent backtest run with its own warmup and state initialization. NO curve slicing."
+  },
+  "temporal_windows": {
+    "window_2017_2021": [["2017-01-03T00:00:00+00:00", "2022-01-01T00:00:00+00:00"]],
+    "window_2022_2026": [["2022-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
+    "window_2023_2026": [["2023-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
+    "exclude_2020": [["2017-01-03T00:00:00+00:00", "2020-01-01T00:00:00+00:00"], ["2021-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
+    "exclude_2024": [["2017-01-03T00:00:00+00:00", "2024-01-01T00:00:00+00:00"], ["2025-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]]
+  },
+  "temporal_execution_note": "EVERY temporal window is independently executed with its own warmup and state initialization. Exclude windows are CHAINED runs: segment 2 warms up on all bars before its start (including excluded year) and compounds on segment 1 ending equity. NO curve slicing.",
+  "position_risk_candidates": {
+    "P0": {
+      "id": "P0",
+      "label": "CONTROL",
+      "description": "Exactly current V3 + production risk geometry: strategy top_n=8, max_positions=6, max_position_pct=0.10, maximum_allocation=0.60, max_gross=0.60, cash_buffer=0.40. Sizing remains current inverse residual-volatility sizing.",
+      "type": "control",
+      "strategy_top_n": 8,
+      "risk_geometry": {
+        "max_positions": 6,
+        "max_position_pct": 0.1,
+        "maximum_allocation": 0.6,
+        "max_gross": 0.6,
+        "cash_buffer": 0.4
+      },
+      "sizing": "inverse_residual_vol_63",
+      "max_gross_exposure_pct": 0.6
+    },
+    "P1": {
+      "id": "P1",
+      "label": "DIVERSIFY_7",
+      "description": "V3 selection remains top_n=8. Risk geometry max_positions=7, max_position_pct=0.085. Maximum nominal equity exposure 7*0.085=0.595 approx same 60% sleeve. Position-count selection MUST preserve V3 alpha rank. Current inverse residual-vol sizing remains unchanged.",
+      "type": "diversify",
+      "strategy_top_n": 8,
+      "risk_geometry": {
+        "max_positions": 7,
+        "max_position_pct": 0.085,
+        "maximum_allocation": 0.6,
+        "max_gross": 0.6,
+        "cash_buffer": 0.4
+      },
+      "sizing": "inverse_residual_vol_63",
+      "max_gross_exposure_pct": 0.6,
+      "note": "One position cannot consume 10%. Same 60% sleeve, model-free diversification."
+    },
+    "P2": {
+      "id": "P2",
+      "label": "DIVERSIFY_8",
+      "description": "V3 selection remains top_n=8. Risk geometry max_positions=8, max_position_pct=0.075. Maximum nominal equity exposure 8*0.075=0.60. All eight V3-selected names may survive risk overlay while single-name maximum exposure falls by 25%. Current inverse residual-vol sizing unchanged.",
+      "type": "diversify",
+      "strategy_top_n": 8,
+      "risk_geometry": {
+        "max_positions": 8,
+        "max_position_pct": 0.075,
+        "maximum_allocation": 0.6,
+        "max_gross": 0.6,
+        "cash_buffer": 0.4
+      },
+      "sizing": "inverse_residual_vol_63",
+      "max_gross_exposure_pct": 0.6,
+      "note": "8*7.5% produces comparable return with lower tail risk if 7th/8th names not value-destructive."
+    },
+    "P3": {
+      "id": "P3",
+      "label": "TAIL_ES_126",
+      "description": "Keep CURRENT concentration geometry max_positions=6 max_position_pct=0.10. Keep exact V3 alpha selection. Change ONLY sizing risk denominator. For every selected symbol calculate using information available strictly through decision timestamp: normal_risk = current production residual_volatility_63; Also calculate downside Expected Shortfall from split-adjusted daily PRICE returns over previous 126 completed sessions. tail_count=max(1,ceil(0.10*len(daily_returns))), worst_returns=tail_count most negative, ES10_daily=abs(mean(worst_returns)), tail_risk_equivalent=ES10_daily*sqrt(252), effective_risk=max(normal_risk,tail_risk_equivalent), raw_weight=1/effective_risk then EXISTING normalization and 10% cap. Do NOT alter rank, do NOT use future returns, do NOT use diagnostic MAE, do NOT optimize 126/10%/sqrt252 frozen. If fewer than 126 returns exist fallback to normal.",
+      "type": "tail_es",
+      "strategy_top_n": 8,
+      "risk_geometry": {
+        "max_positions": 6,
+        "max_position_pct": 0.1,
+        "maximum_allocation": 0.6,
+        "max_gross": 0.6,
+        "cash_buffer": 0.4
+      },
+      "sizing": {
+        "method": "effective_risk_max",
+        "normal_risk": "residual_volatility_63_annualized",
+        "tail_lookback": 126,
+        "tail_pct": 0.1,
+        "tail_count_formula": "max(1, ceil(0.10 * len(daily_returns)))",
+        "ES_formula": "abs(mean(tail_count most negative daily_returns))",
+        "annualization": "ES10_daily * sqrt(252)",
+        "effective_risk": "max(normal_risk, tail_risk_equivalent)",
+        "raw_weight": "1 / effective_risk",
+        "normalization": "existing inverse-vol normalization + 10% cap semantics",
+        "fallback": "if fewer than 126 returns exist, use normal production residual-vol sizing",
+        "frozen_params": [126, 0.1, 252],
+        "no_future": true,
+        "no_MAE_feed": true,
+        "no_optimization": true
+      },
+      "max_gross_exposure_pct": 0.6
+    }
+  },
+  "candidate_note": "Do NOT grid-search. Evaluate EXACTLY P0-P3. Do NOT mix P1/P2/P3 initially. P1/P2 are model-free diversification changes, P3 is risk-estimation change. Identical V3 symbol selection, identical weekly decisions, identical cost model, identical universe, identical signal basis. Only POSITION SIZING / CONCENTRATION may differ.",
+  "cost_stress": {
+    "levels": [1, 2, 3, 5],
+    "description": "Each level independently RERUNS the full trading path with scaled engine cost inputs: slippage_bps*MULT, spread_bps*MULT, crypto_taker_fee_bps*MULT, and where applicable equity fee rates scaled similarly. No heuristic adjusted-return / adjusted-Sharpe formulas. Real engine reruns.",
+    "forbidden_heuristics": ["adjusted_return = base_return - estimated_fee", "adjusted_sharpe = base_sharpe * constant", "any linear fee subtraction without rerun", "adjusted_sharpe formula"]
+  },
+  "bootstrap": {
+    "method": "block_bootstrap",
+    "block_days": 20,
+    "resamples": 2000,
+    "seed": 202608240
+  },
+  "random_seed": 202608240,
+  "fold_contract": {
+    "count": 20,
+    "method": "calendar_fold_windows with relativedelta(months=6)",
+    "step_months": 6,
+    "integrity": "EVERY fold is an independent backtest run with its own warmup/state initialization. No fast_folds_from_curve, no equity-curve slicing, no heuristic fee transforms."
+  },
+  "promotion_rubric": {
+    "description": "Candidate passes only if ALL 14 gates are true (§12). No lookahead, strategy identity preserved, exposure within band.",
+    "criteria": [
+      "1. Full-period Sharpe >= CONTROL.",
+      "2. Full-period return no worse than CONTROL by >5 percentage points (candidate_total_return >= control_total_return - 0.05).",
+      "3. Worst contemporaneous single-position account loss improves >=20% OR p99 position-account loss improves >=20% (candidate_worst >= control_worst * 0.80 in absolute terms, i.e., less negative).",
+      "4. Top-5 loss concentration does not worsen materially (candidate top5 concentration <= control top5 + tolerance, not materially larger).",
+      "5. Full-period maxDD <= CONTROL (prefer improvement >=1pp).",
+      "6. Median paired 20-fold return delta >= 0 (candidate - control per fold median).",
+      "7. >=10/20 Sharpe folds beat CONTROL (candidate Sharpe > control Sharpe in at least 10 folds).",
+      "8. 2022+ window (2022-2026) Sharpe >= CONTROL 2022+ Sharpe.",
+      "9. Real 3x-cost run preserves Sharpe >= CONTROL 3x OR remains within 0.02 with materially better tail metrics.",
+      "10. No one-year dependency (every single calendar year + exclude windows not dominated; candidate not critically dependent on one year).",
+      "11. No single-symbol dependency (candidate-specific own top-3 jackknife still satisfies gates 1-3).",
+      "12. Average equity exposure must remain within CONTROL +/-5 percentage points unless reduced exposure itself produces sufficiently higher Sharpe.",
+      "13. No lookahead (P3 ES strictly through decision timestamp, verified by construction and test).",
+      "14. Strategy selection/ranking identity unchanged (P3 alpha RANKING and selected names identical to P0; only final target weights differ — parity test)."
+    ],
+    "verdicts_allowed": [
+      "POSITION-RISK CANDIDATE: P1 DIVERSIFY_7",
+      "POSITION-RISK CANDIDATE: P2 DIVERSIFY_8",
+      "POSITION-RISK CANDIDATE: P3 TAIL_ES_126",
+      "POSITION-RISK OPTIMIZATION REJECTED",
+      "MULTIPLE POSITION-RISK CANDIDATES PASSED: <ids>"
+    ],
+    "interpretation": {
+      "P1_P2": "P1/P2 change portfolio-risk geometry, do NOT create new alpha. If 8x7.5% succeeds interpret as diversification/risk-policy improvement not new alpha. If 7th/8th names destroy returns report plainly. Do NOT afterwards try 7.8%/8.0%/8.2%/9 positions — no post-result grid.",
+      "P3": "If P3 fails do NOT test ES5/ES15/90d/180d after seeing results. Conclude predeclared estimator did not add value. If P3 succeeds run parity tests proving alpha RANKING and selected names identical to P0 only final target weights differ.",
+      "combinations": "Do NOT run P2+P3 in this mission. First establish whether either idea works independently. No combinatorial search."
+    }
+  },
+  "final_verdicts_required": [
+    "POSITION-RISK CANDIDATE: P1 DIVERSIFY_7",
+    "POSITION-RISK CANDIDATE: P2 DIVERSIFY_8",
+    "POSITION-RISK CANDIDATE: P3 TAIL_ES_126",
+    "POSITION-RISK OPTIMIZATION REJECTED",
+    "MULTIPLE POSITION-RISK CANDIDATES PASSED: P1,P2,P3 subset"
+  ],
+  "required_artifacts": [
+    "docs/v3_position_risk_optimization_2026_08.md",
+    "data/research/v3_position_risk_2026_08/baseline_diagnostics.json",
+    "data/research/v3_position_risk_2026_08/ex_ante_risk_diagnostics.json",
+    "data/research/v3_position_risk_2026_08/candidates.json",
+    "data/research/v3_position_risk_2026_08/position_tail_metrics.json",
+    "data/research/v3_position_risk_2026_08/concentration_metrics.json",
+    "data/research/v3_position_risk_2026_08/walk_forward.json",
+    "data/research/v3_position_risk_2026_08/temporal_windows.json",
+    "data/research/v3_position_risk_2026_08/cost_stress.json",
+    "data/research/v3_position_risk_2026_08/annual_results.json",
+    "data/research/v3_position_risk_2026_08/jackknife.json",
+    "data/research/v3_position_risk_2026_08/bootstrap.json",
+    "data/research/v3_position_risk_2026_08/axon_counterfactual.json",
+    "data/research/v3_position_risk_2026_08/promotion_verdict.json"
+  ],
+  "artifact_provenance_required": ["implementation_commit", "research_commit", "config_digest", "dataset_hashes", "candidate_id", "exact_policy_semantics", "schema_version"],
+  "integrity_constraints": {
+    "forbidden_shortcuts": [
+      "fast_folds_from_curve",
+      "fast_cost_stress_from_result",
+      "temporal slicing from a full-period curve",
+      "adjusted_return = base_return - estimated_fee",
+      "adjusted_sharpe = base_sharpe * constant",
+      "adjusted_sharpe formula",
+      "any curve-slicing substitution for backtest",
+      "any heuristic fee transformation without rerun",
+      "any reuse of a single full-period result to derive folds via curve segments"
+    ],
+    "required_independent_runs": [
+      "Every fold = independent PortfolioBacktestEngine run with own warmup/state",
+      "Every temporal window = independent run with its own warmup/state",
+      "Every 1x/2x/3x/5x cost level = real engine rerun with scaled costs"
+    ],
+    "strategy_invariance": [
+      "identical V3 symbol selection",
+      "identical weekly decisions",
+      "identical cost model",
+      "identical universe",
+      "identical signal basis",
+      "Only POSITION SIZING / CONCENTRATION may differ",
+      "Do NOT modify alpha ranking, positive 12m gate, 6/9/12 consensus, beta, ivol eligibility, entry cadence, exit cadence, add stops, add daily alpha exits, add take profit, modify crypto, enable LIVE"
+    ],
+    "tests_required": "Deterministic tests must block forbidden shortcuts, verify no lookahead in P3 tail ES (uses strictly completed bars through decision timestamp, fallback when <126), verify controls reproduce ~1.6648 return / 0.8214 Sharpe / 0.2203 maxDD, verify candidate definitions exactly P0-P3, verify distinct candidate_worst_episode vs AXON_reference_episode and correct contemporaneous-equity denominator"
+  },
+  "quality_gates": ["python -m pytest -q", "python -m ruff check .", "python -m ruff format --check .", "python -m mypy src"],
+  "results_sha256": {},
+  "commit_note": "Frozen research implementation + manifest BEFORE generating results. Results hashes to be filled after run via --refresh if needed, but research outputs must record implementation_commit == research_commit == this commit. Do not modify candidate math after COMMIT A without invalidating and rerunning. No generated candidate results, no candidate-result report in this commit."
+}

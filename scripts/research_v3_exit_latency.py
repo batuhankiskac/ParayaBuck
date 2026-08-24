@@ -18,6 +18,14 @@ Artifacts: data/research/v3_exit_latency_2026_08/
 Manifest: data/research_manifests/v3_exit_latency_optimization_2026_08.json
 """
 
+# DIAGNOSTIC CORRECTION 2026-08-24 (§2 of v3_position_risk_optimization_2026_08):
+# Prior report conflated candidate_worst_episode with AXON_reference_episode on the same row.
+# Corrected semantics (no strategy/behavior change, reporting only):
+#   - candidate_worst_episode: that candidate's actual worst single-position account impact (realized_pnl / account_equity_at_entry)
+#   - AXON_reference_episode: AXON 2025-02 specifically, reported separately
+# Never display candidate worst % on AXON row unless AXON is that candidate's worst.
+# All account-loss percentages use contemporaneous equity, never initial cash.
+
 from __future__ import annotations
 
 import argparse

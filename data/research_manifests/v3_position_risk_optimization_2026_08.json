@@ -19,7 +19,9 @@
           "top_n": 8,
           "max_single_weight": 0.1,
           "ivol_reject_quantile": 0.7,
-          "exclude_symbols": ["SPY"],
+          "exclude_symbols": [
+            "SPY"
+          ],
           "rebalance_frequency": "weekly"
         }
       },
@@ -85,35 +87,128 @@
     "step_months": 6,
     "fold_count_declared": 20,
     "folds_exact": [
-      ["2017-01-03T00:00:00+00:00", "2017-07-03T00:00:00+00:00"],
-      ["2017-07-03T00:00:00+00:00", "2018-01-03T00:00:00+00:00"],
-      ["2018-01-03T00:00:00+00:00", "2018-07-03T00:00:00+00:00"],
-      ["2018-07-03T00:00:00+00:00", "2019-01-03T00:00:00+00:00"],
-      ["2019-01-03T00:00:00+00:00", "2019-07-03T00:00:00+00:00"],
-      ["2019-07-03T00:00:00+00:00", "2020-01-03T00:00:00+00:00"],
-      ["2020-01-03T00:00:00+00:00", "2020-07-03T00:00:00+00:00"],
-      ["2020-07-03T00:00:00+00:00", "2021-01-03T00:00:00+00:00"],
-      ["2021-01-03T00:00:00+00:00", "2021-07-03T00:00:00+00:00"],
-      ["2021-07-03T00:00:00+00:00", "2022-01-03T00:00:00+00:00"],
-      ["2022-01-03T00:00:00+00:00", "2022-07-03T00:00:00+00:00"],
-      ["2022-07-03T00:00:00+00:00", "2023-01-03T00:00:00+00:00"],
-      ["2023-01-03T00:00:00+00:00", "2023-07-03T00:00:00+00:00"],
-      ["2023-07-03T00:00:00+00:00", "2024-01-03T00:00:00+00:00"],
-      ["2024-01-03T00:00:00+00:00", "2024-07-03T00:00:00+00:00"],
-      ["2024-07-03T00:00:00+00:00", "2025-01-03T00:00:00+00:00"],
-      ["2025-01-03T00:00:00+00:00", "2025-07-03T00:00:00+00:00"],
-      ["2025-07-03T00:00:00+00:00", "2026-01-03T00:00:00+00:00"],
-      ["2026-01-03T00:00:00+00:00", "2026-07-03T00:00:00+00:00"],
-      ["2026-07-03T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]
+      [
+        "2017-01-03T00:00:00+00:00",
+        "2017-07-03T00:00:00+00:00"
+      ],
+      [
+        "2017-07-03T00:00:00+00:00",
+        "2018-01-03T00:00:00+00:00"
+      ],
+      [
+        "2018-01-03T00:00:00+00:00",
+        "2018-07-03T00:00:00+00:00"
+      ],
+      [
+        "2018-07-03T00:00:00+00:00",
+        "2019-01-03T00:00:00+00:00"
+      ],
+      [
+        "2019-01-03T00:00:00+00:00",
+        "2019-07-03T00:00:00+00:00"
+      ],
+      [
+        "2019-07-03T00:00:00+00:00",
+        "2020-01-03T00:00:00+00:00"
+      ],
+      [
+        "2020-01-03T00:00:00+00:00",
+        "2020-07-03T00:00:00+00:00"
+      ],
+      [
+        "2020-07-03T00:00:00+00:00",
+        "2021-01-03T00:00:00+00:00"
+      ],
+      [
+        "2021-01-03T00:00:00+00:00",
+        "2021-07-03T00:00:00+00:00"
+      ],
+      [
+        "2021-07-03T00:00:00+00:00",
+        "2022-01-03T00:00:00+00:00"
+      ],
+      [
+        "2022-01-03T00:00:00+00:00",
+        "2022-07-03T00:00:00+00:00"
+      ],
+      [
+        "2022-07-03T00:00:00+00:00",
+        "2023-01-03T00:00:00+00:00"
+      ],
+      [
+        "2023-01-03T00:00:00+00:00",
+        "2023-07-03T00:00:00+00:00"
+      ],
+      [
+        "2023-07-03T00:00:00+00:00",
+        "2024-01-03T00:00:00+00:00"
+      ],
+      [
+        "2024-01-03T00:00:00+00:00",
+        "2024-07-03T00:00:00+00:00"
+      ],
+      [
+        "2024-07-03T00:00:00+00:00",
+        "2025-01-03T00:00:00+00:00"
+      ],
+      [
+        "2025-01-03T00:00:00+00:00",
+        "2025-07-03T00:00:00+00:00"
+      ],
+      [
+        "2025-07-03T00:00:00+00:00",
+        "2026-01-03T00:00:00+00:00"
+      ],
+      [
+        "2026-01-03T00:00:00+00:00",
+        "2026-07-03T00:00:00+00:00"
+      ],
+      [
+        "2026-07-03T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
     ],
     "note": "Anchored walk-forward using calendar_fold_windows (relativedelta months=6), final fold clipped at eval_end. EVERY fold is an independent backtest run with its own warmup and state initialization. NO curve slicing."
   },
   "temporal_windows": {
-    "window_2017_2021": [["2017-01-03T00:00:00+00:00", "2022-01-01T00:00:00+00:00"]],
-    "window_2022_2026": [["2022-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
-    "window_2023_2026": [["2023-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
-    "exclude_2020": [["2017-01-03T00:00:00+00:00", "2020-01-01T00:00:00+00:00"], ["2021-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]],
-    "exclude_2024": [["2017-01-03T00:00:00+00:00", "2024-01-01T00:00:00+00:00"], ["2025-01-01T00:00:00+00:00", "2026-07-30T00:00:00+00:00"]]
+    "window_2017_2021": [
+      [
+        "2017-01-03T00:00:00+00:00",
+        "2022-01-01T00:00:00+00:00"
+      ]
+    ],
+    "window_2022_2026": [
+      [
+        "2022-01-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    ],
+    "window_2023_2026": [
+      [
+        "2023-01-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    ],
+    "exclude_2020": [
+      [
+        "2017-01-03T00:00:00+00:00",
+        "2020-01-01T00:00:00+00:00"
+      ],
+      [
+        "2021-01-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    ],
+    "exclude_2024": [
+      [
+        "2017-01-03T00:00:00+00:00",
+        "2024-01-01T00:00:00+00:00"
+      ],
+      [
+        "2025-01-01T00:00:00+00:00",
+        "2026-07-30T00:00:00+00:00"
+      ]
+    ]
   },
   "temporal_execution_note": "EVERY temporal window is independently executed with its own warmup and state initialization. Exclude windows are CHAINED runs: segment 2 warms up on all bars before its start (including excluded year) and compounds on segment 1 ending equity. NO curve slicing.",
   "position_risk_candidates": {
@@ -192,7 +287,11 @@
         "raw_weight": "1 / effective_risk",
         "normalization": "existing inverse-vol normalization + 10% cap semantics",
         "fallback": "if fewer than 126 returns exist, use normal production residual-vol sizing",
-        "frozen_params": [126, 0.1, 252],
+        "frozen_params": [
+          126,
+          0.1,
+          252
+        ],
         "no_future": true,
         "no_MAE_feed": true,
         "no_optimization": true
@@ -202,9 +301,19 @@
   },
   "candidate_note": "Do NOT grid-search. Evaluate EXACTLY P0-P3. Do NOT mix P1/P2/P3 initially. P1/P2 are model-free diversification changes, P3 is risk-estimation change. Identical V3 symbol selection, identical weekly decisions, identical cost model, identical universe, identical signal basis. Only POSITION SIZING / CONCENTRATION may differ.",
   "cost_stress": {
-    "levels": [1, 2, 3, 5],
+    "levels": [
+      1,
+      2,
+      3,
+      5
+    ],
     "description": "Each level independently RERUNS the full trading path with scaled engine cost inputs: slippage_bps*MULT, spread_bps*MULT, crypto_taker_fee_bps*MULT, and where applicable equity fee rates scaled similarly. No heuristic adjusted-return / adjusted-Sharpe formulas. Real engine reruns.",
-    "forbidden_heuristics": ["adjusted_return = base_return - estimated_fee", "adjusted_sharpe = base_sharpe * constant", "any linear fee subtraction without rerun", "adjusted_sharpe formula"]
+    "forbidden_heuristics": [
+      "adjusted_return = base_return - estimated_fee",
+      "adjusted_sharpe = base_sharpe * constant",
+      "any linear fee subtraction without rerun",
+      "adjusted_sharpe formula"
+    ]
   },
   "bootstrap": {
     "method": "block_bootstrap",
@@ -220,7 +329,7 @@
     "integrity": "EVERY fold is an independent backtest run with its own warmup/state initialization. No fast_folds_from_curve, no equity-curve slicing, no heuristic fee transforms."
   },
   "promotion_rubric": {
-    "description": "Candidate passes only if ALL 14 gates are true (§12). No lookahead, strategy identity preserved, exposure within band.",
+    "description": "Candidate passes only if ALL 14 gates are true (\u00a712). No lookahead, strategy identity preserved, exposure within band.",
     "criteria": [
       "1. Full-period Sharpe >= CONTROL.",
       "2. Full-period return no worse than CONTROL by >5 percentage points (candidate_total_return >= control_total_return - 0.05).",
@@ -235,7 +344,7 @@
       "11. No single-symbol dependency (candidate-specific own top-3 jackknife still satisfies gates 1-3).",
       "12. Average equity exposure must remain within CONTROL +/-5 percentage points unless reduced exposure itself produces sufficiently higher Sharpe.",
       "13. No lookahead (P3 ES strictly through decision timestamp, verified by construction and test).",
-      "14. Strategy selection/ranking identity unchanged (P3 alpha RANKING and selected names identical to P0; only final target weights differ — parity test)."
+      "14. Strategy selection/ranking identity unchanged (P3 alpha RANKING and selected names identical to P0; only final target weights differ \u2014 parity test)."
     ],
     "verdicts_allowed": [
       "POSITION-RISK CANDIDATE: P1 DIVERSIFY_7",
@@ -245,7 +354,7 @@
       "MULTIPLE POSITION-RISK CANDIDATES PASSED: <ids>"
     ],
     "interpretation": {
-      "P1_P2": "P1/P2 change portfolio-risk geometry, do NOT create new alpha. If 8x7.5% succeeds interpret as diversification/risk-policy improvement not new alpha. If 7th/8th names destroy returns report plainly. Do NOT afterwards try 7.8%/8.0%/8.2%/9 positions — no post-result grid.",
+      "P1_P2": "P1/P2 change portfolio-risk geometry, do NOT create new alpha. If 8x7.5% succeeds interpret as diversification/risk-policy improvement not new alpha. If 7th/8th names destroy returns report plainly. Do NOT afterwards try 7.8%/8.0%/8.2%/9 positions \u2014 no post-result grid.",
       "P3": "If P3 fails do NOT test ES5/ES15/90d/180d after seeing results. Conclude predeclared estimator did not add value. If P3 succeeds run parity tests proving alpha RANKING and selected names identical to P0 only final target weights differ.",
       "combinations": "Do NOT run P2+P3 in this mission. First establish whether either idea works independently. No combinatorial search."
     }
@@ -273,7 +382,15 @@
     "data/research/v3_position_risk_2026_08/axon_counterfactual.json",
     "data/research/v3_position_risk_2026_08/promotion_verdict.json"
   ],
-  "artifact_provenance_required": ["implementation_commit", "research_commit", "config_digest", "dataset_hashes", "candidate_id", "exact_policy_semantics", "schema_version"],
+  "artifact_provenance_required": [
+    "implementation_commit",
+    "research_commit",
+    "config_digest",
+    "dataset_hashes",
+    "candidate_id",
+    "exact_policy_semantics",
+    "schema_version"
+  ],
   "integrity_constraints": {
     "forbidden_shortcuts": [
       "fast_folds_from_curve",
@@ -302,7 +419,23 @@
     ],
     "tests_required": "Deterministic tests must block forbidden shortcuts, verify no lookahead in P3 tail ES (uses strictly completed bars through decision timestamp, fallback when <126), verify controls reproduce ~1.6648 return / 0.8214 Sharpe / 0.2203 maxDD, verify candidate definitions exactly P0-P3, verify distinct candidate_worst_episode vs AXON_reference_episode and correct contemporaneous-equity denominator"
   },
-  "quality_gates": ["python -m pytest -q", "python -m ruff check .", "python -m ruff format --check .", "python -m mypy src"],
+  "quality_gates": [
+    "python -m pytest -q",
+    "python -m ruff check .",
+    "python -m ruff format --check .",
+    "python -m mypy src"
+  ],
   "results_sha256": {},
-  "commit_note": "Frozen research implementation + manifest BEFORE generating results. Results hashes to be filled after run via --refresh if needed, but research outputs must record implementation_commit == research_commit == this commit. Do not modify candidate math after COMMIT A without invalidating and rerunning. No generated candidate results, no candidate-result report in this commit."
+  "commit_note": "COMMIT A2: frozen research implementation fix for cost-stress (research-only PositionRiskResearchEngine with regulatory_fee_multiplier) BEFORE generating results. Original predeclaration 5954d00. Candidate definitions unchanged, rubric unchanged, folds unchanged, datasets unchanged, seed unchanged. No generated candidate results, no report in this commit. Results artifacts must record implementation_commit == research_commit == this COMMIT A2.",
+  "original_predeclaration_commit": "5954d004520e731e1b0ceffaa6273be3a518529d",
+  "original_predeclaration_commit_short": "5954d00",
+  "implementation_commit": "pending_A2_will_be_this_commit",
+  "provenance_note": "Because implementation changed after COMMIT A (cost-stress regulatory fee multiplier fix), keep 5954d00 as historical COMMIT A; this file is COMMIT A2. Candidate definitions byte-for-byte identical, promotion rubric unchanged, fold boundaries unchanged, datasets unchanged, bootstrap seed unchanged, results_sha256 remains empty. Artifacts must later record implementation_commit == research_commit == COMMIT_A2.",
+  "test_count_provenance": {
+    "baseline_before_commit_A": 702,
+    "commit_A_quality_gate": 721,
+    "commit_A2_quality_gate": 726,
+    "note": "baseline_before_commit_A is the original predeclaration manifest value (702). commit_A_quality_gate was 721 after adding 19 integrity tests (702+19). commit_A2 adds 5 new cost-stress tests (721+5=726). Do not rewrite history."
+  },
+  "implementation_commit_pending": "will be COMMIT_A2 SHA after this commit"
 }

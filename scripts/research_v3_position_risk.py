@@ -37,7 +37,7 @@ import json
 import math
 import statistics
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult
@@ -61,6 +61,43 @@ from parayabuck.validation import (
     paired_fold_deltas,
     temporal_diagnostic_windows,
 )
+
+
+class PositionRiskResearchEngine(PortfolioBacktestEngine):
+    """Research-only engine with regulatory_fee_multiplier for cost stress.
+
+    Cost-stress semantics (per COMMIT A2):
+      slippage_bps *= multiplier
+      spread_bps *= multiplier
+      commission *= multiplier
+      crypto_taker_fee_bps *= multiplier
+      complete effective-dated equity regulatory fee *= multiplier (including capped TAF)
+
+    For 1x multiplier=1.0 behavior is exactly identical to production engine.
+    We keep equity_use_effective_dated_fees == True and multiply the FINAL
+    fee returned by the production schedule, so historical TAF/CAT/SEC with
+    correct caps and date-specific rates are stressed uniformly.
+    """
+
+    def __init__(
+        self,
+        *args,
+        regulatory_fee_multiplier: float = 1.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.regulatory_fee_multiplier = float(regulatory_fee_multiplier)
+
+    def _equity_fee(  # type: ignore[override]
+        self,
+        side,  # OrderSide
+        quantity: float,
+        price: float,
+        trade_date: date,
+    ) -> float:
+        base_fee = super()._equity_fee(side, quantity, price, trade_date)
+        return base_fee * self.regulatory_fee_multiplier
+
 
 REPO = Path(__file__).resolve().parents[1]
 EQUITY_CSV = REPO / "data/historical/equity_1200_2016_2026.csv"
@@ -263,7 +300,10 @@ def make_engine(
     starting_equity: float | None = None,
 ):
     limits = risk_limits_for_candidate(config, candidate_id)
-    return PortfolioBacktestEngine(
+    # Research-local cost-stress: slippage/spread/commission/crypto scaled directly,
+    # equity regulatory fees scaled via regulatory_fee_multiplier that multiplies
+    # the FINAL effective-dated fee (including caps), not the flat inputs.
+    return PositionRiskResearchEngine(
         strategy,
         rebalance_policy_for(strategy),
         starting_equity=starting_equity or config.backtest.initial_cash,
@@ -273,17 +313,12 @@ def make_engine(
         if config.backtest.commission
         else 0,
         crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps * cost_multiplier,
-        equity_taf_per_share=config.backtest.equity_taf_per_share * cost_multiplier
-        if cost_multiplier != 1
-        else config.backtest.equity_taf_per_share,
+        equity_taf_per_share=config.backtest.equity_taf_per_share,
         equity_taf_cap=config.backtest.equity_taf_cap,
-        equity_cat_per_share=config.backtest.equity_cat_per_share * cost_multiplier
-        if cost_multiplier != 1
-        else config.backtest.equity_cat_per_share,
-        equity_sec_fee_rate=config.backtest.equity_sec_fee_rate * cost_multiplier
-        if cost_multiplier != 1
-        else config.backtest.equity_sec_fee_rate,
+        equity_cat_per_share=config.backtest.equity_cat_per_share,
+        equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
         equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
+        regulatory_fee_multiplier=cost_multiplier,
         benchmark_symbol="SPY",
         universe=universe,
         universe_version=hash_point_in_time_universe(universe),

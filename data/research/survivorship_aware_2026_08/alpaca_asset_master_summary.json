@@ -1,0 +1,141 @@
+{
+  "fetched_at": "2026-08-24T21:02:58.361670+00:00",
+  "endpoint": "https://paper-api.alpaca.markets/v2/assets",
+  "active": {
+    "total": 14262,
+    "tradable": 13397,
+    "non_tradable": 865,
+    "exchange_distribution": {
+      "OTC": 1140,
+      "NASDAQ": 5598,
+      "NYSE": 2919,
+      "BATS": 1610,
+      "ARCA": 2705,
+      "AMEX": 290
+    },
+    "sample_symbols": [
+      "LVRWF",
+      "CNTGF",
+      "AVHIW",
+      "LYTHF",
+      "LGMK"
+    ]
+  },
+  "inactive": {
+    "total": 19192,
+    "tradable": 0,
+    "non_tradable": 19192,
+    "exchange_distribution": {
+      "OTC": 16329,
+      "ARCA": 469,
+      "NASDAQ": 1317,
+      "NYSE": 845,
+      "AMEX": 97,
+      "BATS": 135
+    },
+    "sample_symbols": [
+      "ARRPY",
+      "UMCN",
+      "STQNF",
+      "GVSI",
+      "CTXAF"
+    ]
+  },
+  "all": {
+    "total": 33454,
+    "tradable": 13397,
+    "non_tradable": 20057,
+    "exchange_distribution": {
+      "OTC": 17469,
+      "ARCA": 3174,
+      "NASDAQ": 6915,
+      "NYSE": 3764,
+      "AMEX": 387,
+      "BATS": 1745
+    },
+    "sample_symbols": [
+      "ARRPY",
+      "UMCN",
+      "STQNF",
+      "GVSI",
+      "CTXAF"
+    ]
+  },
+  "active_raw_sample": [
+    {
+      "id": "c3297661-5d54-46c9-979a-950837b7440a",
+      "class": "us_equity",
+      "exchange": "OTC",
+      "symbol": "LVRWF",
+      "name": "LAVORO LTD Warrant",
+      "status": "active",
+      "tradable": false,
+      "marginable": false,
+      "maintenance_margin_requirement": 100,
+      "margin_requirement_long": "100",
+      "margin_requirement_short": "100",
+      "shortable": false,
+      "easy_to_borrow": false,
+      "borrow_status": "hard_to_borrow",
+      "fractionable": false,
+      "attributes": []
+    },
+    {
+      "id": "d0aacc0f-5ad9-48c7-890f-d39fa065a761",
+      "class": "us_equity",
+      "exchange": "OTC",
+      "symbol": "CNTGF",
+      "name": "CENTOGENE N V Common Shares",
+      "status": "active",
+      "tradable": false,
+      "marginable": false,
+      "maintenance_margin_requirement": 100,
+      "margin_requirement_long": "100",
+      "margin_requirement_short": "100",
+      "shortable": false,
+      "easy_to_borrow": false,
+      "borrow_status": "hard_to_borrow",
+      "fractionable": false,
+      "attributes": []
+    }
+  ],
+  "inactive_raw_sample": [
+    {
+      "id": "a120ad97-d18d-440f-87e6-d631b938264c",
+      "class": "us_equity",
+      "exchange": "OTC",
+      "symbol": "ARRPY",
+      "name": "Aeroports de Paris SA American Depositary Receipts - Unsponsored (France)",
+      "status": "inactive",
+      "tradable": false,
+      "marginable": false,
+      "maintenance_margin_requirement": 100,
+      "margin_requirement_long": "100",
+      "margin_requirement_short": "100",
+      "shortable": false,
+      "easy_to_borrow": false,
+      "borrow_status": "hard_to_borrow",
+      "fractionable": false,
+      "attributes": []
+    },
+    {
+      "id": "c85a913b-487a-4c21-baf9-0e0504c89c4e",
+      "class": "us_equity",
+      "exchange": "OTC",
+      "symbol": "UMCN",
+      "name": "UMC, Inc. Common Stock",
+      "status": "inactive",
+      "tradable": false,
+      "marginable": false,
+      "maintenance_margin_requirement": 100,
+      "margin_requirement_long": "100",
+      "margin_requirement_short": "100",
+      "shortable": false,
+      "easy_to_borrow": false,
+      "borrow_status": "hard_to_borrow",
+      "fractionable": false,
+      "attributes": []
+    }
+  ],
+  "note": "Current asset master is not historical membership; inactive today does not imply eligible for every historical date."
+}

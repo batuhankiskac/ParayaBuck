@@ -160,7 +160,7 @@ offline shadow replay and must not be counted as PAPER soak observations.
 | promotion scope | equity PAPER only |
 | research validation commits | `2c42341`, `32126af`, `bda7002`, `c1148d4` |
 | implementation/provenance commit | `bda700270b4853bcffd47218dfebcef8fc3677b0` |
-| promotion/config commit | `[RECORDED AFTER FINAL VALIDATION]` |
+| promotion/config commit | `39c78aedf40df5aaaf57f535ee2b6a216ef4f348` |
 | config SHA256 before / after | `c65ab34257d51cb99650b01d90e544cd11dd678954b420a1c20872ea6cd0f3f4` / `c86dc22012cbd77cb8932e816af8a72e67e3f834ea53d94a9bc3215015ed3eb3` |
 | frozen manifest SHA256 | `d2b906a836484b102b30610d4b3786923ace8a079df0fc7b811eebb0516b6e96` |
 | expected runtime configuration digest | `330c51141df61411fa3440d432deaa66224ffce932bb2ed1ad7fb73ab30a0cd6` |

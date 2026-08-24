@@ -1307,7 +1307,6 @@ def jackknife_for_candidate(
                 snaps.append(rep2(snap, symbols=fs, observation_set=fo))
             return rep2(univ, snapshots=tuple(snaps))
 
-
         uni3 = _uw2(universe, frozenset(top[:3]))
         res3 = run_window(config, candidate_id, uni3, bars, actions, start=EVAL_START, end=EVAL_END)
         st3 = stats_for_result(res3)

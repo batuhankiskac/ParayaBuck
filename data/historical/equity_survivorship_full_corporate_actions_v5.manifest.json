@@ -1,0 +1,22 @@
+{
+  "dataset": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+  "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "byte_size": 14713370,
+  "row_count": 143446,
+  "universe_symbol_count": 9010,
+  "action_breakdown": {
+    "cash_dividends": 141908,
+    "stock_dividends": 61,
+    "forward_splits": 270,
+    "reverse_splits": 1207,
+    "unit_splits": 0,
+    "stock_mergers": 0,
+    "cash_mergers": 0,
+    "spinoffs": 0,
+    "name_changes": 0
+  },
+  "first_ex_date": "2016-01-04",
+  "last_ex_date": "2026-12-15",
+  "generated_at": "2026-08-25T19:42:48.345239+00:00",
+  "note": "Symmetric v5 corporate actions dataset covering all 9,010 universe symbols"
+}

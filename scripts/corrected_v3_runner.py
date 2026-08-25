@@ -17,27 +17,30 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
+DATASET_V5 = REPO / "data/historical/equity_pit_symmetric_2016_2026_v5.csv"
 DATASET_V4 = REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v4.csv"
 DATASET_V2 = REPO / "data/historical/equity_survivorship_aware_2016_2026_v2.csv"
 DATASET_OLD = REPO / "data/historical/equity_1200_2016_2026.csv"
-LIFETIMES_V4 = REPO / "data/historical/equity_entity_lifetimes_full_v4.csv"
-CA_V4 = REPO / "data/historical/equity_survivorship_full_corporate_actions_v4.csv"
-MANIFEST_V4 = REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v4.manifest.json"
+LIFETIMES_V5 = REPO / "data/historical/equity_entity_lifetimes_full_v5.csv"
+CA_V5 = REPO / "data/historical/equity_survivorship_full_corporate_actions_v5.csv"
+MANIFEST_V5 = REPO / "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json"
 
 # Runner freeze identity
 RUNNER_IDENTITY = {
-    "runner_version": "corrected_v3_v4_1.0",
+    "runner_version": "corrected_v3_v5_symmetric_1.0",
     "engine": "TerminalAwareResearchEngine (path-dependent)",
     "datasets": {
+        "SYMMETRIC_FULL_v5": str(DATASET_V5),
         "FULL_v4": str(DATASET_V4),
-        "DEMO_v2": str(DATASET_V2),
         "OLD": str(DATASET_OLD),
     },
-    "corporate_actions": str(CA_V4),
-    "lifetimes": str(LIFETIMES_V4),
+    "corporate_actions": str(CA_V5),
+    "lifetimes": str(LIFETIMES_V5),
     "policies": ["T0_STALE", "T1_LAST_CLOSE", "T2_HAIRCUT_50", "T3_ZERO"],
-    "runs_predeclared": ["OLD_T0", "DEMO_T0", "FULL_T0", "FULL_T1", "FULL_T2", "FULL_T3"],
+    "runs_predeclared": ["OLD_T0", "SYMMETRIC_FULL_T0", "SYMMETRIC_FULL_T1", "SYMMETRIC_FULL_T2", "SYMMETRIC_FULL_T3"],
     "invariants": [
+        "Symmetric candidate population: broad active + inactive supported US equities (9,010 symbols)",
+        "Zero placeholder UUIDs: 100% provider asset IDs verified against Alpaca master",
         "Remove terminal-held position at last tradable close + fee (T1/T2/T3), delete from _positions/_last_price/_quantities",
         "No stale last_price reintroduction; exposure/holdings from live _positions only",
         "Terminal event fires only after last_bar, no lookahead",

@@ -187,8 +187,9 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
             realized_delta = -avg_price * qty - entry_fee
             # No proceeds, but fee already 0
         lifetime = position.realized_pnl_accumulator + realized_delta
-        # Mutate state path-dependently
+        cash_before = self._cash
         self._cash += proceeds
+        cash_after = self._cash
         self._realized_pnl_events.append((terminal_date, symbol, realized_delta))
         self._closed_position_events.append((terminal_date, symbol, lifetime))
         self.state.realized_pnl += realized_delta
@@ -196,23 +197,26 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         self._positions.pop(symbol, None)
         self._pending = [o for o in self._pending if o.symbol != symbol]
         # Do NOT delete _last_price; equity will no longer include it because position removed
-        # Record event for accounting audit
+        # Record event for accounting audit directly from engine execution
         self.terminal_events_fired.append(
             {
                 "entity_id": info.entity_id if info else position.symbol,
                 "symbol": symbol,
                 "display_symbol": info.display_symbol if info else symbol,
-                "entry_avg": avg_price,
-                "entry_qty": qty,
-                "final_tradable_date": terminal_date.isoformat(),
-                "quantity_before": qty,
-                "account_equity_before": pre_equity,
-                "last_close": last_close,
+                "last_bar": terminal_date.isoformat(),
+                "event_timestamp": terminal_date.isoformat(),
+                "quantity": qty,
+                "policy": self.policy,
                 "effective_policy": effective_policy,
+                "last_close": last_close,
                 "proceeds": proceeds,
-                "realized_delta": realized_delta,
+                "fees": fee if effective_policy != "T3" else 0.0,
+                "cash_before": cash_before,
+                "cash_after": cash_after,
+                "realized_pnl": realized_delta,
                 "pre_equity": pre_equity,
                 "post_equity": self._equity(),
+                "position_removed": True,
             }
         )
         self._fired_entities.add(symbol)

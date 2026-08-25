@@ -1,0 +1,18 @@
+{
+  "dataset": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+  "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "byte_size": 882354549,
+  "row_count": 11686832,
+  "symbol_count": 9010,
+  "entity_count": 9010,
+  "active_histories": 6858,
+  "inactive_histories": 2152,
+  "first_date": "2016-01-04T05:00:00+00:00",
+  "last_date": "2026-07-31T04:00:00Z",
+  "feed": "sip",
+  "adjustment": "split",
+  "lifetime_table": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+  "lifetime_table_hash": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "generated_at": "2026-08-25T19:37:29.940497+00:00",
+  "note": "Symmetric full PIT dataset v5: broad active + inactive supported equities, provider asset UUID identity, zero placeholders"
+}

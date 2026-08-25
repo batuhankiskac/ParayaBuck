@@ -577,6 +577,7 @@ def _window_engine_with_history(
     honor_window: bool = True,
 ):
     engine, equity = _engine_with_equity_runtime(("AAA",))
+    equity.strategy.minimum_history_bars = len(stored)
     equity.history["AAA"] = list(stored)
     fake = FakeHistory(raw={}, splits=provider, honor_window=honor_window)
     engine._historical = fake
@@ -703,3 +704,35 @@ def test_shutdown_joins_signal_adjustment_before_client_close() -> None:
     assert engine.stop() is True
     assert not engine._signal_adjustment_thread.is_alive()
     assert order == ["worker_exited", "close:worker_alive=False"]
+
+
+def test_newer_listed_symbol_with_short_history_verifies_without_growing_global_history_requirement(
+    monkeypatch,
+) -> None:
+    """A newly listed symbol (e.g. 5 days of history) must not fail verification
+    just because another established symbol in the universe has 300 days of history."""
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
+    )
+    engine, equity = _engine_with_equity_runtime(("OLD_SYM", "NEW_SYM"))
+    equity.strategy.minimum_history_bars = 274
+    dates_long = _days(300)
+    dates_short = dates_long[-5:]  # newer listed: only last 5 days exist
+
+    stored_old = [_bar("OLD_SYM", d, 100.0 + i) for i, d in enumerate(dates_long)]
+    stored_new = [_bar("NEW_SYM", d, 20.0 + i) for i, d in enumerate(dates_short)]
+    equity.history = {"OLD_SYM": list(stored_old), "NEW_SYM": list(stored_new)}
+
+    provider = {
+        "OLD_SYM": list(stored_old),
+        "NEW_SYM": list(stored_new),
+    }
+    fake = FakeHistory(raw={}, splits=provider, honor_window=True)
+    engine._historical = fake
+
+    assert engine.verify_equity_signal_basis() is True
+    assert equity.signal_verified_through_by_symbol == {
+        "OLD_SYM": dates_long[-1],
+        "NEW_SYM": dates_short[-1],
+    }

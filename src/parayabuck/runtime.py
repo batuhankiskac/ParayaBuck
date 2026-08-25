@@ -2941,38 +2941,47 @@ class EngineRuntime:
         # so comparing provider_oldest against the request start would fail
         # every honest response. We derive the strategy-required oldest
         # timestamp, then request with a safety margin BEFORE it.
+        from parayabuck.markets.timeframes import bars_to_calendar_days
+
         required_bars = max(
             (runtime.strategy.minimum_history_bars + 1 for runtime in runtimes),
             default=1,
         )
-        stored_oldest: list[datetime] = []
-        for runtime in runtimes:
-            for series in runtime.history.values():
-                if series:
-                    stored_oldest.append(series[0].timestamp)
-        from parayabuck.markets.timeframes import bars_to_calendar_days
-
         fallback_span = bars_to_calendar_days("SPY", "1d", required_bars)
-        if stored_oldest:
-            strategy_required_oldest = min(stored_oldest)
-        else:
-            strategy_required_oldest = end - timedelta(days=fallback_span)
+        fallback_oldest = end - timedelta(days=fallback_span)
+
+        required_oldest_by_symbol: dict[str, datetime] = {}
+        for symbol in symbols:
+            candidates: list[datetime] = []
+            for runtime in runtimes:
+                required = runtime.strategy.minimum_history_bars + 1
+                series = runtime.history.get(symbol)
+                if series:
+                    if len(series) >= required:
+                        candidates.append(series[-required].timestamp)
+                    else:
+                        candidates.append(series[0].timestamp)
+            if candidates:
+                required_oldest_by_symbol[symbol] = min(candidates)
+            else:
+                required_oldest_by_symbol[symbol] = fallback_oldest
+
+        earliest_required = min(required_oldest_by_symbol.values(), default=fallback_oldest)
         start = min(
-            strategy_required_oldest - timedelta(days=_SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS),
-            end - timedelta(days=fallback_span),
+            earliest_required - timedelta(days=_SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS),
+            fallback_oldest,
         )
         try:
             adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
         except Exception as exc:
             self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
             return False
-        required_oldest = strategy_required_oldest
         inadequate = [
             symbol
             for symbol in symbols
             if not adequate_coverage(
                 adjusted.get(symbol, ()),
-                required_oldest=required_oldest,
+                required_oldest=required_oldest_by_symbol.get(symbol, fallback_oldest),
                 required_newest=required_through,
             )
         ]

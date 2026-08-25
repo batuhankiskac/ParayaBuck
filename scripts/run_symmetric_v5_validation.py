@@ -26,10 +26,12 @@ import uuid
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine, TerminalInfo
+from parayabuck.config import load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
+from parayabuck.portfolio import rebalance_policy_for
 from parayabuck.portfolio.equity_residual_momentum_v3 import (
     EquityResidualMomentum1dV3 as EquityResidualMomentumStrategy,
 )
@@ -140,73 +142,111 @@ def load_corporate_actions(symbols: set[str]) -> list[CorporateAction]:
 
 
 def compute_metrics(result, engine: TerminalAwareResearchEngine) -> dict:
-    eq = [p.equity for p in result.portfolio_history]
-    rets = []
-    for i in range(1, len(eq)):
-        if eq[i - 1] <= 0:
-            continue
-        rets.append((eq[i] - eq[i - 1]) / eq[i - 1])
-    total_return = (eq[-1] / eq[0] - 1) if eq and eq[0] else 0
-
-    if result.portfolio_history:
-        start = result.portfolio_history[0].timestamp
-        end = result.portfolio_history[-1].timestamp
-        years = (end - start).days / 365.25 if (end - start).days > 0 else 1
-        cagr = (eq[-1] / eq[0]) ** (1 / years) - 1 if years > 0 and eq[0] > 0 else 0
-    else:
-        cagr = 0
-
-    if len(rets) > 1:
-        mean = statistics.mean(rets)
-        stdev = statistics.pstdev(rets)
-        sharpe = (mean / stdev * math.sqrt(252)) if stdev > 0 else 0
-        downside = [r for r in rets if r < 0]
-        sortino = (
-            (mean / statistics.pstdev(downside) * math.sqrt(252)) if downside and statistics.pstdev(downside) > 0 else 0
+    # PortfolioBacktestResult path (new correct geometry with risk overlay)
+    # Fallback to manual equity_curve derivation if fields missing
+    if hasattr(result, "equity_curve"):
+        eq = list(result.equity_curve)
+        total_return = float(getattr(result, "total_return", (eq[-1] / eq[0] - 1) if eq and eq[0] else 0))
+        cagr = float(getattr(result, "cagr", 0))
+        sharpe = float(getattr(result, "sharpe", 0))
+        sortino = float(getattr(result, "sortino", 0))
+        max_dd = float(getattr(result, "max_drawdown", 0))
+        max_dd_duration = int(getattr(result, "max_drawdown_duration_days", 0))
+        calmar = float(getattr(result, "calmar", 0))
+        turnover = float(getattr(result, "turnover", 0))
+        fees = (
+            float(getattr(result, "fee_total", 0))
+            + float(getattr(result, "slippage_cost_total", 0))
+            + float(getattr(result, "spread_cost_total", 0))
         )
+        dividend_cash = float(getattr(result, "dividend_total", 0))
+        # Holdings / exposure from result aggregates (actual managed positions)
+        avg_hold = float(getattr(result, "average_holdings_count", 0))
+        avg_cash_ratio = float(getattr(result, "average_cash_ratio", 0))
+        avg_exp = 1.0 - avg_cash_ratio
+        # Max holdings / max exposure derived from weight_history if available
+        try:
+            weight_hist = getattr(result, "weight_history", ()) or ()
+            holdings_counts = [len(w) for _, w in weight_hist] if weight_hist else []
+            max_hold = max(holdings_counts) if holdings_counts else int(avg_hold) if avg_hold else 0
+        except Exception:
+            max_hold = int(avg_hold) if avg_hold else 0
+        try:
+            # gross exposure per point from weight_history weights
+            gross_per_point = [sum(w.values()) for _, w in weight_hist] if weight_hist else []
+            max_exp = max(gross_per_point) if gross_per_point else avg_exp
+        except Exception:
+            max_exp = avg_exp
+        # Duration days
+        days = int(getattr(result, "duration_days", len(eq)))
+        ending_equity = float(getattr(result, "ending_equity", eq[-1] if eq else 0))
+        starting_equity = float(getattr(result, "starting_equity", eq[0] if eq else 0))
     else:
-        sharpe = sortino = 0
-
-    max_dd = 0
-    peak = eq[0] if eq else 0
-    max_dd_duration = 0
-    current_dd_duration = 0
-    for v in eq:
-        if v >= peak:
-            peak = v
-            current_dd_duration = 0
+        # Legacy fallback (portfolio_history path)
+        eq = [p.equity for p in result.portfolio_history]
+        rets = []
+        for i in range(1, len(eq)):
+            if eq[i - 1] <= 0:
+                continue
+            rets.append((eq[i] - eq[i - 1]) / eq[i - 1])
+        total_return = (eq[-1] / eq[0] - 1) if eq and eq[0] else 0
+        if result.portfolio_history:
+            start = result.portfolio_history[0].timestamp
+            end = result.portfolio_history[-1].timestamp
+            years = (end - start).days / 365.25 if (end - start).days > 0 else 1
+            cagr = (eq[-1] / eq[0]) ** (1 / years) - 1 if years > 0 and eq[0] > 0 else 0
         else:
-            current_dd_duration += 1
-            if current_dd_duration > max_dd_duration:
-                max_dd_duration = current_dd_duration
-        dd = (peak - v) / peak if peak > 0 else 0
-        if dd > max_dd:
-            max_dd = dd
-
-    calmar = cagr / max_dd if max_dd > 0 else 0
-
-    exposures = []
-    holdings = []
-    for p in result.portfolio_history:
-        holdings.append(len(p.holdings))
-        mv = sum(h.market_value for h in p.holdings.values()) if hasattr(p.holdings, "values") else 0
-        exposures.append(mv / p.equity if p.equity else 0)
-
-    avg_exp = statistics.mean(exposures) if exposures else 0
-    max_exp = max(exposures) if exposures else 0
-    avg_hold = statistics.mean(holdings) if holdings else 0
-    max_hold = max(holdings) if holdings else 0
-
-    total_turnover = sum(
-        sum(abs(f.shares * f.price) for f in snap.fills) for snap in result.portfolio_history if hasattr(snap, "fills")
-    )
-    total_fees = sum(
-        sum(f.commission for f in snap.fills) for snap in result.portfolio_history if hasattr(snap, "fills")
-    )
-    dividend_cash = sum(e.get("proceeds", 0) for e in getattr(engine, "_dividend_events", []))
-
+            cagr = 0
+        if len(rets) > 1:
+            mean = statistics.mean(rets)
+            stdev = statistics.pstdev(rets)
+            sharpe = (mean / stdev * math.sqrt(252)) if stdev > 0 else 0
+            downside = [r for r in rets if r < 0]
+            sortino = (
+                (mean / statistics.pstdev(downside) * math.sqrt(252))
+                if downside and statistics.pstdev(downside) > 0
+                else 0
+            )
+        else:
+            sharpe = sortino = 0
+        max_dd = 0
+        peak = eq[0] if eq else 0
+        max_dd_duration = 0
+        current_dd_duration = 0
+        for v in eq:
+            if v >= peak:
+                peak = v
+                current_dd_duration = 0
+            else:
+                current_dd_duration += 1
+                if current_dd_duration > max_dd_duration:
+                    max_dd_duration = current_dd_duration
+            dd = (peak - v) / peak if peak > 0 else 0
+            if dd > max_dd:
+                max_dd = dd
+        calmar = cagr / max_dd if max_dd > 0 else 0
+        exposures = []
+        holdings = []
+        for p in result.portfolio_history:
+            holdings.append(len(p.holdings))
+            mv = sum(h.market_value for h in p.holdings.values()) if hasattr(p.holdings, "values") else 0
+            exposures.append(mv / p.equity if p.equity else 0)
+        avg_exp = statistics.mean(exposures) if exposures else 0
+        max_exp = max(exposures) if exposures else 0
+        avg_hold = statistics.mean(holdings) if holdings else 0
+        max_hold = max(holdings) if holdings else 0
+        turnover = sum(
+            sum(abs(f.shares * f.price) for f in snap.fills)
+            for snap in result.portfolio_history
+            if hasattr(snap, "fills")
+        )
+        fees = sum(sum(f.commission for f in snap.fills) for snap in result.portfolio_history if hasattr(snap, "fills"))
+        dividend_cash = sum(e.get("proceeds", 0) for e in getattr(engine, "_dividend_events", []))
+        days = len(eq)
+        ending_equity = eq[-1] if eq else 0
+        starting_equity = eq[0] if eq else 0
     return {
-        "days": len(eq),
+        "days": days,
         "total_return": total_return,
         "cagr": cagr,
         "sharpe": sharpe,
@@ -214,15 +254,15 @@ def compute_metrics(result, engine: TerminalAwareResearchEngine) -> dict:
         "calmar": calmar,
         "maxDD": max_dd,
         "maxDD_duration_days": max_dd_duration,
-        "turnover": total_turnover,
-        "fees": total_fees,
+        "turnover": turnover,
+        "fees": fees,
         "dividend_cash": dividend_cash,
         "avg_exposure": avg_exp,
         "max_exposure": max_exp,
         "avg_holdings": avg_hold,
         "max_holdings": max_hold,
-        "ending_equity": eq[-1] if eq else 0,
-        "starting_equity": eq[0] if eq else 0,
+        "ending_equity": ending_equity,
+        "starting_equity": starting_equity,
         "terminal_events": len(engine.terminal_events_fired),
         "terminal_proceeds_total": sum(e.get("proceeds", 0) for e in engine.terminal_events_fired),
     }
@@ -234,16 +274,34 @@ def run_backtest(
     cas: list[CorporateAction],
     policy: str,
 ) -> tuple[dict, TerminalAwareResearchEngine]:
+    config = load_config(str(REPO / "config/settings.yaml"))
     strat = EquityResidualMomentumStrategy()
+    limits = portfolio_risk_limits_from_config(config.risk)
     engine = TerminalAwareResearchEngine(
         strategy=strat,
-        rebalance_policy=None,
+        rebalance_policy=rebalance_policy_for(strat),
         terminal_map=tmap,
         policy=policy,
-        starting_equity=100_000,
-        corporate_actions=cas,
+        starting_equity=config.backtest.initial_cash,
+        slippage_bps=config.backtest.slippage_bps,
+        spread_bps=config.backtest.spread_bps,
+        commission=config.backtest.commission,
+        crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps,
+        equity_taf_per_share=config.backtest.equity_taf_per_share,
+        equity_taf_cap=config.backtest.equity_taf_cap,
+        equity_cat_per_share=config.backtest.equity_cat_per_share,
+        equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
+        equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
+        benchmark_symbol="SPY",
+        risk_limits=limits,
+        maximum_allocation=config.strategy.equity.maximum_allocation,
+        execution_policy=PortfolioExecutionPolicy(
+            rebalance_band_pct=config.execution.rebalance_band_pct,
+            minimum_order_notional=config.execution.minimum_order_notional,
+        ),
+        enforce_drawdown_halt=False,
     )
-    result = engine.run(bars, liquidate_at_end=True)
+    result = engine.run(bars, liquidate_at_end=True, corporate_actions=cas)
     metrics = compute_metrics(result, engine)
     return metrics, engine
 

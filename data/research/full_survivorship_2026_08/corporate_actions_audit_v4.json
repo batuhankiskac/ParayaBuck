@@ -1,0 +1,86 @@
+{
+  "fetched_at": "2026-08-25T17:50:50.977074+00:00",
+  "params": {
+    "start": "2016-01-01",
+    "end": "2026-08-01"
+  },
+  "total_unique_actions": 200998,
+  "total_universe_actions": 28842,
+  "counts_by_type_all": {
+    "cash_dividends": 192423,
+    "cash_mergers": 1040,
+    "forward_splits": 472,
+    "name_changes": 1879,
+    "redemptions": 7,
+    "reorganizations": 29,
+    "reverse_splits": 2578,
+    "spin_offs": 133,
+    "stock_and_cash_mergers": 111,
+    "stock_dividends": 183,
+    "stock_mergers": 1545,
+    "unit_splits": 290,
+    "worthless_removals": 245,
+    "rights_distributions": 61,
+    "partial_calls": 2
+  },
+  "counts_by_type_universe": {
+    "cash_dividends": 28521,
+    "forward_splits": 40,
+    "reverse_splits": 264,
+    "stock_dividends": 10,
+    "worthless_removals": 7
+  },
+  "counts_by_type_old_1194": {
+    "cash_dividends": 16130,
+    "forward_splits": 28,
+    "reverse_splits": 182,
+    "stock_dividends": 10,
+    "worthless_removals": 1
+  },
+  "counts_by_type_inactive": {
+    "cash_dividends": 12391,
+    "reverse_splits": 82,
+    "forward_splits": 12,
+    "worthless_removals": 6
+  },
+  "symbols_with_dividends_universe": 1271,
+  "symbols_with_dividends_old": 600,
+  "symbols_with_dividends_inactive": 671,
+  "total_cash_dividend_rate_sum_universe": 9929.933120505,
+  "total_cash_dividend_rate_sum_old": 6166.673627605,
+  "total_cash_dividend_rate_sum_inactive": 3763.2594929,
+  "old_dividend_csv_count": 16878,
+  "universe_size": 3554,
+  "old_universe_size": 1194,
+  "inactive_size": 2360,
+  "coverage_note": "Alpaca v1/corporate-actions coverage for historical CA; if zero for some types, state as incomplete",
+  "price_only_note": "Signal bars remain split-adjusted PRICE only; corporate-actions used for portfolio PnL dividend cash only, not for total-return signal",
+  "expected_types": [
+    "cash_dividends",
+    "stock_dividends",
+    "splits",
+    "name_changes",
+    "mergers",
+    "spin_offs",
+    "redemptions",
+    "worthless_removals"
+  ],
+  "missing_types_in_response": [],
+  "raw_keys": [
+    "cash_dividends",
+    "cash_mergers",
+    "forward_splits",
+    "name_changes",
+    "redemptions",
+    "reorganizations",
+    "reverse_splits",
+    "spin_offs",
+    "stock_and_cash_mergers",
+    "stock_dividends",
+    "stock_mergers",
+    "unit_splits",
+    "worthless_removals",
+    "rights_distributions",
+    "partial_calls"
+  ]
+}

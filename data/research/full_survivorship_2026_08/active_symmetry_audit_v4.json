@@ -1,0 +1,146 @@
+{
+  "fetched_at": "2026-08-26",
+  "total_active": 14266,
+  "active_supported": 13126,
+  "old_1194": 1194,
+  "active_outside_old": 11943,
+  "sample_size": 300,
+  "sample_eligible": 64,
+  "sample_stage_a_candidate": 64,
+  "eligible_rate": 0.21333333333333335,
+  "stage_a_rate": 0.21333333333333335,
+  "estimated_eligible_full": 2547,
+  "estimated_stage_a_full": 2547,
+  "scanner_thresholds": {
+    "minimum_price": 5,
+    "minimum_median_dollar_volume": 20000000,
+    "minimum_data_completeness": 0.95,
+    "minimum_atr_pct": 0.005,
+    "maximum_atr_pct": 0.12,
+    "spread_quality_ceiling_bps": 50
+  },
+  "details_sample": [
+    {
+      "symbol": "JENA.RT",
+      "status": "INELIGIBLE",
+      "bars": 259,
+      "median_dv": 0.0
+    },
+    {
+      "symbol": "EIPX",
+      "status": "INELIGIBLE",
+      "bars": 936,
+      "median_dv": 956230.4400000001
+    },
+    {
+      "symbol": "IPOS",
+      "status": "INELIGIBLE",
+      "bars": 2658,
+      "median_dv": 70900.651
+    },
+    {
+      "symbol": "ENGN",
+      "status": "INELIGIBLE",
+      "bars": 1127,
+      "median_dv": 2050584.4000000001
+    },
+    {
+      "symbol": "BLMN",
+      "status": "INELIGIBLE",
+      "bars": 2658,
+      "median_dv": 16932795.0
+    },
+    {
+      "symbol": "NUTX",
+      "status": "INELIGIBLE",
+      "bars": 1084,
+      "median_dv": 17439827.88
+    },
+    {
+      "symbol": "CMTL",
+      "status": "INELIGIBLE",
+      "bars": 2658,
+      "median_dv": 1093386.6
+    },
+    {
+      "symbol": "EHI",
+      "status": "INELIGIBLE",
+      "bars": 2658,
+      "median_dv": 489947.76
+    },
+    {
+      "symbol": "ZD",
+      "status": "ELIGIBLE_STAGE_A",
+      "bars": 2658,
+      "median_dv": 26778861.619999997
+    },
+    {
+      "symbol": "WASH",
+      "status": "INELIGIBLE",
+      "bars": 2658,
+      "median_dv": 5454951.2700000005
+    },
+    {
+      "symbol": "CGXU",
+      "status": "ELIGIBLE_STAGE_A",
+      "bars": 1111,
+      "median_dv": 30419673.18
+    },
+    {
+      "symbol": "SSCP",
+      "status": "INELIGIBLE",
+      "bars": 55,
+      "median_dv": 51379.200000000004
+    },
+    {
+      "symbol": "DBCA",
+      "status": "INELIGIBLE",
+      "bars": 108,
+      "median_dv": 176694.41999999998
+    },
+    {
+      "symbol": "NQLT",
+      "status": "INELIGIBLE",
+      "bars": 13,
+      "median_dv": 12900.8124
+    },
+    {
+      "symbol": "ETHT",
+      "status": "INELIGIBLE",
+      "bars": 537,
+      "median_dv": 19587766.5
+    },
+    {
+      "symbol": "CARD",
+      "status": "INELIGIBLE",
+      "bars": 775,
+      "median_dv": 37389.816
+    },
+    {
+      "symbol": "STHO",
+      "status": "INELIGIBLE",
+      "bars": 838,
+      "median_dv": 101297.35
+    },
+    {
+      "symbol": "MUR",
+      "status": "ELIGIBLE_STAGE_A",
+      "bars": 2658,
+      "median_dv": 58503416.010000005
+    },
+    {
+      "symbol": "PPLT",
+      "status": "ELIGIBLE_STAGE_A",
+      "bars": 2658,
+      "median_dv": 36415760.919999994
+    },
+    {
+      "symbol": "WBTN",
+      "status": "INELIGIBLE",
+      "bars": 524,
+      "median_dv": 3194956.8
+    }
+  ],
+  "conclusion": "Active outside old is 11943; sample shows 21.3% eligible, 21.3% stage-a candidate. Estimated 2547 active equities outside old would have historically qualified, and 2547 would have entered Stage-A at least once. This indicates MATERIAL asymmetry: canonical full PIT dataset MUST include broad active + inactive pool, not just old 1194 survivors. If material (>100) as here, correct by expanding active histories.",
+  "action_required": "If estimated eligible >100, canonical full dataset must be expanded to include active histories outside old 1194 (broad active+inactive pool -> PIT existence -> scanner -> Stage-A 300 -> V3). For this correction, document and note that current FULL v4 (3554) is still asymmetric (old 1194 survivors only) and should be expanded in next iteration; for now report bias."
+}

@@ -139,11 +139,7 @@ def _window_metrics(curve: list[float], timestamps: list[datetime]) -> dict[str,
     total_return = curve[-1] / curve[0] - 1 if curve and curve[0] > 0 else 0.0
     days = (timestamps[-1] - timestamps[0]).total_seconds() / 86_400 if len(timestamps) > 1 else 0.0
     years = days / 365.25
-    cagr = (
-        (curve[-1] / curve[0]) ** (1 / years) - 1
-        if years > 0 and curve and curve[0] > 0 and curve[-1] > 0
-        else None
-    )
+    cagr = (curve[-1] / curve[0]) ** (1 / years) - 1 if years > 0 and curve and curve[0] > 0 and curve[-1] > 0 else None
     mean = statistics.fmean(returns) if returns else 0.0
     std = statistics.stdev(returns) if len(returns) > 1 else 0.0
     downside = [value for value in returns if value < 0]
@@ -201,14 +197,8 @@ def _rolling_windows(
         metrics = _window_metrics(sl, ts)
         start_date = ts[0].date()
         end_date = ts[-1].date()
-        decisions = [
-            record
-            for record in rebalances
-            if start_date <= record.decision_timestamp.date() <= end_date
-        ]
-        exposures = [
-            sum(weight for _symbol, weight in record.target_weights) for record in decisions
-        ]
+        decisions = [record for record in rebalances if start_date <= record.decision_timestamp.date() <= end_date]
+        exposures = [sum(weight for _symbol, weight in record.target_weights) for record in decisions]
         turnover = sum(record.expected_turnover for record in decisions)
         windows.append(
             {
@@ -301,15 +291,9 @@ def _regime_table(
             f"vs the full-sample median of that series"
         ),
         "vol_median_annualized": round(vol_median * math.sqrt(252), 4),
-        "trend": {
-            key: _section(values)
-            for key, values in sorted(buckets.items())
-            if key in {label_up, label_down}
-        },
+        "trend": {key: _section(values) for key, values in sorted(buckets.items()) if key in {label_up, label_down}},
         "volatility": {
-            key: _section(values)
-            for key, values in sorted(buckets.items())
-            if key in {"high_vol", "low_vol"}
+            key: _section(values) for key, values in sorted(buckets.items()) if key in {"high_vol", "low_vol"}
         },
         "quadrants": {f"{t}+{v}": _section(values) for (t, v), values in sorted(quadrants.items())},
     }
@@ -320,9 +304,7 @@ def _regime_table(
 # --------------------------------------------------------------------------- #
 
 
-def _block_bootstrap(
-    returns: list[float], block: int, resamples: int, seed: int
-) -> dict[str, object]:
+def _block_bootstrap(returns: list[float], block: int, resamples: int, seed: int) -> dict[str, object]:
     arr = np.asarray(returns, dtype=float)
     n = len(arr)
     rng = np.random.default_rng(seed)
@@ -359,11 +341,7 @@ def _block_bootstrap(
         "seed": seed,
         "observed": {
             "mean_annualized_return": round((1.0 + observed_mean) ** 252 - 1.0, 6),
-            "sharpe": (
-                round(observed_mean / observed_std * math.sqrt(252.0), 4)
-                if observed_std > 0
-                else 0.0
-            ),
+            "sharpe": (round(observed_mean / observed_std * math.sqrt(252.0), 4) if observed_std > 0 else 0.0),
         },
         "mean_annualized_return_percentiles": _pct(annualized),
         "sharpe_percentiles": _pct(sharpes),
@@ -407,9 +385,7 @@ def _summary_stats(result) -> dict[str, object]:
         "turnover": round(result.turnover, 6),
         "fees_total": round(total_cost, 2),
         "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_of_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_of_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "avg_cash_ratio": round(result.average_cash_ratio, 4),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
         "rebalance_count": result.rebalance_count,
@@ -491,9 +467,7 @@ def _neighborhood_verdict(base: dict, runs: dict[str, dict]) -> dict[str, object
             "max_cagr_deviation_pp": 0.0,
             "max_sharpe_deviation": 0.0,
             "sign_flips": 0,
-            "rationale": (
-                "every predeclared neighborhood point was rejected by parameter validation"
-            ),
+            "rationale": ("every predeclared neighborhood point was rejected by parameter validation"),
             "note": "See runs for the per-point rejection reasons.",
         }
     base_cagr = base["cagr"] if base["cagr"] is not None else 0.0
@@ -605,9 +579,7 @@ def run_equity_pack(config) -> dict[str, object]:
             label = f"drop_top{rank + 1}"
             pool_tasks.append((label, (params, 1.0, EQUITY_START, EQUITY_END)))
 
-    print(
-        f"  running {len(pool_tasks)} full-window runs in a forked pool ({POOL_WORKERS} workers)..."
-    )
+    print(f"  running {len(pool_tasks)} full-window runs in a forked pool ({POOL_WORKERS} workers)...")
     _WORKER["config"] = config
     _WORKER["bars"] = bars
     _WORKER["universe"] = universe
@@ -671,10 +643,7 @@ def run_equity_pack(config) -> dict[str, object]:
 
     # ---- break-even cost multiplier ----
     break_even = _break_even(cost_runs)
-    print(
-        f"  break-even cost multiplier: {break_even['multiplier']} "
-        f"(reliable={break_even['reliable']})"
-    )
+    print(f"  break-even cost multiplier: {break_even['multiplier']} (reliable={break_even['reliable']})")
 
     # ---- block bootstrap ----
     bootstrap = _block_bootstrap(
@@ -723,8 +692,7 @@ def run_equity_pack(config) -> dict[str, object]:
             ),
             "base": base_stats,
             "top_contributors": [
-                {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)}
-                for item in top_contributors[:6]
+                {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)} for item in top_contributors[:6]
             ],
             "runs": jackknife,
         },
@@ -754,9 +722,7 @@ def run_crypto_pack(config) -> dict[str, object]:
     bars_1h = load_csv_bars(CRYPTO_CSV, default_market=Market.CRYPTO)
     bars_1d = aggregate_historical_bars(bars_1h, "1d", require_complete=True)
     print(f"  loaded {len(bars_1h):,} 1h bars -> {len(bars_1d):,} 1d bars")
-    universe = build_product_universe(
-        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
-    )
+    universe = build_product_universe(config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h")
     print(f"  PIT universe (1h scanner): {len(universe.snapshots)} snapshots")
 
     base_params = dict(config.strategy.crypto.parameters)
@@ -933,15 +899,13 @@ def run_crypto_pack(config) -> dict[str, object]:
             ),
             "base": base_stats,
             "top_contributors": [
-                {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)}
-                for item in top_contributors[:6]
+                {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)} for item in top_contributors[:6]
             ],
             "runs": jackknife,
         },
         "cost_stress": {
             "methodology": (
-                "slippage_bps 2, spread_bps 2 and crypto taker fee 25 bps at the configured "
-                "rates, scaled by 1x/2x/3x."
+                "slippage_bps 2, spread_bps 2 and crypto taker fee 25 bps at the configured rates, scaled by 1x/2x/3x."
             ),
             "runs": cost_runs,
             "break_even": break_even,
@@ -1051,10 +1015,7 @@ def _market_markdown(report: dict) -> list[str]:
         f"maxDD {_fmt_pct(base['max_drawdown'])}, turnover {_fmt_num(base['turnover'], 4)}"
     )
     neigh = report["neighborhood"]
-    lines.append(
-        f"- Neighborhood verdict: **{neigh['verdict']['verdict']}** — "
-        f"{neigh['verdict']['rationale']}."
-    )
+    lines.append(f"- Neighborhood verdict: **{neigh['verdict']['verdict']}** — {neigh['verdict']['rationale']}.")
     runs = neigh["runs"]
     for key, stats in sorted(runs.items()):
         if stats.get("infeasible"):

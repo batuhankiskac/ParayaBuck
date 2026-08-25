@@ -89,9 +89,7 @@ def _install_fake_telemetry_module(monkeypatch: pytest.MonkeyPatch, *, telemetry
         def forward_metrics(db_path: str | Path | None = None) -> dict[str, Any]:
             return {"available": True, "decision_count": 1}
 
-        def cost_calibration(
-            db_path: str | Path | None = None, config: object | None = None
-        ) -> dict[str, Any]:
+        def cost_calibration(db_path: str | Path | None = None, config: object | None = None) -> dict[str, Any]:
             return {"available": True, "median_slippage_bps": 1.0}
 
         fake.execution_metrics = execution_metrics
@@ -134,9 +132,7 @@ def _install_fake_metrics_module(monkeypatch: pytest.MonkeyPatch, *, metrics: bo
 # ---------------------------------------------------------------------------
 
 
-def test_dashboard_overview_returns_all_panels(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
@@ -189,9 +185,7 @@ def test_dashboard_live_disabled_marker(tmp_path: Path, monkeypatch: pytest.Monk
     """A live-configured deployment whose engine is not trading shows LIVE
     clearly disabled, driven by config.live.enabled + runtime.mode."""
     config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    monkeypatch.setattr(
-        server, "manager", _stub_manager(config_path, engine_state="stopped", paper=False)
-    )
+    monkeypatch.setattr(server, "manager", _stub_manager(config_path, engine_state="stopped", paper=False))
 
     mode = asyncio.run(server.dashboard_overview())["mode"]
     assert mode["paper"] is False
@@ -205,9 +199,7 @@ def test_dashboard_live_disabled_marker(tmp_path: Path, monkeypatch: pytest.Monk
 
 def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path, mode="live", live_enabled=True)
-    monkeypatch.setattr(
-        server, "manager", _stub_manager(config_path, engine_state="running", paper=False)
-    )
+    monkeypatch.setattr(server, "manager", _stub_manager(config_path, engine_state="running", paper=False))
 
     mode = asyncio.run(server.dashboard_overview())["mode"]
     assert mode["badge"] == "live"
@@ -220,9 +212,7 @@ def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyP
 # ---------------------------------------------------------------------------
 
 
-def test_dashboard_strategy_cards_expose_frozen_contracts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
@@ -246,9 +236,7 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(
     assert crypto["maximum_allocation_pct"] == 5.0
 
 
-def test_dashboard_risk_panel_exposes_policies_and_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_risk_panel_exposes_policies_and_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
@@ -266,9 +254,7 @@ def test_dashboard_risk_panel_exposes_policies_and_state(
     assert "risk_epoch" in risk
 
 
-def test_dashboard_universe_and_health_panels(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_universe_and_health_panels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 
@@ -324,9 +310,7 @@ def _crypto_decision() -> dict[str, Any]:
     }
 
 
-def test_dashboard_holdings_carry_reason_rank_and_weights(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_holdings_carry_reason_rank_and_weights(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     positions = [
         {
@@ -341,9 +325,7 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(
-        server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()}
-    )
+    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()})
 
     crypto = asyncio.run(server.dashboard_overview())["crypto"]
     holding = crypto["holdings"][0]
@@ -359,9 +341,7 @@ def test_dashboard_holdings_carry_reason_rank_and_weights(
     assert crypto["next_rebalance_at"] == "2026-08-14T00:00:00+00:00"
 
 
-def test_dashboard_explanations_derive_structured_reasons(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_explanations_derive_structured_reasons(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     positions = [
         {
@@ -375,9 +355,7 @@ def test_dashboard_explanations_derive_structured_reasons(
         }
     ]
     monkeypatch.setattr(server, "manager", _stub_manager(config_path, positions=positions))
-    monkeypatch.setattr(
-        server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()}
-    )
+    monkeypatch.setattr(server, "_dashboard_market_decisions", lambda _account_id: {"crypto": _crypto_decision()})
 
     explanations = asyncio.run(server.dashboard_overview())["explanations"]
     crypto = explanations["crypto"]
@@ -414,9 +392,7 @@ def test_dashboard_metrics_degrade_to_unavailable_when_modules_missing(
     assert metrics["runtime_metrics"]["unavailable"] is True
 
 
-def test_dashboard_metrics_consume_batch_modules(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dashboard_metrics_consume_batch_modules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
     _install_fake_telemetry_module(monkeypatch, telemetry=True)

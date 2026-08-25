@@ -99,9 +99,7 @@ def _wait_for_fill(broker: AlpacaBroker, client_order_id: str) -> tuple[float, f
         status = str(getattr(order, "status", "")).lower().split(".")[-1]
         last_status = status
         if status == "filled":
-            filled_qty = float(
-                getattr(order, "filled_qty", 0) or getattr(order, "cumulative_qty", 0) or 0
-            )
+            filled_qty = float(getattr(order, "filled_qty", 0) or getattr(order, "cumulative_qty", 0) or 0)
             avg_price = float(getattr(order, "filled_avg_price", 0) or 0)
             broker_order_id = str(getattr(order, "id", "") or "")
             if filled_qty <= 0 or avg_price <= 0:
@@ -232,10 +230,7 @@ def _manual_cleanup_instructions(account_id: str) -> None:
     print("Automatic cleanup is ambiguous; inspect the PAPER account manually:")
     print(f"  account: ...{account_id[-4:] if account_id else 'unknown'}")
     print(f"  symbol : {SMOKE_SYMBOL} (PAPER environment only)")
-    print(
-        "  1. Cancel any remaining open PAPER orders for the smoke client ids "
-        f"(prefix {SMOKE_ORDER_PREFIX})."
-    )
+    print(f"  1. Cancel any remaining open PAPER orders for the smoke client ids (prefix {SMOKE_ORDER_PREFIX}).")
     print(f"  2. If the PAPER position in {SMOKE_SYMBOL} is still open, sell it back to zero.")
     print("  3. Do NOT touch unrelated manual inventory or other symbols.")
     print("=" * 72)
@@ -297,9 +292,7 @@ def _cleanup(
         smoke_owned = repo.owned_quantities(account_id).get(SMOKE_SYMBOL, 0.0)
         broker_position = broker._position_qty(SMOKE_SYMBOL)
         if smoke_owned > 1e-6:
-            print(
-                f"  smoke-owned quantity {smoke_owned:.4f}; broker position {broker_position:.4f}"
-            )
+            print(f"  smoke-owned quantity {smoke_owned:.4f}; broker position {broker_position:.4f}")
             if broker_position < smoke_owned - 1e-6:
                 ambiguous.append(f"broker_position_below_smoke_owned:{broker_position}")
                 print(
@@ -367,9 +360,7 @@ def main() -> int:
         portfolio_owned_quantities=lambda: repo.owned_quantities(broker.account_id),
         portfolio_open_orders=lambda: repo.open_orders(broker.account_id),
         portfolio_fill_recovered=lambda *args: None,
-        portfolio_flat_reconciled=lambda symbol, market: repo.clear_stale_ownership(
-            broker.account_id, symbol, market
-        ),
+        portfolio_flat_reconciled=lambda symbol, market: repo.clear_stale_ownership(broker.account_id, symbol, market),
     )
     account_id = ""
     session_id = ""
@@ -377,10 +368,7 @@ def main() -> int:
     try:
         account = broker.account()
         account_id = broker.account_id or "unknown"
-        print(
-            f"paper account ...{broker.account_suffix}: equity={account.equity:.2f} "
-            f"cash={account.cash:.2f}"
-        )
+        print(f"paper account ...{broker.account_suffix}: equity={account.equity:.2f} cash={account.cash:.2f}")
         # The paper endpoint rejects live keys with 401 before we get here.
         assert not os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
 
@@ -388,9 +376,7 @@ def main() -> int:
         print(f"trading rules {SMOKE_SYMBOL}: min_order_size={rules.minimum_order_size}")
 
         # The smoke's ownership math assumes a flat start for the symbol.
-        preflight_held = [
-            p for p in account.positions if not p.is_flat and p.symbol == SMOKE_SYMBOL
-        ]
+        preflight_held = [p for p in account.positions if not p.is_flat and p.symbol == SMOKE_SYMBOL]
         if preflight_held:
             return _fail(
                 f"smoke symbol {SMOKE_SYMBOL} is already held "
@@ -441,9 +427,7 @@ def main() -> int:
         while time.monotonic() < settle_deadline and broker._has_open_order(SMOKE_SYMBOL):
             time.sleep(0.5)
         if broker._has_open_order(SMOKE_SYMBOL):
-            return _fail(
-                f"open order record for {SMOKE_SYMBOL} did not settle; refusing to stack a SELL"
-            )
+            return _fail(f"open order record for {SMOKE_SYMBOL} did not settle; refusing to stack a SELL")
         print(f"submitting SELL {buy_qty} {SMOKE_SYMBOL} ...")
         sell_qty, sell_price = _submit_and_wait(
             repo,
@@ -468,8 +452,7 @@ def main() -> int:
 
         account = broker.account()
         flat = not any(
-            not p.is_flat and p.market == Market.EQUITY and p.symbol == SMOKE_SYMBOL
-            for p in account.positions
+            not p.is_flat and p.market == Market.EQUITY and p.symbol == SMOKE_SYMBOL for p in account.positions
         )
         print(f"reconcile: anomalies={len(anomalies)} flat={flat}")
         if anomalies:
@@ -479,8 +462,7 @@ def main() -> int:
 
         repo.end_session(session_id, "completed")
         print(
-            "PAPER SMOKE PASSED: submit -> fill -> ownership -> restart -> "
-            "exit -> ownership release -> reconciliation"
+            "PAPER SMOKE PASSED: submit -> fill -> ownership -> restart -> exit -> ownership release -> reconciliation"
         )
         return 0
     except Exception as exc:

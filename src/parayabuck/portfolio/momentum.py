@@ -69,13 +69,9 @@ def inverse_volatility_weights(
     return tuple(sorted(capped.items(), key=lambda item: item[0]))
 
 
-def diagonal_portfolio_volatility(
-    weights: dict[str, float], volatilities: dict[str, float]
-) -> float:
+def diagonal_portfolio_volatility(weights: dict[str, float], volatilities: dict[str, float]) -> float:
     """Diagonal-approximation portfolio volatility from per-asset realized vols."""
-    return math.sqrt(
-        sum(weight**2 * volatilities.get(symbol, 0.0) ** 2 for symbol, weight in weights.items())
-    )
+    return math.sqrt(sum(weight**2 * volatilities.get(symbol, 0.0) ** 2 for symbol, weight in weights.items()))
 
 
 def conservative_portfolio_volatility(

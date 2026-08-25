@@ -117,11 +117,7 @@ def prune_backups(
     if not directory.is_dir():
         return []
     backups = sorted(
-        (
-            candidate
-            for candidate in directory.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}")
-            if candidate.is_file()
-        ),
+        (candidate for candidate in directory.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}") if candidate.is_file()),
         key=lambda candidate: candidate.stat().st_mtime,
     )
     removed: list[Path] = []

@@ -63,9 +63,7 @@ def _http_error(status: int) -> requests.exceptions.HTTPError:
 
 
 def test_reconcile_connection_error_is_transient_and_not_recorded() -> None:
-    runtime = _bare_runtime(
-        broker=_ReconcilingBroker(requests.exceptions.ConnectionError("refused"))
-    )
+    runtime = _bare_runtime(broker=_ReconcilingBroker(requests.exceptions.ConnectionError("refused")))
     with pytest.raises(TransientStartupError, match="transient network failure"):
         runtime.start()
     # G2/G3 boundary: no permanent incident and no halt are recorded.
@@ -74,9 +72,7 @@ def test_reconcile_connection_error_is_transient_and_not_recorded() -> None:
 
 
 def test_reconcile_timeout_is_transient() -> None:
-    runtime = _bare_runtime(
-        broker=_ReconcilingBroker(requests.exceptions.Timeout("read timed out"))
-    )
+    runtime = _bare_runtime(broker=_ReconcilingBroker(requests.exceptions.Timeout("read timed out")))
     with pytest.raises(TransientStartupError):
         runtime.start()
     assert getattr(runtime, "_circuit_breaker_reason", None) is None
@@ -99,9 +95,7 @@ def test_reconcile_http_4xx_is_permanent() -> None:
 
 
 def test_reconcile_protection_failure_stays_permanent() -> None:
-    runtime = _bare_runtime(
-        broker=_ReconcilingBroker(ProtectionReconciliationError("managed qty mismatch"))
-    )
+    runtime = _bare_runtime(broker=_ReconcilingBroker(ProtectionReconciliationError("managed qty mismatch")))
     with pytest.raises(ProtectionReconciliationError, match="managed qty mismatch"):
         runtime.start()
     assert runtime._circuit_breaker_reason == "protection_failure"
@@ -109,9 +103,7 @@ def test_reconcile_protection_failure_stays_permanent() -> None:
 
 
 def test_reconcile_ownership_drift_stays_permanent() -> None:
-    runtime = _bare_runtime(
-        broker=_ReconcilingBroker(OwnershipDriftError("broker qty below managed"))
-    )
+    runtime = _bare_runtime(broker=_ReconcilingBroker(OwnershipDriftError("broker qty below managed")))
     with pytest.raises(OwnershipDriftError):
         runtime.start()
     # OwnershipDriftError subclasses ProtectionReconciliationError, so the
@@ -121,9 +113,7 @@ def test_reconcile_ownership_drift_stays_permanent() -> None:
 
 
 def test_reconcile_ambiguous_order_state_stays_permanent() -> None:
-    runtime = _bare_runtime(
-        broker=_ReconcilingBroker(AmbiguousOrderState("submitting crash window"))
-    )
+    runtime = _bare_runtime(broker=_ReconcilingBroker(AmbiguousOrderState("submitting crash window")))
     with pytest.raises(AmbiguousOrderState):
         runtime.start()
     assert runtime._circuit_breaker_reason == "reconciliation_failed"

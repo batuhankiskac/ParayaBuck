@@ -88,14 +88,10 @@ class PaperIncidentReport:
 class PaperIncidentReconciler:
     """Reconcile a broker snapshot without mutating either source."""
 
-    def reconcile(
-        self, snapshot: PaperIncidentSnapshot, database_path: str | Path
-    ) -> PaperIncidentReport:
+    def reconcile(self, snapshot: PaperIncidentSnapshot, database_path: str | Path) -> PaperIncidentReport:
         local_orders, local_positions = _read_local_ledger(database_path)
         by_broker_id = {
-            str(item.get("broker_order_id") or ""): item
-            for item in local_orders
-            if item.get("broker_order_id")
+            str(item.get("broker_order_id") or ""): item for item in local_orders if item.get("broker_order_id")
         }
         by_client_id = {str(item.get("client_order_id") or ""): item for item in local_orders}
         broker_order_ids = {order.order_id for order in snapshot.orders}
@@ -116,15 +112,9 @@ class PaperIncidentReconciler:
             )
         )
         duplicates = tuple(
-            sorted(
-                value
-                for value in set(broker_client_ids)
-                if value and broker_client_ids.count(value) > 1
-            )
+            sorted(value for value in set(broker_client_ids) if value and broker_client_ids.count(value) > 1)
         )
-        realized, slippage = _fill_accounting(
-            snapshot.fills, by_broker_id, by_client_id, snapshot.orders
-        )
+        realized, slippage = _fill_accounting(snapshot.fills, by_broker_id, by_client_id, snapshot.orders)
         unrealized = sum(
             (position.current_price - position.average_entry_price) * position.quantity
             for position in snapshot.positions
@@ -143,11 +133,7 @@ class PaperIncidentReconciler:
                 and order.client_order_id not in by_client_id
             )
         )
-        closed = [
-            position
-            for position in local_positions
-            if str(position.get("status") or "") == "closed"
-        ]
+        closed = [position for position in local_positions if str(position.get("status") or "") == "closed"]
         fees = sum(fill.fee for fill in snapshot.fills)
         net_transfers = sum(activity.net_amount for activity in snapshot.cash_activities)
         unrealized_change = unrealized - snapshot.starting_unrealized_pnl
@@ -169,18 +155,12 @@ class PaperIncidentReconciler:
             slippage=round(slippage, 8),
             fees=round(fees, 8),
             net_transfers=round(net_transfers, 8),
-            expected_ending_equity=(
-                round(expected_ending, 8) if expected_ending is not None else None
-            ),
+            expected_ending_equity=(round(expected_ending, 8) if expected_ending is not None else None),
             actual_ending_equity=snapshot.ending_equity,
             equity_residual=round(residual, 8) if residual is not None else None,
             manual_exit_order_ids=manual,
             external_position_symbols=tuple(
-                sorted(
-                    position.symbol
-                    for position in snapshot.positions
-                    if position.symbol not in local_symbols
-                )
+                sorted(position.symbol for position in snapshot.positions if position.symbol not in local_symbols)
             ),
             broker_orders_missing_locally=missing_local,
             local_orders_missing_at_broker=missing_broker,
@@ -189,19 +169,14 @@ class PaperIncidentReconciler:
                 abs(float(str(position.get("realized_pnl") or 0.0))) < 1e-12 for position in closed
             ),
             local_closed_positions_with_zero_fees=sum(
-                abs(
-                    float(str(position.get("entry_fees") or 0.0))
-                    + float(str(position.get("exit_fees") or 0.0))
-                )
+                abs(float(str(position.get("entry_fees") or 0.0)) + float(str(position.get("exit_fees") or 0.0)))
                 < 1e-12
                 for position in closed
             ),
         )
 
     @staticmethod
-    def anonymized_replay_fixture(
-        snapshot: PaperIncidentSnapshot, report: PaperIncidentReport
-    ) -> dict[str, object]:
+    def anonymized_replay_fixture(snapshot: PaperIncidentSnapshot, report: PaperIncidentReport) -> dict[str, object]:
         def token(value: str) -> str:
             return hashlib.sha256(("parayabuck-replay|" + value).encode()).hexdigest()[:16]
 
@@ -259,15 +234,8 @@ def _read_local_ledger(
     connection = sqlite3.connect(uri, uri=True)
     try:
         connection.row_factory = sqlite3.Row
-        tables = {
-            str(row[0])
-            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        }
-        orders = (
-            [dict(row) for row in connection.execute("SELECT * FROM orders")]
-            if "orders" in tables
-            else []
-        )
+        tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        orders = [dict(row) for row in connection.execute("SELECT * FROM orders")] if "orders" in tables else []
         positions = (
             [dict(row) for row in connection.execute("SELECT * FROM managed_positions")]
             if "managed_positions" in tables
@@ -294,9 +262,7 @@ def _fill_accounting(
         if fill.side.lower() == "buy":
             old_qty = quantity.get(symbol, 0.0)
             new_qty = old_qty + fill.quantity
-            average[symbol] = (
-                average.get(symbol, 0.0) * old_qty + fill.price * fill.quantity
-            ) / new_qty
+            average[symbol] = (average.get(symbol, 0.0) * old_qty + fill.price * fill.quantity) / new_qty
             quantity[symbol] = new_qty
         else:
             sold = min(quantity.get(symbol, 0.0), fill.quantity)

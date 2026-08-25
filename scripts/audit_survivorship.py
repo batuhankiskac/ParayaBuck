@@ -146,9 +146,7 @@ def fetch_alpaca_asset_master() -> dict:
     base = "https://paper-api.alpaca.markets/v2/assets"
 
     def fetch(status: str) -> list[dict]:
-        r = requests.get(
-            base, headers=headers, params={"status": status, "asset_class": "us_equity"}, timeout=30
-        )
+        r = requests.get(base, headers=headers, params={"status": status, "asset_class": "us_equity"}, timeout=30)
         r.raise_for_status()
         return r.json()
 

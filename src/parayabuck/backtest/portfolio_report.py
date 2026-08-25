@@ -61,12 +61,10 @@ class PortfolioReport:
             ],
             "fills": list(self.fills),
             "weight_history": [
-                {"timestamp": timestamp, "weights": weights}
-                for timestamp, weights in self.weight_history
+                {"timestamp": timestamp, "weights": weights} for timestamp, weights in self.weight_history
             ],
             "universe_history": [
-                {"timestamp": timestamp, "symbols": list(symbols)}
-                for timestamp, symbols in self.universe_history
+                {"timestamp": timestamp, "symbols": list(symbols)} for timestamp, symbols in self.universe_history
             ],
             "monthly_returns": {str(year): months for year, months in self.monthly_returns.items()},
             "yearly_returns": [
@@ -76,14 +74,8 @@ class PortfolioReport:
             "regime_performance": self.regime_performance,
             "rolling_beta": list(self.rolling_beta),
             "per_symbol": list(self.per_symbol),
-            "equity_curve": [
-                {"timestamp": timestamp, "equity": equity}
-                for timestamp, equity in self.equity_curve
-            ],
-            "drawdowns": [
-                {"timestamp": timestamp, "drawdown": drawdown}
-                for timestamp, drawdown in self.drawdowns
-            ],
+            "equity_curve": [{"timestamp": timestamp, "equity": equity} for timestamp, equity in self.equity_curve],
+            "drawdowns": [{"timestamp": timestamp, "drawdown": drawdown} for timestamp, drawdown in self.drawdowns],
         }
 
     def write_csvs(self, output_dir: str) -> list[str]:
@@ -219,10 +211,7 @@ def build_portfolio_report(
         default=0.0,
     )
     maximum_positions = max(
-        (
-            sum(1 for weight in weights.values() if weight > 0)
-            for _timestamp, weights in result.weight_history
-        ),
+        (sum(1 for weight in weights.values() if weight > 0) for _timestamp, weights in result.weight_history),
         default=0,
     )
     holding_hours = _average_holding_hours(result)
@@ -289,12 +278,8 @@ def build_portfolio_report(
         }
         for fill in result.fills
     ]
-    weight_history = tuple(
-        (timestamp.isoformat(), weights) for timestamp, weights in result.weight_history
-    )
-    universe_history = tuple(
-        (timestamp.isoformat(), symbols) for timestamp, symbols in result.universe_history
-    )
+    weight_history = tuple((timestamp.isoformat(), weights) for timestamp, weights in result.weight_history)
+    universe_history = tuple((timestamp.isoformat(), symbols) for timestamp, symbols in result.universe_history)
     monthly = _monthly_matrix(result)
     yearly = _yearly_returns(result)
     beta_series = _rolling_beta(result)
@@ -440,9 +425,7 @@ def _benchmark_monthly_returns(benchmark_bars: tuple[Bar, ...]) -> dict[tuple[in
 def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
     benchmark_bars = sorted(result.benchmark_bars, key=lambda bar: bar.timestamp)
     benchmark_by_date: dict[datetime, float] = {bar.timestamp: bar.close for bar in benchmark_bars}
-    portfolio_by_date: dict[datetime, float] = dict(
-        zip(result.curve_timestamps, result.equity_curve, strict=True)
-    )
+    portfolio_by_date: dict[datetime, float] = dict(zip(result.curve_timestamps, result.equity_curve, strict=True))
     common_dates = sorted(set(portfolio_by_date) & set(benchmark_by_date))
     # Build (portfolio, benchmark) pairs jointly: filtering the two series
     # independently desynchronizes them when only one leg has a non-positive
@@ -453,8 +436,7 @@ def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
             benchmark_by_date[common_dates[index]] / benchmark_by_date[common_dates[index - 1]] - 1,
         )
         for index in range(1, len(common_dates))
-        if portfolio_by_date[common_dates[index - 1]] > 0
-        and benchmark_by_date[common_dates[index - 1]] > 0
+        if portfolio_by_date[common_dates[index - 1]] > 0 and benchmark_by_date[common_dates[index - 1]] > 0
     ]
     portfolio_returns = [pair[0] for pair in aligned_returns]
     benchmark_returns = [pair[1] for pair in aligned_returns]
@@ -467,12 +449,9 @@ def _rolling_beta(result: PortfolioBacktestResult) -> tuple[float, ...]:
         mean_portfolio = sum(portfolio_window) / len(portfolio_window)
         mean_benchmark = sum(benchmark_window) / len(benchmark_window)
         covariance = sum(
-            (p - mean_portfolio) * (b - mean_benchmark)
-            for p, b in zip(portfolio_window, benchmark_window, strict=True)
+            (p - mean_portfolio) * (b - mean_benchmark) for p, b in zip(portfolio_window, benchmark_window, strict=True)
         ) / len(portfolio_window)
-        benchmark_variance = sum((value - mean_benchmark) ** 2 for value in benchmark_window) / len(
-            benchmark_window
-        )
+        benchmark_variance = sum((value - mean_benchmark) ** 2 for value in benchmark_window) / len(benchmark_window)
         if benchmark_variance > 0:
             betas.append(covariance / benchmark_variance)
     return tuple(betas)

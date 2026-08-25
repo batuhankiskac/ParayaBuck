@@ -101,9 +101,7 @@ class ProductionPolicyEngine(PortfolioBacktestEngine):
     # -- policy hooks -------------------------------------------------------
 
     def _is_breached(self) -> bool:
-        limits = (
-            self.risk_overlay.limits if self.risk_overlay is not None else PortfolioRiskLimits()
-        )
+        limits = self.risk_overlay.limits if self.risk_overlay is not None else PortfolioRiskLimits()
         peak = self._peak_equity
         return peak > 0 and (peak - self._equity()) / peak >= limits.drawdown_halt
 
@@ -164,9 +162,7 @@ class ProductionPolicyEngine(PortfolioBacktestEngine):
         self.open_halt_episode_cycles = 0
 
 
-def _policy_metrics(
-    result: PortfolioBacktestResult, engine: ProductionPolicyEngine
-) -> dict[str, object]:
+def _policy_metrics(result: PortfolioBacktestResult, engine: ProductionPolicyEngine) -> dict[str, object]:
     latched_cycles = sum(int(reset.get("latched_cycles", 0)) for reset in engine.resets)
     durations = [int(reset["latched_cycles"]) for reset in engine.resets]
     open_cycles = int(getattr(engine, "open_halt_episode_cycles", 0) or 0)
@@ -185,9 +181,7 @@ def _policy_metrics(
         "max_drawdown": round(result.max_drawdown, 6),
         "calmar": round(result.calmar, 6),
         "turnover": round(result.turnover, 6),
-        "fees_total": round(
-            result.slippage_cost_total + result.spread_cost_total + result.fee_total, 2
-        ),
+        "fees_total": round(result.slippage_cost_total + result.spread_cost_total + result.fee_total, 2),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
         "avg_cash_ratio": round(result.average_cash_ratio, 4),
         "avg_holdings": round(result.average_holdings_count, 3),
@@ -265,9 +259,7 @@ def main() -> int:
         deltas[policy_id] = {
             "return_delta_pp": round((production["return"] - alpha_metrics["return"]) * 100, 2),
             "cagr_delta_pp": round((production["cagr"] - alpha_metrics["cagr"]) * 100, 2),
-            "maxdd_delta_pp": round(
-                (production["max_drawdown"] - alpha_metrics["max_drawdown"]) * 100, 2
-            ),
+            "maxdd_delta_pp": round((production["max_drawdown"] - alpha_metrics["max_drawdown"]) * 100, 2),
             "exposure_delta": round(production["avg_exposure"] - alpha_metrics["avg_exposure"], 4),
             "halt_count": production["halt_count"],
             "median_halt_duration_cycles": production["median_halt_duration_cycles"],

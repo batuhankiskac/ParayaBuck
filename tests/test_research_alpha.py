@@ -109,9 +109,7 @@ def test_horizon_windows_never_include_skip_bars() -> None:
 def test_horizon_consensus_uses_each_horizon_window() -> None:
     series_a = [0.01] * 300
     series_b = [0.01] * 100 + [0.05] * 200  # stronger in every window
-    consensus = horizon_consensus_scores(
-        {"A": series_a, "B": series_b}, [126, 189, 252], skip=21, standardized=False
-    )
+    consensus = horizon_consensus_scores({"A": series_a, "B": series_b}, [126, 189, 252], skip=21, standardized=False)
     assert consensus["B"] > consensus["A"]
     # Both standardized and raw consensus have the same symbol ordering when
     # vols are identical across names.
@@ -307,10 +305,7 @@ def test_positive_12m_gate_runs_before_multi_horizon_consensus() -> None:
     def noisy(closes: list[float], phase: float) -> list[float]:
         # Deterministic noise keeps residual vol strictly positive (the base
         # pipeline rejects zero-vol names), identical to the parity suite.
-        return [
-            close * (1.0 + 0.004 * _math.sin(index * 1.7 + phase))
-            for index, close in enumerate(closes)
-        ]
+        return [close * (1.0 + 0.004 * _math.sin(index * 1.7 + phase)) for index, close in enumerate(closes)]
 
     def bars(symbol: str, closes: list[float]) -> tuple[Bar, ...]:
         return tuple(

@@ -177,8 +177,7 @@ def test_v1_historical_specs_stay_registered_and_constructible() -> None:
 def test_v1_equity_spec_unchanged_and_exact() -> None:
     equity = portfolio_strategy_from("equity_residual_momentum_v1", EQUITY_FROZEN_PARAMETERS)
     assert dict(equity.parameter_tuple()) == {
-        key: (list(value) if isinstance(value, tuple) else value)
-        for key, value in EQUITY_FROZEN_PARAMETERS.items()
+        key: (list(value) if isinstance(value, tuple) else value) for key, value in EQUITY_FROZEN_PARAMETERS.items()
     }
     assert equity.rebalance_policy_declared == "monthly"
     assert equity.minimum_history_bars == 273 + 1

@@ -91,9 +91,7 @@ def run(report: Report) -> None:
         session_id = repo.begin_session("account-1", "digest-bench", "paper")
 
     def record_decision() -> None:
-        repo.record_decision(
-            session_id, "account-1", "digest-bench", _target(timestamp), overlay, Market.EQUITY
-        )
+        repo.record_decision(session_id, "account-1", "digest-bench", _target(timestamp), overlay, Market.EQUITY)
 
     timing, _ = timeit(
         record_decision,
@@ -205,9 +203,7 @@ def run(report: Report) -> None:
     report.add(timing)
 
     def queries() -> None:
-        repo.record_decision(
-            session_id, "account-1", "digest-bench", _target(timestamp), overlay, Market.EQUITY
-        )
+        repo.record_decision(session_id, "account-1", "digest-bench", _target(timestamp), overlay, Market.EQUITY)
         repo.high_water("account-1")
         repo.update_high_water("account-1", 100_000.0)
         repo.operations_snapshot("account-1")

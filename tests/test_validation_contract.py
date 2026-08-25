@@ -118,9 +118,7 @@ def test_paired_fold_deltas_is_canonical() -> None:
     assert result["return_delta"]["min"] == -0.01
     assert result["maxDD_delta"]["wins_over_control"] == 1  # only fold 2 deepens DD
     # Delta rows are sorted by fold start, deterministic.
-    assert [row["start"] for row in result["deltas"]] == sorted(
-        row["start"] for row in result["deltas"]
-    )
+    assert [row["start"] for row in result["deltas"]] == sorted(row["start"] for row in result["deltas"])
 
 
 def test_temporal_windows_predeclared_shape() -> None:
@@ -309,9 +307,7 @@ def test_promotion_gate_each_failure_flips_its_gate() -> None:
     candidate = clone()
     candidate["own_top3_drop"] = {"return": 1.2, "sharpe": 0.54}
     gates = promotion_gates(control=data["control"], candidate=candidate)
-    assert not next(g for g in gates if g["gate"] == "own_top3_jackknife_preserves_advantage")[
-        "passed"
-    ]
+    assert not next(g for g in gates if g["gate"] == "own_top3_jackknife_preserves_advantage")["passed"]
 
     # 7. single-year dependency: 4/10 year wins.
     candidate = clone()
@@ -388,9 +384,7 @@ def test_chained_sharpe_uses_joined_daily_returns() -> None:
     mean2 = sum(droppped) / len(droppped)
     variance2 = sum((v - mean2) ** 2 for v in droppped) / (len(droppped) - 1)
     different = mean2 / math.sqrt(variance2) * math.sqrt(252.0)
-    assert chained_cumulative_metrics(joined)["cumulative_sharpe"] != pytest.approx(
-        different, abs=1e-12
-    )
+    assert chained_cumulative_metrics(joined)["cumulative_sharpe"] != pytest.approx(different, abs=1e-12)
 
 
 def test_chain_helpers_empty_and_degenerate_inputs() -> None:

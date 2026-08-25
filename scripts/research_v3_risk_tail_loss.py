@@ -110,20 +110,13 @@ def load_and_validate_manifest():
     declared_folds = manifest.get("walk_forward", {}).get("folds_exact")
     computed = calendar_fold_windows(EVAL_START, EVAL_END, step_months=6)
     if len(computed) != FOLD_COUNT_DECLARED:
-        raise SystemExit(
-            f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}"
-        )
-    declared_parsed = [
-        (datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds
-    ]
+        raise SystemExit(f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}")
+    declared_parsed = [(datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds]
     assert_fold_contract(declared_parsed, computed)
     # Validate dataset hashes
     identity = dataset_identity()
     ds = manifest.get("dataset", {})
-    if (
-        ds.get("bars_sha256") != identity["bars_sha256"]
-        or ds.get("dividends_sha256") != identity["dividends_sha256"]
-    ):
+    if ds.get("bars_sha256") != identity["bars_sha256"] or ds.get("dividends_sha256") != identity["dividends_sha256"]:
         raise SystemExit("dataset hash drift from manifest")
     return manifest
 
@@ -335,8 +328,7 @@ class StopEngine(PortfolioBacktestEngine):
         self._stop_reentries = []
         # track bars index per symbol for ATR lookup
         self._bar_index = {
-            sym: {b.timestamp: idx for idx, b in enumerate(lst)}
-            for sym, lst in self.bars_by_symbol.items()
+            sym: {b.timestamp: idx for idx, b in enumerate(lst)} for sym, lst in self.bars_by_symbol.items()
         }
         self._original_positions_snapshot = {}
 
@@ -367,11 +359,7 @@ class StopEngine(PortfolioBacktestEngine):
             if sym not in self._stop_state and pos.qty > 0:
                 entry_price = pos.avg_price
                 # Need entry timestamp: opened_at
-                atr = (
-                    self._atr_for_entry(sym, pos.opened_at)
-                    if self.stop_policy in ("S3", "S4")
-                    else None
-                )
+                atr = self._atr_for_entry(sym, pos.opened_at) if self.stop_policy in ("S3", "S4") else None
                 if self.stop_policy == "S1":
                     stop = entry_price * 0.92
                 elif self.stop_policy == "S2":
@@ -488,15 +476,11 @@ class StopEngine(PortfolioBacktestEngine):
                     # For now just track exits
                     # Hack: create a fake PortfolioFill and append if possible; but PortfolioFill is frozen dataclass requiring fields  # noqa: E501
                     # Let's create a real PortfolioFill
-                    __import__(
-                        "parayabuck.backtest.portfolio_engine", fromlist=["PortfolioFill"]
-                    ).PortfolioFill(
+                    __import__("parayabuck.backtest.portfolio_engine", fromlist=["PortfolioFill"]).PortfolioFill(
                         timestamp=bar.timestamp,
                         symbol=sym,
                         market=Market.EQUITY,
-                        side=__import__(
-                            "parayabuck.backtest.portfolio_engine", fromlist=["OrderSide"]
-                        ).OrderSide.SELL,
+                        side=__import__("parayabuck.backtest.portfolio_engine", fromlist=["OrderSide"]).OrderSide.SELL,
                         qty=qty,
                         reference_price=stop,
                         fill_price=net_fill,
@@ -524,9 +508,7 @@ class StopEngine(PortfolioBacktestEngine):
                 )
 
 
-def diagnostics_from_baseline(
-    result: PortfolioBacktestResult, bars, bars_by_symbol, corporate_actions
-):
+def diagnostics_from_baseline(result: PortfolioBacktestResult, bars, bars_by_symbol, corporate_actions):
     # Build per-symbol contributions and trade episodes
     # Use fills to derive episodes: fills include both buys and sells; we reconstruct FIFO?
     # Simplify: use closed_position_events for realized pnl per close, and per_symbol for aggregate.
@@ -565,11 +547,7 @@ def diagnostics_from_baseline(
                     # compute MAE/MFE etc using OHLC series between entry and exit
                     bars_list = bars_by_symbol.get(sym, [])
                     # filter bars between entry_time and exit_time inclusive
-                    relevant = [
-                        b
-                        for b in bars_list
-                        if b.timestamp >= entry_time and b.timestamp <= exit_time
-                    ]
+                    relevant = [b for b in bars_list if b.timestamp >= entry_time and b.timestamp <= exit_time]
                     if not relevant:
                         relevant = [b for b in bars_list if b.timestamp >= entry_time][:10]
                     # MAE: max adverse excursion (lowest low vs entry)
@@ -582,9 +560,7 @@ def diagnostics_from_baseline(
                     worst_low = min_low
                     best_high = max_high
                     # realized return
-                    realized_ret = (
-                        (exit_price - entry_price) / entry_price if entry_price > 0 else 0
-                    )
+                    realized_ret = (exit_price - entry_price) / entry_price if entry_price > 0 else 0
                     # holding days
                     holding_days = (exit_time - entry_time).days
                     # thresholds
@@ -599,9 +575,7 @@ def diagnostics_from_baseline(
                         thresholds[str(thr)] = {"crossed": crossed, "recovered": recovered}
                     # worst intraday low while held already min_low
                     # contribution to account return: realized PnL / starting_equity? Use fill qty * price diff  # noqa: E501
-                    pnl = (
-                        (exit_price - entry_price) * take - f.fee * take / f.qty if f.qty > 0 else 0
-                    )
+                    pnl = (exit_price - entry_price) * take - f.fee * take / f.qty if f.qty > 0 else 0
                     episodes.append(
                         {
                             "symbol": sym,
@@ -652,14 +626,10 @@ def diagnostics_from_baseline(
     for k in [1, 3, 5, 10]:
         s = sum_losses(k)
         conc[f"top_{k}_loss"] = round(s, 2)
-        conc[f"top_{k}_share_of_total_losses"] = (
-            round(s / total_losses, 4) if total_losses > 0 else 0
-        )
+        conc[f"top_{k}_share_of_total_losses"] = round(s / total_losses, 4) if total_losses > 0 else 0
     # account equity worst single loss as % account equity: need max single trade loss as % of starting equity? Use starting_equity  # noqa: E501
     starting = result.starting_equity
-    worst_single_pct = (
-        (min(e["realized_pnl"] for e in episodes) / starting * 100) if episodes else 0
-    )
+    worst_single_pct = (min(e["realized_pnl"] for e in episodes) / starting * 100) if episodes else 0
     diagnostics = {
         "episode_count": len(episodes),
         "loss_count": len(losses),
@@ -677,14 +647,10 @@ def diagnostics_from_baseline(
         "mae_p75": pct(maes, 0.75),
         "mae_p90": pct(maes, 0.90),
         "mae_p95": pct(maes, 0.95),
-        "mae_avg_winners": round(
-            statistics.fmean([e["mae"] for e in episodes if e["realized_return"] > 0]), 6
-        )
+        "mae_avg_winners": round(statistics.fmean([e["mae"] for e in episodes if e["realized_return"] > 0]), 6)
         if any(e["realized_return"] > 0 for e in episodes)
         else None,
-        "mae_avg_losers": round(
-            statistics.fmean([e["mae"] for e in episodes if e["realized_return"] < 0]), 6
-        )
+        "mae_avg_losers": round(statistics.fmean([e["mae"] for e in episodes if e["realized_return"] < 0]), 6)
         if any(e["realized_return"] < 0 for e in episodes)
         else None,
     }
@@ -728,13 +694,7 @@ def loser_recovery_matrix(episodes):
             "avg_further_loss_after_threshold": round(avg_further, 6),
             "worst_further_loss_after_threshold": round(worst_further, 6),
             "avg_time_to_recovery_days": round(
-                statistics.fmean(
-                    [
-                        e["holding_days"]
-                        for e in crossed_eps
-                        if e["thresholds"][thr_str]["recovered"]
-                    ]
-                ),
+                statistics.fmean([e["holding_days"] for e in crossed_eps if e["thresholds"][thr_str]["recovered"]]),
                 2,
             )
             if recovered
@@ -748,9 +708,7 @@ def evaluate_stop_candidate(config, universe, bars, bars_by_symbol, actions, can
     strategy = build_v3_strategy()
     if candidate_id == "S0":
         # control: same as baseline, no stop
-        result, _ = run_window(
-            config, strategy, universe, bars, actions, start=EVAL_START, end=EVAL_END
-        )
+        result, _ = run_window(config, strategy, universe, bars, actions, start=EVAL_START, end=EVAL_END)
         gap_stats = {"gap_count": 0, "avg_gap_bps": 0, "worst_gap_bps": 0}
         extra = {}
     else:
@@ -766,9 +724,7 @@ def evaluate_stop_candidate(config, universe, bars, bars_by_symbol, actions, can
         warmup = [
             b
             for b in bars
-            if b.market == Market.EQUITY
-            and b.timeframe == strategy.timeframe
-            and b.timestamp < EVAL_START
+            if b.market == Market.EQUITY and b.timeframe == strategy.timeframe and b.timestamp < EVAL_START
         ]
         engine = StopEngine(
             strategy,
@@ -944,11 +900,7 @@ def evaluate_account_candidate(config, universe, bars, actions, candidate_id):
         and b.timestamp <= EVAL_END
     ]
     warmup = [
-        b
-        for b in bars
-        if b.market == Market.EQUITY
-        and b.timeframe == strategy.timeframe
-        and b.timestamp < EVAL_START
+        b for b in bars if b.market == Market.EQUITY and b.timeframe == strategy.timeframe and b.timestamp < EVAL_START
     ]
     engine = ProductionPolicyEngine(
         strategy,
@@ -990,9 +942,7 @@ def evaluate_account_candidate(config, universe, bars, actions, candidate_id):
     }
 
 
-def run_folds_for_candidate(
-    config, universe, bars, actions, candidate_id, stop_engine=False, account_candidate=None
-):
+def run_folds_for_candidate(config, universe, bars, actions, candidate_id, stop_engine=False, account_candidate=None):
     strategy = build_v3_strategy()
     folds = calendar_fold_windows(EVAL_START, EVAL_END, step_months=6)
     fold_results = []
@@ -1011,9 +961,7 @@ def run_folds_for_candidate(
             warmup = [
                 b
                 for b in bars
-                if b.market == Market.EQUITY
-                and b.timeframe == strategy.timeframe
-                and cutoff <= b.timestamp < start
+                if b.market == Market.EQUITY and b.timeframe == strategy.timeframe and cutoff <= b.timestamp < start
             ]
             bars_by_symbol = defaultdict(list)
             for b in bars:
@@ -1118,9 +1066,7 @@ def run_folds_for_candidate(
                     corporate_actions=[a for a in actions if start <= a.timestamp <= end],
                 )
             else:
-                result, _ = run_window(
-                    config, strategy, universe, bars, actions, start=start, end=end
-                )
+                result, _ = run_window(config, strategy, universe, bars, actions, start=start, end=end)
         else:
             result, _ = run_window(config, strategy, universe, bars, actions, start=start, end=end)
         fold_results.append((start, end, result))
@@ -1158,9 +1104,7 @@ def main():
     baseline_result, _ = run_window(
         config, baseline_strategy, universe, bars, dividends, start=EVAL_START, end=EVAL_END
     )
-    baseline_diag, episodes = diagnostics_from_baseline(
-        baseline_result, bars, bars_by_symbol, dividends
-    )
+    baseline_diag, episodes = diagnostics_from_baseline(baseline_result, bars, bars_by_symbol, dividends)
     loser_mat = loser_recovery_matrix(episodes)
     # Save diagnostics
     with open(OUT_DIR / "baseline_position_diagnostics.json", "w") as f:
@@ -1255,8 +1199,7 @@ def main():
         else:
             base_rets = [
                 (
-                    stop_results["S0"]["stats"]["equity_curve"][i]
-                    / stop_results["S0"]["stats"]["equity_curve"][i - 1]
+                    stop_results["S0"]["stats"]["equity_curve"][i] / stop_results["S0"]["stats"]["equity_curve"][i - 1]
                     - 1
                 )
                 for i in range(1, len(stop_results["S0"]["stats"]["equity_curve"]))
@@ -1272,11 +1215,7 @@ def main():
                     idx = rng2.randrange(0, max(1, n - block + 1))
                     # need both curves same length; approximate with rets slices
                     s1.extend(rets[idx : idx + block])
-                    s2.extend(
-                        base_rets[idx : idx + block]
-                        if idx + block <= len(base_rets)
-                        else base_rets[-block:]
-                    )
+                    s2.extend(base_rets[idx : idx + block] if idx + block <= len(base_rets) else base_rets[-block:])
                 s1 = s1[:n]
                 s2 = s2[:n]
                 e1 = 1.0
@@ -1501,12 +1440,8 @@ def main():
             "reset_count": res.get("reset_count", 0),
             "open_halt_episode": res.get("open", 0) > 0,
             "open_halt_episode_cycles": res.get("open", 0),
-            "maxDD_vs_R0_delta": round(
-                s.get("max_drawdown", 0) - acct_results["R0"]["stats"]["max_drawdown"], 6
-            ),
-            "return_cost_of_protection": round(
-                s.get("return", 0) - acct_results["R0"]["stats"]["return"], 6
-            ),
+            "maxDD_vs_R0_delta": round(s.get("max_drawdown", 0) - acct_results["R0"]["stats"]["max_drawdown"], 6),
+            "return_cost_of_protection": round(s.get("return", 0) - acct_results["R0"]["stats"]["return"], 6),
         }
     with open(OUT_DIR / "account_policy_candidates.json", "w") as f:
         json.dump(
@@ -1685,21 +1620,13 @@ def main():
         # 2 top5 concentration improves
         top5_c = sc["tail"]["top_5_conc"]
         top5_0 = s0["tail"]["top_5_conc"]
-        checks["2_top5_conc_improves"] = (
-            top5_c is not None and top5_0 is not None and top5_c < top5_0
-        )
+        checks["2_top5_conc_improves"] = top5_c is not None and top5_0 is not None and top5_c < top5_0
         # 3 maxDD improves >=2pp
-        checks["3_maxDD_2pp"] = (
-            sc["performance"]["max_drawdown"] <= s0["performance"]["max_drawdown"] - 0.02
-        )
+        checks["3_maxDD_2pp"] = sc["performance"]["max_drawdown"] <= s0["performance"]["max_drawdown"] - 0.02
         # 4 sharpe not worse
-        checks["4_sharpe_not_worse"] = (
-            sc["performance"]["sharpe"] >= s0["performance"]["sharpe"] - 1e-9
-        )
+        checks["4_sharpe_not_worse"] = sc["performance"]["sharpe"] >= s0["performance"]["sharpe"] - 1e-9
         # 5 return not worse by >5pp OR materially higher
-        checks["5_return_within_5pp"] = (
-            sc["performance"]["return"] >= s0["performance"]["return"] - 0.05
-        )
+        checks["5_return_within_5pp"] = sc["performance"]["return"] >= s0["performance"]["return"] - 0.05
         # 6 2022+ sharpe not worse (use temporal window)
         try:
             cr_2022 = temporal["window_2022_2026"][cid]["cumulative_sharpe"]
@@ -1720,18 +1647,12 @@ def main():
             checks["9_3x_not_destroy"] = False
         # 10 no one-year dependency (worst year not dramatically worse)
         # Check that worst_year not more than 5pp worse than S0 worst_year?
-        checks["10_no_one_year_dependency"] = (
-            sc["performance"]["worst_year"] >= s0["performance"]["worst_year"] - 0.05
-        )
+        checks["10_no_one_year_dependency"] = sc["performance"]["worst_year"] >= s0["performance"]["worst_year"] - 0.05
         # 11 no single-symbol dependency (concentration top1 share not dominated)
-        checks["11_no_single_symbol_dependency"] = (
-            True  # stub true; detailed jackknife would be needed
-        )
+        checks["11_no_single_symbol_dependency"] = True  # stub true; detailed jackknife would be needed
         # 12 whipsaw net >0
         checks["12_net_stop_value_positive"] = sc["net_stop_value"] > 0
-        checks["all_pass"] = all(
-            [v for k, v in checks.items() if k.startswith(tuple(str(i) for i in range(1, 13)))]
-        )
+        checks["all_pass"] = all([v for k, v in checks.items() if k.startswith(tuple(str(i) for i in range(1, 13)))])
         stop_pass[cid] = checks
     # Account verdict stub
     acct_pass = {}
@@ -1740,9 +1661,7 @@ def main():
         r0 = acct_out["R0"]
         checks = {}
         checks["never_deadlocks"] = not cr["open_halt_episode"]
-        checks["maxDD_improves"] = (
-            cr["performance"]["max_drawdown"] < r0["performance"]["max_drawdown"]
-        )
+        checks["maxDD_improves"] = cr["performance"]["max_drawdown"] < r0["performance"]["max_drawdown"]
         checks["sharpe_ge_R0"] = cr["performance"]["sharpe"] >= r0["performance"]["sharpe"] - 1e-9
         checks["return_cost_reasonable"] = (
             r0["performance"]["return"] - cr["performance"]["return"]

@@ -103,14 +103,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         if not 0.5 < ivol_quantile < 0.95:
             raise ValueError("ivol_reject_quantile must be in (0.5, 0.95)")
         excluded = self.parameters.get("exclude_symbols", [])
-        if not isinstance(excluded, (list, tuple)) or not all(
-            isinstance(symbol, str) for symbol in excluded
-        ):
+        if not isinstance(excluded, (list, tuple)) or not all(isinstance(symbol, str) for symbol in excluded):
             raise ValueError("exclude_symbols must be a list of symbols")
 
-    def _score_candidates(
-        self, context: PortfolioContext
-    ) -> tuple[tuple[tuple[float, str], ...], dict[str, float]]:
+    def _score_candidates(self, context: PortfolioContext) -> tuple[tuple[tuple[float, str], ...], dict[str, float]]:
         """Timestamp-aligned residual-momentum ranking of the candidate pool.
 
         Shared by ``decide`` (portfolio construction) and ``rank_candidates``
@@ -125,9 +121,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         excluded_raw = self.parameters.get("exclude_symbols", [])
         if not isinstance(excluded_raw, (list, tuple)):
             raise ValueError("exclude_symbols must be a list of symbols")
-        excluded = {
-            str(symbol).strip().upper() for symbol in (*excluded_raw, context.benchmark_symbol)
-        }
+        excluded = {str(symbol).strip().upper() for symbol in (*excluded_raw, context.benchmark_symbol)}
         benchmark_key = canonical_symbol(context.benchmark_symbol, Market.EQUITY)
         spy_bars = context.history.get(benchmark_key, ())
         if len(spy_bars) < beta_window + 1:
@@ -155,10 +149,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 continue
             stock_returns, market_returns = aligned
             beta = _ols_beta(stock_returns, market_returns)
-            residuals = [
-                stock - beta * market
-                for stock, market in zip(stock_returns, market_returns, strict=True)
-            ]
+            residuals = [stock - beta * market for stock, market in zip(stock_returns, market_returns, strict=True)]
             score = self._candidate_score(residuals, formation=formation, skip=skip)
             residual_vol = _volatility(residuals[-vol_window:])
             if not math.isfinite(score) or not math.isfinite(residual_vol):
@@ -211,9 +202,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """
         if not scored:
             return scored
-        threshold = reject_quantile_threshold(
-            [residual_vols[symbol] for _score, symbol in scored], quantile
-        )
+        threshold = reject_quantile_threshold([residual_vols[symbol] for _score, symbol in scored], quantile)
         return [(score, symbol) for score, symbol in scored if residual_vols[symbol] <= threshold]
 
     def _transform_cross_sectional_scores(
@@ -264,9 +253,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """
         return weights
 
-    def _position_weights(
-        self, selected: tuple[str, ...], residual_vols: dict[str, float]
-    ) -> dict[str, float]:
+    def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
         """Sizing for the selected names (inverse-vol, capped). Hook."""
         return dict(
             inverse_volatility_weights(
@@ -286,9 +273,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         if not ranked:
             return self._cash_portfolio(context, "no_qualified_candidates")
         selected = self._select_names(ranked, residual_vols, context, top_n)
-        weights = dict(
-            self._post_target_weights(self._position_weights(selected, residual_vols), context)
-        )
+        weights = dict(self._post_target_weights(self._position_weights(selected, residual_vols), context))
         # Alpha rank travels with the target (1 = best): the risk overlay's
         # position-count enforcement retains the strategy's best-ranked
         # names instead of inventing a second ranking from target weights.
@@ -433,9 +418,7 @@ def _ols_beta(stock_returns: list[float], market_returns: list[float]) -> float:
     """OLS slope of stock returns on market returns (aligned pairs)."""
     market_mean = statistics.fmean(market_returns)
     stock_mean = statistics.fmean(stock_returns)
-    variance = sum((value - market_mean) ** 2 for value in market_returns) / (
-        len(market_returns) - 1
-    )
+    variance = sum((value - market_mean) ** 2 for value in market_returns) / (len(market_returns) - 1)
     if variance <= 1e-12:
         return 0.0
     covariance = sum(

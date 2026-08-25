@@ -334,9 +334,7 @@ class PortfolioBacktestEngine:
         # simulations opt into real enforcement plus an operator-reset policy
         # through ``_risk_epoch_policy``.
         self.enforce_drawdown_halt = bool(enforce_drawdown_halt)
-        self.state = state or PortfolioState(
-            strategy_name=strategy.name, strategy_version=strategy.version
-        )
+        self.state = state or PortfolioState(strategy_name=strategy.name, strategy_version=strategy.version)
         self._idempotency = IdempotencyKeyFactory(strategy.name, strategy.version)
         self._history: dict[tuple[str, str], list[Bar]] = {}
         self._execution_history: dict[tuple[str, str], list[Bar]] = {}
@@ -366,18 +364,12 @@ class PortfolioBacktestEngine:
         # v3 state restores the lifecycle so a restart behaves identically to
         # an uninterrupted run (high-water before restart, drawdown crossed
         # after restart, mid-session day-start).
-        self._peak_equity = (
-            self.state.peak_equity if self.state.peak_equity is not None else starting_equity
-        )
+        self._peak_equity = self.state.peak_equity if self.state.peak_equity is not None else starting_equity
         self._day_start_equity = (
-            self.state.day_start_equity
-            if self.state.day_start_equity is not None
-            else starting_equity
+            self.state.day_start_equity if self.state.day_start_equity is not None else starting_equity
         )
         self._last_observed_equity = (
-            self.state.last_observed_equity
-            if self.state.last_observed_equity is not None
-            else starting_equity
+            self.state.last_observed_equity if self.state.last_observed_equity is not None else starting_equity
         )
         self._risk_session_date: date | None = None
         if self.state.risk_session_date:
@@ -452,9 +444,7 @@ class PortfolioBacktestEngine:
         self._closed_position_events = []
         self._liquidation_costs = []
         self._dividend_total = 0.0
-        self._cash_rate_observations = tuple(
-            sorted(cash_rates or [], key=lambda item: item.timestamp)
-        )
+        self._cash_rate_observations = tuple(sorted(cash_rates or [], key=lambda item: item.timestamp))
         self._risk_contribution_history = []
         self._weight_history = []
         self._universe_history = []
@@ -487,16 +477,10 @@ class PortfolioBacktestEngine:
             cycle = list(grouped)
             for bar in cycle:
                 self._ingest_execution(bar)
-            while (
-                decision_index < len(decision_bars)
-                and decision_bars[decision_index].timestamp <= cycle[0].timestamp
-            ):
+            while decision_index < len(decision_bars) and decision_bars[decision_index].timestamp <= cycle[0].timestamp:
                 self._ingest(decision_bars[decision_index])
                 decision_index += 1
-            while (
-                action_index < len(action_queue)
-                and action_queue[action_index].timestamp <= cycle[0].timestamp
-            ):
+            while action_index < len(action_queue) and action_queue[action_index].timestamp <= cycle[0].timestamp:
                 self._apply_corporate_action(action_queue[action_index])
                 action_index += 1
             self._fill_cycle(cycle)
@@ -534,9 +518,7 @@ class PortfolioBacktestEngine:
                     self.save_state()
         benchmark = [bar for bar in decision_bars if bar.symbol == self.benchmark_symbol]
         benchmark_return = (
-            benchmark[-1].close / benchmark[0].close - 1
-            if len(benchmark) > 1 and benchmark[0].close > 0
-            else 0.0
+            benchmark[-1].close / benchmark[0].close - 1 if len(benchmark) > 1 and benchmark[0].close > 0 else 0.0
         )
         return self._result(curve, curve_timestamps, benchmark_return, tuple(benchmark))
 
@@ -651,24 +633,18 @@ class PortfolioBacktestEngine:
                 bar.close,
                 bar.volume,
             ):
-                raise ValueError(
-                    f"Conflicting duplicate bars for {bar.symbol} at {bar.timestamp.isoformat()}"
-                )
+                raise ValueError(f"Conflicting duplicate bars for {bar.symbol} at {bar.timestamp.isoformat()}")
         return list(unique.values())
 
     def _record_holdings_snapshot(self, timestamp: datetime) -> None:
-        active = [
-            position for position in self._positions.values() if position.opened_at <= timestamp
-        ]
+        active = [position for position in self._positions.values() if position.opened_at <= timestamp]
         position_value = sum(
-            position.qty * self._last_price.get(position.symbol, position.avg_price)
-            for position in active
+            position.qty * self._last_price.get(position.symbol, position.avg_price) for position in active
         )
         equity = self._equity()
         cash_ratio = max(0.0, (equity - position_value) / equity) if equity > 0 else 1.0
         single_values = [
-            position.qty * self._last_price.get(position.symbol, position.avg_price)
-            for position in active
+            position.qty * self._last_price.get(position.symbol, position.avg_price) for position in active
         ]
         concentration = max(single_values) / equity if equity > 0 and single_values else 0.0
         self._holdings_history.append((len(active), cash_ratio, concentration))
@@ -691,18 +667,12 @@ class PortfolioBacktestEngine:
 
     def _sync_state_bookkeeping(self) -> None:
         """Mirror live positions, cash and prices into the persisted state."""
-        self.state.holdings = {
-            symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0
-        }
+        self.state.holdings = {symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0}
         self.state.avg_prices = {
-            symbol: position.avg_price
-            for symbol, position in self._positions.items()
-            if position.qty > 0
+            symbol: position.avg_price for symbol, position in self._positions.items() if position.qty > 0
         }
         self.state.entry_fees = {
-            symbol: position.entry_fee
-            for symbol, position in self._positions.items()
-            if position.qty > 0
+            symbol: position.entry_fee for symbol, position in self._positions.items() if position.qty > 0
         }
         self.state.realized_pnl_accumulators = {
             symbol: position.realized_pnl_accumulator
@@ -732,17 +702,11 @@ class PortfolioBacktestEngine:
         an opening fill. The cutoff makes the capacity model point-in-time.
         """
         history = self._execution_history.get((order.symbol, timeframe), ())
-        known = [
-            item.volume
-            for item in history
-            if item.timestamp <= order.created_at and item.volume > 0
-        ]
+        known = [item.volume for item in history if item.timestamp <= order.created_at and item.volume > 0]
         window = known[-self.liquidity_lookback_bars :]
         return sum(window) / len(window) if window else 0.0
 
-    def _equity_fee(
-        self, side: OrderSide, quantity: float, price: float, trade_date: date
-    ) -> float:
+    def _equity_fee(self, side: OrderSide, quantity: float, price: float, trade_date: date) -> float:
         """Regulatory fee for one equity fill at the trade date.
 
         With effective-dated fees the SEC/TAF/CAT rates follow the official
@@ -824,9 +788,7 @@ class PortfolioBacktestEngine:
                     )
                 else:
                     total = position.qty + fillable
-                    position.avg_price = (
-                        position.qty * position.avg_price + fillable * fill_price
-                    ) / total
+                    position.avg_price = (position.qty * position.avg_price + fillable * fill_price) / total
                     position.qty = total
                     position.entry_fee += fee
             else:
@@ -850,9 +812,7 @@ class PortfolioBacktestEngine:
                 position.qty -= close_qty
                 self._realized_pnl_events.append((bar.timestamp, symbol, realized_delta))
                 if position.qty <= 0:
-                    self._closed_position_events.append(
-                        (bar.timestamp, symbol, position.realized_pnl_accumulator)
-                    )
+                    self._closed_position_events.append((bar.timestamp, symbol, position.realized_pnl_accumulator))
                     self._positions.pop(symbol, None)
             self._fills.append(
                 PortfolioFill(
@@ -930,9 +890,7 @@ class PortfolioBacktestEngine:
         if not scheduled:
             current_weights = {
                 position.symbol: (
-                    position.qty
-                    * self._last_price.get(position.symbol, position.avg_price)
-                    / max(context.equity, 1.0)
+                    position.qty * self._last_price.get(position.symbol, position.avg_price) / max(context.equity, 1.0)
                 )
                 for position in self._positions.values()
             }
@@ -1064,9 +1022,7 @@ class PortfolioBacktestEngine:
             # Target sizing uses executable/raw prices; signal history may be
             # total-return adjusted and is intentionally not a cash price.
             prices[symbol] = self._last_price.get(symbol, eligible[-1].close)
-        holdings = {
-            symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0
-        }
+        holdings = {symbol: position.qty for symbol, position in self._positions.items() if position.qty > 0}
         benchmark = "BTC/USD" if self.strategy.market == Market.CRYPTO else "SPY"
         return PortfolioContext(
             decision_timestamp=timestamp,
@@ -1131,10 +1087,7 @@ class PortfolioBacktestEngine:
 
     def _record_rebalance(self, target: TargetPortfolio) -> None:
         decision = target.decision_timestamp
-        target_map = {
-            canonical_symbol(weight.symbol, self.strategy.market): weight.weight
-            for weight in target.weights
-        }
+        target_map = {canonical_symbol(weight.symbol, self.strategy.market): weight.weight for weight in target.weights}
         signed = tuple(
             sorted(
                 (
@@ -1146,18 +1099,12 @@ class PortfolioBacktestEngine:
             )
         )
         raw_reasons = target.metadata.get("risk_overlay_reasons", ())
-        overlay_reasons = (
-            tuple(str(item) for item in raw_reasons)
-            if isinstance(raw_reasons, (tuple, list))
-            else ()
-        )
+        overlay_reasons = tuple(str(item) for item in raw_reasons) if isinstance(raw_reasons, (tuple, list)) else ()
         self._rebalances.append(
             RebalanceRecord(
                 decision_timestamp=decision,
                 reason=target.rebalance_reason.value,
-                target_weights=tuple(
-                    sorted((weight.symbol, weight.weight) for weight in target.weights)
-                ),
+                target_weights=tuple(sorted((weight.symbol, weight.weight) for weight in target.weights)),
                 target_cash_weight=target.cash_weight,
                 pre_trade_weights=tuple(sorted(self._current_pre_trade_weights.items())),
                 signed_trade_weights=signed,
@@ -1177,9 +1124,7 @@ class PortfolioBacktestEngine:
                 risk_overlay_reasons=overlay_reasons,
             )
         )
-        self._weight_history.append(
-            (decision, {weight.symbol: weight.weight for weight in target.weights})
-        )
+        self._weight_history.append((decision, {weight.symbol: weight.weight for weight in target.weights}))
         self._record_risk_contribution(target)
         symbols = self._universe_symbols(decision)
         if symbols is not None:
@@ -1198,9 +1143,7 @@ class PortfolioBacktestEngine:
             bars = self._history.get((symbol, self.strategy.timeframe), ())
             closes = [bar.close for bar in bars[-61:] if bar.close > 0]
             returns = [
-                closes[index] / closes[index - 1] - 1
-                for index in range(1, len(closes))
-                if closes[index - 1] > 0
+                closes[index] / closes[index - 1] - 1 for index in range(1, len(closes)) if closes[index - 1] > 0
             ]
             volatility = sample_stddev(returns)
             contributions.append(abs(weight.weight) * volatility)
@@ -1298,9 +1241,7 @@ class PortfolioBacktestEngine:
                 drawdown = (peak - equity) / peak
                 max_drawdown = max(max_drawdown, drawdown)
                 if curve_timestamps:
-                    duration_days = (
-                        curve_timestamps[index] - curve_timestamps[peak_index]
-                    ).total_seconds() / 86_400
+                    duration_days = (curve_timestamps[index] - curve_timestamps[peak_index]).total_seconds() / 86_400
                     max_drawdown_duration_days = max(max_drawdown_duration_days, int(duration_days))
         returns = [curve[i] / curve[i - 1] - 1 for i in range(1, len(curve)) if curve[i - 1] > 0]
         downside = [value for value in returns if value < 0]
@@ -1309,16 +1250,10 @@ class PortfolioBacktestEngine:
         downside_std = sample_stddev(downside)
         start_ts = curve_timestamps[0] if curve_timestamps else None
         end_ts = curve_timestamps[-1] if curve_timestamps else None
-        duration_days = (
-            int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0
-        )
+        duration_days = int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0
         years = duration_days / 365.0
         total_return = ending / self.starting_equity - 1
-        cagr = (
-            ((ending / self.starting_equity) ** (1 / years) - 1)
-            if years > 0 and ending > 0
-            else 0.0
-        )
+        cagr = ((ending / self.starting_equity) ** (1 / years) - 1) if years > 0 and ending > 0 else 0.0
         periods_per_year = len(returns) / years if years > 0 else 0.0
         annualizer = math.sqrt(max(1.0, periods_per_year)) if returns else 1.0
         pnls = tuple(event for _, _, event in self._realized_pnl_events)
@@ -1347,9 +1282,7 @@ class PortfolioBacktestEngine:
         worst_month = min(monthly_values, default=0.0)
         worst_year = self._worst_year(curve, curve_timestamps)
         positive_month_ratio = (
-            sum(1 for value in monthly_values if value > 0) / len(monthly_values)
-            if monthly_values
-            else 0.0
+            sum(1 for value in monthly_values if value > 0) / len(monthly_values) if monthly_values else 0.0
         )
         per_symbol = self._symbol_contributions()
         # Excess returns are aligned BY DATE: each series is reduced to
@@ -1378,17 +1311,13 @@ class PortfolioBacktestEngine:
                 or portfolio_by_day[day] <= 0
             ):
                 continue
-            daily_benchmark_return = (
-                benchmark_closes_by_day[day] / benchmark_closes_by_day[previous_day] - 1
-            )
+            daily_benchmark_return = benchmark_closes_by_day[day] / benchmark_closes_by_day[previous_day] - 1
             portfolio_return = portfolio_by_day[day] / previous_portfolio - 1
             excess.append(portfolio_return - daily_benchmark_return)
         excess_mean = sum(excess) / len(excess) if excess else 0.0
         excess_std = sample_stddev(excess)
         daily_periods_per_year = len(excess) / years if years > 0 else 0.0
-        information_ratio = (
-            excess_mean / excess_std * math.sqrt(daily_periods_per_year) if excess_std > 0 else 0.0
-        )
+        information_ratio = excess_mean / excess_std * math.sqrt(daily_periods_per_year) if excess_std > 0 else 0.0
         avg_cash_ratio = sum(cash_ratios) / len(cash_ratios) if cash_ratios else 0.0
         cash_hurdle_return = self._cash_hurdle_return(curve_timestamps)
         cash_yield = avg_cash_ratio * cash_hurdle_return
@@ -1397,9 +1326,7 @@ class PortfolioBacktestEngine:
             for index in range(1, len(benchmark_bars))
             if benchmark_bars[index - 1].close > 0
         ]
-        benchmark_mean = (
-            sum(benchmark_returns) / len(benchmark_returns) if benchmark_returns else 0.0
-        )
+        benchmark_mean = sum(benchmark_returns) / len(benchmark_returns) if benchmark_returns else 0.0
         benchmark_std = sample_stddev(benchmark_returns)
         benchmark_periods = len(benchmark_returns) / years if years > 0 else 0.0
         benchmark_sharpe = (
@@ -1416,14 +1343,8 @@ class PortfolioBacktestEngine:
                     benchmark_max_drawdown,
                     (benchmark_peak - bar.close) / benchmark_peak,
                 )
-        benchmark_cagr = (
-            (1 + benchmark_return) ** (1 / years) - 1
-            if years > 0 and benchmark_return > -1
-            else 0.0
-        )
-        benchmark_calmar = (
-            benchmark_cagr / benchmark_max_drawdown if benchmark_max_drawdown > 0 else 0.0
-        )
+        benchmark_cagr = (1 + benchmark_return) ** (1 / years) - 1 if years > 0 and benchmark_return > -1 else 0.0
+        benchmark_calmar = benchmark_cagr / benchmark_max_drawdown if benchmark_max_drawdown > 0 else 0.0
         self._sync_state_bookkeeping()
         return PortfolioBacktestResult(
             starting_equity=self.starting_equity,
@@ -1458,9 +1379,7 @@ class PortfolioBacktestEngine:
             spread_cost_total=spread_total,
             fee_total=fee_total,
             turnover=turnover,
-            average_holdings_count=(
-                sum(holdings_counts) / len(holdings_counts) if holdings_counts else 0.0
-            ),
+            average_holdings_count=(sum(holdings_counts) / len(holdings_counts) if holdings_counts else 0.0),
             average_cash_ratio=avg_cash_ratio,
             rebalance_count=len(self._rebalances),
             closed_positions=len(self._closed_position_events),
@@ -1499,9 +1418,7 @@ class PortfolioBacktestEngine:
             cost = 0.0
             for fill in decision_fills:
                 sign = 1 if fill.side == OrderSide.BUY else -1
-                signed_notional[fill.symbol] = (
-                    signed_notional.get(fill.symbol, 0.0) + sign * fill.qty * fill.fill_price
-                )
+                signed_notional[fill.symbol] = signed_notional.get(fill.symbol, 0.0) + sign * fill.qty * fill.fill_price
                 executed[fill.symbol] = executed.get(fill.symbol, 0.0) + fill.qty * fill.fill_price
                 cost += fill.slippage_cost + fill.spread_cost + fill.fee
             equity = record.equity_at_decision
@@ -1523,16 +1440,13 @@ class PortfolioBacktestEngine:
                 actual = actual_weights.get(symbol, pre_trade.get(symbol, 0.0))
                 drift = max(drift, abs(target_weight - actual))
             expected_notional = sum(
-                abs(target_weight - pre_trade.get(symbol, 0.0)) * equity
-                for symbol, target_weight in target_map.items()
+                abs(target_weight - pre_trade.get(symbol, 0.0)) * equity for symbol, target_weight in target_map.items()
             )
             sold = {symbol for symbol in signed_notional if symbol not in target_map}
             expected_notional += sum(abs(pre_trade.get(symbol, 0.0)) * equity for symbol in sold)
             realized_notional = sum(abs(value) for value in signed_notional.values())
             executed_weights = tuple(
-                sorted(
-                    ((symbol, value / equity) for symbol, value in executed.items() if equity > 0)
-                )
+                sorted(((symbol, value / equity) for symbol, value in executed.items() if equity > 0))
             )
             realized_turnover = sum(abs(value) for _, value in executed_weights)
             unfilled = max(0.0, expected_notional - realized_notional)
@@ -1606,9 +1520,7 @@ class PortfolioBacktestEngine:
             position = self._positions.get(symbol)
             final_weight = 0.0
             if position is not None and final_equity > 0:
-                final_weight = (
-                    position.qty * self._last_price.get(symbol, position.avg_price) / final_equity
-                )
+                final_weight = position.qty * self._last_price.get(symbol, position.avg_price) / final_equity
             contributions.append(
                 SymbolContribution(
                     symbol=symbol,

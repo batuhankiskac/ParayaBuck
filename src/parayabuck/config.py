@@ -291,8 +291,7 @@ class EngineConfig:
             or self.crypto_emergency_exit_bps <= self.crypto_stop_limit_offset_bps
             or self.crypto_stop_cancel_timeout_seconds <= 0
             or self.crypto_stop_cancel_poll_interval_seconds <= 0
-            or self.crypto_stop_cancel_poll_interval_seconds
-            > self.crypto_stop_cancel_timeout_seconds
+            or self.crypto_stop_cancel_poll_interval_seconds > self.crypto_stop_cancel_timeout_seconds
         )
 
 
@@ -404,12 +403,8 @@ class EquityUniverseConfig:
         from parayabuck.markets.symbols import canonical_symbol
 
         references = tuple(canonical_symbol(item, Market.EQUITY) for item in self.reference_symbols)
-        fallback = tuple(
-            canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols
-        )
-        inverse = tuple(
-            canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols
-        )
+        fallback = tuple(canonical_symbol(item, Market.EQUITY) for item in self.fallback_trade_symbols)
+        inverse = tuple(canonical_symbol(item, Market.EQUITY) for item in self.inverse_trade_symbols)
         allowlist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.allowlist_symbols)
         denylist = tuple(canonical_symbol(item, Market.EQUITY) for item in self.denylist_symbols)
         if len(set(references)) != len(references):
@@ -423,9 +418,7 @@ class EquityUniverseConfig:
         if set(allowlist) & set(denylist):
             raise ValueError("Equity allowlist and denylist must not overlap")
         if not set(inverse).issubset(fallback):
-            raise ValueError(
-                "universe.equity.inverse_trade_symbols must be included in fallback_trade_symbols"
-            )
+            raise ValueError("universe.equity.inverse_trade_symbols must be included in fallback_trade_symbols")
         from parayabuck.markets.sectors import is_inverse_equity
 
         if any(not is_inverse_equity(symbol) for symbol in inverse):
@@ -505,11 +498,7 @@ class CryptoScannerConfig:
             raise ValueError("Crypto scanner volatility optimum must be inside the ATR range")
         if self.minimum_median_dollar_volume <= 0 or self.maximum_spread_bps <= 0:
             raise ValueError("Crypto scanner liquidity and spread thresholds must be positive")
-        if (
-            self.maximum_per_category <= 0
-            or self.maximum_meme_symbols < 0
-            or self.maximum_high_beta_symbols < 0
-        ):
+        if self.maximum_per_category <= 0 or self.maximum_meme_symbols < 0 or self.maximum_high_beta_symbols < 0:
             raise ValueError("Crypto scanner category limits are invalid")
         if self.unknown_category_penalty < 0 or self.high_correlation_penalty < 0:
             raise ValueError("Crypto scanner score penalties must not be negative")
@@ -603,19 +592,12 @@ class Config:
         if not self.symbols:
             raise ValueError("At least one enabled market symbol must be configured")
         if self.alpaca.stock_stream_feed == "iex" and (
-            self.universe.equity.maximum_stream_symbols > 30
-            or len(self.universe.equity.configured_stream_symbols) > 30
+            self.universe.equity.maximum_stream_symbols > 30 or len(self.universe.equity.configured_stream_symbols) > 30
         ):
+            raise ValueError("Alpaca Basic IEX equity stream symbols, including references, must not exceed 30")
+        if len(self.universe.equity.configured_stream_symbols) > self.universe.equity.maximum_stream_symbols:
             raise ValueError(
-                "Alpaca Basic IEX equity stream symbols, including references, must not exceed 30"
-            )
-        if (
-            len(self.universe.equity.configured_stream_symbols)
-            > self.universe.equity.maximum_stream_symbols
-        ):
-            raise ValueError(
-                "Configured equity reference and fallback symbols exceed "
-                "universe.equity.maximum_stream_symbols"
+                "Configured equity reference and fallback symbols exceed universe.equity.maximum_stream_symbols"
             )
         if self.strategy.equity.enabled and not self.universe.equity.enabled:
             raise ValueError("Enabled equity strategy requires universe.equity.enabled")
@@ -628,9 +610,7 @@ class Config:
 
     @property
     def symbols(self) -> tuple[str, ...]:
-        equity = (
-            self.universe.equity.configured_stream_symbols if self.universe.equity.enabled else ()
-        )
+        equity = self.universe.equity.configured_stream_symbols if self.universe.equity.enabled else ()
         crypto = self.universe.crypto.trade_symbols if self.universe.crypto.enabled else ()
         return (*equity, *crypto)
 
@@ -661,9 +641,7 @@ def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
 
     return replace(
         strategy,
-        timeframe=portfolio_strategy_from(
-            strategy.name, strategy.parameters, timeframe=strategy.timeframe
-        ).timeframe,
+        timeframe=portfolio_strategy_from(strategy.name, strategy.parameters, timeframe=strategy.timeframe).timeframe,
     )
 
 
@@ -680,8 +658,7 @@ def load_config(config_path: str | None = None) -> Config:
     # existing operator configuration keeps loading, and normalize it.
     if "risk_monitor_timeframe" in runtime_raw:
         warnings.warn(
-            "runtime.risk_monitor_timeframe is deprecated; rename it to "
-            "runtime.market_state_timeframe (same cadence)",
+            "runtime.risk_monitor_timeframe is deprecated; rename it to runtime.market_state_timeframe (same cadence)",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -722,8 +699,7 @@ def load_config(config_path: str | None = None) -> Config:
     } & set(risk_raw)
     if obsolete_risk:
         raise ValueError(
-            "Obsolete risk settings have no portfolio effect and must be removed: "
-            + ", ".join(sorted(obsolete_risk))
+            "Obsolete risk settings have no portfolio effect and must be removed: " + ", ".join(sorted(obsolete_risk))
         )
     risk = RiskLimits(**risk_raw)
     universe_raw = raw.get("universe")

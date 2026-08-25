@@ -27,9 +27,7 @@ class BarMutation(StrEnum):
 class BarStore:
     def __init__(self, capacity: int = 500) -> None:
         self.capacity = capacity
-        self._bars: dict[tuple[str, str], deque[Bar]] = defaultdict(
-            lambda: deque(maxlen=self.capacity)
-        )
+        self._bars: dict[tuple[str, str], deque[Bar]] = defaultdict(lambda: deque(maxlen=self.capacity))
 
     def _normalize(self, bar: Bar, canonical: str) -> Bar:
         """Return ``bar`` with a canonical symbol, preserving validation."""
@@ -66,11 +64,7 @@ class BarStore:
             # timestamp jump alone cannot distinguish normal market silence
             # from a transport gap. Crypto trades continuously and remains
             # suitable for this continuity check.
-            if (
-                delta.total_seconds() > expected_seconds
-                and bar.market != Market.EQUITY
-                and bar.timeframe != "1d"
-            ):
+            if delta.total_seconds() > expected_seconds and bar.market != Market.EQUITY and bar.timeframe != "1d":
                 mutation = BarMutation.GAP_DETECTED
         series.append(normalized)
         return mutation

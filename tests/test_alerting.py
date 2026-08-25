@@ -109,9 +109,7 @@ def test_risk_latch_alerts_on_transition_only() -> None:
         save_safety_incident=lambda *a, **k: None,
         clear_safety_incident=lambda *a, **k: None,
     )
-    runtime.app_config = SimpleNamespace(
-        risk=SimpleNamespace(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05)
-    )
+    runtime.app_config = SimpleNamespace(risk=SimpleNamespace(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05))
     account = SimpleNamespace(equity=100_000.0, daily_pnl=-600.0, drawdown_pct=0.01)
 
     # First breach: alert fires once.
@@ -136,9 +134,7 @@ def test_drawdown_halt_alert_transition() -> None:
         save_safety_incident=lambda *a, **k: None,
         clear_safety_incident=lambda *a, **k: None,
     )
-    runtime.app_config = SimpleNamespace(
-        risk=SimpleNamespace(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05)
-    )
+    runtime.app_config = SimpleNamespace(risk=SimpleNamespace(daily_loss_limit_pct=0.005, max_drawdown_pct=0.05))
     breaching = SimpleNamespace(equity=100_000.0, daily_pnl=0.0, drawdown_pct=0.06)
     runtime._evaluate_entry_risk_latch(breaching)  # type: ignore[arg-type]
     assert _delivered("drawdown_halt") == 1

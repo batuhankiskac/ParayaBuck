@@ -81,9 +81,7 @@ def _spy_bars() -> tuple[Bar, ...]:
     )
 
 
-def _equity_stock(
-    symbol: str, drift: float, jitter: float, spy: tuple[Bar, ...]
-) -> tuple[Bar, ...]:
+def _equity_stock(symbol: str, drift: float, jitter: float, spy: tuple[Bar, ...]) -> tuple[Bar, ...]:
     return tuple(
         _bar(
             symbol,
@@ -99,10 +97,7 @@ def _equity_history() -> dict[str, tuple[Bar, ...]]:
     spy = _spy_bars()
     return {
         "SPY": spy,
-        **{
-            symbol: _equity_stock(symbol, drift, jitter, spy)
-            for symbol, drift, jitter in _EQUITY_SPECS
-        },
+        **{symbol: _equity_stock(symbol, drift, jitter, spy) for symbol, drift, jitter in _EQUITY_SPECS},
     }
 
 
@@ -186,9 +181,7 @@ def test_equity_explanations_cover_selected_holdings_with_required_keys() -> Non
         assert explanation["alpha_rank"] >= 1
         assert explanation["residual_momentum_score"] > 0.0
         assert 0.0 <= explanation["idio_vol_percentile"] <= 1.0
-        assert explanation["target_weight"] == pytest.approx(
-            target.weight_for(symbol, Market.EQUITY)
-        )
+        assert explanation["target_weight"] == pytest.approx(target.weight_for(symbol, Market.EQUITY))
     assert explanations["AAA"]["current_weight"] == 30.0
     assert explanations["BBB"]["current_weight"] == 7.5
     assert explanations["CCC"]["current_weight"] == 0.0
@@ -260,9 +253,7 @@ def test_crypto_explanations_carry_required_keys() -> None:
         }
         assert explanation["alpha_rank"] >= 1
         assert explanation["realized_vol_22d"] >= 0.0
-        assert explanation["target_weight"] == pytest.approx(
-            target.weight_for(symbol, Market.CRYPTO)
-        )
+        assert explanation["target_weight"] == pytest.approx(target.weight_for(symbol, Market.CRYPTO))
     assert explanations["LOVOL/USD"]["realized_vol_22d"] == 0.0  # flat series
     assert explanations["LOVOL/USD"]["current_weight"] == 1.5
     assert explanations["MIDVOL/USD"]["current_weight"] == 0.0
@@ -486,9 +477,7 @@ def test_alerts_webhook_event_filtering_and_disable() -> None:
         _await_hits(1)
         assert hits == ["runtime_started"]
         # Restrict the webhook event set; console/log sink still receives all.
-        alerts.configure_alerting(
-            webhook_url=url, throttle_seconds=0.0, events=("runtime_started",)
-        )
+        alerts.configure_alerting(webhook_url=url, throttle_seconds=0.0, events=("runtime_started",))
         alerts.emit("scanner_refresh_failure", message="not delivered to webhook")
         assert hits == ["runtime_started"]
         # Disable the webhook entirely.
@@ -563,9 +552,7 @@ def test_runtime_metrics_reads_persisted_state(tmp_path) -> None:
         # account_id narrows the persisted queries.
         scoped = metrics.runtime_metrics(ledger_path, account_id="account-1")
         assert scoped["incidents"]["count"] == 1
-        assert [item["reason"] for item in scoped["incidents"]["active"]] == [
-            "portfolio_drawdown_halt"
-        ]
+        assert [item["reason"] for item in scoped["incidents"]["active"]] == ["portfolio_drawdown_halt"]
         assert session_b  # keep the second session id referenced
     finally:
         ledger.close()

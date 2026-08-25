@@ -146,9 +146,7 @@ def main() -> int:
             row.append(len(top & follow) / TOP_N)
         persistence.append(row)
     mean_persistence = (
-        [statistics.fmean([row[w] for row in persistence]) for w in range(WINDOW_WEEKS)]
-        if persistence
-        else []
+        [statistics.fmean([row[w] for row in persistence]) for w in range(WINDOW_WEEKS)] if persistence else []
     )
     # average time a symbol stays in top-8 (mean consecutive weeks in top-8)
     in_top8: dict[str, int] = {}

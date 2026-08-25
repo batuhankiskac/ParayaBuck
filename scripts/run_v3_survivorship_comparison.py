@@ -84,11 +84,7 @@ def run_for_dataset(csv_path: Path, label: str):
     filtered = [b for b in bars if EVAL_START <= b.timestamp <= EVAL_END]
     from datetime import timedelta
 
-    warmup = [
-        b
-        for b in bars
-        if b.timestamp < EVAL_START and b.timestamp >= EVAL_START - timedelta(days=800)
-    ]
+    warmup = [b for b in bars if b.timestamp < EVAL_START and b.timestamp >= EVAL_START - timedelta(days=800)]
     result = engine.run(filtered, warmup=warmup, liquidate_at_end=True, corporate_actions=actions)
     return result, bars, universe
 
@@ -116,16 +112,12 @@ def main():
     print("Running OLD dataset...")
     old_result, old_bars, old_universe = run_for_dataset(OLD_CSV, "old")
     old_stats = stats_for_result(old_result)
-    print(
-        f"OLD: return {old_stats['return']} sharpe {old_stats['sharpe']} maxDD {old_stats['max_drawdown']}"
-    )
+    print(f"OLD: return {old_stats['return']} sharpe {old_stats['sharpe']} maxDD {old_stats['max_drawdown']}")
 
     print("Running NEW dataset...")
     new_result, new_bars, new_universe = run_for_dataset(NEW_CSV, "new")
     new_stats = stats_for_result(new_result)
-    print(
-        f"NEW: return {new_stats['return']} sharpe {new_stats['sharpe']} maxDD {new_stats['max_drawdown']}"
-    )
+    print(f"NEW: return {new_stats['return']} sharpe {new_stats['sharpe']} maxDD {new_stats['max_drawdown']}")
 
     # Walk-forward 20 folds for both
     folds = calendar_fold_windows(EVAL_START, EVAL_END, step_months=6)
@@ -142,12 +134,8 @@ def main():
         filt_old = [b for b in bars_old if s <= b.timestamp <= e]
         from datetime import timedelta
 
-        warm_old = [
-            b for b in bars_old if b.timestamp < s and b.timestamp >= s - timedelta(days=800)
-        ]
-        res_old = eng_old.run(
-            filt_old, warmup=warm_old, liquidate_at_end=True, corporate_actions=actions
-        )
+        warm_old = [b for b in bars_old if b.timestamp < s and b.timestamp >= s - timedelta(days=800)]
+        res_old = eng_old.run(filt_old, warmup=warm_old, liquidate_at_end=True, corporate_actions=actions)
         old_folds.append(
             {
                 "start": s.isoformat(),
@@ -164,12 +152,8 @@ def main():
         strat_new = EquityResidualMomentum1dV3(dict(FROZEN_PARAMS))
         eng_new = make_engine(config, strat_new, uni_new)
         filt_new = [b for b in bars_new if s <= b.timestamp <= e]
-        warm_new = [
-            b for b in bars_new if b.timestamp < s and b.timestamp >= s - timedelta(days=800)
-        ]
-        res_new = eng_new.run(
-            filt_new, warmup=warm_new, liquidate_at_end=True, corporate_actions=actions
-        )
+        warm_new = [b for b in bars_new if b.timestamp < s and b.timestamp >= s - timedelta(days=800)]
+        res_new = eng_new.run(filt_new, warmup=warm_new, liquidate_at_end=True, corporate_actions=actions)
         new_folds.append(
             {
                 "start": s.isoformat(),
@@ -216,12 +200,8 @@ def main():
         "note": "Frozen V3 CONTROL, same economics, different datasets. Survivorship-aware dataset includes 224 recovered inactive histories (demo sample).",
     }
     (OUT_DIR / "old_vs_new_control.json").write_text(json.dumps(old_vs_new, indent=2))
-    (OUT_DIR / "old_vs_new_walk_forward.json").write_text(
-        json.dumps({"old": old_folds, "new": new_folds}, indent=2)
-    )
-    print(
-        f"Done. Old vs new written. Delta return {old_vs_new['delta_return']} sharpe {old_vs_new['delta_sharpe']}"
-    )
+    (OUT_DIR / "old_vs_new_walk_forward.json").write_text(json.dumps({"old": old_folds, "new": new_folds}, indent=2))
+    print(f"Done. Old vs new written. Delta return {old_vs_new['delta_return']} sharpe {old_vs_new['delta_sharpe']}")
 
 
 if __name__ == "__main__":

@@ -81,9 +81,7 @@ def weekday_count(start: datetime, end: datetime) -> int:
     return total_days - weekend_days
 
 
-def bars_to_calendar_days(
-    symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None
-) -> int:
+def bars_to_calendar_days(symbol: str, timeframe: str, bars: int, end_date: datetime | date | None = None) -> int:
     """Calendar span needed to collect ``bars`` of ``timeframe`` history.
 
     Equity bars only exist on regular trading sessions: 61 daily bars do not
@@ -129,9 +127,7 @@ def bars_to_calendar_days(
                 low, high = 2, days
                 while low < high:
                     mid = (low + high) // 2
-                    probe = calendar.schedule(
-                        start_date=today - timedelta(days=mid), end_date=today
-                    )
+                    probe = calendar.schedule(start_date=today - timedelta(days=mid), end_date=today)
                     if len(probe) >= needed_sessions:
                         high = mid
                     else:

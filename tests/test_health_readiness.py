@@ -86,9 +86,7 @@ def test_healthz_is_unconditional_process_liveness(monkeypatch: Any) -> None:
     """/healthz returns ok even with a broken config and a dead engine: the
     probe answers 'is the process up', not 'is it ready to trade'."""
     monkeypatch.setattr(server, "manager", _dead_engine_manager("error"))
-    monkeypatch.setattr(
-        server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml"))
-    )
+    monkeypatch.setattr(server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml")))
 
     result = asyncio.run(server.healthz())
 
@@ -121,9 +119,7 @@ def test_readyz_invalid_config_never_ready_even_when_engine_healthy(
     """Config validity is the first readiness layer: a healthy engine cannot
     compensate for a configuration that fails to load."""
     monkeypatch.setattr(server, "manager", _healthy_runtime_manager())
-    monkeypatch.setattr(
-        server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml"))
-    )
+    monkeypatch.setattr(server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml")))
 
     health = asyncio.run(server.healthz())
     assert health == {"status": "ok"}
@@ -155,9 +151,7 @@ def test_readyz_control_plane_ready_when_trading_not_expected(monkeypatch: Any) 
     is not expected, so the control plane is ready even though no engine is
     running. The container health probe (/healthz) stays the liveness gate."""
     monkeypatch.setattr(server, "manager", _stopped_manager())
-    monkeypatch.setattr(
-        server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False))
-    )
+    monkeypatch.setattr(server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False)))
 
     ready = asyncio.run(server.readyz())
     payload = json.loads(ready.body)

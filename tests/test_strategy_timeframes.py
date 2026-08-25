@@ -174,9 +174,7 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
         {"top_n": 2, "exclude_symbols": ["SPY"]},
         timeframe="1d",
     )
-    crypto = portfolio_strategy_from(
-        "crypto_low_variance_v1", {"top_n": 2, "rebalance_hours": 168}, timeframe="1d"
-    )
+    crypto = portfolio_strategy_from("crypto_low_variance_v1", {"top_n": 2, "rebalance_hours": 168}, timeframe="1d")
     risk = PortfolioRiskLimits(
         daily_loss_limit=0.05,
         drawdown_halt=0.20,
@@ -216,18 +214,13 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
     # Both markets decide on their own closed-bar batches.
     equity_result = equity_runtime.process_closed_bars(_daily_series(EQUITY_SYMBOLS))
     assert equity_result.status == "submitted"
-    crypto_result = crypto_runtime.process_closed_bars(
-        _daily_series(CRYPTO_SYMBOLS, market=Market.CRYPTO)
-    )
+    crypto_result = crypto_runtime.process_closed_bars(_daily_series(CRYPTO_SYMBOLS, market=Market.CRYPTO))
     assert crypto_result.status == "submitted"
     submitted_symbols = {order.symbol for order in broker.submitted}
     assert any("/" in symbol for symbol in submitted_symbols)
     assert any("/" not in symbol for symbol in submitted_symbols)
     with sqlite3.connect(tmp_path / "shared.sqlite3") as connection:
-        markets = {
-            str(row[0])
-            for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")
-        }
+        markets = {str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")}
     assert markets == {"equity", "crypto"}
     equity_runtime.close()
     crypto_runtime.close()
@@ -274,9 +267,7 @@ def test_backtest_uses_same_strategy_timeframe() -> None:
 
 def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
     broker = _Broker()
-    strategy = portfolio_strategy_from(
-        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
-    )
+    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
     runtime = PortfolioRuntime(
         strategy,
         EQUITY_SYMBOLS,
@@ -302,9 +293,7 @@ def test_strategy_warmup_uses_required_history() -> None:
         decision_timestamp=start + timedelta(days=100),
         market=Market.EQUITY,
         timeframe="1d",
-        history={
-            symbol: tuple(bar for bar in short if bar.symbol == symbol) for symbol in EQUITY_SYMBOLS
-        },
+        history={symbol: tuple(bar for bar in short if bar.symbol == symbol) for symbol in EQUITY_SYMBOLS},
         universe=None,
         universe_version="test",
         equity=100_000.0,
@@ -318,9 +307,7 @@ def test_strategy_warmup_uses_required_history() -> None:
         decision_timestamp=start + timedelta(days=300),
         market=Market.EQUITY,
         timeframe="1d",
-        history={
-            symbol: tuple(bar for bar in long if bar.symbol == symbol) for symbol in EQUITY_SYMBOLS
-        },
+        history={symbol: tuple(bar for bar in long if bar.symbol == symbol) for symbol in EQUITY_SYMBOLS},
         universe=None,
         universe_version="test",
         equity=100_000.0,
@@ -338,9 +325,7 @@ def test_decision_fires_only_on_finalized_bars() -> None:
     decision_timestamp = bars[-1].timestamp
     # One symbol's series ends before the decision timestamp: the batch is
     # not a complete closed-bar batch and MUST be rejected.
-    incomplete = {
-        symbol: [bar for bar in bars if bar.symbol == symbol] for symbol in EQUITY_SYMBOLS
-    }
+    incomplete = {symbol: [bar for bar in bars if bar.symbol == symbol] for symbol in EQUITY_SYMBOLS}
     incomplete["AAPL"] = incomplete["AAPL"][:-1]
     with pytest.raises(ValueError, match="complete closed-bar batch"):
         service.build_context(
@@ -368,9 +353,7 @@ def test_no_same_bar_execution_lookahead() -> None:
     """A decision on completed bar t may only fill on the NEXT tradable bar."""
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 
-    strategy = portfolio_strategy_from(
-        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
-    )
+    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
     engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
     bars = _daily_series(EQUITY_SYMBOLS, days=320)
     result = engine.run(bars, liquidate_at_end=False)
@@ -380,7 +363,6 @@ def test_no_same_bar_execution_lookahead() -> None:
         # the fill timestamp must be strictly AFTER the decision timestamp.
         assert fill.timestamp > fill.decision_timestamp
     assert all(
-        fill.timestamp == max(bar.timestamp for bar in bars)
-        or fill.timestamp in {bar.timestamp for bar in bars}
+        fill.timestamp == max(bar.timestamp for bar in bars) or fill.timestamp in {bar.timestamp for bar in bars}
         for fill in result.fills
     )

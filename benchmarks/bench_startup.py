@@ -85,9 +85,7 @@ def run(report: Report) -> None:
         label="SQLiteStore open (tmp db)",
         warmup=3,
         runs=10,
-        before_each=lambda: Path(ROOT / "data" / "smoke" / "bench_open.sqlite3").unlink(
-            missing_ok=True
-        ),
+        before_each=lambda: Path(ROOT / "data" / "smoke" / "bench_open.sqlite3").unlink(missing_ok=True),
     )
     report.add(timing)
 

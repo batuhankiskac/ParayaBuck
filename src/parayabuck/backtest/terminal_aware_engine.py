@@ -13,23 +13,29 @@ Policies:
   T2 — 50% recovery plus costs
   T3 — zero recovery
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from parayabuck.backtest.portfolio_engine import (
     OrderSide,
     PortfolioBacktestEngine,
+    PortfolioBacktestResult,
     PortfolioFill,
     _Position,
     equity_regulatory_fee,
 )
 from parayabuck.backtest.terminal_policy import TerminalClassification, should_apply_haircut
+from parayabuck.core.models import Bar
+from parayabuck.data.market_dataset import CashRateObservation, CorporateAction
+from parayabuck.markets.symbols import canonical_symbol
 
 TerminalPolicy = Literal["T0", "T1", "T2", "T3"]
+
 
 @dataclass(frozen=True)
 class TerminalInfo:
@@ -40,6 +46,7 @@ class TerminalInfo:
     terminal_event_class: str
     evidence_class: str
     should_haircut: bool
+
 
 def build_terminal_map(
     classifications: dict[str, TerminalClassification],
@@ -84,6 +91,7 @@ def _terminal_proceeds(
     factor = 0.5 if policy == "T2" else 1.0
     base_price = last_close * factor
     from parayabuck.backtest.portfolio_engine import _adverse_bps
+
     adverse = _adverse_bps(slippage_bps, spread_bps)
     fill_price = base_price * (1 - adverse / 10_000.0)
     # Use engine's fee model (effective-dated if enabled)
@@ -91,7 +99,7 @@ def _terminal_proceeds(
     # Approximate market as EQUITY for fee (crypto not in survivorship)
     # Use engine's _equity_fee helper via internal call pattern
     try:
-        fee = engine._equity_fee(OrderSide.SELL, qty, fill_price, trade_date)  # type: ignore[attr-defined]
+        fee = engine._equity_fee(OrderSide.SELL, qty, fill_price, trade_date)
     except Exception:
         fee = qty * 0.000195 + qty * 0.000003 + qty * fill_price * 0.0000206
     notional = qty * fill_price
@@ -113,15 +121,15 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         terminal_map: dict[str, TerminalInfo] | None = None,
         policy: TerminalPolicy = "T0",
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.terminal_map: dict[str, TerminalInfo] = dict(terminal_map or {})
         self.policy: TerminalPolicy = policy
-        self.terminal_events_fired: list[dict] = []
+        self.terminal_events_fired: list[dict[str, Any]] = []
         self._fired_entities: set[str] = set()
         # For geometry invariant audit
         self._actual_exposure_history: list[float] = []
@@ -145,7 +153,9 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         effective_policy: TerminalPolicy = self.policy if should else "T1"
         if not should and self.policy in ("T2", "T3"):
             effective_policy = "T1"
-        proceeds = _terminal_proceeds(qty, last_close, terminal_date.date(), effective_policy, self.slippage_bps, self.spread_bps, self)
+        proceeds = _terminal_proceeds(
+            qty, last_close, terminal_date.date(), effective_policy, self.slippage_bps, self.spread_bps, self
+        )
         # Realized delta vs cost basis
         # Match _close_position formula: (exit_price - avg)*qty - entry_fee - fee
         # Here proceeds already is qty*fill_price - fee, so realized = proceeds - qty*avg - entry_fee
@@ -153,6 +163,7 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         # Compute exit_price and fee separately for accurate realized
         # Recompute exit_price for realized
         from parayabuck.backtest.portfolio_engine import _adverse_bps
+
         factor = 0.5 if effective_policy == "T2" else (0.0 if effective_policy == "T3" else 1.0)
         if effective_policy == "T3":
             exit_price = 0.0
@@ -163,13 +174,17 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
             adverse = _adverse_bps(self.slippage_bps, self.spread_bps)
             exit_price = base_price * (1 - adverse / 10_000.0)
             try:
-                fee = self._equity_fee(OrderSide.SELL, qty, exit_price, terminal_date.date())  # type: ignore
+                fee = self._equity_fee(OrderSide.SELL, qty, exit_price, terminal_date.date())
             except Exception:
                 fee = qty * 0.000195 + qty * 0.000003 + qty * exit_price * 0.0000206
             proceeds = max(0.0, qty * exit_price - fee)
-        realized_delta = (exit_price - avg_price) * qty - entry_fee - fee if effective_policy != "T3" else (- avg_price * qty - entry_fee)
+        realized_delta = (
+            (exit_price - avg_price) * qty - entry_fee - fee
+            if effective_policy != "T3"
+            else (-avg_price * qty - entry_fee)
+        )
         if effective_policy == "T3":
-            realized_delta = - avg_price * qty - entry_fee
+            realized_delta = -avg_price * qty - entry_fee
             # No proceeds, but fee already 0
         lifetime = position.realized_pnl_accumulator + realized_delta
         # Mutate state path-dependently
@@ -206,23 +221,33 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         self._peak_equity = max(self._peak_equity, self._last_observed_equity)
 
     # Override run to inject terminal lifecycle after each bar cycle
-    def run(  # type: ignore[override]
+    def run(
         self,
-        bars,
-        warmup=None,
+        bars: list[Bar],
+        warmup: list[Bar] | None = None,
         *,
-        liquidate_at_end=True,
-        cash_rate_annualized=None,
-        signal_bars=None,
-        corporate_actions=None,
-        cash_rates=None,
-        prepared_inputs=None,
-    ):
+        liquidate_at_end: bool = True,
+        cash_rate_annualized: float | None = None,
+        signal_bars: list[Bar] | None = None,
+        corporate_actions: list[CorporateAction] | None = None,
+        cash_rates: list[CashRateObservation] | None = None,
+        prepared_inputs: tuple[list[Bar], list[Bar]] | None = None,
+    ) -> PortfolioBacktestResult:
         # Policy T0: delegate to parent with no lifecycle (stale)
         if self.policy == "T0":
-            return super().run(bars, warmup=warmup, liquidate_at_end=liquidate_at_end, cash_rate_annualized=cash_rate_annualized, signal_bars=signal_bars, corporate_actions=corporate_actions, cash_rates=cash_rates, prepared_inputs=prepared_inputs)
+            return super().run(
+                bars,
+                warmup=warmup,
+                liquidate_at_end=liquidate_at_end,
+                cash_rate_annualized=cash_rate_annualized,
+                signal_bars=signal_bars,
+                corporate_actions=corporate_actions,
+                cash_rates=cash_rates,
+                prepared_inputs=prepared_inputs,
+            )
         # Path-dependent run
         from itertools import groupby
+
         restored_pending = list(self._pending)
         self._pending = []
         self._fills = []
@@ -247,7 +272,10 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
             ordered, decision_bars = prepared_inputs
         else:
             ordered = sorted(self._deduplicate(bars), key=lambda b: (b.timestamp, b.symbol))
-            decision_bars = sorted(self._deduplicate(signal_bars if signal_bars is not None else bars), key=lambda b: (b.timestamp, b.symbol))
+            decision_bars = sorted(
+                self._deduplicate(signal_bars if signal_bars is not None else bars),
+                key=lambda b: (b.timestamp, b.symbol),
+            )
         watermark = self.state.last_processed_bar
         if watermark:
             cutoff = datetime.fromisoformat(watermark)
@@ -279,13 +307,11 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
             self._fill_cycle(cycle)
             for bar in cycle:
                 # Canonicalize symbol for last_price
-                from parayabuck.backtest.portfolio_engine import canonical_symbol
                 self._last_price[canonical_symbol(bar.symbol, bar.market)] = bar.close
             self._update_risk_state(cycle[0].timestamp)
             self._decide(cycle[0].timestamp)
             # --- geometry invariant audit before terminal ---
             # Actual holdings count and exposure
-            actual_count = len([p for p in self._positions.values() if p.qty > 0])
             pos_val = sum(p.qty * self._last_price.get(p.symbol, p.avg_price) for p in self._positions.values())
             equity_now = self._equity()
             actual_exposure = pos_val / equity_now if equity_now > 0 else 0.0
@@ -300,7 +326,6 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
                     # Use bar close from cycle if present else last_price
                     close_px = None
                     for b in cycle:
-                        from parayabuck.backtest.portfolio_engine import canonical_symbol
                         if canonical_symbol(b.symbol, b.market) == sym:
                             close_px = b.close
                             break
@@ -330,7 +355,10 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
                 if self.state_path is not None:
                     self.save_state()
         benchmark = [b for b in decision_bars if b.symbol == self.benchmark_symbol]
-        benchmark_return = benchmark[-1].close / benchmark[0].close - 1 if len(benchmark) > 1 and benchmark[0].close > 0 else 0.0
+        benchmark_return = (
+            benchmark[-1].close / benchmark[0].close - 1 if len(benchmark) > 1 and benchmark[0].close > 0 else 0.0
+        )
         return self._result(curve, curve_timestamps, benchmark_return, tuple(benchmark))
+
 
 __all__ = ["TerminalAwareResearchEngine", "TerminalInfo", "build_terminal_map"]

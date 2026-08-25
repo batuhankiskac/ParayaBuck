@@ -124,19 +124,12 @@ def load_and_validate_manifest() -> dict:
     declared_folds = manifest.get("walk_forward", {}).get("folds_exact")
     computed = calendar_fold_windows(EVAL_START, EVAL_END, step_months=6)
     if len(computed) != FOLD_COUNT_DECLARED:
-        raise SystemExit(
-            f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}"
-        )
-    declared_parsed = [
-        (datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds
-    ]
+        raise SystemExit(f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}")
+    declared_parsed = [(datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds]
     assert_fold_contract(declared_parsed, computed)
     identity = dataset_identity()
     ds = manifest.get("dataset", {})
-    if (
-        ds.get("bars_sha256") != identity["bars_sha256"]
-        or ds.get("dividends_sha256") != identity["dividends_sha256"]
-    ):
+    if ds.get("bars_sha256") != identity["bars_sha256"] or ds.get("dividends_sha256") != identity["dividends_sha256"]:
         raise SystemExit("dataset hash drift from manifest")
     # Validate config digest matches frozen baseline
     cfg = load_config(str(REPO / "config/settings.yaml"))
@@ -415,9 +408,7 @@ def make_engine(
         starting_equity=starting_equity or config.backtest.initial_cash,
         slippage_bps=config.backtest.slippage_bps * cost_multiplier,
         spread_bps=config.backtest.spread_bps * cost_multiplier,
-        commission=config.backtest.commission * cost_multiplier
-        if config.backtest.commission
-        else 0,
+        commission=config.backtest.commission * cost_multiplier if config.backtest.commission else 0,
         crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps * cost_multiplier,
         equity_taf_per_share=config.backtest.equity_taf_per_share * cost_multiplier
         if cost_multiplier != 1
@@ -475,9 +466,7 @@ def run_window(
             corp = [a for a in actions if start <= a.timestamp <= end]
         else:
             corp = [a for a in actions if a.timestamp >= start]
-    engine = make_engine(
-        config, strategy, universe, cost_multiplier=cost_multiplier, starting_equity=starting_equity
-    )
+    engine = make_engine(config, strategy, universe, cost_multiplier=cost_multiplier, starting_equity=starting_equity)
     result = engine.run(filtered, warmup=warmup, corporate_actions=corp)
     return result
 
@@ -577,9 +566,7 @@ def run_chained_window(
         # keep other fields from r2 (fills etc.) concatenated? For diagnostics we keep concatenation of fills
         fills=tuple(list(r1.fills) + list(r2.fills)),
         realized_pnl_events=tuple(list(r1.realized_pnl_events) + list(r2.realized_pnl_events)),
-        closed_position_events=tuple(
-            list(r1.closed_position_events) + list(r2.closed_position_events)
-        ),
+        closed_position_events=tuple(list(r1.closed_position_events) + list(r2.closed_position_events)),
     )
     return synthetic
 
@@ -657,9 +644,7 @@ def diagnostics_for_result(
     # Use fills sorted by timestamp
     fills = sorted(result.fills, key=lambda f: f.timestamp)
     # Need equity curve per timestamp for account equity at entry
-    equity_by_time = {
-        ts: eq for ts, eq in zip(result.curve_timestamps, result.equity_curve, strict=False)
-    }
+    equity_by_time = {ts: eq for ts, eq in zip(result.curve_timestamps, result.equity_curve, strict=False)}
     # Also need bars for MAE and crossing
     # Build per-symbol episode list
     # Track open position state derived from fills (not engine's internal _positions which may have used different entry averaging)
@@ -767,9 +752,7 @@ def diagnostics_for_result(
                     entry_price = st["avg_price"]
                     worst_low = min(b.low for b in bars_list[entry_idx : exit_idx + 1] if b.low > 0)
                     mae_price = entry_price - worst_low  # per share adverse
-                    mae = mae_price * sum(
-                        f.qty for f in st["fills"]
-                    )  # approx notional adverse at worst
+                    mae = mae_price * sum(f.qty for f in st["fills"])  # approx notional adverse at worst
                     mae_acct = mae / entry_eq if entry_eq else 0
                     mae_pct = (worst_low / entry_price - 1) if entry_price else 0
                     # first crossings
@@ -813,12 +796,8 @@ def diagnostics_for_result(
                         "realized_pnl": round(float(pnl or 0), 2),
                         "realized_pnl_over_equity_at_entry": round(float(acct_impact or 0), 6),
                         "mae_notional": round(float(mae or 0), 2) if mae is not None else None,
-                        "mae_over_equity_at_entry": round(float(mae_acct or 0), 6)
-                        if mae_acct is not None
-                        else None,
-                        "mae_return_pct": round(float(mae_pct or 0), 6)
-                        if mae_pct is not None
-                        else None,
+                        "mae_over_equity_at_entry": round(float(mae_acct or 0), 6) if mae_acct is not None else None,
+                        "mae_return_pct": round(float(mae_pct or 0), 6) if mae_pct is not None else None,
                         "worst_low": round(float(worst_low), 4) if worst_low is not None else None,
                         "first_crossing": crossing,
                         "days_held": (fill.timestamp - st["entry_time"]).days,
@@ -841,9 +820,7 @@ def diagnostics_for_result(
     top3 = sum(abs(e["realized_pnl"]) for e in worst_10[:3]) / total_loss if losses else 0
     top5 = sum(abs(e["realized_pnl"]) for e in worst_10[:5]) / total_loss if losses else 0
     top10 = sum(abs(e["realized_pnl"]) for e in worst_10[:10]) / total_loss if losses else 0
-    mae_vals = [
-        e["mae_over_equity_at_entry"] for e in episodes if e["mae_over_equity_at_entry"] is not None
-    ]
+    mae_vals = [e["mae_over_equity_at_entry"] for e in episodes if e["mae_over_equity_at_entry"] is not None]
     mae_vals_sorted = sorted(mae_vals)
 
     def pct(q):
@@ -864,9 +841,7 @@ def diagnostics_for_result(
         "mae_p95": round(pct(0.95), 6),
         "mae_p99": round(pct(0.99), 6),
         "worst_single_loss_pnl": round(worst_10[0]["realized_pnl"], 2) if worst_10 else 0,
-        "worst_single_loss_acct_impact": round(worst_10[0]["realized_pnl_over_equity_at_entry"], 6)
-        if worst_10
-        else 0,
+        "worst_single_loss_acct_impact": round(worst_10[0]["realized_pnl_over_equity_at_entry"], 6) if worst_10 else 0,
     }
     return diagnostics, episodes
 
@@ -883,9 +858,7 @@ def worst_positions_report(diagnostics, label: str = "") -> dict:
 # --------------------------------------------------------------------------- #
 
 
-def compare_episodes(
-    control_episodes: list[dict], candidate_episodes: list[dict], bars_by_symbol, bar_index
-) -> dict:
+def compare_episodes(control_episodes: list[dict], candidate_episodes: list[dict], bars_by_symbol, bar_index) -> dict:
     """For previous worst 10 control positions, answer did E1/E2/E3 exit earlier, days saved, PnL saved, recovery, reentry."""
     # Index candidate episodes by (symbol, entry_time) approximated via symbol and entry_time truncated to date
     # Build map symbol->list episodes sorted by entry_time
@@ -965,11 +938,7 @@ def compare_episodes(
         reentry = None
         reentry_pnl = None
         # look for next episode for same symbol after cand_exit
-        next_eps = [
-            ep
-            for ep in cand_by_symbol.get(sym, [])
-            if datetime.fromisoformat(ep["entry_time"]) > cand_exit
-        ]
+        next_eps = [ep for ep in cand_by_symbol.get(sym, []) if datetime.fromisoformat(ep["entry_time"]) > cand_exit]
         if next_eps:
             nxt = min(next_eps, key=lambda x: datetime.fromisoformat(x["entry_time"]))
             nxt_entry = datetime.fromisoformat(nxt["entry_time"])
@@ -995,12 +964,8 @@ def compare_episodes(
                 "exited_earlier": days_saved > 0,
                 "days_saved": int(days_saved),
                 "pnl_saved": round(float(pnl_diff), 2),
-                "recovery_after_candidate_exit": round(float(recovery), 6)
-                if recovery is not None
-                else None,
-                "max_price_after_candidate_exit": round(float(max_after), 4)
-                if max_after is not None
-                else None,
+                "recovery_after_candidate_exit": round(float(recovery), 6) if recovery is not None else None,
+                "max_price_after_candidate_exit": round(float(max_after), 4) if max_after is not None else None,
                 "reentered": reentry,
                 "reentry_pnl": reentry_pnl,
             }
@@ -1075,12 +1040,8 @@ def compute_exit_metrics(
             cand_exit = datetime.fromisoformat(best["exit_time"])
             # find indices
             try:
-                cand_idx = next(
-                    i for i, b in enumerate(bars_list) if b.timestamp.date() == cand_exit.date()
-                )
-                ctrl_idx = next(
-                    i for i, b in enumerate(bars_list) if b.timestamp.date() == ce_exit.date()
-                )
+                cand_idx = next(i for i, b in enumerate(bars_list) if b.timestamp.date() == cand_exit.date())
+                ctrl_idx = next(i for i, b in enumerate(bars_list) if b.timestamp.date() == ce_exit.date())
                 if cand_idx < ctrl_idx:
                     segment = bars_list[cand_idx + 1 : ctrl_idx + 1]
                     if segment:
@@ -1106,16 +1067,8 @@ def compute_exit_metrics(
                 # check if previous was early exit vs control
                 reentries += 1
     # additional fees
-    control_cost = (
-        control_result.slippage_cost_total
-        + control_result.spread_cost_total
-        + control_result.fee_total
-    )
-    cand_cost = (
-        candidate_result.slippage_cost_total
-        + candidate_result.spread_cost_total
-        + candidate_result.fee_total
-    )
+    control_cost = control_result.slippage_cost_total + control_result.spread_cost_total + control_result.fee_total
+    cand_cost = candidate_result.slippage_cost_total + candidate_result.spread_cost_total + candidate_result.fee_total
     add_fees = cand_cost - control_cost
 
     return {
@@ -1173,12 +1126,8 @@ def compute_avoided_metrics(
             continue
         # find indices
         try:
-            cand_idx = next(
-                i for i, b in enumerate(bars_list) if b.timestamp.date() == cand_exit.date()
-            )
-            ctrl_idx = next(
-                i for i, b in enumerate(bars_list) if b.timestamp.date() == ce_exit.date()
-            )
+            cand_idx = next(i for i, b in enumerate(bars_list) if b.timestamp.date() == cand_exit.date())
+            ctrl_idx = next(i for i, b in enumerate(bars_list) if b.timestamp.date() == ce_exit.date())
         except StopIteration:
             continue
         if cand_idx >= ctrl_idx:
@@ -1213,21 +1162,11 @@ def compute_avoided_metrics(
                 premature += opp * 0.5  # dampen
         # Also handle case where candidate exit was at loss and control later recovered to profit: that's premature
     # incremental transaction costs
-    control_cost = (
-        control_result.slippage_cost_total
-        + control_result.spread_cost_total
-        + control_result.fee_total
-    )
-    cand_cost = (
-        candidate_result.slippage_cost_total
-        + candidate_result.spread_cost_total
-        + candidate_result.fee_total
-    )
+    control_cost = control_result.slippage_cost_total + control_result.spread_cost_total + control_result.fee_total
+    cand_cost = candidate_result.slippage_cost_total + candidate_result.spread_cost_total + candidate_result.fee_total
     add_fees = cand_cost - control_cost
     # Normalize add_fees to equity terms: divide by starting equity
-    add_fees_norm = (
-        add_fees / control_result.starting_equity if control_result.starting_equity else 0
-    )
+    add_fees_norm = add_fees / control_result.starting_equity if control_result.starting_equity else 0
     # Convert avoided/premature which are already in account-equity units (sum of per-episode /eq_at_entry) to comparable? Keep as raw account-impact sum.
     # For net we need comparable units: avoided and premature are sum of account-impact fractions (e.g., 0.02 = 2% of equity). add_fees_norm is also fraction of starting equity.
     net = avoided - premature - add_fees_norm
@@ -1269,9 +1208,7 @@ def annual_results_for_candidate(config, candidate_id, universe, bars, actions) 
     return out
 
 
-def jackknife_for_candidate(
-    config, candidate_id, universe, bars, actions, control_top_symbols=None
-) -> dict:
+def jackknife_for_candidate(config, candidate_id, universe, bars, actions, control_top_symbols=None) -> dict:
     """Candidate-specific jackknife: drop own top-3 combined contributors."""
     # First get candidate full period result to find own top contributors
     full = run_window(config, candidate_id, universe, bars, actions, start=EVAL_START, end=EVAL_END)
@@ -1356,12 +1293,8 @@ def block_bootstrap_for_candidate(result: PortfolioBacktestResult) -> dict:
     resamples_sorted = sorted(resamples)
     return {
         "mean": round(statistics.fmean(resamples), 6) if resamples else 0,
-        "p5": round(resamples_sorted[int(0.05 * len(resamples_sorted))], 6)
-        if resamples_sorted
-        else 0,
-        "p95": round(resamples_sorted[int(0.95 * len(resamples_sorted))], 6)
-        if resamples_sorted
-        else 0,
+        "p5": round(resamples_sorted[int(0.05 * len(resamples_sorted))], 6) if resamples_sorted else 0,
+        "p95": round(resamples_sorted[int(0.95 * len(resamples_sorted))], 6) if resamples_sorted else 0,
         "count": len(resamples),
     }
 
@@ -1476,11 +1409,7 @@ def main() -> int:
     parser.parse_args()
     manifest = load_and_validate_manifest()
     config = load_config(str(REPO / "config/settings.yaml"))
-    head = (
-        _sha256_file(REPO / ".git/refs/heads/master")
-        if (REPO / ".git/refs/heads/master").exists()
-        else "unknown"
-    )
+    head = _sha256_file(REPO / ".git/refs/heads/master") if (REPO / ".git/refs/heads/master").exists() else "unknown"
     # Use git_head helper if available
     try:
         from scripts.research_helpers import git_head as _gh
@@ -1490,9 +1419,7 @@ def main() -> int:
         import subprocess
 
         try:
-            head = subprocess.run(
-                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO
-            ).stdout.strip()
+            head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO).stdout.strip()
         except Exception:
             head = "unknown"
     cfg_digest = config_digest(config)
@@ -1553,9 +1480,7 @@ def main() -> int:
     for cid in ["E0", "E1", "E2", "E3"]:
         rows = []
         for s, e in folds:
-            res = run_window(
-                config, cid, universe, bars, actions, start=s, end=e, cost_multiplier=1.0
-            )
+            res = run_window(config, cid, universe, bars, actions, start=s, end=e, cost_multiplier=1.0)
             st = stats_for_result(res)
             rows.append(
                 {
@@ -1719,9 +1644,7 @@ def main() -> int:
         _, cand_eps = full_diagnostics[cid]
         comparisons[cid] = compare_episodes(control_eps, cand_eps, bars_by_symbol, bar_index)
         # also compute exit metrics and avoided
-        exit_met = compute_exit_metrics(
-            full_results["E0"], full_results[cid], control_eps, cand_eps, bars_by_symbol
-        )
+        exit_met = compute_exit_metrics(full_results["E0"], full_results[cid], control_eps, cand_eps, bars_by_symbol)
         avoided_met = compute_avoided_metrics(
             control_eps, cand_eps, bars_by_symbol, full_results["E0"], full_results[cid]
         )

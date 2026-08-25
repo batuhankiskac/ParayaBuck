@@ -139,6 +139,7 @@ def should_apply_haircut(tc: TerminalClassification) -> bool:
 
 # ---- policy application ----
 
+
 def _equity_fee_for_sell(qty: float, price: float, trade_date: date) -> float:
     # Use effective dated fees via helper if available
     try:

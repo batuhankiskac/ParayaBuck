@@ -1,0 +1,35 @@
+{
+  "mission": "full_survivorship_correction_H_2026_08",
+  "commit_role": "H_FULL",
+  "parent_G": "a6dbf8c",
+  "description": "Corrected V3 full-survivorship validation results — 6 path-dependent runs, real walk-forward, real selection overlap, terminal accounting audit, terminal sensitivity, final verdict",
+  "datasets_used": {
+    "FULL_v4": "data/historical/equity_survivorship_aware_full_2016_2026_v4.csv (SHA 763fd853..., 3925050 rows, 3554 symbols)",
+    "DEMO_v2": "data/historical/equity_survivorship_aware_2016_2026_v2.csv (SHA 5bef7055..., 1937021 rows, 1418 symbols)",
+    "OLD": "data/historical/equity_1200_2016_2026.csv (1194 survivors)",
+    "corporate_actions_v4": "data/historical/equity_survivorship_full_corporate_actions_v4.csv (28842 rows, 28521 dividends)",
+    "lifetimes_v4": "data/historical/equity_entity_lifetimes_full_v4.csv (3554 entities)"
+  },
+  "results": {
+    "OLD_T0": {"return": 1.629296, "cagr": 0.106295, "sharpe": 0.811275, "sortino": 1.087222, "maxDD": 0.223737, "holdings": 5.5584, "exposure": 0.5482, "terminal_events": 0},
+    "DEMO_T0": {"return": 1.436516, "cagr": 0.097527, "sharpe": 0.759469, "sortino": 1.009352, "maxDD": 0.214894, "holdings": 6.3526, "exposure": 0.5999, "terminal_events": 0},
+    "FULL_T0": {"return": 0.787772, "cagr": 0.062589, "sharpe": 0.550017, "sortino": 0.728433, "maxDD": 0.218342, "holdings": 8.1331, "exposure": 0.7523, "terminal_events": 0},
+    "FULL_T1": {"return": 1.059407, "cagr": 0.078411, "sharpe": 0.641207, "sortino": 0.869010, "maxDD": 0.224963, "holdings": 5.4445, "exposure": 0.5333, "terminal_events": 6, "proceeds": 75143.88},
+    "FULL_T2": {"return": 0.528113, "cagr": 0.045306, "sharpe": 0.392366, "sortino": 0.492106, "maxDD": 0.332929, "holdings": 5.4445, "exposure": 0.5336, "terminal_events": 6, "proceeds": 32912.78},
+    "FULL_T3": {"return": 0.116231, "cagr": 0.011556, "sharpe": 0.153017, "sortino": 0.161460, "maxDD": 0.430224, "holdings": 5.4445, "exposure": 0.5338, "terminal_events": 6, "proceeds": 0.0}
+  },
+  "artifacts": {
+    "full_v3_results": "data/research/full_survivorship_2026_08/full_v3_results.json",
+    "walk_forward_real": "data/research/full_survivorship_2026_08/old_vs_full_walk_forward_real.json",
+    "selection_overlap_real": "data/research/full_survivorship_2026_08/selection_overlap_real.json",
+    "terminal_accounting_audit": "data/research/full_survivorship_2026_08/terminal_event_accounting_audit.json",
+    "terminal_sensitivity": "data/research/full_survivorship_2026_08/terminal_sensitivity.json",
+    "old_demo_full_comparison": "data/research/full_survivorship_2026_08/old_demo_full_comparison.json",
+    "final_verdict": "data/research/full_survivorship_2026_08/final_verdict.json"
+  },
+  "final_verdict": "FULL SURVIVORSHIP RECONSTRUCTION VALIDATED — V3 DATA ROBUSTNESS MODERATE",
+  "historical_research_status": "HISTORICAL V3 RESEARCH FROZEN",
+  "paper_forward_validation_status": "READY FOR PAPER FORWARD VALIDATION",
+  "paper_v3_unchanged": true,
+  "live_disabled": true
+}

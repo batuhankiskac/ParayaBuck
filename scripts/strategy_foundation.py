@@ -117,11 +117,7 @@ def cmd_download(argv: list[str]) -> int:
             stock_feed="sip",
         )
 
-    end = (
-        datetime.now(UTC)
-        if args.end is None
-        else datetime.fromisoformat(args.end.replace("Z", "+00:00"))
-    )
+    end = datetime.now(UTC) if args.end is None else datetime.fromisoformat(args.end.replace("Z", "+00:00"))
     start = datetime.fromisoformat(args.start.replace("Z", "+00:00")).replace(tzinfo=UTC)
 
     # Phase 1: SIP for the pre-2026 window on a fresh client. The account has
@@ -263,9 +259,7 @@ def cmd_download(argv: list[str]) -> int:
             "source_feed": source_feed,
         },
     }
-    (DATASET_DIR / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    (DATASET_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     print(f"manifest written: {DATASET_DIR / 'manifest.json'}")
     if feed_notes:
         print("feed notes:", "; ".join(feed_notes))
@@ -444,9 +438,7 @@ def _metrics(nav: pd.Series) -> dict:
     total_return = float(nav.iloc[-1] / nav.iloc[0] - 1.0)
     cagr = float((nav.iloc[-1] / nav.iloc[0]) ** (1.0 / years) - 1.0) if years > 0 else math.nan
     vol = float(rets.std(ddof=1) * math.sqrt(252)) if len(rets) > 1 else math.nan
-    sharpe = (
-        float(rets.mean() / rets.std(ddof=1) * math.sqrt(252)) if rets.std(ddof=1) > 0 else math.nan
-    )
+    sharpe = float(rets.mean() / rets.std(ddof=1) * math.sqrt(252)) if rets.std(ddof=1) > 0 else math.nan
     downside = rets[rets < 0].std(ddof=1)
     sortino = float(rets.mean() / downside * math.sqrt(252)) if downside > 0 else math.nan
     peak = nav.cummax()
@@ -538,10 +530,7 @@ def cmd_evaluate(argv: list[str]) -> int:
     cash_sensitivity: dict[str, dict[str, dict]] = {}
     for yield_pct in (0.0, 2.0, 4.0):
         cash_sensitivity[f"{yield_pct:g}%"] = {
-            name: {
-                k: data["metrics"][k]
-                for k in ("cagr", "sharpe", "sortino", "max_drawdown", "avg_exposure")
-            }
+            name: {k: data["metrics"][k] for k in ("cagr", "sharpe", "sortino", "max_drawdown", "avg_exposure")}
             for name, data in _evaluate(cfg, 1.0, panel, cash_yield=yield_pct / 100.0).items()
         }
 
@@ -551,8 +540,7 @@ def cmd_evaluate(argv: list[str]) -> int:
         "generated_at": datetime.now(UTC).isoformat(),
         "policy_version": {
             "research": "drawdown halt = SHADOW event; entries never blocked",
-            "production_commit": "f3c394d (2026-08-12): drawdown operational incident + "
-            "verified risk-epoch reset",
+            "production_commit": "f3c394d (2026-08-12): drawdown operational incident + verified risk-epoch reset",
             "note": "portfolio-return comparisons are valid only within this policy "
             "version; V1/V2 ETF runs (pre-f3c394d) enforced the drawdown latch on "
             "the return path and are NOT directly comparable.",
@@ -570,8 +558,7 @@ def cmd_evaluate(argv: list[str]) -> int:
         },
         "method": {
             "rebalance": "monthly, month-end close",
-            "warmup": "2016 (252d trailing vol / 12m returns / 200d SMA); evaluation "
-            "from 2017-01-03",
+            "warmup": "2016 (252d trailing vol / 12m returns / 200d SMA); evaluation from 2017-01-03",
             "cost_model": {
                 "adverse_bps_per_side": "slippage + half spread (config.backtest)",
                 "regulatory_fees": "TAF/CAT/SEC fixed 2026 rates (config.backtest)",
@@ -620,19 +607,14 @@ def cmd_evaluate(argv: list[str]) -> int:
         start_i = 0
         while start_i + n_days <= len(ref_nav):
             per_window[start_i] = {
-                name: _metrics(data["nav"].iloc[start_i : start_i + n_days])
-                for name, data in stress["1.0"].items()
+                name: _metrics(data["nav"].iloc[start_i : start_i + n_days]) for name, data in stress["1.0"].items()
             }
             start_i += 252
         windows: dict[str, dict] = {}
         for name in [*SYSTEMS, "SPY"]:
-            sharpe_series = [
-                m[name]["sharpe"] for m in per_window.values() if not math.isnan(m[name]["sharpe"])
-            ]
+            sharpe_series = [m[name]["sharpe"] for m in per_window.values() if not math.isnan(m[name]["sharpe"])]
             dd_series = [
-                m[name]["max_drawdown"]
-                for m in per_window.values()
-                if not math.isnan(m[name]["max_drawdown"])
+                m[name]["max_drawdown"] for m in per_window.values() if not math.isnan(m[name]["max_drawdown"])
             ]
             b1_win_share = (
                 sum(
@@ -751,9 +733,7 @@ def _print_console(report: dict) -> None:
             f"{_fmt_num(m['turnover'], 1):>6s} {_fmt_pct(m['avg_exposure']):>6s}"
         )
     print("\n=== YEARLY RETURNS (1x costs) ===")
-    years = sorted(
-        {y for name in [*SYSTEMS, "SPY"] for y in report["full_period_1x"][name]["yearly_returns"]}
-    )
+    years = sorted({y for name in [*SYSTEMS, "SPY"] for y in report["full_period_1x"][name]["yearly_returns"]})
     print(f"{'year':6s} " + " ".join(f"{name:>8s}" for name in [*SYSTEMS, "SPY"]))
     for y in years:
         row = []
@@ -795,18 +775,14 @@ def _write_markdown(report: dict, path: Path) -> None:
         f"- dataset: `{report['data']['dataset_id']}` (hash `{report['data']['data_hash'][:16]}…`)",
         f"- adjustment: {report['data']['adjustment']} — dividends inside the price series, "
         "no separate cash flows, no double counting",
-        f"- span: {report['data']['start']} → {report['data']['end']}, "
-        f"feed {report['data']['source_feed']}",
+        f"- span: {report['data']['start']} → {report['data']['end']}, feed {report['data']['source_feed']}",
         "",
         "## Method",
         "",
         "- Monthly rebalance at month-end close; decisions on completed bars only.",
-        "- 2016 = estimation warmup (252d vol / 12m returns / 200d SMA); "
-        "evaluation 2017-01-03 → end.",
-        "- C1 gate: 12m own-price total return > 0. C2 gate: close > 200d SMA. "
-        "Filtered assets → cash (0%).",
-        "- Costs mirror `config.backtest` (slippage + half spread per side, "
-        "TAF/CAT/SEC fixed rates), ×1/×2/×3.",
+        "- 2016 = estimation warmup (252d vol / 12m returns / 200d SMA); evaluation 2017-01-03 → end.",
+        "- C1 gate: 12m own-price total return > 0. C2 gate: close > 200d SMA. Filtered assets → cash (0%).",
+        "- Costs mirror `config.backtest` (slippage + half spread per side, TAF/CAT/SEC fixed rates), ×1/×2/×3.",
         "- Drawdown halt is a shadow event (research policy); nothing is blocked.",
         "",
         "## Full period (2017-01-03 → end, 1x costs)",
@@ -829,9 +805,7 @@ def _write_markdown(report: dict, path: Path) -> None:
         "| year | " + " | ".join([*SYSTEMS, "SPY"]) + " |",
         "|---|---" + "---|" * (len(SYSTEMS) + 1),
     ]
-    years = sorted(
-        {y for name in [*SYSTEMS, "SPY"] for y in report["full_period_1x"][name]["yearly_returns"]}
-    )
+    years = sorted({y for name in [*SYSTEMS, "SPY"] for y in report["full_period_1x"][name]["yearly_returns"]})
     for y in years:
         cells = []
         for name in [*SYSTEMS, "SPY"]:
@@ -853,8 +827,7 @@ def _write_markdown(report: dict, path: Path) -> None:
         lines.append(f"| {mult} | " + " | ".join(cells) + " |")
     lines += ["", "## Trend increment vs B1 (decision table, 1x costs)", ""]
     lines += [
-        "| system | dCAGR pp | dSharpe | dSortino | dmaxDD pp | dCalmar | "
-        "Sharpe win 3y | Sharpe win 5y |",
+        "| system | dCAGR pp | dSharpe | dSortino | dmaxDD pp | dCalmar | Sharpe win 3y | Sharpe win 5y |",
         "|---|---|---|---|---|---|---|",
     ]
     for name, ti in report["trend_increment_vs_b1_1x"].items():
@@ -868,9 +841,7 @@ def _write_markdown(report: dict, path: Path) -> None:
     for window, table in report["rolling_folds_1x"].items():
         lines.append(f"### {window} rolling windows")
         lines.append("")
-        lines.append(
-            "| system | n | Sharpe mean | Sharpe med | Sharpe min | maxDD mean | maxDD min |"
-        )
+        lines.append("| system | n | Sharpe mean | Sharpe med | Sharpe min | maxDD mean | maxDD min |")
         lines.append("|---|---|---|---|---|---|---|")
         for name, m in table.items():
             lines.append(

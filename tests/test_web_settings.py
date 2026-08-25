@@ -131,9 +131,7 @@ def test_reset_safety_lock_does_not_deadlock_on_state_lock() -> None:
     assert result["done"], "reset_safety_lock deadlocked on the state lock"
 
 
-def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _CountingEngineManager(tmp_path)
     manager.config_path.write_text(
         yaml.safe_dump(
@@ -187,9 +185,7 @@ def test_saving_runtime_settings_restarts_engine_without_restarting_web_app(
     assert result["app_restart_required"] is False
 
 
-def test_settings_save_succeeds_when_automatic_restart_times_out(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _RestartFailureManagerStub(tmp_path)
     manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}}))
     monkeypatch.setattr(server, "manager", manager)
@@ -204,9 +200,7 @@ def test_settings_save_succeeds_when_automatic_restart_times_out(
     assert "timeframe" not in saved.get("engine", {})
 
 
-def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _CountingEngineManager(tmp_path)
     manager.config_path.write_text(
         yaml.safe_dump(
@@ -238,9 +232,7 @@ def test_settings_save_strips_obsolete_engine_keys_so_config_loads_again(
     assert "warmup_bars" not in saved.get("engine", {})
 
 
-def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_settings_save_strips_obsolete_risk_keys_so_config_loads_again(tmp_path: Path, monkeypatch: Any) -> None:
     manager = _CountingEngineManager(tmp_path)
     manager.config_path.write_text(
         yaml.safe_dump(
@@ -531,9 +523,7 @@ def test_web_backtest_allowed_when_engine_stopped(monkeypatch: Any) -> None:
 def test_engine_start_refused_while_web_backtest_running(monkeypatch: Any) -> None:
     """The engine must not start while a Web backtest is running."""
     manager = server.EngineManager()
-    monkeypatch.setattr(
-        server.backtest_manager.__class__, "is_running", property(lambda self: True)
-    )
+    monkeypatch.setattr(server.backtest_manager.__class__, "is_running", property(lambda self: True))
     with pytest.raises(ValueError, match="Web backtest is still running"):
         manager.start_engine()
     assert manager.engine_state == "stopped"
@@ -546,9 +536,7 @@ def test_engine_start_allowed_when_web_backtest_idle(monkeypatch: Any) -> None:
     manager.env_path = Path("/nonexistent/.env")
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
-    monkeypatch.setattr(
-        server.backtest_manager.__class__, "is_running", property(lambda self: False)
-    )
+    monkeypatch.setattr(server.backtest_manager.__class__, "is_running", property(lambda self: False))
     with pytest.raises(ValueError, match="Alpaca API key/secret missing"):
         manager.start_engine()
 
@@ -574,9 +562,7 @@ def test_websocket_logs_detects_dead_browser_and_cleans_queue(monkeypatch: Any) 
     assert manager.log_queues == set()
 
 
-def test_status_reports_validated_universe_counts_while_runtime_is_starting(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_status_reports_validated_universe_counts_while_runtime_is_starting(tmp_path: Path, monkeypatch: Any) -> None:
     candidate_path = tmp_path / "candidates.json"
     equity_path = tmp_path / "active-equity.json"
     crypto_path = tmp_path / "active-crypto.json"
@@ -622,9 +608,7 @@ def test_status_reports_validated_universe_counts_while_runtime_is_starting(
 
     monkeypatch.setattr(server, "manager", StartingManager())
     monkeypatch.setattr(server, "load_config", lambda _path: config)
-    monkeypatch.setattr(
-        server, "validate_active_universe", lambda _config: (("AAPL", "MSFT"), "success")
-    )
+    monkeypatch.setattr(server, "validate_active_universe", lambda _config: (("AAPL", "MSFT"), "success"))
     monkeypatch.setattr(
         server,
         "validate_active_crypto_universe",
@@ -660,9 +644,7 @@ def test_status_reports_configured_strategy_state(monkeypatch: Any) -> None:
             return True
 
     def make_config(enabled: bool) -> object:
-        selection = type(
-            "Selection", (), {"enabled": enabled, "name": "equity_residual_momentum_v1"}
-        )()
+        selection = type("Selection", (), {"enabled": enabled, "name": "equity_residual_momentum_v1"})()
         disabled = type("Selection", (), {"enabled": False, "name": "crypto"})()
         strategy = type("Strategy", (), {"equity": selection, "crypto": disabled})()
         universe = type(
@@ -751,9 +733,7 @@ def test_status_exposes_strategy_metadata_instead_of_global_timeframe(
     (tmp_path / "c.json").write_text(json.dumps({"shortlist_symbols": ["A", "B", "C"]}))
     # The streamed observation set is the alpha-ranked subset of the pool;
     # selected_symbols holds the broader pool.
-    (tmp_path / "a.json").write_text(
-        json.dumps({"selected_symbols": ["A", "B", "C"], "observation_set": ["A", "B"]})
-    )
+    (tmp_path / "a.json").write_text(json.dumps({"selected_symbols": ["A", "B", "C"], "observation_set": ["A", "B"]}))
     (tmp_path / "crypto.json").write_text(json.dumps({"selected_symbols": []}))
 
     monkeypatch.setattr(server, "manager", StaticManager())
@@ -874,9 +854,7 @@ def test_readyz_config_invalid_returns_503(monkeypatch: Any) -> None:
             return None
 
     monkeypatch.setattr(server, "manager", BadConfigManager())
-    monkeypatch.setattr(
-        server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml"))
-    )
+    monkeypatch.setattr(server, "load_config", lambda _path: (_ for _ in ()).throw(ValueError("bad yaml")))
     response = asyncio.run(server.readyz())
     payload = json.loads(response.body)
     assert payload["ready"] is False
@@ -961,9 +939,7 @@ def test_readyz_intentional_stop_control_plane_ready(monkeypatch: Any) -> None:
             return None
 
     monkeypatch.setattr(server, "manager", StoppedManager())
-    monkeypatch.setattr(
-        server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False))
-    )
+    monkeypatch.setattr(server, "load_config", lambda _path: Config(app=AppConfig(auto_start_engine=False)))
     response = asyncio.run(server.readyz())
     payload = json.loads(response.body)
     assert payload["ready"] is True

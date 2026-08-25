@@ -51,9 +51,7 @@ def test_parentless_bracket_children_keep_their_exit_roles() -> None:
                 "order": {**common, "id": "stop", "type": "stop", "stop_price": "95"},
             }
         )
-        await stream._on_update(
-            {"event": "new", "order": {**common, "id": "target", "type": "limit"}}
-        )
+        await stream._on_update({"event": "new", "order": {**common, "id": "target", "type": "limit"}})
 
     asyncio.run(scenario())
     assert [item.role for item in updates] == [

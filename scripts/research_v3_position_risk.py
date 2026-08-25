@@ -153,19 +153,12 @@ def load_and_validate_manifest() -> dict:
     declared_folds = manifest.get("walk_forward", {}).get("folds_exact")
     computed = calendar_fold_windows(EVAL_START, EVAL_END, step_months=6)
     if len(computed) != FOLD_COUNT_DECLARED:
-        raise SystemExit(
-            f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}"
-        )
-    declared_parsed = [
-        (datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds
-    ]
+        raise SystemExit(f"fold contract violated: expected {FOLD_COUNT_DECLARED} computed {len(computed)}")
+    declared_parsed = [(datetime.fromisoformat(a), datetime.fromisoformat(b)) for a, b in declared_folds]
     assert_fold_contract(declared_parsed, computed)
     identity = dataset_identity()
     ds = manifest.get("dataset", {})
-    if (
-        ds.get("bars_sha256") != identity["bars_sha256"]
-        or ds.get("dividends_sha256") != identity["dividends_sha256"]
-    ):
+    if ds.get("bars_sha256") != identity["bars_sha256"] or ds.get("dividends_sha256") != identity["dividends_sha256"]:
         raise SystemExit("dataset hash drift from manifest")
     cfg = load_config(str(REPO / "config/settings.yaml"))
     expected = manifest.get("baseline_identity", {}).get("config_digest")
@@ -196,9 +189,7 @@ class TailES126(EquityResidualMomentum1dV3):
         self._last_context = None
         return result
 
-    def _position_weights(
-        self, selected: tuple[str, ...], residual_vols: dict[str, float]
-    ) -> dict[str, float]:
+    def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
         if not selected:
             return {}
         ctx = getattr(self, "_last_context", None)
@@ -309,9 +300,7 @@ def make_engine(
         starting_equity=starting_equity or config.backtest.initial_cash,
         slippage_bps=config.backtest.slippage_bps * cost_multiplier,
         spread_bps=config.backtest.spread_bps * cost_multiplier,
-        commission=config.backtest.commission * cost_multiplier
-        if config.backtest.commission
-        else 0,
+        commission=config.backtest.commission * cost_multiplier if config.backtest.commission else 0,
         crypto_taker_fee_bps=config.backtest.crypto_taker_fee_bps * cost_multiplier,
         equity_taf_per_share=config.backtest.equity_taf_per_share,
         equity_taf_cap=config.backtest.equity_taf_cap,
@@ -349,9 +338,7 @@ def run_window(
     cost_multiplier: float = 1.0,
 ) -> PortfolioBacktestResult:
     strategy = build_strategy(candidate_id)
-    engine = make_engine(
-        config, strategy, universe, candidate_id=candidate_id, cost_multiplier=cost_multiplier
-    )
+    engine = make_engine(config, strategy, universe, candidate_id=candidate_id, cost_multiplier=cost_multiplier)
     # Filter bars and warmup: use 550 calendar days warmup approach consistent with prior research
     # We use available bars directly via prepared window helper from product?
     # Simpler: use engine.run with bars filtered by date and warmup
@@ -359,9 +346,7 @@ def run_window(
     # warmup: bars before start needed for beta 273; use up to 800 days for safety
     from datetime import timedelta
 
-    warmup_bars = [
-        b for b in bars if b.timestamp < start and b.timestamp >= start - timedelta(days=800)
-    ]
+    warmup_bars = [b for b in bars if b.timestamp < start and b.timestamp >= start - timedelta(days=800)]
     # Universe snapshots already PIT; engine will handle history trimming
     # Execution bars need to include warmup + filtered for filling?
     # engine.run handles warmup separately via warmup param
@@ -394,9 +379,7 @@ def run_chained_window(
     # Second segment: warmup includes excluded gap, starting equity = res0 ending equity, chain equity curve
     s1, e1 = segments[1]
     strategy = build_strategy(candidate_id)
-    engine = make_engine(
-        config, strategy, universe, candidate_id=candidate_id, starting_equity=res0.ending_equity
-    )
+    engine = make_engine(config, strategy, universe, candidate_id=candidate_id, starting_equity=res0.ending_equity)
     filtered = [b for b in bars if s1 <= b.timestamp <= e1]
     from datetime import timedelta
 
@@ -414,9 +397,7 @@ def run_chained_window(
     chained_times = list(res0.curve_timestamps) + list(res1.curve_timestamps)
     from dataclasses import replace
 
-    combined_return = (
-        chained_curve[-1] / chained_curve[0] - 1 if chained_curve and chained_curve[0] > 0 else 0
-    )
+    combined_return = chained_curve[-1] / chained_curve[0] - 1 if chained_curve and chained_curve[0] > 0 else 0
     chained_metrics = chained_cumulative_metrics(chained_curve)
     synthetic = replace(
         res1,
@@ -433,9 +414,7 @@ def run_chained_window(
         curve_timestamps=tuple(chained_times),
         fills=tuple(list(res0.fills) + list(res1.fills)),
         realized_pnl_events=tuple(list(res0.realized_pnl_events) + list(res1.realized_pnl_events)),
-        closed_position_events=tuple(
-            list(res0.closed_position_events) + list(res1.closed_position_events)
-        ),
+        closed_position_events=tuple(list(res0.closed_position_events) + list(res1.closed_position_events)),
     )
     return synthetic
 
@@ -510,9 +489,7 @@ def diagnostics_for_result(
     Also distinguish candidate_worst_episode vs AXON_reference_episode in returned diagnostics.
     """
     fills = sorted(result.fills, key=lambda f: f.timestamp)
-    equity_by_time = {
-        ts: eq for ts, eq in zip(result.curve_timestamps, result.equity_curve, strict=False)
-    }
+    equity_by_time = {ts: eq for ts, eq in zip(result.curve_timestamps, result.equity_curve, strict=False)}
     open_state: dict[str, dict] = {}
     episodes: list[dict] = []
     for fill in fills:
@@ -631,12 +608,8 @@ def diagnostics_for_result(
                         "realized_pnl": round(float(pnl or 0), 2),
                         "realized_pnl_over_equity_at_entry": round(float(acct_impact or 0), 6),
                         "mae_notional": round(float(mae or 0), 2) if mae is not None else None,
-                        "mae_over_equity_at_entry": round(float(mae_acct or 0), 6)
-                        if mae_acct is not None
-                        else None,
-                        "mae_return_pct": round(float(mae_pct or 0), 6)
-                        if mae_pct is not None
-                        else None,
+                        "mae_over_equity_at_entry": round(float(mae_acct or 0), 6) if mae_acct is not None else None,
+                        "mae_return_pct": round(float(mae_pct or 0), 6) if mae_pct is not None else None,
                         "worst_low": round(float(worst_low), 4) if worst_low is not None else None,
                         "first_crossing": crossing,
                         "days_held": (fill.timestamp - st["entry_time"]).days,
@@ -651,9 +624,7 @@ def diagnostics_for_result(
     top3 = sum(abs(e["realized_pnl"]) for e in worst_10[:3]) / total_loss if losses else 0
     top5 = sum(abs(e["realized_pnl"]) for e in worst_10[:5]) / total_loss if losses else 0
     top10 = sum(abs(e["realized_pnl"]) for e in worst_10[:10]) / total_loss if losses else 0
-    mae_vals = [
-        e["mae_over_equity_at_entry"] for e in episodes if e["mae_over_equity_at_entry"] is not None
-    ]
+    mae_vals = [e["mae_over_equity_at_entry"] for e in episodes if e["mae_over_equity_at_entry"] is not None]
 
     def pct(q):
         s = sorted(mae_vals)
@@ -690,9 +661,7 @@ def diagnostics_for_result(
         "mae_p95": round(pct(0.95), 6),
         "mae_p99": round(pct(0.99), 6),
         "worst_single_loss_pnl": round(worst_10[0]["realized_pnl"], 2) if worst_10 else 0,
-        "worst_single_loss_acct_impact": round(worst_10[0]["realized_pnl_over_equity_at_entry"], 6)
-        if worst_10
-        else 0,
+        "worst_single_loss_acct_impact": round(worst_10[0]["realized_pnl_over_equity_at_entry"], 6) if worst_10 else 0,
         "candidate_worst_episode": candidate_worst,
         "AXON_reference_episode": axon_ref,
         "note": "All account-loss percentages use realized_position_pnl / account_equity_at_entry (contemporaneous), never initial cash. candidate_worst_episode is that candidate's actual worst; AXON_reference_episode is AXON 2025-02 specifically; do not display candidate worst % on AXON row unless AXON is that candidate's worst.",
@@ -879,12 +848,8 @@ def ex_ante_diagnostics(
                 "ES10_126_annualized": round(es10, 6) if es10 is not None else None,
                 "worst_daily_return_126": round(worst_ret, 6) if worst_ret is not None else None,
                 "worst_overnight_gap_126": round(worst_gap, 6) if worst_gap is not None else None,
-                "ivol_percentile": round(ivol_percentile, 4)
-                if ivol_percentile is not None
-                else None,
-                "consensus_score": round(consensus_score, 6)
-                if consensus_score is not None
-                else None,
+                "ivol_percentile": round(ivol_percentile, 4) if ivol_percentile is not None else None,
+                "consensus_score": round(consensus_score, 6) if consensus_score is not None else None,
                 "future_realized_pnl_over_equity": ep.get("realized_pnl_over_equity_at_entry"),
                 "future_mae_over_equity": ep.get("mae_over_equity_at_entry"),
                 "future_realized_return_pct": round(
@@ -898,11 +863,7 @@ def ex_ante_diagnostics(
     # Sort by future loss (most negative account impact)
     sorted_records = sorted(
         records,
-        key=lambda r: (
-            r["future_realized_pnl_over_equity"]
-            if r["future_realized_pnl_over_equity"] is not None
-            else 0
-        ),
+        key=lambda r: r["future_realized_pnl_over_equity"] if r["future_realized_pnl_over_equity"] is not None else 0,
     )
     n = len(sorted_records)
     k = max(1, math.ceil(0.10 * n)) if n else 0
@@ -927,8 +888,7 @@ def ex_ante_diagnostics(
             "worst_10pct_mean": mean([r[key] for r in worst_10pct]),
             "rest_mean": mean([r[key] for r in rest]),
             "delta": (mean([r[key] for r in worst_10pct]) - mean([r[key] for r in rest]))
-            if mean([r[key] for r in worst_10pct]) is not None
-            and mean([r[key] for r in rest]) is not None
+            if mean([r[key] for r in worst_10pct]) is not None and mean([r[key] for r in rest]) is not None
             else None,
         }
 
@@ -976,9 +936,7 @@ def axon_counterfactual(
         # fallback to any AXON episode worst
         axon_candidates = [e for e in control_episodes if e["symbol"] == "AXON"]
         if axon_candidates:
-            axon_ref = sorted(
-                axon_candidates, key=lambda e: e["realized_pnl_over_equity_at_entry"]
-            )[0]
+            axon_ref = sorted(axon_candidates, key=lambda e: e["realized_pnl_over_equity_at_entry"])[0]
 
     # Helper to find candidate match
     def find_match(control_ep, cand_eps):
@@ -1029,17 +987,13 @@ def axon_counterfactual(
                 # We report candidate's realized loss and impact; reduction is control impact - candidate impact
                 # However candidate pnl is on its own equity path, so we also compute scaled pnl using control return * candidate notional
                 ctrl_ret = (
-                    ce["realized_pnl"] / ce["position_notional_at_entry"]
-                    if ce["position_notional_at_entry"]
-                    else 0
+                    ce["realized_pnl"] / ce["position_notional_at_entry"] if ce["position_notional_at_entry"] else 0
                 )
                 cand_notional = match["position_notional_at_entry"]
                 # Estimate counterfactual pnl on same price path as control
                 est_pnl_same_path = ctrl_ret * cand_notional
                 est_impact_same_path = (
-                    est_pnl_same_path / ce["account_equity_at_entry"]
-                    if ce["account_equity_at_entry"]
-                    else 0
+                    est_pnl_same_path / ce["account_equity_at_entry"] if ce["account_equity_at_entry"] else 0
                 )
                 row["counterfactuals"][cid] = {
                     "matched": True,
@@ -1055,9 +1009,7 @@ def axon_counterfactual(
                         ce["realized_pnl_over_equity_at_entry"] - est_impact_same_path, 6
                     ),
                     "dollar_reduction": round(ce["realized_pnl"] - est_pnl_same_path, 2),
-                    "weight_ratio": round(
-                        match["initial_position_weight"] / ce["initial_position_weight"], 4
-                    )
+                    "weight_ratio": round(match["initial_position_weight"] / ce["initial_position_weight"], 4)
                     if ce["initial_position_weight"]
                     else None,
                 }
@@ -1076,8 +1028,7 @@ def axon_counterfactual(
             (
                 r
                 for r in rows
-                if r["control"]["symbol"] == "AXON"
-                and r["control"]["entry_time"] == axon_ref["entry_time"]
+                if r["control"]["symbol"] == "AXON" and r["control"]["entry_time"] == axon_ref["entry_time"]
             ),
             None,
         )
@@ -1106,18 +1057,14 @@ def axon_counterfactual(
                     )
                     est_pnl = ctrl_ret * match["position_notional_at_entry"]
                     est_imp = (
-                        est_pnl / axon_ref["account_equity_at_entry"]
-                        if axon_ref["account_equity_at_entry"]
-                        else 0
+                        est_pnl / axon_ref["account_equity_at_entry"] if axon_ref["account_equity_at_entry"] else 0
                     )
                     axon_row["counterfactuals"][cid] = {
                         "matched": True,
                         "candidate_weight": match["initial_position_weight"],
                         "estimated_pnl_same_path": round(est_pnl, 2),
                         "estimated_impact_same_path": round(est_imp, 6),
-                        "impact_reduction": round(
-                            axon_ref["realized_pnl_over_equity_at_entry"] - est_imp, 6
-                        ),
+                        "impact_reduction": round(axon_ref["realized_pnl_over_equity_at_entry"] - est_imp, 6),
                         "dollar_reduction": round(axon_ref["realized_pnl"] - est_pnl, 2),
                     }
                 else:
@@ -1169,9 +1116,7 @@ def axon_counterfactual(
                 worst = sorted(tail)[:tail_count]
                 mean_worst = sum(worst) / len(worst) if worst else 0
                 es_val = abs(mean_worst) * math.sqrt(252)
-        axon_answers["P3_ES_before_entry_annualized"] = (
-            round(es_val, 6) if es_val is not None else None
-        )
+        axon_answers["P3_ES_before_entry_annualized"] = round(es_val, 6) if es_val is not None else None
         axon_answers["P3_ES_note"] = (
             "Do NOT claim P3 predicted AXON unless ES metric was actually elevated BEFORE entry; compare ES to normal residual vol."
         )
@@ -1298,17 +1243,11 @@ def position_tail_metrics(episodes: list[dict]) -> dict:
             "count_worse_than": {},
         }
     # Loss severity = abs(realized_pnl / equity) for losing episodes only (positive magnitude)
-    loss_severities = sorted(
-        [abs(e["realized_pnl_over_equity_at_entry"]) for e in episodes if e["realized_pnl"] < 0]
-    )
+    loss_severities = sorted([abs(e["realized_pnl_over_equity_at_entry"]) for e in episodes if e["realized_pnl"] < 0])
     # For percentile, 95th and 99th of POSITIVE severities = severe tail (large magnitude)
     # losses sorted ascending: mild -> severe, so p95 is near severe tail
     mae_vals = sorted(
-        [
-            e["mae_over_equity_at_entry"]
-            for e in episodes
-            if e.get("mae_over_equity_at_entry") is not None
-        ]
+        [e["mae_over_equity_at_entry"] for e in episodes if e.get("mae_over_equity_at_entry") is not None]
     )
 
     def pct_sorted(sorted_vals, q):
@@ -1330,17 +1269,11 @@ def position_tail_metrics(episodes: list[dict]) -> dict:
 
     # loss concentration: top1/top3 etc as share of total realized losses
     total_loss = sum(abs(e["realized_pnl"]) for e in episodes if e["realized_pnl"] < 0)
-    sorted_by_loss = sorted(
-        [e for e in episodes if e["realized_pnl"] < 0], key=lambda e: e["realized_pnl"]
-    )
-    top1 = (
-        abs(sorted_by_loss[0]["realized_pnl"]) / total_loss if sorted_by_loss and total_loss else 0
-    )
+    sorted_by_loss = sorted([e for e in episodes if e["realized_pnl"] < 0], key=lambda e: e["realized_pnl"])
+    top1 = abs(sorted_by_loss[0]["realized_pnl"]) / total_loss if sorted_by_loss and total_loss else 0
     top3 = sum(abs(e["realized_pnl"]) for e in sorted_by_loss[:3]) / total_loss if total_loss else 0
     top5 = sum(abs(e["realized_pnl"]) for e in sorted_by_loss[:5]) / total_loss if total_loss else 0
-    top10 = (
-        sum(abs(e["realized_pnl"]) for e in sorted_by_loss[:10]) / total_loss if total_loss else 0
-    )
+    top10 = sum(abs(e["realized_pnl"]) for e in sorted_by_loss[:10]) / total_loss if total_loss else 0
 
     thresholds = [-0.01, -0.015, -0.02, -0.025, -0.03]
     count_worse = {}
@@ -1524,9 +1457,9 @@ def evaluate_promotion(
                 return False
             return cand < ctrl and (ctrl - cand) / abs(ctrl) >= 0.20
 
-        gates["3_tail_improves_20pct"] = improvement_magnitude(
-            worst_ctrl, worst_cand
-        ) or improvement_magnitude(p99_ctrl, p99_cand)
+        gates["3_tail_improves_20pct"] = improvement_magnitude(worst_ctrl, worst_cand) or improvement_magnitude(
+            p99_ctrl, p99_cand
+        )
         # 4 top5 concentration not worsen materially
         top5_ctrl = tail_metrics["P0"]["loss_concentration"]["top5"]
         top5_cand = tail_metrics[cid]["loss_concentration"]["top5"]
@@ -1549,9 +1482,7 @@ def evaluate_promotion(
         # 9 3x cost preserves sharpe >= control 3x OR within 0.02 with better tail
         ctrl_3x_sharpe = cost_stress.get("3x", {}).get("P0", {}).get("sharpe", -1)
         cand_3x_sharpe = cost_stress.get("3x", {}).get(cid, {}).get("sharpe", -1)
-        tail_better = improvement_magnitude(worst_ctrl, worst_cand) or improvement_magnitude(
-            p99_ctrl, p99_cand
-        )
+        tail_better = improvement_magnitude(worst_ctrl, worst_cand) or improvement_magnitude(p99_ctrl, p99_cand)
         gates["9_3x_cost_preserves"] = cand_3x_sharpe >= ctrl_3x_sharpe or (
             abs(cand_3x_sharpe - ctrl_3x_sharpe) <= 0.02 and tail_better
         )
@@ -1579,9 +1510,7 @@ def evaluate_promotion(
                     # evaluate magnitude improvement for jackknife vs control full
                     jk_worst = abs(jk_tail.get("worst", 0))
                     jk_p99 = abs(jk_tail.get("p99", 0))
-                    g3 = improvement_magnitude(worst_ctrl, jk_worst) or improvement_magnitude(
-                        p99_ctrl, jk_p99
-                    )
+                    g3 = improvement_magnitude(worst_ctrl, jk_worst) or improvement_magnitude(p99_ctrl, jk_p99)
                     gates["11_no_single_symbol_dependency"] = g3
                 else:
                     # No tail to evaluate, but g1/g2 already failed for all candidates, so false; if they had passed, we would consider not evaluable as true
@@ -1626,9 +1555,7 @@ def main() -> int:
         import subprocess
 
         try:
-            head = subprocess.run(
-                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO
-            ).stdout.strip()
+            head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO).stdout.strip()
         except Exception:
             head = "unknown"
     cfg_digest = config_digest(config)
@@ -1681,9 +1608,7 @@ def main() -> int:
     for cid in ["P0", "P1", "P2", "P3"]:
         rows = []
         for s, e in folds:
-            res = run_window(
-                config, cid, universe, bars, actions, start=s, end=e, cost_multiplier=1.0
-            )
+            res = run_window(config, cid, universe, bars, actions, start=s, end=e, cost_multiplier=1.0)
             st = stats_for_result(res)
             rows.append(
                 {

@@ -65,9 +65,7 @@ def test_splits_adjustment_maps_to_sdk_split(monkeypatch: Any) -> None:
     )
 
     end_at = datetime.now(UTC)
-    history.get_bars_batch(
-        ["AAPL"], "5m", start=end_at - timedelta(days=5), end=end_at, adjustment="splits"
-    )
+    history.get_bars_batch(["AAPL"], "5m", start=end_at - timedelta(days=5), end=end_at, adjustment="splits")
     # The CLI passes "splits", but the Alpaca SDK enum value is "split".
     assert recorded["adjustment"] == "split"
 
@@ -81,9 +79,7 @@ def _crypto_bars(
 ) -> list[Bar]:
     return [
         Bar(
-            end
-            - timedelta(minutes=last_bar_offset_minutes)
-            - timedelta(minutes=minutes_per_bar * (count - 1 - index)),
+            end - timedelta(minutes=last_bar_offset_minutes) - timedelta(minutes=minutes_per_bar * (count - 1 - index)),
             "BTC/USD",
             "5m",
             100.0,
@@ -251,9 +247,7 @@ def _empty_crypto_history(cache_bars: list[Bar]) -> Any:
     history = alpaca_module.AlpacaHistoricalData.__new__(alpaca_module.AlpacaHistoricalData)
     history._stock_feed = "iex"
     history._stock_client = None
-    history._crypto_client = SimpleNamespace(
-        get_crypto_bars=lambda request: SimpleNamespace(df=pd.DataFrame())
-    )
+    history._crypto_client = SimpleNamespace(get_crypto_bars=lambda request: SimpleNamespace(df=pd.DataFrame()))
     history._cache = SimpleNamespace(
         get=lambda *args, **kwargs: cache_bars,
         upsert=lambda *args, **kwargs: None,
@@ -294,9 +288,7 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
     history._stock_client = SimpleNamespace(
         get_stock_bars=lambda request: (
             calls.append(("sip", str(request.feed)))
-            or (_ for _ in ()).throw(
-                RuntimeError("Insufficient data privileges: feed=sip is not entitled")
-            )
+            or (_ for _ in ()).throw(RuntimeError("Insufficient data privileges: feed=sip is not entitled"))
         )
     )
     history._crypto_client = None
@@ -316,9 +308,7 @@ def test_sip_entitlement_failure_falls_back_to_iex(monkeypatch: Any) -> None:
     # Non-entitlement failures never trigger the fallback.
     history._sip_fallback_active = False
     history._sip_quote_fallback_active = False
-    history._stock_client.get_stock_bars = lambda request: (_ for _ in ()).throw(
-        ConnectionError("connection reset")
-    )
+    history._stock_client.get_stock_bars = lambda request: (_ for _ in ()).throw(ConnectionError("connection reset"))
     with pytest.raises(ConnectionError, match="connection reset"):
         history.get_bars_batch(["AAPL"], "1d", start=end - timedelta(days=30), end=end)
     assert history._sip_fallback_active is False

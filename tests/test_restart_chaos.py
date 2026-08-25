@@ -196,10 +196,7 @@ def _restarted_runtime(
 
 def _bars(symbols: tuple[str, ...], *, day: datetime | None = None) -> list[Bar]:
     timestamp = day or datetime(2025, 1, 1, tzinfo=UTC)
-    return [
-        Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY)
-        for symbol in symbols
-    ]
+    return [Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY) for symbol in symbols]
 
 
 def _fill(
@@ -799,9 +796,7 @@ def test_restart_with_managed_symbol_outside_scanner_universe_stays_pinned(
         ),
         "broker-entry",
     )
-    assert [entry.canonical_symbol for entry in ledger.managed_entries_for_account("acct")] == [
-        "BTC/USD"
-    ]
+    assert [entry.canonical_symbol for entry in ledger.managed_entries_for_account("acct")] == ["BTC/USD"]
 
     base = Config()
     runtime = EngineRuntime.__new__(EngineRuntime)

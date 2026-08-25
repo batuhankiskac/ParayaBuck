@@ -199,12 +199,8 @@ def test_entry_fee_reduces_realized_pnl_on_full_and_partial_exits() -> None:
     # One buy fill plus one partial-sell and one final-sell fill: 3 fills at
     # 2.0 commission each; the entry fee is a real cost inside the PnL.
     assert result.fee_total == pytest.approx(3 * 2.0)
-    sell_proceeds = sum(
-        fill.qty * fill.fill_price for fill in result.fills if fill.side == OrderSide.SELL
-    )
-    buy_cost = sum(
-        fill.qty * fill.fill_price for fill in result.fills if fill.side == OrderSide.BUY
-    )
+    sell_proceeds = sum(fill.qty * fill.fill_price for fill in result.fills if fill.side == OrderSide.SELL)
+    buy_cost = sum(fill.qty * fill.fill_price for fill in result.fills if fill.side == OrderSide.BUY)
     manual = sell_proceeds - buy_cost - result.fee_total
     assert sum(result.realized_pnls) == pytest.approx(manual)
 
@@ -224,12 +220,8 @@ def test_state_realized_pnl_matches_economic_realized_delta_at_every_fill() -> N
     state = result.state
     # Mid-run (position still open): realized PnL equals the partial-exit
     # deltas; cash + holdings value + realized must reconstruct equity.
-    unrealized = state.holdings.get("SPY", 0.0) * (
-        state.last_prices.get("SPY", 0.0) - state.avg_prices.get("SPY", 0.0)
-    )
-    assert state.realized_pnl == pytest.approx(
-        result.ending_equity - result.starting_equity - unrealized
-    )
+    unrealized = state.holdings.get("SPY", 0.0) * (state.last_prices.get("SPY", 0.0) - state.avg_prices.get("SPY", 0.0))
+    assert state.realized_pnl == pytest.approx(result.ending_equity - result.starting_equity - unrealized)
     # The full-exit run ends flat: realized PnL equals the total equity change.
     closed = _engine(strategy, commission=1.0)
     full = closed.run(_equity_days(200, epoch), liquidate_at_end=True)
@@ -420,9 +412,7 @@ def test_restart_keeps_cash_and_never_reissues_filled_orders(tmp_path) -> None:
     ]
     # Idempotent client order ids: identical decisions produce identical ids.
     restart_ids = [fill.client_order_id for fill in restarted.fills]
-    ref_ids = [
-        fill.client_order_id for fill in reference.fills if fill.timestamp >= bars[60].timestamp
-    ]
+    ref_ids = [fill.client_order_id for fill in reference.fills if fill.timestamp >= bars[60].timestamp]
     assert restart_ids == ref_ids
 
 
@@ -478,8 +468,7 @@ def test_restart_risk_state_equivalence_with_drawdown_after_restart(tmp_path) ->
     """
     epoch = datetime(2024, 1, 1, tzinfo=UTC)
     ramp = [
-        _bar(epoch + timedelta(days=index), "SPY", 100 * 1.005**index, Market.EQUITY, 5_000_000)
-        for index in range(40)
+        _bar(epoch + timedelta(days=index), "SPY", 100 * 1.005**index, Market.EQUITY, 5_000_000) for index in range(40)
     ]
     crash = [
         _bar(
@@ -525,25 +514,19 @@ def test_restart_risk_state_equivalence_with_drawdown_after_restart(tmp_path) ->
     assert [fill.timestamp for fill in restarted.fills] == [
         fill.timestamp for fill in reference.fills if fill.timestamp > cutoff
     ]
-    assert [fill.qty for fill in restarted.fills] == [
-        fill.qty for fill in reference.fills if fill.timestamp > cutoff
-    ]
+    assert [fill.qty for fill in restarted.fills] == [fill.qty for fill in reference.fills if fill.timestamp > cutoff]
     # Persisted risk lifecycle identical: peak, day-start, last observed and
     # the active session date all survived the restart.
     assert restarted.state.peak_equity == pytest.approx(reference.state.peak_equity)
     assert restarted.state.day_start_equity == pytest.approx(reference.state.day_start_equity)
-    assert restarted.state.last_observed_equity == pytest.approx(
-        reference.state.last_observed_equity
-    )
+    assert restarted.state.last_observed_equity == pytest.approx(reference.state.last_observed_equity)
     assert restarted.state.risk_session_date == reference.state.risk_session_date
     # Ending equity matches to the cent.
     assert restarted.ending_equity == pytest.approx(reference.ending_equity, abs=1e-6)
     # Daily-loss and drawdown halt behavior after the restart matches the
     # uninterrupted run exactly (the drawdown limit is crossed only after the
     # restart, so this proves the persisted peak feeds the halt).
-    reference_post = [
-        record for record in reference.rebalances if record.decision_timestamp > cutoff
-    ]
+    reference_post = [record for record in reference.rebalances if record.decision_timestamp > cutoff]
     assert len(restarted.rebalances) == len(reference_post)
     assert [record.risk_overlay_halted for record in restarted.rebalances] == [
         record.risk_overlay_halted for record in reference_post
@@ -785,10 +768,7 @@ def test_session_date_for_equity_uses_new_york_trading_date() -> None:
 def test_crypto_daily_reset_uses_utc_boundary() -> None:
     """Crypto daily-loss resets at the UTC calendar boundary (documented)."""
     epoch = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = [
-        _bar(epoch + timedelta(hours=index), "BTC/USD", 100.0, Market.CRYPTO, 100_000)
-        for index in range(48)
-    ]
+    bars = [_bar(epoch + timedelta(hours=index), "BTC/USD", 100.0, Market.CRYPTO, 100_000) for index in range(48)]
     bars[25] = _bar(epoch + timedelta(hours=25), "BTC/USD", 89.0, Market.CRYPTO, 100_000)
     strategy = _DailyRiskStrategy("BTC/USD", 0.6, market=Market.CRYPTO)
     engine = PortfolioBacktestEngine(
@@ -809,8 +789,6 @@ def test_crypto_daily_reset_uses_utc_boundary() -> None:
     # >11% drop at hour 25 registers as a daily loss past the 0.5% limit and
     # halts the hour-25 decision. If the day-start had been reset to the
     # post-close equity of hour 25 itself, no daily loss would register.
-    decision_at_25 = next(
-        record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp
-    )
+    decision_at_25 = next(record for record in result.rebalances if record.decision_timestamp == bars[25].timestamp)
     assert decision_at_25.risk_overlay_halted
     assert "daily_loss_limit" in decision_at_25.risk_overlay_reasons

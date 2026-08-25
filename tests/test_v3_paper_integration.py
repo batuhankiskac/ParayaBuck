@@ -51,10 +51,7 @@ def _target(weights: dict[str, float]) -> TargetPortfolio:
 
 
 def _rules(*symbols: str) -> dict[str, AssetTradingRules]:
-    return {
-        symbol: AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0)
-        for symbol in symbols
-    }
+    return {symbol: AssetTradingRules(symbol, Market.EQUITY, 0.01, 0.01, 0.01, 1.0) for symbol in symbols}
 
 
 def _plan(
@@ -81,9 +78,7 @@ def test_v3_switch_reuses_current_holdings_as_normal_delta_inventory() -> None:
         _account(_position("AAPL", 80.0)),
         symbols=("AAPL", "MSFT"),
     )
-    assert [(order.symbol, order.side, order.quantity) for order in orders] == [
-        ("AAPL", PortfolioOrderSide.BUY, 20.0)
-    ]
+    assert [(order.symbol, order.side, order.quantity) for order in orders] == [("AAPL", PortfolioOrderSide.BUY, 20.0)]
 
 
 def test_v3_switch_exits_unselected_holdings_and_enters_new_names() -> None:

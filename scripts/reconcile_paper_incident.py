@@ -207,9 +207,7 @@ def _snapshot(
         for item in raw_positions
         if isinstance(item, dict)
     )
-    ending_equity = (
-        float(str(raw_account.get("equity", 0) or 0)) if isinstance(raw_account, dict) else None
-    )
+    ending_equity = float(str(raw_account.get("equity", 0) or 0)) if isinstance(raw_account, dict) else None
     cash_activities = tuple(
         BrokerCashActivityRecord(
             activity_id=str(item.get("id", "")),

@@ -122,9 +122,7 @@ class CandidateSpec:
 
 CANDIDATES: dict[Market, tuple[CandidateSpec, ...]] = {
     Market.EQUITY: (
-        CandidateSpec(
-            "equity_monthly", "equity_residual_momentum_v1", dict(FROZEN_EQUITY), "1d", True
-        ),
+        CandidateSpec("equity_monthly", "equity_residual_momentum_v1", dict(FROZEN_EQUITY), "1d", True),
         CandidateSpec(
             "equity_weekly",
             "equity_residual_momentum_v1",
@@ -191,18 +189,12 @@ def _capture_run(node: dict[str, object], path: str, matches: list[dict[str, obj
     for key in ("1x", "2x", "3x", "cost_1x", "cost_2x", "cost_3x"):
         if key in node and isinstance(node[key], dict):
             sub = node[key]
-            ret = (
-                sub.get("return")
-                if isinstance(sub.get("return"), (int, float))
-                else sub.get("total_return")
-            )
+            ret = sub.get("return") if isinstance(sub.get("return"), (int, float)) else sub.get("total_return")
             if isinstance(ret, (int, float)):
                 matches.append(
                     {
                         "file": path.split(".")[0],
-                        "multiplier": key
-                        if not key.startswith("cost_")
-                        else key.replace("cost_", "") + "x",
+                        "multiplier": key if not key.startswith("cost_") else key.replace("cost_", "") + "x",
                         "peer_return": round(float(ret), 6),
                     }
                 )
@@ -276,12 +268,8 @@ def _run_record(run: ProductBacktestResult, *, cost_multiplier: float) -> dict[s
         "fee_total": round(result.fee_total, 2),
         "total_cost": round(total_cost, 2),
         "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_of_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
-        "cost_per_unit_turnover": (
-            round(total_cost / result.turnover, 6) if result.turnover > 0 else 0.0
-        ),
+        "fees_pct_of_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
+        "cost_per_unit_turnover": (round(total_cost / result.turnover, 6) if result.turnover > 0 else 0.0),
         "avg_holdings": round(result.average_holdings_count, 3),
         "avg_cash_ratio": round(result.average_cash_ratio, 4),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
@@ -318,16 +306,10 @@ class AuditRunner:
                 print(f"  {len(self.equity_bars):,} bars", flush=True)
         else:
             if self.crypto_bars_1h is None:
-                print(
-                    f"Loading extended crypto dataset ({CRYPTO_CSV_EXTENDED.name})...", flush=True
-                )
-                self.crypto_bars_1h = load_csv_bars(
-                    CRYPTO_CSV_EXTENDED, default_market=Market.CRYPTO
-                )
+                print(f"Loading extended crypto dataset ({CRYPTO_CSV_EXTENDED.name})...", flush=True)
+                self.crypto_bars_1h = load_csv_bars(CRYPTO_CSV_EXTENDED, default_market=Market.CRYPTO)
                 print(f"  {len(self.crypto_bars_1h):,} 1h bars", flush=True)
-                self.crypto_bars_1d = aggregate_historical_bars(
-                    self.crypto_bars_1h, "1d", require_complete=True
-                )
+                self.crypto_bars_1d = aggregate_historical_bars(self.crypto_bars_1h, "1d", require_complete=True)
                 print(f"  aggregated {len(self.crypto_bars_1d):,} 1d bars", flush=True)
 
     def _universe(self, market: Market) -> PointInTimeUniverse:
@@ -338,9 +320,7 @@ class AuditRunner:
                     "Building point-in-time equity universe (production scanner policy)...",
                     flush=True,
                 )
-                universe = build_product_universe(
-                    self.config, self.equity_bars, market=Market.EQUITY, end=EQUITY_END
-                )
+                universe = build_product_universe(self.config, self.equity_bars, market=Market.EQUITY, end=EQUITY_END)
             else:
                 print(
                     "Building point-in-time crypto universe from 1h scanner bars (timeframe='1h')...",
@@ -418,17 +398,13 @@ class AuditRunner:
         start, end = WINDOWS[market]
         universe = self._universe(market)
         return {
-            f"{m:g}x": self.run(
-                market, spec, cost_multiplier=m, start=start, end=end, universe=universe
-            )
+            f"{m:g}x": self.run(market, spec, cost_multiplier=m, start=start, end=end, universe=universe)
             for m in (1.0, 2.0, 3.0)
         }
 
     def full_1x_run(self, market: Market, spec: CandidateSpec) -> dict[str, object]:
         start, end = WINDOWS[market]
-        return self.run(
-            market, spec, cost_multiplier=1.0, start=start, end=end, universe=self._universe(market)
-        )
+        return self.run(market, spec, cost_multiplier=1.0, start=start, end=end, universe=self._universe(market))
 
     # ------------------------------------------------------------- section 1
     def section_baseline(self) -> dict[str, object]:
@@ -484,8 +460,7 @@ class AuditRunner:
                     "documented_source": expected["source"],
                 }
                 rows = [
-                    [k, v["documented"], v["reproduced"], v["relative_drift"], v["flag"]]
-                    for k, v in checks.items()
+                    [k, v["documented"], v["reproduced"], v["relative_drift"], v["flag"]] for k, v in checks.items()
                 ]
                 print(f"\nBaseline: {spec.key} vs {expected['source']}", flush=True)
                 print(
@@ -530,9 +505,7 @@ class AuditRunner:
             "first_fill": fill_ts[0].isoformat() if fill_ts else None,
             "last_fill": fill_ts[-1].isoformat() if fill_ts else None,
             "window": record["window"],
-            "min_fill_after_decision_hours": round(min_gap_hours, 3)
-            if min_gap_hours is not None
-            else None,
+            "min_fill_after_decision_hours": round(min_gap_hours, 3) if min_gap_hours is not None else None,
             "same_bar_fill_violations": violations,
             "fill_model": "decision on closed bar; fill at next tradable bar open",
         }
@@ -556,9 +529,7 @@ class AuditRunner:
 
             min_hist = {}
             for spec in specs:
-                strat = portfolio_strategy_from(
-                    spec.strategy_name, spec.parameters, timeframe=spec.strategy_timeframe
-                )
+                strat = portfolio_strategy_from(spec.strategy_name, spec.parameters, timeframe=spec.strategy_timeframe)
                 min_hist[spec.key] = int(strat.minimum_history_bars)
             warmup_bars = {
                 spec.key: len(
@@ -596,8 +567,7 @@ class AuditRunner:
             # (e) no future data: T+1 model spot check on every 1x full run
             t1 = {k: self._t1_check(r) for k, r in runs_1x.items()}
             t1_ok = all(t["same_bar_fill_violations"] == 0 for t in t1.values()) and all(
-                t["first_decision"] is not None
-                and t["window"][0] <= t["first_decision"] <= t["window"][1]
+                t["first_decision"] is not None and t["window"][0] <= t["first_decision"] <= t["window"][1]
                 for t in t1.values()
             )
             # (f) return comparisons on equal horizons
@@ -696,9 +666,7 @@ class AuditRunner:
         return {"available": True, "matches": matches}
 
     @staticmethod
-    def _peer_crosscheck_find(
-        matches: list[dict[str, object]], multiplier: str
-    ) -> list[dict[str, object]]:
+    def _peer_crosscheck_find(matches: list[dict[str, object]], multiplier: str) -> list[dict[str, object]]:
         return [m for m in matches if str(m["multiplier"]) == multiplier]
 
     def section_cost_stress(self, all_records: dict[str, object]) -> dict[str, object]:
@@ -738,9 +706,7 @@ class AuditRunner:
                     "parameters": runs["1x"]["strategy_parameters"],
                     "universe_hash": runs["1x"]["universe_hash"],
                     "window": runs["1x"]["window"],
-                    "runs": {
-                        m: {k: v for k, v in r.items() if k != "_run"} for m, r in runs.items()
-                    },
+                    "runs": {m: {k: v for k, v in r.items() if k != "_run"} for m, r in runs.items()},
                     "peer_crosscheck": peer,
                 }
                 for m in ("1x", "2x", "3x"):
@@ -752,9 +718,7 @@ class AuditRunner:
                             r["return"],
                             r["gross_return"],
                             r["total_cost"],
-                            r["fees_pct_of_gross_pnl"]
-                            if r["fees_pct_of_gross_pnl"] is not None
-                            else float("nan"),
+                            r["fees_pct_of_gross_pnl"] if r["fees_pct_of_gross_pnl"] is not None else float("nan"),
                             r["turnover"],
                             r["cagr"],
                             r["sharpe"],
@@ -904,8 +868,7 @@ class AuditRunner:
                 if market == Market.CRYPTO
                 else "30-day-stepped 6-month folds (2019-01-02 anchored)",
                 "folds": [
-                    {"fold": i + 1, "start": s.isoformat(), "end": e.isoformat()}
-                    for i, (s, e) in enumerate(folds)
+                    {"fold": i + 1, "start": s.isoformat(), "end": e.isoformat()} for i, (s, e) in enumerate(folds)
                 ],
                 "fold_count": len(folds),
                 "universe_hash": hash_point_in_time_universe(universe),
@@ -955,10 +918,7 @@ class AuditRunner:
             print("\nPer-fold returns and winner (baseline vs faster):", flush=True)
             print(
                 _md_table(
-                    ["fold", "start", "end"]
-                    + keys
-                    + ["winner"]
-                    + [f"{fk} vs {control_key}" for fk in faster_keys],
+                    ["fold", "start", "end"] + keys + ["winner"] + [f"{fk} vs {control_key}" for fk in faster_keys],
                     winner_rows,
                 ),
                 flush=True,
@@ -983,15 +943,9 @@ class AuditRunner:
             }
             if top
             else None,
-            "top_2": {"symbol": top[1][0], "realized_pnl": round(top[1][1], 2)}
-            if len(top) > 1
-            else None,
-            "top_3": {"symbol": top[2][0], "realized_pnl": round(top[2][1], 2)}
-            if len(top) > 2
-            else None,
-            "top1_share_of_positive_pnl": round(top[0][1] / positive_total, 4)
-            if positive_total > 0
-            else 0.0,
+            "top_2": {"symbol": top[1][0], "realized_pnl": round(top[1][1], 2)} if len(top) > 1 else None,
+            "top_3": {"symbol": top[2][0], "realized_pnl": round(top[2][1], 2)} if len(top) > 2 else None,
+            "top1_share_of_positive_pnl": round(top[0][1] / positive_total, 4) if positive_total > 0 else 0.0,
             "top2_share_of_positive_pnl": round(sum(i[1] for i in top[:2]) / positive_total, 4)
             if positive_total > 0
             else 0.0,
@@ -1003,9 +957,7 @@ class AuditRunner:
             "max_single_weight": record["maximum_concentration"],
         }
 
-    def _jackknife(
-        self, market: Market, spec: CandidateSpec, drop_symbol: str
-    ) -> dict[str, object]:
+    def _jackknife(self, market: Market, spec: CandidateSpec, drop_symbol: str) -> dict[str, object]:
         universe = self._universe(market)
         filtered = PointInTimeUniverse(
             market=market,
@@ -1013,14 +965,11 @@ class AuditRunner:
                 replace(
                     s,
                     symbols=frozenset(symbol for symbol in s.symbols if symbol != drop_symbol),
-                    observation_set=frozenset(
-                        symbol for symbol in s.observation_set if symbol != drop_symbol
-                    ),
+                    observation_set=frozenset(symbol for symbol in s.observation_set if symbol != drop_symbol),
                 )
                 for s in universe.snapshots
             ),
-            methodology=universe.methodology
-            + f" (jackknife: {drop_symbol} excluded from snapshots)",
+            methodology=universe.methodology + f" (jackknife: {drop_symbol} excluded from snapshots)",
         )
         start, end = WINDOWS[market]
         base = self.run(
@@ -1046,9 +995,7 @@ class AuditRunner:
             "delta_max_drawdown": round(jk["max_drawdown"] - base["max_drawdown"], 6),
             "top_contributors_after_drop": [
                 {"symbol": item.symbol, "realized_pnl": round(item.realized_pnl, 2)}
-                for item in sorted(jk_run.result.per_symbol, key=lambda item: -item.realized_pnl)[
-                    :3
-                ]
+                for item in sorted(jk_run.result.per_symbol, key=lambda item: -item.realized_pnl)[:3]
             ],
             "caveat": (
                 "jackknife removes the symbol from the PIT universe snapshots (symbols and "
@@ -1081,22 +1028,14 @@ class AuditRunner:
             "total_rebalances": total_rebalances,
             "btc": {
                 "rebalances_held": btc_rebalances,
-                "share_of_rebalances": round(btc_rebalances / total_rebalances, 4)
-                if total_rebalances
-                else 0.0,
-                "avg_weight_when_held": round(btc_weight_sum / btc_rebalances, 4)
-                if btc_rebalances
-                else 0.0,
+                "share_of_rebalances": round(btc_rebalances / total_rebalances, 4) if total_rebalances else 0.0,
+                "avg_weight_when_held": round(btc_weight_sum / btc_rebalances, 4) if btc_rebalances else 0.0,
                 "realized_pnl": round(contributions.get("BTC/USD", 0.0), 2),
             },
             "eth": {
                 "rebalances_held": eth_rebalances,
-                "share_of_rebalances": round(eth_rebalances / total_rebalances, 4)
-                if total_rebalances
-                else 0.0,
-                "avg_weight_when_held": round(eth_weight_sum / eth_rebalances, 4)
-                if eth_rebalances
-                else 0.0,
+                "share_of_rebalances": round(eth_rebalances / total_rebalances, 4) if total_rebalances else 0.0,
+                "avg_weight_when_held": round(eth_weight_sum / eth_rebalances, 4) if eth_rebalances else 0.0,
                 "realized_pnl": round(contributions.get("ETH/USD", 0.0), 2),
             },
             "note": (
@@ -1128,9 +1067,7 @@ class AuditRunner:
                 }
                 if market == Market.EQUITY:
                     top_symbol = conc["top_1"]["symbol"] if conc["top_1"] else None
-                    entry["jackknife"] = (
-                        self._jackknife(market, spec, top_symbol) if top_symbol else None
-                    )
+                    entry["jackknife"] = self._jackknife(market, spec, top_symbol) if top_symbol else None
                 else:
                     entry["pinned_analysis"] = self._crypto_pinned_analysis(record)
                 market_payload[spec.key] = entry
@@ -1183,25 +1120,19 @@ class AuditRunner:
             mkey = market.value
             records = {spec.key: self.full_1x_run(market, spec) for spec in CANDIDATES[market]}
             years = sorted(
-                {
-                    year
-                    for record in records.values()
-                    for year, _ret, _bench in record["_run"].report.yearly_returns
-                }
+                {year for record in records.values() for year, _ret, _bench in record["_run"].report.yearly_returns}
             )
             headers = ["year"] + [spec.key for spec in CANDIDATES[market]] + ["benchmark"]
             rows = []
             for year in years:
                 row: list[object] = [year]
                 for spec in CANDIDATES[market]:
-                    yearly = dict(
-                        (y, (r, b)) for y, r, b in records[spec.key]["_run"].report.yearly_returns
-                    )
+                    yearly = dict((y, (r, b)) for y, r, b in records[spec.key]["_run"].report.yearly_returns)
                     ret, _b = yearly.get(year, (None, None))
                     row.append(ret)
-                bench = dict(
-                    (y, b) for y, _r, b in records[list(records)[0]]["_run"].report.yearly_returns
-                ).get(year, None)
+                bench = dict((y, b) for y, _r, b in records[list(records)[0]]["_run"].report.yearly_returns).get(
+                    year, None
+                )
                 rows.append(row + [bench])
             payload[mkey] = {
                 "benchmark": records[list(records)[0]]["_run"].result.benchmark_symbol,
@@ -1215,15 +1146,13 @@ class AuditRunner:
                     {
                         "year": r[0],
                         **{
-                            spec.key: dict(
-                                (y, v)
-                                for y, v, _b in records[spec.key]["_run"].report.yearly_returns
-                            ).get(r[0])
+                            spec.key: dict((y, v) for y, v, _b in records[spec.key]["_run"].report.yearly_returns).get(
+                                r[0]
+                            )
                             for spec in CANDIDATES[market]
                         },
                         "benchmark": dict(
-                            (y, b)
-                            for y, _r, b in records[list(records)[0]]["_run"].report.yearly_returns
+                            (y, b) for y, _r, b in records[list(records)[0]]["_run"].report.yearly_returns
                         ).get(r[0]),
                     }
                     for r in records[list(records)[0]]["_run"].report.yearly_returns
@@ -1262,14 +1191,10 @@ class AuditRunner:
                 mdd_better = f1x["max_drawdown"] < c1x["max_drawdown"]
                 caputil_better = f1x["avg_exposure"] > c1x["avg_exposure"]
                 cost_robust = (
-                    (f1x["return"] - f3x["return"]) / abs(f1x["return"]) * 100.0
-                    if f1x["return"] != 0
-                    else 0.0
+                    (f1x["return"] - f3x["return"]) / abs(f1x["return"]) * 100.0 if f1x["return"] != 0 else 0.0
                 )
                 c_cost_robust = (
-                    (c1x["return"] - c3x["return"]) / abs(c1x["return"]) * 100.0
-                    if c1x["return"] != 0
-                    else 0.0
+                    (c1x["return"] - c3x["return"]) / abs(c1x["return"]) * 100.0 if c1x["return"] != 0 else 0.0
                 )
                 # Comparative cost robustness: the faster candidate must keep
                 # its 1x and 2x edge (2x not materially below the control's 2x)
@@ -1283,12 +1208,8 @@ class AuditRunner:
                 )
                 wf_control = wf[mkey]["per_candidate"][control.key]
                 wf_faster = wf[mkey]["per_candidate"][fk.key]
-                wf_consistent = (
-                    wf_faster["positive_fold_ratio"] >= 0.5 and wf_faster["median_fold_return"] > 0
-                )
-                wf_wins = wf[mkey]["faster_vs_baseline_fold_wins"].get(
-                    f"{fk.key}_wins_over_{control.key}", 0
-                )
+                wf_consistent = wf_faster["positive_fold_ratio"] >= 0.5 and wf_faster["median_fold_return"] > 0
+                wf_wins = wf[mkey]["faster_vs_baseline_fold_wins"].get(f"{fk.key}_wins_over_{control.key}", 0)
                 conc_control = conc[mkey][control.key]["concentration"]
                 conc_faster = conc[mkey][fk.key]["concentration"]
                 jk = conc[mkey][fk.key].get("jackknife") if market == Market.EQUITY else None
@@ -1296,13 +1217,7 @@ class AuditRunner:
                     jk is None or abs(jk["delta_return"]) < 0.05
                 )
                 second_axis = [sharpe_better, mdd_better, caputil_better]
-                dominates = (
-                    cagr_up
-                    and any(second_axis)
-                    and acceptable_cost
-                    and wf_consistent
-                    and concentration_ok
-                )
+                dominates = cagr_up and any(second_axis) and acceptable_cost and wf_consistent and concentration_ok
                 criteria[fk.key] = {
                     "net_cagr_up": {
                         "pass": cagr_up,
@@ -1377,13 +1292,9 @@ def _brief_evidence(info: dict[str, object]) -> str:
         note = str(info["note"])
     else:
         note = ""
-    interesting = {
-        k: v for k, v in info.items() if k not in ("pass", "note") and not isinstance(v, dict)
-    }
+    interesting = {k: v for k, v in info.items() if k not in ("pass", "note") and not isinstance(v, dict)}
     if interesting:
-        return "; ".join(f"{k}={v}" for k, v in interesting.items())[:300] + (
-            " | " + note if note else ""
-        )
+        return "; ".join(f"{k}={v}" for k, v in interesting.items())[:300] + (" | " + note if note else "")
     nested = {k: v for k, v in info.items() if k not in ("pass", "note") and isinstance(v, dict)}
     if nested:
         parts = []
@@ -1403,9 +1314,7 @@ def main() -> int:
         default="baseline,cost,walkforward,concentration,calendar,methodology,verdict",
         help="comma-separated sections to run",
     )
-    parser.add_argument(
-        "--markets", default="equity,crypto", help="comma-separated markets (equity,crypto)"
-    )
+    parser.add_argument("--markets", default="equity,crypto", help="comma-separated markets (equity,crypto)")
     args = parser.parse_args()
     sections = {s.strip() for s in args.only.split(",") if s.strip()}
     market_set = set()
@@ -1431,9 +1340,7 @@ def main() -> int:
         for market in (Market.EQUITY, Market.CRYPTO):
             if market not in market_set:
                 continue
-            all_records[market.value] = {
-                spec.key: runner.cost_stress_runs(market, spec) for spec in CANDIDATES[market]
-            }
+            all_records[market.value] = {spec.key: runner.cost_stress_runs(market, spec) for spec in CANDIDATES[market]}
         results["cost_stress"] = runner.section_cost_stress(all_records)
         _write("cost_stress.json", results["cost_stress"])
 
@@ -1490,9 +1397,7 @@ def main() -> int:
         "repo_head": _git_head(),
         "generated_utc": datetime.now(UTC).isoformat(),
         "datasets": {m.value: str(DATASETS[m][0].name) for m in market_set},
-        "windows": {
-            m.value: [WINDOWS[m][0].isoformat(), WINDOWS[m][1].isoformat()] for m in market_set
-        },
+        "windows": {m.value: [WINDOWS[m][0].isoformat(), WINDOWS[m][1].isoformat()] for m in market_set},
         "universe_hashes": universe_hashes,
         "universe_snapshot_counts": universe_snapshot_counts,
         "candidates": {

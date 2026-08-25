@@ -114,9 +114,7 @@ def _bars(
         for offset, symbol in enumerate(symbols):
             drift = 1.0015 + offset * 0.00003
             noise_amp = 0.004 + offset * 0.0005
-            close = (
-                100.0 * (drift**index) * (1.0 + noise_amp * math.sin(index * 0.9 + offset * 1.7))
-            )
+            close = 100.0 * (drift**index) * (1.0 + noise_amp * math.sin(index * 0.9 + offset * 1.7))
             bars.append(
                 Bar(
                     timestamp,
@@ -208,9 +206,7 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     crypto_universe = load_active_crypto_symbols(config.universe.crypto)
     assert equity_universe, "equity universe preflight must yield symbols"
     assert crypto_universe, "crypto universe preflight must yield symbols"
-    transitions.append(
-        f"universe_preflight equity={len(equity_universe)} crypto={len(crypto_universe)}"
-    )
+    transitions.append(f"universe_preflight equity={len(equity_universe)} crypto={len(crypto_universe)}")
 
     repository = PortfolioStateRepository(tmp_path / "dual.sqlite3")
     broker = _PaperBroker()
@@ -234,12 +230,10 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     equity_runtime.seed([bar for day in equity_days[:300] for bar in equity_by_day[day]])
     crypto_runtime.seed([bar for day in crypto_days[:300] for bar in crypto_by_day[day]])
     assert all(
-        len(series) >= equity_runtime.strategy.minimum_history_bars
-        for series in equity_runtime.history.values()
+        len(series) >= equity_runtime.strategy.minimum_history_bars for series in equity_runtime.history.values()
     )
     assert all(
-        len(series) >= crypto_runtime.strategy.minimum_history_bars
-        for series in crypto_runtime.history.values()
+        len(series) >= crypto_runtime.strategy.minimum_history_bars for series in crypto_runtime.history.values()
     )
     transitions.append("warmup equity_ready crypto_ready")
 
@@ -260,9 +254,7 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     assert crypto_catch_up.target is not None
     assert crypto_catch_up.target.metadata.get("decision_origin") == "startup_catch_up"
     assert crypto_catch_up.target.invested_weight > 0
-    transitions.append(
-        f"startup_catch_up equity=submitted crypto=submitted orders={len(broker.submitted)}"
-    )
+    transitions.append(f"startup_catch_up equity=submitted crypto=submitted orders={len(broker.submitted)}")
 
     # Stage 4: account reconciliation — a fresh broker snapshot is taken
     # before any decision, exactly like the runtime does between phases.
@@ -290,22 +282,18 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
 
     # Cadence contract: equity rebalances only on ISO-week starts (weekly).
     assert all(
-        decision.isocalendar()[:2] != (decision - timedelta(days=1)).isocalendar()[:2]
-        for decision in equity_decisions
+        decision.isocalendar()[:2] != (decision - timedelta(days=1)).isocalendar()[:2] for decision in equity_decisions
     )
     # Cadence contract: crypto rebalances on 96h boundaries.
     for previous, current in zip(crypto_decisions, crypto_decisions[1:], strict=False):
-        epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (
-            96 * 3600
-        )
+        epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (96 * 3600)
         assert epoch_delta >= 1
 
     # Persisted catch-up decisions carry the startup_catch_up origin.
     connection = repository.store.connection
     for market in ("equity", "crypto"):
         row = connection.execute(
-            "SELECT target_json FROM portfolio_decisions WHERE market=? "
-            "ORDER BY decision_timestamp ASC LIMIT 1",
+            "SELECT target_json FROM portfolio_decisions WHERE market=? ORDER BY decision_timestamp ASC LIMIT 1",
             (market,),
         ).fetchone()
         assert row is not None
@@ -316,8 +304,7 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     equity_invested = crypto_invested = 0.0
     for market, runtime in ((Market.EQUITY, equity_runtime), (Market.CRYPTO, crypto_runtime)):
         row = connection.execute(
-            "SELECT target_json FROM portfolio_decisions WHERE market=? "
-            "ORDER BY decision_timestamp DESC LIMIT 1",
+            "SELECT target_json FROM portfolio_decisions WHERE market=? ORDER BY decision_timestamp DESC LIMIT 1",
             (market.value,),
         ).fetchone()
         assert row is not None
@@ -335,9 +322,7 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
 
     # The persisted repository is the single authoritative record: both
     # markets have decisions in ONE database (extended, not duplicated).
-    markets = {
-        str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")
-    }
+    markets = {str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")}
     assert markets == {"equity", "crypto"}
     equity_decision_count = connection.execute(
         "SELECT COUNT(*) FROM portfolio_decisions WHERE market='equity'"
@@ -363,15 +348,11 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     crypto_restart.close()
     # No duplicate decision rows after the restart attempt.
     assert (
-        connection.execute(
-            "SELECT COUNT(*) FROM portfolio_decisions WHERE market='equity'"
-        ).fetchone()[0]
+        connection.execute("SELECT COUNT(*) FROM portfolio_decisions WHERE market='equity'").fetchone()[0]
         == equity_decision_count
     )
     assert (
-        connection.execute(
-            "SELECT COUNT(*) FROM portfolio_decisions WHERE market='crypto'"
-        ).fetchone()[0]
+        connection.execute("SELECT COUNT(*) FROM portfolio_decisions WHERE market='crypto'").fetchone()[0]
         == crypto_decision_count
     )
     transitions.append("restart no_duplicate_catch_up")

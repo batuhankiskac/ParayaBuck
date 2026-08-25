@@ -59,13 +59,10 @@ def _bar(symbol: str, timestamp: datetime, close: float, market: Market) -> Bar:
     )
 
 
-def _series(
-    symbol: str, slope: float, days: int = 300, market: Market = Market.EQUITY
-) -> tuple[Bar, ...]:
+def _series(symbol: str, slope: float, days: int = 300, market: Market = Market.EQUITY) -> tuple[Bar, ...]:
     start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
     return tuple(
-        _bar(symbol, start + timedelta(days=index), 100 * (1 + slope) ** index, market)
-        for index in range(days)
+        _bar(symbol, start + timedelta(days=index), 100 * (1 + slope) ** index, market) for index in range(days)
     )
 
 
@@ -97,9 +94,7 @@ def test_scanner_pool_exceeds_streamed_observation_set() -> None:
 
 
 def test_observation_set_uses_strategy_alpha_and_pins() -> None:
-    strategy = portfolio_strategy_from(
-        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
-    )
+    strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
     pool = ("SPY", "AAPL", "MSFT", "JPM")
     history = {
         symbol: _series(symbol, slope)
@@ -322,8 +317,7 @@ def test_residual_momentum_aligns_returns_on_timestamps() -> None:
     # The market jumps +9% on day 2 (the day the stock does not trade).
     spy_closes = [100.0, 101.0, 110.0, 111.0, 112.0, 113.0]
     spy_bars = tuple(
-        _bar("SPY", start + timedelta(days=index), close, Market.EQUITY)
-        for index, close in enumerate(spy_closes)
+        _bar("SPY", start + timedelta(days=index), close, Market.EQUITY) for index, close in enumerate(spy_closes)
     )
     # The stock trades at the market's exact price on every day BOTH trade
     # (days 0,1,3,4,5 — day 2 is the stock's missing session): its return

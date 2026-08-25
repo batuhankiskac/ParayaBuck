@@ -73,17 +73,12 @@ class FakeCryptoClient:
 
     def get_crypto_bars(self, request: Any) -> Any:
         minutes = _timeframe_minutes(request.timeframe)
-        rows = _rows(
-            list(request.symbol_or_symbols), request.start, request.end, minutes, Market.CRYPTO
-        )
+        rows = _rows(list(request.symbol_or_symbols), request.start, request.end, minutes, Market.CRYPTO)
         self.bar_rows.append(len(rows))
         return SimpleNamespace(df=_to_df(rows))
 
     def get_crypto_latest_quote(self, request: Any) -> dict[str, Any]:
-        return {
-            symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05)
-            for symbol in request.symbol_or_symbols
-        }
+        return {symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05) for symbol in request.symbol_or_symbols}
 
 
 class FakeStockClient:
@@ -92,24 +87,17 @@ class FakeStockClient:
 
     def get_stock_bars(self, request: Any) -> Any:
         minutes = _timeframe_minutes(request.timeframe)
-        rows = _rows(
-            list(request.symbol_or_symbols), request.start, request.end, minutes, Market.EQUITY
-        )
+        rows = _rows(list(request.symbol_or_symbols), request.start, request.end, minutes, Market.EQUITY)
         self.bar_rows.append(len(rows))
         return SimpleNamespace(df=_to_df(rows))
 
     def get_stock_latest_quote(self, request: Any) -> dict[str, Any]:
-        return {
-            symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05)
-            for symbol in request.symbol_or_symbols
-        }
+        return {symbol: SimpleNamespace(bid_price=100.0, ask_price=100.05) for symbol in request.symbol_or_symbols}
 
 
 def _timeframe_minutes(timeframe: Any) -> int:
     unit_minutes = {"Minute": 1, "Hour": 60, "Day": 1440}
-    return getattr(timeframe, "amount", 1) * unit_minutes.get(
-        str(getattr(timeframe, "unit")).split(".")[-1], 1
-    )
+    return getattr(timeframe, "amount", 1) * unit_minutes.get(str(getattr(timeframe, "unit")).split(".")[-1], 1)
 
 
 class FakeTrading:
@@ -118,8 +106,7 @@ class FakeTrading:
 
     def get_all_assets(self, _request: Any) -> list[Any]:
         return [
-            SimpleNamespace(symbol=symbol, tradable=True, status="active", exchange="NASDAQ")
-            for symbol in self.symbols
+            SimpleNamespace(symbol=symbol, tradable=True, status="active", exchange="NASDAQ") for symbol in self.symbols
         ]
 
 
@@ -200,17 +187,13 @@ def _crypto_result_snapshot(result: Any) -> dict[str, Any]:
     return payload
 
 
-def test_crypto_refresh_cold_and_warm_cache_results_are_identical(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_crypto_refresh_cold_and_warm_cache_results_are_identical(tmp_path: Path, monkeypatch: Any) -> None:
     config = _config(tmp_path)
     trading = FakeTrading(_CRYPTO)
     crypto = FakeCryptoClient()
     stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(
-        preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock)
-    )
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
 
     cold = preflight_module.refresh_crypto_universe(config, "k", "s")
     cold_rows = sum(crypto.bar_rows)
@@ -224,17 +207,13 @@ def test_crypto_refresh_cold_and_warm_cache_results_are_identical(
     assert _crypto_result_snapshot(cold) == _crypto_result_snapshot(warm)
 
 
-def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(tmp_path: Path, monkeypatch: Any) -> None:
     config = _config(tmp_path)
     trading = FakeTrading(_CRYPTO)
     crypto = FakeCryptoClient()
     stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(
-        preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock)
-    )
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
     preflight_module.refresh_crypto_universe(config, "k", "s")
 
     from dataclasses import replace
@@ -253,17 +232,13 @@ def test_crypto_refresh_config_digest_change_fails_closed_to_full_refetch(
     assert crypto.bar_rows and crypto.bar_rows[0] >= len(_CRYPTO) * 336
 
 
-def test_equity_refresh_observation_cache_keeps_scanner_result_identical(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_equity_refresh_observation_cache_keeps_scanner_result_identical(tmp_path: Path, monkeypatch: Any) -> None:
     config = _config(tmp_path)
     trading = FakeTrading(_EQUITY)
     crypto = FakeCryptoClient()
     stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(
-        preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock)
-    )
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
 
     cold = preflight_module.refresh_equity_universe(config, "k", "s")
     cold_bars = sum(stock.bar_rows)
@@ -284,9 +259,7 @@ class _FrozenDatetime(datetime):
         return cls.frozen.astimezone(tz or UTC)
 
 
-def test_equity_same_slot_skip_after_close_produces_identical_output(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_equity_same_slot_skip_after_close_produces_identical_output(tmp_path: Path, monkeypatch: Any) -> None:
     """After the session close the cached final daily bar needs no refetch;
     a same-slot re-run must skip the whole daily delta pass and produce the
     identical scanner result."""
@@ -303,9 +276,7 @@ def test_equity_same_slot_skip_after_close_produces_identical_output(
     crypto = FakeCryptoClient()
     stock = FakeStockClient()
     _install_fakes(monkeypatch, trading)
-    monkeypatch.setattr(
-        preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock)
-    )
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", lambda *a, **k: _history(config, crypto, stock))
 
     first = preflight_module.refresh_equity_universe(config, "k", "s")
     first_calls = len(stock.bar_rows)

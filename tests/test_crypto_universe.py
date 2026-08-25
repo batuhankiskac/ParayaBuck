@@ -126,9 +126,7 @@ def test_scanner_is_deterministic_and_atomic(tmp_path: Path) -> None:
     ]
     timestamp = datetime.now(UTC)
     first = scanner.scan(candidates, data_timestamp=timestamp, selection_timestamp=timestamp)
-    second = scanner.scan(
-        list(reversed(candidates)), data_timestamp=timestamp, selection_timestamp=timestamp
-    )
+    second = scanner.scan(list(reversed(candidates)), data_timestamp=timestamp, selection_timestamp=timestamp)
     assert first == second
     # The eligible POOL exceeds the stream capacity; the OBSERVATION SET is
     # the streamed subset with sector diversity.
@@ -247,9 +245,7 @@ def _managed_crypto_ledger(tmp_path: Path) -> tuple[ExecutionLedger, OrderIntent
         ),
         "entry-id",
     )
-    ledger.register_protective_stop(
-        "acct", order.client_order_id, "parayabuck-entry-stop", "stop-id"
-    )
+    ledger.register_protective_stop("acct", order.client_order_id, "parayabuck-entry-stop", "stop-id")
     return ledger, order
 
 
@@ -323,9 +319,7 @@ def test_stop_fill_during_target_cancel_never_submits_duplicate_sell(
     ledger, _order = _managed_crypto_ledger(tmp_path)
     client = _ExitClient(stop_status="filled")
     broker = _broker(ledger, client)
-    broker.process_crypto_price(
-        CryptoPriceObservation("BTC/USD", 111, 94, "one_minute_bar", datetime.now(UTC))
-    )
+    broker.process_crypto_price(CryptoPriceObservation("BTC/USD", 111, 94, "one_minute_bar", datetime.now(UTC)))
     assert client.submitted == []
     assert ledger.managed_for_account("acct") == {}
     ledger.close()
@@ -336,9 +330,7 @@ def test_unconfirmed_stop_cancel_halts_without_target_order(tmp_path: Path) -> N
     client = _ExitClient(stop_status="accepted")
     broker = _broker(ledger, client)
     with pytest.raises(AmbiguousOrderState, match="unconfirmed"):
-        broker.process_crypto_price(
-            CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC))
-        )
+        broker.process_crypto_price(CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC)))
     assert client.submitted == []
     position = ledger.managed_for_account("acct")["BTC/USD"]
     assert position.status == "manual_intervention_required"

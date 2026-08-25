@@ -102,9 +102,7 @@ class MarketDataset:
                     raise ValueError(f"Duplicate {label} bar: {key}")
                 keys.add(key)
         signal_symbols = {canonical_symbol(bar.symbol, bar.market) for bar in self.signal_bars}
-        executable_symbols = {
-            canonical_symbol(bar.symbol, bar.market) for bar in self.executable_bars
-        }
+        executable_symbols = {canonical_symbol(bar.symbol, bar.market) for bar in self.executable_bars}
         if not signal_symbols.issubset(executable_symbols):
             missing = sorted(signal_symbols - executable_symbols)
             raise ValueError(f"No executable series for signal symbols: {missing}")
@@ -141,9 +139,7 @@ class MarketDataset:
             ("cash_rate", rate.timestamp.isoformat(), rate.annualized_rate)
             for rate in sorted(self.cash_rates, key=lambda item: item.timestamp)
         )
-        return hashlib.sha256(
-            json.dumps(payload, separators=(",", ":"), sort_keys=False).encode()
-        ).hexdigest()
+        return hashlib.sha256(json.dumps(payload, separators=(",", ":"), sort_keys=False).encode()).hexdigest()
 
 
 __all__ = [

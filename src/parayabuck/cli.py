@@ -45,18 +45,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help="configuration YAML path")
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("web", help="start the local operations console")
-    backup = commands.add_parser(
-        "backup", help="consistent SQLite backup of the runtime decision database"
-    )
+    backup = commands.add_parser("backup", help="consistent SQLite backup of the runtime decision database")
     backup.add_argument(
         "--retention-days",
         type=float,
         default=None,
         help="override the configured backup retention (days)",
     )
-    authorize = commands.add_parser(
-        "authorize-live", help="create a short-lived account/config-bound live approval"
-    )
+    authorize = commands.add_parser("authorize-live", help="create a short-lived account/config-bound live approval")
     authorize.add_argument("--operator", required=True)
     authorize.add_argument("--expires-minutes", type=int, default=15)
     backtest = commands.add_parser("backtest", help="run a production-strategy backtest")
@@ -95,9 +91,7 @@ def _add_backtest_arguments(
     parser.add_argument("--end")
     parser.add_argument("--initial-cash", type=float, default=None)
     parser.add_argument("--output-dir", default=None)
-    parser.add_argument(
-        "--param", action="append", default=[], metavar="NAME=VALUE", help="strategy override"
-    )
+    parser.add_argument("--param", action="append", default=[], metavar="NAME=VALUE", help="strategy override")
     if include_cost_stress:
         parser.add_argument(
             "--cost-stress",
@@ -128,9 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
     bars = _load_bars(config, args, market, start, end)
-    corporate_actions = (
-        load_csv_corporate_actions(args.corporate_actions) if args.corporate_actions else None
-    )
+    corporate_actions = load_csv_corporate_actions(args.corporate_actions) if args.corporate_actions else None
     if args.command == "optimize":
         grid = _parse_grid(args.grid)
         parameters = _strategy_parameters(config, market, args.param)
@@ -194,32 +186,17 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         # clean SystemExit style as every other missing prerequisite —
         # LiveOperatorApproval.calculated_signature would only raise a raw
         # ValueError at signing time.
-        raise SystemExit(
-            f"{config.live.operator_approval_key_env} must be set to a key of "
-            "at least 32 characters"
-        )
+        raise SystemExit(f"{config.live.operator_approval_key_env} must be set to a key of at least 32 characters")
     equity_universe = config.universe.equity
-    if (
-        config.strategy.equity.enabled
-        and equity_universe.enabled
-        and equity_universe.dynamic_selection_enabled
-    ):
+    if config.strategy.equity.enabled and equity_universe.enabled and equity_universe.dynamic_selection_enabled:
         _symbols, status = validate_active_universe(equity_universe)
         if status != "success" and not equity_universe.allow_static_fallback_trading:
-            raise SystemExit(
-                f"Live authorization requires a valid dynamic equity universe; status={status}"
-            )
+            raise SystemExit(f"Live authorization requires a valid dynamic equity universe; status={status}")
     crypto_universe = config.universe.crypto
-    if (
-        config.strategy.crypto.enabled
-        and crypto_universe.enabled
-        and crypto_universe.dynamic_selection_enabled
-    ):
+    if config.strategy.crypto.enabled and crypto_universe.enabled and crypto_universe.dynamic_selection_enabled:
         _symbols, status = validate_active_crypto_universe(crypto_universe)
         if status != "success" and not crypto_universe.allow_static_fallback_trading:
-            raise SystemExit(
-                f"Live authorization requires a valid dynamic crypto universe; status={status}"
-            )
+            raise SystemExit(f"Live authorization requires a valid dynamic crypto universe; status={status}")
     broker = AlpacaBroker(key, secret, paper=False)
     try:
         broker.account()  # Read-only identity verification against the live endpoint.
@@ -247,9 +224,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             continue
         if not symbols:
             raise SystemExit(f"No active {market.value} universe is available")
-        strategy = portfolio_strategy_from(
-            selection.name, selection.parameters, timeframe=selection.timeframe
-        )
+        strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
         digests.append(
             configuration_digest(
                 strategy,
@@ -274,10 +249,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         json.dumps(approval.to_dict(), indent=2, sort_keys=True),
         mode=0o600,
     )
-    print(
-        f"Live approval written for account ...{account_suffix}; "
-        f"expires {approval.expires_at.isoformat()}"
-    )
+    print(f"Live approval written for account ...{account_suffix}; expires {approval.expires_at.isoformat()}")
     return 0
 
 
@@ -287,9 +259,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
     backups older than the retention window."""
     from parayabuck.backup import backup_database, verify_backup
 
-    retention_days = (
-        args.retention_days if args.retention_days is not None else config.backup.retention_days
-    )
+    retention_days = args.retention_days if args.retention_days is not None else config.backup.retention_days
     destination = backup_database(
         config.runtime.decision_db_path,
         config.backup.path,
@@ -338,9 +308,7 @@ def _load_bars(
         stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
-    strategy = portfolio_strategy_from(
-        selection.name, selection.parameters, timeframe=selection.timeframe
-    )
+    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     minimum_bars = strategy.minimum_history_bars
     # Bounded warmup extension: a symbol with fewer pre-start bars than the
     # strategy declares would silently drop out of the early evaluation
@@ -354,8 +322,7 @@ def _load_bars(
             attempts += 1
             expected_per_symbol = max(
                 1,
-                int((end_at - start_at).total_seconds() / 86_400)
-                * (24 if selection.timeframe == "1h" else 1),
+                int((end_at - start_at).total_seconds() / 86_400) * (24 if selection.timeframe == "1h" else 1),
             )
             batch_size = max(1, min(100, 9_000 // expected_per_symbol))
             for offset in range(0, len(symbols), batch_size):
@@ -368,21 +335,17 @@ def _load_bars(
                     adjustment="splits" if market == Market.EQUITY else "raw",
                 )
                 for symbol in batch:
-                    by_symbol[symbol] = [
-                        bar for bar in downloaded.get(symbol, ()) if bar.timestamp >= start_at
-                    ]
+                    by_symbol[symbol] = [bar for bar in downloaded.get(symbol, ()) if bar.timestamp >= start_at]
             deficient = [
                 symbol
                 for symbol in symbols
-                if start is not None
-                and sum(1 for bar in by_symbol[symbol] if bar.timestamp < start) < minimum_bars
+                if start is not None and sum(1 for bar in by_symbol[symbol] if bar.timestamp < start) < minimum_bars
             ]
             if not deficient:
                 break
             if attempts >= 3:
                 log.warning(
-                    "Warmup still short of %d pre-start bars for %d symbol(s) after "
-                    "3 extension attempts: %s",
+                    "Warmup still short of %d pre-start bars for %d symbol(s) after 3 extension attempts: %s",
                     minimum_bars,
                     len(deficient),
                     ", ".join(sorted(deficient)[:20]),
@@ -417,9 +380,7 @@ def _warmup_window_days(config: Config, market: Market, end_date: datetime | Non
     a historical backtest sizes its warmup with that era's session density.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    strategy = portfolio_strategy_from(
-        selection.name, selection.parameters, timeframe=selection.timeframe
-    )
+    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     lookback_days = 60 if market == Market.EQUITY else config.universe.crypto.scanner.lookback_days
     from parayabuck.markets.timeframes import bars_to_calendar_days
 
@@ -443,9 +404,7 @@ def _candidate_symbols(
     limit: int | None,
 ) -> list[str]:
     if explicit:
-        return list(
-            dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip())
-        )
+        return list(dict.fromkeys(item.strip().upper() for item in explicit.split(",") if item.strip()))
     if market == Market.EQUITY:
         # Always download the broad eligible universe. The historical Stage-A
         # shortlist is applied per date inside the backtest universe builder,
@@ -495,9 +454,7 @@ def _candidate_symbols(
     return [*required_order, *candidates[: max(0, limit or len(candidates))]]
 
 
-def _strategy_parameters(
-    config: Config, market: Market, raw_overrides: list[str]
-) -> dict[str, object]:
+def _strategy_parameters(config: Config, market: Market, raw_overrides: list[str]) -> dict[str, object]:
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     parameters = dict(selection.parameters)
     for item in raw_overrides:

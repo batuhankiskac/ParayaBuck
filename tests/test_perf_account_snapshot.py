@@ -112,9 +112,7 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct", account=broker.account)
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps=False, has_data_gaps_for_market=lambda market: False
-    )
+    runtime.market_state = SimpleNamespace(has_data_gaps=False, has_data_gaps_for_market=lambda market: False)
     runtime._managed_pin_symbols = set()
     runtime._last_portfolio_status = {}
     runtime._universe_retry_at = {}
@@ -147,11 +145,7 @@ def test_decision_cycle_issues_at_most_one_broker_account_fetch(tmp_path) -> Non
     runtime.seed(_bars(start, 220))
     broker.account_calls = 0
     for day in range(10):
-        batch = [
-            bar
-            for bar in _bars(start + timedelta(days=221 + day), 1)
-            if bar.market == Market.EQUITY
-        ]
+        batch = [bar for bar in _bars(start + timedelta(days=221 + day), 1) if bar.market == Market.EQUITY]
         # The account loop refreshed the snapshot at its last poll.
         engine._last_account_at = datetime.now(UTC)
         engine._process_portfolio_timestamp(batch)

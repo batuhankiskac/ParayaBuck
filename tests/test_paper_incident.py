@@ -110,13 +110,9 @@ def test_incident_download_paginates_orders_and_fills(monkeypatch) -> None:
     assert len(incident_cli._all_orders("key", "secret", None)) == 501
     assert len(incident_cli._all_fills("key", "secret", "2026-01-01T00:00:00Z")) == 101
     assert any("until" in params for path, params in calls if path == "/orders")
-    assert any(
-        "page_token" in params for path, params in calls if path == "/account/activities/FILL"
-    )
+    assert any("page_token" in params for path, params in calls if path == "/account/activities/FILL")
     assert all(
-        params["after"] == "2026-01-01T00:00:00Z"
-        for path, params in calls
-        if path == "/account/activities/FILL"
+        params["after"] == "2026-01-01T00:00:00Z" for path, params in calls if path == "/account/activities/FILL"
     )
 
 
@@ -141,9 +137,7 @@ def test_incident_equity_bridge_uses_unrealized_pnl_change(tmp_path) -> None:
 
 
 def test_incident_download_paginates_relevant_cash_activities(monkeypatch) -> None:
-    first_page = [
-        {"id": f"cash-{index}", "date": "2026-01-02", "net_amount": "1"} for index in range(100)
-    ]
+    first_page = [{"id": f"cash-{index}", "date": "2026-01-02", "net_amount": "1"} for index in range(100)]
     second_page = [{"id": "cash-older", "date": "2026-01-01", "net_amount": "-2"}]
     calls: list[dict[str, object]] = []
 

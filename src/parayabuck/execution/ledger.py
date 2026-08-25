@@ -269,9 +269,7 @@ class ExecutionLedger:
         # resurrected from a historical row on the next open. INSERT OR
         # IGNORE keeps it idempotent even if a crash lands between the
         # backfill and the stamp.
-        applied_versions = {
-            int(row[0]) for row in self.connection.execute("SELECT version FROM schema_migrations")
-        }
+        applied_versions = {int(row[0]) for row in self.connection.execute("SELECT version FROM schema_migrations")}
         if 4 not in applied_versions:
             self.connection.execute(
                 """
@@ -374,10 +372,7 @@ class ExecutionLedger:
                 (account_id, symbol, order.client_order_id),
             ).fetchone()
             if existing_open is not None:
-                raise ValueError(
-                    "Single-managed-entry invariant violated for "
-                    f"{symbol}: existing={existing_open[0]}"
-                )
+                raise ValueError(f"Single-managed-entry invariant violated for {symbol}: existing={existing_open[0]}")
             existing_pending = self.connection.execute(
                 """
                 SELECT client_order_id FROM orders
@@ -390,10 +385,7 @@ class ExecutionLedger:
                 (account_id, symbol, order.client_order_id),
             ).fetchone()
             if existing_pending is not None:
-                raise ValueError(
-                    "Single-managed-entry invariant violated for "
-                    f"{symbol}: pending={existing_pending[0]}"
-                )
+                raise ValueError(f"Single-managed-entry invariant violated for {symbol}: pending={existing_pending[0]}")
             self.connection.execute(
                 """
                 INSERT INTO orders(
@@ -459,11 +451,7 @@ class ExecutionLedger:
         previous_qty = float(existing[0]) if existing else 0.0
         previous_average = float(existing[1]) if existing else 0.0
         total_entry = previous_qty + qty_delta
-        average = (
-            (previous_average * previous_qty + price * qty_delta) / total_entry
-            if total_entry > 0
-            else price
-        )
+        average = (previous_average * previous_qty + price * qty_delta) / total_entry if total_entry > 0 else price
         self.connection.execute(
             """
             INSERT INTO managed_positions(
@@ -968,12 +956,8 @@ class ExecutionLedger:
                     (event.client_order_id,),
                 ).fetchone()
                 previous_filled = float(existing[0]) if existing else 0.0
-                previous_average = (
-                    float(existing[1]) if existing and existing[1] is not None else None
-                )
-                previous_state = (
-                    OrderState(existing[2]) if existing and existing[2] is not None else None
-                )
+                previous_average = float(existing[1]) if existing and existing[1] is not None else None
+                previous_state = OrderState(existing[2]) if existing and existing[2] is not None else None
                 role = OrderRole(existing[4]) if existing else event.role
                 if role == OrderRole.MANUAL_EXIT and event.role != OrderRole.MANUAL_EXIT:
                     role = event.role
@@ -983,9 +967,7 @@ class ExecutionLedger:
                 cumulative = min(max(0.0, event.cumulative_filled_qty), requested)
                 effective_cumulative = max(previous_filled, cumulative)
                 fill_delta = max(0.0, cumulative - previous_filled)
-                fill_price = self._delta_fill_price(
-                    previous_average, previous_filled, cumulative, fill_delta, event
-                )
+                fill_price = self._delta_fill_price(previous_average, previous_filled, cumulative, fill_delta, event)
                 current_state = event.state
                 if previous_state in terminal_states and current_state not in terminal_states:
                     current_state = previous_state
@@ -1163,9 +1145,7 @@ class ExecutionLedger:
                 self.connection.rollback()
                 raise
 
-    def _resolve_entry_client_order_id(
-        self, event: ExecutionEvent, existing: tuple[object, ...] | None
-    ) -> str | None:
+    def _resolve_entry_client_order_id(self, event: ExecutionEvent, existing: tuple[object, ...] | None) -> str | None:
         """Link a child event to its managed entry lot.
 
         Order of preference: the stored entry id, the parent broker id, an
@@ -1234,12 +1214,7 @@ class ExecutionLedger:
     ) -> float:
         """Weighted price of the newly-filled delta from cumulative averages."""
         average_fill_price = event.average_fill_price
-        if (
-            fill_delta > 0
-            and average_fill_price is not None
-            and previous_average is not None
-            and previous_filled > 0
-        ):
+        if fill_delta > 0 and average_fill_price is not None and previous_average is not None and previous_filled > 0:
             return max(
                 0.0,
                 (average_fill_price * cumulative - previous_average * previous_filled) / fill_delta,
@@ -1398,9 +1373,7 @@ class ExecutionLedger:
                 return None
             return str(row[0])
 
-    def entry_order_for_broker_id(
-        self, account_id: str, broker_order_id: str
-    ) -> tuple[OrderIntent, float] | None:
+    def entry_order_for_broker_id(self, account_id: str, broker_order_id: str) -> tuple[OrderIntent, float] | None:
         """Return a durable entry and its known cumulative fill for recovery."""
         with self._lock:
             row = self.connection.execute(

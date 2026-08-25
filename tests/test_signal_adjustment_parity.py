@@ -39,9 +39,7 @@ def _economic_path(start: float, count: int) -> list[float]:
 def _bare_runtime(symbol: str = "AAA", *, minimum_history_bars: int = 10) -> PortfolioRuntime:
     runtime = object.__new__(PortfolioRuntime)
     runtime.market = Market.EQUITY
-    runtime.strategy = type(
-        "S", (), {"timeframe": "1d", "minimum_history_bars": minimum_history_bars}
-    )()
+    runtime.strategy = type("S", (), {"timeframe": "1d", "minimum_history_bars": minimum_history_bars})()
     runtime.symbols = (symbol,)
     runtime.history = {symbol: []}
     runtime.signal_verified_through_by_symbol = {}
@@ -318,9 +316,7 @@ def test_restart_between_splits_lands_on_provider_authority() -> None:
     post_restart = _bare_runtime()
     post_restart.seed(list(provider_now))
 
-    assert [b.close for b in pre_restart.history["AAA"]] == [
-        b.close for b in post_restart.history["AAA"]
-    ]
+    assert [b.close for b in pre_restart.history["AAA"]] == [b.close for b in post_restart.history["AAA"]]
 
 
 def test_crypto_runtime_is_never_touched_by_the_bridge() -> None:
@@ -527,14 +523,10 @@ def _process_engine(provider: dict[str, list[Bar]], dates: list[datetime]):
     engine._portfolio_runtimes = (portfolio_runtime,)
     # Instance attribute shadows the bound readiness gate (always open).
     engine._entry_readiness_reasons = lambda market, **kwargs: ()
-    engine.broker = SimpleNamespace(
-        account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0.0, positions=())
-    )
+    engine.broker = SimpleNamespace(account=lambda: AccountSnapshot(10_000, 10_000, 10_000, 0.0, positions=()))
     # Freshness machinery is irrelevant here: the pipeline only needs A
     # snapshot to proceed past its None-check.
-    engine._fresh_account_snapshot = lambda: AccountSnapshot(
-        10_000, 10_000, 10_000, 0.0, positions=()
-    )
+    engine._fresh_account_snapshot = lambda: AccountSnapshot(10_000, 10_000, 10_000, 0.0, positions=())
     return engine, captured
 
 
@@ -610,9 +602,7 @@ def test_intraday_request_start_still_verifies(monkeypatch) -> None:
     # The request boundary inherits the odd intraday time of the strategy's
     # oldest bar, so it cannot coincide with any daily bar timestamp.
     assert (requested_start.hour, requested_start.minute) == (7, 37)
-    first_returned = min(
-        bar.timestamp for bar in provider["AAA"] if bar.timestamp >= requested_start
-    )
+    first_returned = min(bar.timestamp for bar in provider["AAA"] if bar.timestamp >= requested_start)
     assert first_returned > requested_start  # API semantics: bar AFTER start
     # ...yet verification succeeded because adequacy is measured against the
     # strategy-required oldest BAR (inside covered territory).

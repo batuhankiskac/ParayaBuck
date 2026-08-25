@@ -228,9 +228,7 @@ def test_live_prerequisites_live_config_static_checks(tmp_path: Path, monkeypatc
     assert config_path.exists()
 
 
-def test_live_prerequisites_binding_verified_when_account_and_digests_match(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_live_prerequisites_binding_verified_when_account_and_digests_match(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     config_path = _live_config(root)
     key = "k" * 40
@@ -253,9 +251,7 @@ def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkey
     root = tmp_path
     config_path = _live_config(root)
     key = "k" * 40
-    _write_approval(
-        root, account_id="acct-other-9", key=key, digests=_expected_digests(config_path)
-    )
+    _write_approval(root, account_id="acct-other-9", key=key, digests=_expected_digests(config_path))
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)
     monkeypatch.setattr(alpaca_module, "AlpacaBroker", _FakeLiveBroker)

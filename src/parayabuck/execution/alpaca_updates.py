@@ -104,9 +104,7 @@ class AlpacaTradingUpdateStream:
             filled_qty=float(_field(order, "filled_qty", 0) or 0),
             average_fill_price=float(average) if average is not None else None,
             timestamp=timestamp.astimezone(UTC),
-            fee=float(
-                _field(raw, "commission", _field(raw, "fee", _field(order, "commission", 0))) or 0
-            ),
+            fee=float(_field(raw, "commission", _field(raw, "fee", _field(order, "commission", 0))) or 0),
             activity_id=str(
                 _field(raw, "execution_id", _field(raw, "id", ""))
                 or (

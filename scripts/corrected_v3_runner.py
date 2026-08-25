@@ -6,10 +6,15 @@ Uses:
 - Corporate actions v4 for portfolio dividend cash (signal remains price-only)
 - Actual risk geometry (engine._positions holds live holdings, stale zombies removed)
 """
+
 from __future__ import annotations
-import csv, json, hashlib, pathlib
-from datetime import datetime, UTC
+
+import csv
+import hashlib
+import json
+import pathlib
 from collections import defaultdict
+from datetime import UTC, datetime
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 DATASET_V4 = REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v4.csv"
@@ -43,12 +48,14 @@ RUNNER_IDENTITY = {
     "no_results_yet": True,
 }
 
+
 def hash_file(path: pathlib.Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1<<20), b""):
+        for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
 
 def build_terminal_map():
     """Build symbol->TerminalInfo from lifetimes v4 + CA worthless_removals."""
@@ -61,7 +68,11 @@ def build_terminal_map():
     tmap = {}
     for row in csv.DictReader(open(LIFETIMES_V4)):
         sym = row["canonical_symbol"]
-        last_bar = datetime.fromisoformat(row["last_observed_bar"].replace("Z","+00:00")) if row["last_observed_bar"] else None
+        last_bar = (
+            datetime.fromisoformat(row["last_observed_bar"].replace("Z", "+00:00"))
+            if row["last_observed_bar"]
+            else None
+        )
         # classify: if worthless then VERIFIED else POSSIBLE if ends before dataset end
         dataset_end = datetime.fromisoformat("2026-07-31T04:00:00+00:00")
         if last_bar and last_bar < dataset_end and row["current_status"] != "active":
@@ -76,6 +87,7 @@ def build_terminal_map():
             }
     return tmap
 
+
 if __name__ == "__main__":
     print(json.dumps(RUNNER_IDENTITY, indent=2))
     # Verify manifests exist
@@ -83,9 +95,10 @@ if __name__ == "__main__":
         print(f"{p.name}: exists={p.exists()} size={p.stat().st_size if p.exists() else 0}")
     # Quick sanity: no duplicate symbols in v4 lifetimes
     from collections import Counter
+
     rows = list(csv.DictReader(open(LIFETIMES_V4)))
     cnt = Counter(r["canonical_symbol"] for r in rows)
-    dups = [k for k,v in cnt.items() if v>1]
+    dups = [k for k, v in cnt.items() if v > 1]
     print(f"v4 duplicate symbols: {len(dups)} (expected 0)")
     print(f"terminal_map size: {len(build_terminal_map())}")
     print("Runner frozen (no results).")

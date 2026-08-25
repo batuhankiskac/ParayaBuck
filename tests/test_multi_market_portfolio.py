@@ -223,12 +223,8 @@ def test_planner_orders_sells_before_buys_across_markets() -> None:
     assert orders
     from parayabuck.execution.portfolio import PortfolioOrderSide
 
-    sell_indexes = [
-        index for index, order in enumerate(orders) if order.side == PortfolioOrderSide.SELL
-    ]
-    buy_indexes = [
-        index for index, order in enumerate(orders) if order.side == PortfolioOrderSide.BUY
-    ]
+    sell_indexes = [index for index, order in enumerate(orders) if order.side == PortfolioOrderSide.SELL]
+    buy_indexes = [index for index, order in enumerate(orders) if order.side == PortfolioOrderSide.BUY]
     assert sell_indexes and buy_indexes
     assert max(sell_indexes) < min(buy_indexes)  # risk-reducing sells first
 
@@ -307,9 +303,7 @@ class _SharedBroker:
         return "broker-" + order.client_order_id
 
 
-def _daily_bars(
-    symbols: tuple[str, ...], days: int = 320, market: Market = Market.EQUITY
-) -> list[Bar]:
+def _daily_bars(symbols: tuple[str, ...], days: int = 320, market: Market = Market.EQUITY) -> list[Bar]:
     import math
 
     start = datetime(2024, 1, 1, 4, 0, tzinfo=UTC)
@@ -339,9 +333,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
     each market's decision boundary without duplicate rebalances."""
     repository = PortfolioStateRepository(tmp_path / "shared.sqlite3")
     broker = _SharedBroker()
-    equity = portfolio_strategy_from(
-        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
-    )
+    equity = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
     crypto = portfolio_strategy_from(
         "crypto_low_variance_v1",
         {"top_n": 2, "rebalance_hours": 168},
@@ -367,21 +359,14 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
     )
     equity_result = equity_runtime.process_closed_bars(_daily_bars(("AAPL", "MSFT", "NVDA", "SPY")))
     assert equity_result.status == "submitted"
-    crypto_result = crypto_runtime.process_closed_bars(
-        _daily_bars(("BTC/USD", "ETH/USD"), market=Market.CRYPTO)
-    )
+    crypto_result = crypto_runtime.process_closed_bars(_daily_bars(("BTC/USD", "ETH/USD"), market=Market.CRYPTO))
     assert crypto_result.status == "submitted"
     equity_runtime.close()
     crypto_runtime.close()
 
     with sqlite3.connect(tmp_path / "shared.sqlite3") as connection:
-        markets = {
-            str(row[0])
-            for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")
-        }
-        sessions = connection.execute("SELECT COUNT(*) FROM portfolio_runtime_sessions").fetchone()[
-            0
-        ]
+        markets = {str(row[0]) for row in connection.execute("SELECT DISTINCT market FROM portfolio_decisions")}
+        sessions = connection.execute("SELECT COUNT(*) FROM portfolio_runtime_sessions").fetchone()[0]
     assert markets == {"equity", "crypto"}
     assert sessions >= 2
 

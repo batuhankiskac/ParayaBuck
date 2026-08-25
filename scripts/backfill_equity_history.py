@@ -71,10 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         symbols = symbols[: args.limit_symbols]
     start = datetime.fromisoformat(args.start).replace(tzinfo=UTC)
     end = datetime.fromisoformat(args.end).replace(tzinfo=UTC)
-    print(
-        f"backfill {len(symbols)} symbols {start.date()}..{end.date()} "
-        f"(feed: configured sip, iex fallback)"
-    )
+    print(f"backfill {len(symbols)} symbols {start.date()}..{end.date()} (feed: configured sip, iex fallback)")
     provider = AlpacaHistoricalData(key, secret, stock_feed="sip", data_delayed=False)
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,10 +126,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     written += 1
             if (offset + batch_size) % 400 == 0 or offset + batch_size >= len(symbols):
-                print(
-                    f"  {min(offset + batch_size, len(symbols))}/{len(symbols)} "
-                    f"symbols, {written} rows"
-                )
+                print(f"  {min(offset + batch_size, len(symbols))}/{len(symbols)} symbols, {written} rows")
     digest = hashlib.sha256(out_path.read_bytes()).hexdigest()
     first = last = None
     with out_path.open(newline="", encoding="utf-8") as handle:

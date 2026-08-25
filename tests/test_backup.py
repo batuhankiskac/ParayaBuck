@@ -17,9 +17,7 @@ def _make_runtime_db(path: Path, *, rows: int = 3) -> SQLiteStore:
     store = SQLiteStore(path)  # PRAGMA journal_mode=WAL
     store.acquire()
     connection = store.connection
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)"
-    )
+    connection.execute("CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
     connection.executemany(
         "INSERT INTO decisions(payload) VALUES (?)",
         ((f"payload-{index}",) for index in range(rows)),
@@ -60,9 +58,7 @@ def test_backup_produces_valid_restorable_database(tmp_path: Path) -> None:
     try:
         assert restored.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert _table_counts(restored) == 3
-        assert restored.execute("SELECT payload FROM decisions ORDER BY id LIMIT 1").fetchone() == (
-            "payload-0",
-        )
+        assert restored.execute("SELECT payload FROM decisions ORDER BY id LIMIT 1").fetchone() == ("payload-0",)
     finally:
         restored.close()
 
@@ -101,10 +97,7 @@ def test_backup_snapshot_excludes_uncommitted_transactions(tmp_path: Path) -> No
         restored = sqlite3.connect(second)
         try:
             assert _table_counts(restored) == 3
-            assert any(
-                row[0] == "committed-after"
-                for row in restored.execute("SELECT payload FROM decisions")
-            )
+            assert any(row[0] == "committed-after" for row in restored.execute("SELECT payload FROM decisions"))
         finally:
             restored.close()
     finally:
@@ -143,9 +136,7 @@ def test_backup_itself_prunes_older_than_retention(tmp_path: Path) -> None:
     backup_dir = tmp_path / "backups"
     anchor = datetime.now(UTC)
     try:
-        stale = backup_database(
-            source, backup_dir, retention_days=7, now=anchor - timedelta(days=14)
-        )
+        stale = backup_database(source, backup_dir, retention_days=7, now=anchor - timedelta(days=14))
         os.utime(stale, (anchor.timestamp() - 14 * 86_400,) * 2)
         fresh = backup_database(source, backup_dir, retention_days=7, now=anchor)
     finally:

@@ -65,9 +65,7 @@ def test_equity_v2_signal_math_identical_to_v1() -> None:
     v1 = portfolio_strategy_from("equity_residual_momentum_v1", FROZEN_EQUITY)
     v2 = portfolio_strategy_from("equity_residual_momentum_v2", FROZEN_EQUITY)
     assert v1.minimum_history_bars == v2.minimum_history_bars
-    assert v2.parameter_tuple() == tuple(
-        sorted({**FROZEN_EQUITY, "rebalance_frequency": "weekly"}.items())
-    )
+    assert v2.parameter_tuple() == tuple(sorted({**FROZEN_EQUITY, "rebalance_frequency": "weekly"}.items()))
     # same context -> same scores (decision requires history; verify parameter
     # surface only here; full behavioral parity is covered by the backtest)
     for key, value in v1.parameter_tuple():
@@ -76,18 +74,14 @@ def test_equity_v2_signal_math_identical_to_v1() -> None:
 
 def test_crypto_v2_registered_and_96h() -> None:
     # default identity: constructed without rebalance_hours -> 96h
-    v2 = portfolio_strategy_from(
-        "crypto_low_variance_v2", {"variance_lookback_days": 22, "top_n": 2}
-    )
+    v2 = portfolio_strategy_from("crypto_low_variance_v2", {"variance_lookback_days": 22, "top_n": 2})
     assert v2.name == "crypto_low_variance_v2"
     assert v2.version == "2.0.0"
     assert dict(v2.parameter_tuple())["rebalance_hours"] == 96
     assert rebalance_policy_for(v2).hours == 96
     assert v2.spec().rebalance_policy == "hours:96"
     # explicit override still wins (operator may pin a different cadence)
-    pinned = portfolio_strategy_from(
-        "crypto_low_variance_v2", {**FROZEN_CRYPTO, "rebalance_hours": 168}
-    )
+    pinned = portfolio_strategy_from("crypto_low_variance_v2", {**FROZEN_CRYPTO, "rebalance_hours": 168})
     assert rebalance_policy_for(pinned).hours == 168
     # v1 stays 168h
     v1 = portfolio_strategy_from("crypto_low_variance_v1", FROZEN_CRYPTO)
@@ -109,9 +103,7 @@ def test_v2_requires_no_alpha_parameter_changes() -> None:
     # v2's own cadence default applies when the cadence parameter is absent
     equity_v2 = portfolio_strategy_from("equity_residual_momentum_v2", FROZEN_EQUITY)
     assert rebalance_policy_for(equity_v2).frequency == "weekly"
-    crypto_v2 = portfolio_strategy_from(
-        "crypto_low_variance_v2", {"variance_lookback_days": 22, "top_n": 2}
-    )
+    crypto_v2 = portfolio_strategy_from("crypto_low_variance_v2", {"variance_lookback_days": 22, "top_n": 2})
     assert rebalance_policy_for(crypto_v2).hours == 96
 
 

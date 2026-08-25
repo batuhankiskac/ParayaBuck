@@ -141,10 +141,7 @@ def _runtime(
 
 def _bars(symbols: tuple[str, ...], *, day: datetime | None = None) -> list[Bar]:
     timestamp = day or datetime(2025, 1, 1, tzinfo=UTC)
-    return [
-        Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY)
-        for symbol in symbols
-    ]
+    return [Bar(timestamp, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY) for symbol in symbols]
 
 
 def _fill(
@@ -459,9 +456,7 @@ def test_live_hard_dollar_cap_transient_exposure_never_exceeds_cap(tmp_path) -> 
     """LIVE: with a rejected SELL the account is already over the hard dollar
     cap, so the dependent BUY must NOT be submitted at all."""
     broker = _SimBroker((_position("AAPL", 400),))  # $40k managed exposure
-    runtime, repository = _runtime(
-        tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0
-    )
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0)
     result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
     assert result.status == "sell_phase_submitted"
     sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
@@ -478,9 +473,7 @@ def test_live_hard_dollar_cap_buy_fits_after_sell(tmp_path) -> None:
     """LIVE: after the SELL fills there is room under the cap; the BUY is
     submitted but the post-buy managed exposure never exceeds the cap."""
     broker = _SimBroker((_position("AAPL", 400),))
-    runtime, repository = _runtime(
-        tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0
-    )
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, mode="live", cap=30_000.0)
     result = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
     assert result.status == "sell_phase_submitted"
     sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)

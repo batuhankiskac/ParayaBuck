@@ -28,9 +28,7 @@ class LiveOperatorApproval:
     def __post_init__(self) -> None:
         if not self.operator_id.strip() or not self.account_id.strip() or not self.nonce.strip():
             raise ValueError("Operator approval identity must not be empty")
-        if not self.configuration_digests or len(set(self.configuration_digests)) != len(
-            self.configuration_digests
-        ):
+        if not self.configuration_digests or len(set(self.configuration_digests)) != len(self.configuration_digests):
             raise ValueError("Operator approval requires unique configuration digests")
         if self.maximum_dollar_exposure <= 0:
             raise ValueError("Operator approval requires a positive dollar cap")
@@ -79,9 +77,7 @@ class LiveOperatorApproval:
             approval = cls(
                 operator_id=str(raw.get("operator_id", "")),
                 account_id=str(raw.get("account_id", "")),
-                configuration_digests=tuple(
-                    str(item) for item in raw.get("configuration_digests", ())
-                ),
+                configuration_digests=tuple(str(item) for item in raw.get("configuration_digests", ())),
                 maximum_dollar_exposure=float(raw.get("maximum_dollar_exposure", 0)),
                 approved_at=datetime.fromisoformat(str(raw.get("approved_at", ""))),
                 expires_at=datetime.fromisoformat(str(raw.get("expires_at", ""))),

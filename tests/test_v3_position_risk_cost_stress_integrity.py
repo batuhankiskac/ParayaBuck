@@ -122,16 +122,12 @@ def test_make_engine_stores_correct_multiplier_and_costs():
     from scripts.research_v3_position_risk import make_engine
 
     config = load_config(str(REPO / "config/settings.yaml"))
-    bars = load_csv_bars(
-        str(REPO / "data/historical/equity_1200_2016_2026.csv"), default_market=Market.EQUITY
-    )
+    bars = load_csv_bars(str(REPO / "data/historical/equity_1200_2016_2026.csv"), default_market=Market.EQUITY)
     # Need universe for make_engine (can be None? but build one)
     from datetime import datetime
 
     # Use minimal universe via build_product_universe
-    universe = build_product_universe(
-        config, bars, market=Market.EQUITY, end=datetime(2026, 7, 30, tzinfo=UTC)
-    )
+    universe = build_product_universe(config, bars, market=Market.EQUITY, end=datetime(2026, 7, 30, tzinfo=UTC))
     strat = _make_dummy_strategy()
     # Test 3x
     engine_3x = make_engine(config, strat, universe, candidate_id="P0", cost_multiplier=3.0)
@@ -159,12 +155,8 @@ def test_1x_full_candidate_engine_reproduces_baseline():
     from scripts.research_v3_position_risk import make_engine
 
     config = load_config(str(REPO / "config/settings.yaml"))
-    bars = load_csv_bars(
-        str(REPO / "data/historical/equity_1200_2016_2026.csv"), default_market=Market.EQUITY
-    )
-    universe = build_product_universe(
-        config, bars, market=Market.EQUITY, end=datetime(2026, 7, 30, tzinfo=UTC)
-    )
+    bars = load_csv_bars(str(REPO / "data/historical/equity_1200_2016_2026.csv"), default_market=Market.EQUITY)
+    universe = build_product_universe(config, bars, market=Market.EQUITY, end=datetime(2026, 7, 30, tzinfo=UTC))
     strat = _make_dummy_strategy()
     engine = make_engine(config, strat, universe, candidate_id="P0", cost_multiplier=1.0)
     # Check risk limits match control

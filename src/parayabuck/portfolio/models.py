@@ -155,14 +155,10 @@ class TargetPortfolio:
             weights=weights,
             cash_weight=float(raw.get("cash_weight", 0.0)),
             rebalance_reason=RebalanceReason(str(raw.get("rebalance_reason", "scheduled"))),
-            data_timestamp=(
-                datetime.fromisoformat(str(raw_data_timestamp)) if raw_data_timestamp else None
-            ),
+            data_timestamp=(datetime.fromisoformat(str(raw_data_timestamp)) if raw_data_timestamp else None),
             universe_version=str(raw.get("universe_version", "")),
             universe_snapshot_id=str(raw.get("universe_snapshot_id", "")),
-            parameters=tuple(
-                (str(key), value) for key, value in dict(raw.get("parameters", {})).items()
-            ),
+            parameters=tuple((str(key), value) for key, value in dict(raw.get("parameters", {})).items()),
             risk_multiplier=float(raw.get("risk_multiplier", 1.0)),
             metadata=dict(raw.get("metadata", {})),
         )
@@ -182,11 +178,7 @@ class RebalancePolicy:
     frequency: str = "monthly"
 
     def __post_init__(self) -> None:
-        if (
-            self.frequency != "monthly"
-            and self.frequency != "weekly"
-            and not (self.frequency.startswith("hours:"))
-        ):
+        if self.frequency != "monthly" and self.frequency != "weekly" and not (self.frequency.startswith("hours:")):
             raise ValueError(f"Unsupported rebalance frequency: {self.frequency}")
         if self.frequency.startswith("hours:"):
             hours = self.frequency.removeprefix("hours:")
@@ -301,9 +293,7 @@ class PortfolioState:
             "holdings": self.holdings,
             "avg_prices": self.avg_prices,
             "last_target": self.last_target,
-            "last_rebalance_at": (
-                self.last_rebalance_at.isoformat() if self.last_rebalance_at else None
-            ),
+            "last_rebalance_at": (self.last_rebalance_at.isoformat() if self.last_rebalance_at else None),
             "rebalance_count": self.rebalance_count,
             "universe_version": self.universe_version,
             "universe_snapshot_id": self.universe_snapshot_id,
@@ -340,9 +330,7 @@ class PortfolioState:
             holdings=holdings,
             avg_prices=avg_prices,
             last_target=last_target,
-            last_rebalance_at=(
-                datetime.fromisoformat(str(last_rebalance)) if last_rebalance else None
-            ),
+            last_rebalance_at=(datetime.fromisoformat(str(last_rebalance)) if last_rebalance else None),
             rebalance_count=int(raw.get("rebalance_count", 0)),
             universe_version=str(raw.get("universe_version", "")),
             universe_snapshot_id=str(raw.get("universe_snapshot_id", "")),
@@ -353,21 +341,13 @@ class PortfolioState:
             last_prices=last_prices,
             pending_target=pending_target,
             pending_orders=pending_orders,
-            last_processed_bar=(
-                str(raw["last_processed_bar"]) if raw.get("last_processed_bar") else None
-            ),
+            last_processed_bar=(str(raw["last_processed_bar"]) if raw.get("last_processed_bar") else None),
             peak_equity=(float(raw["peak_equity"]) if raw.get("peak_equity") is not None else None),
-            day_start_equity=(
-                float(raw["day_start_equity"]) if raw.get("day_start_equity") is not None else None
-            ),
+            day_start_equity=(float(raw["day_start_equity"]) if raw.get("day_start_equity") is not None else None),
             last_observed_equity=(
-                float(raw["last_observed_equity"])
-                if raw.get("last_observed_equity") is not None
-                else None
+                float(raw["last_observed_equity"]) if raw.get("last_observed_equity") is not None else None
             ),
-            risk_session_date=(
-                str(raw["risk_session_date"]) if raw.get("risk_session_date") else None
-            ),
+            risk_session_date=(str(raw["risk_session_date"]) if raw.get("risk_session_date") else None),
             schema_version=int(raw.get("schema_version", 1)),
         )
 

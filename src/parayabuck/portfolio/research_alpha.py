@@ -73,9 +73,7 @@ def blend_scores(
     """
     raw_pct = percentile_ranks(raw)
     std_pct = percentile_ranks(standardized)
-    return {
-        symbol: alpha_raw * raw_pct[symbol] + (1.0 - alpha_raw) * std_pct[symbol] for symbol in raw
-    }
+    return {symbol: alpha_raw * raw_pct[symbol] + (1.0 - alpha_raw) * std_pct[symbol] for symbol in raw}
 
 
 def _compounded(residuals: Sequence[float]) -> float:
@@ -260,9 +258,7 @@ def hysteresis_selection(
     """
     ranks: dict[str, int] = {symbol: index + 1 for index, (_score, symbol) in enumerate(ranked)}
     kept = [
-        symbol
-        for symbol in holdings_qty
-        if holdings_qty[symbol] > 0 and symbol in ranks and ranks[symbol] <= hold_rank
+        symbol for symbol in holdings_qty if holdings_qty[symbol] > 0 and symbol in ranks and ranks[symbol] <= hold_rank
     ]
     kept.sort(key=lambda symbol: ranks[symbol])
     selected = kept[:top_n]

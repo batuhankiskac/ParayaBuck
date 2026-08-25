@@ -116,9 +116,7 @@ _FROZEN: dict[str, object] = {
 }
 
 
-def _variant_class(
-    name: str, base: type[EquityResidualMomentum1dV2]
-) -> type[EquityResidualMomentum1dV2]:
+def _variant_class(name: str, base: type[EquityResidualMomentum1dV2]) -> type[EquityResidualMomentum1dV2]:
     return type(name, (base,), {"name": name.lower(), "version": "1.0.0", "display_name": name})
 
 
@@ -143,9 +141,7 @@ class AlphaResearchA3Equal(AlphaResearchStandardized):
     """A: standardized score + EQUAL weights (isolates selection from
     inverse-vol sizing)."""
 
-    def _position_weights(
-        self, selected: tuple[str, ...], residual_vols: dict[str, float]
-    ) -> dict[str, float]:
+    def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
         cap = self.param_float("max_single_weight", 0.10)
         weight = min(1.0 / max(1, len(selected)), cap)
         return {symbol: weight for symbol in selected}
@@ -190,22 +186,16 @@ class AlphaResearchMultiHorizon(AlphaResearchControl):
         skip: int,
     ) -> list[tuple[float, str]]:
         standardized = bool(self.parameters.get("multi_horizon_standardized", False))
-        consensus = horizon_consensus_scores(
-            residuals_by_symbol, self._HORIZONS, skip, standardized=standardized
-        )
+        consensus = horizon_consensus_scores(residuals_by_symbol, self._HORIZONS, skip, standardized=standardized)
         return [(consensus[symbol], symbol) for _score, symbol in scored]
 
 
 class AlphaResearchSqrtIvol(AlphaResearchControl):
     """SQRT-inverse-vol sizing (intermediate between inverse-vol and equal)."""
 
-    def _position_weights(
-        self, selected: tuple[str, ...], residual_vols: dict[str, float]
-    ) -> dict[str, float]:
+    def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
         return dict(
-            sqrt_ivol_weights(
-                selected, residual_vols, maximum_weight=self.param_float("max_single_weight", 0.10)
-            )
+            sqrt_ivol_weights(selected, residual_vols, maximum_weight=self.param_float("max_single_weight", 0.10))
         )
 
 
@@ -402,9 +392,7 @@ def run_window(
     actions: list[CorporateAction] | None = None,
 ) -> tuple[PortfolioBacktestResult, EquityResidualMomentum1dV2]:
     strategy = build_strategy(variant_id, parameters)
-    available = [
-        bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe
-    ]
+    available = [bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe]
     if end is not None:
         available = [bar for bar in available if bar.timestamp <= end]
     filtered = available if start is None else [bar for bar in available if bar.timestamp >= start]
@@ -443,9 +431,7 @@ def rebalance_stats(result: PortfolioBacktestResult) -> dict[str, object]:
     wins = [value for value in interval_returns if value > 0]
     losses = [value for value in interval_returns if value <= 0]
     return {
-        "rebalance_win_rate": round(len(wins) / len(interval_returns), 4)
-        if interval_returns
-        else 0.0,
+        "rebalance_win_rate": round(len(wins) / len(interval_returns), 4) if interval_returns else 0.0,
         "avg_winning_rebalance": round(statistics.fmean(wins), 6) if wins else 0.0,
         "avg_losing_rebalance": round(statistics.fmean(losses), 6) if losses else 0.0,
         "profit_factor": _profit_factor(result),
@@ -470,9 +456,7 @@ def full_stats(result: PortfolioBacktestResult) -> dict[str, float | int | None]
         "turnover": round(result.turnover, 6),
         "fees_total": round(total_cost, 2),
         "fees_pct_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
         "avg_holdings": round(result.average_holdings_count, 3),
         "max_concentration_weight": round(result.maximum_concentration, 4),
@@ -546,9 +530,7 @@ def universe_without(universe: PointInTimeUniverse, banned: frozenset[str]) -> P
                 observation_set=frozenset(snapshot.observation_set - banned),
             )
         )
-    return PointInTimeUniverse(
-        market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology
-    )
+    return PointInTimeUniverse(market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology)
 
 
 def summarize_folds(
@@ -605,9 +587,7 @@ def spy_daily_regimes(bars: list[Bar]) -> dict[datetime, str]:
     return out
 
 
-def regime_pnl(
-    result: PortfolioBacktestResult, spy_daily: dict[datetime, str]
-) -> dict[str, object]:
+def regime_pnl(result: PortfolioBacktestResult, spy_daily: dict[datetime, str]) -> dict[str, object]:
     """Ex-post candidate PnL attribution by SPY regime (diagnostic only)."""
     buckets: dict[str, list[float]] = {NORMAL: [], ELEVATED: []}
     previous: float | None = None
@@ -623,14 +603,10 @@ def regime_pnl(
         daily_returns = buckets[regime]
         out[regime] = {
             "days": len(daily_returns),
-            "mean_daily_return": round(statistics.fmean(daily_returns), 6)
-            if daily_returns
-            else 0.0,
+            "mean_daily_return": round(statistics.fmean(daily_returns), 6) if daily_returns else 0.0,
             "total_return": round(sum(daily_returns), 6) if daily_returns else 0.0,
             "positive_day_ratio": (
-                round(sum(1 for value in daily_returns if value > 0) / len(daily_returns), 4)
-                if daily_returns
-                else 0.0
+                round(sum(1 for value in daily_returns if value > 0) / len(daily_returns), 4) if daily_returns else 0.0
             ),
         }
     return out
@@ -757,12 +733,8 @@ def block_bootstrap_deltas(
             "p5": round(deltas_dd[p5], 6),
             "p95": round(deltas_dd[p95], 6),
         },
-        "probability_sharpe_above_control": round(
-            sum(1 for value in deltas_sharpe if value > 0) / resamples, 4
-        ),
-        "probability_return_above_control": round(
-            sum(1 for value in deltas_return if value > 0) / resamples, 4
-        ),
+        "probability_sharpe_above_control": round(sum(1 for value in deltas_sharpe if value > 0) / resamples, 4),
+        "probability_return_above_control": round(sum(1 for value in deltas_return if value > 0) / resamples, 4),
     }
 
 
@@ -933,9 +905,7 @@ def run_variant(
         ]
         decisions_reduced = sum(1 for event in events if event["multiplier"] < 1.0)
         regime["regime_decisions"] = events
-        regime["reduced_decision_fraction"] = (
-            round(decisions_reduced / len(events), 4) if events else 0.0
-        )
+        regime["reduced_decision_fraction"] = round(decisions_reduced / len(events), 4) if events else 0.0
         regime["avg_multiplier"] = (
             round(statistics.fmean(event["multiplier"] for event in events), 4) if events else 1.0
         )
@@ -945,8 +915,7 @@ def run_variant(
         "variant": variant_id,
         "strategy_name": VARIANTS[variant_id][0].__name__,
         "parameters": {
-            key: str(value) if isinstance(value, list) else value
-            for key, value in sorted(parameters.items())
+            key: str(value) if isinstance(value, list) else value for key, value in sorted(parameters.items())
         },
         "full_period": full_stats(full),
         "concentration": concentration(full),
@@ -972,15 +941,11 @@ def run_variant(
 
 
 def _normalize_overrides(overrides: dict[str, object]) -> dict[str, object]:
-    return {
-        key: (str(value) if isinstance(value, bool) else value) for key, value in overrides.items()
-    }
+    return {key: (str(value) if isinstance(value, bool) else value) for key, value in overrides.items()}
 
 
 def _normalize_parameters(parameters: dict[str, object]) -> dict[str, object]:
-    return {
-        key: (str(value) if isinstance(value, list) else value) for key, value in parameters.items()
-    }
+    return {key: (str(value) if isinstance(value, list) else value) for key, value in parameters.items()}
 
 
 def load_and_validate_manifest() -> dict:
@@ -1007,9 +972,7 @@ def load_and_validate_manifest() -> dict:
     }
     if normalized_declared != built_in:
         drift = {
-            key
-            for key in set(normalized_declared) | set(built_in)
-            if normalized_declared.get(key) != built_in.get(key)
+            key for key in set(normalized_declared) | set(built_in) if normalized_declared.get(key) != built_in.get(key)
         }
         raise SystemExit(
             "VARIANTS drifted from the committed predeclaration: "
@@ -1074,9 +1037,7 @@ def aggregate() -> int:
     }
 
     # fold_deltas.json — paired candidate-vs-control fold deltas.
-    control_folds = {
-        fold["start"]: fold for fold in all_artifacts["control"]["walk_forward"]["folds"]
-    }
+    control_folds = {fold["start"]: fold for fold in all_artifacts["control"]["walk_forward"]["folds"]}
     fold_deltas: dict[str, object] = {}
     for candidate_id, artifact in all_artifacts.items():
         if candidate_id == "control":
@@ -1131,31 +1092,14 @@ def aggregate() -> int:
         }
 
     # recent_period.json / annual_results.json / cost_stress.json / jackknife.json
-    recent_period = {
-        candidate_id: artifact["recent_period"] for candidate_id, artifact in all_artifacts.items()
-    }
+    recent_period = {candidate_id: artifact["recent_period"] for candidate_id, artifact in all_artifacts.items()}
     annual_results = {
-        "years": sorted(
-            {
-                int(year)
-                for artifact in all_artifacts.values()
-                for year in artifact["annual_windows"]
-            }
-        ),
-        "candidates": {
-            candidate_id: artifact["annual_windows"]
-            for candidate_id, artifact in all_artifacts.items()
-        },
+        "years": sorted({int(year) for artifact in all_artifacts.values() for year in artifact["annual_windows"]}),
+        "candidates": {candidate_id: artifact["annual_windows"] for candidate_id, artifact in all_artifacts.items()},
     }
-    cost_stress = {
-        candidate_id: artifact["cost_stress"] for candidate_id, artifact in all_artifacts.items()
-    }
-    jackknife = {
-        candidate_id: artifact["jackknife"] for candidate_id, artifact in all_artifacts.items()
-    }
-    regime_analysis = {
-        candidate_id: artifact["regime"] for candidate_id, artifact in all_artifacts.items()
-    }
+    cost_stress = {candidate_id: artifact["cost_stress"] for candidate_id, artifact in all_artifacts.items()}
+    jackknife = {candidate_id: artifact["jackknife"] for candidate_id, artifact in all_artifacts.items()}
+    regime_analysis = {candidate_id: artifact["regime"] for candidate_id, artifact in all_artifacts.items()}
 
     # bootstrap.json — block-bootstrap deltas vs the CONTROL daily curve.
     control_curve = all_artifacts["control"]["full_equity_curve"]
@@ -1169,9 +1113,7 @@ def aggregate() -> int:
     for candidate_id, artifact in all_artifacts.items():
         if candidate_id == "control":
             continue
-        bootstrap["deltas"][candidate_id] = block_bootstrap_deltas(
-            control_curve, artifact["full_equity_curve"]
-        )
+        bootstrap["deltas"][candidate_id] = block_bootstrap_deltas(control_curve, artifact["full_equity_curve"])
 
     # summary fold-wins from fold_deltas.
     for candidate_id, summary_row in summary.items():
@@ -1256,9 +1198,7 @@ def main() -> int:
         payload = json.loads(control_artifact_path.read_text())
         control_top = list(payload["concentration"]["top_symbols"])[:JACKKNIFE_TOP]
     elif "control" not in requested:
-        raise SystemExit(
-            "control artifact missing; run --variants control first (or --skip-jackknife)"
-        )
+        raise SystemExit("control artifact missing; run --variants control first (or --skip-jackknife)")
 
     for variant_id in requested:
         started = datetime.now(UTC)

@@ -17,9 +17,7 @@ from parayabuck.runtime import EngineRuntime, WorkerHealth
 def test_invalid_dynamic_snapshot_blocks_entries_unless_fallback_is_explicit() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.app_config = Config()
-    runtime.universe_preflight = SimpleNamespace(
-        equity_status="refresh_failed", crypto_status="disabled"
-    )
+    runtime.universe_preflight = SimpleNamespace(equity_status="refresh_failed", crypto_status="disabled")
 
     assert runtime._initial_universe_halt(Market.EQUITY) == "invalid_dynamic_universe"
 
@@ -63,11 +61,7 @@ def test_hot_swap_pins_positions_and_open_orders_within_stream_capacity() -> Non
             10_000,
             10_000,
             0.0,
-            positions=(
-                PositionSnapshot(
-                    "AAPL", 1, 100, 100, Market.EQUITY, ownership="managed", managed_qty=1
-                ),
-            ),
+            positions=(PositionSnapshot("AAPL", 1, 100, 100, Market.EQUITY, ownership="managed", managed_qty=1),),
         ),
         portfolio_open_order_symbols=lambda: {"QQQ"},
     )
@@ -89,9 +83,7 @@ def test_hot_swap_pins_positions_and_open_orders_within_stream_capacity() -> Non
 
     runtime.stream = SimpleNamespace(update_subscriptions=update_subscriptions)
 
-    def warmup(
-        _history: object, symbols: list[str], *, retry: bool, staged_only: bool = False
-    ) -> None:
+    def warmup(_history: object, symbols: list[str], *, retry: bool, staged_only: bool = False) -> None:
         assert symbols == ["MSFT"]
         assert not retry
         assert "MSFT" in runtime._not_ready_symbols
@@ -409,9 +401,7 @@ def test_hot_swap_warmup_failure_preserves_previous_universe() -> None:
         update_subscriptions=lambda stocks, crypto: subscribed.append((stocks, crypto)),
     )
 
-    def fail_warmup(
-        _history: object, symbols: list[str], *, retry: bool, staged_only: bool = False
-    ) -> None:
+    def fail_warmup(_history: object, symbols: list[str], *, retry: bool, staged_only: bool = False) -> None:
         raise RuntimeError("historical backfill failed")
 
     runtime._warmup_symbols = fail_warmup
@@ -520,9 +510,7 @@ def test_disabled_crypto_strategy_without_positions_streams_nothing(tmp_path, mo
     monkeypatch.setattr(
         runtime_module,
         "ensure_active_universes",
-        lambda config, api_key, secret_key: SimpleNamespace(
-            equity_status="success", crypto_status="success"
-        ),
+        lambda config, api_key, secret_key: SimpleNamespace(equity_status="success", crypto_status="success"),
     )
     monkeypatch.setattr(
         runtime_module,
@@ -543,9 +531,7 @@ def test_disabled_crypto_strategy_without_positions_streams_nothing(tmp_path, mo
     runtime._portfolio_repository.close()
 
 
-def test_disabled_crypto_strategy_with_managed_position_stays_protected(
-    tmp_path, monkeypatch
-) -> None:
+def test_disabled_crypto_strategy_with_managed_position_stays_protected(tmp_path, monkeypatch) -> None:
     """Crypto strategy disabled BUT a managed crypto position exists: the
     position remains in the observation membership so it is monitored and
     protected."""
@@ -560,9 +546,7 @@ def test_disabled_crypto_strategy_with_managed_position_stays_protected(
     monkeypatch.setattr(
         runtime_module,
         "ensure_active_universes",
-        lambda config, api_key, secret_key: SimpleNamespace(
-            equity_status="success", crypto_status="success"
-        ),
+        lambda config, api_key, secret_key: SimpleNamespace(equity_status="success", crypto_status="success"),
     )
     monkeypatch.setattr(
         runtime_module,
@@ -599,9 +583,9 @@ def test_disabled_crypto_strategy_with_managed_position_stays_protected(
     repo.record_order(
         PortfolioOrderRequest(
             client_order_id="pbp-crypto-entry",
-            decision_id=repo.store.connection.execute(
-                "SELECT decision_id FROM portfolio_decisions LIMIT 1"
-            ).fetchone()[0],
+            decision_id=repo.store.connection.execute("SELECT decision_id FROM portfolio_decisions LIMIT 1").fetchone()[
+                0
+            ],
             symbol="BTC/USD",
             market=Market.CRYPTO,
             side=PortfolioOrderSide.BUY,
@@ -1038,9 +1022,7 @@ def test_old_scanner_result_with_mismatched_digest_cannot_become_valid(monkeypat
         "refresh_equity_universe",
         lambda *_args: (_ for _ in ()).throw(RuntimeError("scanner unavailable")),
     )
-    monkeypatch.setattr(
-        runtime_module, "validate_active_universe", lambda _config: ((), "digest_mismatch")
-    )
+    monkeypatch.setattr(runtime_module, "validate_active_universe", lambda _config: ((), "digest_mismatch"))
 
     runtime._refresh_runtime_universes()
 
@@ -1086,9 +1068,7 @@ def _health_payload_runtime() -> EngineRuntime:
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct")
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps=False, has_data_gaps_for_market=lambda market: False
-    )
+    runtime.market_state = SimpleNamespace(has_data_gaps=False, has_data_gaps_for_market=lambda market: False)
     return runtime
 
 

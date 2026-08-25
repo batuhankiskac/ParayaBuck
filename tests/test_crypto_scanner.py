@@ -237,13 +237,7 @@ def test_category_limits_and_score_penalties(tmp_path: Path) -> None:
     # every eligible pair.
     assert sum(symbol in result.observation_set for symbol in ("DOGE/USD", "SHIB/USD")) == 1
     assert sum(symbol in result.observation_set for symbol in ("ARB/USD", "HYPE/USD")) == 1
-    assert (
-        sum(
-            symbol in result.observation_set
-            for symbol in ("SOL/USD", "ADA/USD", "AVAX/USD", "DOT/USD")
-        )
-        == 2
-    )
+    assert sum(symbol in result.observation_set for symbol in ("SOL/USD", "ADA/USD", "AVAX/USD", "DOT/USD")) == 2
     assert len(result.selected_symbols) > len(result.observation_set)
 
     normal = _candidate("SOL/USD", correlation=0.5)
@@ -315,9 +309,7 @@ def test_dynamic_loader_reserves_managed_position_and_static_mode_is_unchanged(
     assert load_active_crypto_symbols(static) == static.trade_symbols
 
 
-def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_runtime_uses_only_active_crypto_for_stream_and_trade_permission(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     scanner = CryptoUniverseScanner(crypto)
     now = datetime.now(UTC)
@@ -441,9 +433,7 @@ def test_asset_api_failure_preserves_previous_success(tmp_path: Path, monkeypatc
     assert active.read_text() == '{"old":"success"}'
 
 
-def test_historical_api_failure_preserves_previous_success(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_historical_api_failure_preserves_previous_success(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(
         tmp_path,
         maximum_stream_symbols=3,
@@ -472,10 +462,7 @@ def test_historical_api_failure_preserves_previous_success(
             pass
 
         def get_all_assets(self, _request: object) -> list[object]:
-            return [
-                SimpleNamespace(symbol=symbol, tradable=True, status="active")
-                for symbol in crypto.trade_symbols
-            ]
+            return [SimpleNamespace(symbol=symbol, tradable=True, status="active") for symbol in crypto.trade_symbols]
 
     class FailingHistory:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
@@ -492,9 +479,7 @@ def test_historical_api_failure_preserves_previous_success(
     assert active.read_text() == '{"old":"success"}'
 
 
-def test_startup_preflight_refreshes_both_missing_dynamic_universes(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_startup_preflight_refreshes_both_missing_dynamic_universes(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     equity = EquityUniverseConfig(
         dynamic_selection_enabled=True,
@@ -529,9 +514,7 @@ def test_startup_preflight_refreshes_both_missing_dynamic_universes(
     assert result.crypto_refreshed
 
 
-def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     config = Config(
         universe=UniverseConfig(
@@ -568,9 +551,7 @@ def test_startup_preflight_failure_is_nonfatal_and_keeps_fallback(
     )
 
 
-def test_startup_preflight_skips_api_when_active_file_is_valid(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_startup_preflight_skips_api_when_active_file_is_valid(tmp_path: Path, monkeypatch: Any) -> None:
     crypto = _config(tmp_path, maximum_stream_symbols=3)
     now = datetime.now(UTC)
     scanner = CryptoUniverseScanner(crypto)

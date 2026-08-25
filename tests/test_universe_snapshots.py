@@ -145,16 +145,11 @@ def test_historical_equity_adapter_uses_same_production_scanner_policy() -> None
     )
     snapshot = universe.snapshots[-1]
     history = {
-        symbol: [
-            bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at
-        ]
+        symbol: [bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at]
         for symbol in ("AAA", "ZZZ")
     }
     direct = EquityUniverseScanner(config).scan(
-        [
-            equity_candidate_from_bars(symbol, series, expected_bar_count=20)
-            for symbol, series in history.items()
-        ],
+        [equity_candidate_from_bars(symbol, series, expected_bar_count=20) for symbol, series in history.items()],
         data_timestamp=max(bar.timestamp for series in history.values() for bar in series),
         selection_timestamp=snapshot.effective_at,
     )
@@ -186,9 +181,7 @@ def test_historical_crypto_adapter_uses_same_production_scanner_policy() -> None
     )
     snapshot = universe.snapshots[-1]
     history = {
-        symbol: [
-            bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at
-        ]
+        symbol: [bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at]
         for symbol in {bar.symbol for bar in bars}
     }
     direct = CryptoUniverseScanner(config).scan(
@@ -427,9 +420,7 @@ def test_incremental_universe_matches_naive_trailing_windows_per_snapshot() -> N
             selection_timestamp=snapshot.effective_at,
             pinned_symbols=(),
         )
-        assert snapshot.symbols == frozenset(direct.selected_symbols), (
-            f"snapshot mismatch at {snapshot.effective_at}"
-        )
+        assert snapshot.symbols == frozenset(direct.selected_symbols), f"snapshot mismatch at {snapshot.effective_at}"
 
 
 def test_incremental_universe_handles_wide_datasets_without_rescanning() -> None:
@@ -480,9 +471,7 @@ def test_incremental_universe_handles_wide_datasets_without_rescanning() -> None
     assert elapsed < 30.0, f"incremental builder too slow: {elapsed:.1f}s"
 
 
-def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
-    tmp_path, monkeypatch
-) -> None:
+def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(tmp_path, monkeypatch) -> None:
     from parayabuck.universe import preflight as preflight_module
 
     config = _equity_refresh_config(tmp_path)
@@ -490,12 +479,10 @@ def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(
     now = datetime.now(UTC)
     cached_history = {
         "AAA": [
-            (bar.timestamp.isoformat(), 100, 101, 99, 100, 5_000_000)
-            for bar in _daily_bars(now, 20, "AAA", 5_000_000)
+            (bar.timestamp.isoformat(), 100, 101, 99, 100, 5_000_000) for bar in _daily_bars(now, 20, "AAA", 5_000_000)
         ],
         "BBB": [
-            (bar.timestamp.isoformat(), 100, 101, 99, 100, 1_000_000)
-            for bar in _daily_bars(now, 20, "BBB", 1_000_000)
+            (bar.timestamp.isoformat(), 100, 101, 99, 100, 1_000_000) for bar in _daily_bars(now, 20, "BBB", 1_000_000)
         ],
     }
     (tmp_path / "equity_candidates.json").write_text(

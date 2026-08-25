@@ -94,10 +94,7 @@ class ExitPolicy:
             self.trailing_atr_multiple,
             self.trailing_activation_r,
         )
-        if any(
-            value is not None and (not math.isfinite(value) or value <= 0)
-            for value in positive_values
-        ):
+        if any(value is not None and (not math.isfinite(value) or value <= 0) for value in positive_values):
             raise ValueError("Exit policy numeric values must be finite and positive")
         if self.max_holding_bars is not None and self.max_holding_bars <= 0:
             raise ValueError("Maximum holding bars must be positive")
@@ -152,10 +149,7 @@ class Bar:
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
             raise ValueError("Bar timestamps must be timezone-aware")
-        if not all(
-            math.isfinite(value)
-            for value in (self.open, self.high, self.low, self.close, self.volume)
-        ):
+        if not all(math.isfinite(value) for value in (self.open, self.high, self.low, self.close, self.volume)):
             raise ValueError("Bar values must be finite")
         if self.high < self.low or not self.low <= self.open <= self.high:
             raise ValueError("Invalid OHLC values")

@@ -47,9 +47,7 @@ def test_no_curve_slicing_import():
     # Ensure research does not slice equity_curve to compute folds
     # Look for pattern equity_curve[s_idx:e_idx] slicing for folds — forbidden
     # Our implementation uses independent run_window per fold, not slicing
-    assert (
-        "equity_curve[" not in text or "full_results" in text
-    )  # allow full curve storage but not slicing for folds
+    assert "equity_curve[" not in text or "full_results" in text  # allow full curve storage but not slicing for folds
     # More precise: forbid s_idx/e_idx slicing that computes fold returns
     assert not re.search(r"s_idx.*e_idx.*curve", text), "curve slicing for folds is forbidden"
     assert not re.search(r"seg = curve\[", text), "curve slicing is forbidden"

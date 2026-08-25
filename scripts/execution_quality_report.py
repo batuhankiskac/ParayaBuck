@@ -76,9 +76,7 @@ def main() -> int:
             f"commission={_fmt(configured.get('commission'))} "
             f"crypto_taker_fee_bps={_fmt(configured.get('crypto_taker_fee_bps'))}"
         )
-        print(
-            f"  equity_use_effective_dated_fees={configured.get('equity_use_effective_dated_fees')}"
-        )
+        print(f"  equity_use_effective_dated_fees={configured.get('equity_use_effective_dated_fees')}")
         print(f"  model: {configured.get('model')}")
     else:
         print("  (no configuration available)")
@@ -117,8 +115,7 @@ def main() -> int:
         strategy = forward["strategy"]
         print("\nForward metrics:")
         print(
-            f"  decisions: {strategy['decisions']['count']} "
-            f"by_market={json.dumps(strategy['decisions']['by_market'])}"
+            f"  decisions: {strategy['decisions']['count']} by_market={json.dumps(strategy['decisions']['by_market'])}"
         )
         _print_summary("  target turnover (one-way weight)", strategy["target_turnover"])
         print(f"  observation-set churn events: {strategy['observation_set_churn']['total']}")

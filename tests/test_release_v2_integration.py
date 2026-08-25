@@ -164,9 +164,7 @@ class _FakeAlpacaClient:
         return self.filled_orders.get(client_order_id)
 
 
-def _broker(
-    client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path: Path
-) -> AlpacaBroker:
+def _broker(client: _FakeAlpacaClient, repo: PortfolioStateRepository, tmp_path: Path) -> AlpacaBroker:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker.ledger = ExecutionLedger(str(tmp_path / "execution.sqlite3"))
     broker.portfolio_owned_quantities = lambda: repo.owned_quantities(broker.account_id)
@@ -210,9 +208,7 @@ def _runtime(
     )
 
 
-def _fill_orders(
-    result: PortfolioRuntimeResult, repo: PortfolioStateRepository, client: _FakeAlpacaClient
-) -> None:
+def _fill_orders(result: PortfolioRuntimeResult, repo: PortfolioStateRepository, client: _FakeAlpacaClient) -> None:
     """Apply every BUY order of the latest decision as a broker fill and
     mirror the resulting positions on the fake client."""
     for order in result.orders:
@@ -374,16 +370,12 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
     # Equity: first ISO-week start after day 300 (bars start on a Monday).
     # Crypto: first 96h block boundary after day 300.
     first_weekly_start = next(
-        day
-        for day in equity_days[301:]
-        if day.isocalendar()[:2] != (day - timedelta(days=1)).isocalendar()[:2]
+        day for day in equity_days[301:] if day.isocalendar()[:2] != (day - timedelta(days=1)).isocalendar()[:2]
     )
     equity_decisions: list[datetime] = []
     crypto_decisions: list[datetime] = []
     for day in equity_days[300:]:
-        equity_result = v2_equity.process_closed_bars(
-            [bar for bar in equity_bars if bar.timestamp == day]
-        )
+        equity_result = v2_equity.process_closed_bars([bar for bar in equity_bars if bar.timestamp == day])
         if equity_result.status in {"submitted", "sell_phase_submitted", "buy_phase_submitted"}:
             assert equity_result.target is not None
             assert equity_result.target.metadata.get("decision_origin") is None
@@ -391,9 +383,7 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
                 "equity decision off the weekly cadence"
             )
             equity_decisions.append(day)
-        crypto_result = v2_crypto.process_closed_bars(
-            [bar for bar in crypto_bars if bar.timestamp == day]
-        )
+        crypto_result = v2_crypto.process_closed_bars([bar for bar in crypto_bars if bar.timestamp == day])
         if crypto_result.status in {"submitted", "sell_phase_submitted", "buy_phase_submitted"}:
             assert crypto_result.target is not None
             assert crypto_result.target.metadata.get("decision_origin") is None
@@ -408,9 +398,7 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
         assert current.isocalendar()[:2] != previous.isocalendar()[:2]
     assert crypto_decisions and len(crypto_decisions) == len(set(crypto_decisions)) >= 2
     for previous, current in zip(crypto_decisions, crypto_decisions[1:], strict=False):
-        epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (
-            96 * 3600
-        )
+        epoch_delta = int(current.timestamp()) // (96 * 3600) - int(previous.timestamp()) // (96 * 3600)
         assert epoch_delta >= 1, "crypto decisions off the 96h cadence"
     assert _decision_count(repo, Market.EQUITY, v2_equity_digest) == len(equity_decisions)
     assert _decision_count(repo, Market.CRYPTO, v2_crypto_digest) == len(crypto_decisions)
@@ -419,16 +407,14 @@ def test_v1_to_v2_migration_keeps_positions_managed_and_rebalances_once(
     # on top of the full target. Sells never exceed the managed quantity.
     with repo.store.lock:
         rows = repo.store.connection.execute(
-            "SELECT decision_id, market, target_json FROM portfolio_decisions "
-            "WHERE configuration_digest IN (?, ?)",
+            "SELECT decision_id, market, target_json FROM portfolio_decisions WHERE configuration_digest IN (?, ?)",
             (v2_equity_digest, v2_crypto_digest),
         ).fetchall()
     for _decision_id, market_value, target_json in rows:
         target = TargetPortfolio.from_dict(json.loads(str(target_json)))
         target_by_symbol = {w.symbol: w.weight for w in target.weights}
         order_rows = repo.store.connection.execute(
-            "SELECT symbol, side, quantity, reference_price FROM portfolio_orders "
-            "WHERE decision_id=?",
+            "SELECT symbol, side, quantity, reference_price FROM portfolio_orders WHERE decision_id=?",
             (_decision_id,),
         ).fetchall()
         for symbol, side, qty, price in order_rows:
@@ -491,9 +477,7 @@ def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
     assert v2_result.orders
     _fill_orders(v2_result, repo, client)
     v2.close()
-    held_symbols = {
-        position.symbol for position in client.positions if position.asset_class == "us_equity"
-    }
+    held_symbols = {position.symbol for position in client.positions if position.asset_class == "us_equity"}
     assert held_symbols
 
     v3 = _runtime(
@@ -529,15 +513,10 @@ def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
         assert order.strategy_name == "equity_residual_momentum_v3"
         assert order.strategy_version == "3.0.0"
     assert all(len(sides) == 1 for sides in by_symbol.values())
-    assert all(
-        not (order.side == PortfolioOrderSide.SELL and order.quantity > 100.0)
-        for order in first.orders
-    )
+    assert all(not (order.side == PortfolioOrderSide.SELL and order.quantity > 100.0) for order in first.orders)
 
     with repo.store.lock:
-        before_orders = repo.store.connection.execute(
-            "SELECT COUNT(*) FROM portfolio_orders"
-        ).fetchone()[0]
+        before_orders = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_orders").fetchone()[0]
         before_decisions = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
             ("equity_residual_momentum_v3",),
@@ -560,9 +539,7 @@ def test_v2_to_v3_paper_promotion_uses_normal_delta_and_restart_idempotency(
     )
     assert duplicate.status == "duplicate_decision"
     with repo.store.lock:
-        after_orders = repo.store.connection.execute(
-            "SELECT COUNT(*) FROM portfolio_orders"
-        ).fetchone()[0]
+        after_orders = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_orders").fetchone()[0]
         after_decisions = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_decisions WHERE strategy_name=?",
             ("equity_residual_momentum_v3",),
@@ -598,10 +575,7 @@ def test_v3_runtime_signal_basis_latch_blocks_entries_until_verified(
     )
     assert blocked.target is not None
     assert all(order.side != PortfolioOrderSide.BUY for order in blocked.orders)
-    assert (
-        blocked.target.metadata["paper_observability"]["blocked_or_skipped_reason"]
-        == "signal_adjustment_unverified"
-    )
+    assert blocked.target.metadata["paper_observability"]["blocked_or_skipped_reason"] == "signal_adjustment_unverified"
 
     verified_through = {symbol: days[301] for symbol in EQUITY_SYMBOLS}
     runtime.signal_verified_through_by_symbol = verified_through
@@ -612,8 +586,5 @@ def test_v3_runtime_signal_basis_latch_blocks_entries_until_verified(
     assert proceeded.status == "submitted"
     assert any(order.side == PortfolioOrderSide.BUY for order in proceeded.orders)
     assert proceeded.target is not None
-    assert (
-        proceeded.target.metadata["paper_observability"]["signal_verified_through"]
-        == days[301].isoformat()
-    )
+    assert proceeded.target.metadata["paper_observability"]["signal_verified_through"] == days[301].isoformat()
     runtime.close()

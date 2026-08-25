@@ -51,25 +51,17 @@ def _bar(symbol: str, timestamp: datetime, close: float, market: Market = Market
     )
 
 
-def _manual_series(
-    symbol: str, closes: list[float], start: datetime | None = None
-) -> tuple[Bar, ...]:
+def _manual_series(symbol: str, closes: list[float], start: datetime | None = None) -> tuple[Bar, ...]:
     start = start or datetime(2024, 1, 1, tzinfo=UTC)
-    return tuple(
-        _bar(symbol, start + timedelta(days=index), close) for index, close in enumerate(closes)
-    )
+    return tuple(_bar(symbol, start + timedelta(days=index), close) for index, close in enumerate(closes))
 
 
-def _flat_series(
-    symbol: str, bars: int = MIN_HISTORY_BARS, close: float = 100.0
-) -> tuple[Bar, ...]:
+def _flat_series(symbol: str, bars: int = MIN_HISTORY_BARS, close: float = 100.0) -> tuple[Bar, ...]:
     """``bars`` aligned 1d bars all closing at ``close`` -> realized vol 0."""
     return _manual_series(symbol, [close] * bars)
 
 
-def _alternating_series(
-    symbol: str, amplitude: float, bars: int = MIN_HISTORY_BARS
-) -> tuple[Bar, ...]:
+def _alternating_series(symbol: str, amplitude: float, bars: int = MIN_HISTORY_BARS) -> tuple[Bar, ...]:
     """Bars oscillating 100 / (100 + amplitude) -> vol grows with amplitude."""
     closes = [100.0 + amplitude if index % 2 else 100.0 for index in range(bars)]
     return _manual_series(symbol, closes)
@@ -85,9 +77,7 @@ def _holey_series(symbol: str) -> tuple[Bar, ...]:
     """23 completed bars spanning 24 calendar days: day 11 is MISSING inside
     the lookback window, so the last-23 span is 23 days, not 22."""
     start = datetime(2024, 1, 1, tzinfo=UTC)
-    bars = [
-        _bar(symbol, start + timedelta(days=index), 100.0) for index in range(24) if index != 11
-    ]
+    bars = [_bar(symbol, start + timedelta(days=index), 100.0) for index in range(24) if index != 11]
     assert len(bars) == MIN_HISTORY_BARS
     return tuple(bars)
 
@@ -446,19 +436,11 @@ def test_engine_fills_next_bar_open_with_28bps_side_cost() -> None:
         assert fill.timestamp - fill.decision_timestamp == timedelta(days=1)
         # Filled at the next bar's OPEN with adverse 3 bps price impact.
         assert fill.fill_price == pytest.approx(fill.reference_price * (1 + 3 / 10_000), rel=1e-12)
-        assert fill.slippage_cost == pytest.approx(
-            fill.qty * fill.reference_price * 2 / 10_000, rel=1e-9
-        )
-        assert fill.spread_cost == pytest.approx(
-            fill.qty * fill.reference_price * 1 / 10_000, rel=1e-9
-        )
+        assert fill.slippage_cost == pytest.approx(fill.qty * fill.reference_price * 2 / 10_000, rel=1e-9)
+        assert fill.spread_cost == pytest.approx(fill.qty * fill.reference_price * 1 / 10_000, rel=1e-9)
         # 25 bps taker fee on the fill notional.
         assert fill.fee == pytest.approx(fill.qty * fill.fill_price * 25 / 10_000, rel=1e-9)
-        per_side_bps = (
-            (fill.slippage_cost + fill.spread_cost + fill.fee)
-            / (fill.qty * fill.reference_price)
-            * 10_000
-        )
+        per_side_bps = (fill.slippage_cost + fill.spread_cost + fill.fee) / (fill.qty * fill.reference_price) * 10_000
         assert per_side_bps == pytest.approx(28.0, rel=1e-3)
     # The first rebalance targets the two lowest-variance names at 50/50.
     assert result.rebalances[0].target_weights == (

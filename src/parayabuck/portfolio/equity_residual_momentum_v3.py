@@ -120,9 +120,7 @@ def multi_horizon_consensus(
         per_horizon.append(percentile_ranks(scores))
     if len(per_horizon) < 2:
         return {}
-    common_symbols = set(per_horizon[0]).intersection(
-        *(set(horizon_scores) for horizon_scores in per_horizon[1:])
-    )
+    common_symbols = set(per_horizon[0]).intersection(*(set(horizon_scores) for horizon_scores in per_horizon[1:]))
     if len(common_symbols) < 2:
         return {}
     consensus: dict[str, float] = {}

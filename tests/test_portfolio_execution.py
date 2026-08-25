@@ -236,9 +236,7 @@ def test_planner_client_order_id_is_scoped_to_decision_identity() -> None:
 
 
 def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
-    payload = json.loads(
-        (Path(__file__).parent / "fixtures" / "paper_loss_replay.json").read_text()
-    )
+    payload = json.loads((Path(__file__).parent / "fixtures" / "paper_loss_replay.json").read_text())
     raw_account = payload["account"]
     raw_position = payload["managed_position"]
     position = PositionSnapshot(
@@ -273,9 +271,7 @@ def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
     assert weights[raw_position["symbol"]] <= position.market_value / account.equity
 
 
-def _mixed_position(
-    symbol: str, total_qty: float, managed_qty: float, price: float = 100.0
-) -> PositionSnapshot:
+def _mixed_position(symbol: str, total_qty: float, managed_qty: float, price: float = 100.0) -> PositionSnapshot:
     return PositionSnapshot(
         symbol=symbol,
         qty=total_qty,
@@ -291,9 +287,7 @@ def _mixed_position(
 def test_risk_overlay_counts_external_exposure_exactly_once() -> None:
     """AAPL external $10k + managed $2k on a $100k account: the external
     exposure is counted exactly once in gross_after."""
-    overlay = PortfolioRiskOverlay(
-        PortfolioRiskLimits(maximum_equity_asset=0.25, maximum_equity=0.5)
-    )
+    overlay = PortfolioRiskOverlay(PortfolioRiskLimits(maximum_equity_asset=0.25, maximum_equity=0.5))
     account = _account(
         (_mixed_position("AAPL", 120, 20),),
     )
@@ -319,9 +313,7 @@ def test_risk_overlay_counts_external_exposure_exactly_once() -> None:
 
 def test_risk_overlay_caps_managed_exposure_not_external() -> None:
     """maximum_allocation caps the managed sleeve; external stays immutable."""
-    overlay = PortfolioRiskOverlay(
-        PortfolioRiskLimits(maximum_equity_asset=0.5, maximum_equity=0.6)
-    )
+    overlay = PortfolioRiskOverlay(PortfolioRiskLimits(maximum_equity_asset=0.5, maximum_equity=0.6))
     account = _account(
         (_mixed_position("AAPL", 130, 30),),
     )

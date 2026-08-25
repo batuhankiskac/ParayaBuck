@@ -163,9 +163,7 @@ VARIANTS: dict[str, tuple[type[EquityResidualMomentum1dV2], dict[str, object]]] 
 # --------------------------------------------------------------------------- #
 
 
-def build_total_return_signal(
-    bars_by_symbol: dict[str, list[Bar]], actions: list[CorporateAction]
-) -> list[Bar]:
+def build_total_return_signal(bars_by_symbol: dict[str, list[Bar]], actions: list[CorporateAction]) -> list[Bar]:
     """Dividend-reinvested closes on top of the split-adjusted price series.
 
     TR(t) = TR(t-1) * [P(t)/P(t-1)] * [1 + D(t)/P(t-1)] where D(t) is the
@@ -270,9 +268,7 @@ def run_window(
     signal_bars: list[Bar] | None = None,
     actions: list[CorporateAction] | None = None,
 ) -> PortfolioBacktestResult:
-    available = [
-        bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe
-    ]
+    available = [bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe]
     if end is not None:
         available = [bar for bar in available if bar.timestamp <= end]
     filtered = available if start is None else [bar for bar in available if bar.timestamp >= start]
@@ -297,9 +293,7 @@ def full_stats(result: PortfolioBacktestResult) -> dict[str, object]:
         "turnover": round(result.turnover, 6),
         "fees_total": round(total_cost, 2),
         "fees_pct_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
         "avg_holdings": round(result.average_holdings_count, 3),
         "max_concentration_weight": round(result.maximum_concentration, 4),
@@ -336,9 +330,7 @@ def concentration(result: PortfolioBacktestResult) -> dict[str, object]:
     top = contributions[:3]
     return {
         "top_symbols": [symbol for symbol, _pnl in top],
-        "top1_share_of_positive_pnl": (
-            round(top[0][1] / positive_total, 4) if top and positive_total > 0 else 0.0
-        ),
+        "top1_share_of_positive_pnl": (round(top[0][1] / positive_total, 4) if top and positive_total > 0 else 0.0),
         "top3_share_of_positive_pnl": (
             round(sum(item[1] for item in top) / positive_total, 4) if positive_total > 0 else 0.0
         ),
@@ -361,9 +353,7 @@ def universe_without(universe: PointInTimeUniverse, banned: frozenset[str]) -> P
                 observation_set=frozenset(snapshot.observation_set - banned),
             )
         )
-    return PointInTimeUniverse(
-        market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology
-    )
+    return PointInTimeUniverse(market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology)
 
 
 def summarize_folds(results: list[tuple[datetime, datetime, PortfolioBacktestResult]]) -> dict:
@@ -387,9 +377,7 @@ def summarize_folds(results: list[tuple[datetime, datetime, PortfolioBacktestRes
         "median_fold_return": median_return,
         "worst_fold_return": min(returns) if returns else None,
         "best_fold_return": max(returns) if returns else None,
-        "positive_fold_ratio": (
-            round(sum(1 for value in returns if value > 0) / len(returns), 4) if returns else 0.0
-        ),
+        "positive_fold_ratio": (round(sum(1 for value in returns if value > 0) / len(returns), 4) if returns else 0.0),
         "median_fold_sharpe": statistics.median(sharpes) if sharpes else 0.0,
     }
 
@@ -494,8 +482,7 @@ def run_variant(
         "variant": variant_id,
         "strategy_name": strategy.name,
         "parameters": {
-            key: str(value) if isinstance(value, list) else value
-            for key, value in strategy.parameter_tuple()
+            key: str(value) if isinstance(value, list) else value for key, value in strategy.parameter_tuple()
         },
         "full_period": full_stats(full),
         "concentration": concentration(full),
@@ -520,10 +507,7 @@ def load_and_validate_manifest() -> dict:
     built_in = {
         variant_id: {
             "base": cls.__name__,
-            "overrides": {
-                key: str(value) if isinstance(value, list) else value
-                for key, value in overrides.items()
-            },
+            "overrides": {key: str(value) if isinstance(value, list) else value for key, value in overrides.items()},
         }
         for variant_id, (cls, overrides) in VARIANTS.items()
     }
@@ -531,18 +515,13 @@ def load_and_validate_manifest() -> dict:
         variant_id: {
             "base": spec["base"],
             "overrides": {
-                key: str(value) if isinstance(value, list) else value
-                for key, value in spec["overrides"].items()
+                key: str(value) if isinstance(value, list) else value for key, value in spec["overrides"].items()
             },
         }
         for variant_id, spec in declared.items()
     }
     if normalized != built_in:
-        drift = {
-            key
-            for key in set(normalized) | set(built_in)
-            if normalized.get(key) != built_in.get(key)
-        }
+        drift = {key for key in set(normalized) | set(built_in) if normalized.get(key) != built_in.get(key)}
         raise SystemExit(
             "VARIANTS drifted from the committed predeclaration: "
             f"{sorted(drift)}. Update the code AND the manifest together."
@@ -598,18 +577,14 @@ def main() -> int:
 
     # CONTROL's top contributors define the shared jackknife perturbation.
     control_top: list[str] | None = None
-    control_artifact_path = OUT_DIR / (
-        "control.json" if not arguments.smoke else "control_smoke.json"
-    )
+    control_artifact_path = OUT_DIR / ("control.json" if not arguments.smoke else "control_smoke.json")
     if arguments.skip_jackknife:
         control_top = None
     elif control_artifact_path.exists():
         payload = json.loads(control_artifact_path.read_text())
         control_top = list(payload["concentration"]["top_symbols"])
     elif "control" not in requested:
-        raise SystemExit(
-            "control artifact missing; run --variants control first (or --skip-jackknife)"
-        )
+        raise SystemExit("control artifact missing; run --variants control first (or --skip-jackknife)")
 
     for variant_id in requested:
         started = datetime.now(UTC)

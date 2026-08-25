@@ -66,9 +66,7 @@ def _open_readonly(db_path: str | Path) -> sqlite3.Connection | None:
 
 
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
-    row = connection.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
-    ).fetchone()
+    row = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
     return row is not None
 
 
@@ -229,9 +227,7 @@ def execution_metrics(
         fees_by_market: dict[str, float] = {}
 
         # Portfolio fills (side-aware reference slippage, fill delay).
-        if _table_exists(connection, "portfolio_fills") and _table_exists(
-            connection, "portfolio_orders"
-        ):
+        if _table_exists(connection, "portfolio_fills") and _table_exists(connection, "portfolio_orders"):
             delay_cols = _columns(connection, "portfolio_fills")
             delay_expr = "f.fill_delay_seconds" if "fill_delay_seconds" in delay_cols else "NULL"
             for row in _query(
@@ -282,9 +278,7 @@ def execution_metrics(
                     # Legacy rows: ONE row per order, however many partial
                     # fills it had — count orders-with-fills, not fill events
                     # (portfolio_fills rows above count each fill exactly once).
-                    orders_with_fills_by_market[market_key] = (
-                        orders_with_fills_by_market.get(market_key, 0) + 1
-                    )
+                    orders_with_fills_by_market[market_key] = orders_with_fills_by_market.get(market_key, 0) + 1
                 if stored_bps is not None:
                     slippage_values.append(float(stored_bps))
                     slippage_by_market.setdefault(market_key, []).append(float(stored_bps))
@@ -331,10 +325,7 @@ def execution_metrics(
             },
             "slippage": {
                 **_stat_summary(slippage_values),
-                "by_market": {
-                    market: _stat_summary(values)
-                    for market, values in sorted(slippage_by_market.items())
-                },
+                "by_market": {market: _stat_summary(values) for market, values in sorted(slippage_by_market.items())},
                 "unit": "bps",
                 "sign_convention": "positive = adverse (fill worse than reference)",
             },
@@ -393,26 +384,16 @@ def _turnover_and_churn_by_market(
             universe_versions_by_market.setdefault(market, []).append(
                 (str(timestamp), str(raw.get("universe_version", "")))
             )
-        for (_previous_ts, previous_w, _), (_current_ts, current_w, _) in pairwise(
-            weights_by_decision
-        ):
+        for (_previous_ts, previous_w, _), (_current_ts, current_w, _) in pairwise(weights_by_decision):
             symbols = set(previous_w) | set(current_w)
-            turnover = (
-                sum(
-                    abs(previous_w.get(symbol, 0.0) - current_w.get(symbol, 0.0))
-                    for symbol in symbols
-                )
-                / 2.0
-            )
+            turnover = sum(abs(previous_w.get(symbol, 0.0) - current_w.get(symbol, 0.0)) for symbol in symbols) / 2.0
             turnover_by_market.setdefault(market, []).append(turnover)
 
     churn_by_market: dict[str, int] = {}
     for market, entries in universe_versions_by_market.items():
         churn_by_market[market] = sum(
             previous_version != current_version
-            for (_previous_ts, previous_version), (_current_ts, current_version) in pairwise(
-                entries
-            )
+            for (_previous_ts, previous_version), (_current_ts, current_version) in pairwise(entries)
         )
     return turnover_by_market, candidate_pool_by_market, churn_by_market
 
@@ -454,8 +435,8 @@ def forward_metrics(
             rows = _query(connection, "SELECT COUNT(*) FROM portfolio_orders")
             rebalance_orders = int(rows[0][0]) if rows else 0
 
-        turnover_by_market, candidate_pool_by_market, churn_by_market = (
-            _turnover_and_churn_by_market(decisions_by_market)
+        turnover_by_market, candidate_pool_by_market, churn_by_market = _turnover_and_churn_by_market(
+            decisions_by_market
         )
 
         execution: dict[str, int] = {}
@@ -536,17 +517,13 @@ def forward_metrics(
                 drawdown_pct = max(0.0, (peak_equity - equity_estimate) / peak_equity)
 
         turnover_values = [value for values in turnover_by_market.values() for value in values]
-        pool_values = [
-            float(value) for values in candidate_pool_by_market.values() for value in values
-        ]
+        pool_values = [float(value) for values in candidate_pool_by_market.values() for value in values]
         return {
             "available": True,
             "strategy": {
                 "decisions": {
                     "count": decision_count,
-                    "by_market": {
-                        market: len(decisions) for market, decisions in decisions_by_market.items()
-                    },
+                    "by_market": {market: len(decisions) for market, decisions in decisions_by_market.items()},
                     "by_strategy": {
                         strategy: sum(
                             1
@@ -575,32 +552,25 @@ def forward_metrics(
                     # decision, so the total is the decision count (the
                     # by_market map below stays per-market).
                     "count": decision_count,
-                    "by_market": {
-                        market: len(decisions) for market, decisions in decisions_by_market.items()
-                    },
+                    "by_market": {market: len(decisions) for market, decisions in decisions_by_market.items()},
                     "orders_planned": rebalance_orders,
                 },
                 "target_turnover": {
                     **_stat_summary(turnover_values),
                     "by_market": {
-                        market: _stat_summary(values)
-                        for market, values in sorted(turnover_by_market.items())
+                        market: _stat_summary(values) for market, values in sorted(turnover_by_market.items())
                     },
                     "unit": "one-way weight turnover per rebalance",
                 },
                 "observation_set_churn": {
                     "events": churn_by_market,
                     "total": sum(churn_by_market.values()),
-                    "note": (
-                        "proxy: universe_version change between consecutive "
-                        "persisted decisions per market"
-                    ),
+                    "note": ("proxy: universe_version change between consecutive persisted decisions per market"),
                 },
                 "candidate_pool_size": {
                     **_stat_summary(pool_values),
                     "by_market": {
-                        market: _stat_summary(values)
-                        for market, values in sorted(candidate_pool_by_market.items())
+                        market: _stat_summary(values) for market, values in sorted(candidate_pool_by_market.items())
                     },
                 },
             },
@@ -619,9 +589,7 @@ def forward_metrics(
                     "total": round(realized_total + unrealized_total, 6),
                     "fees": round(fee_total_all, 6),
                 },
-                "equity_estimate": (
-                    round(equity_estimate, 6) if equity_estimate is not None else None
-                ),
+                "equity_estimate": (round(equity_estimate, 6) if equity_estimate is not None else None),
                 "gross_exposure": None,
                 "cash": None,
                 "drawdown": {
@@ -713,9 +681,7 @@ def cost_calibration(
         slippage_values: list[float] = []
         spread_values: list[float] = []
         fee_values: list[float] = []
-        if _table_exists(connection, "portfolio_fills") and _table_exists(
-            connection, "portfolio_orders"
-        ):
+        if _table_exists(connection, "portfolio_fills") and _table_exists(connection, "portfolio_orders"):
             for row in _query(
                 connection,
                 """
@@ -733,9 +699,7 @@ def cost_calibration(
                     fee_values.append(float(fee))
         orders_cols = _columns(connection, "orders")
         if "slippage_bps" in orders_cols:
-            for (stored_bps,) in _query(
-                connection, "SELECT slippage_bps FROM orders WHERE slippage_bps IS NOT NULL"
-            ):
+            for (stored_bps,) in _query(connection, "SELECT slippage_bps FROM orders WHERE slippage_bps IS NOT NULL"):
                 slippage_values.append(float(stored_bps))
         if "spread_estimate_bps" in orders_cols:
             for (stored_spread,) in _query(
@@ -819,9 +783,7 @@ def expected_vs_actual(
     status = str(order.get("status", ""))
     submitted_at = order.get("created_at")
     actual_quantity = sum(_to_float(fill.get("quantity")) for fill in fills)
-    total_value = sum(
-        _to_float(fill.get("quantity")) * _to_float(fill.get("price")) for fill in fills
-    )
+    total_value = sum(_to_float(fill.get("quantity")) * _to_float(fill.get("price")) for fill in fills)
     average_fill_price = total_value / actual_quantity if actual_quantity > 0 else None
     fees = sum(_to_float(fill.get("fee")) for fill in fills)
     delay: float | None = None
@@ -844,12 +806,8 @@ def expected_vs_actual(
         "actual_quantity": round(actual_quantity, 6),
         "fill_ratio": (actual_quantity / expected_quantity) if expected_quantity > 0 else None,
         "expected_price": reference_price,
-        "average_fill_price": (
-            round(average_fill_price, 8) if average_fill_price is not None else None
-        ),
-        "fill_price_delta_bps": (
-            round(price_delta_bps, 4) if price_delta_bps is not None else None
-        ),
+        "average_fill_price": (round(average_fill_price, 8) if average_fill_price is not None else None),
+        "fill_price_delta_bps": (round(price_delta_bps, 4) if price_delta_bps is not None else None),
         "slippage_bps": round(adverse_bps, 4) if adverse_bps is not None else None,
         "fees": round(fees, 6),
         "fill_count": len(fills),
@@ -891,9 +849,7 @@ def decision_expected_vs_actual(
     if connection is None:
         return _empty_state()
     try:
-        if not _table_exists(connection, "portfolio_decisions") or not _table_exists(
-            connection, "portfolio_orders"
-        ):
+        if not _table_exists(connection, "portfolio_decisions") or not _table_exists(connection, "portfolio_orders"):
             return {
                 "available": True,
                 "decision_id": decision_id,

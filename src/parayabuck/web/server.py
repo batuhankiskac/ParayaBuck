@@ -105,9 +105,7 @@ class BacktestManager:
             self.universe = None
             self.progress = []
             argv = self._build_argv(payload, self.output_dir)
-            self._thread = self._thread_factory(
-                target=self._run, args=(argv,), daemon=True, name="web-backtest"
-            )
+            self._thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
             self._thread.start()
             return self.run_id
 
@@ -181,10 +179,7 @@ class BacktestManager:
             universe_path = report_path.with_name("universe.json")
             try:
                 if not report_path.exists():
-                    error = (
-                        f"Rapor üretilmedi: {report_path} "
-                        "(CLI hatasız çıktı ama rapor dosyası yazılmadı)"
-                    )
+                    error = f"Rapor üretilmedi: {report_path} (CLI hatasız çıktı ama rapor dosyası yazılmadı)"
                 else:
                     raw = json.loads(report_path.read_text(encoding="utf-8"))
                     summary = raw.get("summary")
@@ -245,9 +240,7 @@ class EngineManager:
         self._last_account_monotonic = 0.0
         self._account_cache_ttl_seconds = 5.0
         self._account_lock = threading.Lock()
-        self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = (
-            set()
-        )
+        self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = set()
         self._log_queues_lock = threading.Lock()
         # Reentrant: reset_safety_lock and current_engine_state may be invoked
         # while the state lock is already held by the caller.
@@ -309,16 +302,10 @@ class EngineManager:
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards."""
         try:
-            raw = (
-                yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
-                if self.config_path.exists()
-                else {}
-            )
+            raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
             app_config = (raw or {}).get("app", {})
             runtime_config = (raw or {}).get("runtime", {})
-            legacy_live = (
-                "mode" not in runtime_config and (raw or {}).get("alpaca", {}).get("paper") is False
-            )
+            legacy_live = "mode" not in runtime_config and (raw or {}).get("alpaca", {}).get("paper") is False
             key, secret = self.get_credentials()
             return bool(
                 app_config.get("auto_start_engine", True)
@@ -368,9 +355,7 @@ class EngineManager:
         current_paper = self.is_paper_mode()
         entering_live = current_paper and not payload.paper_mode
         if entering_live and payload.restart_engine:
-            raise ValueError(
-                "Saving live mode requires restart_engine=false; start live separately after arming"
-            )
+            raise ValueError("Saving live mode requires restart_engine=false; start live separately after arming")
         if entering_live:
             current_key, current_secret = self.get_credentials()
             if not current_key or not current_secret:
@@ -434,9 +419,7 @@ class EngineManager:
         # operator UI heals configs that still carry the old key.
         runtime_save = dict(cfg_raw["runtime"])
         if "risk_monitor_timeframe" in runtime_save:
-            runtime_save.setdefault(
-                "market_state_timeframe", runtime_save.pop("risk_monitor_timeframe")
-            )
+            runtime_save.setdefault("market_state_timeframe", runtime_save.pop("risk_monitor_timeframe"))
         runtime_save["mode"] = "paper" if payload.paper_mode else "live"
         runtime_save["execution_timeframe"] = payload.execution_timeframe
         cfg_raw["runtime"] = runtime_save
@@ -475,17 +458,13 @@ class EngineManager:
         )
         if entering_live and credentials_changed:
             self.invalidate_live_arming()
-            raise ValueError(
-                "Credentials changed; request and type a fresh live confirmation first"
-            )
+            raise ValueError("Credentials changed; request and type a fresh live confirmation first")
         if entering_live:
             token = self._live_arm_token
             candidate_digest = self._digest_config(cfg_raw, paper=False)
             if token is None or token.config_digest != candidate_digest:
                 self.invalidate_live_arming()
-                raise ValueError(
-                    "Settings changed after live verification; confirm the live account again"
-                )
+                raise ValueError("Settings changed after live verification; confirm the live account again")
         return ValidatedSettings(
             cfg_raw=cfg_raw,
             old_app=old_app,
@@ -503,8 +482,7 @@ class EngineManager:
         with backtest_manager.lock:
             if backtest_manager.is_running:
                 raise ValueError(
-                    "A Web backtest is still running; wait for it to finish "
-                    "before starting the trading engine"
+                    "A Web backtest is still running; wait for it to finish before starting the trading engine"
                 )
             with self._state_lock:
                 if self.runtime is not None or self.engine_state in _START_ENGINE_BLOCKING_STATES:
@@ -515,8 +493,7 @@ class EngineManager:
                 if self.engine_state == "starting" and not auto_start:
                     if self._retry_task is not None:
                         raise ValueError(
-                            "Engine auto-start retry is in progress; wait for "
-                            "it to finish or stop the engine"
+                            "Engine auto-start retry is in progress; wait for it to finish or stop the engine"
                         )
                     raise ValueError("Engine is already starting")
                 self.engine_state = "starting"
@@ -550,8 +527,7 @@ class EngineManager:
             live_mode = cfg.runtime.mode.value == "live"
             if live_mode and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise ValueError(
-                    "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES "
-                    "before starting the application."
+                    "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES before starting the application."
                 )
             if live_mode:
                 self._require_valid_live_arm(key, secret, consume=True)
@@ -721,17 +697,14 @@ class EngineManager:
                         if self.engine_state != "starting":
                             return
                         attempt = self._retry_attempt + 1
-                        delay = _AUTO_START_RETRY_BACKOFF[
-                            min(attempt, len(_AUTO_START_RETRY_BACKOFF)) - 1
-                        ]
+                        delay = _AUTO_START_RETRY_BACKOFF[min(attempt, len(_AUTO_START_RETRY_BACKOFF)) - 1]
                         self._retry_attempt = attempt
                         self._retry_next_at = time.monotonic() + delay
                         self._retry_task = asyncio.current_task()
                         self._retry_task_loop = asyncio.get_running_loop()
                         self.last_engine_error = f"transient: {exc}; retry in {delay}s"
                     log.warning(
-                        "Automatic engine start attempt %d failed transiently (%s); "
-                        "retrying in %ds",
+                        "Automatic engine start attempt %d failed transiently (%s); retrying in %ds",
                         attempt,
                         exc,
                         delay,
@@ -762,19 +735,14 @@ class EngineManager:
         with self._state_lock:
             runtime = self.runtime
         if runtime is None:
-            raise ValueError(
-                "The trading engine is not running; start it before resetting the risk epoch"
-            )
+            raise ValueError("The trading engine is not running; start it before resetting the risk epoch")
         baseline = runtime.start_new_risk_epoch()
         return {"baseline_equity": baseline}
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:
             now = time.monotonic()
-            if (
-                self.last_account is not None
-                and now - self._last_account_monotonic < self._account_cache_ttl_seconds
-            ):
+            if self.last_account is not None and now - self._last_account_monotonic < self._account_cache_ttl_seconds:
                 return {
                     "account": self.last_account,
                     "age_seconds": max(0.0, now - self._last_account_monotonic),
@@ -822,24 +790,15 @@ class EngineManager:
                                 "market_value": p.market_value,
                                 "unrealized_pnl": p.unrealized_pnl,
                                 "ownership": p.ownership,
-                                "protection_state": (
-                                    owned.protection_state.value if owned is not None else None
-                                ),
+                                "protection_state": (owned.protection_state.value if owned is not None else None),
                                 "stop_price": (
-                                    owned.current_stop or owned.original_stop
-                                    if owned is not None
-                                    else None
+                                    owned.current_stop or owned.original_stop if owned is not None else None
                                 ),
-                                "target_price": owned.original_target
-                                if owned is not None
-                                else None,
+                                "target_price": owned.original_target if owned is not None else None,
                                 "stop_order_state": owned.stop_state if owned is not None else None,
-                                "target_exit_state": (
-                                    owned.target_state if owned is not None else None
-                                ),
+                                "target_exit_state": (owned.target_state if owned is not None else None),
                                 "manual_intervention_required": bool(
-                                    owned is not None
-                                    and owned.status == "manual_intervention_required"
+                                    owned is not None and owned.status == "manual_intervention_required"
                                 ),
                             }
                         )
@@ -852,9 +811,7 @@ class EngineManager:
                     "unrealized_pnl": acct.unrealized_pnl,
                     "fees": acct.fees,
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
-                    "gross_exposure": sum(
-                        position.market_value for position in acct.positions if not position.is_flat
-                    ),
+                    "gross_exposure": sum(position.market_value for position in acct.positions if not position.is_flat),
                     "positions": positions_list,
                     "account_suffix": getattr(self.broker, "account_suffix", ""),
                     "snapshot_at": datetime.now(UTC).isoformat(),
@@ -987,15 +944,11 @@ class EngineManager:
             )
 
         self._append_live_config_checks(item, live_cfg, runtime_cfg)
-        approval, approval_error, hmac_key, approval_path = self._check_approval_signature(
-            item, live_cfg
-        )
+        approval, approval_error, hmac_key, approval_path = self._check_approval_signature(item, live_cfg)
         key, secret = self.get_credentials()
         account_id, account_probe_error = self._probe_live_account(key, secret)
         expected_digests, digest_error = self._resolve_live_configuration_digests()
-        self._append_live_binding_check(
-            item, approval, account_id, account_probe_error, expected_digests, digest_error
-        )
+        self._append_live_binding_check(item, approval, account_id, account_probe_error, expected_digests, digest_error)
         self._append_live_session_checks(item, key, secret)
         return {
             "all_met": all(entry["satisfied"] for entry in items),
@@ -1043,18 +996,14 @@ class EngineManager:
             "live_cap",
             "Config: live.hard_dollar_cap > 0",
             cap_ok,
-            f"live.hard_dollar_cap must be greater than 0 (currently {cap:g})"
-            if not cap_ok
-            else None,
+            f"live.hard_dollar_cap must be greater than 0 (currently {cap:g})" if not cap_ok else None,
         )
         env_ok = os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
         item(
             "enable_live_env",
             "PARAYABUCK_ENABLE_LIVE=YES",
             env_ok,
-            "PARAYABUCK_ENABLE_LIVE=YES is not set; restart the application with it"
-            if not env_ok
-            else None,
+            "PARAYABUCK_ENABLE_LIVE=YES is not set; restart the application with it" if not env_ok else None,
         )
 
     def _check_approval_signature(
@@ -1063,9 +1012,7 @@ class EngineManager:
         live_cfg: dict[str, Any],
     ) -> tuple[LiveOperatorApproval | None, str | None, str, str]:
         approval_path = str(live_cfg.get("operator_approval_path") or "")
-        key_env_name = str(
-            live_cfg.get("operator_approval_key_env") or "PARAYABUCK_OPERATOR_APPROVAL_KEY"
-        )
+        key_env_name = str(live_cfg.get("operator_approval_key_env") or "PARAYABUCK_OPERATOR_APPROVAL_KEY")
         hmac_key = os.getenv(key_env_name, "")
         file_ok = bool(approval_path) and Path(approval_path).exists()
         item(
@@ -1085,9 +1032,7 @@ class EngineManager:
             "approval_key",
             "Operator approval HMAC key configured",
             key_ok,
-            f"approval key env {key_env_name} is missing or shorter than 32 characters"
-            if not key_ok
-            else None,
+            f"approval key env {key_env_name} is missing or shorter than 32 characters" if not key_ok else None,
         )
         approval: LiveOperatorApproval | None = None
         approval_error: str | None = None
@@ -1097,9 +1042,7 @@ class EngineManager:
                 approval = LiveOperatorApproval(
                     operator_id=str(parsed.get("operator_id", "")),
                     account_id=str(parsed.get("account_id", "")),
-                    configuration_digests=tuple(
-                        str(entry) for entry in parsed.get("configuration_digests", ())
-                    ),
+                    configuration_digests=tuple(str(entry) for entry in parsed.get("configuration_digests", ())),
                     maximum_dollar_exposure=float(parsed.get("maximum_dollar_exposure", 0)),
                     approved_at=datetime.fromisoformat(str(parsed.get("approved_at", ""))),
                     expires_at=datetime.fromisoformat(str(parsed.get("expires_at", ""))),
@@ -1108,18 +1051,14 @@ class EngineManager:
                 )
                 expected = approval.calculated_signature(hmac_key)
                 if not hmac.compare_digest(approval.signature, expected):
-                    approval_error = (
-                        "approval file signature does not match the operator approval key"
-                    )
+                    approval_error = "approval file signature does not match the operator approval key"
                 elif approval.expires_at <= datetime.now(UTC):
                     approval_error = "approval file has expired"
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 approval_error = f"approval file is unreadable or invalid: {exc}"
         signature_ok = approval is not None and approval_error is None
         if not signature_ok and approval_error is None:
-            approval_error = (
-                "approval file or operator approval HMAC key is missing (see checks above)"
-            )
+            approval_error = "approval file or operator approval HMAC key is missing (see checks above)"
         item(
             "approval_signature",
             "Approval signature and expiry valid",
@@ -1128,9 +1067,7 @@ class EngineManager:
         )
         return approval, approval_error, hmac_key, approval_path
 
-    def _probe_live_account(
-        self, key: str | None, secret: str | None
-    ) -> tuple[str | None, str | None]:
+    def _probe_live_account(self, key: str | None, secret: str | None) -> tuple[str | None, str | None]:
         if not key or not secret:
             return None, None
         try:
@@ -1204,8 +1141,7 @@ class EngineManager:
         elif account_id is None:
             binding_state = "unverifiable"
             binding_missing = (
-                "cannot verify the live account binding: "
-                f"live account probe failed: {account_probe_error}"
+                f"cannot verify the live account binding: live account probe failed: {account_probe_error}"
                 if account_probe_error is not None
                 else "cannot verify the live account binding without reachable live credentials"
             )
@@ -1217,9 +1153,7 @@ class EngineManager:
             binding_missing = "approval file was issued for a different Alpaca account"
         elif set(approval.configuration_digests) != set(expected_digests):
             binding_state = "missing"
-            binding_missing = (
-                "approval file configuration digests do not match the current settings"
-            )
+            binding_missing = "approval file configuration digests do not match the current settings"
         item(
             "approval_binding",
             "Approval binds this account and configuration",
@@ -1258,9 +1192,7 @@ class EngineManager:
             "stop the engine before arming live mode" if not engine_idle else None,
         )
 
-    def _require_valid_live_arm(
-        self, key: str, secret: str, *, consume: bool = False
-    ) -> LiveArmToken:
+    def _require_valid_live_arm(self, key: str, secret: str, *, consume: bool = False) -> LiveArmToken:
         token = self._live_arm_token
         valid = (
             token is not None
@@ -1271,9 +1203,7 @@ class EngineManager:
         )
         if not valid:
             self.invalidate_live_arming()
-            raise ValueError(
-                "Live trading requires a fresh confirmation for these credentials and settings."
-            )
+            raise ValueError("Live trading requires a fresh confirmation for these credentials and settings.")
         assert token is not None
         if consume:
             self.invalidate_live_arming()
@@ -1304,9 +1234,7 @@ class EngineManager:
         now = time.monotonic()
         ticket = secrets.token_urlsafe(24)
         with self._ws_tickets_lock:
-            self._ws_tickets = {
-                key: value for key, value in self._ws_tickets.items() if now < value[1]
-            }
+            self._ws_tickets = {key: value for key, value in self._ws_tickets.items() if now < value[1]}
             self._ws_tickets[ticket] = (kind, now + 30.0)
         return ticket
 
@@ -1338,8 +1266,7 @@ def _tracked_secret_warning(root: Path) -> str | None:
         # The secret scan cannot prove anything when git is unavailable; the
         # failure must be loud so the operator knows the block was skipped.
         log.critical(
-            "SECURITY CHECK FAILED: cannot list tracked files for secret scan (%s); "
-            "the secret-key guard is inactive",
+            "SECURITY CHECK FAILED: cannot list tracked files for secret scan (%s); the secret-key guard is inactive",
             exc,
         )
         return None
@@ -1476,9 +1403,7 @@ async def protect_local_control_api(request: Request, call_next: Any) -> Any:
     host = urlparse(f"//{host_header}").hostname or ""
     if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
         return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
-    if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin(
-        request.headers.get("origin")
-    ):
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin(request.headers.get("origin")):
         return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})
     if request.method not in {"GET", "HEAD", "OPTIONS"} and not secrets.compare_digest(
         request.headers.get("x-parayabuck-control-token", "").encode("latin-1", "replace"),
@@ -1704,21 +1629,13 @@ def _strategy_metadata(cfg: Any) -> dict[str, Any]:
         if not selection.enabled:
             continue
         try:
-            strategy = portfolio_strategy_from(
-                selection.name, selection.parameters, timeframe=selection.timeframe
-            )
+            strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
             spec = strategy.spec()
             observation_size = (
-                len(
-                    active_payload.get(
-                        "observation_set", active_payload.get("selected_symbols", ())
-                    )
-                )
+                len(active_payload.get("observation_set", active_payload.get("selected_symbols", ())))
                 if market_key == "equity"
                 else len(
-                    active_crypto_payload.get(
-                        "observation_set", active_crypto_payload.get("selected_symbols", ())
-                    )
+                    active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
                 )
             )
             result[market_key] = {
@@ -1803,12 +1720,8 @@ async def get_status() -> dict[str, Any]:
             if repository is not None:
                 account_id = getattr(runtime.broker, "account_id", None) or "unknown"
                 result["operations"] = repository.operations_snapshot(account_id)
-                result["ownership_drift_active"] = (
-                    health.circuit_breaker_reason == "ownership_drift"
-                )
-                result["reconciliation_anomalies"] = list(
-                    repository.ownership_adjustments(account_id)
-                )
+                result["ownership_drift_active"] = health.circuit_breaker_reason == "ownership_drift"
+                result["reconciliation_anomalies"] = list(repository.ownership_adjustments(account_id))
             result["active_equity_symbol_count"] = len(
                 getattr(runtime, "_symbols_by_market", {}).get(Market.EQUITY, ())
             )
@@ -1821,17 +1734,11 @@ async def get_status() -> dict[str, Any]:
             active_path = Path(cfg.universe.equity.active_universe_path)
             active_crypto_path = Path(cfg.universe.crypto.active_universe_path)
             candidate_payload = (
-                json.loads(candidate_path.read_text(encoding="utf-8"))
-                if candidate_path.exists()
-                else []
+                json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else []
             )
-            active_payload = (
-                json.loads(active_path.read_text(encoding="utf-8")) if active_path.exists() else {}
-            )
+            active_payload = json.loads(active_path.read_text(encoding="utf-8")) if active_path.exists() else {}
             active_crypto_payload = (
-                json.loads(active_crypto_path.read_text(encoding="utf-8"))
-                if active_crypto_path.exists()
-                else {}
+                json.loads(active_crypto_path.read_text(encoding="utf-8")) if active_crypto_path.exists() else {}
             )
             candidate_items = (
                 candidate_payload.get(
@@ -1841,25 +1748,17 @@ async def get_status() -> dict[str, Any]:
                 if isinstance(candidate_payload, dict)
                 else candidate_payload
             )
-            result["candidate_universe_size"] = (
-                len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
-            )
+            result["candidate_universe_size"] = len(candidate_items) if isinstance(candidate_items, (list, dict)) else 0
             equity_symbols, validated_scanner_status = validate_active_universe(cfg.universe.equity)
-            crypto_symbols, validated_crypto_scanner_status = validate_active_crypto_universe(
-                cfg.universe.crypto
-            )
+            crypto_symbols, validated_crypto_scanner_status = validate_active_crypto_universe(cfg.universe.crypto)
             if runtime is None:
                 result["active_equity_symbol_count"] = len(equity_symbols)
                 result["active_crypto_symbol_count"] = len(crypto_symbols)
             result["scanner"] = {
                 "last_run_at": active_payload.get("selection_timestamp"),
                 "status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
-                "equity_status": runtime_refresh.get("status", {}).get(
-                    "equity", validated_scanner_status
-                ),
-                "crypto_status": runtime_refresh.get("status", {}).get(
-                    "crypto", validated_crypto_scanner_status
-                ),
+                "equity_status": runtime_refresh.get("status", {}).get("equity", validated_scanner_status),
+                "crypto_status": runtime_refresh.get("status", {}).get("crypto", validated_crypto_scanner_status),
                 "equity_snapshot_status": validated_scanner_status,
                 "crypto_snapshot_status": validated_crypto_scanner_status,
                 "scanner_version": active_payload.get("scanner_version"),
@@ -1869,29 +1768,21 @@ async def get_status() -> dict[str, Any]:
                 "refresh_errors": runtime_refresh.get("errors", {}),
                 "equity_candidate_count": len(active_payload.get("candidate_symbols", ())),
                 "equity_shortlist_count": len(
-                    candidate_payload.get("shortlist_symbols", ())
-                    if isinstance(candidate_payload, dict)
-                    else ()
+                    candidate_payload.get("shortlist_symbols", ()) if isinstance(candidate_payload, dict) else ()
                 ),
                 "equity_sector_metadata_coverage": active_payload.get("sector_metadata_coverage"),
                 "crypto_candidate_count": len(active_crypto_payload.get("candidate_symbols", ())),
             }
             result["universe"] = {
                 "equity": {
-                    "symbols": list(
-                        active_payload.get(
-                            "observation_set", active_payload.get("selected_symbols", ())
-                        )
-                    ),
+                    "symbols": list(active_payload.get("observation_set", active_payload.get("selected_symbols", ()))),
                     "pool_size": len(active_payload.get("selected_symbols", ())),
                     "scores": active_payload.get("score_breakdown", {}),
                     "eliminated": active_payload.get("eliminated", {}),
                 },
                 "crypto": {
                     "symbols": list(
-                        active_crypto_payload.get(
-                            "observation_set", active_crypto_payload.get("selected_symbols", ())
-                        )
+                        active_crypto_payload.get("observation_set", active_crypto_payload.get("selected_symbols", ()))
                     ),
                     "pool_size": len(active_crypto_payload.get("selected_symbols", ())),
                     "scores": active_crypto_payload.get("score_breakdown", {}),
@@ -2100,9 +1991,7 @@ async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
         if restart_engine:
             await asyncio.to_thread(manager.stop_engine)
             if manager.engine_state != "stopped":
-                raise RuntimeError(
-                    "Bot could not stop safely. Use the Durdur button and try again."
-                )
+                raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
         _atomic_update_credentials(manager.env_path, api_key, secret_key)
         atomic_write(
             manager.config_path,
@@ -2331,9 +2220,7 @@ def _dashboard_readonly_connection() -> sqlite3.Connection | None:
     if not path.exists():
         return None
     try:
-        connection: sqlite3.Connection = sqlite3.connect(
-            f"file:{path}?mode=ro", uri=True, timeout=5.0
-        )
+        connection: sqlite3.Connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5.0)
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
     except sqlite3.Error as exc:
@@ -2474,9 +2361,7 @@ def _dashboard_next_rebalance_at(last_decision_at: str | None, policy: str | Non
         return (last + timedelta(hours=hours)).isoformat()
     if policy == "weekly":
         days_ahead = 7 - last.weekday()
-        boundary = (last + timedelta(days=days_ahead)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        boundary = (last + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
         return boundary.isoformat()
     if policy == "monthly":
         year, month = last.year, last.month
@@ -2543,11 +2428,7 @@ def _dashboard_market_card(
     enabled = bool(selection.enabled)
     market_health = dict((health or {}).get("markets", {}).get(market_key, {}) or {})
     catch_up = dict(market_health.get("catch_up") or {})
-    positions = [
-        position
-        for position in account.get("positions", [])
-        if position.get("market") == market_key
-    ]
+    positions = [position for position in account.get("positions", []) if position.get("market") == market_key]
     equity = max(float(account.get("equity") or 0.0), 1e-9)
     market_value = sum(float(position.get("market_value") or 0.0) for position in positions)
     target = dict((decision or {}).get("target") or {})
@@ -2568,9 +2449,7 @@ def _dashboard_market_card(
                 "qty": position.get("total_qty") or position.get("qty") or 0,
                 "market_value": position.get("market_value"),
                 "current_weight_pct": (float(position.get("market_value") or 0.0) / equity) * 100,
-                "target_weight_pct": (
-                    float((weight or {}).get("weight") or 0.0) * 100 if weight else None
-                ),
+                "target_weight_pct": (float((weight or {}).get("weight") or 0.0) * 100 if weight else None),
                 "reason": (weight or {}).get("reason") if weight else None,
                 "rank": rank,
                 "of_qualified": qualified if rank is not None else None,
@@ -2747,44 +2626,32 @@ def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | Non
     return incidents, risk_state
 
 
-def _dashboard_risk(
-    cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]
-) -> dict[str, Any]:
+def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, Any]) -> dict[str, Any]:
     """Risk panel: exposure, buffers, policies, latch, incidents, epoch."""
     equity = max(float(account.get("equity") or 0.0), 1e-9)
     cash = float(account.get("cash") or 0.0)
     gross = float(account.get("gross_exposure") or 0.0)
     positions = account.get("positions", [])
-    equity_value = sum(
-        float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity"
-    )
-    crypto_value = sum(
-        float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "crypto"
-    )
+    equity_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity")
+    crypto_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "crypto")
     daily_pnl = float(account.get("daily_pnl") or 0.0)
     drawdown = float(account.get("drawdown") or 0.0)
     limits = getattr(cfg, "risk", None) if cfg is not None else None
     incidents, risk_state = _dashboard_ledger_risk()
     return {
         "gross_exposure_pct": (gross / equity) * 100,
-        "gross_exposure_limit_pct": (
-            float(getattr(limits, "max_gross_exposure_pct", 0.60) or 0.0) * 100
-        ),
+        "gross_exposure_limit_pct": (float(getattr(limits, "max_gross_exposure_pct", 0.60) or 0.0) * 100),
         "cash_pct": (cash / equity) * 100,
         "cash_buffer_limit_pct": (float(getattr(limits, "cash_buffer_pct", 0.40) or 0.0) * 100),
         "equity_exposure_pct": (equity_value / equity) * 100,
         "crypto_exposure_pct": (crypto_value / equity) * 100,
-        "crypto_exposure_limit_pct": (
-            float(getattr(limits, "max_crypto_exposure_pct", 0.10) or 0.0) * 100
-        ),
+        "crypto_exposure_limit_pct": (float(getattr(limits, "max_crypto_exposure_pct", 0.10) or 0.0) * 100),
         "max_position_pct": (float(getattr(limits, "max_position_pct", 0.10) or 0.0) * 100),
         "max_positions": int(getattr(limits, "max_positions", 0) or 0),
         "crypto_positions": sum(1 for p in positions if p.get("market") == "crypto"),
         "max_crypto_positions": int(getattr(limits, "max_crypto_positions", 0) or 0),
         "daily_pnl": daily_pnl,
-        "daily_loss_limit_pct": (
-            float(getattr(limits, "daily_loss_limit_pct", 0.005) or 0.0) * 100
-        ),
+        "daily_loss_limit_pct": (float(getattr(limits, "daily_loss_limit_pct", 0.005) or 0.0) * 100),
         "drawdown": drawdown,
         "max_drawdown_pct": (float(getattr(limits, "max_drawdown_pct", 0.05) or 0.0) * 100),
         "entry_risk_latch": dict((health or {}).get("entry_risk_latch") or {}),
@@ -2899,11 +2766,7 @@ def _dashboard_execution() -> dict[str, Any]:
         price = float(row[6] or 0.0)
         reference = float(row[9]) if row[9] is not None else None
         direction = 1.0 if str(row[4]).lower() == "buy" else -1.0
-        slippage_bps = (
-            ((price - reference) / reference) * 10000 * direction
-            if reference and reference > 0
-            else None
-        )
+        slippage_bps = ((price - reference) / reference) * 10000 * direction if reference and reference > 0 else None
         fill_entry = {
             "activity_id": str(row[0]),
             "client_order_id": str(row[1]),
@@ -3060,11 +2923,7 @@ def _dashboard_health(
 ) -> dict[str, Any]:
     """System health panel: workers, queue, freshness, reconciliation, DB."""
     workers = dict((health or {}).get("workers") or {})
-    heartbeats = [
-        str(worker.get("last_heartbeat"))
-        for worker in workers.values()
-        if worker.get("last_heartbeat")
-    ]
+    heartbeats = [str(worker.get("last_heartbeat")) for worker in workers.values() if worker.get("last_heartbeat")]
     refresh = dict((health or {}).get("universe_refresh") or {})
     engine_cfg = getattr(cfg, "engine", None) if cfg is not None else None
     if runtime_metrics_payload is None:
@@ -3088,9 +2947,7 @@ def _dashboard_health(
             "age_seconds": account.get("age_seconds"),
             "stale": account.get("stale"),
             "source": account.get("source"),
-            "maximum_age_for_entry_seconds": getattr(
-                engine_cfg, "maximum_account_age_for_entry_seconds", None
-            ),
+            "maximum_age_for_entry_seconds": getattr(engine_cfg, "maximum_account_age_for_entry_seconds", None),
         },
         "reconciliation": {
             "last_at": (health or {}).get("last_reconciliation_at"),
@@ -3110,9 +2967,7 @@ def _dashboard_health(
     }
 
 
-def _dashboard_explanations(
-    decisions: dict[str, dict[str, Any]], account: dict[str, Any]
-) -> dict[str, Any]:
+def _dashboard_explanations(decisions: dict[str, dict[str, Any]], account: dict[str, Any]) -> dict[str, Any]:
     """Per-holding structured reasons from persisted decision metadata."""
     result: dict[str, Any] = {}
     for market_key in ("equity", "crypto"):
@@ -3141,9 +2996,7 @@ def _dashboard_explanations(
                     "reason": reason,
                     "rank": rank,
                     "of_qualified": qualified if rank is not None else None,
-                    "target_weight_pct": (
-                        float((weight or {}).get("weight") or 0.0) * 100 if weight else 0.0
-                    ),
+                    "target_weight_pct": (float((weight or {}).get("weight") or 0.0) * 100 if weight else 0.0),
                     "decision_timestamp": (decision or {}).get("timestamp"),
                     "decision_strategy": (decision or {}).get("strategy_name"),
                     "hypothesis": metadata.get("hypothesis"),
@@ -3254,12 +3107,7 @@ def _dashboard_payload() -> dict[str, Any]:
     now = time.monotonic()
     with _dashboard_snapshot_lock:
         cached = _dashboard_snapshot
-        if (
-            cached is not None
-            and now < cached[0]
-            and cached[1] == engine_state
-            and cached[2] == config_key
-        ):
+        if cached is not None and now < cached[0] and cached[1] == engine_state and cached[2] == config_key:
             return cached[3]
     payload = _build_dashboard_payload(engine_state)
     with _dashboard_snapshot_lock:
@@ -3308,10 +3156,7 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
             "daily_pnl": account.get("daily_pnl"),
             "realized_pnl": account.get("realized_pnl"),
             "unrealized_pnl": account.get("unrealized_pnl"),
-            "total_pnl": (
-                float(account.get("realized_pnl") or 0.0)
-                + float(account.get("unrealized_pnl") or 0.0)
-            )
+            "total_pnl": (float(account.get("realized_pnl") or 0.0) + float(account.get("unrealized_pnl") or 0.0))
             if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
             else None,
             "drawdown": account.get("drawdown"),
@@ -3350,17 +3195,13 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         "universe": _dashboard_safe_panel("universe", lambda: _dashboard_universe(cfg, health)),
         "health": _dashboard_safe_panel(
             "health",
-            lambda: _dashboard_health(
-                cfg, health, account, runtime_metrics_payload=runtime_metrics_payload
-            ),
+            lambda: _dashboard_health(cfg, health, account, runtime_metrics_payload=runtime_metrics_payload),
         ),
         "explanations": _dashboard_safe_panel(
             "explanations",
             lambda: _dashboard_explanations(decisions, account),
         ),
-        "metrics": _dashboard_metrics_payload(
-            account_id, runtime_metrics_payload=runtime_metrics_payload
-        ),
+        "metrics": _dashboard_metrics_payload(account_id, runtime_metrics_payload=runtime_metrics_payload),
     }
 
 
@@ -3372,9 +3213,7 @@ def _dashboard_metrics_payload(
     return {
         "telemetry": _telemetry_payload(),
         "runtime_metrics": (
-            runtime_metrics_payload
-            if runtime_metrics_payload is not None
-            else _runtime_metrics_payload(account_id)
+            runtime_metrics_payload if runtime_metrics_payload is not None else _runtime_metrics_payload(account_id)
         ),
     }
 
@@ -3469,13 +3308,9 @@ async def websocket_stream(websocket: WebSocket) -> None:
             # current_engine_state may call runtime.health() (ledger/broker
             # access) and is_paper_mode re-parses the config on change; both
             # block and must not run on the event loop.
-            state, paper = await asyncio.to_thread(
-                lambda: (manager.current_engine_state(), manager.is_paper_mode())
-            )
+            state, paper = await asyncio.to_thread(lambda: (manager.current_engine_state(), manager.is_paper_mode()))
             status_data = {"state": state, "paper": paper}
-            await websocket.send_json(
-                {"type": "update", "account": account_data, "status": status_data}
-            )
+            await websocket.send_json({"type": "update", "account": account_data, "status": status_data})
             # The browser never sends messages; this paces the loop and,
             # unlike asyncio.sleep, detects a dead peer: writing to a lost
             # connection only logs "socket.send() raised exception." in
@@ -3509,9 +3344,7 @@ async def websocket_logs(websocket: WebSocket) -> None:
             get_task = asyncio.ensure_future(queue.get())
             recv_task = asyncio.ensure_future(websocket.receive_text())
             try:
-                done, _pending = await asyncio.wait(
-                    {get_task, recv_task}, return_when=asyncio.FIRST_COMPLETED
-                )
+                done, _pending = await asyncio.wait({get_task, recv_task}, return_when=asyncio.FIRST_COMPLETED)
             finally:
                 for task in (get_task, recv_task):
                     if not task.done():

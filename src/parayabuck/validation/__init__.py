@@ -110,9 +110,7 @@ def temporal_diagnostic_windows(
     start, including the excluded year, and compounds on segment 1's ending
     equity). Names are the canonical keys used by artifacts/report.
     """
-    year_start = {
-        year: datetime(year, 1, 1, tzinfo=UTC) for year in (2020, 2021, 2022, 2023, 2024, 2025)
-    }
+    year_start = {year: datetime(year, 1, 1, tzinfo=UTC) for year in (2020, 2021, 2022, 2023, 2024, 2025)}
     return {
         "window_2017_2021": [(eval_start, min(recent_start, eval_end))],
         "window_2022_2026": [(recent_start, eval_end)],
@@ -243,9 +241,7 @@ def chained_cumulative_metrics(curve: Sequence[float]) -> dict[str, float]:
         if curve[index - 1] > 0 and curve[index] > 0
     ]
     mean = statistics.fmean(daily) if daily else 0.0
-    variance = (
-        sum((value - mean) ** 2 for value in daily) / (len(daily) - 1) if len(daily) > 1 else 0.0
-    )
+    variance = sum((value - mean) ** 2 for value in daily) / (len(daily) - 1) if len(daily) > 1 else 0.0
     sharpe = mean / math.sqrt(variance) * math.sqrt(252.0) if variance > 0 else 0.0
     peak = 1.0
     running = 1.0

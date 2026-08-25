@@ -147,9 +147,7 @@ def test_crypto_position_caps_match_config() -> None:
     assert config.risk.max_crypto_positions == 2
     assert config.risk.max_crypto_positions <= config.risk.max_positions
     # Two positions at the per-position cap exactly fill the sleeve cap.
-    assert 2 * config.risk.max_crypto_position_pct == pytest.approx(
-        config.risk.max_crypto_exposure_pct
-    )
+    assert 2 * config.risk.max_crypto_position_pct == pytest.approx(config.risk.max_crypto_exposure_pct)
 
     # 2026-08-21: the sleeve allocation (0.05) is now TIGHTER than the
     # risk-layer exposure cap; the allocation binds first.
@@ -238,10 +236,7 @@ def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
         maximum_allocation=config.strategy.crypto.maximum_allocation,
         mode="backtest",
     )
-    assert all(
-        weight.weight <= config.risk.max_crypto_position_pct + _EPS
-        for weight in many.target.weights
-    )
+    assert all(weight.weight <= config.risk.max_crypto_position_pct + _EPS for weight in many.target.weights)
     assert many.target.invested_weight <= config.risk.max_crypto_exposure_pct + _EPS
 
 
@@ -262,9 +257,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     )
     assert len(decision.target.weights) <= config.risk.max_positions
     assert decision.target.invested_weight <= 0.60 + _EPS
-    assert all(
-        weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights
-    )
+    assert all(weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights)
 
 
 def test_risk_limits_dataclass_validates_contract() -> None:

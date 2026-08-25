@@ -33,8 +33,7 @@ def test_manifest_exists_and_declares_no_results():
         == "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31"
     )
     assert (
-        data.get("dataset", {}).get("bars_sha256")
-        == "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a"
+        data.get("dataset", {}).get("bars_sha256") == "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a"
     )
 
 
@@ -99,10 +98,7 @@ def test_position_diagnostics_use_contemporaneous_equity():
     assert "realized_pnl / initial_backtest_cash" not in text
     assert "initial_backtest_cash" not in text
     # Must use realized_position_pnl / account_equity_at_entry semantics
-    assert (
-        "realized_position_pnl / account_equity_at_entry" in text
-        or "realized_pnl_over_equity_at_entry" in text
-    )
+    assert "realized_position_pnl / account_equity_at_entry" in text or "realized_pnl_over_equity_at_entry" in text
 
 
 def test_distinguish_candidate_worst_vs_axon():

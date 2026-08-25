@@ -90,9 +90,7 @@ def supported_portfolio_strategies() -> tuple[str, ...]:
     return tuple(sorted(PRODUCT_STRATEGY_NAMES))
 
 
-def rebalance_policy_for(
-    strategy: PortfolioStrategy, parameters: dict[str, object] | None = None
-) -> RebalancePolicy:
+def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, object] | None = None) -> RebalancePolicy:
     """Map a portfolio strategy to its rebalance policy.
 
     Crypto strategies encode their rebalance cadence in the ``rebalance_hours``
@@ -101,9 +99,7 @@ def rebalance_policy_for(
     """
     if strategy.market == Market.CRYPTO:
         merged = dict(parameters or strategy.parameters)
-        hours_value = merged.get(
-            "rebalance_hours", getattr(strategy, "default_rebalance_hours", 24)
-        )
+        hours_value = merged.get("rebalance_hours", getattr(strategy, "default_rebalance_hours", 24))
         if not isinstance(hours_value, (int, float)):
             raise ValueError("rebalance_hours must be numeric")
         hours = int(hours_value)

@@ -80,9 +80,7 @@ def build_observation_set(
         ranked = tuple(symbol for symbol in ranked if symbol in available)
         source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
-        fill = tuple(
-            symbol for symbol in scanner_fallback if symbol not in reserved and symbol not in ranked
-        )
+        fill = tuple(symbol for symbol in scanner_fallback if symbol not in reserved and symbol not in ranked)
         ranked = (*ranked, *fill)
         if source == "no_ranker" and fill:
             source = "scanner_quality_fallback"

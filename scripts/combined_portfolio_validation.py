@@ -149,9 +149,7 @@ def _window_sleeve_stats(result, start: datetime, end: datetime) -> dict[str, ob
     window_fills = [fill for fill in result.fills if start <= fill.timestamp <= end]
     window_cost = sum(fill.slippage_cost + fill.spread_cost + fill.fee for fill in window_fills)
     traded_notional = sum(fill.qty * fill.reference_price for fill in window_fills)
-    window_rebalances = [
-        record for record in result.rebalances if start <= record.decision_timestamp <= end
-    ]
+    window_rebalances = [record for record in result.rebalances if start <= record.decision_timestamp <= end]
     window_closes = [event for event in result.closed_position_events if start <= event[0] <= end]
     curve_in_window = [
         value
@@ -217,17 +215,12 @@ def main(argv: list[str] | None = None) -> int:
         universe=eq_universe,
     )
     eq_result = eq_run.result
-    print(
-        f"  full-period ret={eq_result.total_return:.2%} (window metrics below are "
-        "scoped to the common window)"
-    )
+    print(f"  full-period ret={eq_result.total_return:.2%} (window metrics below are scoped to the common window)")
 
     print("Crypto sleeve (crypto_low_variance_v1, allocation 0.10)...")
     c_bars_1h = load_csv_bars(CRYPTO_CSV, default_market=Market.CRYPTO)
     c_bars_1d = aggregate_historical_bars(c_bars_1h, "1d", require_complete=True)
-    c_universe = build_product_universe(
-        config, c_bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
-    )
+    c_universe = build_product_universe(config, c_bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h")
     c_run = run_product_backtest(
         config,
         c_bars_1d,
@@ -250,31 +243,21 @@ def main(argv: list[str] | None = None) -> int:
         for ts, value in zip(eq_result.curve_timestamps, eq_result.equity_curve)
         if ts.date() >= CRYPTO_EVAL_START.date()
     }
-    c_by_date = {
-        ts.date(): value for ts, value in zip(c_result.curve_timestamps, c_result.equity_curve)
-    }
+    c_by_date = {ts.date(): value for ts, value in zip(c_result.curve_timestamps, c_result.equity_curve)}
     common_dates = sorted(set(eq_by_date) & set(c_by_date))
     if len(common_dates) < 60:
         raise RuntimeError(
-            f"Common window too short: {len(common_dates)} days (equity {len(eq_by_date)}, "
-            f"crypto {len(c_by_date)})"
+            f"Common window too short: {len(common_dates)} days (equity {len(eq_by_date)}, crypto {len(c_by_date)})"
         )
     window_start = datetime.combine(common_dates[0], datetime.min.time(), tzinfo=UTC)
     window_end = (
-        datetime.combine(common_dates[-1], datetime.min.time(), tzinfo=UTC)
-        + timedelta(days=1)
-        - timedelta(seconds=1)
+        datetime.combine(common_dates[-1], datetime.min.time(), tzinfo=UTC) + timedelta(days=1) - timedelta(seconds=1)
     )
-    print(
-        f"  common window: {common_dates[0]} .. {common_dates[-1]} "
-        f"({len(common_dates)} trading days)"
-    )
+    print(f"  common window: {common_dates[0]} .. {common_dates[-1]} ({len(common_dates)} trading days)")
 
     eq_window = [eq_by_date[day] for day in common_dates]
     c_window = [c_by_date[day] for day in common_dates]
-    combined_window = [
-        eq_value + c_value - initial_cash for eq_value, c_value in zip(eq_window, c_window)
-    ]
+    combined_window = [eq_value + c_value - initial_cash for eq_value, c_value in zip(eq_window, c_window)]
     dates = [datetime.combine(day, datetime.min.time(), tzinfo=UTC) for day in common_dates]
 
     def _returns(series: list[float]) -> list[float]:
@@ -362,9 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         if (combined_cagr is not None and equity_cagr is not None and combined_cagr < equity_cagr)
         else "does not dilute return"
     )
-    risk_part = (
-        "reduces max drawdown" if combined_mdd < equity_mdd else "does not reduce max drawdown"
-    )
+    risk_part = "reduces max drawdown" if combined_mdd < equity_mdd else "does not reduce max drawdown"
     crypto_cagr_pct = f"{crypto_cagr * 100:.2f}%" if crypto_cagr is not None else "n/a"
     cost_drag = (
         "crypto sleeve is a cost drag relative to its (negative) contribution"
@@ -425,9 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             "avg_crypto_exposure": round(avg_c_exp, 4),
             "avg_total_exposure": round(avg_total_exp, 4),
             "avg_cash_usage": round(1.0 - avg_total_exp, 4),
-            "correlation_equity_crypto_daily_pnl": (
-                round(correlation, 4) if correlation is not None else None
-            ),
+            "correlation_equity_crypto_daily_pnl": (round(correlation, 4) if correlation is not None else None),
             "risk_on_fractions": {
                 "both_risk_on": round(both_risk_on / n_days, 4),
                 "one_risk_on": round(one_risk_on / n_days, 4),
@@ -463,11 +442,7 @@ def main(argv: list[str] | None = None) -> int:
         f"maxDD {combined_metrics.get('max_drawdown', 0) * 100:.2f}% "
         f"Calmar {combined_metrics.get('calmar', 0):.2f}"
     )
-    print(
-        f"  sleeve correlation: {correlation:.4f}"
-        if correlation is not None
-        else "  sleeve correlation: n/a"
-    )
+    print(f"  sleeve correlation: {correlation:.4f}" if correlation is not None else "  sleeve correlation: n/a")
     print(
         f"  avg exposures: equity {avg_eq_exp:.2%} crypto {avg_c_exp:.2%} "
         f"total {avg_total_exp:.2%} cash {1 - avg_total_exp:.2%}"
@@ -542,10 +517,7 @@ def _append_summary_section(report: dict) -> None:
     )
     combined = report["combined"]
     lines.append("")
-    lines.append(
-        f"- Sleeve daily-PnL correlation: "
-        f"{_fmt_num(combined['correlation_equity_crypto_daily_pnl'], 4)}"
-    )
+    lines.append(f"- Sleeve daily-PnL correlation: {_fmt_num(combined['correlation_equity_crypto_daily_pnl'], 4)}")
     lines.append(
         f"- Risk-on fractions: both sleeves risk-on "
         f"{_fmt_pct(combined['risk_on_fractions']['both_risk_on'])}, "

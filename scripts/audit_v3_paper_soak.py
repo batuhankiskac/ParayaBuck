@@ -50,9 +50,7 @@ EXPECTED_STRATEGY = "equity_residual_momentum_v3"
 EXPECTED_VERSION = "3.0.0"
 EXPECTED_MARKET = "equity"
 EXPECTED_MODE = "paper"
-TERMINAL_ORDER_STATUSES = frozenset(
-    {"filled", "fill", "canceled", "cancelled", "rejected", "expired"}
-)
+TERMINAL_ORDER_STATUSES = frozenset({"filled", "fill", "canceled", "cancelled", "rejected", "expired"})
 KNOWN_ORDER_STATUSES = TERMINAL_ORDER_STATUSES | frozenset(
     {"submitting", "submitted", "accepted", "partially_filled", "reconciliation_required"}
 )
@@ -136,9 +134,7 @@ def _summary(values: list[float]) -> dict[str, object]:
 
 
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
-    row = connection.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
-    ).fetchone()
+    row = connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
     return row is not None
 
 
@@ -184,9 +180,7 @@ def _parse_scalar(value: str) -> object:
         return value.lower() == "true"
     if value.lower() in {"null", "none", "~"}:
         return None
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
     try:
         return int(value)
@@ -284,9 +278,7 @@ def _fill_delay_seconds(occurred_at: str, submitted_at: str | None) -> float | N
     return delay if delay >= 0 else None
 
 
-def _adverse_slippage_bps(
-    fill_price: float | None, reference_price: float | None, side: str
-) -> float | None:
+def _adverse_slippage_bps(fill_price: float | None, reference_price: float | None, side: str) -> float | None:
     if fill_price is None or reference_price is None or fill_price <= 0 or reference_price <= 0:
         return None
     sign = {"buy": 1.0, "long": 1.0, "sell": -1.0, "short": -1.0}.get(side.lower())
@@ -295,23 +287,16 @@ def _adverse_slippage_bps(
     return (fill_price - reference_price) / reference_price * 10_000.0 * sign
 
 
-def _expected_vs_actual(
-    order: dict[str, object], fills: list[dict[str, object]]
-) -> dict[str, object]:
+def _expected_vs_actual(order: dict[str, object], fills: list[dict[str, object]]) -> dict[str, object]:
     expected_quantity = _finite_float(order.get("quantity")) or 0.0
     reference_price = _finite_float(order.get("reference_price"))
     actual_quantity = sum(_finite_float(fill.get("quantity")) or 0.0 for fill in fills)
     total_value = sum(
-        (_finite_float(fill.get("quantity")) or 0.0) * (_finite_float(fill.get("price")) or 0.0)
-        for fill in fills
+        (_finite_float(fill.get("quantity")) or 0.0) * (_finite_float(fill.get("price")) or 0.0) for fill in fills
     )
     average_price = total_value / actual_quantity if actual_quantity > 0 else None
     fees = sum(_finite_float(fill.get("fee")) or 0.0 for fill in fills)
-    delay = (
-        _fill_delay_seconds(str(fills[0].get("occurred_at", "")), str(order.get("created_at")))
-        if fills
-        else None
-    )
+    delay = _fill_delay_seconds(str(fills[0].get("occurred_at", "")), str(order.get("created_at"))) if fills else None
     adverse_bps = _adverse_slippage_bps(average_price, reference_price, str(order.get("side", "")))
     return {
         "actual_quantity": actual_quantity,
@@ -400,9 +385,7 @@ def _configuration_report(config_path: Path) -> tuple[dict[str, object], object 
                 "runtime_mode": "pass" if runtime_mode == EXPECTED_MODE else "fail",
                 "live_enabled": "pass" if not live_enabled else "fail",
                 "live_environment_armed": "fail" if live_environment_armed else "pass",
-                "equity_v3_selected": (
-                    "pass" if config.strategy.equity.name == EXPECTED_STRATEGY else "fail"
-                ),
+                "equity_v3_selected": ("pass" if config.strategy.equity.name == EXPECTED_STRATEGY else "fail"),
                 "paper_only": "pass" if paper_only else "fail",
             },
         }
@@ -596,10 +579,7 @@ def _scoped_rows(
     placeholders = ", ".join("?" for _ in account_ids)
     rows, error = _fetchall(
         connection,
-        (
-            f"SELECT {columns} FROM {table} WHERE account_id IN ({placeholders}) "
-            f"ORDER BY {order_column}"
-        ),
+        (f"SELECT {columns} FROM {table} WHERE account_id IN ({placeholders}) ORDER BY {order_column}"),
         tuple(sorted(account_ids)),
     )
     if error is not None:
@@ -643,9 +623,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
         report["query_only"] = bool(connection.execute("PRAGMA query_only").fetchone()[0])
         table_names = {
             str(row[0])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
         }
         report["tables"] = {
             table: {"present": table in table_names, "columns": sorted(_columns(connection, table))}
@@ -681,9 +659,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
 
         decision_account = "d.account_id" if "account_id" in decision_columns else "''"
         session_account = "s.account_id" if "account_id" in session_columns else "''"
-        session_digest = (
-            "s.configuration_digest" if "configuration_digest" in session_columns else "''"
-        )
+        session_digest = "s.configuration_digest" if "configuration_digest" in session_columns else "''"
         session_mode = "s.mode" if "mode" in session_columns else "''"
         session_status = "s.status" if "status" in session_columns else "''"
         session_join = (
@@ -823,10 +799,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
                 decision_anomalies.append("decision session identity is missing")
             if session_mode_value and session_mode_value != EXPECTED_MODE:
                 decision_anomalies.append("session mode is not paper")
-            if (
-                row["session_configuration_digest"]
-                and str(row["session_configuration_digest"]) != digest
-            ):
+            if row["session_configuration_digest"] and str(row["session_configuration_digest"]) != digest:
                 decision_anomalies.append("session and decision configuration digests differ")
 
             weights, weight_errors = _target_weights(target)
@@ -841,22 +814,14 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             position_count_values.append(float(len(weights)))
             if max_weight is not None:
                 max_weight_values.append(max_weight)
-            if (
-                invested is not None
-                and cash_weight is not None
-                and invested + cash_weight > 1.000001
-            ):
+            if invested is not None and cash_weight is not None and invested + cash_weight > 1.000001:
                 decision_anomalies.append("target invested plus cash weights exceed 1")
             if config is not None and invested is not None:
                 configured_equity = config.strategy.equity
                 if invested > configured_equity.maximum_allocation + 1e-6:
-                    decision_anomalies.append(
-                        "target invested weight exceeds configured sleeve allocation"
-                    )
+                    decision_anomalies.append("target invested weight exceeds configured sleeve allocation")
                 if max_weight is not None and max_weight > config.risk.max_position_pct + 1e-6:
-                    decision_anomalies.append(
-                        "target symbol weight exceeds configured position cap"
-                    )
+                    decision_anomalies.append("target symbol weight exceeds configured position cap")
 
             universe_version = str(target.get("universe_version", ""))
             universe_snapshot = str(target.get("universe_snapshot_id", ""))
@@ -874,9 +839,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
                     / 2.0
                 )
                 turnover_values.append(turnover_for_row)
-            universe_changed = (
-                previous_universe is not None and universe_version != previous_universe
-            )
+            universe_changed = previous_universe is not None and universe_version != previous_universe
 
             order_report, order_anomalies, compact_orders = _order_metrics(
                 connection, decision_id, orders_available, fills_available
@@ -899,9 +862,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
                 )
                 if lifecycle_error is not None:
                     lifecycle["error"] = lifecycle_error
-                    decision_anomalies.append(
-                        f"rebalance lifecycle query failed: {lifecycle_error}"
-                    )
+                    decision_anomalies.append(f"rebalance lifecycle query failed: {lifecycle_error}")
                 elif lifecycle_rows:
                     lifecycle_row = lifecycle_rows[-1]
                     lifecycle.update(
@@ -939,9 +900,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
                 decision_anomalies.append("risk gross_after exceeds configured gross cap")
 
             metadata = target.get("metadata")
-            observability = (
-                metadata.get("paper_observability") if isinstance(metadata, dict) else None
-            )
+            observability = metadata.get("paper_observability") if isinstance(metadata, dict) else None
             blocked_reason = (
                 str(observability.get("blocked_or_skipped_reason", "")).strip()
                 if isinstance(observability, dict)
@@ -1032,9 +991,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             "valid_count": max(0, valid_count),
             "first_timestamp": str(rows[0]["decision_timestamp"]) if rows else None,
             "last_timestamp": str(rows[-1]["decision_timestamp"]) if rows else None,
-            "reason": (
-                None if rows else "no equity_residual_momentum_v3 decisions in portfolio_decisions"
-            ),
+            "reason": (None if rows else "no equity_residual_momentum_v3 decisions in portfolio_decisions"),
         }
         report["identity"] = {
             "expected": {
@@ -1054,9 +1011,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
                 "universe_snapshot_ids": sorted(universe_snapshots),
             },
             "configuration_digest_count": len(config_digests),
-            "identity_stable": (
-                bool(rows) and len(config_digests) <= 1 and strategy_versions == {EXPECTED_VERSION}
-            ),
+            "identity_stable": (bool(rows) and len(config_digests) <= 1 and strategy_versions == {EXPECTED_VERSION}),
         }
         report["rebalances"] = rebalances
         report["aggregates"] = {
@@ -1086,10 +1041,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             "broker_api_failures": {
                 "available": False,
                 "count": None,
-                "reason": (
-                    "transient broker API failures are not persisted in the "
-                    "portfolio runtime schema"
-                ),
+                "reason": ("transient broker API failures are not persisted in the portfolio runtime schema"),
             },
         }
 
@@ -1097,10 +1049,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             connection,
             "portfolio_ownership_adjustments",
             account_ids,
-            (
-                "adjustment_id, account_id, symbol, market, quantity, kind, note, "
-                "created_at, consumed_quantity"
-            ),
+            ("adjustment_id, account_id, symbol, market, quantity, kind, note, created_at, consumed_quantity"),
             "created_at",
         )
         scoped_incidents, incident_rows = _scoped_rows(
@@ -1146,11 +1095,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             "available": True,
             "count": len(anomaly_items) + len(adjustment_rows) + len(incident_rows),
             "by_type": dict(
-                sorted(
-                    Counter(
-                        item_type for item in anomaly_items for item_type in item.get("types", [])
-                    ).items()
-                )
+                sorted(Counter(item_type for item in anomaly_items for item_type in item.get("types", [])).items())
             ),
             "items": anomaly_items,
             "ownership_adjustments": {
@@ -1167,12 +1112,8 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             },
             "unowned_fills": {
                 "available": fills_available and unowned_fill_error is None,
-                "count": len(unowned_fill_rows)
-                if fills_available and unowned_fill_error is None
-                else None,
-                "items": unowned_fill_rows
-                if fills_available and unowned_fill_error is None
-                else None,
+                "count": len(unowned_fill_rows) if fills_available and unowned_fill_error is None else None,
+                "items": unowned_fill_rows if fills_available and unowned_fill_error is None else None,
                 "reason": unowned_fill_error,
             },
         }
@@ -1205,10 +1146,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             },
             "ledger_net_filled_quantity": {
                 "available": bool(net_fills),
-                "basis": (
-                    "net portfolio_fills for v3 decisions; not a broker snapshot "
-                    "or market-value exposure"
-                ),
+                "basis": ("net portfolio_fills for v3 decisions; not a broker snapshot or market-value exposure"),
                 "by_symbol": {
                     symbol: round(quantity, 8)
                     for symbol, quantity in sorted(net_fills.items())
@@ -1218,10 +1156,7 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
             "actual_market_value": {
                 "available": False,
                 "value": None,
-                "reason": (
-                    "portfolio runtime schema does not persist a v3-linked broker "
-                    "mark-to-market snapshot"
-                ),
+                "reason": ("portfolio runtime schema does not persist a v3-linked broker mark-to-market snapshot"),
             },
             "risk_state": {
                 **scoped_risk_state,
@@ -1285,10 +1220,7 @@ def _offline_shadow_reference() -> dict[str, object]:
             "config_digest_sha256": raw.get("config_digest_sha256"),
             "generated_at": raw.get("generated_at"),
             "summary": raw.get("summary"),
-            "note": (
-                "This reference is not counted as PAPER soak observations and "
-                "never authorizes orders."
-            ),
+            "note": ("This reference is not counted as PAPER soak observations and never authorizes orders."),
         }
     )
     return report
@@ -1307,9 +1239,7 @@ def main() -> int:
 
     config_path = _resolve_path(args.config)
     configuration, config = _configuration_report(config_path)
-    configured_db = (
-        str(config.runtime.decision_db_path) if config is not None else DEFAULT_DECISION_DB_PATH
-    )
+    configured_db = str(config.runtime.decision_db_path) if config is not None else DEFAULT_DECISION_DB_PATH
     db_path = _resolve_path(args.db or configured_db)
     database = _audit_database(db_path, config)
     report = {

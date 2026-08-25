@@ -89,9 +89,7 @@ def normalize_symbol(symbol: str, market: Market | None = None) -> SymbolIdentit
 
     inferred_market = market
     if inferred_market is None:
-        inferred_market = (
-            Market.CRYPTO if "/" in value or _split_legacy_pair(value) else Market.EQUITY
-        )
+        inferred_market = Market.CRYPTO if "/" in value or _split_legacy_pair(value) else Market.EQUITY
 
     if inferred_market == Market.EQUITY:
         if "/" in value:
@@ -166,10 +164,7 @@ def same_symbol(left: str, right: str, market: Market | None = None) -> bool:
             return canonical_symbol(left, market) == canonical_symbol(right, market)
         left_identity = normalize_symbol(left)
         right_identity = normalize_symbol(right)
-        return (
-            left_identity.market == right_identity.market
-            and left_identity.canonical == right_identity.canonical
-        )
+        return left_identity.market == right_identity.market and left_identity.canonical == right_identity.canonical
     except ValueError:
         return False
 

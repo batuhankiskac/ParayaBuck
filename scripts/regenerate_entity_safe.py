@@ -6,6 +6,7 @@ Keep active survivor for active+inactive, keep longest bar history for inactive+
 Regenerate CSV with engine_symbol unique (but for now just exclude duplicates to avoid stitching).
 Creates v4 file with new SHA.
 """
+
 import collections
 import csv
 import hashlib
@@ -26,7 +27,7 @@ by_sym = collections.defaultdict(list)
 for r in lifetimes:
     by_sym[r["canonical_symbol"]].append(r)
 
-dups = {k:v for k,v in by_sym.items() if len(v)>1}
+dups = {k: v for k, v in by_sym.items() if len(v) > 1}
 print(f"Found {len(dups)} duplicate symbols")
 
 # Determine which entity to keep per symbol
@@ -40,48 +41,54 @@ for sym, rows in sorted(dups.items()):
     # For active+inactive, keep active
     active_rows = [r for r in rows if r["current_status"] == "active"]
     inactive_rows = [r for r in rows if r["current_status"] != "active"]
-    if len(active_rows)==1 and len(inactive_rows)>=1:
+    if len(active_rows) == 1 and len(inactive_rows) >= 1:
         # Keep active, exclude inactive
         keep = active_rows[0]
         keep_ids.add(keep["entity_id"])
         for r in inactive_rows:
             exclude_ids.add(r["entity_id"])
-        conflicts.append({
-            "symbol": sym,
-            "classification": "VERIFIED_TICKER_REUSE",
-            "decision": f"keep active {keep['entity_id'][:8]}, exclude {len(inactive_rows)} inactive",
-            "kept": keep["entity_id"],
-            "excluded": [r["entity_id"] for r in inactive_rows],
-            "note": "Active survivor kept, inactive reuse excluded to avoid symbol-bar collision"
-        })
+        conflicts.append(
+            {
+                "symbol": sym,
+                "classification": "VERIFIED_TICKER_REUSE",
+                "decision": f"keep active {keep['entity_id'][:8]}, exclude {len(inactive_rows)} inactive",
+                "kept": keep["entity_id"],
+                "excluded": [r["entity_id"] for r in inactive_rows],
+                "note": "Active survivor kept, inactive reuse excluded to avoid symbol-bar collision",
+            }
+        )
     else:
         # inactive+inactive (2 or 3) — keep the one with most bars (longest duration)
         # Compute duration
         def duration(r):
             try:
                 from datetime import datetime
-                f = datetime.fromisoformat(r["first_observed_bar"].replace("Z","+00:00"))
-                l = datetime.fromisoformat(r["last_observed_bar"].replace("Z","+00:00"))
-                return (l-f).days
+
+                f = datetime.fromisoformat(r["first_observed_bar"].replace("Z", "+00:00"))
+                l = datetime.fromisoformat(r["last_observed_bar"].replace("Z", "+00:00"))
+                return (l - f).days
             except:
                 return 0
+
         rows_sorted_dur = sorted(rows, key=duration, reverse=True)
         keep = rows_sorted_dur[0]
         keep_ids.add(keep["entity_id"])
         for r in rows_sorted_dur[1:]:
             exclude_ids.add(r["entity_id"])
-        conflicts.append({
-            "symbol": sym,
-            "classification": "VERIFIED_TICKER_REUSE",
-            "decision": f"keep longest {keep['entity_id'][:8]} ({duration(keep)}d), exclude {len(rows)-1}",
-            "kept": keep["entity_id"],
-            "excluded": [r["entity_id"] for r in rows_sorted_dur[1:]],
-            "note": "Multiple inactive reuse; kept longest history, others AMBIGUOUS excluded"
-        })
+        conflicts.append(
+            {
+                "symbol": sym,
+                "classification": "VERIFIED_TICKER_REUSE",
+                "decision": f"keep longest {keep['entity_id'][:8]} ({duration(keep)}d), exclude {len(rows) - 1}",
+                "kept": keep["entity_id"],
+                "excluded": [r["entity_id"] for r in rows_sorted_dur[1:]],
+                "note": "Multiple inactive reuse; kept longest history, others AMBIGUOUS excluded",
+            }
+        )
 
 # For non-dup symbols, keep all
 for sym, rows in by_sym.items():
-    if len(rows)==1:
+    if len(rows) == 1:
         keep_ids.add(rows[0]["entity_id"])
 
 print(f"Keep {len(keep_ids)}, exclude {len(exclude_ids)}")
@@ -148,15 +155,21 @@ with open(NEW_LT, "w", newline="") as f:
     for r in new_lifetimes_sorted:
         w.writerow(r)
 
+
 # Hashes
-def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+def sha(p):
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
 new_sha = sha(NEW_CSV)
 new_lt_hash = sha(NEW_LT)
 new_size = NEW_CSV.stat().st_size
 new_rows = len(filtered)
 new_symbols = len(keep_symbols)
 new_entities = len(new_lifetimes_sorted)
-old_manifest = json.loads((REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v3.manifest.json").read_text())
+old_manifest = json.loads(
+    (REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v3.manifest.json").read_text()
+)
 first = min(r["timestamp"] for r in filtered) if filtered else ""
 last = max(r["timestamp"] for r in filtered) if filtered else ""
 manifest = {
@@ -168,19 +181,19 @@ manifest = {
     "entity_count": new_entities,
     "first_date": first,
     "last_date": last,
-    "feed": old_manifest.get("feed","sip"),
-    "adjustment": old_manifest.get("adjustment","split"),
+    "feed": old_manifest.get("feed", "sip"),
+    "adjustment": old_manifest.get("adjustment", "split"),
     "generation_commit": "pending_v4_entity_safe",
-    "asset_master_snapshot_hash": old_manifest.get("asset_master_snapshot_hash",""),
+    "asset_master_snapshot_hash": old_manifest.get("asset_master_snapshot_hash", ""),
     "lifetime_table": str(NEW_LT),
     "lifetime_table_hash": new_lt_hash,
     "generated_at": "2026-08-26T00:00:00+00:00",
     "note": "Entity-safe v4: 27 ticker-reuse symbols resolved (14 active+inactive keep active, 13 inactive+inactive keep longest), excluded 29 entities (27 symbols), no stitching",
     "ticker_reuse_handling": "VERIFIED_TICKER_REUSE, AMBIGUOUS excluded, engine_symbol == display_symbol for kept (unique after exclusion)",
-    "parent_sha": old_manifest.get("sha256",""),
-    "parent_rows": old_manifest.get("row_count",0),
+    "parent_sha": old_manifest.get("sha256", ""),
+    "parent_rows": old_manifest.get("row_count", 0),
     "excluded_entities": len(exclude_ids),
-    "excluded_symbols": 0
+    "excluded_symbols": 0,
 }
 NEW_MANIFEST.write_text(json.dumps(manifest, indent=2))
 print(f"Wrote new CSV {NEW_CSV} sha {new_sha[:12]} rows {new_rows} symbols {new_symbols} entities {new_entities}")
@@ -190,11 +203,11 @@ print(f"Manifest {NEW_MANIFEST}")
 out_conflicts = {
     "conflicts": conflicts,
     "total_conflict_symbols": len(conflicts),
-    "verified_ticker_reuse": len([c for c in conflicts if c["classification"]=="VERIFIED_TICKER_REUSE"]),
+    "verified_ticker_reuse": len([c for c in conflicts if c["classification"] == "VERIFIED_TICKER_REUSE"]),
     "ambiguous": 0,
     "excluded_entities": len(exclude_ids),
     "kept_entities": len(keep_ids),
-    "note": "Entity-safe v4: all 27 duplicate symbols classified as VERIFIED_TICKER_REUSE, excluded ambiguous reuse to avoid bar stitching. Engine_symbol now unique (display_symbol for kept)."
+    "note": "Entity-safe v4: all 27 duplicate symbols classified as VERIFIED_TICKER_REUSE, excluded ambiguous reuse to avoid bar stitching. Engine_symbol now unique (display_symbol for kept).",
 }
 TICKER_CONFLICTS.write_text(json.dumps(out_conflicts, indent=2))
 print(f"Wrote conflicts {TICKER_CONFLICTS}")

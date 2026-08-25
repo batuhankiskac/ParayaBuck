@@ -213,9 +213,7 @@ def test_live_policy_digest_is_independent_of_ephemeral_active_symbols(tmp_path)
     )
 
     assert first_runtime.configuration_digest == second_runtime.configuration_digest
-    assert first_runtime.configuration_digest != configuration_digest(
-        strategy, "live", 0.50, "changed-policy", limits
-    )
+    assert first_runtime.configuration_digest != configuration_digest(strategy, "live", 0.50, "changed-policy", limits)
 
 
 def test_portfolio_fill_chain_is_idempotent_and_keeps_pnl_fee_slippage_separate(
@@ -240,9 +238,7 @@ def test_portfolio_fill_chain_is_idempotent_and_keeps_pnl_fee_slippage_separate(
             unrealized_pnl=-3.0,
         )
     with sqlite3.connect(tmp_path / "runtime.sqlite3") as connection:
-        row = connection.execute(
-            "SELECT fee, realized_pnl, unrealized_pnl, slippage FROM portfolio_fills"
-        ).fetchone()
+        row = connection.execute("SELECT fee, realized_pnl, unrealized_pnl, slippage FROM portfolio_fills").fetchone()
         assert row[:3] == (1.25, 12.0, -3.0)
         assert row[3] != 0
         assert connection.execute("SELECT COUNT(*) FROM portfolio_fills").fetchone()[0] == 1
@@ -322,9 +318,7 @@ def _portfolio_broker(
 ) -> AlpacaBroker:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     ledger_path = tmp_path / "execution.sqlite3" if tmp_path is not None else None
-    broker.ledger = (
-        ExecutionLedger(str(ledger_path)) if with_ledger and ledger_path is not None else None
-    )
+    broker.ledger = ExecutionLedger(str(ledger_path)) if with_ledger and ledger_path is not None else None
     broker.portfolio_owned_quantities = lambda: repo.owned_quantities(broker.account_id)
     broker.portfolio_open_orders = lambda: repo.open_orders(broker.account_id)
     broker._account_id = "acct"
@@ -337,9 +331,7 @@ def _portfolio_broker(
     broker.crypto_stop_cancel_poll_interval_seconds = 0.25
     broker.manage_external_positions = False
     broker._peak_equity = 0.0
-    broker._peak_state_path = (
-        Path(tmp_path) / "peak.json" if tmp_path is not None else Path("/tmp/peak.json")
-    )
+    broker._peak_state_path = Path(tmp_path) / "peak.json" if tmp_path is not None else Path("/tmp/peak.json")
     return broker
 
 
@@ -484,9 +476,7 @@ def test_portfolio_ownership_survives_runtime_restart(tmp_path) -> None:
     restarted_snapshot = restarted_broker.account()
     assert order.symbol in {position.symbol for position in restarted_snapshot.positions}
     assert (
-        next(
-            position for position in restarted_snapshot.positions if position.symbol == order.symbol
-        ).ownership
+        next(position for position in restarted_snapshot.positions if position.symbol == order.symbol).ownership
         == "managed"
     )
 
@@ -644,9 +634,7 @@ def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
     broker = _portfolio_broker(client, repo, tmp_path)
     recorded: dict[str, str] = {}
 
-    def record_stop(
-        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
-    ) -> None:
+    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
         recorded["id"] = client_order_id
         repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
 
@@ -759,9 +747,7 @@ def test_emergency_stop_retry_fill_is_attributed_to_accepted_order_id(tmp_path) 
     broker = _portfolio_broker(client, repo, tmp_path)
     recorded: dict[str, str] = {}
 
-    def record_stop(
-        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
-    ) -> None:
+    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
         recorded["id"] = client_order_id
         repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
 
@@ -799,9 +785,7 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
 
     client = _FakeAlpacaClient()  # no positions, no open orders
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership(
-        "acct", symbol, market
-    )
+    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
     broker.reconcile()
 
@@ -826,9 +810,7 @@ def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path
         )
     ]
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership(
-        "acct", symbol, market
-    )
+    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
     broker.reconcile()
 
@@ -1189,9 +1171,7 @@ def test_manual_open_buy_does_not_exempt_ownership_drift(tmp_path) -> None:
             asset_class="crypto",
         )
     ]
-    client.open_orders = [
-        SimpleNamespace(symbol="BTC/USD", qty="0.3", side="buy", status="new", type="market")
-    ]
+    client.open_orders = [SimpleNamespace(symbol="BTC/USD", qty="0.3", side="buy", status="new", type="market")]
     broker = _portfolio_broker(client, repo, tmp_path)
     with pytest.raises(OwnershipDriftError, match="Ownership drift"):
         broker.account()
@@ -1217,9 +1197,7 @@ def test_manual_open_sell_does_not_exempt_ownership_drift(tmp_path) -> None:
             asset_class="crypto",
         )
     ]
-    client.open_orders = [
-        SimpleNamespace(symbol="BTC/USD", qty="0.3", side="sell", status="new", type="limit")
-    ]
+    client.open_orders = [SimpleNamespace(symbol="BTC/USD", qty="0.3", side="sell", status="new", type="limit")]
     broker = _portfolio_broker(client, repo, tmp_path)
     with pytest.raises(OwnershipDriftError, match="Ownership drift"):
         broker.account()
@@ -1478,9 +1456,7 @@ def test_protective_stop_slippage_references_stop_price_not_entry(tmp_path) -> N
     broker = _portfolio_broker(client, repo, tmp_path)
     recorded: dict[str, object] = {}
 
-    def record_stop(
-        symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float
-    ) -> None:
+    def record_stop(symbol: str, market: Market, qty: float, client_order_id: str, reference_price: float) -> None:
         recorded["id"] = client_order_id
         recorded["reference_price"] = reference_price
         repo.record_protective_order("acct", client_order_id, symbol, market, qty, reference_price)
@@ -1825,9 +1801,7 @@ def test_operations_snapshot_is_isolated_between_two_accounts(tmp_path) -> None:
 
     assert snapshot_a["last_decision"]["strategy"] == "eq"
     assert snapshot_b["last_decision"]["strategy"] == "eq"
-    assert {order["client_order_id"] for order in snapshot_a["pending_orders"]} == {
-        "pbp-open-acct-a"
-    }
+    assert {order["client_order_id"] for order in snapshot_a["pending_orders"]} == {"pbp-open-acct-a"}
     assert snapshot_b["pending_orders"] == []
     assert {fill["activity_id"] for fill in snapshot_a["recent_fills"]} == {"activity-acct-a"}
     assert {fill["activity_id"] for fill in snapshot_b["recent_fills"]} == {"activity-acct-b"}
@@ -1889,9 +1863,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
     _owned_crypto_entry(repo, quantity=0.5)
     client = _FakeAlpacaClient()  # flat, no filled orders
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership(
-        "acct", symbol, market
-    )
+    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
     broker.reconcile()
 
@@ -1965,17 +1937,15 @@ def test_reconcile_recovers_real_fill_from_broker_history(tmp_path) -> None:
         )
 
     broker.portfolio_fill_recovered = recover_fill
-    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership(
-        "acct", symbol, market
-    )
+    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
     broker.reconcile()
 
     assert repo.owned_quantities("acct") == {}
     with repo.store.lock:
-        adjustments = repo.store.connection.execute(
-            "SELECT COUNT(*) FROM portfolio_ownership_adjustments"
-        ).fetchone()[0]
+        adjustments = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_ownership_adjustments").fetchone()[
+            0
+        ]
         fill = repo.store.connection.execute(
             "SELECT price, quantity FROM portfolio_fills WHERE client_order_id = 'pbp-exit-sell'"
         ).fetchone()
@@ -2015,9 +1985,7 @@ def test_late_real_fill_after_reconciliation_consumes_adjustment(tmp_path) -> No
     # Reconcile runs while the broker is flat and no fill is visible yet.
     client = _FakeAlpacaClient()
     broker = _portfolio_broker(client, repo, tmp_path)
-    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership(
-        "acct", symbol, market
-    )
+    broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
     broker.reconcile()
     assert repo.owned_quantities("acct") == {}
 
@@ -2134,9 +2102,7 @@ def test_old_database_with_child_rows_migrates_cleanly(tmp_path) -> None:
     assert connection.execute("SELECT COUNT(*) FROM portfolio_fills").fetchone()[0] == 2
     assert connection.execute("SELECT COUNT(*) FROM portfolio_high_water").fetchone()[0] == 1
     # account_id was backfilled onto decisions from the session lineage.
-    backfilled = connection.execute(
-        "SELECT DISTINCT account_id FROM portfolio_decisions"
-    ).fetchall()
+    backfilled = connection.execute("SELECT DISTINCT account_id FROM portfolio_decisions").fetchall()
     assert backfilled == [("acct-legacy",)]
     # Orders still reference decisions; fills still reference orders.
     assert (
@@ -2157,15 +2123,13 @@ def test_old_database_with_child_rows_migrates_cleanly(tmp_path) -> None:
     # migration restored real booked quantities from the legacy fills table.
     assert (
         connection.execute(
-            "SELECT cumulative_filled_quantity FROM portfolio_orders "
-            "WHERE client_order_id='order-buy-1'"
+            "SELECT cumulative_filled_quantity FROM portfolio_orders WHERE client_order_id='order-buy-1'"
         ).fetchone()[0]
         == 10
     )
     assert (
         connection.execute(
-            "SELECT cumulative_filled_quantity FROM portfolio_orders "
-            "WHERE client_order_id='order-sell-1'"
+            "SELECT cumulative_filled_quantity FROM portfolio_orders WHERE client_order_id='order-sell-1'"
         ).fetchone()[0]
         == 4
     )
@@ -2456,9 +2420,7 @@ def _health_runtime() -> object:
     runtime._portfolio_repository = None
     runtime.ledger = None
     runtime.broker = SimpleNamespace(account_id="acct")
-    runtime.market_state = SimpleNamespace(
-        has_data_gaps=False, has_data_gaps_for_market=lambda market: False
-    )
+    runtime.market_state = SimpleNamespace(has_data_gaps=False, has_data_gaps_for_market=lambda market: False)
     return runtime
 
 
@@ -2525,27 +2487,17 @@ def test_rebalance_policy_next_boundary_after() -> None:
 
     weekly = RebalancePolicy(Market.EQUITY, "weekly")
     # 2025-01-08 is a Wednesday -> the next ISO Monday (2025-01-13).
-    assert weekly.next_boundary_after(datetime(2025, 1, 8, tzinfo=UTC)) == datetime(
-        2025, 1, 13, tzinfo=UTC
-    )
+    assert weekly.next_boundary_after(datetime(2025, 1, 8, tzinfo=UTC)) == datetime(2025, 1, 13, tzinfo=UTC)
     # Already a Monday: one week later.
-    assert weekly.next_boundary_after(datetime(2025, 1, 6, tzinfo=UTC)) == datetime(
-        2025, 1, 13, tzinfo=UTC
-    )
+    assert weekly.next_boundary_after(datetime(2025, 1, 6, tzinfo=UTC)) == datetime(2025, 1, 13, tzinfo=UTC)
     # Sunday: the next day.
-    assert weekly.next_boundary_after(datetime(2025, 1, 12, tzinfo=UTC)) == datetime(
-        2025, 1, 13, tzinfo=UTC
-    )
+    assert weekly.next_boundary_after(datetime(2025, 1, 12, tzinfo=UTC)) == datetime(2025, 1, 13, tzinfo=UTC)
 
     hours = RebalancePolicy(Market.CRYPTO, "hours:24")
     # Mid-block: the start of the next 24h UTC block.
-    assert hours.next_boundary_after(datetime(2025, 1, 1, 5, 0, tzinfo=UTC)) == datetime(
-        2025, 1, 2, 0, 0, tzinfo=UTC
-    )
+    assert hours.next_boundary_after(datetime(2025, 1, 1, 5, 0, tzinfo=UTC)) == datetime(2025, 1, 2, 0, 0, tzinfo=UTC)
     # Exactly on a block boundary: previous + N hours.
-    assert hours.next_boundary_after(datetime(2025, 1, 1, 0, 0, tzinfo=UTC)) == datetime(
-        2025, 1, 2, 0, 0, tzinfo=UTC
-    )
+    assert hours.next_boundary_after(datetime(2025, 1, 1, 0, 0, tzinfo=UTC)) == datetime(2025, 1, 2, 0, 0, tzinfo=UTC)
 
     # Invariant: the result is always a real boundary strictly after previous.
     for policy, previous in (
@@ -2570,8 +2522,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
     bars = _bars()  # 220 daily bars; the last bar is mid-month
     last_timestamp = max(bar.timestamp for bar in bars)
     assert (
-        RebalancePolicy(Market.EQUITY, "monthly").next_boundary_after(last_timestamp)
-        > last_timestamp
+        RebalancePolicy(Market.EQUITY, "monthly").next_boundary_after(last_timestamp) > last_timestamp
     )  # warmup ends between cadence boundaries
 
     # Backtest: first usable bar is a period start (previous=None), so the
@@ -2657,9 +2608,7 @@ def test_startup_catch_up_incomplete_strategy_batch_when_timestamps_diverge(
     bars = _bars()
     runtime.seed(bars)
     later = max(bar.timestamp for bar in bars) + timedelta(days=1)
-    runtime.history["AAPL"].append(
-        Bar(later, "AAPL", "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY)
-    )
+    runtime.history["AAPL"].append(Bar(later, "AAPL", "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY))
     result = runtime.startup_catch_up()
     assert result.status == "incomplete_strategy_batch"
     assert runtime.startup_catch_up_status == "incomplete_strategy_batch"
@@ -2727,12 +2676,7 @@ def test_startup_catch_up_already_invested_skips_when_managed_position_exists(
     result = runtime.startup_catch_up()
     assert result.status == "already_invested"
     assert runtime.startup_catch_up_status == "already_invested"
-    assert (
-        runtime.repository.latest_decision_timestamp(
-            "unknown", runtime.configuration_digest, Market.EQUITY
-        )
-        is None
-    )
+    assert runtime.repository.latest_decision_timestamp("unknown", runtime.configuration_digest, Market.EQUITY) is None
 
 
 def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
@@ -2749,9 +2693,7 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
         cash_weight=0.9,
     )
     legacy_risk = RiskOverlayDecision(legacy_target, False, (), 0.0, 0.10)
-    decision_id = repo.record_decision(
-        session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY
-    )
+    decision_id = repo.record_decision(session, "acct", "legacy-digest", legacy_target, legacy_risk, Market.EQUITY)
     repo.save_rebalance_execution(decision_id, "acct", Market.EQUITY, REBALANCE_PHASE_SELL_PENDING)
     repo.record_order(
         PortfolioOrderRequest(
@@ -2801,9 +2743,7 @@ def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchange
     assert plain.status == "not_scheduled"
     assert plain.target is None
 
-    forced = runtime.process_closed_bars(
-        last_batch, force_scheduled=True, decision_origin="test_origin"
-    )
+    forced = runtime.process_closed_bars(last_batch, force_scheduled=True, decision_origin="test_origin")
     assert forced.status == "submitted"
     assert forced.target is not None
     assert forced.target.metadata.get("decision_origin") == "test_origin"
@@ -2902,10 +2842,7 @@ def test_engine_run_startup_catch_up_blocked_by_readiness_reasons() -> None:
     runtime._portfolio_runtimes = (fake,)
     runtime._run_startup_catch_up()
     assert fake.calls == []
-    assert (
-        fake.startup_catch_up_status
-        == "blocked:account_snapshot_stale,worker_unavailable:pb-stocks"
-    )
+    assert fake.startup_catch_up_status == "blocked:account_snapshot_stale,worker_unavailable:pb-stocks"
 
 
 def test_engine_run_startup_catch_up_propagates_entry_latch() -> None:

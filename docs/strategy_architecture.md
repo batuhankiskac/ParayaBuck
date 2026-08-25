@@ -103,8 +103,8 @@ StrategySpec(
     display_name="Residual Momentum v1",
     market=Market.EQUITY,
     primary_timeframe="1d",
-    supported_timeframes=("1d",),   # ONLY validated variants
-    required_timeframes=(),          # extra series the strategy needs
+    supported_timeframes=("1d",),  # ONLY validated variants
+    required_timeframes=(),  # extra series the strategy needs
     rebalance_policy="monthly",
     minimum_history_bars=274,
 )

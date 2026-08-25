@@ -176,9 +176,7 @@ def _daily_exposure_series(result, bars) -> list[tuple[datetime, float]]:
             fill_index += 1
         equity = result.equity_curve[index]
         if equity > 0 and positions:
-            market_value = sum(
-                qty * mark(symbol, ts) for symbol, qty in positions.items() if qty > 0
-            )
+            market_value = sum(qty * mark(symbol, ts) for symbol, qty in positions.items() if qty > 0)
             exposure = min(1.0, market_value / equity)
         else:
             exposure = 0.0
@@ -193,16 +191,12 @@ def _capital_utilization(result, bars) -> dict[str, object]:
     avg = statistics.fmean(exposures) if days else 0.0
     median = statistics.median(exposures) if days else 0.0
     pct_positive = sum(1 for value in exposures if value > 0) / days if days else 0.0
-    pct_near_max = (
-        sum(1 for value in exposures if value >= NEAR_MAX_EXPOSURE) / days if days else 0.0
-    )
+    pct_near_max = sum(1 for value in exposures if value >= NEAR_MAX_EXPOSURE) / days if days else 0.0
     pct_idle = sum(1 for value in exposures if value == 0) / days if days else 0.0
     first_fill = min((fill.timestamp for fill in result.fills), default=None)
     start_ts = result.curve_timestamps[0] if result.curve_timestamps else None
     time_to_first = (
-        (first_fill - start_ts).total_seconds() / 86400.0
-        if first_fill is not None and start_ts is not None
-        else None
+        (first_fill - start_ts).total_seconds() / 86400.0 if first_fill is not None and start_ts is not None else None
     )
     # Decision-target exposure (what the strategy asked for at each rebalance).
     target_exposures = [sum(weights.values()) for _ts, weights in result.weight_history]
@@ -212,18 +206,12 @@ def _capital_utilization(result, bars) -> dict[str, object]:
         "pct_days_exposure_gt_0": round(pct_positive, 6),
         "pct_days_near_max_allocation_ge_0.45": round(pct_near_max, 6),
         "pct_days_idle_exposure_0": round(pct_idle, 6),
-        "time_to_first_deployment_days": round(time_to_first, 3)
-        if time_to_first is not None
-        else None,
+        "time_to_first_deployment_days": round(time_to_first, 3) if time_to_first is not None else None,
         "first_fill_timestamp": first_fill.isoformat() if first_fill is not None else None,
         "window_start_timestamp": start_ts.isoformat() if start_ts is not None else None,
         "decision_count": len(result.weight_history),
-        "avg_target_exposure": round(statistics.fmean(target_exposures), 6)
-        if target_exposures
-        else 0.0,
-        "median_target_exposure": round(statistics.median(target_exposures), 6)
-        if target_exposures
-        else 0.0,
+        "avg_target_exposure": round(statistics.fmean(target_exposures), 6) if target_exposures else 0.0,
+        "median_target_exposure": round(statistics.median(target_exposures), 6) if target_exposures else 0.0,
         "pct_decisions_target_gt_0": (
             round(sum(1 for value in target_exposures if value > 0) / len(target_exposures), 6)
             if target_exposures
@@ -267,13 +255,9 @@ def _full_metrics(result, report, bars) -> dict[str, object]:
         "turnover_total": round(result.turnover, 6),
         "turnover_annualized": round(result.turnover / years, 4) if years > 0 else 0.0,
         "fees_total": round(total_cost, 2),
-        "fees_pct_of_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_of_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "net_pnl_per_turnover": (
-            round(net_pnl / traded_notional, 6) if traded_notional > 0 else None
-        ),
+        "net_pnl_per_turnover": (round(net_pnl / traded_notional, 6) if traded_notional > 0 else None),
         "capital_utilization": utilization,
         "band_analysis": {
             "decisions": decisions,
@@ -284,9 +268,7 @@ def _full_metrics(result, report, bars) -> dict[str, object]:
             "avg_expected_turnover_when_trading": (
                 round(
                     statistics.fmean(
-                        record.expected_turnover
-                        for record in result.rebalances
-                        if record.expected_turnover > 0
+                        record.expected_turnover for record in result.rebalances if record.expected_turnover > 0
                     ),
                     6,
                 )
@@ -305,8 +287,7 @@ def _assert_cadence(parameters: dict[str, object], expected: str) -> None:
     strategy = portfolio_strategy_from(STRATEGY, parameters, timeframe="1d")
     policy = rebalance_policy_for(strategy)
     assert policy.frequency == expected, (
-        f"rebalance policy mismatch: expected {expected!r}, got {policy.frequency!r} "
-        f"from parameters {parameters}"
+        f"rebalance policy mismatch: expected {expected!r}, got {policy.frequency!r} from parameters {parameters}"
     )
     assert policy.market == Market.EQUITY
     return strategy
@@ -395,9 +376,7 @@ def _churn_analysis(result, monthly_fills, bars, *, start, end) -> dict[str, obj
                 break
 
     reversal_cost = sum(
-        fill.fee + fill.slippage_cost + fill.spread_cost
-        for fill in fills
-        if id(fill) in reversal_fill_ids
+        fill.fee + fill.slippage_cost + fill.spread_cost for fill in fills if id(fill) in reversal_fill_ids
     )
 
     # % of weekly trades that would not have occurred under monthly cadence:
@@ -405,9 +384,7 @@ def _churn_analysis(result, monthly_fills, bars, *, start, end) -> dict[str, obj
     # the same symbol within +-21 calendar days (approximation: monthly
     # decisions anchor on month starts; 21 days is the halfway point to the
     # next monthly decision).
-    monthly_set: set[tuple[str, datetime]] = {
-        (fill.symbol, fill.timestamp) for fill in monthly_fills
-    }
+    monthly_set: set[tuple[str, datetime]] = {(fill.symbol, fill.timestamp) for fill in monthly_fills}
     monthly_by_symbol: dict[str, list[datetime]] = defaultdict(list)
     for symbol, ts in monthly_set:
         monthly_by_symbol[symbol].append(ts)
@@ -417,8 +394,7 @@ def _churn_analysis(result, monthly_fills, bars, *, start, end) -> dict[str, obj
     for fill in fills:
         stamps = monthly_by_symbol.get(fill.symbol, [])
         matched = any(
-            abs((stamp - fill.timestamp).total_seconds()) / 86400.0 <= MONTHLY_OVERLAP_DAYS
-            for stamp in stamps
+            abs((stamp - fill.timestamp).total_seconds()) / 86400.0 <= MONTHLY_OVERLAP_DAYS for stamp in stamps
         )
         if not matched:
             weekly_only += 1
@@ -442,9 +418,7 @@ def _churn_analysis(result, monthly_fills, bars, *, start, end) -> dict[str, obj
     }
 
 
-def _staleness_diagnostic(
-    bars, universe, strategy, *, window_start, window_end
-) -> dict[str, object]:
+def _staleness_diagnostic(bars, universe, strategy, *, window_start, window_end) -> dict[str, object]:
     """No-trade ranking-stability audit of the weekly decision stream.
 
     For every weekly decision timestamp in the window, ranks the PIT
@@ -551,26 +525,16 @@ def _staleness_diagnostic(
             }
         )
 
-    wow_spearmans = [
-        entry["spearman_top_rank"]
-        for entry in week_over_week
-        if entry["spearman_top_rank"] is not None
-    ]
+    wow_spearmans = [entry["spearman_top_rank"] for entry in week_over_week if entry["spearman_top_rank"] is not None]
     wow_churn = [entry["top8_churn"] for entry in week_over_week]
     week2 = [
-        entry["fraction_still_top8_week2"]
-        for entry in monthly_decay
-        if entry["fraction_still_top8_week2"] is not None
+        entry["fraction_still_top8_week2"] for entry in monthly_decay if entry["fraction_still_top8_week2"] is not None
     ]
     week3 = [
-        entry["fraction_still_top8_week3"]
-        for entry in monthly_decay
-        if entry["fraction_still_top8_week3"] is not None
+        entry["fraction_still_top8_week3"] for entry in monthly_decay if entry["fraction_still_top8_week3"] is not None
     ]
     week4 = [
-        entry["fraction_still_top8_week4"]
-        for entry in monthly_decay
-        if entry["fraction_still_top8_week4"] is not None
+        entry["fraction_still_top8_week4"] for entry in monthly_decay if entry["fraction_still_top8_week4"] is not None
     ]
     return {
         "window": [window_start.isoformat(), window_end.isoformat()],
@@ -583,21 +547,13 @@ def _staleness_diagnostic(
         "monthly_decay": monthly_decay,
         "summary": {
             "spearman_mean": round(statistics.fmean(wow_spearmans), 4) if wow_spearmans else None,
-            "spearman_median": round(statistics.median(wow_spearmans), 4)
-            if wow_spearmans
-            else None,
+            "spearman_median": round(statistics.median(wow_spearmans), 4) if wow_spearmans else None,
             "spearman_min": round(min(wow_spearmans), 4) if wow_spearmans else None,
             "top8_churn_mean": round(statistics.fmean(wow_churn), 4) if wow_churn else 0.0,
             "top8_churn_median": round(statistics.median(wow_churn), 4) if wow_churn else 0.0,
-            "monthly_top8_still_top8_week2_mean": round(statistics.fmean(week2), 4)
-            if week2
-            else None,
-            "monthly_top8_still_top8_week3_mean": round(statistics.fmean(week3), 4)
-            if week3
-            else None,
-            "monthly_top8_still_top8_week4_mean": round(statistics.fmean(week4), 4)
-            if week4
-            else None,
+            "monthly_top8_still_top8_week2_mean": round(statistics.fmean(week2), 4) if week2 else None,
+            "monthly_top8_still_top8_week3_mean": round(statistics.fmean(week3), 4) if week3 else None,
+            "monthly_top8_still_top8_week4_mean": round(statistics.fmean(week4), 4) if week4 else None,
         },
     }
 
@@ -656,14 +612,10 @@ def _walk_forward(config, bars, universe, *, start, end, smoke: bool) -> dict[st
             "median_fold_return": round(statistics.median(returns), 6) if returns else 0.0,
             "worst_fold_return": round(min(returns), 6) if returns else 0.0,
             "best_fold_return": round(max(returns), 6) if returns else 0.0,
-            "mean_fold_sharpe": round(
-                statistics.fmean([row[f"{label}_sharpe"] for row in fold_rows]), 4
-            )
+            "mean_fold_sharpe": round(statistics.fmean([row[f"{label}_sharpe"] for row in fold_rows]), 4)
             if fold_rows
             else 0.0,
-            "mean_fold_max_drawdown": round(
-                statistics.fmean([row[f"{label}_max_drawdown"] for row in fold_rows]), 6
-            )
+            "mean_fold_max_drawdown": round(statistics.fmean([row[f"{label}_max_drawdown"] for row in fold_rows]), 6)
             if fold_rows
             else 0.0,
         }
@@ -721,9 +673,7 @@ def _jackknife(config, bars, universe, runs: dict[str, object], *, start, end) -
             )
             dropped_universe = replace(universe, snapshots=dropped_snapshots)
             parameters = (
-                dict(FROZEN_EQUITY)
-                if label == "monthly"
-                else dict(FROZEN_EQUITY, rebalance_frequency="weekly")
+                dict(FROZEN_EQUITY) if label == "monthly" else dict(FROZEN_EQUITY, rebalance_frequency="weekly")
             )
             rerun = run_product_backtest(
                 config,
@@ -746,9 +696,7 @@ def _jackknife(config, bars, universe, runs: dict[str, object], *, start, end) -
                 "delta_return_pp": round((dropped["return"] - base["return"]) * 100, 4),
                 "delta_cagr_pp": round((dropped["cagr"] - base["cagr"]) * 100, 4),
                 "delta_sharpe": round(dropped["sharpe"] - base["sharpe"], 4),
-                "delta_max_drawdown_pp": round(
-                    (dropped["max_drawdown"] - base["max_drawdown"]) * 100, 4
-                ),
+                "delta_max_drawdown_pp": round((dropped["max_drawdown"] - base["max_drawdown"]) * 100, 4),
             }
     return out
 
@@ -808,11 +756,7 @@ def _verdict(metrics: dict[str, object]) -> dict[str, object]:
         "concentration_ok": concentration_ok,
     }
     dominates = (
-        net_cagr_up
-        and (sharpe_up or mdd_down or util_up)
-        and cost_robust_ok
-        and walk_forward_ok
-        and concentration_ok
+        net_cagr_up and (sharpe_up or mdd_down or util_up) and cost_robust_ok and walk_forward_ok and concentration_ok
     )
     return {
         "pareto_rule": "net CAGR up AND at least one of Sharpe/maxDD/capital-utilization improved "
@@ -881,9 +825,7 @@ def _print_main_table(metrics: dict[str, object]) -> None:
         "avg exp | med exp | %>0 | %nearmax | %idle | t2first (d) |"
     )
     print(header)
-    print(
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
-    )
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for label in ("monthly", "weekly"):
         deep = metrics[label]["1x"]["deep"]
         for cost in ("1x", "2x", "3x"):
@@ -925,9 +867,7 @@ def _print_walk_forward(walk: dict[str, object]) -> None:
             f"{_fmt_pct(row['monthly_return'])} | {_fmt_num(row['monthly_sharpe'])} | {_fmt_pct(row['monthly_max_drawdown'])} | "
             f"{_fmt_pct(row['weekly_return'])} | {_fmt_num(row['weekly_sharpe'])} | {_fmt_pct(row['weekly_max_drawdown'])} |"
         )
-    print(
-        "\n| candidate | pos folds | ratio | mean | median | worst | best | mean Sharpe | mean maxDD |"
-    )
+    print("\n| candidate | pos folds | ratio | mean | median | worst | best | mean Sharpe | mean maxDD |")
     print("|---|---|---|---|---|---|---|---|---|")
     for label in ("monthly", "weekly"):
         s = walk["summary"][label]
@@ -944,16 +884,8 @@ def _print_calendar_years(yearly: dict[str, object]) -> None:
     print("|---|---|---|---|")
     rows = {entry["year"]: entry for entry in yearly["years"]["monthly"]}
     for year in sorted(rows):
-        monthly = next(
-            entry["portfolio_return"]
-            for entry in yearly["years"]["monthly"]
-            if entry["year"] == year
-        )
-        weekly = next(
-            entry["portfolio_return"]
-            for entry in yearly["years"]["weekly"]
-            if entry["year"] == year
-        )
+        monthly = next(entry["portfolio_return"] for entry in yearly["years"]["monthly"] if entry["year"] == year)
+        weekly = next(entry["portfolio_return"] for entry in yearly["years"]["weekly"] if entry["year"] == year)
         benchmark = rows[year]["benchmark_return"]
         print(f"| {year} | {_fmt_pct(monthly)} | {_fmt_pct(weekly)} | {_fmt_pct(benchmark)} |")
 
@@ -987,9 +919,7 @@ def _print_staleness(staleness: dict[str, object]) -> None:
 def _print_churn(churn: dict[str, object]) -> None:
     print("\n## Churn / adverse turnover (weekly candidate fills)\n")
     print(f"- round trips (sell->rebuy same symbol within 7 bars): {churn['round_trip_count']}")
-    print(
-        f"- flip-flops (buy->sell->buy within 7 bars each, incl. A->B->A): {churn['flip_flop_count']}"
-    )
+    print(f"- flip-flops (buy->sell->buy within 7 bars each, incl. A->B->A): {churn['flip_flop_count']}")
     print(f"- cost paid on reversal fills: ${churn['reversal_cost_total']:.2f}")
     print(
         f"- weekly fills not occurring under monthly cadence: {churn['weekly_only_fills_under_monthly_cadence']}/"
@@ -999,9 +929,7 @@ def _print_churn(churn: dict[str, object]) -> None:
 
 def _print_bands(metrics: dict[str, object]) -> None:
     print("\n## Band analysis (decisions -> orders -> fills, 1x)\n")
-    print(
-        "| candidate | decisions | orders created | decisions w/ fills | fills | zero-order decisions |"
-    )
+    print("| candidate | decisions | orders created | decisions w/ fills | fills | zero-order decisions |")
     print("|---|---|---|---|---|---|")
     for label in ("monthly", "weekly"):
         b = metrics[label]["1x"]["band_analysis"]
@@ -1029,9 +957,7 @@ def _print_concentration(concentration: dict[str, object]) -> None:
             )
     jackknife = concentration.get("jackknife")
     if jackknife:
-        print(
-            "\n| candidate | dropped | return delta (pp) | CAGR delta (pp) | Sharpe delta | maxDD delta (pp) |"
-        )
+        print("\n| candidate | dropped | return delta (pp) | CAGR delta (pp) | Sharpe delta | maxDD delta (pp) |")
         print("|---|---|---|---|---|---|")
         for label in ("monthly", "weekly"):
             for symbol, entry in jackknife[label]["drops"].items():
@@ -1075,9 +1001,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("Building point-in-time equity universe (once, reused by every run)...")
     t0 = time.perf_counter()
-    universe = build_product_universe(
-        config=load_config(), bars=bars, market=Market.EQUITY, end=EQUITY_END
-    )
+    universe = build_product_universe(config=load_config(), bars=bars, market=Market.EQUITY, end=EQUITY_END)
     print(f"  universe built in {time.perf_counter() - t0:.1f}s")
     universe_hash = hash_point_in_time_universe(universe)
     snapshots = universe.snapshots
@@ -1101,8 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
             "monthly": "control - frozen spec (v1 baseline)",
             "weekly": {
                 "rebalance_frequency": "weekly",
-                "note": "strategy ignores the key in its "
-                "math; rebalance_policy_for maps it to RebalancePolicy(weekly)",
+                "note": "strategy ignores the key in its math; rebalance_policy_for maps it to RebalancePolicy(weekly)",
             },
         },
         "dataset": str(EQUITY_CSV.name),
@@ -1202,9 +1125,7 @@ def main(argv: list[str] | None = None) -> int:
     metrics["walk_forward"] = walk
 
     # ---- calendar years (1x full-window reports) --------------------------
-    yearly = _calendar_year_returns(
-        {"monthly": one_x_runs["monthly"].report, "weekly": one_x_runs["weekly"].report}
-    )
+    yearly = _calendar_year_returns({"monthly": one_x_runs["monthly"].report, "weekly": one_x_runs["weekly"].report})
     report["calendar_year_returns"] = yearly
 
     # ---- staleness --------------------------------------------------------
@@ -1273,9 +1194,7 @@ def main(argv: list[str] | None = None) -> int:
             f"gated earlier to keep the bake-off bounded)",
         }
     else:
-        print(
-            f"\nJackknife (mean full run {mean_run_seconds:.0f}s <= gate; running top-1/2/3 drops)..."
-        )
+        print(f"\nJackknife (mean full run {mean_run_seconds:.0f}s <= gate; running top-1/2/3 drops)...")
         t0 = time.perf_counter()
         jackknife = _jackknife(config, bars, universe, one_x_runs, start=start, end=end)
         print(f"  jackknife done in {time.perf_counter() - t0:.1f}s")

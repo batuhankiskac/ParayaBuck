@@ -94,9 +94,7 @@ def ensure_active_universes(
         _, equity_status = validate_active_universe(equity)
         if equity_status != "success":
             log.info("Automatic equity universe scan started; reason=%s", equity_status)
-            if _refresh_with_retry(
-                lambda: refresh_equity_universe(config, api_key, secret_key), "equity"
-            ):
+            if _refresh_with_retry(lambda: refresh_equity_universe(config, api_key, secret_key), "equity"):
                 equity_status = "success"
                 equity_refreshed = True
                 log.info("Automatic equity universe scan completed")
@@ -108,9 +106,7 @@ def ensure_active_universes(
         _, crypto_status = validate_active_crypto_universe(crypto)
         if crypto_status != "success":
             log.info("Automatic crypto universe scan started; reason=%s", crypto_status)
-            if _refresh_with_retry(
-                lambda: refresh_crypto_universe(config, api_key, secret_key), "crypto"
-            ):
+            if _refresh_with_retry(lambda: refresh_crypto_universe(config, api_key, secret_key), "crypto"):
                 crypto_status = "success"
                 crypto_refreshed = True
                 log.info("Automatic crypto universe scan completed")
@@ -134,9 +130,7 @@ def eligible_equity_assets(config: Config, trading: TradingClient) -> dict[str, 
     evaluated on historical data.
     """
     universe = config.universe.equity
-    assets = trading.get_all_assets(
-        GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE)
-    )
+    assets = trading.get_all_assets(GetAssetsRequest(asset_class=AssetClass.US_EQUITY, status=AssetStatus.ACTIVE))
     allowed: dict[str, Any] = {}
     allowlist = set(universe.allowlist_symbols)
     denylist = set(universe.denylist_symbols)
@@ -244,9 +238,7 @@ def refresh_equity_universe(
             rows = cached_history.get(symbol) or []
             by_symbol[symbol] = _tuples_to_bars(symbol, rows[-20:])
         start = end - timedelta(days=10)
-        for batch in _chunks(
-            [symbol for symbol in sorted(allowed) if symbol not in skip_symbols], 150
-        ):
+        for batch in _chunks([symbol for symbol in sorted(allowed) if symbol not in skip_symbols], 150):
             historical_requests += 1
             downloaded = history.get_bars_batch(batch, "1d", start=start, end=end)
             bars_downloaded += sum(len(items) for items in downloaded.values())
@@ -276,10 +268,7 @@ def refresh_equity_universe(
                 by_symbol[symbol] = bars
                 if bars:
                     cached_history[symbol] = [_bar_to_tuple(bar) for bar in bars[-20:]]
-    discovered = [
-        _equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, []))
-        for symbol in sorted(allowed)
-    ]
+    discovered = [_equity_candidate(symbol, allowed[symbol], by_symbol.get(symbol, [])) for symbol in sorted(allowed)]
     ranked = sorted(
         discovered,
         key=lambda item: (-item.median_dollar_volume_20d, item.symbol),
@@ -312,11 +301,7 @@ def refresh_equity_universe(
         "symbols": sorted(allowed),
         "shortlist_symbols": sorted(shortlist_symbols),
         "candidates": [asdict(item) for item in enriched_discovered],
-        "history": {
-            symbol: rows
-            for symbol, rows in sorted(cached_history.items())
-            if rows and symbol in allowed
-        },
+        "history": {symbol: rows for symbol, rows in sorted(cached_history.items()) if rows and symbol in allowed},
     }
     temporary = source_path.with_suffix(source_path.suffix + ".tmp")
     temporary.write_text(json.dumps(enriched, indent=2, sort_keys=True), encoding="utf-8")
@@ -362,9 +347,7 @@ def _equity_observation_set(
     selection = config.strategy.equity
     if not selection.enabled or not result.selected_symbols:
         return result
-    strategy = portfolio_strategy_from(
-        selection.name, selection.parameters, timeframe=selection.timeframe
-    )
+    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     pool = result.selected_symbols
     warmup_days = bars_to_calendar_days(
         "SPY", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
@@ -414,9 +397,7 @@ def refresh_crypto_universe(
     trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
-    assets = trading.get_all_assets(
-        GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE)
-    )
+    assets = trading.get_all_assets(GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE))
     by_symbol: dict[str, Any] = {}
     allowlist = set(universe.allowlist_symbols)
     denylist = set(universe.denylist_symbols)
@@ -438,9 +419,7 @@ def refresh_crypto_universe(
         or str(getattr(by_symbol[symbol], "status", "")).lower().split(".")[-1] != "active"
     ]
     if invalid_pins:
-        raise ValueError(
-            f"Configured crypto pins are not active/tradable: {','.join(invalid_pins)}"
-        )
+        raise ValueError(f"Configured crypto pins are not active/tradable: {','.join(invalid_pins)}")
     candidate_symbols = tuple(sorted(by_symbol))
     if not candidate_symbols:
         raise ValueError("Alpaca returned no supported USD crypto pairs")
@@ -460,10 +439,7 @@ def refresh_crypto_universe(
         end,
         scope="crypto_scanner",
         config_digest=crypto_scanner_config_digest(universe),
-        identity=(
-            f"lookback_days={universe.scanner.lookback_days}:"
-            f"timeframe={universe.scanner.historical_timeframe}"
-        ),
+        identity=(f"lookback_days={universe.scanner.lookback_days}:timeframe={universe.scanner.historical_timeframe}"),
     )
     quotes: dict[str, Any] = {}
     try:
@@ -513,9 +489,7 @@ def _crypto_observation_set(
     selection = config.strategy.crypto
     if not selection.enabled or not result.selected_symbols:
         return result
-    strategy = portfolio_strategy_from(
-        selection.name, selection.parameters, timeframe=selection.timeframe
-    )
+    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     pool = result.selected_symbols
     warmup_days = bars_to_calendar_days(
         "BTC/USD", strategy.timeframe, strategy.minimum_history_bars, end_date=data_timestamp
@@ -536,9 +510,7 @@ def _crypto_observation_set(
 
     now = datetime.now(UTC)
     closed_bars = {
-        symbol: tuple(
-            bar for bar in bars.get(symbol, ()) if bar_is_closed(bar.timestamp, bar.timeframe, now)
-        )
+        symbol: tuple(bar for bar in bars.get(symbol, ()) if bar_is_closed(bar.timestamp, bar.timeframe, now))
         for symbol in pool
     }
     observation = build_observation_set(
@@ -648,9 +620,7 @@ def _incremental_history(
     inside ``AlpacaHistoricalData``; the returned merged bars are identical
     to a full-window download.
     """
-    fetcher: Callable[..., dict[str, list[Any]]] | None = getattr(
-        history, "get_bars_batch_incremental", None
-    )
+    fetcher: Callable[..., dict[str, list[Any]]] | None = getattr(history, "get_bars_batch_incremental", None)
     if fetcher is None:
         plain: dict[str, list[Any]] = history.get_bars_batch(
             symbols, timeframe, start=start, end=end, adjustment=adjustment
@@ -683,9 +653,7 @@ def _observation_scope_digest(base_digest: str, selection: object) -> str:
         "timeframe": getattr(selection, "timeframe", None),
         "parameters": getattr(selection, "parameters", {}),
     }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
 def _bar_to_tuple(bar: Bar) -> tuple[str, float, float, float, float, float]:
@@ -724,10 +692,7 @@ def _equity_candidate(symbol: str, asset: Any, bars: list[Any]) -> EquityCandida
         symbol,
         bars,
         expected_bar_count=20,
-        economic_sector=(
-            str(getattr(asset, "sector", "") or getattr(asset, "economic_sector", "")).strip()
-            or None
-        ),
+        economic_sector=(str(getattr(asset, "sector", "") or getattr(asset, "economic_sector", "")).strip() or None),
         exchange=str(getattr(asset, "exchange", "")).split(".")[-1],
         tradable=bool(getattr(asset, "tradable", False)),
         status=str(getattr(asset, "status", "")).lower().split(".")[-1],

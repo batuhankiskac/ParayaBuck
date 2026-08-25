@@ -137,16 +137,14 @@ def test_corrupt_risk_state_row_is_ignored_not_raised(tmp_path: Path) -> None:
     today = datetime.now(UTC).date()
     with ledger.connection as connection:
         connection.execute(
-            "INSERT INTO risk_state(account_id, session_date, payload, updated_at) "
-            "VALUES ('acct', ?, ?, ?)",
+            "INSERT INTO risk_state(account_id, session_date, payload, updated_at) VALUES ('acct', ?, ?, ?)",
             (today.isoformat(), '{"day_start_equity": 10000.0}', "not-a-timestamp"),
         )
     assert ledger.load_risk_state("acct", today) is None
 
     with ledger.connection as connection:
         connection.execute(
-            "UPDATE risk_state SET updated_at = ?, payload = ? "
-            "WHERE account_id = 'acct' AND session_date = ?",
+            "UPDATE risk_state SET updated_at = ?, payload = ? WHERE account_id = 'acct' AND session_date = ?",
             (
                 datetime.now(UTC).isoformat(),
                 '{"peak_equity": 1.0}',

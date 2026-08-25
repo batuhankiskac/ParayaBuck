@@ -83,10 +83,7 @@ class TimeframeAggregator:
         close_date = session_close.astimezone(NEW_YORK).date()
         flushed: list[Bar] = []
         for symbol, bar in list(self._current.items()):
-            if (
-                bar.market == Market.EQUITY
-                and bar.timestamp.astimezone(NEW_YORK).date() == close_date
-            ):
+            if bar.market == Market.EQUITY and bar.timestamp.astimezone(NEW_YORK).date() == close_date:
                 flushed.append(self._current.pop(symbol))
                 self._last_components[symbol] = self._components.pop(symbol, {})
         return sorted(flushed, key=lambda bar: (bar.timestamp, bar.symbol))
@@ -105,9 +102,7 @@ class TimeframeAggregator:
         )
 
     def _aggregate(self, components: dict[datetime, Bar], timestamp: datetime) -> Bar:
-        return _combine_bars(
-            [components[key] for key in sorted(components)], timestamp, self.timeframe
-        )
+        return _combine_bars([components[key] for key in sorted(components)], timestamp, self.timeframe)
 
 
 def _combine_bars(ordered: list[Bar], timestamp: datetime, timeframe: str) -> Bar:
@@ -154,13 +149,10 @@ def aggregate_historical_bars(
     expected = target_minutes // source_minutes
     result: list[Bar] = []
     source_delta = timedelta(minutes=source_minutes)
-    for (_symbol, bucket), components in sorted(
-        buckets.items(), key=lambda item: (item[0][1], item[0][0])
-    ):
+    for (_symbol, bucket), components in sorted(buckets.items(), key=lambda item: (item[0][1], item[0][0])):
         ordered = sorted(components, key=lambda item: item.timestamp)
         contiguous = all(
-            current.timestamp - previous.timestamp == source_delta
-            for previous, current in pairwise(ordered)
+            current.timestamp - previous.timestamp == source_delta for previous, current in pairwise(ordered)
         )
         if require_complete and (len(ordered) != expected or not contiguous):
             continue

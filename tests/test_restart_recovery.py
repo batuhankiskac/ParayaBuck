@@ -123,8 +123,7 @@ def _runtime(
 
 def _bars(symbols: tuple[str, ...]) -> list[Bar]:
     return [
-        Bar(datetime(2025, 1, 1, tzinfo=UTC), symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000)
-        for symbol in symbols
+        Bar(datetime(2025, 1, 1, tzinfo=UTC), symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000) for symbol in symbols
     ]
 
 
@@ -190,9 +189,7 @@ def test_restart_preserves_fill_quality_telemetry(tmp_path: Path) -> None:
 
     comparison = telemetry.decision_expected_vs_actual(db, decision_id)
     assert comparison["available"] is True
-    filled = [
-        item for item in comparison["orders"] if item["client_order_id"] == order.client_order_id
-    ]
+    filled = [item for item in comparison["orders"] if item["client_order_id"] == order.client_order_id]
     assert len(filled) == 1
     assert filled[0]["slippage_bps"] == pytest.approx(10.0)
     assert filled[0]["fill_ratio"] == 1.0

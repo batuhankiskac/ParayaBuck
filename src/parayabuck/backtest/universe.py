@@ -59,9 +59,7 @@ class PointInTimeUniverse:
         # (a no-op for already-sorted input) keeps contains() exact for any
         # direct construction too.
         if any(right.effective_at < left.effective_at for left, right in pairwise(self.snapshots)):
-            object.__setattr__(
-                self, "snapshots", tuple(sorted(self.snapshots, key=lambda item: item.effective_at))
-            )
+            object.__setattr__(self, "snapshots", tuple(sorted(self.snapshots, key=lambda item: item.effective_at)))
 
     def contains(self, symbol: str, market: Market, timestamp: datetime) -> bool:
         if market != self.market:
@@ -76,8 +74,7 @@ class PointInTimeUniverse:
 
     def to_dict(self) -> dict[str, object]:
         coverage = (
-            sum(snapshot.sector_metadata_coverage for snapshot in self.snapshots)
-            / len(self.snapshots)
+            sum(snapshot.sector_metadata_coverage for snapshot in self.snapshots) / len(self.snapshots)
             if self.snapshots
             else 1.0
         )
@@ -203,9 +200,7 @@ def build_trailing_point_in_time_universe(
             while series and series[0].timestamp < cutoff:
                 series.popleft()
         window = {symbol: series for symbol, series in window.items() if series}
-        by_symbol: dict[str, list[Bar]] = {
-            symbol: list(series) for symbol, series in window.items()
-        }
+        by_symbol: dict[str, list[Bar]] = {symbol: list(series) for symbol, series in window.items()}
         # Each per-symbol series is built from ``selected_bars`` (sorted by
         # (timestamp, symbol)) and only ever shrinks from the front, so it is
         # timestamp-ascending: the latest bar of the latest series is the
@@ -314,8 +309,7 @@ def build_trailing_point_in_time_universe(
             f"{rebalance_frequency} production scanner policy on trailing {lookback_days}d "
             "metrics; inputs strictly precede snapshot; "
             + (
-                f"Stage-A shortlist capped at {target_shortlist} symbols by trailing "
-                "median dollar volume; "
+                f"Stage-A shortlist capped at {target_shortlist} symbols by trailing median dollar volume; "
                 if target_shortlist is not None
                 else ""
             )
@@ -372,8 +366,7 @@ def verify_persisted_universe(
     recomputed = hash_point_in_time_universe(universe)
     if recomputed != expected_hash:
         raise ValueError(
-            "Universe snapshot hash mismatch: persisted "
-            f"{expected_hash[:12]}... vs recomputed {recomputed[:12]}..."
+            f"Universe snapshot hash mismatch: persisted {expected_hash[:12]}... vs recomputed {recomputed[:12]}..."
         )
 
 

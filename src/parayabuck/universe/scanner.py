@@ -48,9 +48,7 @@ def equity_candidate_from_bars(
     valid: list[Bar] = []
     for bar in bars:
         try:
-            values = tuple(
-                float(getattr(bar, field)) for field in ("high", "low", "close", "volume")
-            )
+            values = tuple(float(getattr(bar, field)) for field in ("high", "low", "close", "volume"))
         except (AttributeError, TypeError, ValueError):
             continue
         if all(math.isfinite(value) for value in values) and values[2] > 0 and values[3] >= 0:
@@ -71,9 +69,7 @@ def equity_candidate_from_bars(
             leveraged_or_inverse=classified,
         )
     price = float(getattr(ordered[-1], "close"))
-    dollar_volumes = [
-        float(getattr(bar, "close")) * float(getattr(bar, "volume")) for bar in ordered
-    ]
+    dollar_volumes = [float(getattr(bar, "close")) * float(getattr(bar, "volume")) for bar in ordered]
     ranges = true_ranges(ordered)
     return EquityCandidate(
         symbol=symbol,
@@ -141,15 +137,11 @@ class EquityUniverseScanner:
         membership is enforced by ``validate_active_universe`` at load time.
         """
         references = self.config.reference_symbols
-        if data_timestamp.tzinfo is None or (
-            selection_timestamp is not None and selection_timestamp.tzinfo is None
-        ):
+        if data_timestamp.tzinfo is None or (selection_timestamp is not None and selection_timestamp.tzinfo is None):
             raise ValueError("Scanner timestamps must be timezone-aware (UTC)")
         pinned = tuple(
             symbol
-            for symbol in dict.fromkeys(
-                canonical_symbol(item, Market.EQUITY) for item in pinned_symbols
-            )
+            for symbol in dict.fromkeys(canonical_symbol(item, Market.EQUITY) for item in pinned_symbols)
             if symbol not in references and symbol not in self.config.inverse_trade_symbols
         )
         reserved = tuple(dict.fromkeys((*references, *self.config.inverse_trade_symbols, *pinned)))
@@ -225,11 +217,7 @@ class EquityUniverseScanner:
                 "selection_role": (
                     "reference"
                     if symbol in references
-                    else (
-                        "inverse_hedge"
-                        if symbol in self.config.inverse_trade_symbols
-                        else "pinned_managed_position"
-                    )
+                    else ("inverse_hedge" if symbol in self.config.inverse_trade_symbols else "pinned_managed_position")
                 ),
                 "economic_sector": candidate_sector.get(symbol, sector_of(symbol)),
             }
@@ -307,10 +295,7 @@ class EquityUniverseScanner:
             return "not_active_tradable"
         if item.exchange.upper() in {"OTC", "OTCQX", "OTCQB", "PINK"}:
             return "otc"
-        if (
-            item.leveraged_or_inverse
-            and canonical_symbol(item.symbol) not in self.config.inverse_trade_symbols
-        ):
+        if item.leveraged_or_inverse and canonical_symbol(item.symbol) not in self.config.inverse_trade_symbols:
             return "leveraged_or_inverse"
         if not math.isfinite(item.price) or item.price < self.scanner.minimum_price:
             return "minimum_price"
@@ -329,9 +314,7 @@ class EquityUniverseScanner:
             or item.data_completeness < self.scanner.minimum_data_completeness
         ):
             return "data_completeness"
-        if item.spread_bps is not None and (
-            not math.isfinite(item.spread_bps) or item.spread_bps < 0
-        ):
+        if item.spread_bps is not None and (not math.isfinite(item.spread_bps) or item.spread_bps < 0):
             return "invalid_spread"
         return None
 
@@ -366,16 +349,13 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
             return (), "invalid"
         if payload.get("scanner_version") != EquityUniverseScanner.version:
             return (), "invalid"
-        if config.require_scanner_config_digest_match and payload.get(
-            "config_digest"
-        ) != scanner_config_digest(config):
+        if config.require_scanner_config_digest_match and payload.get("config_digest") != scanner_config_digest(config):
             return (), "digest_mismatch"
         expected_strategy_name = config.observation_strategy_name
         if expected_strategy_name and (
             payload.get("observation_strategy_name") != expected_strategy_name
             or payload.get("observation_strategy_version") != config.observation_strategy_version
-            or payload.get("observation_strategy_timeframe")
-            != config.observation_strategy_timeframe
+            or payload.get("observation_strategy_timeframe") != config.observation_strategy_timeframe
         ):
             return (), "observation_strategy_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
@@ -440,9 +420,7 @@ def validate_active_universe(config: EquityUniverseConfig) -> tuple[tuple[str, .
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         # Fail closed, but surface the parse error: a persistent "invalid"
         # status is indistinguishable from rot without the underlying cause.
-        logging.getLogger("parayabuck.universe").warning(
-            "Active equity universe validation failed: %s", exc
-        )
+        logging.getLogger("parayabuck.universe").warning("Active equity universe validation failed: %s", exc)
         return (), "invalid"
 
 
@@ -468,9 +446,7 @@ def load_active_symbols(
                 "Active equity universe rejected; status=%s fallback=configured", status
             )
     trade = selected or config.fallback_trade_symbols
-    combined = tuple(
-        dict.fromkeys((*references, *trade, *(canonical_symbol(item) for item in pinned_symbols)))
-    )
+    combined = tuple(dict.fromkeys((*references, *trade, *(canonical_symbol(item) for item in pinned_symbols))))
     if len(combined) > config.maximum_stream_symbols:
         kept = combined[: config.maximum_stream_symbols]
         logging.getLogger("parayabuck.universe").warning(

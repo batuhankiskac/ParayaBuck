@@ -119,9 +119,7 @@ def _connect_readonly(path: str | Path) -> sqlite3.Connection | None:
         return None
 
 
-def _query_rows(
-    connection: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()
-) -> list[tuple[Any, ...]]:
+def _query_rows(connection: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> list[tuple[Any, ...]]:
     try:
         return list(connection.execute(sql, params).fetchall())
     except sqlite3.Error as exc:
@@ -149,9 +147,7 @@ def _sessions_metrics(connection: sqlite3.Connection) -> dict[str, object]:
         }
     rows = _query_rows(
         connection,
-        "SELECT COUNT(*), "
-        "SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END), "
-        "MAX(started_at) FROM runtime_sessions",
+        "SELECT COUNT(*), SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END), MAX(started_at) FROM runtime_sessions",
     )
     total, unended, latest = rows[0] if rows else (0, 0, None)
     total = int(total or 0)
@@ -198,8 +194,7 @@ def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -
     else:
         rows = _query_rows(
             connection,
-            "SELECT reason, scope, activated_at, updated_at FROM safety_incidents "
-            "ORDER BY activated_at DESC, id DESC",
+            "SELECT reason, scope, activated_at, updated_at FROM safety_incidents ORDER BY activated_at DESC, id DESC",
         )
     incidents = [
         {
@@ -213,9 +208,7 @@ def _incidents_metrics(connection: sqlite3.Connection, account_id: str | None) -
     return {"count": len(incidents), "active": incidents}
 
 
-def _risk_state_metrics(
-    connection: sqlite3.Connection, account_id: str | None
-) -> dict[str, object]:
+def _risk_state_metrics(connection: sqlite3.Connection, account_id: str | None) -> dict[str, object]:
     """Latest risk_state row per account (session-scoped, JSON payload)."""
     if not _table_exists(connection, "risk_state"):
         return {"latest": []}
@@ -273,9 +266,7 @@ def _entry_block_duration_seconds(incidents: dict[str, object]) -> float | None:
     return None
 
 
-def runtime_metrics(
-    database_path: str | Path | None = None, *, account_id: str | None = None
-) -> dict[str, object]:
+def runtime_metrics(database_path: str | Path | None = None, *, account_id: str | None = None) -> dict[str, object]:
     """Aggregate runtime and risk metrics from persisted state plus counters.
 
     ``database_path`` defaults to the configured ``runtime.decision_db_path``

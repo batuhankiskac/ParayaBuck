@@ -53,9 +53,7 @@ class RuntimeMarketState:
         return bool(self._not_ready)
 
     def has_data_gaps_for_market(self, market: Market) -> bool:
-        return any(
-            ("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready
-        )
+        return any(("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready)
 
     def has_data_gaps_for_symbol(self, symbol: str) -> bool:
         wanted = canonical_symbol(symbol)

@@ -174,9 +174,7 @@ def test_crypto_asset_lookup_uses_legacy_adapter() -> None:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker.ledger = None
     broker._asset_cache = {}
-    broker._client = SimpleNamespace(
-        get_asset=lambda symbol: looked_up.append(symbol) or SimpleNamespace()
-    )
+    broker._client = SimpleNamespace(get_asset=lambda symbol: looked_up.append(symbol) or SimpleNamespace())
     broker._asset("BTC/USD")
     assert looked_up == ["BTCUSD"]
 
@@ -193,9 +191,7 @@ def test_crypto_position_lookup_uses_legacy_symbol() -> None:
     broker._asset_cache = {}
     broker._client = SimpleNamespace(
         get_asset=lambda symbol: SimpleNamespace(min_trade_increment=None),
-        get_open_position=lambda symbol: (
-            looked_up.append(symbol) or SimpleNamespace(qty="0.5", qty_available="0.5")
-        ),
+        get_open_position=lambda symbol: looked_up.append(symbol) or SimpleNamespace(qty="0.5", qty_available="0.5"),
     )
     resolved = broker.resolve_available_position_qty("BTC/USD", 1.0)
     assert resolved.available_qty == pytest.approx(0.5)
@@ -229,9 +225,7 @@ def test_sparse_equity_bars_are_not_mistaken_for_transport_gaps() -> None:
     assert equities.upsert(_bar(start)) == BarMutation.INSERTED
     assert equities.upsert(_bar(start + timedelta(minutes=10))) == BarMutation.INSERTED
 
-    assert crypto.upsert(_bar(start, symbol="BTC/USD", market=Market.CRYPTO)) == (
-        BarMutation.INSERTED
-    )
+    assert crypto.upsert(_bar(start, symbol="BTC/USD", market=Market.CRYPTO)) == (BarMutation.INSERTED)
     assert (
         crypto.upsert(_bar(start + timedelta(minutes=10), symbol="BTC/USD", market=Market.CRYPTO))
         == BarMutation.GAP_DETECTED
@@ -338,19 +332,13 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     thread = threading.Thread(target=runtime._decision_loop, daemon=True)
     thread.start()
     try:
-        runtime._events.put_market_event(
-            _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
-        )
+        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC)))
         assert first_ingested.wait(5)
-        runtime._events.put_market_event(
-            _Event("primary", _bar(timestamp, "MSFT"), datetime.now(UTC))
-        )
+        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "MSFT"), datetime.now(UTC)))
         deadline = time.monotonic() + 5
         while len(ingested) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
-        runtime._events.put_market_event(
-            _Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC))
-        )
+        runtime._events.put_market_event(_Event("primary", _bar(timestamp, "AAPL"), datetime.now(UTC)))
         deadline = time.monotonic() + 5
         while "AAPL" not in corrections and time.monotonic() < deadline:
             time.sleep(0.01)
@@ -593,9 +581,7 @@ def test_external_position_is_not_modified_by_default() -> None:
         0,
         positions=(PositionSnapshot("AAPL", 10, 100, 101, Market.EQUITY),),
     )
-    broker._submit_stop = lambda *_args, **_kwargs: pytest.fail(
-        "external position must remain untouched"
-    )
+    broker._submit_stop = lambda *_args, **_kwargs: pytest.fail("external position must remain untouched")
     broker.reconcile()
 
 
@@ -688,9 +674,7 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
     )
     broker._has_protective_order = lambda *_args: False
     broker._available_position_qty = lambda _symbol, qty, **_kwargs: qty
-    broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: (
-        submitted.append(qty) or True
-    )
+    broker._submit_stop = lambda _symbol, _market, qty, *_args, **_kwargs: submitted.append(qty) or True
     broker.reconcile()
     assert submitted == [pytest.approx(0.01)]
 
@@ -722,9 +706,7 @@ def test_atomic_credentials_quote_values_with_special_characters(tmp_path: Path)
     assert 'ALPACA_SECRET_KEY="secret with spaces"' in env.read_text()
 
 
-def test_direct_settings_call_cannot_auto_restart_into_live(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_direct_settings_call_cannot_auto_restart_into_live(tmp_path: Path, monkeypatch: Any) -> None:
     manager = server.EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.env_path = tmp_path / ".env"
@@ -741,9 +723,7 @@ def test_direct_settings_call_cannot_auto_restart_into_live(
     )
     monkeypatch.setattr(server, "manager", manager)
     with pytest.raises(HTTPException) as error:
-        asyncio.run(
-            server.save_settings(server.SettingsPayload(paper_mode=False, restart_engine=True))
-        )
+        asyncio.run(server.save_settings(server.SettingsPayload(paper_mode=False, restart_engine=True)))
     assert error.value.status_code == 400
 
 
@@ -1180,9 +1160,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime.market_state = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
     runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
     runtime.ledger = SimpleNamespace(
-        managed_entries_for_account=lambda _account: (
-            SimpleNamespace(status="manual_intervention_required"),
-        ),
+        managed_entries_for_account=lambda _account: (SimpleNamespace(status="manual_intervention_required"),),
         clear_safety_incident=lambda _account, _reason=None: None,
     )
 
@@ -1190,9 +1168,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
         runtime.reset_safety_lock()
 
 
-def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: Path, monkeypatch: Any) -> None:
     manager = server.EngineManager()
     manager.config_path = tmp_path / "settings.yaml"
     manager.config_path.write_text(yaml.safe_dump({"alpaca": {"paper": True}, "symbols": ["AAPL"]}))

@@ -121,9 +121,7 @@ def main() -> int:
     for bar in equity_bars:
         by_symbol.setdefault(bar.symbol, []).append(bar)
     if args.smoke:
-        equity_bars = [
-            bar for bar in equity_bars if bar.timestamp >= datetime(2024, 1, 1, tzinfo=UTC)
-        ]
+        equity_bars = [bar for bar in equity_bars if bar.timestamp >= datetime(2024, 1, 1, tzinfo=UTC)]
     print(f"{len(equity_bars)} equity bars, {len(actions)} dividend actions", flush=True)
 
     v2 = EquityResidualMomentum1dV2(dict(FROZEN_PARAMS))
@@ -177,9 +175,7 @@ def main() -> int:
         overlap = len(set(v2_selected) & set(v3_selected))
         union = set(v2_selected) | set(v3_selected)
         jaccard = overlap / len(union) if union else 0.0
-        turnover_diff = sum(
-            abs(v3_weights.get(symbol, 0.0) - v2_weights.get(symbol, 0.0)) for symbol in union
-        )
+        turnover_diff = sum(abs(v3_weights.get(symbol, 0.0) - v2_weights.get(symbol, 0.0)) for symbol in union)
         rows.append(
             {
                 "timestamp": timestamp.isoformat(),
@@ -190,12 +186,8 @@ def main() -> int:
                 "target_overlap": overlap,
                 "target_jaccard": round(jaccard, 4),
                 "turnover_difference": round(turnover_diff, 6),
-                "v2_target_weights": {
-                    symbol: round(weight, 6) for symbol, weight in v2_weights.items()
-                },
-                "v3_target_weights": {
-                    symbol: round(weight, 6) for symbol, weight in v3_weights.items()
-                },
+                "v2_target_weights": {symbol: round(weight, 6) for symbol, weight in v2_weights.items()},
+                "v3_target_weights": {symbol: round(weight, 6) for symbol, weight in v3_weights.items()},
             }
         )
         if (index + 1) % 50 == 0 or index == len(ordered_times) - 1:

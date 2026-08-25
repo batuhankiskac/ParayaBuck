@@ -109,9 +109,7 @@ class AlpacaBarStream:
             if subscribe_updated is not None:
                 subscribe_updated(crypto_updated_handler, *crypto_symbols)
 
-    def update_subscriptions(
-        self, stock_symbols: list[str], crypto_symbols: list[str]
-    ) -> dict[str, tuple[str, ...]]:
+    def update_subscriptions(self, stock_symbols: list[str], crypto_symbols: list[str]) -> dict[str, tuple[str, ...]]:
         """Atomically converge running streams on a newly approved symbol set.
 
         Stock and crypto memberships are applied in order. If the second
@@ -158,9 +156,7 @@ class AlpacaBarStream:
                 crypto_handler,
                 crypto_updated_handler,
             )
-            applied.append(
-                (self.crypto, added_crypto, removed_crypto, crypto_handler, crypto_updated_handler)
-            )
+            applied.append((self.crypto, added_crypto, removed_crypto, crypto_handler, crypto_updated_handler))
         except Exception as original:
             # Roll back every completed market in reverse order: re-subscribe
             # what was unsubscribed and unsubscribe what was added. If a
@@ -168,9 +164,7 @@ class AlpacaBarStream:
             # halt entries and force a reconnect instead of trusting it.
             for stream, added, removed, handler, updated_handler in reversed(applied):
                 try:
-                    self._update_market_subscription(
-                        stream, removed, added, handler, updated_handler
-                    )
+                    self._update_market_subscription(stream, removed, added, handler, updated_handler)
                 except Exception:
                     self._rollback_failed = True
                     log.exception("Rollback of stream subscription change failed")

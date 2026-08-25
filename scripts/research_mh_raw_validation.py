@@ -126,9 +126,7 @@ VARIANTS: dict[str, tuple[type[EquityResidualMomentum1dV2], dict[str, object]]] 
 
 
 def _normalize_parameters(parameters: dict[str, object]) -> dict[str, object]:
-    return {
-        key: (str(value) if isinstance(value, list) else value) for key, value in parameters.items()
-    }
+    return {key: (str(value) if isinstance(value, list) else value) for key, value in parameters.items()}
 
 
 def load_and_validate_manifest() -> dict:
@@ -140,18 +138,10 @@ def load_and_validate_manifest() -> dict:
     manifest = json.loads(MANIFEST_PATH.read_text())
 
     declared_variants = manifest.get("variants", {})
-    built_in = {
-        variant_id: {"base": cls.__name__} for variant_id, (cls, _overrides) in VARIANTS.items()
-    }
-    normalized = {
-        variant_id: {"base": spec["base"]} for variant_id, spec in declared_variants.items()
-    }
+    built_in = {variant_id: {"base": cls.__name__} for variant_id, (cls, _overrides) in VARIANTS.items()}
+    normalized = {variant_id: {"base": spec["base"]} for variant_id, spec in declared_variants.items()}
     if normalized != built_in:
-        drift = {
-            key
-            for key in set(normalized) | set(built_in)
-            if normalized.get(key) != built_in.get(key)
-        }
+        drift = {key for key in set(normalized) | set(built_in) if normalized.get(key) != built_in.get(key)}
         raise SystemExit(f"VARIANTS drifted from the committed predeclaration: {sorted(drift)}")
 
     frozen = manifest.get("frozen_parameters", {})
@@ -167,19 +157,13 @@ def load_and_validate_manifest() -> dict:
     computed = calendar_fold_windows(EVAL_START, EVAL_END, step_months=FOLD_STEP_MONTHS)
     if len(computed) != FOLD_COUNT_DECLARED:
         raise SystemExit(
-            f"fold contract violated: expected exactly {FOLD_COUNT_DECLARED} folds, "
-            f"computed {len(computed)}"
+            f"fold contract violated: expected exactly {FOLD_COUNT_DECLARED} folds, computed {len(computed)}"
         )
-    declared_parsed = [
-        (datetime.fromisoformat(pair[0]), datetime.fromisoformat(pair[1]))
-        for pair in declared_folds
-    ]
+    declared_parsed = [(datetime.fromisoformat(pair[0]), datetime.fromisoformat(pair[1])) for pair in declared_folds]
     assert_fold_contract(declared_parsed, computed)
 
     declared_temporal = manifest.get("temporal_windows", {})
-    if set(declared_temporal) != set(
-        temporal_diagnostic_windows(EVAL_START, EVAL_END, RECENT_START)
-    ):
+    if set(declared_temporal) != set(temporal_diagnostic_windows(EVAL_START, EVAL_END, RECENT_START)):
         raise SystemExit("temporal_windows drifted from the committed predeclaration")
     return manifest
 
@@ -242,16 +226,12 @@ def run_window(
     starting_equity: float | None = None,
 ) -> tuple[PortfolioBacktestResult, EquityResidualMomentum1dV2]:
     strategy = build_strategy(variant_id)
-    available = [
-        bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe
-    ]
+    available = [bar for bar in bars if bar.market == Market.EQUITY and bar.timeframe == strategy.timeframe]
     if end is not None:
         available = [bar for bar in available if bar.timestamp <= end]
     filtered = available if start is None else [bar for bar in available if bar.timestamp >= start]
     warmup = [] if start is None else [bar for bar in available if bar.timestamp < start]
-    engine = make_engine(
-        config, strategy, universe, cost_multiplier=cost_multiplier, starting_equity=starting_equity
-    )
+    engine = make_engine(config, strategy, universe, cost_multiplier=cost_multiplier, starting_equity=starting_equity)
     return engine.run(filtered, warmup=warmup, corporate_actions=actions), strategy
 
 
@@ -332,9 +312,7 @@ def rebalance_stats(result: PortfolioBacktestResult) -> dict[str, object]:
     wins = [value for value in interval_returns if value > 0]
     losses = [value for value in interval_returns if value <= 0]
     return {
-        "rebalance_win_rate": round(len(wins) / len(interval_returns), 4)
-        if interval_returns
-        else 0.0,
+        "rebalance_win_rate": round(len(wins) / len(interval_returns), 4) if interval_returns else 0.0,
         "avg_winning_rebalance": round(statistics.fmean(wins), 6) if wins else 0.0,
         "avg_losing_rebalance": round(statistics.fmean(losses), 6) if losses else 0.0,
         "profit_factor": _profit_factor(result),
@@ -359,9 +337,7 @@ def full_stats(result: PortfolioBacktestResult) -> dict[str, float | int | None]
         "turnover": round(result.turnover, 6),
         "fees_total": round(total_cost, 2),
         "fees_pct_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "avg_exposure": round(1.0 - result.average_cash_ratio, 4),
         "avg_holdings": round(result.average_holdings_count, 3),
         "max_concentration_weight": round(result.maximum_concentration, 4),
@@ -435,9 +411,7 @@ def universe_without(universe: PointInTimeUniverse, banned: frozenset[str]) -> P
                 observation_set=frozenset(snapshot.observation_set - banned),
             )
         )
-    return PointInTimeUniverse(
-        market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology
-    )
+    return PointInTimeUniverse(market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology)
 
 
 def summarize_folds(
@@ -493,9 +467,7 @@ def spy_daily_regimes(bars: list[Bar]) -> dict[datetime, str]:
     return out
 
 
-def regime_pnl(
-    result: PortfolioBacktestResult, spy_daily: dict[datetime, str]
-) -> dict[str, object]:
+def regime_pnl(result: PortfolioBacktestResult, spy_daily: dict[datetime, str]) -> dict[str, object]:
     buckets: dict[str, list[float]] = {NORMAL: [], ELEVATED: []}
     previous: float | None = None
     for equity, timestamp in zip(result.equity_curve, result.curve_timestamps):
@@ -510,14 +482,10 @@ def regime_pnl(
         daily_returns = buckets[regime]
         out[regime] = {
             "days": len(daily_returns),
-            "mean_daily_return": round(statistics.fmean(daily_returns), 6)
-            if daily_returns
-            else 0.0,
+            "mean_daily_return": round(statistics.fmean(daily_returns), 6) if daily_returns else 0.0,
             "total_return": round(sum(daily_returns), 6) if daily_returns else 0.0,
             "positive_day_ratio": (
-                round(sum(1 for value in daily_returns if value > 0) / len(daily_returns), 4)
-                if daily_returns
-                else 0.0
+                round(sum(1 for value in daily_returns if value > 0) / len(daily_returns), 4) if daily_returns else 0.0
             ),
         }
     return out
@@ -638,12 +606,8 @@ def block_bootstrap_deltas(
             "p5": round(deltas_dd[p5], 6),
             "p95": round(deltas_dd[p95], 6),
         },
-        "probability_sharpe_above_control": round(
-            sum(1 for value in deltas_sharpe if value > 0) / resamples, 4
-        ),
-        "probability_return_above_control": round(
-            sum(1 for value in deltas_return if value > 0) / resamples, 4
-        ),
+        "probability_sharpe_above_control": round(sum(1 for value in deltas_sharpe if value > 0) / resamples, 4),
+        "probability_return_above_control": round(sum(1 for value in deltas_return if value > 0) / resamples, 4),
     }
 
 
@@ -671,9 +635,7 @@ def run_variant(
         eval_start = datetime(2024, 1, 2, tzinfo=UTC)
         folds = folds[-2:]
 
-    full, full_strategy = run_window(
-        config, variant_id, universe, bars, start=None, end=None, actions=actions
-    )
+    full, full_strategy = run_window(config, variant_id, universe, bars, start=None, end=None, actions=actions)
 
     # Walk-forward folds (anchored: everything before each fold is warmup).
     fold_results: list[tuple[datetime, datetime, PortfolioBacktestResult]] = []
@@ -716,9 +678,7 @@ def run_variant(
         }
 
     # Recent window (2022+).
-    recent, _strategy = run_window(
-        config, variant_id, universe, bars, start=RECENT_START, end=None, actions=actions
-    )
+    recent, _strategy = run_window(config, variant_id, universe, bars, start=RECENT_START, end=None, actions=actions)
 
     # Cost stress: 1x is the full run above; 2x/3x/5x re-run the window.
     stress: dict[str, object] = {"1x": full_stats(full)}
@@ -809,9 +769,7 @@ def run_variant(
     # Temporal sensitivity windows (diagnostics only; never optimized).
     temporal: dict[str, object] = {}
     if not smoke:
-        for name, segments in temporal_diagnostic_windows(
-            EVAL_START, EVAL_END, RECENT_START
-        ).items():
+        for name, segments in temporal_diagnostic_windows(EVAL_START, EVAL_END, RECENT_START).items():
             chained = run_segments(config, variant_id, universe, bars, segments, actions=actions)
             temporal[name] = {
                 "return": round(chained["cumulative_return"], 6),
@@ -825,10 +783,7 @@ def run_variant(
         "schema_version": RESULT_SCHEMA_VERSION,
         "variant": variant_id,
         "strategy_name": VARIANTS[variant_id][0].__name__,
-        "parameters": {
-            key: str(value) if isinstance(value, list) else value
-            for key, value in sorted(_FROZEN.items())
-        },
+        "parameters": {key: str(value) if isinstance(value, list) else value for key, value in sorted(_FROZEN.items())},
         "semantics": {
             "positive_12m_gate": True,
             "multi_horizon_rank_consensus": True,
@@ -911,11 +866,7 @@ def aggregate() -> int:
     }
 
     # fold_deltas.json — ONE canonical paired comparison via the contract module.
-    fold_deltas = {
-        "mh_raw": paired_fold_deltas(
-            control["walk_forward"]["folds"], mh_raw["walk_forward"]["folds"]
-        )
-    }
+    fold_deltas = {"mh_raw": paired_fold_deltas(control["walk_forward"]["folds"], mh_raw["walk_forward"]["folds"])}
     for candidate_id, summary_row in summary.items():
         fold_entry = fold_deltas.get(candidate_id)
         if fold_entry is not None:
@@ -931,9 +882,7 @@ def aggregate() -> int:
         for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
     }
     annual_results = {
-        "years": sorted(
-            {int(year) for artifact in (control, mh_raw) for year in artifact["annual_windows"]}
-        ),
+        "years": sorted({int(year) for artifact in (control, mh_raw) for year in artifact["annual_windows"]}),
         "candidates": {
             candidate_id: artifact["annual_windows"]
             for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
@@ -944,12 +893,10 @@ def aggregate() -> int:
         for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
     }
     jackknife = {
-        candidate_id: artifact["jackknife"]
-        for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
+        candidate_id: artifact["jackknife"] for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
     }
     regime_analysis = {
-        candidate_id: artifact["regime"]
-        for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
+        candidate_id: artifact["regime"] for candidate_id, artifact in {"control": control, "mh_raw": mh_raw}.items()
     }
     temporal_windows = {
         candidate_id: artifact["temporal_windows"]
@@ -971,9 +918,7 @@ def aggregate() -> int:
     # promotion_gate.json — the §9 rubric evaluated from the numbers above.
     control_yearly = control["yearly_returns"]
     mh_yearly = mh_raw["yearly_returns"]
-    yearly_wins = sum(
-        1 for year in mh_yearly if year in control_yearly and mh_yearly[year] > control_yearly[year]
-    )
+    yearly_wins = sum(1 for year in mh_yearly if year in control_yearly and mh_yearly[year] > control_yearly[year])
     yearly_years = len([year for year in mh_yearly if year in control_yearly])
 
     def _minimal(artifact: dict, *, exclude_2020: dict, exclude_2024: dict) -> dict[str, object]:
@@ -1002,9 +947,7 @@ def aggregate() -> int:
     gates = {
         "rubric": manifest["promotion_rubric"],
         "gates": promotion_gates(control=control_min, candidate=mh_min),
-        "passed_all": all(
-            item["passed"] for item in promotion_gates(control=control_min, candidate=mh_min)
-        ),
+        "passed_all": all(item["passed"] for item in promotion_gates(control=control_min, candidate=mh_min)),
     }
 
     json.dump(summary, open(OUT_DIR / "summary.json", "w"), indent=1)
@@ -1064,9 +1007,7 @@ def main() -> int:
         help="comma-separated subset of: control,mh_raw",
     )
     parser.add_argument("--aggregate", action="store_true", help="write aggregate artifacts")
-    parser.add_argument(
-        "--smoke", action="store_true", help="short smoke run (no jackknife/stress)"
-    )
+    parser.add_argument("--smoke", action="store_true", help="short smoke run (no jackknife/stress)")
     parser.add_argument(
         "--temporal-only",
         action="store_true",
@@ -1121,17 +1062,11 @@ def main() -> int:
         for variant_id in requested:
             path = OUT_DIR / f"{variant_id}.json"
             if not path.exists():
-                raise SystemExit(
-                    f"{path} missing — a full variant run must exist before --temporal-only"
-                )
+                raise SystemExit(f"{path} missing — a full variant run must exist before --temporal-only")
             artifact = json.loads(path.read_text())
             temporal: dict[str, object] = {}
-            for name, segments in temporal_diagnostic_windows(
-                EVAL_START, EVAL_END, RECENT_START
-            ).items():
-                chained = run_segments(
-                    config, variant_id, universe, bars, segments, actions=actions
-                )
+            for name, segments in temporal_diagnostic_windows(EVAL_START, EVAL_END, RECENT_START).items():
+                chained = run_segments(config, variant_id, universe, bars, segments, actions=actions)
                 temporal[name] = {
                     "return": round(chained["cumulative_return"], 6),
                     "sharpe": round(chained["cumulative_sharpe"], 6),
@@ -1164,9 +1099,7 @@ def main() -> int:
                 payload = json.loads(existing.read_text())
                 own_top[variant_id] = list(payload["concentration"]["top_symbols"])[:JACKKNIFE_TOP]
             else:
-                probe, _strategy = run_window(
-                    config, variant_id, universe, bars, start=None, end=None, actions=actions
-                )
+                probe, _strategy = run_window(config, variant_id, universe, bars, start=None, end=None, actions=actions)
                 own_top[variant_id] = list(concentration(probe)["top_symbols"])[:JACKKNIFE_TOP]
         if variant_id == "control":
             control_top = own_top["control"]

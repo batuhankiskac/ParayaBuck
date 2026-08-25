@@ -151,9 +151,7 @@ def main() -> int:
     to_fetch_active = [s for s in to_fetch_all if candidates[s].get("status") != "inactive"]
     # Prioritize inactive for survivorship, then active
     to_fetch = to_fetch_inactive + to_fetch_active
-    print(
-        f"to_fetch {len(to_fetch)} total ({len(to_fetch_inactive)} inactive, {len(to_fetch_active)} active new)"
-    )
+    print(f"to_fetch {len(to_fetch)} total ({len(to_fetch_inactive)} inactive, {len(to_fetch_active)} active new)")
     for sym, rows in current_bars_by_sym.items():
         first = rows[0]["timestamp"]
         last = rows[-1]["timestamp"]
@@ -190,9 +188,7 @@ def main() -> int:
     for idx, sym in enumerate(to_fetch):
         status, bars = fetch_bars(sym)
         if idx % 100 == 0:
-            print(
-                f"[{idx}/{len(to_fetch)}] {sym} {status} {len(bars) if isinstance(bars, list) else ''}"
-            )
+            print(f"[{idx}/{len(to_fetch)}] {sym} {status} {len(bars) if isinstance(bars, list) else ''}")
         if status == "ok" and len(bars) >= 63:
             # Convert bar format from Alpaca to CSV format
             # Alpaca bar: {"t": "2016-01-04T05:00:00Z", "o": ..., "h": ..., "l": ..., "c": ..., "v": ..., "n": ..., "vw": ...}

@@ -219,8 +219,7 @@ def _seed_portfolio_database(path: Path) -> None:
                 "metadata": {"qualified_symbols": 8},
             }
             connection.execute(
-                "INSERT INTO portfolio_decisions VALUES "
-                "(?, 's1', 'acct', 'digest', ?, ?, ?, ?, '{}')",
+                "INSERT INTO portfolio_decisions VALUES (?, 's1', 'acct', 'digest', ?, ?, ?, ?, '{}')",
                 (decision_id, timestamp, market, "strategy_" + market, json.dumps(target)),
             )
         # Equity decision d-eq-2: two buys with 5 / 10 / 15 bps adverse fills.
@@ -245,9 +244,7 @@ def _seed_portfolio_database(path: Path) -> None:
             ("f2", "o-eq-b", "2026-02-05T15:00:05+00:00", 50.0, 200.20, 0.5),
             ("f3", "o-cr-a", "2026-01-05T15:00:07+00:00", 0.5, 3004.5, 3.75),
         ):
-            created = (
-                "2026-02-05T15:00:00+00:00" if activity != "f3" else "2026-01-05T15:00:00+00:00"
-            )
+            created = "2026-02-05T15:00:00+00:00" if activity != "f3" else "2026-01-05T15:00:00+00:00"
             connection.execute(
                 "INSERT INTO portfolio_fills VALUES (?, ?, ?, ?, ?, ?, 0.0, 0.0, 0.0, ?)",
                 (
@@ -257,9 +254,7 @@ def _seed_portfolio_database(path: Path) -> None:
                     qty,
                     price,
                     fee,
-                    (
-                        datetime.fromisoformat(occurred) - datetime.fromisoformat(created)
-                    ).total_seconds(),
+                    (datetime.fromisoformat(occurred) - datetime.fromisoformat(created)).total_seconds(),
                 ),
             )
         connection.execute(

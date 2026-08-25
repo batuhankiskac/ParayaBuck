@@ -113,10 +113,7 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
             return self._cash_portfolio(context, "no_qualified_low_variance")
         selected = tuple(symbol for _score, symbol in ranked[:top_n])
         weight = 1.0 / len(selected)
-        targets = tuple(
-            TargetWeight(symbol, weight, reason="low_realized_variance")
-            for symbol in sorted(selected)
-        )
+        targets = tuple(TargetWeight(symbol, weight, reason="low_realized_variance") for symbol in sorted(selected))
         return TargetPortfolio(
             strategy_name=self.name,
             strategy_version=self.version,

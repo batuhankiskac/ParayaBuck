@@ -46,11 +46,7 @@ def _panel(symbols: list[str], days: int = 320) -> list[Bar]:
     for index in range(days):
         timestamp = start + timedelta(days=index)
         for offset, symbol in enumerate(symbols):
-            close = (
-                100
-                * (1.002 + offset * 0.0001) ** index
-                * (1 + 0.012 * math.sin(index * 0.8 + offset))
-            )
+            close = 100 * (1.002 + offset * 0.0001) ** index * (1 + 0.012 * math.sin(index * 0.8 + offset))
             bars.append(_bar(symbol, timestamp, close))
     return bars
 
@@ -128,9 +124,7 @@ def test_alpha_scores_broader_pool_than_final_stream_set() -> None:
     # Every pool symbol was ingested; only universe members may be targeted.
     assert len(context_history) == len(symbols)
     snapshot_symbols = next(
-        snapshot.symbols
-        for snapshot in reversed(universe.snapshots)
-        if snapshot.effective_at <= last_decision
+        snapshot.symbols for snapshot in reversed(universe.snapshots) if snapshot.effective_at <= last_decision
     )
     assert snapshot_symbols
     # The alpha-search pool is BIGGER than the streamed observation capacity:
@@ -261,9 +255,7 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
     broker = _Broker()
     # Only the equity strategy is enabled: a crypto runtime is never built,
     # so crypto bars can never produce crypto orders.
-    equity = portfolio_strategy_from(
-        "equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]}
-    )
+    equity = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
     runtime = PortfolioRuntime(
         equity,
         ("AAPL", "MSFT", "NVDA", "SPY"),
@@ -335,18 +327,10 @@ def test_crypto_and_equity_universe_states_are_isolated() -> None:
     for snapshot in crypto_universe.snapshots:
         assert all("/" in symbol for symbol in snapshot.symbols)
     equity_member = next(
-        iter(
-            next(
-                snapshot for snapshot in reversed(equity_universe.snapshots) if snapshot.symbols
-            ).symbols
-        )
+        iter(next(snapshot for snapshot in reversed(equity_universe.snapshots) if snapshot.symbols).symbols)
     )
     crypto_member = next(
-        iter(
-            next(
-                snapshot for snapshot in reversed(crypto_universe.snapshots) if snapshot.symbols
-            ).symbols
-        )
+        iter(next(snapshot for snapshot in reversed(crypto_universe.snapshots) if snapshot.symbols).symbols)
     )
     assert equity_universe.contains(equity_member, Market.EQUITY, start + timedelta(days=100))
     assert not equity_universe.contains("S99", Market.EQUITY, start + timedelta(days=100))

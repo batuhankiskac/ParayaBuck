@@ -74,14 +74,9 @@ def _run_equity(config) -> dict[str, object]:
             ]
         ),
         "fill_count": len(result.fills),
-        "weight_history_hash": _sha(
-            [(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]
-        ),
+        "weight_history_hash": _sha([(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]),
         "universe_history_hash": _sha(
-            [
-                (timestamp.isoformat(), sorted(symbols))
-                for timestamp, symbols in result.universe_history
-            ]
+            [(timestamp.isoformat(), sorted(symbols)) for timestamp, symbols in result.universe_history]
         ),
         "economics": {
             "net_return": summary["net_return"],
@@ -126,14 +121,9 @@ def _run_crypto(config) -> dict[str, object]:
             ]
         ),
         "fill_count": len(result.fills),
-        "weight_history_hash": _sha(
-            [(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]
-        ),
+        "weight_history_hash": _sha([(timestamp.isoformat(), weights) for timestamp, weights in result.weight_history]),
         "universe_history_hash": _sha(
-            [
-                (timestamp.isoformat(), sorted(symbols))
-                for timestamp, symbols in result.universe_history
-            ]
+            [(timestamp.isoformat(), sorted(symbols)) for timestamp, symbols in result.universe_history]
         ),
         "economics": {
             "net_return": summary["net_return"],
@@ -161,9 +151,7 @@ def collect() -> dict[str, object]:
 def _head_sha() -> str:
     import subprocess
 
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def main() -> int:

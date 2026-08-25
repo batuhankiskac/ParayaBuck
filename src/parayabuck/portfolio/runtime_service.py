@@ -77,9 +77,7 @@ def is_terminal_order_status(status: str) -> bool:
 
 # Single SQL source for the terminal set above: queries must never hardcode
 # a second copy that can drift from is_terminal_order_status.
-TERMINAL_ORDER_STATUSES_SQL = ", ".join(
-    f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES)
-)
+TERMINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES))
 
 
 log = get_logger("parayabuck.portfolio.runtime_service")
@@ -108,9 +106,7 @@ class PortfolioDecisionService:
         universe: object | None,
         universe_version: str,
     ) -> PortfolioContext:
-        if any(
-            not series or series[-1].timestamp != decision_timestamp for series in history.values()
-        ):
+        if any(not series or series[-1].timestamp != decision_timestamp for series in history.values()):
             raise ValueError("Portfolio context requires a complete closed-bar batch")
         return PortfolioContext(
             decision_timestamp=decision_timestamp,
@@ -246,28 +242,20 @@ class PortfolioStateRepository:
                 """
             )
             session_columns = {
-                str(row[1])
-                for row in self.store.connection.execute(
-                    "PRAGMA table_info(portfolio_runtime_sessions)"
-                )
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_runtime_sessions)")
             }
             if "manifest_checksum" in session_columns:
                 self.store.connection.execute(
-                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN "
-                    "manifest_checksum TO configuration_digest"
+                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN manifest_checksum TO configuration_digest"
                 )
             if "stage" in session_columns:
-                self.store.connection.execute(
-                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN stage TO mode"
-                )
+                self.store.connection.execute("ALTER TABLE portfolio_runtime_sessions RENAME COLUMN stage TO mode")
             decision_columns = {
-                str(row[1])
-                for row in self.store.connection.execute("PRAGMA table_info(portfolio_decisions)")
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_decisions)")
             }
             if "manifest_checksum" in decision_columns:
                 self.store.connection.execute(
-                    "ALTER TABLE portfolio_decisions RENAME COLUMN "
-                    "manifest_checksum TO configuration_digest"
+                    "ALTER TABLE portfolio_decisions RENAME COLUMN manifest_checksum TO configuration_digest"
                 )
             if "account_id" not in decision_columns:
                 self.store.connection.execute(
@@ -280,14 +268,10 @@ class PortfolioStateRepository:
                        WHERE s.session_id = portfolio_decisions.session_id
                    ), '') WHERE account_id = ''"""
             )
-            columns = {
-                str(row[1])
-                for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")
-            }
+            columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")}
             if "cumulative_filled_quantity" not in columns:
                 self.store.connection.execute(
-                    "ALTER TABLE portfolio_orders ADD COLUMN "
-                    "cumulative_filled_quantity REAL NOT NULL DEFAULT 0"
+                    "ALTER TABLE portfolio_orders ADD COLUMN cumulative_filled_quantity REAL NOT NULL DEFAULT 0"
                 )
                 # Legacy databases kept fills in portfolio_fills while the
                 # orders table had no cumulative quantity. Restore the real
@@ -301,9 +285,7 @@ class PortfolioStateRepository:
                        WHERE cumulative_filled_quantity = 0"""
                 )
             if "average_fill_price" not in columns:
-                self.store.connection.execute(
-                    "ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL"
-                )
+                self.store.connection.execute("ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL")
                 self.store.connection.execute(
                     """UPDATE portfolio_orders
                        SET average_fill_price = (
@@ -313,16 +295,11 @@ class PortfolioStateRepository:
                        )
                        WHERE average_fill_price IS NULL"""
                 )
-            fill_columns = {
-                str(row[1])
-                for row in self.store.connection.execute("PRAGMA table_info(portfolio_fills)")
-            }
+            fill_columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_fills)")}
             # Execution-quality capture (telemetry, REPORT ONLY): submission ->
             # fill delay per fill. Nullable; legacy rows stay valid.
             if "fill_delay_seconds" not in fill_columns:
-                self.store.connection.execute(
-                    "ALTER TABLE portfolio_fills ADD COLUMN fill_delay_seconds REAL"
-                )
+                self.store.connection.execute("ALTER TABLE portfolio_fills ADD COLUMN fill_delay_seconds REAL")
                 self.store.connection.execute(
                     """UPDATE portfolio_fills
                        SET fill_delay_seconds = (
@@ -448,9 +425,7 @@ class PortfolioStateRepository:
                 (datetime.now(UTC).isoformat(), status, session_id),
             )
 
-    def has_decision(
-        self, account_id: str, configuration_digest: str, timestamp: datetime, market: Market
-    ) -> bool:
+    def has_decision(self, account_id: str, configuration_digest: str, timestamp: datetime, market: Market) -> bool:
         with self.store.lock:
             row = self.store.connection.execute(
                 """SELECT 1 FROM portfolio_decisions
@@ -460,9 +435,7 @@ class PortfolioStateRepository:
             ).fetchone()
         return row is not None
 
-    def latest_decision_timestamp(
-        self, account_id: str, configuration_digest: str, market: Market
-    ) -> datetime | None:
+    def latest_decision_timestamp(self, account_id: str, configuration_digest: str, market: Market) -> datetime | None:
         """Return the last persisted decision boundary for restart-safe scheduling."""
         with self.store.lock:
             row = self.store.connection.execute(
@@ -481,9 +454,7 @@ class PortfolioStateRepository:
         risk: RiskOverlayDecision,
         market: Market,
     ) -> str:
-        decision_id = _decision_id(
-            account_id, configuration_digest, target.decision_timestamp, market
-        )
+        decision_id = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_decisions(
@@ -572,9 +543,7 @@ class PortfolioStateRepository:
                 (phase, status, datetime.now(UTC).isoformat(), decision_id),
             )
 
-    def current_rebalance_execution(
-        self, account_id: str, market: Market
-    ) -> RebalanceExecutionState | None:
+    def current_rebalance_execution(self, account_id: str, market: Market) -> RebalanceExecutionState | None:
         """The newest persisted rebalance execution for one account/market.
 
         Includes completed and blocked executions so callers can distinguish
@@ -635,9 +604,7 @@ class PortfolioStateRepository:
             return ()
         return tuple(dict(item) for item in parsed if isinstance(item, dict))
 
-    def orders_for_decision(
-        self, decision_id: str, side: str | None = None
-    ) -> tuple[dict[str, object], ...]:
+    def orders_for_decision(self, decision_id: str, side: str | None = None) -> tuple[dict[str, object], ...]:
         """Order rows attributed to one decision (used by rebalance recovery)."""
         query = """SELECT client_order_id, symbol, market, side, quantity,
                           status, cumulative_filled_quantity
@@ -696,8 +663,7 @@ class PortfolioStateRepository:
                 # without a matching buy. The stop itself is already accepted
                 # broker-side; ownership release for it is a reconcile concern.
                 log.error(
-                    "Protective stop for %s has no portfolio entry lineage; "
-                    "ownership bookkeeping skipped",
+                    "Protective stop for %s has no portfolio entry lineage; ownership bookkeeping skipped",
                     symbol,
                 )
                 return
@@ -739,8 +705,7 @@ class PortfolioStateRepository:
             note="broker position absent and no real fill found in activity history",
         )
         log.warning(
-            "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s "
-            "(no broker position found)",
+            "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s (no broker position found)",
             account_id,
             symbol,
             owned,
@@ -813,9 +778,7 @@ class PortfolioStateRepository:
             )
             remaining -= consume
 
-    def _latest_entry_lineage(
-        self, account_id: str, symbol: str, market: Market
-    ) -> tuple[str, float] | None:
+    def _latest_entry_lineage(self, account_id: str, symbol: str, market: Market) -> tuple[str, float] | None:
         """Decision id and reference price of the most recent BUY entry row."""
         row = self.store.connection.execute(
             """
@@ -840,9 +803,7 @@ class PortfolioStateRepository:
             ).fetchone()
         return row is not None
 
-    def open_orders(
-        self, account_id: str = "unknown", market: Market | None = None
-    ) -> tuple[OpenPortfolioOrder, ...]:
+    def open_orders(self, account_id: str = "unknown", market: Market | None = None) -> tuple[OpenPortfolioOrder, ...]:
         """Non-terminal portfolio orders attributed to one account.
 
         Orders are attributed through the persisted decision/session lineage,
@@ -917,8 +878,7 @@ class PortfolioStateRepository:
             # left gross: the position drops by the full sold quantity.
             if side == "buy" and market == "crypto":
                 cumulative_filled_quantity = float(
-                    Decimal(str(cumulative_filled_quantity))
-                    * (Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
+                    Decimal(str(cumulative_filled_quantity)) * (Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 )
             fill_delta = max(0.0, cumulative_filled_quantity - previous)
             delay_seconds: float | None = None
@@ -1018,9 +978,7 @@ class PortfolioStateRepository:
                 (account_id, equity, datetime.now(UTC).isoformat()),
             )
 
-    def owned_quantities(
-        self, account_id: str = "unknown", market: Market | None = None
-    ) -> dict[str, float]:
+    def owned_quantities(self, account_id: str = "unknown", market: Market | None = None) -> dict[str, float]:
         """Net filled quantity per symbol for one account.
 
         Orders are attributed to an account through the persisted
@@ -1052,9 +1010,7 @@ class PortfolioStateRepository:
             filled_qty = float(filled or 0.0)
             if filled_qty <= 0:
                 continue
-            net[str(symbol)] = net.get(str(symbol), 0.0) + (
-                filled_qty if str(side) == "buy" else -filled_qty
-            )
+            net[str(symbol)] = net.get(str(symbol), 0.0) + (filled_qty if str(side) == "buy" else -filled_qty)
         for symbol, adjusted in adjustments:
             net[str(symbol)] = net.get(str(symbol), 0.0) - float(adjusted or 0.0)
         # Negative net ownership is an invariant violation, never something to
@@ -1065,9 +1021,7 @@ class PortfolioStateRepository:
         if negative:
             raise RuntimeError(
                 "Negative net portfolio ownership (invariant violation): "
-                + ", ".join(
-                    f"{symbol}={quantity:.6f}" for symbol, quantity in sorted(negative.items())
-                )
+                + ", ".join(f"{symbol}={quantity:.6f}" for symbol, quantity in sorted(negative.items()))
             )
         return {symbol: quantity for symbol, quantity in net.items() if quantity > 1e-12}
 
@@ -1231,9 +1185,7 @@ class PortfolioRuntime:
             raise ValueError("Live portfolio execution requires a positive hard dollar cap")
         self.strategy = strategy
         self.market = strategy.market
-        self.symbols = tuple(
-            dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in symbols)
-        )
+        self.symbols = tuple(dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in symbols))
         self.broker = broker
         self.repository = repository
         self.mode = mode
@@ -1303,9 +1255,7 @@ class PortfolioRuntime:
         }
         planned_delta: dict[str, float] = {}
         for order in orders:
-            signed_quantity = (
-                order.quantity if order.side == PortfolioOrderSide.BUY else -order.quantity
-            )
+            signed_quantity = order.quantity if order.side == PortfolioOrderSide.BUY else -order.quantity
             planned_delta[order.symbol] = planned_delta.get(order.symbol, 0.0) + signed_quantity
         target_weights = {weight.symbol: weight.weight for weight in target.weights}
         symbols = sorted(set(current_positions) | set(target_weights) | set(planned_delta))
@@ -1357,11 +1307,7 @@ class PortfolioRuntime:
         now = datetime.now(UTC)
         for bar in sorted(bars, key=lambda item: (item.timestamp, item.symbol)):
             symbol = canonical_symbol(bar.symbol, bar.market)
-            if (
-                bar.market != self.market
-                or bar.timeframe != self.strategy.timeframe
-                or symbol not in self.history
-            ):
+            if bar.market != self.market or bar.timeframe != self.strategy.timeframe or symbol not in self.history:
                 continue
             if self.market == Market.CRYPTO:
                 if not bar_is_closed(bar.timestamp, bar.timeframe, now):
@@ -1371,16 +1317,12 @@ class PortfolioRuntime:
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
                 series.append(bar)
-        timestamp_sets = [
-            {bar.timestamp for bar in series} for series in self.history.values() if series
-        ]
+        timestamp_sets = [{bar.timestamp for bar in series} for series in self.history.values() if series]
         if len(timestamp_sets) == len(self.history):
             common_timestamps = set.intersection(*timestamp_sets)
             if common_timestamps:
                 common_latest = max(common_timestamps)
-                self.previous_timestamp = max(
-                    filter(None, (self.previous_timestamp, common_latest))
-                )
+                self.previous_timestamp = max(filter(None, (self.previous_timestamp, common_latest)))
 
     def startup_catch_up(self, *, entry_latch: str | None = None) -> PortfolioRuntimeResult:
         """Decide immediately on the latest completed warmup bars.
@@ -1398,9 +1340,7 @@ class PortfolioRuntime:
         """
         self.startup_catch_up_at = datetime.now(UTC)
         series_by_symbol = dict(self.history)
-        timestamps = [
-            series[-1].timestamp if series else None for series in series_by_symbol.values()
-        ]
+        timestamps = [series[-1].timestamp if series else None for series in series_by_symbol.values()]
         if any(timestamp is None for timestamp in timestamps) or any(
             len(series) < self.strategy.minimum_history_bars for series in series_by_symbol.values()
         ):
@@ -1411,15 +1351,11 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         timestamp = timestamps[0]
         assert timestamp is not None
-        if self.repository.has_decision(
-            self.account_id, self.configuration_digest, timestamp, self.market
-        ):
+        if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             self.startup_catch_up_status = "duplicate_decision"
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         if (
-            self.repository.latest_decision_timestamp(
-                self.account_id, self.configuration_digest, self.market
-            )
+            self.repository.latest_decision_timestamp(self.account_id, self.configuration_digest, self.market)
             is not None
         ):
             # Any prior decision for this deployment means the cadence is
@@ -1439,14 +1375,10 @@ class PortfolioRuntime:
         # rebalance defers the catch-up (submitting fresh BUYs while an older
         # SELL is working could stack risk-increasing exposure).
         self.advance_rebalance()
-        current_rebalance = self.repository.current_rebalance_execution(
-            self.account_id, self.market
-        )
+        current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             self.startup_catch_up_status = "rebalance_in_progress"
-            return PortfolioRuntimeResult(
-                current_rebalance.decision_id, None, None, (), (), "rebalance_in_progress"
-            )
+            return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_in_progress")
         bars = [series[-1] for series in series_by_symbol.values()]
         result = self.process_closed_bars(
             bars,
@@ -1559,11 +1491,7 @@ class PortfolioRuntime:
         if not eligible:
             return PortfolioRuntimeResult(None, None, None, (), (), "no_eligible_bars")
         timestamp = max(bar.timestamp for bar in eligible)
-        batch_symbols = {
-            canonical_symbol(bar.symbol, bar.market)
-            for bar in eligible
-            if bar.timestamp == timestamp
-        }
+        batch_symbols = {canonical_symbol(bar.symbol, bar.market) for bar in eligible if bar.timestamp == timestamp}
         for bar in sorted(eligible, key=lambda item: (item.timestamp, item.symbol)):
             self._append_signal_bar(bar)
         # ``boundary`` is the real cadence; ``scheduled`` additionally honors
@@ -1576,26 +1504,18 @@ class PortfolioRuntime:
         self.previous_timestamp = timestamp
         warming_symbols = tuple(
             sorted(
-                symbol
-                for symbol, series in self.history.items()
-                if len(series) < self.strategy.minimum_history_bars
+                symbol for symbol, series in self.history.items() if len(series) < self.strategy.minimum_history_bars
             )
         )
         missing_symbols = tuple(
-            sorted(
-                symbol
-                for symbol, series in self.history.items()
-                if not series or series[-1].timestamp != timestamp
-            )
+            sorted(symbol for symbol, series in self.history.items() if not series or series[-1].timestamp != timestamp)
         )
         if warming_symbols:
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
         if missing_symbols:
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         ready_history = dict(self.history)
-        if self.repository.has_decision(
-            self.account_id, self.configuration_digest, timestamp, self.market
-        ):
+        if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         # A persisted two-phase rebalance may have become ready since the last
         # event (trade update, restart, or reconcile). Advance it first, then
@@ -1603,14 +1523,10 @@ class PortfolioRuntime:
         # flight: submitting a fresh BUY while an older SELL is working could
         # stack risk-increasing exposure on top of the not-yet-sold position.
         self.advance_rebalance()
-        current_rebalance = self.repository.current_rebalance_execution(
-            self.account_id, self.market
-        )
+        current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
-                return PortfolioRuntimeResult(
-                    current_rebalance.decision_id, None, None, (), (), "rebalance_blocked"
-                )
+                return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
             return PortfolioRuntimeResult(
                 current_rebalance.decision_id,
                 None,
@@ -1628,9 +1544,7 @@ class PortfolioRuntime:
         managed = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
-            if position.market == self.market
-            and not position.is_flat
-            and position.managed_qty > 1e-12
+            if position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
         }
         if not managed.issubset(batch_symbols):
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
@@ -1672,9 +1586,7 @@ class PortfolioRuntime:
             # weight so the planner emits SELL orders only; entries stay
             # blocked while protective/risk-reducing exits keep flowing.
             current_weights = {
-                canonical_symbol(position.symbol, position.market): (
-                    position.market_value / account.equity
-                )
+                canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
                 for position in account.positions
                 if position.market == self.market and not position.is_flat
             }
@@ -1691,10 +1603,7 @@ class PortfolioRuntime:
                     if min(weight.weight, current_weights.get(weight.symbol, 0.0)) > 0
                 ),
                 cash_weight=1.0
-                - sum(
-                    min(weight.weight, current_weights.get(weight.symbol, 0.0))
-                    for weight in raw_target.weights
-                ),
+                - sum(min(weight.weight, current_weights.get(weight.symbol, 0.0)) for weight in raw_target.weights),
                 metadata={
                     **raw_target.metadata,
                     "entry_risk_latch": entry_latch,
@@ -1702,9 +1611,7 @@ class PortfolioRuntime:
             )
         if not scheduled:
             current_weights = {
-                canonical_symbol(position.symbol, position.market): (
-                    position.market_value / account.equity
-                )
+                canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
                 for position in account.positions
                 if position.market == self.market and not position.is_flat
             }
@@ -1732,16 +1639,11 @@ class PortfolioRuntime:
                 raw_target,
                 metadata={**raw_target.metadata, "decision_origin": decision_origin},
             )
-        if any(
-            canonical_symbol(weight.symbol, self.market) not in self.symbols
-            for weight in raw_target.weights
-        ):
+        if any(canonical_symbol(weight.symbol, self.market) not in self.symbols for weight in raw_target.weights):
             raise ValueError("Strategy emitted a symbol outside the active universe")
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
-            maximum_allocation = min(
-                maximum_allocation, self.live_dollar_cap / max(1.0, account.equity)
-            )
+            maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         risk = self.risk_overlay.apply(
             raw_target,
             account,
@@ -1750,17 +1652,13 @@ class PortfolioRuntime:
             maximum_allocation=maximum_allocation,
             mode=self.mode,
         )
-        rules = {
-            symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols
-        }
+        rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
         # The order idempotency key must be scoped to the account-local
         # decision identity (account + configuration digest + timestamp +
         # market), otherwise two configurations sharing a strategy name,
         # version and timestamp collide on the same client_order_id and the
         # second decision's orders are silently dropped by the repository.
-        decision_id = _decision_id(
-            self.account_id, self.configuration_digest, timestamp, self.market
-        )
+        decision_id = _decision_id(self.account_id, self.configuration_digest, timestamp, self.market)
         planned = self.planner.plan(
             risk.target,
             account,
@@ -1788,10 +1686,7 @@ class PortfolioRuntime:
             risk,
             self.market,
         )
-        orders = tuple(
-            PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
-            for order in planned
-        )
+        orders = tuple(PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id}) for order in planned)
         sells = tuple(order for order in orders if order.side == PortfolioOrderSide.SELL)
         buys = tuple(order for order in orders if order.side == PortfolioOrderSide.BUY)
         if not buys:
@@ -1816,9 +1711,7 @@ class PortfolioRuntime:
                 self.account_id,
                 self.market,
                 REBALANCE_PHASE_SELL_PENDING,
-                buy_orders_json=json.dumps(
-                    [asdict(order) for order in buys], sort_keys=True, default=str
-                ),
+                buy_orders_json=json.dumps([asdict(order) for order in buys], sort_keys=True, default=str),
             )
             submitted = self._submit_orders(sells)
             return PortfolioRuntimeResult(
@@ -1865,9 +1758,7 @@ class PortfolioRuntime:
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
             return None
         if current.phase == REBALANCE_PHASE_BLOCKED:
-            return PortfolioRuntimeResult(
-                current.decision_id, None, None, (), (), "rebalance_blocked"
-            )
+            return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if current.phase == REBALANCE_PHASE_BUY_READY:
             return self._submit_deferred_buys(current.decision_id)
         if current.phase == REBALANCE_PHASE_BUY_PENDING:
@@ -1878,21 +1769,15 @@ class PortfolioRuntime:
                     return None
                 buys = resolved
             if buys and all(is_terminal_order_status(str(item["status"])) for item in buys):
-                self.repository.update_rebalance_execution(
-                    current.decision_id, REBALANCE_PHASE_COMPLETE
-                )
-                return PortfolioRuntimeResult(
-                    current.decision_id, None, None, (), (), "rebalance_complete"
-                )
+                self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_COMPLETE)
+                return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_complete")
             return None
         # sell_pending: wait until every required sell is terminal.
         sells = self.repository.orders_for_decision(current.decision_id, side="sell")
         if not sells:
             # No sell rows recorded for a sell_pending rebalance: nothing can
             # ever become terminal, so re-plan the buys from the fresh state.
-            self.repository.update_rebalance_execution(
-                current.decision_id, REBALANCE_PHASE_BUY_READY
-            )
+            self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
             return self._submit_deferred_buys(current.decision_id)
         if any(str(item["status"]) == "submitting" for item in sells):
             # A crash between repository persistence and broker acknowledgement
@@ -1910,9 +1795,7 @@ class PortfolioRuntime:
                 REBALANCE_PHASE_BLOCKED,
                 status="reconciliation_required",
             )
-            return PortfolioRuntimeResult(
-                current.decision_id, None, None, (), (), "rebalance_blocked"
-            )
+            return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if not all(is_terminal_order_status(status) for status in statuses):
             return None
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
@@ -1971,9 +1854,7 @@ class PortfolioRuntime:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BLOCKED)
             return None
         try:
-            adjusted_target = TargetPortfolio.from_dict(
-                json.loads(str(decision["risk_json"]))["target"]
-            )
+            adjusted_target = TargetPortfolio.from_dict(json.loads(str(decision["risk_json"]))["target"])
         except (KeyError, TypeError, ValueError) as exc:
             log.error("Cannot restore rebalance target for %s: %s", decision_id, exc)
             self.repository.update_rebalance_execution(
@@ -1983,9 +1864,7 @@ class PortfolioRuntime:
         account = self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
-            maximum_allocation = min(
-                maximum_allocation, self.live_dollar_cap / max(1.0, account.equity)
-            )
+            maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1994,13 +1873,9 @@ class PortfolioRuntime:
             maximum_allocation=maximum_allocation,
             mode=self.mode,
         )
-        prices: dict[str, float] = {
-            symbol: series[-1].close for symbol, series in self.history.items() if series
-        }
+        prices: dict[str, float] = {symbol: series[-1].close for symbol, series in self.history.items() if series}
         for position in account.positions:
-            prices.setdefault(
-                canonical_symbol(position.symbol, position.market), position.current_price
-            )
+            prices.setdefault(canonical_symbol(position.symbol, position.market), position.current_price)
         # Restart recovery can run before warmup repopulated history; the
         # decision-time reference prices of the deferred BUY orders are the
         # authoritative fallback so the BUY side is never lost.
@@ -2009,9 +1884,7 @@ class PortfolioRuntime:
             reference = stored.get("reference_price")
             if symbol and reference is not None:
                 prices.setdefault(symbol, float(str(reference)))
-        rules = {
-            symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols
-        }
+        rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
         planned = self.planner.plan(
             risk.target,
             account,
@@ -2029,9 +1902,7 @@ class PortfolioRuntime:
         )
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
-            return PortfolioRuntimeResult(
-                decision_id, risk.target, risk, (), (), "rebalance_complete"
-            )
+            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         buy_orders = self._size_buys_to_safe_capacity(buy_orders, account)
         if not buy_orders:
             log.warning(
@@ -2039,9 +1910,7 @@ class PortfolioRuntime:
                 decision_id,
             )
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
-            return PortfolioRuntimeResult(
-                decision_id, risk.target, risk, (), (), "rebalance_complete"
-            )
+            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         submitted = self._submit_orders(buy_orders)
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
         return PortfolioRuntimeResult(
@@ -2077,13 +1946,9 @@ class PortfolioRuntime:
         """
         prices: dict[str, float] = {order.symbol: order.reference_price for order in buy_orders}
         for position in account.positions:
-            prices.setdefault(
-                canonical_symbol(position.symbol, position.market), position.current_price
-            )
+            prices.setdefault(canonical_symbol(position.symbol, position.market), position.current_price)
         equity = max(1e-9, account.equity)
-        current_gross = sum(
-            position.market_value for position in account.positions if not position.is_flat
-        )
+        current_gross = sum(position.market_value for position in account.positions if not position.is_flat)
         managed_value = sum(
             abs(position.managed_qty) * position.current_price
             for position in account.positions
@@ -2095,9 +1960,7 @@ class PortfolioRuntime:
         if self.mode == "live":
             cash_capacity = min(cash_capacity, max(0.0, self.live_dollar_cap - managed_value))
         capacity = min(gross_capacity, cash_capacity)
-        notional = sum(
-            order.quantity * prices.get(order.symbol, order.reference_price) for order in buy_orders
-        )
+        notional = sum(order.quantity * prices.get(order.symbol, order.reference_price) for order in buy_orders)
         if notional <= 0:
             return ()
         if notional > capacity:
@@ -2110,9 +1973,7 @@ class PortfolioRuntime:
                         **asdict(order),
                         "quantity": floor_increment(
                             order.quantity * scale,
-                            self.broker.asset_trading_rules(
-                                order.symbol, self.market
-                            ).quantity_increment,
+                            self.broker.asset_trading_rules(order.symbol, self.market).quantity_increment,
                         ),
                     }
                 )
@@ -2154,9 +2015,7 @@ class PortfolioRuntime:
 
 
 def _decision_id(account_id: str, checksum: str, timestamp: datetime, market: Market) -> str:
-    return hashlib.sha256(
-        f"{account_id}|{checksum}|{timestamp.isoformat()}|{market.value}".encode()
-    ).hexdigest()[:24]
+    return hashlib.sha256(f"{account_id}|{checksum}|{timestamp.isoformat()}|{market.value}".encode()).hexdigest()[:24]
 
 
 def configuration_digest(

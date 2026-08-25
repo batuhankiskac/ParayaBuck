@@ -303,9 +303,7 @@ def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
         cli_module.load_csv_bars(csv_path, default_market=Market.EQUITY)
 
 
-def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(
-    tmp_path, monkeypatch
-) -> None:
+def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(tmp_path, monkeypatch) -> None:
     config = _config(tmp_path)
     candidate_path = tmp_path / "equity-candidates.json"
     candidate_path.write_text(
@@ -394,9 +392,7 @@ def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, mon
     first = captured_requests[0]
     # The warmup span is anchored at the evaluation start (2022 session
     # density), never at today's date.
-    expected_warmup = timedelta(
-        days=cli_module._warmup_window_days(config, Market.EQUITY, end_date=start)
-    )
+    expected_warmup = timedelta(days=cli_module._warmup_window_days(config, Market.EQUITY, end_date=start))
     assert first["start"] == start - expected_warmup
     assert first["end"] == end
     assert first["adjustment"] == "splits"

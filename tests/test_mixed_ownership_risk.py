@@ -135,9 +135,7 @@ def test_external_over_asset_limit_blocks_managed_additions_and_surfaces() -> No
     # over-limit symbol. QQQ is an independent position and stays.
     assert weights["AAPL"] == pytest.approx(0.07)
     assert weights["QQQ"] == pytest.approx(0.05)
-    assert any(
-        reason.startswith("external_exceeds_asset_limit:AAPL") for reason in decision.reasons
-    )
+    assert any(reason.startswith("external_exceeds_asset_limit:AAPL") for reason in decision.reasons)
 
 
 def test_mixed_position_keeps_floor_and_blocks_new_managed() -> None:

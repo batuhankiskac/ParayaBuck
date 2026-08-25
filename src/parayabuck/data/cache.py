@@ -58,18 +58,12 @@ class WarmupCache:
 
     def _primary_key_columns(self) -> set[str]:
         pk_name = next(
-            (
-                row[1]
-                for row in self.connection.execute("PRAGMA index_list(bars)").fetchall()
-                if row[3] == "pk"
-            ),
+            (row[1] for row in self.connection.execute("PRAGMA index_list(bars)").fetchall() if row[3] == "pk"),
             None,
         )
         if pk_name is None:
             return set()
-        return {
-            row[2] for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()
-        }
+        return {row[2] for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()}
 
     def _migrate_legacy_schema(self) -> None:
         """Rebuild caches created before ``market`` joined the primary key.
@@ -206,9 +200,7 @@ class WarmupCache:
         caller must refetch instead of reusing the cache.
         """
         with self._lock:
-            row = self.connection.execute(
-                "SELECT config_digest FROM scope_meta WHERE scope=?", (scope,)
-            ).fetchone()
+            row = self.connection.execute("SELECT config_digest FROM scope_meta WHERE scope=?", (scope,)).fetchone()
         return bool(row and row[0] == config_digest)
 
     def scope_set(self, scope: str, config_digest: str, identity: str = "") -> None:

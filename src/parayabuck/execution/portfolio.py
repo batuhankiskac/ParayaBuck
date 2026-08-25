@@ -184,38 +184,24 @@ class PortfolioRiskOverlay:
             immutable_value(position) / equity
             for position in account.positions
             if not position.is_flat
-            and (
-                canonical_symbol(position.symbol, position.market) not in approved
-                or position.external_qty > 1e-12
-            )
+            and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
         immutable_sleeve = sum(
             immutable_value(position) / equity
             for position in account.positions
             if not position.is_flat
             and position.market == market
-            and (
-                canonical_symbol(position.symbol, position.market) not in approved
-                or position.external_qty > 1e-12
-            )
+            and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
-        desired = {
-            canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights
-        }
+        desired = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
         # Strategy alpha priority per canonical symbol (0 = unranked). When
         # the strategy declares ranks, position-count enforcement below
         # retains best-ranked names; otherwise the legacy target-weight
         # order applies unchanged.
-        rank_by_symbol = {
-            canonical_symbol(weight.symbol, market): weight.rank for weight in target.weights
-        }
+        rank_by_symbol = {canonical_symbol(weight.symbol, market): weight.rank for weight in target.weights}
         if mode not in {"backtest", "paper", "live"}:
             raise ValueError(f"Unsupported portfolio execution mode: {mode}")
-        per_asset = (
-            self.limits.maximum_crypto_asset
-            if market == Market.CRYPTO
-            else self.limits.maximum_equity_asset
-        )
+        per_asset = self.limits.maximum_crypto_asset if market == Market.CRYPTO else self.limits.maximum_equity_asset
         # Immutable external inventory per symbol: never sellable, never
         # scaled. The strategy's total desired weight for a mixed symbol is
         # split internally into external_floor + managed_desired; only the
@@ -260,9 +246,7 @@ class PortfolioRiskOverlay:
             desired[symbol] = max(desired[symbol], external_weight)
 
         position_limit = (
-            self.limits.maximum_crypto_positions
-            if market == Market.CRYPTO
-            else self.limits.maximum_positions
+            self.limits.maximum_crypto_positions if market == Market.CRYPTO else self.limits.maximum_positions
         )
         # Position-count policy: the LIMIT is risk enforcement and stays
         # intact, but WHO survives must follow the strategy's declared alpha
@@ -284,14 +268,10 @@ class PortfolioRiskOverlay:
             priority = sorted(desired, key=lambda symbol: (-desired[symbol], symbol))
         kept_symbols = set(priority[:position_limit])
         if len(desired) > len(kept_symbols):
-            desired = {
-                symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols
-            }
+            desired = {symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols}
             halted_reasons.append("position_count_limit")
 
-        sleeve_limit = (
-            self.limits.maximum_crypto if market == Market.CRYPTO else self.limits.maximum_equity
-        )
+        sleeve_limit = self.limits.maximum_crypto if market == Market.CRYPTO else self.limits.maximum_equity
         # Internally separate the three exposure layers: immutable external
         # inventory (never sellable), managed desired exposure (mutable by the
         # planner) and the total desired account exposure (external + managed
@@ -352,13 +332,10 @@ class PortfolioRiskOverlay:
                 **target.metadata,
                 "risk_overlay_reasons": tuple(halted_reasons),
                 "risk_overlay_halted": halted,
-                "risk_overlay_managed_exposure": sum(weight.weight for weight in weights)
-                - external_in_weights,
+                "risk_overlay_managed_exposure": sum(weight.weight for weight in weights) - external_in_weights,
             },
         )
-        gross_after = (
-            immutable_gross + sum(weight.weight for weight in weights) - external_in_weights
-        )
+        gross_after = immutable_gross + sum(weight.weight for weight in weights) - external_in_weights
         return RiskOverlayDecision(
             adjusted,
             halted,
@@ -407,18 +384,14 @@ class TargetToOrderPlanner:
             for position in account.positions
             if position.market == market and not position.is_flat
         }
-        target_weights = {
-            canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights
-        }
+        target_weights = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
         symbols = approved & (set(target_weights) | set(positions))
         decision_id = decision_id or _decision_id(target)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
             if symbol in open_symbols:
                 continue
-            price = prices.get(symbol) or (
-                positions[symbol].current_price if symbol in positions else 0.0
-            )
+            price = prices.get(symbol) or (positions[symbol].current_price if symbol in positions else 0.0)
             rule = rules.get(symbol)
             if price <= 0 or rule is None:
                 continue
@@ -448,16 +421,12 @@ class TargetToOrderPlanner:
             side = PortfolioOrderSide.BUY if delta > 0 else PortfolioOrderSide.SELL
             quantity = floor_increment(abs(delta), rule.quantity_increment)
             if position is not None and side == PortfolioOrderSide.SELL:
-                available = (
-                    position.qty_available if position.qty_available is not None else position.qty
-                )
+                available = position.qty_available if position.qty_available is not None else position.qty
                 quantity = min(quantity, max(0.0, available))
                 quantity = floor_increment(quantity, rule.quantity_increment)
             if quantity < rule.minimum_order_size:
                 continue
-            if quantity * price < max(
-                self.policy.minimum_order_notional, rule.minimum_order_notional
-            ):
+            if quantity * price < max(self.policy.minimum_order_notional, rule.minimum_order_notional):
                 continue
             orders.append(
                 PortfolioOrderRequest(

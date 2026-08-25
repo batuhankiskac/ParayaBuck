@@ -118,9 +118,7 @@ def crypto_candidate_from_bars(
         correlation = _return_correlation(ordered, btc_bars)
     return CryptoCandidate(
         symbol=canonical,
-        median_dollar_volume=(
-            statistics.median(daily_dollar_volumes.values()) if daily_dollar_volumes else 0.0
-        ),
+        median_dollar_volume=(statistics.median(daily_dollar_volumes.values()) if daily_dollar_volumes else 0.0),
         atr_pct=atr_pct,
         data_completeness=completeness,
         btc_correlation=correlation,
@@ -222,13 +220,9 @@ class CryptoUniverseScanner:
         are never reported as eliminated; pool membership is enforced by
         ``validate_active_crypto_universe`` at load time.
         """
-        if data_timestamp.tzinfo is None or (
-            selection_timestamp is not None and selection_timestamp.tzinfo is None
-        ):
+        if data_timestamp.tzinfo is None or (selection_timestamp is not None and selection_timestamp.tzinfo is None):
             raise ValueError("Scanner timestamps must be timezone-aware (UTC)")
-        managed_pins = tuple(
-            dict.fromkeys(canonical_symbol(item, Market.CRYPTO) for item in pinned_symbols)
-        )
+        managed_pins = tuple(dict.fromkeys(canonical_symbol(item, Market.CRYPTO) for item in pinned_symbols))
         reserved = tuple(dict.fromkeys((*self.config.pinned_symbols, *managed_pins)))
         if len(reserved) > self.config.maximum_stream_symbols:
             raise ValueError("Pinned crypto symbols exceed maximum_stream_symbols")
@@ -300,9 +294,7 @@ class CryptoUniverseScanner:
             ):
                 correlation_penalty = self.config.scanner.high_correlation_penalty
                 diversification = max(0.0, 1.0 - correlation_penalty / 10.0)
-            unknown_penalty = (
-                self.config.scanner.unknown_category_penalty if category == "unknown" else 0.0
-            )
+            unknown_penalty = self.config.scanner.unknown_category_penalty if category == "unknown" else 0.0
             score = (
                 liquidity * 35
                 + item.data_completeness * 25
@@ -320,11 +312,7 @@ class CryptoUniverseScanner:
                 "diversification": round(diversification * 10, 8),
                 "category": category,
                 "spread_source": "unavailable" if item.spread_bps is None else "latest_quote",
-                "btc_correlation": (
-                    "unavailable"
-                    if item.btc_correlation is None
-                    else round(item.btc_correlation, 8)
-                ),
+                "btc_correlation": ("unavailable" if item.btc_correlation is None else round(item.btc_correlation, 8)),
             }
             scored.append((score, symbol, category, breakdown))
 
@@ -349,9 +337,7 @@ class CryptoUniverseScanner:
             )
             breakdowns[symbol] = {
                 **breakdown,
-                "selection_role": (
-                    "configured_pin" if symbol in self.config.pinned_symbols else "managed_position"
-                ),
+                "selection_role": ("configured_pin" if symbol in self.config.pinned_symbols else "managed_position"),
             }
             categories[category] = categories.get(category, 0) + 1
 
@@ -370,9 +356,7 @@ class CryptoUniverseScanner:
         observation_eliminated: dict[str, str] = {}
         observation_categories: dict[str, int] = {}
         for symbol in reserved:
-            category = str(
-                breakdowns[symbol].get("category", CRYPTO_CATEGORIES.get(symbol, "unknown"))
-            )
+            category = str(breakdowns[symbol].get("category", CRYPTO_CATEGORIES.get(symbol, "unknown")))
             observation_categories[category] = observation_categories.get(category, 0) + 1
         for _score, symbol, category, _breakdown in ordered_scored:
             if symbol in observation:
@@ -445,11 +429,7 @@ class CryptoUniverseScanner:
             return "data_completeness"
         if item.median_dollar_volume < self.config.scanner.minimum_median_dollar_volume:
             return "minimum_liquidity"
-        if not (
-            self.config.scanner.minimum_atr_pct
-            <= item.atr_pct
-            <= self.config.scanner.maximum_atr_pct
-        ):
+        if not (self.config.scanner.minimum_atr_pct <= item.atr_pct <= self.config.scanner.maximum_atr_pct):
             return "atr_range"
         if item.spread_bps is not None:
             if not math.isfinite(item.spread_bps) or item.spread_bps < 0:
@@ -476,9 +456,9 @@ def validate_active_crypto_universe(
             return (), "invalid"
         if payload.get("scanner_version") != CryptoUniverseScanner.version:
             return (), "version_mismatch"
-        if config.require_scanner_config_digest_match and payload.get(
-            "config_digest"
-        ) != crypto_scanner_config_digest(config):
+        if config.require_scanner_config_digest_match and payload.get("config_digest") != crypto_scanner_config_digest(
+            config
+        ):
             return (), "digest_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
@@ -514,10 +494,7 @@ def validate_active_crypto_universe(
         }
         if not set(selected).issubset(candidates | set(config.pinned_symbols) | managed_pins):
             return (), "outside_candidate_pool"
-        if any(
-            split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol)
-            for symbol in selected
-        ):
+        if any(split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol) for symbol in selected):
             return (), "invalid"
         # The eligible pool may exceed the stream capacity; the OBSERVATION
         # SET is the streamed subset and must respect the cap.
@@ -533,18 +510,13 @@ def validate_active_crypto_universe(
             return (), "invalid"
         if not set(config.pinned_symbols).issubset(observation):
             return (), "missing_pins"
-        if any(
-            split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol)
-            for symbol in observation
-        ):
+        if any(split_crypto_pair(symbol)[1] != "USD" or is_stablecoin_pair(symbol) for symbol in observation):
             return (), "invalid"
         return observation, "success"
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         # Fail closed, but surface the parse error: a persistent "invalid"
         # status is indistinguishable from rot without the underlying cause.
-        logging.getLogger("parayabuck.universe").warning(
-            "Active crypto universe validation failed: %s", exc
-        )
+        logging.getLogger("parayabuck.universe").warning("Active crypto universe validation failed: %s", exc)
         return (), "invalid"
 
 
@@ -567,9 +539,7 @@ def load_active_crypto_symbols(
         )
     base = (
         selected
-        or tuple(dict.fromkeys((*config.pinned_symbols, *config.trade_symbols)))[
-            : config.maximum_stream_symbols
-        ]
+        or tuple(dict.fromkeys((*config.pinned_symbols, *config.trade_symbols)))[: config.maximum_stream_symbols]
     )
     reserved = tuple(dict.fromkeys((*config.pinned_symbols, *managed)))
     if len(reserved) > config.maximum_stream_symbols:

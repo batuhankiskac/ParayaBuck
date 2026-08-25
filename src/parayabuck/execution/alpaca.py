@@ -67,9 +67,7 @@ def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
     try:
         alerts.emit(kind, message=message, **fields)
     except Exception:
-        log.warning(
-            "Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True
-        )
+        log.warning("Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True)
 
 
 class AmbiguousOrderState(RuntimeError):
@@ -115,9 +113,7 @@ class AlpacaBroker:
         ledger: ExecutionLedger | None = None,
         portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
         portfolio_open_orders: Callable[[], object] | None = None,
-        portfolio_fill_recovered: (
-            Callable[[str, str, float, float, datetime, str, float], None] | None
-        ) = None,
+        portfolio_fill_recovered: (Callable[[str, str, float, float, datetime, str, float], None] | None) = None,
         portfolio_stop_recorded: (Callable[[str, Market, float, str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,
@@ -128,9 +124,7 @@ class AlpacaBroker:
         self._client = TradingClient(api_key, secret_key, paper=paper)
         patch_session_timeout(self._client._session, timeout=15.0)
         self._paper = paper
-        self._peak_state_path = Path("data/runtime") / (
-            "paper_equity_peak.json" if paper else "live_equity_peak.json"
-        )
+        self._peak_state_path = Path("data/runtime") / ("paper_equity_peak.json" if paper else "live_equity_peak.json")
         self._peak_equity = self._load_peak_equity()
         self._asset_cache: dict[str, Any] = {}
         self.manage_external_positions = manage_external_positions
@@ -204,9 +198,7 @@ class AlpacaBroker:
         previous_equity = float(account.last_equity or equity)
         positions: list[PositionSnapshot] = []
         ledger = self.ledger
-        managed_positions = (
-            ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
-        )
+        managed_positions = ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         owned_quantities: dict[str, float] = {}
         portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
         if portfolio_owned_provider is not None:
@@ -220,11 +212,7 @@ class AlpacaBroker:
             unrealized += float(raw.unrealized_pl or 0)
             intraday_unrealized += float(raw.unrealized_intraday_pl or 0)
             asset_class = str(getattr(raw, "asset_class", "")).lower()
-            market = (
-                Market.CRYPTO
-                if "crypto" in asset_class or is_crypto(str(raw.symbol))
-                else Market.EQUITY
-            )
+            market = Market.CRYPTO if "crypto" in asset_class or is_crypto(str(raw.symbol)) else Market.EQUITY
             canonical = canonical_symbol(str(raw.symbol), market)
             managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
@@ -243,9 +231,7 @@ class AlpacaBroker:
                     "reconciliation is required before trading resumes"
                 )
             total_owned = ledger_owned + repo_owned
-            fee_reserve = (
-                float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
-            )
+            fee_reserve = float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
             if (
                 managed is None
                 and total_owned > 1e-12
@@ -272,21 +258,13 @@ class AlpacaBroker:
                     current_price=current_price,
                     market=market,
                     qty_available=(
-                        float(raw.qty_available)
-                        if getattr(raw, "qty_available", None) is not None
-                        else None
+                        float(raw.qty_available) if getattr(raw, "qty_available", None) is not None else None
                     ),
                     ownership=ownership,
                     managed_qty=managed_qty,
-                    stop_price=(
-                        managed.current_stop or managed.original_stop
-                        if managed is not None
-                        else None
-                    ),
+                    stop_price=(managed.current_stop or managed.original_stop if managed is not None else None),
                     initial_risk=(
-                        abs(float(raw.avg_entry_price) - managed.original_stop)
-                        if managed is not None
-                        else None
+                        abs(float(raw.avg_entry_price) - managed.original_stop) if managed is not None else None
                     ),
                 )
             )
@@ -298,9 +276,7 @@ class AlpacaBroker:
             # open order never suppresses ownership drift.
             repo_orders = self._portfolio_open_order_map()
             for canonical, owned_qty, raw_qty, market in drift_candidates:
-                if self._open_order_explains_drift(
-                    canonical, owned_qty, raw_qty, market, repo_orders
-                ):
+                if self._open_order_explains_drift(canonical, owned_qty, raw_qty, market, repo_orders):
                     continue
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: repository managed "
@@ -322,15 +298,9 @@ class AlpacaBroker:
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
-            crypto_buying_power=(
-                float(crypto_buying_power_raw) if crypto_buying_power_raw is not None else cash
-            ),
+            crypto_buying_power=(float(crypto_buying_power_raw) if crypto_buying_power_raw is not None else cash),
             crypto_trading_enabled=crypto_status == "ACTIVE",
-            fees=(
-                ledger.total_fees_for_account(self._account_id or "unknown")
-                if ledger is not None
-                else 0.0
-            ),
+            fees=(ledger.total_fees_for_account(self._account_id or "unknown") if ledger is not None else 0.0),
         )
         self._snapshot_cache = snapshot
         self._snapshot_cached_at = time.monotonic()
@@ -344,8 +314,7 @@ class AlpacaBroker:
         minimum = float(getattr(asset, "min_order_size", None) or 0.000000001)
         quantity_increment = float(getattr(asset, "min_trade_increment", None) or 0.000000001)
         price_increment = float(
-            getattr(asset, "price_increment", None)
-            or (0.01 if market == Market.EQUITY else 0.000001)
+            getattr(asset, "price_increment", None) or (0.01 if market == Market.EQUITY else 0.000001)
         )
         minimum_notional = float(
             getattr(asset, "min_order_notional", None) or (1.0 if market == Market.EQUITY else 10.0)
@@ -366,9 +335,7 @@ class AlpacaBroker:
         the planner skip any symbol with a working order, managed or not,
         because the bot must not stack orders onto an existing flow.
         """
-        orders = self._client.get_orders(
-            GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
-        )
+        orders = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         return {
             canonical_symbol(str(self._field(order, "symbol", "")))
             for order in orders or ()
@@ -409,9 +376,7 @@ class AlpacaBroker:
                 continue
             status = self._normalized_field(broker_order, "status")
             if status == "filled":
-                recovered = self._fill_from_broker_order(
-                    broker_order, client_order_id, broker_order_id
-                )
+                recovered = self._fill_from_broker_order(broker_order, client_order_id, broker_order_id)
                 if recovered is not None:
                     if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
                         fill_recovered(*recovered)
@@ -497,9 +462,7 @@ class AlpacaBroker:
         self, order: Any, client_order_id: str, broker_order_id: str
     ) -> tuple[str, str, float, float, datetime, str, float] | None:
         """Extract the real fill from a filled Alpaca order."""
-        filled_qty = float(
-            self._field(order, "filled_qty", 0) or self._field(order, "cumulative_qty", 0) or 0
-        )
+        filled_qty = float(self._field(order, "filled_qty", 0) or self._field(order, "cumulative_qty", 0) or 0)
         avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
         if filled_qty <= 0 or avg_price <= 0:
             return None
@@ -529,11 +492,7 @@ class AlpacaBroker:
         if provider is None:
             return set()
         orders = provider() or ()
-        return {
-            canonical_symbol(str(getattr(order, "symbol", "")))
-            for order in orders
-            if getattr(order, "symbol", "")
-        }
+        return {canonical_symbol(str(getattr(order, "symbol", ""))) for order in orders if getattr(order, "symbol", "")}
 
     def _portfolio_open_order_map(self) -> dict[str, list[object]]:
         """Open portfolio orders grouped by canonical symbol (SELL legs)."""
@@ -566,9 +525,7 @@ class AlpacaBroker:
         else — a manual order, a BUY, or an under-sized SELL — keeps the
         drift fail-closed.
         """
-        fee_reserve = (
-            float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
-        )
+        fee_reserve = float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE) if market == Market.CRYPTO else 1.0
         shortfall = max(0.0, owned_qty * fee_reserve - abs(raw_qty))
         if shortfall <= 1e-12:
             return False
@@ -592,10 +549,7 @@ class AlpacaBroker:
         if quantity < Decimal(str(rules.minimum_order_size)):
             _emit_alert(
                 "order_rejected",
-                message=(
-                    f"Portfolio order below minimum size: {order.symbol} "
-                    f"client_order_id={order.client_order_id}"
-                ),
+                message=(f"Portfolio order below minimum size: {order.symbol} client_order_id={order.client_order_id}"),
                 symbol=order.symbol,
                 market=order.market.value,
                 client_order_id=order.client_order_id,
@@ -606,8 +560,7 @@ class AlpacaBroker:
             _emit_alert(
                 "order_rejected",
                 message=(
-                    f"Portfolio order below minimum notional: {order.symbol} "
-                    f"client_order_id={order.client_order_id}"
+                    f"Portfolio order below minimum notional: {order.symbol} client_order_id={order.client_order_id}"
                 ),
                 symbol=order.symbol,
                 market=order.market.value,
@@ -641,16 +594,13 @@ class AlpacaBroker:
             _emit_alert(
                 "ambiguous_order",
                 message=(
-                    f"Alpaca order response has no id for "
-                    f"client_order_id={order.client_order_id} symbol={order.symbol}"
+                    f"Alpaca order response has no id for client_order_id={order.client_order_id} symbol={order.symbol}"
                 ),
                 symbol=order.symbol,
                 market=order.market.value,
                 client_order_id=order.client_order_id,
             )
-            raise AmbiguousOrderState(
-                f"Alpaca order response has no id for {order.client_order_id}"
-            )
+            raise AmbiguousOrderState(f"Alpaca order response has no id for {order.client_order_id}")
         return broker_order_id
 
     def reconcile(self) -> None:
@@ -667,13 +617,9 @@ class AlpacaBroker:
         account = self.account()
         manage_external = bool(getattr(self, "manage_external_positions", True))
         portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
-        portfolio_owned = (
-            set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
-        )
+        portfolio_owned = set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
         ledger = self.ledger
-        managed = (
-            ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
-        )
+        managed = ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
         fill_activities_reconciled = True
         if ledger is not None:
             fill_activities_reconciled = self._reconcile_fill_activity_fees()
@@ -681,13 +627,9 @@ class AlpacaBroker:
             # the snapshot taken above. Refresh it before protection checks.
             managed = ledger.managed_for_account(self._account_id or "unknown")
         broker_symbols = {
-            canonical_symbol(position.symbol, position.market)
-            for position in account.positions
-            if not position.is_flat
+            canonical_symbol(position.symbol, position.market) for position in account.positions if not position.is_flat
         }
-        if portfolio_owned and (
-            flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)
-        ):
+        if portfolio_owned and (flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)):
             # A portfolio symbol with no broker position is stale: a missed
             # stop fill (stream downtime) or a manual sell would otherwise
             # leave the repository claiming managed ownership of a position
@@ -728,9 +670,7 @@ class AlpacaBroker:
             # ledger lot: protect them with an emergency-exit stop so the
             # position cannot ride to zero unguarded. Equity portfolio
             # positions stay unprotected (their risk model is the overlay).
-            portfolio_owned_position = (
-                position.market == Market.CRYPTO and symbol in portfolio_owned
-            )
+            portfolio_owned_position = position.market == Market.CRYPTO and symbol in portfolio_owned
             if ownership is None and not portfolio_owned_position and not manage_external:
                 log.info("External position left unchanged during reconciliation: %s", symbol)
                 continue
@@ -740,10 +680,7 @@ class AlpacaBroker:
                 minimum_fee_adjusted_qty = ownership.owned_qty
                 if position.market == Market.CRYPTO:
                     minimum_fee_adjusted_qty *= float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                if (
-                    position.market == Market.CRYPTO
-                    and abs(position.qty) + tolerance < minimum_fee_adjusted_qty
-                ):
+                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < minimum_fee_adjusted_qty:
                     if ledger is not None:
                         ledger.mark_manual_intervention(
                             self._account_id or "unknown",
@@ -752,14 +689,10 @@ class AlpacaBroker:
                     raise ProtectionReconciliationError(
                         f"Broker quantity is below managed ledger quantity for {symbol}"
                     )
-                if (
-                    position.market == Market.CRYPTO
-                    and abs(position.qty) + tolerance < ownership.owned_qty
-                ):
+                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < ownership.owned_qty:
                     broker_qty_is_fee_adjusted = True
                     log.info(
-                        "Accepted fee-adjusted crypto ownership: symbol=%s ledger_qty=%s "
-                        "broker_qty=%s",
+                        "Accepted fee-adjusted crypto ownership: symbol=%s ledger_qty=%s broker_qty=%s",
                         symbol,
                         ownership.owned_qty,
                         abs(position.qty),
@@ -781,15 +714,9 @@ class AlpacaBroker:
                     stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
                     total_qty = abs(position.qty)
                 stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
-            available_qty = (
-                abs(position.qty_available) if position.qty_available is not None else total_qty
-            )
+            available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
             required_qty = total_qty
-            if (
-                position.market == Market.CRYPTO
-                and position.qty_available == 0
-                and not broker_qty_is_fee_adjusted
-            ):
+            if position.market == Market.CRYPTO and position.qty_available == 0 and not broker_qty_is_fee_adjusted:
                 # Alpaca may deduct the taker fee from the acquired asset. A
                 # stop can therefore reserve every sellable unit while being
                 # up to 0.25% smaller than the raw position quantity. Only use
@@ -798,20 +725,11 @@ class AlpacaBroker:
                 required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
                 required_qty = self._round_qty_down(position.symbol, required_qty)
             if open_orders is None and get_orders is not None:
-                open_orders = get_orders(
-                    GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
-                )
+                open_orders = get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
             # Positional open_orders: test doubles monkeypatch this method
             # with positional-only lambdas and must keep working.
-            has_protection = self._has_protective_order(
-                position.symbol, is_long, required_qty, open_orders
-            )
-            if (
-                not has_protection
-                and ownership is not None
-                and ownership.broker_order_id
-                and available_qty <= 0
-            ):
+            has_protection = self._has_protective_order(position.symbol, is_long, required_qty, open_orders)
+            if not has_protection and ownership is not None and ownership.broker_order_id and available_qty <= 0:
                 # Alpaca's open-orders endpoint can return only the active
                 # take-profit leg of a filled bracket. Its paired stop remains
                 # HELD and is visible only when the filled parent is fetched
@@ -853,9 +771,7 @@ class AlpacaBroker:
                 # must be cancelled and broker-confirmed before replacement.
                 if mismatch == "over":
                     protected_qty = float(getattr(self, "_last_protected_qty", 0.0))
-                    if position.market == Market.CRYPTO and protected_qty <= total_qty + max(
-                        1e-9, total_qty * 1e-8
-                    ):
+                    if position.market == Market.CRYPTO and protected_qty <= total_qty + max(1e-9, total_qty * 1e-8):
                         # Fee-reserve band: ``required`` was reduced to ~99.75%
                         # of the position when nothing was sellable
                         # (qty_available == 0), so the engine's OWN full-size
@@ -927,9 +843,7 @@ class AlpacaBroker:
                             self._account_id or "unknown",
                             ownership.entry_client_order_id,
                         )
-                raise ProtectionReconciliationError(
-                    f"Could not restore managed protection for {position.symbol}"
-                )
+                raise ProtectionReconciliationError(f"Could not restore managed protection for {position.symbol}")
             if ownership is not None and ledger is not None:
                 ledger.set_protection_state(
                     self._account_id or "unknown",
@@ -1055,9 +969,7 @@ class AlpacaBroker:
         except Exception as exc:
             log.warning("Fill activity fee reconciliation deferred: %s", exc)
             return False
-        activities.sort(
-            key=lambda item: str(item.get("transaction_time") or item.get("date") or "")
-        )
+        activities.sort(key=lambda item: str(item.get("transaction_time") or item.get("date") or ""))
         recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
         # Watermark tracks only activities that were actually processed: an
         # activity skipped by a transient parse failure must not be
@@ -1070,11 +982,7 @@ class AlpacaBroker:
                 fee = abs(float(fee_raw or 0))
             except (TypeError, ValueError):
                 continue
-            timestamp_raw = (
-                activity.get("transaction_time")
-                or activity.get("date")
-                or datetime.now(UTC).isoformat()
-            )
+            timestamp_raw = activity.get("transaction_time") or activity.get("date") or datetime.now(UTC).isoformat()
             try:
                 occurred_at = datetime.fromisoformat(str(timestamp_raw))
                 if occurred_at.tzinfo is None:
@@ -1093,14 +1001,7 @@ class AlpacaBroker:
                 price = 0.0
             # Recover an exit that filled while TradingStream was offline.
             # A stable activity id makes this idempotent across reconciliations.
-            if (
-                activity_id
-                and broker_order_id
-                and symbol
-                and side == "sell"
-                and qty > 0
-                and price > 0
-            ):
+            if activity_id and broker_order_id and symbol and side == "sell" and qty > 0 and price > 0:
                 market = Market.CRYPTO if "/" in symbol else Market.EQUITY
                 # One ledger row per broker order: a single order can produce
                 # several fill activities (partial fills, fee legs), and the
@@ -1115,9 +1016,7 @@ class AlpacaBroker:
                 # brick engine startup.
                 order_lookup = getattr(ledger, "order_for_broker_id", None)
                 existing_client = (
-                    order_lookup(self._account_id or "unknown", broker_order_id)
-                    if order_lookup is not None
-                    else None
+                    order_lookup(self._account_id or "unknown", broker_order_id) if order_lookup is not None else None
                 )
                 if existing_client is not None:
                     log.info(
@@ -1148,14 +1047,7 @@ class AlpacaBroker:
                             activity_id=activity_id,
                         )
                     )
-            if (
-                activity_id
-                and broker_order_id
-                and symbol
-                and side == "buy"
-                and qty > 0
-                and price > 0
-            ):
+            if activity_id and broker_order_id and symbol and side == "buy" and qty > 0 and price > 0:
                 recovered_buy_fills.setdefault(broker_order_id, []).append(
                     (qty, price, occurred_at, activity_id, symbol)
                 )
@@ -1170,8 +1062,7 @@ class AlpacaBroker:
                 applied_watermark = occurred_at
             if applied:
                 log.info(
-                    "Fee activity applied: broker_order_id=%s fee=%s "
-                    "recovery_action=fill_activity_reconciliation",
+                    "Fee activity applied: broker_order_id=%s fee=%s recovery_action=fill_activity_reconciliation",
                     activity.get("order_id"),
                     fee,
                 )
@@ -1236,9 +1127,7 @@ class AlpacaBroker:
         get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
         if get_by_client_id is None or not position.exit_client_order_id:
             ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise ProtectionReconciliationError(
-                f"Cannot recover crypto exit for {position.canonical_symbol}"
-            )
+            raise ProtectionReconciliationError(f"Cannot recover crypto exit for {position.canonical_symbol}")
         try:
             order = get_by_client_id(position.exit_client_order_id)
         except Exception as exc:
@@ -1258,11 +1147,7 @@ class AlpacaBroker:
         qty = float(self._field(order, "qty", position.owned_qty) or position.owned_qty)
         filled_qty = float(self._field(order, "filled_qty", 0) or 0)
         average = self._field(order, "filled_avg_price")
-        role = (
-            OrderRole.TAKE_PROFIT
-            if "-target-exit" in position.exit_client_order_id
-            else OrderRole.EMERGENCY_EXIT
-        )
+        role = OrderRole.TAKE_PROFIT if "-target-exit" in position.exit_client_order_id else OrderRole.EMERGENCY_EXIT
         if filled_qty > 0 and average is not None:
             ledger.apply_execution_event(
                 ExecutionEvent(
@@ -1284,27 +1169,19 @@ class AlpacaBroker:
             ledger.set_exit_state(
                 self._account_id,
                 position.entry_client_order_id,
-                target_state=(
-                    "target_exit_filled"
-                    if role == OrderRole.TAKE_PROFIT
-                    else "emergency_exit_filled"
-                ),
+                target_state=("target_exit_filled" if role == OrderRole.TAKE_PROFIT else "emergency_exit_filled"),
             )
             return
         if state in {OrderState.CANCELLED, OrderState.REJECTED, OrderState.EXPIRED}:
             self._reprotect_after_terminal_exit(position)
             return
         ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-        raise ProtectionReconciliationError(
-            f"Crypto exit remains {state.value} for {position.canonical_symbol}"
-        )
+        raise ProtectionReconciliationError(f"Crypto exit remains {state.value} for {position.canonical_symbol}")
 
     def _reprotect_after_terminal_exit(self, position: ManagedPosition) -> None:
         ledger = self.ledger
         if ledger is None:
-            raise ProtectionReconciliationError(
-                f"Cannot re-protect {position.canonical_symbol}: no ledger"
-            )
+            raise ProtectionReconciliationError(f"Cannot re-protect {position.canonical_symbol}: no ledger")
         current = next(
             (
                 item
@@ -1322,9 +1199,7 @@ class AlpacaBroker:
         )
         if not resolution.verified or resolution.available_qty <= 0:
             ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
-            raise ProtectionReconciliationError(
-                f"Remaining exit quantity is unverified for {current.canonical_symbol}"
-            )
+            raise ProtectionReconciliationError(f"Remaining exit quantity is unverified for {current.canonical_symbol}")
         client_id = f"{current.entry_client_order_id}-stop-reprotect"
         log.warning(
             "Re-protection requested: market=crypto symbol=%s entry_client_order_id=%s "
@@ -1347,8 +1222,7 @@ class AlpacaBroker:
             if self._has_protective_order(current.canonical_symbol, True, resolution.available_qty):
                 ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
                 raise AmbiguousOrderState(
-                    f"Protective stop exists while re-protection failed for "
-                    f"{current.canonical_symbol}"
+                    f"Protective stop exists while re-protection failed for {current.canonical_symbol}"
                 )
             intent = OrderIntent(
                 current.source_signal_id,
@@ -1398,8 +1272,7 @@ class AlpacaBroker:
             clear_exit_order=True,
         )
         log.warning(
-            "Re-protection active: market=crypto symbol=%s entry_client_order_id=%s "
-            "order_client_id=%s managed_qty=%s",
+            "Re-protection active: market=crypto symbol=%s entry_client_order_id=%s order_client_id=%s managed_qty=%s",
             current.canonical_symbol,
             current.entry_client_order_id,
             client_id,
@@ -1423,9 +1296,7 @@ class AlpacaBroker:
             if (
                 side == closing_side
                 and status not in {"canceled", "expired", "filled", "rejected"}
-                and (
-                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
-                )
+                and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
             ):
                 # Only the still-working remainder protects the position; an
                 # already-filled portion must never be double-counted.
@@ -1448,9 +1319,7 @@ class AlpacaBroker:
             )
             if same_symbol(str(self._field(parent, "symbol", symbol)), symbol):
                 protected += protective_qty(parent)
-        matches, self._last_protection_mismatch = self._protection_matches(
-            protected, Decimal(str(required_qty))
-        )
+        matches, self._last_protection_mismatch = self._protection_matches(protected, Decimal(str(required_qty)))
         self._last_protected_qty = float(protected)
         return matches
 
@@ -1561,9 +1430,7 @@ class AlpacaBroker:
             try:
                 # Alpaca's position endpoint keys crypto by the legacy
                 # no-slash form (``BTCUSD``); the canonical ``BTC/USD`` 404s.
-                position: Any = self._client.get_open_position(
-                    normalize_symbol(symbol).asset_lookup_symbol
-                )
+                position: Any = self._client.get_open_position(normalize_symbol(symbol).asset_lookup_symbol)
                 saw_position = True
                 raw_available = (
                     position.get("qty_available")
@@ -1572,9 +1439,7 @@ class AlpacaBroker:
                 )
                 if raw_available is None:
                     raw_available = (
-                        position.get("qty", 0)
-                        if isinstance(position, dict)
-                        else getattr(position, "qty", 0)
+                        position.get("qty", 0) if isinstance(position, dict) else getattr(position, "qty", 0)
                     )
                 available = abs(Decimal(str(raw_available or 0)))
                 qty = min(requested, available)
@@ -1646,9 +1511,7 @@ class AlpacaBroker:
                 qty_number = int(qty_decimal)
             else:
                 # Alpaca supports fractional equity stops only with DAY time-in-force.
-                qty_number = float(
-                    qty_decimal.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN)
-                )
+                qty_number = float(qty_decimal.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN))
                 equity_tif = TimeInForce.DAY
         if qty_number <= 0 or stop_price <= 0:
             log.warning(
@@ -1660,17 +1523,13 @@ class AlpacaBroker:
             return None
         try:
             if market == Market.CRYPTO:
-                offset = Decimal(
-                    str(getattr(self, "crypto_stop_limit_offset_bps", 25.0))
-                ) / Decimal(10000)
+                offset = Decimal(str(getattr(self, "crypto_stop_limit_offset_bps", 25.0))) / Decimal(10000)
                 stop_decimal = Decimal(str(stop_price))
                 distance_steps = max(
                     1,
                     int((stop_decimal * offset / step).to_integral_value(rounding=ROUND_CEILING)),
                 )
-                limit_decimal = stop_decimal + (
-                    -distance_steps * step if position_is_long else distance_steps * step
-                )
+                limit_decimal = stop_decimal + (-distance_steps * step if position_is_long else distance_steps * step)
                 limit_price = float(limit_decimal)
                 if limit_price <= 0:
                     log.warning(
@@ -1835,9 +1694,7 @@ class AlpacaBroker:
                 if after_qty <= expected + tolerance:
                     price = float(self._field(order, "filled_avg_price", 0) or 0)
                     if price <= 0:
-                        raise AmbiguousOrderState(
-                            f"Emergency exit fill price is unverified for {intent.symbol}"
-                        )
+                        raise AmbiguousOrderState(f"Emergency exit fill price is unverified for {intent.symbol}")
                     return (
                         Fill(
                             exit_client_order_id,
@@ -1853,9 +1710,7 @@ class AlpacaBroker:
                     f"Emergency exit filled but position quantity is unverified for {intent.symbol}"
                 )
             if status in {"rejected", "canceled", "cancelled", "expired"}:
-                raise RuntimeError(
-                    f"Emergency exit {status} for exact managed quantity {intent.symbol}"
-                )
+                raise RuntimeError(f"Emergency exit {status} for exact managed quantity {intent.symbol}")
             time.sleep(0.25)
         raise AmbiguousOrderState(f"Emergency exit timed out for {intent.symbol}")
 
@@ -1882,8 +1737,7 @@ class AlpacaBroker:
         lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
         if not lock.acquire(blocking=False):
             log.warning(
-                "Crypto exit observation deferred because symbol lock is busy: "
-                "symbol=%s source=%s observed_at=%s",
+                "Crypto exit observation deferred because symbol lock is busy: symbol=%s source=%s observed_at=%s",
                 symbol,
                 observation.source,
                 observation.timestamp.isoformat(),
@@ -1911,12 +1765,8 @@ class AlpacaBroker:
                         item.target_state,
                     )
                     if not item.protective_stop_broker_order_id:
-                        ledger.mark_manual_intervention(
-                            self._account_id, item.entry_client_order_id
-                        )
-                        raise AmbiguousOrderState(
-                            f"Intrabar stop/target order is unknown for {symbol}"
-                        )
+                        ledger.mark_manual_intervention(self._account_id, item.entry_client_order_id)
+                        raise AmbiguousOrderState(f"Intrabar stop/target order is unknown for {symbol}")
                     stop = self._client.get_order_by_id(item.protective_stop_broker_order_id)
                     stop_status = self._normalized_field(stop, "status")
                     if stop_status == "filled":
@@ -1929,9 +1779,7 @@ class AlpacaBroker:
                             self._cancel_stop_then_exit(claimed, "intrabar_stop")
                         return "stop"
                     ledger.mark_manual_intervention(self._account_id, item.entry_client_order_id)
-                    raise AmbiguousOrderState(
-                        f"Intrabar stop/target path unresolved for {symbol}: {stop_status}"
-                    )
+                    raise AmbiguousOrderState(f"Intrabar stop/target path unresolved for {symbol}: {stop_status}")
                 if target_seen:
                     reason = "target"
                 else:
@@ -1945,8 +1793,7 @@ class AlpacaBroker:
                             stop_state="triggered_unfilled",
                         )
                         log.warning(
-                            "Crypto stop triggered but remains unfilled: market=crypto "
-                            "symbol=%s source=%s",
+                            "Crypto stop triggered but remains unfilled: market=crypto symbol=%s source=%s",
                             symbol,
                             observation.source,
                         )
@@ -1975,15 +1822,11 @@ class AlpacaBroker:
     def _cancel_stop_then_exit(self, position: ManagedPosition, reason: str) -> None:
         ledger = self.ledger
         if ledger is None:
-            raise AmbiguousOrderState(
-                f"Cannot cancel stop for {position.canonical_symbol}: no ledger"
-            )
+            raise AmbiguousOrderState(f"Cannot cancel stop for {position.canonical_symbol}: no ledger")
         stop_id = position.protective_stop_broker_order_id
         if not stop_id:
             ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(
-                f"Protective stop id is unknown for {position.canonical_symbol}"
-            )
+            raise AmbiguousOrderState(f"Protective stop id is unknown for {position.canonical_symbol}")
         try:
             self._client.cancel_order_by_id(stop_id)
         except Exception as exc:
@@ -2004,8 +1847,7 @@ class AlpacaBroker:
                 ledger.apply_execution_event(
                     ExecutionEvent(
                         self._account_id,
-                        position.protective_stop_client_order_id
-                        or f"{position.entry_client_order_id}-stop",
+                        position.protective_stop_client_order_id or f"{position.entry_client_order_id}-stop",
                         stop_id,
                         None,
                         OrderRole.PROTECTIVE_STOP,
@@ -2028,8 +1870,7 @@ class AlpacaBroker:
         if stop_status not in {"canceled", "cancelled", "expired"}:
             ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
             raise AmbiguousOrderState(
-                f"Stop cancellation is unconfirmed for {position.canonical_symbol}: "
-                f"{stop_status or 'unknown'}"
+                f"Stop cancellation is unconfirmed for {position.canonical_symbol}: {stop_status or 'unknown'}"
             )
         ledger.set_exit_state(
             self._account_id,
@@ -2043,9 +1884,7 @@ class AlpacaBroker:
         )
         if qty <= 0:
             ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(
-                f"No verified managed quantity available for {position.canonical_symbol}"
-            )
+            raise AmbiguousOrderState(f"No verified managed quantity available for {position.canonical_symbol}")
         suffix = "target-exit" if reason == "target" else "emergency-exit"
         client_id = f"{position.entry_client_order_id}-{suffix}"
         result = self._submit_with_recovery(
@@ -2065,9 +1904,7 @@ class AlpacaBroker:
         ledger.set_exit_state(
             self._account_id,
             position.entry_client_order_id,
-            target_state="target_exit_submitted"
-            if reason == "target"
-            else "emergency_exit_submitted",
+            target_state="target_exit_submitted" if reason == "target" else "emergency_exit_submitted",
             exit_client_order_id=client_id,
             exit_broker_order_id=broker_id,
         )
@@ -2105,9 +1942,7 @@ class AlpacaBroker:
             ledger.set_exit_state(
                 self._account_id,
                 position.entry_client_order_id,
-                target_state="target_exit_filled"
-                if reason == "target"
-                else "emergency_exit_filled",
+                target_state="target_exit_filled" if reason == "target" else "emergency_exit_filled",
             )
             return
         if state == OrderState.PARTIALLY_FILLED:
@@ -2150,9 +1985,7 @@ class AlpacaBroker:
                 ledger.set_exit_state(
                     self._account_id,
                     position.entry_client_order_id,
-                    target_state="target_exit_filled"
-                    if reason == "target"
-                    else "emergency_exit_filled",
+                    target_state="target_exit_filled" if reason == "target" else "emergency_exit_filled",
                 )
                 return
             if terminal_state not in {
@@ -2175,9 +2008,7 @@ class AlpacaBroker:
     def _poll_stop_cancellation(self, position: Any, stop_id: str) -> tuple[Any, str]:
         ledger = self.ledger
         if ledger is None:
-            raise AmbiguousOrderState(
-                f"Stop cancellation is unverified for {position.canonical_symbol}: no ledger"
-            )
+            raise AmbiguousOrderState(f"Stop cancellation is unverified for {position.canonical_symbol}: no ledger")
         deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
         last_stop: Any = None
         last_status = ""
@@ -2189,16 +2020,11 @@ class AlpacaBroker:
                 filled_qty = float(self._field(last_stop, "filled_qty", 0) or 0)
                 filled_price = float(self._field(last_stop, "filled_avg_price", 0) or 0)
                 if filled_qty > 0 and filled_price > 0:
-                    state = (
-                        OrderState.FILLED
-                        if last_status == "filled"
-                        else OrderState.PARTIALLY_FILLED
-                    )
+                    state = OrderState.FILLED if last_status == "filled" else OrderState.PARTIALLY_FILLED
                     ledger.apply_execution_event(
                         ExecutionEvent(
                             self._account_id,
-                            position.protective_stop_client_order_id
-                            or f"{position.entry_client_order_id}-stop",
+                            position.protective_stop_client_order_id or f"{position.entry_client_order_id}-stop",
                             stop_id,
                             None,
                             OrderRole.PROTECTIVE_STOP,
@@ -2238,8 +2064,7 @@ class AlpacaBroker:
             time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.01))
         ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
         raise AmbiguousOrderState(
-            f"Stop cancellation is unconfirmed for {position.canonical_symbol}: "
-            f"{last_status or 'lookup_failed'}"
+            f"Stop cancellation is unconfirmed for {position.canonical_symbol}: {last_status or 'lookup_failed'}"
         )
 
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
@@ -2284,10 +2109,7 @@ class AlpacaBroker:
                     )
             _emit_alert(
                 "ambiguous_order",
-                message=(
-                    f"Broker write outcome unknown for client_order_id={client_order_id}: "
-                    f"{submit_exc}"
-                ),
+                message=(f"Broker write outcome unknown for client_order_id={client_order_id}: {submit_exc}"),
                 client_order_id=client_order_id,
                 reason="broker_write_outcome_unknown",
             )
@@ -2296,14 +2118,10 @@ class AlpacaBroker:
             ) from submit_exc
 
     def _has_open_order(self, symbol: str) -> bool:
-        orders = self._client.get_orders(
-            GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
-        )
+        orders = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True))
         if not orders:
             return False
-        return any(
-            same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders
-        )
+        return any(same_symbol(str(self._field(order, "symbol", symbol)), symbol) for order in orders)
 
     def _has_protective_order(
         self,
@@ -2324,15 +2142,11 @@ class AlpacaBroker:
             ),
             start=Decimal(0),
         )
-        matches, self._last_protection_mismatch = self._protection_matches(
-            protected, Decimal(str(required_qty))
-        )
+        matches, self._last_protection_mismatch = self._protection_matches(protected, Decimal(str(required_qty)))
         self._last_protected_qty = float(protected)
         return matches
 
-    def _open_protective_orders(
-        self, symbol: str, position_is_long: bool, open_orders: Any = None
-    ) -> list[Any]:
+    def _open_protective_orders(self, symbol: str, position_is_long: bool, open_orders: Any = None) -> list[Any]:
         if open_orders is None:
             orders: Any = self._client.get_orders(
                 GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
@@ -2349,15 +2163,9 @@ class AlpacaBroker:
         canonical = canonical_symbol(symbol)
         ledger = self.ledger
         account_id = getattr(self, "_account_id", "") or "unknown"
-        legacy_external_management = ledger is None and bool(
-            getattr(self, "manage_external_positions", True)
-        )
-        managed_order_ids = (
-            ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
-        )
-        managed_client_ids = (
-            ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
-        )
+        legacy_external_management = ledger is None and bool(getattr(self, "manage_external_positions", True))
+        managed_order_ids = ledger.managed_order_ids(account_id, canonical) if ledger is not None else set()
+        managed_client_ids = ledger.managed_client_order_ids(account_id, canonical) if ledger is not None else set()
 
         def is_owned(order: Any, inherited: bool = False) -> bool:
             order_id = str(self._field(order, "id", "") or "")
@@ -2394,9 +2202,7 @@ class AlpacaBroker:
                     "replaced",
                     "stopped",
                 }
-                and (
-                    stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"}
-                )
+                and (stop_price is not None or order_type in {"stop", "stop_limit", "trailing_stop"})
             ):
                 protective.append(order)
                 return
@@ -2433,15 +2239,11 @@ class AlpacaBroker:
                 if last_status == "filled":
                     _emit_alert(
                         "ambiguous_order",
-                        message=(
-                            f"Protective order filled while cancellation was pending for {symbol}"
-                        ),
+                        message=(f"Protective order filled while cancellation was pending for {symbol}"),
                         symbol=symbol,
                         reason="protective_order_filled_during_cancel",
                     )
-                    raise AmbiguousOrderState(
-                        f"Protective order filled while cancellation was pending for {symbol}"
-                    )
+                    raise AmbiguousOrderState(f"Protective order filled while cancellation was pending for {symbol}")
             except AmbiguousOrderState:
                 raise
             except Exception:
@@ -2451,27 +2253,19 @@ class AlpacaBroker:
             time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.25))
         _emit_alert(
             "ambiguous_order",
-            message=(
-                f"Protective order cancellation is unconfirmed for {symbol}: "
-                f"{last_status or 'lookup_failed'}"
-            ),
+            message=(f"Protective order cancellation is unconfirmed for {symbol}: {last_status or 'lookup_failed'}"),
             symbol=symbol,
             reason="cancel_unconfirmed",
             last_status=last_status or "lookup_failed",
         )
         raise AmbiguousOrderState(
-            f"Protective order cancellation is unconfirmed for {symbol}: "
-            f"{last_status or 'lookup_failed'}"
+            f"Protective order cancellation is unconfirmed for {symbol}: {last_status or 'lookup_failed'}"
         )
 
     @staticmethod
     def _protection_matches(protected: Decimal, required: Decimal) -> tuple[bool, str]:
         tolerance = max(Decimal("0.000000001"), required * Decimal("0.000000001"))
-        mismatch = (
-            "missing"
-            if protected == 0
-            else ("under" if protected < required - tolerance else "over")
-        )
+        mismatch = "missing" if protected == 0 else ("under" if protected < required - tolerance else "over")
         return abs(protected - required) <= tolerance, mismatch
 
     def _normalized_field(self, value: Any, name: str) -> str:

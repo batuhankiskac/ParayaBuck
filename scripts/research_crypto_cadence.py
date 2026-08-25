@@ -98,9 +98,7 @@ def _per_year_breakdown(result) -> dict[str, dict[str, int]]:
     years: dict[int, dict[str, int]] = {}
     for rebalance in result.rebalances:
         year = rebalance.decision_timestamp.year
-        years.setdefault(year, {"decisions": 0, "orders": 0, "fills": 0, "trades": 0})[
-            "decisions"
-        ] += 1
+        years.setdefault(year, {"decisions": 0, "orders": 0, "fills": 0, "trades": 0})["decisions"] += 1
     seen_orders: set[str] = set()
     for fill in result.fills:
         year = fill.timestamp.year
@@ -110,9 +108,7 @@ def _per_year_breakdown(result) -> dict[str, dict[str, int]]:
             years[year]["orders"] += 1
     for timestamp, _symbol, _pnl in result.closed_position_events:
         year = timestamp.year
-        years.setdefault(year, {"decisions": 0, "orders": 0, "fills": 0, "trades": 0})[
-            "trades"
-        ] += 1
+        years.setdefault(year, {"decisions": 0, "orders": 0, "fills": 0, "trades": 0})["trades"] += 1
     return {str(year): years[year] for year in sorted(years)}
 
 
@@ -145,10 +141,7 @@ def _daily_exposures(result, bars_1d: list[Bar]) -> list[tuple[str, float]]:
                 positions[fill.symbol] = max(0.0, positions.get(fill.symbol, 0.0) - fill.qty)
                 if positions[fill.symbol] <= 1e-12:
                     positions.pop(fill.symbol, None)
-        value = sum(
-            quantity * close_at.get(symbol, {}).get(ts, 0.0)
-            for symbol, quantity in positions.items()
-        )
+        value = sum(quantity * close_at.get(symbol, {}).get(ts, 0.0) for symbol, quantity in positions.items())
         exposure = value / equity if equity > 0 else 0.0
         exposures.append((ts.isoformat(), exposure))
     return exposures
@@ -163,14 +156,10 @@ def _capital_utilization(result, bars_1d: list[Bar], start: datetime) -> dict[st
         "avg_exposure": round(statistics.fmean(values), 4),
         "median_exposure": round(statistics.median(values), 4),
         "pct_days_positive_exposure": round(sum(1 for v in values if v > 1e-9) / len(values), 4),
-        "pct_days_near_max": round(
-            sum(1 for v in values if v >= NEAR_MAX_EXPOSURE) / len(values), 4
-        ),
+        "pct_days_near_max": round(sum(1 for v in values if v >= NEAR_MAX_EXPOSURE) / len(values), 4),
         "pct_days_idle": round(sum(1 for v in values if v < 1e-9) / len(values), 4),
         "time_to_first_deployment_days": (
-            round((datetime.fromisoformat(deployed) - start).total_seconds() / 86_400, 2)
-            if deployed
-            else None
+            round((datetime.fromisoformat(deployed) - start).total_seconds() / 86_400, 2) if deployed else None
         ),
         "near_max_threshold": NEAR_MAX_EXPOSURE,
         "note": (
@@ -242,9 +231,7 @@ def _churn_diagnostics(result) -> dict[str, object]:
     for symbol in by_symbol:
         by_symbol[symbol].sort(key=lambda item: (item[1], item[2]))
     # Position-level round trips: interval closed, same symbol re-opened <= 7d later.
-    round_trips_pos: list[
-        tuple[tuple[str, datetime, datetime], tuple[str, datetime, datetime]]
-    ] = []
+    round_trips_pos: list[tuple[tuple[str, datetime, datetime], tuple[str, datetime, datetime]]] = []
     for symbol, series in by_symbol.items():
         for index in range(len(series) - 1):
             current, following = series[index], series[index + 1]
@@ -319,9 +306,7 @@ def _churn_diagnostics(result) -> dict[str, object]:
             else 0.0
         ),
         "reversal_cost": round(reversal_cost, 2),
-        "reversal_cost_pct_of_total_cost": round(reversal_cost / total_cost, 4)
-        if total_cost > 0
-        else 0.0,
+        "reversal_cost_pct_of_total_cost": round(reversal_cost / total_cost, 4) if total_cost > 0 else 0.0,
         "ab_a_flip_count": len(flips),
         "flip_cost": round(flip_cost, 2),
         "top_flip_pairs": top_flip_pairs,
@@ -351,8 +336,7 @@ def _baseline_avoidance(fills_fast, baseline_fills) -> dict[str, object]:
     """
     block_seconds = 168 * 3600
     baseline_keys = {
-        (int(fill.timestamp.timestamp()) // block_seconds, fill.symbol, fill.side.value)
-        for fill in baseline_fills
+        (int(fill.timestamp.timestamp()) // block_seconds, fill.symbol, fill.side.value) for fill in baseline_fills
     }
     totals = {"fills": len(fills_fast), "trades": 0}
     avoided = {"fills": 0, "trades": 0}
@@ -371,12 +355,8 @@ def _baseline_avoidance(fills_fast, baseline_fills) -> dict[str, object]:
         else:
             quantities[fill.symbol] = max(0.0, quantities.get(fill.symbol, 0.0) - fill.qty)
     return {
-        "pct_fills_avoided_by_168h": round(avoided["fills"] / totals["fills"], 4)
-        if totals["fills"]
-        else 0.0,
-        "pct_trades_avoided_by_168h": round(avoided["trades"] / totals["trades"], 4)
-        if totals["trades"]
-        else 0.0,
+        "pct_fills_avoided_by_168h": round(avoided["fills"] / totals["fills"], 4) if totals["fills"] else 0.0,
+        "pct_trades_avoided_by_168h": round(avoided["trades"] / totals["trades"], 4) if totals["trades"] else 0.0,
         "fills_total": totals["fills"],
         "fills_avoided": avoided["fills"],
         "trades_total": totals["trades"],
@@ -397,12 +377,8 @@ def _band_analysis(result) -> dict[str, object]:
         "orders": len(order_ids),
         "fills": len(result.fills),
         "trades": len(result.closed_position_events),
-        "order_ratio": round(len(order_ids) / result.rebalance_count, 4)
-        if result.rebalance_count
-        else 0.0,
-        "fill_ratio": round(len(result.fills) / result.rebalance_count, 4)
-        if result.rebalance_count
-        else 0.0,
+        "order_ratio": round(len(order_ids) / result.rebalance_count, 4) if result.rebalance_count else 0.0,
+        "fill_ratio": round(len(result.fills) / result.rebalance_count, 4) if result.rebalance_count else 0.0,
         "avg_cost_per_fill": round(total_cost / len(result.fills), 2) if result.fills else 0.0,
         "note": (
             "decisions = period starts (band NOT applied); orders = distinct client_order_ids "
@@ -423,30 +399,16 @@ def _concentration(result, fills) -> dict[str, object]:
     btc_fills = sum(1 for fill in fills if fill.symbol == "BTC/USD")
     eth_fills = sum(1 for fill in fills if fill.symbol == "ETH/USD")
     trades = len(result.closed_position_events)
-    btc_trades = sum(
-        1 for _ts, symbol, _pnl in result.closed_position_events if symbol == "BTC/USD"
-    )
-    eth_trades = sum(
-        1 for _ts, symbol, _pnl in result.closed_position_events if symbol == "ETH/USD"
-    )
+    btc_trades = sum(1 for _ts, symbol, _pnl in result.closed_position_events if symbol == "BTC/USD")
+    eth_trades = sum(1 for _ts, symbol, _pnl in result.closed_position_events if symbol == "ETH/USD")
     return {
-        "top_1": {"symbol": top[0].symbol, "realized_pnl": round(top[0].realized_pnl, 2)}
-        if top
-        else None,
-        "top_2": {"symbol": top[1].symbol, "realized_pnl": round(top[1].realized_pnl, 2)}
-        if len(top) > 1
-        else None,
-        "top1_share_of_positive_pnl": round(top[0].realized_pnl / positive_pnl, 4)
-        if positive_pnl > 0
-        else 0.0,
+        "top_1": {"symbol": top[0].symbol, "realized_pnl": round(top[0].realized_pnl, 2)} if top else None,
+        "top_2": {"symbol": top[1].symbol, "realized_pnl": round(top[1].realized_pnl, 2)} if len(top) > 1 else None,
+        "top1_share_of_positive_pnl": round(top[0].realized_pnl / positive_pnl, 4) if positive_pnl > 0 else 0.0,
         "top2_share_of_positive_pnl": (
-            round(sum(item.realized_pnl for item in top[:2]) / positive_pnl, 4)
-            if positive_pnl > 0
-            else 0.0
+            round(sum(item.realized_pnl for item in top[:2]) / positive_pnl, 4) if positive_pnl > 0 else 0.0
         ),
-        "top1_share_of_total_pnl": round(top[0].realized_pnl / total_pnl, 4)
-        if total_pnl != 0
-        else 0.0,
+        "top1_share_of_total_pnl": round(top[0].realized_pnl / total_pnl, 4) if total_pnl != 0 else 0.0,
         "BTC": {
             "realized_pnl": round(btc_contrib.realized_pnl, 2) if btc_contrib else None,
             "share_of_total_pnl": round(btc_contrib.realized_pnl / total_pnl, 4)
@@ -507,9 +469,7 @@ def _detailed_metrics(result, bars_1d: list[Bar]) -> dict[str, object]:
         "annualized_turnover": round(result.turnover / (run_days / 365.25), 4),
         "fees_total": round(total_cost, 2),
         "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-        "fees_pct_of_gross_pnl": (
-            round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-        ),
+        "fees_pct_of_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
         "net_pnl": round(net_pnl, 2),
         "net_per_turnover": round(net_pnl / result.turnover, 2) if result.turnover > 0 else 0.0,
         "fees_per_turnover": round(total_cost / result.turnover, 2) if result.turnover > 0 else 0.0,
@@ -534,9 +494,7 @@ def _cadence_semantics_check(params: dict[str, object], hours: int, result) -> d
     # (RebalancePolicy.is_period_start uses int(ts.timestamp()) // (hours*3600)
     # on the first bar of each block; crypto 1d bars are midnight UTC).
     boundaries = sum(
-        1
-        for rebalance in result.rebalances
-        if int(rebalance.decision_timestamp.timestamp()) % (hours * 3600) == 0
+        1 for rebalance in result.rebalances if int(rebalance.decision_timestamp.timestamp()) % (hours * 3600) == 0
     )
     return {
         "asserted_policy_hours": policy.hours,
@@ -593,9 +551,7 @@ def _spearman(a: tuple[str, ...], b: tuple[str, ...]) -> float | None:
     return cov / math.sqrt(var_x * var_y)
 
 
-def _staleness_diagnostic(
-    bars_1d: list[Bar], universe, strategy, start: datetime, end: datetime
-) -> dict[str, object]:
+def _staleness_diagnostic(bars_1d: list[Bar], universe, strategy, start: datetime, end: datetime) -> dict[str, object]:
     """Weekly ranking over the full window (NO trades — pure signal audit).
 
     For every 168h epoch block decision date (RebalancePolicy parity) build a
@@ -650,18 +606,12 @@ def _staleness_diagnostic(
     # Top-2 persistence: fraction of consecutive blocks with the SAME pair.
     same_pair = 0
     for index in range(1, len(top2_history)):
-        if (
-            set(top2_history[index - 1][1]) == set(top2_history[index][1])
-            and len(top2_history[index][1]) == 2
-        ):
+        if set(top2_history[index - 1][1]) == set(top2_history[index][1]) and len(top2_history[index][1]) == 2:
             same_pair += 1
     # Ranking churn: Spearman between consecutive full rankings.
     churns = [
         value
-        for value in (
-            _spearman(rankings[index - 1][1], rankings[index][1])
-            for index in range(1, len(rankings))
-        )
+        for value in (_spearman(rankings[index - 1][1], rankings[index][1]) for index in range(1, len(rankings)))
         if value is not None
     ]
     # Per-symbol top-2 streaks (consecutive weeks selected).
@@ -706,12 +656,8 @@ def _staleness_diagnostic(
         },
         "top2_streaks": symbol_streaks,
         "overall": {
-            "mean_streak_weeks_all": round(statistics.fmean(all_streaks), 2)
-            if all_streaks
-            else None,
-            "mean_of_symbol_mean_streaks": round(statistics.fmean(symbol_means), 2)
-            if symbol_means
-            else None,
+            "mean_streak_weeks_all": round(statistics.fmean(all_streaks), 2) if all_streaks else None,
+            "mean_of_symbol_mean_streaks": round(statistics.fmean(symbol_means), 2) if symbol_means else None,
             "avg_time_selected_symbol_remains_top2_weeks": (
                 round(statistics.fmean(all_streaks), 2) if all_streaks else None
             ),
@@ -745,9 +691,7 @@ def main() -> int:
     print("Building point-in-time crypto universe ONCE from 1h scanner bars...")
     from parayabuck.backtest.product import build_product_universe
 
-    universe = build_product_universe(
-        config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h"
-    )
+    universe = build_product_universe(config, bars_1h, market=Market.CRYPTO, end=CRYPTO_END, timeframe="1h")
     universe_hash = hash_point_in_time_universe(universe)
     snapshots = universe.snapshots
     candidate_counts = [snapshot.candidate_count for snapshot in snapshots]
@@ -766,9 +710,7 @@ def main() -> int:
             "snapshots": len(snapshots),
             "methodology": universe.methodology,
             "scanner_timeframe": "1h",
-            "avg_candidate_pool": (
-                round(statistics.fmean(candidate_counts), 1) if candidate_counts else 0.0
-            ),
+            "avg_candidate_pool": (round(statistics.fmean(candidate_counts), 1) if candidate_counts else 0.0),
             "built_once": True,
         },
     }
@@ -802,9 +744,7 @@ def main() -> int:
         print(f"\n=== CANDIDATE {label} (rebalance_hours={hours}) ===")
         parameters = dict(FROZEN_CRYPTO)
         parameters["rebalance_hours"] = hours
-        policy = rebalance_policy_for(
-            portfolio_strategy_from(STRATEGY_NAME, parameters, timeframe="1d"), parameters
-        )
+        policy = rebalance_policy_for(portfolio_strategy_from(STRATEGY_NAME, parameters, timeframe="1d"), parameters)
         assert policy.hours == hours, f"cadence assert failed: {policy.hours} != {hours}"
         print(f"  policy hours={policy.hours} (asserted)")
 
@@ -939,8 +879,7 @@ def main() -> int:
     # Baseline validation vs the frozen bakeoff artifact (candidate B).
     m168 = reports["168h"]["full_period_1x"]
     baseline_validation = {
-        "reference": "docs/crypto_bakeoff_validation.md candidate B "
-        "(validated bit-identically at commit 68331da9430b)",
+        "reference": "docs/crypto_bakeoff_validation.md candidate B (validated bit-identically at commit 68331da9430b)",
         "bit_identical_metrics": {
             "return": {"reference": 0.046073, "this_run": m168["return"]},
             "cagr": {"reference": 0.008484, "this_run": m168["cagr"]},
@@ -1061,11 +1000,7 @@ def main() -> int:
     print("\n## Baseline validation vs bakeoff doc (candidate B, 168h)")
     bv_rows = []
     for metric, pair in baseline_validation["bit_identical_metrics"].items():
-        status = (
-            "bit-identical"
-            if round(pair["reference"], 6) == round(pair["this_run"], 6)
-            else "DRIFT"
-        )
+        status = "bit-identical" if round(pair["reference"], 6) == round(pair["this_run"], 6) else "DRIFT"
         bv_rows.append([metric, pair["reference"], pair["this_run"], status])
     bv_rows.append(
         [
@@ -1154,9 +1089,7 @@ def main() -> int:
         c = reports[label]["full_period_1x"]["churn"]
         b = reports[label]["full_period_1x"].get("baseline_avoidance", {})
         avoided = (
-            f"{b['pct_fills_avoided_by_168h']:.1%} fills / {b['pct_trades_avoided_by_168h']:.1%} trades"
-            if b
-            else "—"
+            f"{b['pct_fills_avoided_by_168h']:.1%} fills / {b['pct_trades_avoided_by_168h']:.1%} trades" if b else "—"
         )
         churn_rows.append(
             [

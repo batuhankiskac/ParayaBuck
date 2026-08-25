@@ -79,10 +79,7 @@ def _noisy(closes: list[float], phase: float, amplitude: float = 0.004) -> list[
     whole-series rescale (split basis) leaves returns unchanged, so the
     tie-heavy and split-adjusted scenarios keep their meaning.
     """
-    return [
-        close * (1.0 + amplitude * math.sin(index * 1.7 + phase))
-        for index, close in enumerate(closes)
-    ]
+    return [close * (1.0 + amplitude * math.sin(index * 1.7 + phase)) for index, close in enumerate(closes)]
 
 
 def _bars(symbol: str, closes: list[float]) -> tuple[Bar, ...]:
@@ -322,9 +319,7 @@ def test_consensus_math_parity_research_vs_production() -> None:
     from parayabuck.portfolio.equity_residual_momentum_v3 import multi_horizon_consensus
     from parayabuck.portfolio.research_alpha import horizon_consensus_scores
 
-    residuals = {
-        f"S{index}": [0.003 * (index + 1) % 7 - 0.002 for _ in range(300)] for index in range(4)
-    }
+    residuals = {f"S{index}": [0.003 * (index + 1) % 7 - 0.002 for _ in range(300)] for index in range(4)}
     production = multi_horizon_consensus(residuals, [126, 189, 252], 21)
     research = horizon_consensus_scores(residuals, [126, 189, 252], 21, standardized=False)
     assert production == research

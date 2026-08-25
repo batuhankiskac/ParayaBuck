@@ -30,9 +30,7 @@ def _sha256_file(path: str | Path) -> str:
 
 def git_head() -> str:
     """The commit that produced/produces the research outputs."""
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO_ROOT
-    ).stdout.strip()
+    return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=REPO_ROOT).stdout.strip()
 
 
 def dataset_identity() -> dict[str, object]:
@@ -130,9 +128,7 @@ def _fold_window(
     return folds
 
 
-def _calendar_fold_window(
-    start: datetime, end: datetime, step_months: int
-) -> list[tuple[datetime, datetime]]:
+def _calendar_fold_window(start: datetime, end: datetime, step_months: int) -> list[tuple[datetime, datetime]]:
     """Anchored walk-forward windows aligned to whole calendar months.
 
     ``_fold_window`` steps by 30-day blocks; the frozen reversal walk-forward
@@ -172,34 +168,21 @@ def _fold_stats(result) -> dict[str, object]:
 def _concentration(result) -> dict[str, object]:
     """PnL concentration: largest single-symbol realized contribution shares."""
     contributions = sorted(
-        (
-            (symbol, pnl)
-            for symbol, pnl in ((item.symbol, item.realized_pnl) for item in result.per_symbol)
-        ),
+        ((symbol, pnl) for symbol, pnl in ((item.symbol, item.realized_pnl) for item in result.per_symbol)),
         key=lambda item: (-item[1], item[0]),
     )
     positive_total = sum(pnl for _symbol, pnl in contributions if pnl > 0)
     top = contributions[:3]
     return {
         "top_1": {"symbol": top[0][0], "realized_pnl": round(top[0][1], 2)} if top else None,
-        "top_2": (
-            {"symbol": top[1][0], "realized_pnl": round(top[1][1], 2)} if len(top) > 1 else None
-        ),
-        "top_3": (
-            {"symbol": top[2][0], "realized_pnl": round(top[2][1], 2)} if len(top) > 2 else None
-        ),
-        "top1_share_of_positive_pnl": (
-            round(top[0][1] / positive_total, 4) if positive_total > 0 else 0.0
-        ),
+        "top_2": ({"symbol": top[1][0], "realized_pnl": round(top[1][1], 2)} if len(top) > 1 else None),
+        "top_3": ({"symbol": top[2][0], "realized_pnl": round(top[2][1], 2)} if len(top) > 2 else None),
+        "top1_share_of_positive_pnl": (round(top[0][1] / positive_total, 4) if positive_total > 0 else 0.0),
         "top2_share_of_positive_pnl": (
-            round(sum(item[1] for item in top[:2]) / positive_total, 4)
-            if positive_total > 0
-            else 0.0
+            round(sum(item[1] for item in top[:2]) / positive_total, 4) if positive_total > 0 else 0.0
         ),
         "top3_share_of_positive_pnl": (
-            round(sum(item[1] for item in top[:3]) / positive_total, 4)
-            if positive_total > 0
-            else 0.0
+            round(sum(item[1] for item in top[:3]) / positive_total, 4) if positive_total > 0 else 0.0
         ),
         "max_single_weight": round(result.maximum_concentration, 4),
         "symbol_count": len(contributions),
@@ -283,9 +266,7 @@ def _cost_stress(
             "turnover": round(result.turnover, 6),
             "fees_total": round(total_cost, 2),
             "fees_pct_of_avg_equity": round(total_cost / avg_equity, 6) if avg_equity > 0 else 0.0,
-            "fees_pct_of_gross_pnl": (
-                round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None
-            ),
+            "fees_pct_of_gross_pnl": (round(total_cost / abs(gross_pnl), 6) if abs(gross_pnl) > 1e-9 else None),
             "avg_holdings": round(result.average_holdings_count, 3),
             "avg_cash_ratio": round(result.average_cash_ratio, 4),
             "rebalance_count": result.rebalance_count,

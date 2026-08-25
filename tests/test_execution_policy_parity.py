@@ -107,9 +107,7 @@ def _engine(
     )
     engine._cash = equity - qty * price
     engine._last_price["SPY"] = price
-    engine._positions["SPY"] = _Position(
-        "SPY", Market.EQUITY, "1d", qty, price, datetime(2025, 1, 1, tzinfo=UTC)
-    )
+    engine._positions["SPY"] = _Position("SPY", Market.EQUITY, "1d", qty, price, datetime(2025, 1, 1, tzinfo=UTC))
     return engine
 
 
@@ -243,9 +241,7 @@ def test_configuration_digest_includes_execution_policy() -> None:
     live authorization generated for another execution policy cannot be
     reused silently."""
     strategy = _FixedTargetStrategy({"SPY": 0.10})
-    baseline = configuration_digest(
-        strategy, "paper", 0.50, "universe-v1", execution_policy=PortfolioExecutionPolicy()
-    )
+    baseline = configuration_digest(strategy, "paper", 0.50, "universe-v1", execution_policy=PortfolioExecutionPolicy())
     other_band = configuration_digest(
         strategy,
         "paper",
@@ -273,8 +269,5 @@ def test_live_authorization_digest_includes_execution_policy() -> None:
     base = {"runtime": {"mode": "live"}}
     with_band = {"runtime": {"mode": "live"}, "execution": {"rebalance_band_pct": 0.01}}
     with_notional = {"runtime": {"mode": "live"}, "execution": {"minimum_order_notional": 25}}
-    digests = {
-        web_server.EngineManager._digest_config(raw, paper=False)
-        for raw in (base, with_band, with_notional)
-    }
+    digests = {web_server.EngineManager._digest_config(raw, paper=False) for raw in (base, with_band, with_notional)}
     assert len(digests) == 3

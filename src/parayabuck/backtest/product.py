@@ -60,9 +60,7 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
                 if timestamp.weekday() >= 5:
                     raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
                 if timeframe != "1d" and not is_regular_equity_time(timestamp):
-                    raise ValueError(
-                        f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}"
-                    )
+                    raise ValueError(f"Equity CSV contains an out-of-session bar: {timestamp.isoformat()}")
             rows.append(
                 Bar(
                     timestamp=timestamp,
@@ -87,9 +85,7 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
         required = {"timestamp", "symbol", "action_type", "value"}
         if not required.issubset(reader.fieldnames or ()):
             missing = sorted(required - set(reader.fieldnames or ()))
-            raise ValueError(
-                f"Corporate-action CSV is missing required columns: {', '.join(missing)}"
-            )
+            raise ValueError(f"Corporate-action CSV is missing required columns: {', '.join(missing)}")
         for raw in reader:
             timestamp = datetime.fromisoformat(str(raw["timestamp"]))
             if timestamp.tzinfo is None:
@@ -97,8 +93,7 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
             action_type = CorporateActionType(str(raw["action_type"]).lower())
             if action_type != CorporateActionType.DIVIDEND:
                 raise ValueError(
-                    "Product backtests use split-adjusted prices; only explicit dividend "
-                    "actions may be supplied"
+                    "Product backtests use split-adjusted prices; only explicit dividend actions may be supplied"
                 )
             actions.append(
                 CorporateAction(
@@ -128,9 +123,7 @@ def build_product_universe(
     the strategy.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    strategy = portfolio_strategy_from(
-        selection.name, selection.parameters, timeframe=selection.timeframe
-    )
+    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
     available = [
         bar
         for bar in bars
@@ -202,18 +195,14 @@ def run_product_backtest(
         available = [
             bar
             for bar in bars
-            if bar.market == market
-            and bar.timeframe == strategy.timeframe
-            and (end is None or bar.timestamp <= end)
+            if bar.market == market and bar.timeframe == strategy.timeframe and (end is None or bar.timestamp <= end)
         ]
         filtered = [bar for bar in available if start is None or bar.timestamp >= start]
         if not filtered:
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
         warmup = [bar for bar in available if start is not None and bar.timestamp < start]
         if universe is None:
-            universe = build_product_universe(
-                config, bars, market=market, end=end, timeframe=strategy.timeframe
-            )
+            universe = build_product_universe(config, bars, market=market, end=end, timeframe=strategy.timeframe)
         prepared = None
     else:
         filtered, warmup, (ordered, decision_bars) = prepared_inputs
@@ -273,13 +262,8 @@ def run_product_backtest(
             "universe_hash": hash_point_in_time_universe(universe),
             "universe_methodology": universe.methodology,
             "sector_metadata_coverage": universe.to_dict()["sector_metadata_coverage"],
-            "scanner_versions": sorted(
-                {snapshot.scanner_version for snapshot in universe.snapshots}
-            ),
-            "data_feed": (
-                data_feed
-                or "offline csv (feed unknown; downloader used the configured historical feed)"
-            ),
+            "scanner_versions": sorted({snapshot.scanner_version for snapshot in universe.snapshots}),
+            "data_feed": (data_feed or "offline csv (feed unknown; downloader used the configured historical feed)"),
             "data_feed_note": (
                 "IEX historical data reflects one exchange's prints, not the "
                 "consolidated SIP/NBBO tape; liquidity, spread and volume "
@@ -311,9 +295,7 @@ def run_product_backtest(
             "drawdown_halt_shadow_events": {
                 "count": len(result.drawdown_halt_shadow_events),
                 "first": (
-                    result.drawdown_halt_shadow_events[0][0].isoformat()
-                    if result.drawdown_halt_shadow_events
-                    else None
+                    result.drawdown_halt_shadow_events[0][0].isoformat() if result.drawdown_halt_shadow_events else None
                 ),
                 "last": (
                     result.drawdown_halt_shadow_events[-1][0].isoformat()
@@ -370,8 +352,7 @@ def optimize_grid(
     combination_count = math.prod(len(values) for values in grid.values())
     if combination_count > _MAX_OPTIMIZATION_COMBINATIONS:
         raise ValueError(
-            f"Optimization grid has {combination_count} combinations; "
-            f"maximum is {_MAX_OPTIMIZATION_COMBINATIONS}"
+            f"Optimization grid has {combination_count} combinations; maximum is {_MAX_OPTIMIZATION_COMBINATIONS}"
         )
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     baseline = dict(base_parameters or selection.parameters)
@@ -384,8 +365,7 @@ def optimize_grid(
     # (deprecated strategy.timeframe key may be None in production config:
     # the strategy owns its primary signal timeframe).
     strategy_timeframe = (
-        selection.timeframe
-        or portfolio_strategy_from(strategy_name or selection.name, parameters=baseline).timeframe
+        selection.timeframe or portfolio_strategy_from(strategy_name or selection.name, parameters=baseline).timeframe
     )
     # The per-trial bar preprocessing (window filter, dedup, sort) is likewise
     # trial-invariant: prepare it once per window and reuse it.
@@ -460,9 +440,7 @@ def optimize_grid(
     destination = Path(output_dir or config.backtest.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     path = destination / "optimization.json"
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
-    )
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     payload["output"] = str(path)
     return payload
 
@@ -484,9 +462,7 @@ def _prepared_window(
     available = [
         bar
         for bar in bars
-        if bar.market == market
-        and bar.timeframe == timeframe
-        and (end is None or bar.timestamp <= end)
+        if bar.market == market and bar.timeframe == timeframe and (end is None or bar.timestamp <= end)
     ]
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
@@ -514,13 +490,7 @@ def ranking_score(result: PortfolioBacktestResult, metric: str = "risk_adjusted"
     if metric != "risk_adjusted":
         raise ValueError(f"Unsupported ranking metric: {metric}")
     trade_penalty = min(0.0, (len(result.closed_position_events) - 5) * 0.10)
-    return (
-        result.sharpe
-        + 0.50 * result.sortino
-        + 0.25 * result.calmar
-        - 2.0 * result.max_drawdown
-        + trade_penalty
-    )
+    return result.sharpe + 0.50 * result.sortino + 0.25 * result.calmar - 2.0 * result.max_drawdown + trade_penalty
 
 
 def _validate_optimization_windows(

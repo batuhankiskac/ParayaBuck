@@ -173,9 +173,7 @@ def _window_metrics(result, deploy: datetime) -> dict[str, object]:
     total_costs = result.slippage_cost_total + result.spread_cost_total + result.fee_total
     return {
         "deploy_date": deploy.date().isoformat(),
-        "days_to_first_decision": days_since(
-            first_rebalance.decision_timestamp if first_rebalance else None
-        ),
+        "days_to_first_decision": days_since(first_rebalance.decision_timestamp if first_rebalance else None),
         "days_to_first_fill": days_since(first_fill.timestamp if first_fill else None),
         "days_to_first_exposure": days_since(first_fill.timestamp if first_fill else None),
         "return_7d": horizon_return(7),
@@ -237,9 +235,7 @@ def _simulate_market(
             metrics = _window_metrics(result, deploy)
             metrics["variant"] = variant
             metrics["universe_hash"] = universe_hash
-            metrics["first_decision_timestamp"] = (
-                result.rebalances[0].decision_timestamp if result.rebalances else None
-            )
+            metrics["first_decision_timestamp"] = result.rebalances[0].decision_timestamp if result.rebalances else None
             outcomes[variant] = metrics
         # no-lookahead assertions: identical bars/warmup/universe across variants
         assert outcomes["catch_up"]["universe_hash"] == outcomes["control"]["universe_hash"]
@@ -264,9 +260,7 @@ def _aggregate(runs: list[dict[str, object]]) -> dict[str, object]:
     out: dict[str, object] = {}
     for variant, items in rows.items():
         out[variant] = {
-            "median_days_to_first_exposure": _agg(
-                [r["days_to_first_exposure"] for r in items], statistics.median
-            ),
+            "median_days_to_first_exposure": _agg([r["days_to_first_exposure"] for r in items], statistics.median),
             "p90_days_to_first_exposure": _agg(
                 [r["days_to_first_exposure"] for r in items],
                 lambda vs: sorted(vs)[min(len(vs) - 1, max(0, math.ceil(0.9 * len(vs)) - 1))],
@@ -368,9 +362,7 @@ def main(argv: list[str] | None = None) -> int:
             return build_product_universe(config, equity_bars, market=Market.EQUITY, end=deploy)
 
         def crypto_universe_for(deploy):
-            return build_product_universe(
-                config, crypto_1h, market=Market.CRYPTO, end=deploy, timeframe="1h"
-            )
+            return build_product_universe(config, crypto_1h, market=Market.CRYPTO, end=deploy, timeframe="1h")
 
         equity_sim = _simulate_market(
             config,
@@ -416,9 +408,7 @@ def main(argv: list[str] | None = None) -> int:
         datetime(2017, 1, 3, tzinfo=UTC),
         max(bar.timestamp for bar in equity_bars),
     )
-    crypto_universe = build_product_universe(
-        config, crypto_1h, market=Market.CRYPTO, end=None, timeframe="1h"
-    )
+    crypto_universe = build_product_universe(config, crypto_1h, market=Market.CRYPTO, end=None, timeframe="1h")
     crypto_strategy = portfolio_strategy_from("crypto_low_variance_v1", CRYPTO_PARAMS)
     crypto_engine = _engine(config, crypto_strategy, Market.CRYPTO, crypto_universe, state=None)
     crypto_result = crypto_engine.run(

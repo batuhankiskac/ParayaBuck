@@ -41,9 +41,7 @@ def test_reject_quantile_threshold_edge_cases() -> None:
     assert reject_quantile_threshold([4.0, 1.0, 3.0, 2.0], 0.0) == 1.0
     assert reject_quantile_threshold([4.0, 1.0, 3.0, 2.0], 1.0) == 4.0
     # Input order never matters (deterministic).
-    assert reject_quantile_threshold([5.0, 1.0, 4.0], 0.70) == reject_quantile_threshold(
-        [1.0, 4.0, 5.0], 0.70
-    )
+    assert reject_quantile_threshold([5.0, 1.0, 4.0], 0.70) == reject_quantile_threshold([1.0, 4.0, 5.0], 0.70)
 
 
 def test_reject_quantile_threshold_validates_arguments() -> None:

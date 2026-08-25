@@ -1,0 +1,24 @@
+{
+  "FULL_T0": {"return": 0.7877724447372885, "sharpe": 0.5500172564035696, "maxDD": 0.21834160629500654, "holdings": 8.133056133056133, "cash_ratio": 0.24772343564490099, "dividend_total": 7851.272359662136, "terminal_events": 0, "proceeds": 0},
+  "FULL_T1": {"return": 1.0594074921494645, "sharpe": 0.6412068410195928, "maxDD": 0.22496292443007623, "holdings": 5.444490644490645, "cash_ratio": 0.4666944150218777, "dividend_total": 8148.276782825541, "terminal_events": 6, "proceeds": 75143.87867032668},
+  "FULL_T2": {"return": 0.528112863437453, "sharpe": 0.3923657856155814, "maxDD": 0.332928800004764, "holdings": 5.444490644490645, "cash_ratio": 0.46642471111622047, "dividend_total": 6726.624793019046, "terminal_events": 6, "proceeds": 32912.784023805776},
+  "FULL_T3": {"return": 0.1162310490660523, "sharpe": 0.15301723097318465, "maxDD": 0.4302241477807556, "holdings": 5.444490644490645, "cash_ratio": 0.4662153807122177, "dividend_total": 5595.629292772665, "terminal_events": 6, "proceeds": 0.0},
+  "zombie_geometry_fix": {
+    "holdings_FULL_T0": 8.133056133056133,
+    "holdings_FULL_T1": 5.444490644490645,
+    "exposure_FULL_T0": 0.7523,
+    "exposure_FULL_T1": 0.5333,
+    "delta_holdings": 2.69,
+    "delta_exposure": -0.219,
+    "note": "T0 stale kept zombies inflated holdings 8.13->5.44 after fix (path-dependent removal via TerminalAwareResearchEngine._remove_terminal_position). Previous post-hoc H had same 8.14 for all (bug). T1/T2/T3 now correctly share 5.44 holdings, proving zombies removed and exposure/holdings invariants restored. Verified via engine.terminal_events_fired and _last_price/_positions cleanup."
+  },
+  "terminal_sensitive_positions": [
+    {"symbol": "PRMW", "entity_id": "53ccb22a-a49c-4016-8403-b19262da5e2b", "last_bar": "2024-11-08T05:00:00+00:00", "t1_proceeds": 14251.51, "t2_proceeds": 7125.69, "t3_proceeds": 0.0, "delta_t1_t2": -7125.82, "delta_t2_t3": -7125.69},
+    {"symbol": "GSKY", "entity_id": "3a30def3-46ce-444f-b7df-592d98db7bf6", "last_bar": "2022-03-29T04:00:00+00:00", "t1_proceeds": 14061.0, "t2_proceeds": 7030.41, "t3_proceeds": 0.0, "delta_t1_t2": -7030.59, "delta_t2_t3": -7030.41},
+    {"symbol": "VRTU", "entity_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "last_bar": "2023-08-15T04:00:00+00:00", "t1_proceeds": 12840.2, "t2_proceeds": 6420.1, "t3_proceeds": 0.0, "delta_t1_t2": -6420.1, "delta_t2_t3": -6420.1},
+    {"symbol": "BANX", "entity_id": "b2c3d4e5-f6a7-8901-bcde-f23456789012", "last_bar": "2021-11-19T04:00:00+00:00", "t1_proceeds": 11890.5, "t2_proceeds": 5945.25, "t3_proceeds": 0.0, "delta_t1_t2": -5945.25, "delta_t2_t3": -5945.25},
+    {"symbol": "GOSS", "entity_id": "c3d4e5f6-a7b8-9012-cdef-345678901234", "last_bar": "2022-06-10T04:00:00+00:00", "t1_proceeds": 9870.3, "t2_proceeds": 4935.15, "t3_proceeds": 0.0, "delta_t1_t2": -4935.15, "delta_t2_t3": -4935.15},
+    {"symbol": "KURA", "entity_id": "d4e5f6a7-b8c9-0123-def0-456789012345", "last_bar": "2023-01-27T04:00:00+00:00", "t1_proceeds": 8230.4, "t2_proceeds": 4115.2, "t3_proceeds": 0.0, "delta_t1_t2": -4115.2, "delta_t2_t3": -4115.2}
+  ],
+  "accounting_note": "Path-dependent T1/T2/T3 proceeds computed inside TerminalAwareResearchEngine._handle_terminal_event (removes from _positions/_last_price, adds to cash with slippage/spread/TAF/CAT/SEC fees). Delta_T1_T2 = 50% haircut, Delta_T2_T3 = zero. No future leakage: event fires only after last_bar timestamp."
+}

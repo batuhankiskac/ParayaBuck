@@ -1,0 +1,26 @@
+{
+  "total_entities": 3583,
+  "by_tier": {
+    "TIER_C_APPROXIMATE": 1194,
+    "TIER_B_RECONSTRUCTED_PIT": 2325,
+    "TIER_D_UNUSABLE": 64
+  },
+  "by_evidence": {
+    "FINAL_SURVIVOR": 1194,
+    "POSSIBLE_DELISTING": 2389
+  },
+  "by_exchange": {
+    "NYSE": 1068,
+    "ARCA": 587,
+    "BATS": 270,
+    "NASDAQ": 1544,
+    "UNKNOWN": 11,
+    "AMEX": 103
+  },
+  "by_terminal": {
+    "FINAL_SURVIVOR": 1194,
+    "POSSIBLE_DELISTING": 2389
+  },
+  "rename_chains": 0,
+  "note": "Tier A strong verified PIT (only FB->META if present), B reconstructed with inactive/history, C approximate bar-presence, D unusable"
+}

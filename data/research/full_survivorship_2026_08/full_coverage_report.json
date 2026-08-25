@@ -1,0 +1,72 @@
+{
+  "OLD_CURRENT_SURVIVOR_SET": {
+    "bars": 1738468,
+    "symbols": 1194,
+    "entities": 1194,
+    "final_survivors": 1193,
+    "historical_non_survivors": 1,
+    "survivor_ratio": 0.9991624790619765,
+    "early_terminations_gt20": 1,
+    "gt60": 1,
+    "gt252": 1,
+    "late_entries": 744,
+    "rename_chains": 0,
+    "Tier": {
+      "A": 0,
+      "B": 0,
+      "C": 1194,
+      "D": 0
+    }
+  },
+  "DEMO_RECONSTRUCTION_300": {
+    "bars": 1937021,
+    "symbols": 1418,
+    "entities": 1418,
+    "final_survivors": 1193,
+    "historical_non_survivors": 225,
+    "survivor_ratio": 0.8413258110014105,
+    "early_terminations_gt20": 225,
+    "gt60": 224,
+    "gt252": 220,
+    "late_entries": 808,
+    "rename_chains": 0,
+    "Tier": {
+      "TIER_C_APPROXIMATE": 1194,
+      "TIER_B_RECONSTRUCTED_PIT": 224
+    }
+  },
+  "FULL_RECONSTRUCTION": {
+    "bars": 3925050,
+    "symbols": 3554,
+    "entities": 3583,
+    "final_survivors": 1402,
+    "historical_non_survivors": 2151,
+    "survivor_ratio": 0.3944850872256612,
+    "early_terminations_gt20": 2151,
+    "gt60": 2146,
+    "gt252": 2122,
+    "late_entries": 1633,
+    "rename_chains": 0,
+    "Tier": {
+      "TIER_C_APPROXIMATE": 1194,
+      "TIER_B_RECONSTRUCTED_PIT": 2325,
+      "TIER_D_UNUSABLE": 64
+    },
+    "evidence": {
+      "FINAL_SURVIVOR": 1194,
+      "POSSIBLE_DELISTING": 2389
+    },
+    "terminal": {
+      "FINAL_SURVIVOR": 1194,
+      "POSSIBLE_DELISTING": 2389
+    }
+  },
+  "comparison": {
+    "demo_survivor_ratio": 0.8413258110014105,
+    "full_survivor_ratio": 0.3944850872256612,
+    "delta": -0.44684072377574924,
+    "material_improvement": true,
+    "note": "Full adds 2136 symbols, 1988029 bars; survivor ratio 0.8413 -> 0.3945 delta -0.4468. Expected large improvement; if barely changes, explain.",
+    "explanation": "Full reconstruction materially expanded: +2136 symbols, survivor ratio drop 0.4468, demonstrating evolving cross-section."
+  }
+}

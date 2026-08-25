@@ -1,0 +1,19 @@
+{
+  "total_entities": 3583,
+  "by_terminal_event_class": {
+    "FINAL_SURVIVOR": 1194,
+    "POSSIBLE_DELISTING": 2389
+  },
+  "early_terminated_gt20": 2151,
+  "gt60": 2146,
+  "gt252": 2122,
+  "note": "Classification based on lifetimes evidence_class / terminal_event_class. Actual held-at-termination requires V3 holdings; will be updated after V3 runs.",
+  "information_availability": {
+    "alpaca_provides_authoritative_terminal_metadata": false,
+    "delisting_date_available": false,
+    "merger_successor_available": false,
+    "cash_consideration_available": false,
+    "last_tradable_session_available_via_bars_only": true,
+    "statement": "authoritative terminal proceeds unavailable from current provider; last close not recoverable, use sensitivity bounds T1/T2/T3"
+  }
+}

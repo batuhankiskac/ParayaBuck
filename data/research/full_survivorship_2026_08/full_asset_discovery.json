@@ -1,0 +1,43 @@
+{
+  "fetched_at": "2026-08-25T16:02:02.659464+00:00",
+  "total_active": 14266,
+  "total_inactive": 19191,
+  "eligible_inactive": 2508,
+  "rejected": 16683,
+  "by_exchange": {
+    "active": {
+      "OTC": 1140,
+      "NASDAQ": 5600,
+      "NYSE": 2917,
+      "BATS": 1611,
+      "ARCA": 2708,
+      "AMEX": 290
+    },
+    "inactive": {
+      "OTC": 16328,
+      "NYSE": 845,
+      "NASDAQ": 1317,
+      "AMEX": 97,
+      "BATS": 135,
+      "ARCA": 469
+    },
+    "eligible": {
+      "NASDAQ": 1058,
+      "NYSE": 804,
+      "AMEX": 86,
+      "BATS": 128,
+      "ARCA": 432
+    }
+  },
+  "supported_exchanges": [
+    "AMEX",
+    "ARCA",
+    "BATS",
+    "NASDAQ",
+    "NYSE"
+  ],
+  "symbol_format_regex": "^[A-Z][A-Z0-9.\\-]*$",
+  "feed": "sip",
+  "adjustment": "split",
+  "date_range": "2016-01-01 -> 2026-07-30"
+}

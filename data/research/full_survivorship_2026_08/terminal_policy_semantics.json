@@ -1,0 +1,10 @@
+{
+  "T0_CURRENT_STALE_REFERENCE": "existing engine semantics: stale last_price may persist indefinitely after last bar if liquidate_at_end=False (optimistic, diagnostic)",
+  "T1_LAST_TRADABLE_EXIT": "force close at last observed tradable close with normal sell costs (still optimistic for many delistings)",
+  "T2_TERMINAL_HAIRCUT_50": "for unresolved non-successor termination: terminal recoverable value = 50% of last close + normal liquidation cost (sensitivity, not truth)",
+  "T3_TERMINAL_ZERO": "for unresolved non-successor termination: terminal recoverable value = 0 (severe-loss upper-bound)",
+  "exclusions": "Do NOT apply haircut to VERIFIED_RENAME, successor continuation, normal gap, temporary halt, provider outage",
+  "timing": "No look-ahead: terminal action occurs AFTER final observed tradable session; strategy cannot exit before delisting based on future knowledge. Terminal accounting is dataset/backtest lifecycle event after last bar.",
+  "no_grid_search": true,
+  "haircut_optimization_forbidden": "Do NOT optimize 50% after results; no 25/75/90 grid"
+}

@@ -1,0 +1,19 @@
+{
+  "total_eligible": 2508,
+  "total_attempted": 2508,
+  "by_status": {
+    "SUCCESS": 2389,
+    "EMPTY": 61,
+    "INVALID_SYMBOL": 58
+  },
+  "success": 2389,
+  "empty": 61,
+  "invalid_symbol": 58,
+  "entitlement_error": 0,
+  "provider_error": 0,
+  "recovery_rate": 0.9525518341307815,
+  "feed": "sip",
+  "adjustment": "split",
+  "date_range": "2016-01-01 -> 2026-07-30",
+  "note": "Full eligible 2508, success 2389 (95.2%), includes 224 demo reused + 2165 new batched"
+}

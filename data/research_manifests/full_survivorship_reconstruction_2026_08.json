@@ -1,0 +1,163 @@
+{
+  "mission": "full_survivorship_reconstruction_2026_08",
+  "continuation_of": "survivorship_aware_dataset_2026_08",
+  "declared_before_results": true,
+  "no_results_yet": true,
+  "provenance": {
+    "git_head_at_declaration": "93a0cd60866605e7bf8e98755315849c0961ec4a",
+    "git_head_commit_a": "14320109a9afb66816ff5960f194164cbdde861a",
+    "git_head_commit_bcd": "93a0cd60866605e7bf8e98755315849c0961ec4a",
+    "expected_lineage_b99b": "b99b7c74e548a7ed71368a6b390335eb6b9124b8",
+    "lineage_b99b_status": "NOT_FOUND_IN_CURRENT_LOG — HEAD is 93a0cd6; previous docs referenced 919a44da016e3593bb1ad91e880f3066cd4a7ced as COMMIT C but HEAD advanced to 93a0cd6 (commit B/C/D combined). Recorded exactly as observed.",
+    "python_version": "3.14.7",
+    "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+    "scanner_config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+    "strategy_equity_name": "equity_residual_momentum_v3",
+    "strategy_equity_version": "3.0.0",
+    "runtime_mode": "paper",
+    "live_enabled": false,
+    "historical_source_feed": "SIP",
+    "adjustment": "split",
+    "paper_mode_verified": true,
+    "live_false_verified": true,
+    "v3_frozen_verified": true
+  },
+  "baseline_demo_dataset": {
+    "path": "data/historical/equity_survivorship_aware_2016_2026_v2.csv",
+    "sha256": "5bef7055d34d838453cc6c93f08945497183d5ddc48d216dae733bdecbd4ec15",
+    "bars": 1937021,
+    "symbols": 1418,
+    "entities": 1418,
+    "date_range": "2016-01-04 -> 2026-07-30",
+    "old_entities": 1194,
+    "reconstructed_entities": 1418,
+    "recovered_historical_non_survivors": 224,
+    "survivor_ratio_old": 0.999162,
+    "survivor_ratio_demo": 0.841326,
+    "sample_inactive_attempted": 300,
+    "sample_recovery_rate_observed": 0.7467,
+    "note": "Demo used 300 inactive sample; ~2863 eligible inactive on supported exchanges per alpaca_asset_master_summary (NASDAQ 1317, NYSE 845, ARCA 469, AMEX 97, BATS 135). Estimated recoverable ~2430 at 85% probe rate."
+  },
+  "baseline_old_dataset": {
+    "path": "data/historical/equity_1200_2016_2026.csv",
+    "sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "bars": 1738468,
+    "symbols": 1194
+  },
+  "prior_v3_control_results": {
+    "old": {
+      "return": 1.6648,
+      "sharpe": 0.821377,
+      "maxDD": 0.220319
+    },
+    "demo": {
+      "return": 1.467241,
+      "sharpe": 0.769018,
+      "maxDD": 0.21215
+    },
+    "delta": -0.197559,
+    "note": "-19.76pp demo reconstruction effect (stale-price T0 semantics, lower-bound bias)"
+  },
+  "frozen_discovery_filter": {
+    "asset_class": "us_equity",
+    "status": "inactive",
+    "endpoint": "GET /v2/assets?status=inactive&asset_class=us_equity",
+    "supported_exchanges": ["NASDAQ", "NYSE", "AMEX", "ARCA", "BATS"],
+    "exchange_normalization": "Use provider exchange field verbatim upper-cased; NASDAQ/NYSE/ARCA/AMEX/BATS exact match only. Any other exchange (including OTC, OTC_* etc.) excluded from canonical dataset.",
+    "otc_policy": {
+      "included": false,
+      "reason": "Production historical scanner would not have admitted OTC names: scanner requires minimum_price 5, minimum_median_dollar_volume 20_000_000, spread_quality_ceiling_bps 50, atr bounds, etc. OTC tickers dominated by warrants/preferreds/illiquid ADRs (OTC 16329 of 19192 inactive). Including them would inject unrealistic micro-cap history not tradeable by V3. Document count excluded.",
+      "count_excluded_if_otc": 16329,
+      "document_excluded": true
+    },
+    "symbol_format_eligibility": {
+      "valid_symbol_regex": "^[A-Z][A-Z0-9.\\-]*$",
+      "reject_invalid_characters": true,
+      "allow_dot": true,
+      "allow_hyphen": true,
+      "reject_length_gt_10": true,
+      "reject_warrants_units_if_identifiable": "Do not pre-filter warrants/units by name; include them but flag via security-type heuristics in discovery report; they will be counted separately",
+      "invalid_symbol_handling": "INVALID_SYMBOL — persist reason code, do not treat as no_history"
+    },
+    "preferred_feed": "SIP",
+    "fallback_feed": "NONE — do not silently fallback to IEX; if SIP entitlement fails, record ENTITLEMENT_ERROR",
+    "adjustment": "split",
+    "adjustment_raw": "splits only — dividends remain separate corporate actions; adjustment=splits as in prior v2",
+    "date_range": {
+      "requested_start": "2016-01-01",
+      "requested_end": "2026-07-30",
+      "effective_start": "2016-01-04 (first trading day with bars)",
+      "effective_end": "2026-07-30",
+      "note": "Matches demo v2 range; request 2016-01-01 but bars start 2016-01-04"
+    },
+    "determinism": "Discovery pipeline deterministic: fetches all inactive assets matching filter, sorts by symbol+asset_id, no manual cherry-pick, no performance-informed selection"
+  },
+  "retry_policy": {
+    "pagination": "limit=10000 per request; daily bars 2016-2026 ~2650 bars fits single page but paginate via next_page_token until exhausted",
+    "retry_temporary_failures": 3,
+    "retry_backoff": "exponential 1s, 2s, 4s for 429/500/502/503/504",
+    "rate_limit_delay_ms": 250,
+    "rate_limit_failure_classification": "RATE_LIMIT_FAILURE if retries exhausted",
+    "distinguish_api_failure_from_empty": true
+  },
+  "invalid_symbol_handling": {
+    "reason_codes": ["UNSUPPORTED_EXCHANGE", "INVALID_SYMBOL", "UNSUPPORTED_SECURITY_TYPE", "DUPLICATE_ENTITY", "PROVIDER_ERROR", "NO_HISTORY", "AMBIGUOUS_IDENTITY", "DATA_QUALITY_FAILURE"],
+    "empty_vs_failure": "EMPTY = provider returned success with 0 bars; INVALID_SYMBOL = provider returned 400/invalid symbol error; PROVIDER_ERROR = 500/network; ENTITLEMENT_ERROR = 403/401; never conflate failure with no_history",
+    "checkpointing": "Persist progress checkpoints every 50 symbols to allow resume without manual intervention; final dataset reproducible from frozen logic, not checkpoint state"
+  },
+  "ticker_rename_handling": {
+    "canonical_key": "provider_asset_id (Alpaca asset UUID) is primary entity identity, not ticker symbol",
+    "fields": ["entity_id (=provider_asset_id)", "provider_asset_id", "current_symbol", "historical_symbol", "valid_from", "valid_to", "rename_chain"],
+    "known_example": "FB -> META on 2022-06-09: provider_asset_id fc6a5dcd... for META, ab5bccc3... for FB ETF reused ticker — must NOT merge",
+    "tests_required": ["same ticker + different provider_asset_id != same entity", "historical alias + same stable asset_id == same entity"],
+    "asof_behavior": "Use provider asof mapping where available; overlapping date histories with same asset_id treated as rename continuation"
+  },
+  "stable_entity_id_semantics": {
+    "entity_id": "provider_asset_id UUID where available; fallback entity_{symbol} for current survivors without asset master collision, but full reconstruction must use real UUIDs for all inactive",
+    "rename_chain_format": "JSON array of {symbol, valid_from, valid_to} sorted chronologically; example: [{\"symbol\": \"FB\", \"valid_from\": \"2016-01-04T05:00:00+00:00\", \"valid_to\": \"2022-06-08T04:00:00+00:00\"}, {\"symbol\": \"META\", \"valid_from\": \"2022-06-09T04:00:00+00:00\", \"valid_to\": null}]",
+    "duplicate_entity_rule": "Same provider_asset_id mapping to simultaneous unrelated entities is hard failure"
+  },
+  "terminal_event_policy_research_definitions": {
+    "status": "RESEARCH-LOCAL ONLY — do not modify production PortfolioBacktestEngine yet",
+    "engine_issue_audited": "self._last_price may persist stale close indefinitely if held equity stops producing bars and liquidate_at_end=false",
+    "classification_required": ["RENAMED_CONTINUATION", "ACQUISITION_OR_MERGER", "POSSIBLE_DELISTING", "VERIFIED_DELISTING", "TEMPORARY_HALT", "DATA_GAP", "UNKNOWN_TERMINATION"],
+    "information_availability_audit": "Check whether Alpaca exposes authoritative delisting date/merger successor/cash consideration/terminal settlement/last tradable session; if absent state explicitly unavailable",
+    "sensitivity_policies_predeclared": {
+      "T0_CURRENT_STALE_REFERENCE": "existing engine semantics — stale last_price persists indefinitely (optimistic, diagnostic)",
+      "T1_LAST_TRADABLE_EXIT": "force close at last observed tradable close with normal sell costs (still optimistic for many delistings)",
+      "T2_TERMINAL_HAIRCUT_50": "for unresolved non-successor termination: terminal recoverable value = 50% of last close + normal liquidation cost (sensitivity, not truth)",
+      "T3_TERMINAL_ZERO": "for unresolved non-successor termination: terminal recoverable value = 0 (severe-loss upper bound)",
+      "note": "DO NOT optimize 50% after results; DO NOT test other haircuts; no 25/75/90 grid"
+    },
+    "exclusions": "Do NOT apply haircut to VERIFIED_RENAME, successor continuation, normal data gap, temporary halt, provider outage",
+    "timing_rule": "No look-ahead: terminal action occurs AFTER final observed tradable session; strategy cannot exit one week/bar before simply because reconstruction knows future termination. Terminal accounting is dataset/backtest lifecycle event after last bar.",
+    "tests_required": ["A_NORMAL_SURVIVOR", "B_FUTURE_DELIST no early exit", "C_TERMINAL_HELD (T0/T1/T2/T3 differences)", "D_NOT_HELD no phantom", "E_RENAME continuity NO haircut", "F_TEMPORARY_GAP no terminal", "G_LATE_IPO absent before valid_from", "H_RESTART deterministic"]
+  },
+  "frozen_v3_parameters": {
+    "formation_bars": 252,
+    "skip_bars": 21,
+    "beta_window_bars": 273,
+    "residual_vol_window": 63,
+    "horizons": [126, 189, 252],
+    "ranking": "raw residual percentile consensus",
+    "positive_12m_gate": true,
+    "ivol_reject_quantile": 0.7,
+    "top_n": 8,
+    "max_single_weight": 0.1,
+    "max_positions": 6,
+    "equity_allocation": 0.6,
+    "rebalance_frequency": "weekly",
+    "execution": "same as production",
+    "costs": "same real costs (slippage 2bps, spread 2bps, effective-dated TAF/CAT/SEC, commission 0)",
+    "note": "DO NOT optimize any of these; no V4"
+  },
+  "quality_gates": ["PYTHONPATH=src python -m pytest -q", "python -m ruff check .", "python -m ruff format --check .", "python -m mypy src"],
+  "commit_semantics": {
+    "A_FULL": "This manifest — frozen discovery + reconstruction + terminal semantics, NO full generated dataset result",
+    "B_FULL": "Frozen implementation + full generated dataset identity/hash + coverage + terminal tests, NO V3 performance results",
+    "C_FULL": "V3 validation runner frozen, NO results",
+    "D_FULL": "Results + report only; if implementation changes after result generation, discard partial, new frozen commit, rerun from scratch"
+  },
+  "gitignore_policy": "Large generated CSV remains gitignored (data/historical/equity_survivorship_aware_*.csv). Git contains generation code, manifests, hashes, metadata, research summaries, small derived artifacts.",
+  "commit_note": "COMMIT A_FULL — frozen discovery and terminal semantics BEFORE full data download. No full reconstructed result should exist before this commit."
+}

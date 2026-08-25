@@ -4,8 +4,14 @@
 Fetches all 8+ types for 2016-2026, paginates completely, creates v4 CSV + manifest,
 and audits dividend parity.
 """
-import csv, json, hashlib, time, pathlib, sys
-from datetime import datetime, UTC
+import csv
+import hashlib
+import json
+import pathlib
+import sys
+import time
+from datetime import UTC, datetime
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 OUT_CSV = REPO / "data/historical/equity_survivorship_full_corporate_actions_v4.csv"
 OUT_MANIFEST = REPO / "data/historical/equity_survivorship_full_corporate_actions_v4.manifest.json"
@@ -27,6 +33,7 @@ if not KEY:
     sys.exit(1)
 
 import requests
+
 HEADERS={"APCA-API-KEY-ID":KEY,"APCA-API-SECRET-KEY":SECRET}
 BASE="https://data.alpaca.markets/v1/corporate-actions"
 
@@ -168,6 +175,7 @@ print(f"Wrote {OUT_CSV} rows {len(universe_actions)}")
 # Audit
 # Count by action_type
 from collections import Counter
+
 cnt_all = Counter(a.get("_action_type") for a in by_id.values())
 cnt_uni = Counter(a.get("_action_type") for a in universe_actions)
 cnt_old = Counter(a.get("_action_type") for a in old_universe_actions)

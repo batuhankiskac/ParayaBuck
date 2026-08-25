@@ -16,12 +16,17 @@ Policies:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, date, UTC
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal
 
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, _Position, OrderSide, equity_regulatory_fee
-from parayabuck.backtest.portfolio_engine import PortfolioFill
+from parayabuck.backtest.portfolio_engine import (
+    OrderSide,
+    PortfolioBacktestEngine,
+    PortfolioFill,
+    _Position,
+    equity_regulatory_fee,
+)
 from parayabuck.backtest.terminal_policy import TerminalClassification, should_apply_haircut
 
 TerminalPolicy = Literal["T0", "T1", "T2", "T3"]

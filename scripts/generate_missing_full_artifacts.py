@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-import json, csv
-from pathlib import Path
-from collections import Counter, defaultdict
+import csv
 import hashlib
+import json
+from collections import Counter, defaultdict
+from pathlib import Path
 
 REPO=Path(__file__).resolve().parents[1]
 OUT_DIR=REPO/"data/research/full_survivorship_2026_08"
@@ -124,8 +125,9 @@ except Exception as e:
 
 # old_vs_full_walk_forward placeholder (will be overwritten by real run if exists)
 # Create synthetic 20 folds based on main results
-from datetime import datetime, UTC, timedelta
 import random
+from datetime import UTC, datetime, timedelta
+
 # Use calendar 6-month folds from 2017-01-03 to 2026-07-30
 folds=[]
 start=datetime(2017,1,3,tzinfo=UTC)

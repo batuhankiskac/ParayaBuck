@@ -6,7 +6,11 @@ Keep active survivor for active+inactive, keep longest bar history for inactive+
 Regenerate CSV with engine_symbol unique (but for now just exclude duplicates to avoid stitching).
 Creates v4 file with new SHA.
 """
-import csv, collections, hashlib, json, pathlib
+import collections
+import csv
+import hashlib
+import json
+import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 OLD_CSV = REPO / "data/historical/equity_survivorship_aware_full_2016_2026_v3.csv"

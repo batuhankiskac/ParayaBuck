@@ -1,0 +1,14 @@
+{
+  "classification": "FULL SURVIVORSHIP RECONSTRUCTION VALIDATED \u2014 V3 DATA ROBUSTNESS MODERATE",
+  "reason": "Full reconstruction 1194->3554 symbols, survivor ratio 99.9%->39.4%, 2151 non-survivors added. V3 return drops 1.665->0.871 (-79pp), Sharpe 0.822->0.587, but remains positive with risk-adjusted returns. Terminal T1 (last-close) negligible (-24bps), T2 (-37k, return 0.497) and T3 (0.124) show severe sensitivity bounds but not total alpha collapse. V3 not robust strong, but not weak.",
+  "old_return": 1.665296,
+  "demo_return": 1.467736,
+  "full_t0_return": 0.871344,
+  "full_t1_return": 0.871103,
+  "full_t2_return": 0.497441,
+  "full_t3_return": 0.123784,
+  "bias_estimate": "Observed demo bias -19.8pp, full stale -79.4pp, terminal-adjusted T2 -116.8pp vs old, T3 -154pp. Plausible true bias ~80-120pp if delisted assumed 50% recovery, up to 150pp if zero.",
+  "paper_v3_unchanged": true,
+  "live_disabled": true,
+  "no_production_modify": true
+}

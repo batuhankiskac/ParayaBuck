@@ -6,6 +6,7 @@ from parayabuck.portfolio.crypto_low_variance import (
     CryptoLowVariance1dV1,
     CryptoLowVariance1dV2,
 )
+from parayabuck.portfolio.crypto_low_variance_hysteresis import CryptoLowVarianceHysteresis1dV1
 from parayabuck.portfolio.equity_residual_momentum import (
     EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2,
@@ -26,6 +27,7 @@ _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityResidualMomentum1dV3.name: EquityResidualMomentum1dV3,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
+    CryptoLowVarianceHysteresis1dV1.name: CryptoLowVarianceHysteresis1dV1,
 }
 
 # The PRODUCT strategy surface: the identities the PAPER product supports

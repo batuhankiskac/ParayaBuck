@@ -2688,7 +2688,9 @@ class EngineRuntime:
                     strategy=getattr(getattr(portfolio_runtime, "strategy", None), "name", "unknown"),
                     error=str(exc),
                     current_state={"market": portfolio_runtime.market.value},
-                    reconcile_action=lambda: _broker.reconcile() if _broker is not None and hasattr(_broker, "reconcile") else False,
+                    reconcile_action=lambda: (
+                        _broker.reconcile() if _broker is not None and hasattr(_broker, "reconcile") else False
+                    ),
                 )
                 log.exception(
                     "Portfolio ownership drift blocked decisions for market=%s",

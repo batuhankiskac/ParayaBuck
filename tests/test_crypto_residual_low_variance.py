@@ -311,10 +311,28 @@ class TestPitUniverseExclusion:
         """
         # Independent verification without harness: assert dataset extras are known
         configured_22 = {
-            "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD", "DOGE/USD",
-            "AVAX/USD", "LINK/USD", "LTC/USD", "BCH/USD", "DOT/USD", "UNI/USD",
-            "AAVE/USD", "ARB/USD", "FIL/USD", "RENDER/USD", "ONDO/USD", "HYPE/USD",
-            "SHIB/USD", "GRT/USD", "CRV/USD", "PEPE/USD",
+            "BTC/USD",
+            "ETH/USD",
+            "SOL/USD",
+            "XRP/USD",
+            "ADA/USD",
+            "DOGE/USD",
+            "AVAX/USD",
+            "LINK/USD",
+            "LTC/USD",
+            "BCH/USD",
+            "DOT/USD",
+            "UNI/USD",
+            "AAVE/USD",
+            "ARB/USD",
+            "FIL/USD",
+            "RENDER/USD",
+            "ONDO/USD",
+            "HYPE/USD",
+            "SHIB/USD",
+            "GRT/USD",
+            "CRV/USD",
+            "PEPE/USD",
         }
         dataset_only = {"MKR/USD", "NEAR/USD", "TRX/USD"}
         assert configured_22.isdisjoint(dataset_only)

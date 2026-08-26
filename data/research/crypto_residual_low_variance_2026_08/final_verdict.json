@@ -1,0 +1,51 @@
+{
+  "final_docs": "docs/crypto_residual_low_variance_validation.md",
+  "gates": {
+    "R1": {
+      "10_turnover_justified": false,
+      "11_two_regimes_positive": false,
+      "12_pit_parity": true,
+      "1_sharpe_gt_control": false,
+      "2_cagr_or_lower_dd": false,
+      "3_walk_forward_positive_and_median": false,
+      "4_beats_60pct": false,
+      "5_2x_positive": true,
+      "6_3x_not_catastrophic": true,
+      "7_concentration": true,
+      "8_loo_positive": true,
+      "9_no_single_fold_dominance": false
+    },
+    "R2": {
+      "10_turnover_justified": true,
+      "11_two_regimes_positive": true,
+      "12_pit_parity": true,
+      "1_sharpe_gt_control": true,
+      "2_cagr_or_lower_dd": true,
+      "3_walk_forward_positive_and_median": false,
+      "4_beats_60pct": true,
+      "5_2x_positive": true,
+      "6_3x_not_catastrophic": true,
+      "7_concentration": true,
+      "8_loo_positive": true,
+      "9_no_single_fold_dominance": false
+    },
+    "R3": {
+      "10_turnover_justified": false,
+      "11_two_regimes_positive": false,
+      "12_pit_parity": true,
+      "1_sharpe_gt_control": false,
+      "2_cagr_or_lower_dd": false,
+      "3_walk_forward_positive_and_median": false,
+      "4_beats_60pct": true,
+      "5_2x_positive": false,
+      "6_3x_not_catastrophic": true,
+      "7_concentration": true,
+      "8_loo_positive": false,
+      "9_no_single_fold_dominance": false
+    }
+  },
+  "generated_at": "2026-08-26T19:33:45.280078+00:00",
+  "note": "final verdict after corrected jackknife (BTC factor history kept; strategy-level exclusion). R2 now 10/12 (fails #3 positive folds 5 vs 6 by 1, and #9 single-fold dominance). Still not ALL 12, so FAMILY REJECTED per strict pre-registered gates.",
+  "universe_hash": "92518890e5814de46d8144982259986bd32cd2a6152cce899657a06a4468fed9",
+  "verdict": "CRYPTO BTC-RESIDUAL LOW-VARIANCE FAMILY REJECTED"
+}

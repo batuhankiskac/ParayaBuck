@@ -463,31 +463,60 @@ def refresh_crypto_universe(
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
     assets = trading.get_all_assets(GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE))
-    by_symbol: dict[str, Any] = {}
+    # Paper candidate-pool parity: the authoritative alpha-search pool is the
+    # configured trade_symbols (22-pair researched universe). The broker's
+    # currently supported active/tradable assets are an intersection, not a
+    # replacement. Unconfigured broker symbols (e.g. FOO/USD) must never enter
+    # the alpha candidate pool, and a configured symbol that the broker reports
+    # inactive/non-tradable must be excluded from fresh ENTRY eligibility.
+    # Managed positions outside the configured pool remain observable for safe
+    # exits via load_active_crypto_symbols(reserved pinning), not via the
+    # candidate pool.
+    broker_active: dict[str, Any] = {}
     allowlist = set(universe.allowlist_symbols)
     denylist = set(universe.denylist_symbols)
     for asset in assets:
         symbol = _crypto_asset_symbol(asset)
-        if (
-            symbol is None
-            or not symbol.endswith("/USD")
-            or symbol in denylist
-            or (allowlist and symbol not in allowlist)
-        ):
+        if symbol is None or not symbol.endswith("/USD"):
             continue
-        by_symbol[symbol] = asset
+        broker_active[symbol] = asset
+    # Configured pool (authoritative) filtered by allow/deny deterministically.
+    configured_pool = set(universe.trade_symbols)
+    if allowlist:
+        configured_pool &= allowlist
+    if denylist:
+        configured_pool -= denylist
+    # Also apply denylist to broker map for pinned validation consistency,
+    # but candidate intersection uses configured_pool only.
     invalid_pins = [
         symbol
         for symbol in universe.pinned_symbols
-        if symbol not in by_symbol
-        or not bool(getattr(by_symbol[symbol], "tradable", False))
-        or str(getattr(by_symbol[symbol], "status", "")).lower().split(".")[-1] != "active"
+        if symbol not in broker_active
+        or symbol in denylist
+        or (allowlist and symbol not in allowlist)
+        or not bool(getattr(broker_active[symbol], "tradable", False))
+        or str(getattr(broker_active[symbol], "status", "")).lower().split(".")[-1] != "active"
     ]
     if invalid_pins:
         raise ValueError(f"Configured crypto pins are not active/tradable: {','.join(invalid_pins)}")
-    candidate_symbols = tuple(sorted(by_symbol))
+    # Intersect configured pool with broker active/tradable.
+    candidate_symbols_list: list[str] = []
+    for symbol in sorted(configured_pool):
+        asset = broker_active.get(symbol)
+        if asset is None:
+            continue
+        if symbol in denylist or (allowlist and symbol not in allowlist):
+            continue
+        if not bool(getattr(asset, "tradable", False)):
+            continue
+        if str(getattr(asset, "status", "")).lower().split(".")[-1] != "active":
+            continue
+        candidate_symbols_list.append(symbol)
+    # Keep a filtered broker map for candidate construction only.
+    by_symbol: dict[str, Any] = {symbol: broker_active[symbol] for symbol in candidate_symbols_list}
+    candidate_symbols = tuple(candidate_symbols_list)
     if not candidate_symbols:
-        raise ValueError("Alpaca returned no supported USD crypto pairs")
+        raise ValueError("No configured crypto trade symbols are currently active/tradable (broker intersection empty)")
     history = AlpacaHistoricalData(
         api_key,
         secret_key,
@@ -592,6 +621,11 @@ def _crypto_observation_set(
     return replace(
         result,
         observation_set=observation.observation_set,
+        observation_strategy_name=strategy.name,
+        observation_strategy_version=strategy.version,
+        observation_strategy_timeframe=strategy.timeframe,
+        observation_strategy_parameters_digest=universe.observation_strategy_parameters_digest
+        or hashlib.sha256(json.dumps(selection.parameters, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
         observation_eliminated={
             **result.observation_eliminated,
             "observation_source": observation.source,

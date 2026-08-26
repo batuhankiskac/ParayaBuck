@@ -260,7 +260,28 @@ def build_trailing_point_in_time_universe(
                     minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
                 ),
             )
+            # Research ↔ PAPER parity: the configured trade_symbols are the
+            # authoritative candidate pool for crypto. Only symbols that are
+            # both configured and have bars at this PIT window enter the
+            # scanner. This mirrors PAPER's configured ∩ broker_active
+            # intersection, with broker availability inferred from bar
+            # availability (listing support) at time t. Dataset-only extras
+            # (e.g. MKR/USD, NEAR/USD, TRX/USD) must not enter the alpha pool.
+            allowed_crypto_pool: set[str] | None = None
+            if crypto_config is not None and configured_crypto.trade_symbols:
+                allowed_crypto_pool = {canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.trade_symbols}
+                if configured_crypto.allowlist_symbols:
+                    allowed_crypto_pool &= {
+                        canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.allowlist_symbols
+                    }
+                if configured_crypto.denylist_symbols:
+                    allowed_crypto_pool -= {
+                        canonical_symbol(s, Market.CRYPTO) for s in configured_crypto.denylist_symbols
+                    }
             btc_history = by_symbol.get("BTC/USD", [])
+            crypto_items = sorted(by_symbol.items())
+            if allowed_crypto_pool is not None:
+                crypto_items = [(s, h) for s, h in crypto_items if s in allowed_crypto_pool]
             crypto_candidates = [
                 crypto_candidate_from_bars(
                     symbol,
@@ -271,7 +292,7 @@ def build_trailing_point_in_time_universe(
                     btc_bars=btc_history,
                     spread_bps=None,
                 )
-                for symbol, history in sorted(by_symbol.items())
+                for symbol, history in crypto_items
             ]
             result = CryptoUniverseScanner(configured_crypto).scan(
                 crypto_candidates,

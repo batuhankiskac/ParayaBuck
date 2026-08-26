@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-08-26T20:14:08.603382+00:00",
+  "turnover_analysis": {
+    "T0": {
+      "candidate_id": "T0",
+      "label": "CONTROL low-variance 22d 96h",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 288.0,
+          "mean": 25.78,
+          "median": 12.0,
+          "min": 2.0
+        },
+        "intervals": 156,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.7415,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.3739,
+        "selection_turnover": 0.2585,
+        "weight_turnover": {
+          "mean": 0.0098,
+          "median": 0.0,
+          "total": 4.4141
+        }
+      }
+    },
+    "T1": {
+      "candidate_id": "T1",
+      "label": "T1 hysteresis retention rank<=4",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 433.0,
+          "mean": 67.27,
+          "median": 30.0,
+          "min": 3.0
+        },
+        "intervals": 62,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.8872,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.1615,
+        "selection_turnover": 0.1128,
+        "weight_turnover": {
+          "mean": 0.0042,
+          "median": 0.0,
+          "total": 1.9071
+        }
+      }
+    },
+    "T2": {
+      "candidate_id": "T2",
+      "label": "T2 consensus 22/63 percentile mean",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 376.0,
+          "mean": 43.22,
+          "median": 15.0,
+          "min": 4.0
+        },
+        "intervals": 90,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.8333,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.2434,
+        "selection_turnover": 0.1667,
+        "weight_turnover": {
+          "mean": 0.006,
+          "median": 0.0,
+          "total": 2.7138
+        }
+      }
+    },
+    "T3": {
+      "candidate_id": "T3",
+      "label": "T3 downside deviation 22d",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 424.0,
+          "mean": 30.57,
+          "median": 12.0,
+          "min": 2.0
+        },
+        "intervals": 144,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.7647,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.3429,
+        "selection_turnover": 0.2353,
+        "weight_turnover": {
+          "mean": 0.0089,
+          "median": 0.0,
+          "total": 4.0034
+        }
+      }
+    },
+    "T4": {
+      "candidate_id": "T4",
+      "label": "T4 correlation-aware top5",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 347.0,
+          "mean": 23.75,
+          "median": 8.0,
+          "min": 2.0
+        },
+        "intervals": 220,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.6265,
+          "median": 0.3333,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.5288,
+        "selection_turnover": 0.3735,
+        "weight_turnover": {
+          "mean": 0.0145,
+          "median": 0.025,
+          "total": 6.5645
+        }
+      }
+    },
+    "T5": {
+      "candidate_id": "T5",
+      "label": "T5 inverse-vol weighting",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 288.0,
+          "mean": 25.78,
+          "median": 12.0,
+          "min": 2.0
+        },
+        "intervals": 156,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.7415,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.3739,
+        "selection_turnover": 0.2585,
+        "weight_turnover": {
+          "mean": 0.0098,
+          "median": 0.0,
+          "total": 4.4141
+        }
+      }
+    },
+    "T6": {
+      "candidate_id": "T6",
+      "label": "T6 hysteresis + inverse-vol",
+      "turnover": {
+        "holding_duration_days": {
+          "max": 433.0,
+          "mean": 67.27,
+          "median": 30.0,
+          "min": 3.0
+        },
+        "intervals": 62,
+        "jaccard_overlap": {
+          "max": 1.0,
+          "mean": 0.8872,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "methodology": "Jaccard on 96h target selection sets; weight turnover half-L1; holding duration from fills",
+        "rebalance_count": 453,
+        "replacement_frequency": 0.1615,
+        "selection_turnover": 0.1128,
+        "weight_turnover": {
+          "mean": 0.0042,
+          "median": 0.0,
+          "total": 1.9071
+        }
+      }
+    }
+  }
+}

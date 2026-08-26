@@ -1,0 +1,72 @@
+{
+  "fee_savings": {
+    "T1": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T1",
+      "fee_saving_pct_vs_T0": 0.529,
+      "fee_saving_vs_T0": 1338.94,
+      "fees_total": 1192.07,
+      "is_hysteresis": true,
+      "turnover": 4.000522,
+      "turnover_reduction_pct": 0.5411
+    },
+    "T2": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T2",
+      "fee_saving_pct_vs_T0": 0.3843,
+      "fee_saving_vs_T0": 972.59,
+      "fees_total": 1558.42,
+      "is_hysteresis": false,
+      "turnover": 5.46062,
+      "turnover_reduction_pct": 0.3736
+    },
+    "T3": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T3",
+      "fee_saving_pct_vs_T0": 0.086,
+      "fee_saving_vs_T0": 217.69,
+      "fees_total": 2313.32,
+      "is_hysteresis": false,
+      "turnover": 7.917977,
+      "turnover_reduction_pct": 0.0917
+    },
+    "T4": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T4",
+      "fee_saving_pct_vs_T0": -0.3758,
+      "fee_saving_vs_T0": -951.04,
+      "fees_total": 3482.05,
+      "is_hysteresis": false,
+      "turnover": 12.371865,
+      "turnover_reduction_pct": -0.4192
+    },
+    "T5": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T5",
+      "fee_saving_pct_vs_T0": 0.0,
+      "fee_saving_vs_T0": 0.0,
+      "fees_total": 2531.01,
+      "is_hysteresis": false,
+      "turnover": 8.71739,
+      "turnover_reduction_pct": 0.0
+    },
+    "T6": {
+      "base_fees_total": 2531.01,
+      "base_turnover": 8.71739,
+      "candidate_id": "T6",
+      "fee_saving_pct_vs_T0": 0.529,
+      "fee_saving_vs_T0": 1338.94,
+      "fees_total": 1192.07,
+      "is_hysteresis": true,
+      "turnover": 4.000522,
+      "turnover_reduction_pct": 0.5411
+    }
+  },
+  "generated_at": "2026-08-26T20:14:08.603578+00:00",
+  "methodology": "fees total vs T0 full window; hysteresis expected to reduce turnover/fees"
+}

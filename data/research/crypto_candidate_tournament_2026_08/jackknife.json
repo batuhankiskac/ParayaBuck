@@ -1,0 +1,295 @@
+{
+  "generated_at": "2026-08-26T20:14:08.598909+00:00",
+  "jackknife": {
+    "T0": {
+      "candidate_id": "T0",
+      "label": "CONTROL low-variance 22d 96h",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.008217,
+          "directionally_positive": true,
+          "max_drawdown": 0.067476,
+          "removed": "SHIB/USD",
+          "return": 0.04462,
+          "sharpe": 0.278703
+        },
+        "without_SOL_USD": {
+          "cagr": 0.007895,
+          "directionally_positive": true,
+          "max_drawdown": 0.039583,
+          "removed": "SOL/USD",
+          "return": 0.042838,
+          "sharpe": 0.376953
+        }
+      }
+    },
+    "T1": {
+      "candidate_id": "T1",
+      "label": "T1 hysteresis retention rank<=4",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_LTC_USD": {
+          "cagr": 0.004061,
+          "directionally_positive": true,
+          "max_drawdown": 0.060447,
+          "removed": "LTC/USD",
+          "return": 0.021855,
+          "sharpe": 0.18303
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.015413,
+          "directionally_positive": true,
+          "max_drawdown": 0.061919,
+          "removed": "SHIB/USD",
+          "return": 0.08501,
+          "sharpe": 0.512847
+        },
+        "without_SOL_USD": {
+          "cagr": 0.010964,
+          "directionally_positive": true,
+          "max_drawdown": 0.039563,
+          "removed": "SOL/USD",
+          "return": 0.059891,
+          "sharpe": 0.515095
+        }
+      }
+    },
+    "T2": {
+      "candidate_id": "T2",
+      "label": "T2 consensus 22/63 percentile mean",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.005564,
+          "directionally_positive": true,
+          "max_drawdown": 0.076245,
+          "removed": "SHIB/USD",
+          "return": 0.030037,
+          "sharpe": 0.206139
+        },
+        "without_SOL_USD": {
+          "cagr": 0.0104,
+          "directionally_positive": true,
+          "max_drawdown": 0.039567,
+          "removed": "SOL/USD",
+          "return": 0.056739,
+          "sharpe": 0.506548
+        }
+      }
+    },
+    "T3": {
+      "candidate_id": "T3",
+      "label": "T3 downside deviation 22d",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.012474,
+          "directionally_positive": true,
+          "max_drawdown": 0.06477,
+          "removed": "SHIB/USD",
+          "return": 0.068364,
+          "sharpe": 0.399722
+        },
+        "without_SOL_USD": {
+          "cagr": 0.004626,
+          "directionally_positive": true,
+          "max_drawdown": 0.038296,
+          "removed": "SOL/USD",
+          "return": 0.024923,
+          "sharpe": 0.256825
+        },
+        "without_XRP_USD": {
+          "cagr": 0.005193,
+          "directionally_positive": true,
+          "max_drawdown": 0.06477,
+          "removed": "XRP/USD",
+          "return": 0.028014,
+          "sharpe": 0.169473
+        }
+      }
+    },
+    "T4": {
+      "candidate_id": "T4",
+      "label": "T4 correlation-aware top5",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_SHIB_USD": {
+          "cagr": 3.4e-05,
+          "directionally_positive": true,
+          "max_drawdown": 0.077184,
+          "removed": "SHIB/USD",
+          "return": 0.000182,
+          "sharpe": 0.018412
+        },
+        "without_SOL_USD": {
+          "cagr": 0.025221,
+          "directionally_positive": true,
+          "max_drawdown": 0.04415,
+          "removed": "SOL/USD",
+          "return": 0.142097,
+          "sharpe": 0.908838
+        }
+      }
+    },
+    "T5": {
+      "candidate_id": "T5",
+      "label": "T5 inverse-vol weighting",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.008217,
+          "directionally_positive": true,
+          "max_drawdown": 0.067476,
+          "removed": "SHIB/USD",
+          "return": 0.04462,
+          "sharpe": 0.278703
+        },
+        "without_SOL_USD": {
+          "cagr": 0.007895,
+          "directionally_positive": true,
+          "max_drawdown": 0.039583,
+          "removed": "SOL/USD",
+          "return": 0.042838,
+          "sharpe": 0.376953
+        }
+      }
+    },
+    "T6": {
+      "candidate_id": "T6",
+      "label": "T6 hysteresis + inverse-vol",
+      "leave_one_out": {
+        "without_BTC_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "BTC/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_ETH_USD": {
+          "cagr": 0.0,
+          "directionally_positive": false,
+          "max_drawdown": 0.0,
+          "removed": "ETH/USD",
+          "return": 0.0,
+          "sharpe": 0.0
+        },
+        "without_LTC_USD": {
+          "cagr": 0.004061,
+          "directionally_positive": true,
+          "max_drawdown": 0.060447,
+          "removed": "LTC/USD",
+          "return": 0.021855,
+          "sharpe": 0.18303
+        },
+        "without_SHIB_USD": {
+          "cagr": 0.015413,
+          "directionally_positive": true,
+          "max_drawdown": 0.061919,
+          "removed": "SHIB/USD",
+          "return": 0.08501,
+          "sharpe": 0.512847
+        },
+        "without_SOL_USD": {
+          "cagr": 0.010964,
+          "directionally_positive": true,
+          "max_drawdown": 0.039563,
+          "removed": "SOL/USD",
+          "return": 0.059891,
+          "sharpe": 0.515095
+        }
+      }
+    }
+  }
+}

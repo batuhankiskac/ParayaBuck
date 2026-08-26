@@ -1,0 +1,271 @@
+{
+  "cost_stress": {
+    "T0": {
+      "candidate_id": "T0",
+      "label": "CONTROL low-variance 22d 96h",
+      "stress": {
+        "1x": {
+          "cagr": 0.009644,
+          "fees_total": 2531.01,
+          "max_drawdown": 0.067476,
+          "net_positive": true,
+          "return": 0.052532,
+          "sharpe": 0.31146,
+          "trade_count": 162,
+          "turnover": 8.71739
+        },
+        "2x": {
+          "cagr": 0.005152,
+          "fees_total": 5010.8,
+          "max_drawdown": 0.069872,
+          "net_positive": true,
+          "return": 0.02779,
+          "sharpe": 0.174032,
+          "trade_count": 162,
+          "turnover": 8.736571
+        },
+        "3x": {
+          "cagr": 0.000614,
+          "fees_total": 7438.99,
+          "max_drawdown": 0.072262,
+          "net_positive": true,
+          "return": 0.003281,
+          "sharpe": 0.035113,
+          "trade_count": 162,
+          "turnover": 8.755315
+        }
+      }
+    },
+    "T1": {
+      "candidate_id": "T1",
+      "label": "T1 hysteresis retention rank<=4",
+      "stress": {
+        "1x": {
+          "cagr": 0.018963,
+          "fees_total": 1192.07,
+          "max_drawdown": 0.061919,
+          "net_positive": true,
+          "return": 0.105399,
+          "sharpe": 0.60077,
+          "trade_count": 66,
+          "turnover": 4.000522
+        },
+        "2x": {
+          "cagr": 0.016953,
+          "fees_total": 2367.51,
+          "max_drawdown": 0.062925,
+          "net_positive": true,
+          "return": 0.093818,
+          "sharpe": 0.538699,
+          "trade_count": 66,
+          "turnover": 3.992311
+        },
+        "3x": {
+          "cagr": 0.014858,
+          "fees_total": 3534.68,
+          "max_drawdown": 0.06393,
+          "net_positive": true,
+          "return": 0.08185,
+          "sharpe": 0.473967,
+          "trade_count": 66,
+          "turnover": 3.994106
+        }
+      }
+    },
+    "T2": {
+      "candidate_id": "T2",
+      "label": "T2 consensus 22/63 percentile mean",
+      "stress": {
+        "1x": {
+          "cagr": 0.007027,
+          "fees_total": 1558.42,
+          "max_drawdown": 0.076245,
+          "net_positive": true,
+          "return": 0.038061,
+          "sharpe": 0.244012,
+          "trade_count": 94,
+          "turnover": 5.46062
+        },
+        "2x": {
+          "cagr": 0.004204,
+          "fees_total": 3097.83,
+          "max_drawdown": 0.078402,
+          "net_positive": true,
+          "return": 0.022633,
+          "sharpe": 0.152104,
+          "trade_count": 95,
+          "turnover": 5.463832
+        },
+        "3x": {
+          "cagr": 0.001419,
+          "fees_total": 4619.43,
+          "max_drawdown": 0.080298,
+          "net_positive": true,
+          "return": 0.007594,
+          "sharpe": 0.061514,
+          "trade_count": 95,
+          "turnover": 5.467115
+        }
+      }
+    },
+    "T3": {
+      "candidate_id": "T3",
+      "label": "T3 downside deviation 22d",
+      "stress": {
+        "1x": {
+          "cagr": 0.01137,
+          "fees_total": 2313.32,
+          "max_drawdown": 0.06477,
+          "net_positive": true,
+          "return": 0.062163,
+          "sharpe": 0.368634,
+          "trade_count": 147,
+          "turnover": 7.917977
+        },
+        "2x": {
+          "cagr": 0.007144,
+          "fees_total": 4583.45,
+          "max_drawdown": 0.066486,
+          "net_positive": true,
+          "return": 0.038702,
+          "sharpe": 0.237381,
+          "trade_count": 146,
+          "turnover": 7.928153
+        },
+        "3x": {
+          "cagr": 0.003067,
+          "fees_total": 6813.24,
+          "max_drawdown": 0.068199,
+          "net_positive": true,
+          "return": 0.016469,
+          "sharpe": 0.111152,
+          "trade_count": 146,
+          "turnover": 7.936816
+        }
+      }
+    },
+    "T4": {
+      "candidate_id": "T4",
+      "label": "T4 correlation-aware top5",
+      "stress": {
+        "1x": {
+          "cagr": 0.002147,
+          "fees_total": 3482.05,
+          "max_drawdown": 0.078474,
+          "net_positive": true,
+          "return": 0.011503,
+          "sharpe": 0.077244,
+          "trade_count": 227,
+          "turnover": 12.371865
+        },
+        "2x": {
+          "cagr": -0.004294,
+          "fees_total": 6870.24,
+          "max_drawdown": 0.089335,
+          "net_positive": false,
+          "return": -0.022692,
+          "sharpe": -0.100573,
+          "trade_count": 227,
+          "turnover": 12.414781
+        },
+        "3x": {
+          "cagr": -0.009461,
+          "fees_total": 10173.04,
+          "max_drawdown": 0.101802,
+          "net_positive": false,
+          "return": -0.049442,
+          "sharpe": -0.248983,
+          "trade_count": 228,
+          "turnover": 12.452511
+        }
+      }
+    },
+    "T5": {
+      "candidate_id": "T5",
+      "label": "T5 inverse-vol weighting",
+      "stress": {
+        "1x": {
+          "cagr": 0.009644,
+          "fees_total": 2531.01,
+          "max_drawdown": 0.067476,
+          "net_positive": true,
+          "return": 0.052532,
+          "sharpe": 0.31146,
+          "trade_count": 162,
+          "turnover": 8.71739
+        },
+        "2x": {
+          "cagr": 0.005152,
+          "fees_total": 5010.8,
+          "max_drawdown": 0.069872,
+          "net_positive": true,
+          "return": 0.02779,
+          "sharpe": 0.174032,
+          "trade_count": 162,
+          "turnover": 8.736571
+        },
+        "3x": {
+          "cagr": 0.000614,
+          "fees_total": 7438.99,
+          "max_drawdown": 0.072262,
+          "net_positive": true,
+          "return": 0.003281,
+          "sharpe": 0.035113,
+          "trade_count": 162,
+          "turnover": 8.755315
+        }
+      }
+    },
+    "T6": {
+      "candidate_id": "T6",
+      "label": "T6 hysteresis + inverse-vol",
+      "stress": {
+        "1x": {
+          "cagr": 0.018963,
+          "fees_total": 1192.07,
+          "max_drawdown": 0.061919,
+          "net_positive": true,
+          "return": 0.105399,
+          "sharpe": 0.60077,
+          "trade_count": 66,
+          "turnover": 4.000522
+        },
+        "2x": {
+          "cagr": 0.016953,
+          "fees_total": 2367.51,
+          "max_drawdown": 0.062925,
+          "net_positive": true,
+          "return": 0.093818,
+          "sharpe": 0.538699,
+          "trade_count": 66,
+          "turnover": 3.992311
+        },
+        "3x": {
+          "cagr": 0.014858,
+          "fees_total": 3534.68,
+          "max_drawdown": 0.06393,
+          "net_positive": true,
+          "return": 0.08185,
+          "sharpe": 0.473967,
+          "trade_count": 66,
+          "turnover": 3.994106
+        }
+      }
+    }
+  },
+  "effective_cost": {
+    "commission": 0,
+    "cost_multiplier_levels": [
+      1,
+      2,
+      3
+    ],
+    "maximum_allocation": 0.05,
+    "minimum_order_notional": 10,
+    "rebalance_band_pct": 0.005,
+    "slippage_bps": 2,
+    "spread_bps": 2,
+    "taker_fee_bps": 25
+  },
+  "generated_at": "2026-08-26T20:14:05.182407+00:00"
+}

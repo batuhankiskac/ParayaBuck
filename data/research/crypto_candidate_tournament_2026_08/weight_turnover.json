@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-08-26T20:14:08.603670+00:00",
+  "weight_turnover": {
+    "T0": {
+      "candidate_id": "T0",
+      "label": "CONTROL low-variance 22d 96h",
+      "weight_turnover": {
+        "mean": 0.0098,
+        "median": 0.0,
+        "total": 4.4141
+      }
+    },
+    "T1": {
+      "candidate_id": "T1",
+      "label": "T1 hysteresis retention rank<=4",
+      "weight_turnover": {
+        "mean": 0.0042,
+        "median": 0.0,
+        "total": 1.9071
+      }
+    },
+    "T2": {
+      "candidate_id": "T2",
+      "label": "T2 consensus 22/63 percentile mean",
+      "weight_turnover": {
+        "mean": 0.006,
+        "median": 0.0,
+        "total": 2.7138
+      }
+    },
+    "T3": {
+      "candidate_id": "T3",
+      "label": "T3 downside deviation 22d",
+      "weight_turnover": {
+        "mean": 0.0089,
+        "median": 0.0,
+        "total": 4.0034
+      }
+    },
+    "T4": {
+      "candidate_id": "T4",
+      "label": "T4 correlation-aware top5",
+      "weight_turnover": {
+        "mean": 0.0145,
+        "median": 0.025,
+        "total": 6.5645
+      }
+    },
+    "T5": {
+      "candidate_id": "T5",
+      "label": "T5 inverse-vol weighting",
+      "weight_turnover": {
+        "mean": 0.0098,
+        "median": 0.0,
+        "total": 4.4141
+      }
+    },
+    "T6": {
+      "candidate_id": "T6",
+      "label": "T6 hysteresis + inverse-vol",
+      "weight_turnover": {
+        "mean": 0.0042,
+        "median": 0.0,
+        "total": 1.9071
+      }
+    }
+  }
+}

@@ -1,0 +1,641 @@
+{
+  "candidates": {
+    "R0": {
+      "beta_diagnostics_snapshot": {
+        "avg_beta_median": 1.1753,
+        "avg_residual_vol_median": 0.026321,
+        "beta_p10": 0.6865,
+        "beta_p90": 1.8311
+      },
+      "candidate_id": "R0",
+      "concentration": {
+        "max_single_weight": 0.0539,
+        "per_symbol": [
+          {
+            "realized_pnl": 2996.24,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2408.19,
+            "symbol": "LTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2027.66,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 890.73,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 651.02,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 94.6,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -179.26,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -246.91,
+            "symbol": "AAVE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -346.98,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -396.29,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -445.57,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -544.15,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -800.71,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -855.41,
+            "symbol": "SOL/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.3304,
+        "top2_share_of_positive_pnl": 0.596,
+        "top3_share_of_positive_pnl": 0.8196,
+        "top_1": {
+          "realized_pnl": 2996.24,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 2408.19,
+          "symbol": "LTC/USD"
+        },
+        "top_3": {
+          "realized_pnl": 2027.66,
+          "symbol": "ETH/USD"
+        }
+      },
+      "label": "CONTROL total vol 22d",
+      "metrics": {
+        "annualized_volatility": 0.032512,
+        "average_exposure": 0.049695,
+        "average_holdings": 3.080678,
+        "cagr": 0.009644,
+        "calmar": 0.142928,
+        "equity_end": 105253.16,
+        "equity_start": 100000,
+        "fees": {
+          "fee": 2259.83,
+          "fees_pct_of_avg_equity": 0.024601,
+          "slippage": 180.79,
+          "spread": 90.39,
+          "total": 2531.01
+        },
+        "gross_return": 0.079078,
+        "max_drawdown": 0.067476,
+        "max_drawdown_duration_days": 843,
+        "max_exposure": null,
+        "number_of_fills": 807,
+        "positive_period_ratio": 0.4923,
+        "profit_factor": 1.2075,
+        "rebalance_count": 453,
+        "sharpe": 0.31146,
+        "sortino": 0.446413,
+        "total_return": 0.052532,
+        "trade_count": 162,
+        "turnover": 8.71739
+      },
+      "parameters": {
+        "rebalance_hours": 96,
+        "top_n": 2,
+        "variance_lookback_days": 22
+      },
+      "selected_symbols": [
+        "AAVE/USD",
+        "AVAX/USD",
+        "BCH/USD",
+        "BTC/USD",
+        "DOGE/USD",
+        "DOT/USD",
+        "ETH/USD",
+        "GRT/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "SHIB/USD",
+        "SOL/USD",
+        "UNI/USD",
+        "XRP/USD"
+      ],
+      "strategy_name": "crypto_low_variance_v2",
+      "strategy_version": "2.0.0"
+    },
+    "R1": {
+      "beta_diagnostics_snapshot": {
+        "avg_beta_median": 1.1753,
+        "avg_residual_vol_median": 0.026321,
+        "beta_p10": 0.6865,
+        "beta_p90": 1.8311
+      },
+      "candidate_id": "R1",
+      "concentration": {
+        "max_single_weight": 0.0539,
+        "per_symbol": [
+          {
+            "realized_pnl": 3380.16,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3208.15,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2726.94,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1204.05,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 793.31,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 792.76,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 452.05,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -514.28,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -935.72,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -951.48,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1341.7,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1719.56,
+            "symbol": "LTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -2043.9,
+            "symbol": "DOT/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.2692,
+        "top2_share_of_positive_pnl": 0.5247,
+        "top3_share_of_positive_pnl": 0.7418,
+        "top_1": {
+          "realized_pnl": 3380.16,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3208.15,
+          "symbol": "ETH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 2726.94,
+          "symbol": "BCH/USD"
+        }
+      },
+      "label": "RESIDUAL 22",
+      "metrics": {
+        "annualized_volatility": 0.037488,
+        "average_exposure": 0.048721,
+        "average_holdings": 3.122302,
+        "cagr": 0.008228,
+        "calmar": 0.101235,
+        "equity_end": 104468.04,
+        "equity_start": 100000,
+        "fees": {
+          "fee": 3110.42,
+          "fees_pct_of_avg_equity": 0.033907,
+          "slippage": 248.83,
+          "spread": 124.42,
+          "total": 3483.67
+        },
+        "gross_return": 0.081345,
+        "max_drawdown": 0.081277,
+        "max_drawdown_duration_days": 940,
+        "max_exposure": null,
+        "number_of_fills": 1119,
+        "positive_period_ratio": 0.4949,
+        "profit_factor": 1.1252,
+        "rebalance_count": 453,
+        "sharpe": 0.237317,
+        "sortino": 0.333105,
+        "total_return": 0.04468,
+        "trade_count": 226,
+        "turnover": 12.050814
+      },
+      "parameters": {
+        "beta_window": 22,
+        "rebalance_hours": 96,
+        "residual_vol_window": 22,
+        "top_n": 2
+      },
+      "selected_symbols": [
+        "ADA/USD",
+        "AVAX/USD",
+        "BCH/USD",
+        "BTC/USD",
+        "DOGE/USD",
+        "DOT/USD",
+        "ETH/USD",
+        "GRT/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "SHIB/USD",
+        "SOL/USD",
+        "UNI/USD",
+        "XRP/USD"
+      ],
+      "strategy_name": "crypto_residual_low_variance_r1",
+      "strategy_version": "1.0.0"
+    },
+    "R2": {
+      "beta_diagnostics_snapshot": {
+        "avg_beta_median": 1.1753,
+        "avg_residual_vol_median": 0.026321,
+        "beta_p10": 0.6865,
+        "beta_p90": 1.8311
+      },
+      "candidate_id": "R2",
+      "concentration": {
+        "max_single_weight": 0.0629,
+        "per_symbol": [
+          {
+            "realized_pnl": 4100.39,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3742.05,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3491.81,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1558.52,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 532.84,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 331.58,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 272.52,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 191.77,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -408.33,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -450.65,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -557.32,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -957.66,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -2760.86,
+            "symbol": "LTC/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.2883,
+        "top2_share_of_positive_pnl": 0.5515,
+        "top3_share_of_positive_pnl": 0.797,
+        "top_1": {
+          "realized_pnl": 4100.39,
+          "symbol": "BTC/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3742.05,
+          "symbol": "SHIB/USD"
+        },
+        "top_3": {
+          "realized_pnl": 3491.81,
+          "symbol": "BCH/USD"
+        }
+      },
+      "label": "RESIDUAL 63",
+      "metrics": {
+        "annualized_volatility": 0.036615,
+        "average_exposure": 0.048123,
+        "average_holdings": 2.566804,
+        "cagr": 0.015418,
+        "calmar": 0.208734,
+        "equity_end": 108503.91,
+        "equity_start": 100000,
+        "fees": {
+          "fee": 2813.65,
+          "fees_pct_of_avg_equity": 0.030049,
+          "slippage": 225.09,
+          "spread": 112.55,
+          "total": 3151.29
+        },
+        "gross_return": 0.118654,
+        "max_drawdown": 0.073864,
+        "max_drawdown_duration_days": 779,
+        "max_exposure": null,
+        "number_of_fills": 970,
+        "positive_period_ratio": 0.4877,
+        "profit_factor": 1.2716,
+        "rebalance_count": 453,
+        "sharpe": 0.436169,
+        "sortino": 0.619017,
+        "total_return": 0.085039,
+        "trade_count": 197,
+        "turnover": 10.681124
+      },
+      "parameters": {
+        "beta_window": 63,
+        "rebalance_hours": 96,
+        "residual_vol_window": 22,
+        "top_n": 2
+      },
+      "selected_symbols": [
+        "ADA/USD",
+        "AVAX/USD",
+        "BCH/USD",
+        "BTC/USD",
+        "DOGE/USD",
+        "DOT/USD",
+        "ETH/USD",
+        "GRT/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "SHIB/USD",
+        "SOL/USD",
+        "UNI/USD",
+        "XRP/USD"
+      ],
+      "strategy_name": "crypto_residual_low_variance_r2",
+      "strategy_version": "1.0.0"
+    },
+    "R3": {
+      "beta_diagnostics_snapshot": {
+        "avg_beta_median": 1.1753,
+        "avg_residual_vol_median": 0.026321,
+        "beta_p10": 0.6865,
+        "beta_p90": 1.8311
+      },
+      "candidate_id": "R3",
+      "concentration": {
+        "max_single_weight": 0.05,
+        "per_symbol": [
+          {
+            "realized_pnl": 3699.82,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3538.54,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1024.65,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 528.93,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 314.92,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 191.77,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -86.54,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -534.84,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -757.83,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -793.74,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -901.8,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1394.12,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1872.5,
+            "symbol": "LTC/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.3979,
+        "top2_share_of_positive_pnl": 0.7784,
+        "top3_share_of_positive_pnl": 0.8886,
+        "top_1": {
+          "realized_pnl": 3699.82,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3538.54,
+          "symbol": "BCH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 1024.65,
+          "symbol": "ETH/USD"
+        }
+      },
+      "label": "RESIDUAL CONSENSUS",
+      "metrics": {
+        "annualized_volatility": 0.035536,
+        "average_exposure": 0.042585,
+        "average_holdings": 2.64851,
+        "cagr": 0.004409,
+        "calmar": 0.044716,
+        "equity_end": 102374.53,
+        "equity_start": 100000,
+        "fees": {
+          "fee": 2572.76,
+          "fees_pct_of_avg_equity": 0.028546,
+          "slippage": 205.82,
+          "spread": 102.91,
+          "total": 2881.5
+        },
+        "gross_return": 0.053828,
+        "max_drawdown": 0.098604,
+        "max_drawdown_duration_days": 1024,
+        "max_exposure": null,
+        "number_of_fills": 969,
+        "positive_period_ratio": 0.464,
+        "profit_factor": 1.0779,
+        "rebalance_count": 453,
+        "sharpe": 0.141546,
+        "sortino": 0.188365,
+        "total_return": 0.023745,
+        "trade_count": 194,
+        "turnover": 10.14115
+      },
+      "parameters": {
+        "beta_windows": [
+          22,
+          63
+        ],
+        "rebalance_hours": 96,
+        "residual_vol_window": 22,
+        "top_n": 2
+      },
+      "selected_symbols": [
+        "ADA/USD",
+        "AVAX/USD",
+        "BCH/USD",
+        "BTC/USD",
+        "DOGE/USD",
+        "DOT/USD",
+        "ETH/USD",
+        "GRT/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "SHIB/USD",
+        "SOL/USD",
+        "UNI/USD",
+        "XRP/USD"
+      ],
+      "strategy_name": "crypto_residual_low_variance_r3",
+      "strategy_version": "1.0.0"
+    }
+  },
+  "effective_cost": {
+    "commission": 0,
+    "cost_multiplier_levels": [
+      1,
+      2,
+      3
+    ],
+    "minimum_order_notional": 10,
+    "rebalance_band_pct": 0.005,
+    "slippage_bps": 2,
+    "spread_bps": 2,
+    "taker_fee_bps": 25
+  },
+  "generated_at": "2026-08-26T19:25:11.485956+00:00",
+  "universe_hash": "92518890e5814de46d8144982259986bd32cd2a6152cce899657a06a4468fed9",
+  "window": [
+    "2021-04-01T00:00:00+00:00",
+    "2026-07-31T23:59:59+00:00"
+  ]
+}

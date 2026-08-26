@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import math
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
-UTC = timezone.utc
+UTC = UTC
 
 # ---------------------------------------------------------------------------
 # Independent reference implementations (§23 — ground truth)
@@ -715,8 +715,10 @@ class TestHarnessIntegrationPureHelpers:
         fn = getattr(h, "mean_percentile_score", None)
         if fn is None:
             pytest.skip("mean_percentile_score alias not present (percentile_ranks covers it)")
-        pr22 = ref_percentile_ranks({"A": 0.01, "B": 0.02, "C": 0.03})
-        pr63 = ref_percentile_ranks({"A": 0.03, "B": 0.01, "C": 0.02})
+        pr22 = ref_percentile_ranks({"A": 0.01, "B": 0.02, "C": 0.03})  # noqa: F841
+        pr63 = ref_percentile_ranks({"A": 0.03, "B": 0.01, "C": 0.02})  # noqa: F841
+
+
 class TestT0ControlParity:
     """Compare harness T0 ranking vs production CryptoLowVariance1dV2 (same context)."""
 
@@ -779,27 +781,29 @@ class TestT0ControlParity:
             prices=prices,
             benchmark_symbol="BTC/USD",
         )
-        strat = CryptoLowVariance1dV2(
-            parameters={"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96}
-        )
+        strat = CryptoLowVariance1dV2(parameters={"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96})
         prod_ranked = strat.rank_candidates(ctx)
         # Harness T0 is CryptoLowVariance1dV2 with T0_PARAMS — check frozen params if no helper
         t0_params = getattr(h, "T0_PARAMS", None)
         if t0_params is not None:
             assert t0_params == {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96}
-        t0_fn = (
-            getattr(h, "rank_t0", None)
-            or getattr(h, "score_t0", None)
-            or getattr(h, "_score_candidates_t0", None)
-        )
+        t0_fn = getattr(h, "rank_t0", None) or getattr(h, "score_t0", None) or getattr(h, "_score_candidates_t0", None)
         if t0_fn is None:
-            t0_cls = getattr(h, "CryptoLowVarianceTournamentT0", None) or getattr(h, "T0", None) or getattr(h, "CryptoTournamentT0", None)
+            t0_cls = (
+                getattr(h, "CryptoLowVarianceTournamentT0", None)
+                or getattr(h, "T0", None)
+                or getattr(h, "CryptoTournamentT0", None)
+            )
             if t0_cls is None:
                 # Fallback: harness T0 is just CryptoLowVariance1dV2(T0_PARAMS) — parity is by construction
                 # Verify harness can at least instantiate that and ranking matches production (same class)
                 from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV2 as _Prod
 
-                harness_strat = _Prod(parameters=dict(t0_params) if t0_params else {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96})
+                harness_strat = _Prod(
+                    parameters=dict(t0_params)
+                    if t0_params
+                    else {"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96}
+                )
                 harness_ranked = harness_strat.rank_candidates(ctx)
                 assert tuple(harness_ranked) == tuple(prod_ranked)
                 return
@@ -811,12 +815,13 @@ class TestT0ControlParity:
                 harness_ranked = tuple(s for _, s in harness_ranked)  # type: ignore[misc]
             harness_ranked = tuple(harness_ranked)  # type: ignore[assignment]
         assert tuple(harness_ranked) == tuple(prod_ranked)
+
     def test_t0_uses_same_22_symbol_filter_via_context(self) -> None:
+        from parayabuck.backtest.product import build_product_universe
+        from parayabuck.config import load_config
         from parayabuck.core.models import Bar, Market
         from parayabuck.portfolio.base import PortfolioContext
         from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV2  # type: ignore[import-not-found]
-        from parayabuck.backtest.product import build_product_universe
-        from parayabuck.config import load_config
 
         _harness()  # ensure harness present or skip
         config = load_config()
@@ -827,8 +832,22 @@ class TestT0ControlParity:
             ts = base + timedelta(days=i)
             for sym in ["BTC/USD", "ETH/USD", "MKR/USD"]:
                 close = 100 + i * 0.1
-                bars.append(Bar(symbol=sym, timestamp=ts, timeframe="1d", market=Market.CRYPTO, open=100, high=max(101, close + 1), low=99, close=close, volume=1000))
-        universe = build_product_universe(config, bars, market=Market.CRYPTO, end=base + timedelta(days=29), timeframe="1d")
+                bars.append(
+                    Bar(
+                        symbol=sym,
+                        timestamp=ts,
+                        timeframe="1d",
+                        market=Market.CRYPTO,
+                        open=100,
+                        high=max(101, close + 1),
+                        low=99,
+                        close=close,
+                        volume=1000,
+                    )
+                )
+        universe = build_product_universe(
+            config, bars, market=Market.CRYPTO, end=base + timedelta(days=29), timeframe="1d"
+        )
         ts = universe.snapshots[-1].effective_at if universe.snapshots else base + timedelta(days=29)
         history: dict[str, tuple] = {}
         prices: dict[str, float] = {}
@@ -850,9 +869,7 @@ class TestT0ControlParity:
         )
         # MKR must be out of universe (not in 22 pool)
         assert not ctx.in_universe("MKR/USD")
-        strat = CryptoLowVariance1dV2(
-            parameters={"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96}
-        )
+        strat = CryptoLowVariance1dV2(parameters={"variance_lookback_days": 22, "top_n": 2, "rebalance_hours": 96})
         ranked = strat.rank_candidates(ctx)
         assert "MKR/USD" not in ranked
 
@@ -903,6 +920,7 @@ class TestHarnessSelectionHelpers:
             break
         if not tried:
             pytest.skip("select_correlation_pair signature mismatch")
+
 
 # ---------------------------------------------------------------------------
 # Smoke: reference math self-consistency

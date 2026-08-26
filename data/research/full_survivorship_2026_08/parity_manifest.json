@@ -1,0 +1,48 @@
+{
+  "effective_params": [
+    [
+      "beta_window_bars",
+      273
+    ],
+    [
+      "formation_bars",
+      252
+    ],
+    [
+      "ivol_reject_quantile",
+      0.7
+    ],
+    [
+      "max_single_weight",
+      0.1
+    ],
+    [
+      "residual_vol_window",
+      63
+    ],
+    [
+      "skip_bars",
+      21
+    ],
+    [
+      "top_n",
+      8
+    ]
+  ],
+  "frozen_check": "PASS",
+  "strategy": "equity_residual_momentum_v3",
+  "timeframe": "1d",
+  "target_shortlist": 300,
+  "max_stream_symbols": 30,
+  "formation_bars": 252,
+  "skip_bars": 21,
+  "beta_window_bars": 273,
+  "residual_vol_window": 63,
+  "top_n": 8,
+  "max_single_weight": 0.1,
+  "ivol_reject_quantile": 0.7,
+  "weekly": true,
+  "positive_12_1_gate": true,
+  "consensus": "126/189/252 MH_RAW",
+  "note": "K_FINAL_PARITY_FREEZE manifest - production PIT universe parity, CA parity"
+}

@@ -16,6 +16,27 @@ without requiring the runtime to stop or checkpoint.
 
 Backups are timestamped files under a configured directory and pruned by
 retention (oldest deleted first). Stdlib only.
+
+Durability & crash-consistency semantics (WAL, synchronous=NORMAL, busy_timeout):
+* Source databases are opened with ``busy_timeout=5000`` so a concurrent
+  runtime write does not fail the backup with SQLITE_BUSY; the backup API
+  retries internally while the runtime keeps writing.
+* The snapshot is transaction-consistent: it contains every committed
+  transaction at the instant the backup runs and excludes in-flight
+  uncommitted work — a crash mid-backup never produces a half-decision file.
+* The backup API copies the source file header verbatim, so a backup of a
+  WAL runtime is itself WAL-format; it is normalized to DELETE mode
+  (``PRAGMA journal_mode=DELETE``) so the snapshot is a standalone
+  rollback-journal file with no ``-wal``/``-shm`` sidecars and is portable
+  and restorable read-only.
+* Corruption recovery: ``verify_backup`` runs ``PRAGMA integrity_check`` on
+  the snapshot (read-only open); a backup that fails verification is
+  discarded and the runtime falls back to the previous verified backup or
+  fails closed per production policy.
+* Concurrent handling: pruning deletes only files older than
+  ``retention_days`` by mtime (oldest first) and never touches the
+  just-created file; sidecar siblings (``-wal``/``-shm``) from
+  pre-normalization backups are cleaned up.
 """
 
 BACKUP_PREFIX = "parayabuck-"
@@ -54,6 +75,12 @@ def backup_database(
     uncommitted work. After the snapshot, backups older than
     ``retention_days`` are pruned (oldest first). Returns the created backup
     path.
+
+    Crash-consistency: a backup that is interrupted (process crash, power
+    loss) may leave a partial file; callers should run ``verify_backup`` on
+    the returned path before trusting it, and restore logic must prefer the
+    last verified backup. The backup itself is atomic at the SQLite level —
+    it never contains a half-committed decision+order transaction.
     """
     retention = _validate_retention(retention_days)
     source = Path(source_path)
@@ -68,6 +95,7 @@ def backup_database(
     destination_connection = sqlite3.connect(destination)
     try:
         source_connection.execute("PRAGMA busy_timeout=5000")
+        destination_connection.execute("PRAGMA busy_timeout=5000")
         # Online backup: copies a consistent snapshot, retrying on transient
         # locks while the runtime keeps writing. The source is never modified.
         source_connection.backup(destination_connection)
@@ -77,6 +105,9 @@ def backup_database(
         # to a standalone rollback-journal database: portable, restorable
         # read-only, and free of sidecar litter.
         destination_connection.execute("PRAGMA journal_mode=DELETE")
+        # Ensure the destination is fsynced and not WAL: a standalone file
+        # with no sidecars survives a crash without needing WAL recovery.
+        destination_connection.commit()
     finally:
         destination_connection.close()
         source_connection.close()

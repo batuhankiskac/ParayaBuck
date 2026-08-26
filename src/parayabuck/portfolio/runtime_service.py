@@ -454,6 +454,7 @@ class PortfolioStateRepository:
         risk: RiskOverlayDecision,
         market: Market,
     ) -> str:
+        """Persist one decision (without orders). Prefer ``record_decision_with_orders`` for crash-consistency."""
         decision_id = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
@@ -475,6 +476,90 @@ class PortfolioStateRepository:
             )
         return decision_id
 
+    def record_decision_with_orders(
+        self,
+        session_id: str,
+        account_id: str,
+        configuration_digest: str,
+        target: TargetPortfolio,
+        risk: RiskOverlayDecision,
+        market: Market,
+        orders: tuple[PortfolioOrderRequest, ...],
+        *,
+        initial_status: str = "submitting",
+        buy_orders_json: str | None = None,
+        rebalance_phase: str | None = None,
+    ) -> str:
+        """Atomically persist a decision, its orders, and optional rebalance phase.
+
+        Crash-consistency: the decision row, every order row for that decision,
+        and (when ``rebalance_phase`` is set) the rebalance-execution row are
+        written in a SINGLE SQLite transaction (``BEGIN IMMEDIATE`` via
+        ``with connection``). A crash mid-write cannot leave a half-decision
+        (decision without orders) or a half-rebalance (decision+orders without
+        the sell_pending marker). The transaction is bounded by ``store.lock``
+        plus WAL ``busy_timeout=5000`` so concurrent writers serialize.
+        """
+        decision_id = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
+        created_at = datetime.now(UTC).isoformat()
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_decisions(
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    decision_id,
+                    session_id,
+                    account_id,
+                    configuration_digest,
+                    target.decision_timestamp.isoformat(),
+                    market.value,
+                    target.strategy_name,
+                    json.dumps(target.to_dict(), sort_keys=True, default=str),
+                    json.dumps(asdict(risk), sort_keys=True, default=str),
+                ),
+            )
+            for order in orders:
+                self.store.connection.execute(
+                    """INSERT OR IGNORE INTO portfolio_orders(
+                        client_order_id, decision_id, symbol, market, side, quantity,
+                        reference_price, status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        order.client_order_id,
+                        decision_id,
+                        order.symbol,
+                        order.market.value,
+                        order.side.value,
+                        order.quantity,
+                        order.reference_price,
+                        initial_status,
+                        created_at,
+                    ),
+                )
+            if rebalance_phase is not None:
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_rebalance_executions(
+                        decision_id, account_id, market, phase, status, buy_orders_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(decision_id) DO UPDATE SET
+                        phase = excluded.phase,
+                        status = excluded.status,
+                        buy_orders_json = excluded.buy_orders_json,
+                        updated_at = excluded.updated_at""",
+                    (
+                        decision_id,
+                        account_id,
+                        market.value,
+                        rebalance_phase,
+                        "active",
+                        buy_orders_json or "[]",
+                        created_at,
+                    ),
+                )
+        return decision_id
+
     def record_order(self, order: PortfolioOrderRequest, status: str) -> None:
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
@@ -494,8 +579,6 @@ class PortfolioStateRepository:
                     datetime.now(UTC).isoformat(),
                 ),
             )
-
-    # -- two-phase rebalance execution lifecycle ----------------------------
 
     def save_rebalance_execution(
         self,
@@ -1678,20 +1761,25 @@ class PortfolioRuntime:
         )
         if observed_target is not risk.target:
             risk = replace(risk, target=observed_target)
-        decision_id = self.repository.record_decision(
-            self.session_id,
-            self.account_id,
-            self.configuration_digest,
-            risk.target,
-            risk,
-            self.market,
-        )
         orders = tuple(PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id}) for order in planned)
         sells = tuple(order for order in orders if order.side == PortfolioOrderSide.SELL)
         buys = tuple(order for order in orders if order.side == PortfolioOrderSide.BUY)
         if not buys:
             # Pure risk-reducing decision: nothing depends on a sell outcome,
-            # so the whole order set can be submitted immediately.
+            # so the whole order set can be submitted immediately. Persist
+            # decision + orders atomically so a crash cannot leave a
+            # half-decision (decision without orders).
+            decision_id = self.repository.record_decision_with_orders(
+                self.session_id,
+                self.account_id,
+                self.configuration_digest,
+                risk.target,
+                risk,
+                self.market,
+                orders,
+                initial_status="submitting",
+            )
+            # Orders are already persisted as submitting; submit them idempotently.
             submitted = self._submit_orders(orders)
             return PortfolioRuntimeResult(
                 decision_id,
@@ -1706,12 +1794,18 @@ class PortfolioRuntime:
             # persist the dependent buys in the rebalance-execution state;
             # they are submitted only after every required sell is terminal
             # and a fresh account snapshot proves the exposure is safe.
-            self.repository.save_rebalance_execution(
-                decision_id,
+            # Atomic: decision + sell orders + rebalance marker in one tx.
+            decision_id = self.repository.record_decision_with_orders(
+                self.session_id,
                 self.account_id,
+                self.configuration_digest,
+                risk.target,
+                risk,
                 self.market,
-                REBALANCE_PHASE_SELL_PENDING,
+                sells,
+                initial_status="submitting",
                 buy_orders_json=json.dumps([asdict(order) for order in buys], sort_keys=True, default=str),
+                rebalance_phase=REBALANCE_PHASE_SELL_PENDING,
             )
             submitted = self._submit_orders(sells)
             return PortfolioRuntimeResult(
@@ -1723,7 +1817,17 @@ class PortfolioRuntime:
                 "sell_phase_submitted",
             )
         # Pure BUY decision with no SELL leg: there is nothing to wait for,
-        # so the BUY phase begins immediately.
+        # so the BUY phase begins immediately. Atomic decision+orders.
+        decision_id = self.repository.record_decision_with_orders(
+            self.session_id,
+            self.account_id,
+            self.configuration_digest,
+            risk.target,
+            risk,
+            self.market,
+            buys,
+            initial_status="submitting",
+        )
         submitted = self._submit_orders(buys)
         return PortfolioRuntimeResult(
             decision_id,
@@ -1993,13 +2097,28 @@ class PortfolioRuntime:
     def _submit_orders(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
-        The client order id is deterministic per decision/symbol/side, so a
-        crash between persistence and broker acknowledgement cannot produce a
+        The client order id is deterministic ``parayabuck-{decision_id}-{symbol}-{side}``
+        so a crash between persistence and broker acknowledgement cannot produce a
         duplicate broker order (Alpaca rejects a reused client id and the
-        broker's ambiguity recovery resolves the existing order).
+        broker's ambiguity recovery resolves the existing order). Duplicate
+        decisions produce the same id and ``record_order`` is ``INSERT OR IGNORE``
+        so only one logical order exists; restart never duplicates, a partial
+        fill leaves the same key and the re-planned residual is the only new
+        work, and a broker timeout marks ``reconciliation_required`` and
+        requires ``reconcile()`` before retry.
         """
         submitted: list[str] = []
         for order in orders:
+            # Idempotency: if the logical order already exists with a terminal
+            # or submitted status, do not submit a duplicate broker order.
+            existing = self.repository.orders_for_decision(order.decision_id)
+            already = next((o for o in existing if str(o.get("client_order_id")) == order.client_order_id), None)
+            if already is not None:
+                status = str(already.get("status", ""))
+                if status in {"submitted", "filled", "partial_fill", "canceled", "rejected", "expired"}:
+                    continue
+                if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:
+                    continue
             self.repository.record_order(order, "submitting")
             try:
                 broker_order_id = self.broker.submit_portfolio_order(order)

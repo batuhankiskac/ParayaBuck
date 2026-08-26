@@ -10,7 +10,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 from requests.exceptions import RequestException
 
@@ -44,6 +44,9 @@ from parayabuck.markets.timeframes import (
 )
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
+from parayabuck.monitoring.incident import IncidentCategory
+from parayabuck.monitoring.paper_incident import automate_incident_recovery
+from parayabuck.monitoring.receipt import build_receipt, default_receipt_dir
 from parayabuck.portfolio import portfolio_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
@@ -1763,7 +1766,47 @@ class EngineRuntime:
             and (datetime.now(UTC) - snapshot_at).total_seconds() <= self.config.maximum_account_age_for_entry_seconds
         ):
             return snapshot
-        account: AccountSnapshot = self.broker.account()
+        # Stale account -> BROKER_ACCOUNT_STALE incident: reconcile-first style fetch with bounded handling
+        # Never blind retry; stale snapshot pauses decisions via entry latch, but we still produce canonical record
+        try:
+            account: AccountSnapshot = self.broker.account()
+        except Exception as exc:
+            # Provider/broker temporary -> bounded retry 5 attempts; DB errors fail closed immediately is handled elsewhere
+            if "database" in str(exc).lower() or "locked" in str(exc).lower() or "integrity" in str(exc).lower():
+                automate_incident_recovery(
+                    IncidentCategory.DATABASE_ERROR,
+                    account_id=getattr(self.broker, "account_id", "unknown"),
+                    error=str(exc),
+                    current_state={"fresh_account_fetch": True},
+                )
+                raise
+            # For broker timeouts / stale account we emit BROKER_ACCOUNT_STALE and fail closed for this cycle
+            automate_incident_recovery(
+                IncidentCategory.BROKER_ACCOUNT_STALE,
+                account_id=getattr(self.broker, "account_id", "unknown"),
+                error=str(exc),
+                current_state={
+                    "fresh_account_fetch": True,
+                    "age_seconds": (datetime.now(UTC) - snapshot_at).total_seconds() if snapshot_at else None,
+                },
+            )
+            raise
+        else:
+            # Freshness check after fetch: if broker returned timestamp is stale, treat as incident but still return snapshot
+            # (readiness gate will block entries); we emit incident for observability
+            try:
+                ts = getattr(account, "timestamp", None) or getattr(account, "updated_at", None)
+                if ts is not None and hasattr(ts, "tzinfo"):
+                    age = (datetime.now(UTC) - ts).total_seconds() if ts.tzinfo else None
+                    if age is not None and age > self.config.maximum_account_age_for_entry_seconds * 2:
+                        automate_incident_recovery(
+                            IncidentCategory.BROKER_ACCOUNT_STALE,
+                            account_id=getattr(self.broker, "account_id", "unknown"),
+                            error=f"broker account snapshot stale age={age:.1f}s",
+                            current_state={"age_seconds": age},
+                        )
+            except Exception:
+                pass
         now = datetime.now(UTC)
         self._last_account_snapshot = account
         self._last_account_snapshot_at = now
@@ -1927,6 +1970,10 @@ class EngineRuntime:
         * TRANSIENT_READINESS — the entry-risk latch and market entry halts are
           reconstructed from authoritative state at startup and never
           persisted.
+        * WATERMARK — decision watermarks (``previous_timestamp`` per market
+          and ``portfolio_watermark``) are restored from the latest persisted
+          decision so a restart never replays a duplicate decision or loses
+          the cadence position.
         """
         account_id = self.broker.account_id or "unknown"
         persistent_reasons = {
@@ -1960,6 +2007,34 @@ class EngineRuntime:
         previous = self.ledger.load_risk_state(account_id, datetime.now(UTC).date())
         if previous is not None:
             self._consecutive_losses = previous.consecutive_losses
+        # --- Watermark restoration (restart scenarios A-G) ---
+        # PortfolioRuntime already restores ``previous_timestamp`` from the
+        # repository's latest_decision_timestamp in its __init__. Here we
+        # mirror that into the engine-level watermark maps so
+        # ``_process_portfolio_timestamp`` and the bar coalescer start with
+        # the persisted high-water instead of ``datetime.min`` and never
+        # re-emit a duplicate decision after a restart (before/after decision,
+        # after order submission, after partial/complete fill, while
+        # verification or universe refresh was running).
+        try:
+            for rt in getattr(self, "_portfolio_runtimes", ()):
+                ts = self._portfolio_repository.latest_decision_timestamp(
+                    account_id, rt.configuration_digest, rt.market
+                )
+                if ts is not None:
+                    self._portfolio_watermarks[rt.market] = max(
+                        ts, self._portfolio_watermarks.get(rt.market, datetime.min.replace(tzinfo=UTC))
+                    )
+                    for sym in getattr(rt, "symbols", ()):
+                        key = (sym, rt.strategy.timeframe)
+                        self._series_watermarks[key] = max(
+                            ts, self._series_watermarks.get(key, datetime.min.replace(tzinfo=UTC))
+                        )
+        except Exception:
+            # Watermark restore is best-effort; a repository hiccup must not
+            # brick startup — the duplicate-decision guard in
+            # PortfolioRuntime still prevents double orders.
+            log.warning("Watermark restoration skipped after repository hiccup", exc_info=True)
 
     async def _on_trade_update(self, update: TradeUpdate) -> None:
         try:
@@ -2543,8 +2618,13 @@ class EngineRuntime:
         # is the sole strategy/risk/order decision path.
 
     def _process_portfolio_timestamp(self, bars: list[Bar], *, health: RuntimeHealth | None = None) -> None:
-        if self._warming_up or self._circuit_breaker_reason is not None:
+        if self._warming_up or self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
             return
+        # Fail-closed: a pending reconciliation (material drift detected) blocks
+        # new portfolio orders until a verified ``reconcile()`` clears it.
+        # This is the engine-side complement to the broker's 7-category
+        # ``reconcile()`` — holdings==broker is enforced before any new
+        # decision can emit orders (restart scenarios A-G).
         # One immutable account snapshot per processing cycle, shared by every
         # market's decision in this batch (single broker fetch instead of one
         # per market). Fetched lazily on the first actual decision; freshness
@@ -2598,14 +2678,22 @@ class EngineRuntime:
                     if account is not None:
                         kwargs["account"] = account
                     portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
-            except OwnershipDriftError:
+            except OwnershipDriftError as exc:
                 self._circuit_breaker_reason = "ownership_drift"
                 self._state = "halted"
+                _broker = getattr(self, "broker", None)
+                automate_incident_recovery(
+                    IncidentCategory.POSITION_DRIFT,
+                    account_id=getattr(_broker, "account_id", "unknown") if _broker is not None else "unknown",
+                    strategy=getattr(getattr(portfolio_runtime, "strategy", None), "name", "unknown"),
+                    error=str(exc),
+                    current_state={"market": portfolio_runtime.market.value},
+                    reconcile_action=lambda: _broker.reconcile() if _broker is not None and hasattr(_broker, "reconcile") else False,
+                )
                 log.exception(
                     "Portfolio ownership drift blocked decisions for market=%s",
                     portfolio_runtime.market.value,
                 )
-                runtime_metrics_store.record_event("circuit_breaker")
                 alerts.emit(
                     "circuit_breaker",
                     message="Portfolio ownership drift blocked decisions; runtime halted",
@@ -2616,6 +2704,40 @@ class EngineRuntime:
             except Exception as exc:
                 self._circuit_breaker_reason = "portfolio_runtime_failure"
                 self._state = "halted"
+                # DB integrity: fail closed immediately, never retry
+                err_lower = str(exc).lower()
+                if "database" in err_lower or "locked" in err_lower or "sqlite" in err_lower:
+                    automate_incident_recovery(
+                        IncidentCategory.DATABASE_ERROR,
+                        account_id=getattr(self.broker, "account_id", "unknown")
+                        if hasattr(self, "broker")
+                        else "unknown",
+                        strategy=portfolio_runtime.strategy.name,
+                        error=str(exc),
+                        current_state={"market": portfolio_runtime.market.value},
+                    )
+                elif isinstance(exc, TimeoutError) or "timeout" in err_lower:
+                    automate_incident_recovery(
+                        IncidentCategory.PROVIDER_UNAVAILABLE,
+                        account_id=getattr(self.broker, "account_id", "unknown")
+                        if hasattr(self, "broker")
+                        else "unknown",
+                        strategy=portfolio_runtime.strategy.name,
+                        error=str(exc),
+                        current_state={"market": portfolio_runtime.market.value},
+                        provider_action=lambda: (_ for _ in ()).throw(exc),
+                    )
+                else:
+                    automate_incident_recovery(
+                        IncidentCategory.PENDING_ORDER_UNKNOWN,
+                        account_id=getattr(self.broker, "account_id", "unknown")
+                        if hasattr(self, "broker")
+                        else "unknown",
+                        strategy=portfolio_runtime.strategy.name,
+                        error=str(exc),
+                        current_state={"market": portfolio_runtime.market.value},
+                        reconcile_action=lambda: self.broker.reconcile() if hasattr(self.broker, "reconcile") else None,
+                    )
                 log.exception("Portfolio runtime failed closed: %s", exc)
                 runtime_metrics_store.record_event("circuit_breaker")
                 alerts.emit(
@@ -2673,6 +2795,111 @@ class EngineRuntime:
                     observability.get("symbols"),
                     observability.get("blocked_or_skipped_reason"),
                 )
+                # PAPER cycle observability + receipt (reconstructable via IDs/hashes + summaries)
+                try:
+                    # Only write receipt for scheduled weekly equity decisions (successful rebalance)
+                    should_receipt = (
+                        portfolio_result.status
+                        in {
+                            "rebalance_complete",
+                            "rebalance_in_progress",
+                            "rebalance_blocked",
+                            "submitted",
+                            "risk_reduced",
+                            "no_orders",
+                        }
+                        or portfolio_result.target is not None
+                    )
+                    if should_receipt and portfolio_result.target is not None:
+                        ts = portfolio_result.target.decision_timestamp
+                        # Structured summaries for observability (hashes/IDs, not raw histories)
+                        universe_hash = portfolio_runtime.universe_version or "unknown"
+                        target_w = {w.symbol: float(w.weight) for w in portfolio_result.target.weights}
+                        risk_w = target_w  # risk_adjusted_weights: after overlay, available via risk object if present
+                        if portfolio_result.risk is not None:
+                            try:
+                                risk_w = (
+                                    {w.symbol: float(w.weight) for w in portfolio_result.risk.adjusted_target.weights}
+                                    if hasattr(portfolio_result.risk, "adjusted_target")
+                                    else target_w
+                                )
+                            except Exception:
+                                risk_w = target_w
+                        broker_positions_before: dict[str, float] = {}
+                        fills_list: list[dict[str, object]] = []
+                        positions_after: dict[str, float] = {}
+                        gross = 0.0
+                        cash_ratio = (
+                            float(portfolio_result.target.cash_weight)
+                            if portfolio_result.target.cash_weight is not None
+                            else 0.0
+                        )
+                        if account is not None:
+                            broker_positions_before = {
+                                p.symbol: float(p.qty)
+                                for p in account.positions
+                                if p.market == portfolio_runtime.market
+                            }
+                            positions_after = dict(broker_positions_before)
+                            # Apply intended deltas as estimate (actual fills arrive via trade updates)
+                            for order in portfolio_result.orders:
+                                delta = order.quantity if order.side.value == "buy" else -order.quantity
+                                positions_after[order.symbol] = positions_after.get(order.symbol, 0.0) + delta
+                            try:
+                                gross = sum(abs(qty * 100.0) for qty in positions_after.values()) / max(
+                                    1.0, float(account.equity)
+                                )
+                            except Exception:
+                                gross = 0.0
+                        intended = [
+                            {
+                                "symbol": o.symbol,
+                                "side": o.side.value if hasattr(o.side, "value") else str(o.side),
+                                "quantity": float(o.quantity),
+                                "client_order_id": o.client_order_id,
+                            }
+                            for o in portfolio_result.orders
+                        ]
+                        receipt = build_receipt(
+                            decision_timestamp=ts,
+                            config_digest=portfolio_runtime.configuration_digest,
+                            strategy_name=portfolio_runtime.strategy.name,
+                            strategy_version=portfolio_runtime.strategy.version,
+                            universe_hash=universe_hash,
+                            universe_size=len(portfolio_runtime.symbols),
+                            observation_set_symbols=tuple(sorted(portfolio_runtime.symbols)),
+                            selected_symbols=tuple(sorted(target_w.keys())),
+                            target_weights=target_w,
+                            risk_adjusted_weights=risk_w,
+                            broker_positions_before=broker_positions_before,
+                            intended_orders=intended,
+                            submitted_order_ids=list(portfolio_result.submitted_order_ids),
+                            fills=fills_list,
+                            positions_after=positions_after,
+                            actual_gross_exposure=float(gross),
+                            cash_ratio=float(cash_ratio),
+                            warnings=[],
+                            incidents=[],
+                        )
+                        receipt.write(default_receipt_dir())
+                        runtime_metrics_store.record_paper_cycle(
+                            {
+                                "decision_id": portfolio_result.decision_id,
+                                "decision_timestamp": ts.isoformat(),
+                                "universe_hash": universe_hash,
+                                "universe_size": len(portfolio_runtime.symbols),
+                                "ranked_count": observability.get("ranked_symbol_count"),
+                                "selected_symbols": sorted(target_w.keys()),
+                                "target_gross": sum(target_w.values()),
+                                "risk_gross": sum(risk_w.values()),
+                                "intended_order_ids": [o["client_order_id"] for o in intended],
+                                "submitted_order_ids": list(portfolio_result.submitted_order_ids),
+                                "positions_after": positions_after,
+                                "cash_ratio": cash_ratio,
+                            }
+                        )
+                except Exception as exc:
+                    log.warning("PAPER receipt/observability failed: %s", exc, exc_info=True)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
 
     def _run_startup_catch_up(self) -> None:
@@ -2923,6 +3150,37 @@ class EngineRuntime:
         adoption, no cross-symbol watermark). Returns True only when every
         required symbol is provider-verified; callers must then block new
         equity entries on False while risk-reducing exits keep flowing.
+
+        Hardening (per-symbol trailing-window, watermark, retries, dedup):
+        * Per-symbol trailing window — ``required_oldest_by_symbol`` is
+          derived from EACH symbol's own trailing window (``series[-required]``
+          or ``series[0]`` for new listings with short history, or a
+          calendar fallback), so a newly listed 5-day symbol does not inherit
+          a 300-bar global requirement and does not fail verification.
+        * Verified-through watermark — per-symbol ``verified_through_by_symbol``
+          is monotonic (``max`` timestamp, updated only on adequate coverage)
+          and restored only via ``adopt_authoritative_signal_history``; a
+          failed or partial provider response never advances or partially
+          overwrites watermarks (fail-closed). Membership changes
+          (``PortfolioRuntime.update_symbols``) reset watermarks conservatively
+          so new symbols must be verified before entries.
+        * Bounded retries — provider fetch is retried at most once on
+          transient network errors (``_is_transient_network_error``) with a
+          short backoff; adequacy failures (empty/partial/missing bars) are
+          NOT retried — they fail closed immediately. Retries are bounded to
+          keep provider-call budgets predictable.
+        * New listings / missing bars / partial provider — an empty series,
+          a partially returned symbol set, or a provider that has not yet
+          published the decision-day bar leaves that symbol ``inadequate``
+          and the whole check fails closed with no partial adoption.
+        * Dedup identical provider calls — consecutive calls with identical
+          sorted symbols, same computed start/end window, same
+          ``required_through`` and same timeframe/adjustment within a short
+          TTL (45 s) reuse the last successful verified_through without
+          re-hitting Alpaca. This is measured via
+          ``provider_symbols_requested``/``provider_bars_returned``/
+          ``provider_calls`` and never weakens fail-closed (a new decision
+          timestamp or new symbol set invalidates the dedup key).
         """
         history_client = getattr(self, "_historical", None)
         runtimes = [
@@ -2971,10 +3229,65 @@ class EngineRuntime:
             earliest_required - timedelta(days=_SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS),
             fallback_oldest,
         )
-        try:
-            adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
-        except Exception as exc:
-            self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
+        # — Dedup identical provider calls (bounded, measured, fail-closed) —
+        # Key is symbols + required_through + timeframe/adjustment; start/end
+        # (derived from strategy window + now()) are intentionally excluded so
+        # rapid repeated latches within the same second deduplicate even though
+        # `end = now()` drifts by milliseconds. A new symbol set or a new
+        # decision timestamp invalidates the key.
+        dedup_key = (
+            tuple(symbols),
+            required_through.isoformat() if required_through is not None else None,
+            "1d",
+            "splits",
+        )
+        dedup_state: dict[str, object] | None = getattr(self, "_signal_verify_dedup", None)
+        if dedup_state is not None:
+            last_key = dedup_state.get("key")
+            last_at = dedup_state.get("at")
+            last_verified = dedup_state.get("verified_through_by_symbol")
+            # Dedup only when current health is still healthy (not forced to
+            # None/False) — a manual reset (test or membership change) must
+            # force a real provider fetch, otherwise a rebased split would be
+            # missed and history would stay unverified.
+            current_healthy = self._signal_adjustment_state().get("healthy") is True
+            if (
+                current_healthy
+                and last_key == dedup_key
+                and isinstance(last_at, datetime)
+                and (end - last_at).total_seconds() < 45.0
+                and isinstance(last_verified, dict)
+                and dedup_state.get("result") is True
+            ):
+                # Watermark still fresh for this exact window: reuse without
+                # provider call, but re-validate per-symbol through-gate.
+                if required_through is not None:
+                    if all(
+                        isinstance(last_verified.get(symbol), datetime) and last_verified[symbol] >= required_through
+                        for symbol in symbols
+                    ):
+                        return True
+                else:
+                    return True
+        adjusted: dict[str, list[Any]] | None = None
+        last_exc: BaseException | None = None
+        for attempt in range(2):
+            try:
+                adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                if not _is_transient_network_error(exc) or attempt == 1:
+                    self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
+                    return False
+                # Transient: bounded retry with short backoff.
+                import time as _t
+
+                _t.sleep(0.5 * (attempt + 1))
+                continue
+        if adjusted is None:
+            self._record_signal_adjustment_failure(f"provider fetch failed: {last_exc}")
             return False
         inadequate = [
             symbol
@@ -3002,6 +3315,14 @@ class EngineRuntime:
             self._record_signal_adjustment_failure(f"rebuild failed: {exc}")
             return False
         self._record_signal_adjustment_success(verified_through_by_symbol)
+        # Store dedup entry (measured) only on success; failures never cache
+        # so a transient outage is retried on the next decision latch.
+        self._signal_verify_dedup = {
+            "key": dedup_key,
+            "at": end,
+            "verified_through_by_symbol": dict(verified_through_by_symbol),
+            "result": True,
+        }
         if changed_total:
             log.warning(
                 "Signal history merged from provider authority: %d symbol(s) changed",
@@ -3175,7 +3496,40 @@ class EngineRuntime:
         reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
         with reconcile_lock:
             try:
-                self.broker.reconcile()
+                result = self.broker.reconcile()
+                # --- 7-category fail-closed handling (ALPACA-7) ---
+                if isinstance(result, dict):
+                    mismatched = []
+                    for key in (
+                        "LOCAL_STALE",
+                        "BROKER_STALE",
+                        "QUANTITY_MISMATCH",
+                        "UNKNOWN_ORDER",
+                        "MISSING_LOCAL_ORDER",
+                        "MISSING_BROKER_ORDER",
+                    ):
+                        if result.get(key):
+                            mismatched.append(f"{key}={result[key]}")
+                    if mismatched:
+                        log.warning(
+                            "Reconciliation categories show drift (fail-closed, new orders blocked): %s",
+                            "; ".join(mismatched),
+                        )
+                        self._circuit_breaker_reason = "reconciliation_failed"
+                        self._reconcile_failed = True
+                        runtime_metrics_store.record_event("reconciliation_failure")
+                        alerts.emit(
+                            "reconciliation_failure",
+                            message="Reconciliation drift detected; new orders blocked pending verified reconcile",
+                            reason="reconciliation_failed",
+                            categories={k: result.get(k) for k in result},
+                        )
+                        # Still update last_reconciliation_at so the drift is visible,
+                        # but do not clear incidents — require operator-verified recovery.
+                        self._last_reconciliation_at = datetime.now(UTC)
+                        self._last_account_at = datetime.now(UTC)
+                        self._generic_reconcile_failures = 0
+                        return
                 self._last_reconciliation_at = datetime.now(UTC)
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0

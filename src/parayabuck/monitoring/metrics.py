@@ -9,6 +9,10 @@
   failures, data gaps, risk incidents, circuit-breaker engagements, ...);
 * derived convenience fields (restart count, entry-block duration) computed
   from the persisted rows above.
+* PAPER cycle observability — every scheduled PAPER cycle is reconstructable
+  via IDs/hashes + structured summaries (universe, ranked, target, risk,
+  intended/submitted orders, Alpaca ack, fills, positions, cash/exposure)
+  without storing enormous raw histories.
 
 The function is empty-state safe: a missing database, a corrupt row, or a
 fresh installation all return the same stable shape with zero/empty values
@@ -54,11 +58,52 @@ RUNTIME_COUNTER_KEYS: frozenset[str] = frozenset(
         "data_gap",
         "order_rejected",
         "ambiguous_order",
+        "paper_cycle",
+        "paper_receipt_written",
+        "paper_incident",
     }
 )
 
+# PAPER cycle observability: bounded in-memory ring of structured summaries
+# (IDs/hashes + small summaries, not raw histories). Each entry is
+# reconstructable: universe_hash, ranked_count, target/risk gross, order IDs,
+# Alpaca acks, fills counts, positions/cash snapshots.
+_PAPER_CYCLE_MAX = 64
+_paper_cycle_lock = threading.Lock()
+_paper_cycles: list[dict[str, Any]] = []
+
 _counter_lock = threading.Lock()
 _counters: dict[str, int] = {}
+
+
+def record_paper_cycle(summary: dict[str, Any]) -> None:
+    """Record a PAPER cycle summary (never raises, bounded to 64 entries)."""
+    try:
+        entry = dict(summary)
+        entry.setdefault("recorded_at", datetime.now(UTC).isoformat())
+        with _paper_cycle_lock:
+            _paper_cycles.append(entry)
+            if len(_paper_cycles) > _PAPER_CYCLE_MAX:
+                del _paper_cycles[0 : len(_paper_cycles) - _PAPER_CYCLE_MAX]
+        record_event("paper_cycle")
+    except Exception:
+        log.warning("record_paper_cycle failed", exc_info=True)
+
+
+def paper_cycles() -> list[dict[str, Any]]:
+    """Snapshot of PAPER cycle reconstructable summaries (newest last, bounded)."""
+    with _paper_cycle_lock:
+        return [dict(entry) for entry in _paper_cycles]
+
+
+def _paper_cycle_metrics() -> dict[str, Any]:
+    with _paper_cycle_lock:
+        cycles = [dict(entry) for entry in _paper_cycles]
+    return {
+        "count": len(cycles),
+        "latest": cycles[-1] if cycles else None,
+        "recent": cycles[-10:] if len(cycles) > 10 else cycles,
+    }
 
 
 def record_event(kind: str) -> None:
@@ -83,6 +128,8 @@ def reset_for_tests() -> None:
     """Clear process-local counters (test helper only)."""
     with _counter_lock:
         _counters.clear()
+    with _paper_cycle_lock:
+        _paper_cycles.clear()
 
 
 def _default_database_path() -> str:
@@ -294,6 +341,7 @@ def runtime_metrics(database_path: str | Path | None = None, *, account_id: str 
             risk_state = _risk_state_metrics(connection, account_id)
         finally:
             connection.close()
+    paper_cycle_summary = _paper_cycle_metrics()
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "database_path": str(path),
@@ -302,6 +350,7 @@ def runtime_metrics(database_path: str | Path | None = None, *, account_id: str 
         "sessions": sessions,
         "incidents": incidents,
         "risk_state": risk_state,
+        "paper_cycles": paper_cycle_summary,
         # Derived convenience fields.
         "restart_count": int(sessions["restart_count"]),
         "scanner_failures": int(counters["scanner_refresh_failure"]),
@@ -315,12 +364,16 @@ def runtime_metrics(database_path: str | Path | None = None, *, account_id: str 
         "order_rejected_events": int(counters["order_rejected"]),
         "ambiguous_order_events": int(counters["ambiguous_order"]),
         "entry_block_duration_seconds": _entry_block_duration_seconds(incidents),
+        "paper_cycle_count": int(paper_cycle_summary["count"]),
+        "paper_receipts_written": int(counters.get("paper_receipt_written", 0)),
     }
 
 
 __all__ = [
     "RUNTIME_COUNTER_KEYS",
     "record_event",
+    "record_paper_cycle",
+    "paper_cycles",
     "reset_for_tests",
     "runtime_counters",
     "runtime_metrics",

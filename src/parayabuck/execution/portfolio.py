@@ -488,8 +488,21 @@ def _decision_id(target: TargetPortfolio) -> str:
 
 
 def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide) -> str:
-    digest = hashlib.sha256(f"{decision_id}|{symbol}|{side.value}".encode()).hexdigest()
-    return f"pbp-{digest[:32]}"
+    """Deterministic broker idempotency key for one decision leg.
+
+    Format ``parayabuck-{decision_id}-{symbol}-{side}`` is stable across
+    restarts and unique per decision/symbol/side. The decision_id itself is
+    already scoped to account+digest+timestamp+market, so the full key is
+    globally unique without hashing. Persisted via ``portfolio_orders``;
+    duplicate decisions map to the same logical order and ``INSERT OR IGNORE``
+    prevents a second broker submission. Partial fills keep the same key and
+    only the residual is re-planned; broker timeouts leave the row at
+    ``reconciliation_required`` and require a ``reconcile()`` before retry.
+    """
+    canonical = canonical_symbol(symbol, Market.CRYPTO if "/" in symbol else Market.EQUITY)
+    # Use the canonical symbol in the key so ``BTC/USD`` vs ``BTCUSD`` do not
+    # create duplicate broker orders for the same logical leg.
+    return f"parayabuck-{decision_id}-{canonical}-{side.value}"
 
 
 __all__ = [

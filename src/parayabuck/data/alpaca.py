@@ -92,7 +92,19 @@ def _first_expected_bar(market: Market, timeframe: str, start: datetime) -> date
 
 
 class AlpacaHistoricalData:
-    """Bounded Alpaca REST client used to warm up the streaming engine."""
+    """Bounded Alpaca REST client used to warm up the streaming engine.
+
+    Dedup & measurement: ``get_bars_batch`` deduplicates identical consecutive
+    provider calls (same sorted symbols, timeframe, start, end, adjustment)
+    within a short TTL (60 s) so repeated signal-verification latches that
+    happen on the same decision timestamp do not re-hit Alpaca. The cache
+    is measurement-aware: ``historical_requests``-style counters in
+    ``universe.preflight.refresh_equity_universe`` remain accurate because a
+    dedup hit returns the cached bars without counting as a new provider call.
+    The dedup is bounded (single-entry, TTL) and never weakens fail-closed
+    semantics — a new timestamp, new symbol set, or expired TTL triggers a
+    fresh provider fetch and fresh adequacy checks.
+    """
 
     def __init__(
         self,
@@ -119,6 +131,15 @@ class AlpacaHistoricalData:
         self._sip_fallback_active = False
         self._sip_quote_fallback_active = False
         self._cache = WarmupCache()
+        # Dedup identical consecutive provider calls (measure/bounded).
+        self._last_batch_key: tuple[object, ...] | None = None
+        self._last_batch_result: dict[str, list[Bar]] | None = None
+        self._last_batch_at: datetime | None = None
+        self._dedup_ttl_seconds: float = 60.0
+        # Observability counters (measured provider calls).
+        self.provider_calls: int = 0
+        self.provider_symbols_requested: int = 0
+        self.provider_bars_returned: int = 0
 
     def feed_status(self) -> dict[str, object]:
         """Configured and effective equity historical feed for reporting."""
@@ -217,6 +238,22 @@ class AlpacaHistoricalData:
         if not symbols:
             return {}
         symbols, market, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
+        # Dedup identical consecutive provider calls (bounded, fail-closed):
+        # same sorted symbols + window + adjustment within TTL returns cached
+        # bars without hitting Alpaca. This prevents repeated identical
+        # verification calls (per-symbol trailing-window fix) from hammering
+        # the provider while keeping measurement of symbols/bars/provider_calls.
+        dedup_key = (tuple(sorted(symbols)), timeframe, start_at.isoformat(), end_at.isoformat(), adjustment)
+        now = datetime.now(UTC)
+        last_at = getattr(self, "_last_batch_at", None)
+        if (
+            dedup_key == getattr(self, "_last_batch_key", None)
+            and last_at is not None
+            and (now - last_at).total_seconds() < getattr(self, "_dedup_ttl_seconds", 60.0)
+            and getattr(self, "_last_batch_result", None) is not None
+        ):
+            # Return a shallow copy so callers cannot mutate the cached dict.
+            return {symbol: list(bars) for symbol, bars in self._last_batch_result.items()}  # type: ignore[union-attr]
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             # Alpaca caps a single bars response at 10,000 ROWS total, across
@@ -230,7 +267,7 @@ class AlpacaHistoricalData:
                 # Alpaca caps responses at 10,000 rows and silently truncates
                 # beyond it. Split the date window into row-bounded chunks so
                 # long crypto/equity histories download completely.
-                return self._fetch_chunked_windows(
+                result = self._fetch_chunked_windows(
                     symbols,
                     timeframe,
                     start_at,
@@ -239,7 +276,11 @@ class AlpacaHistoricalData:
                     adjustment,
                     market,
                 )
-        return self._fetch_window(
+                self._last_batch_key = dedup_key
+                self._last_batch_result = {s: list(b) for s, b in result.items()}
+                self._last_batch_at = now
+                return result
+        result = self._fetch_window(
             symbols,
             timeframe,
             start_at,
@@ -247,6 +288,10 @@ class AlpacaHistoricalData:
             adjustment,
             market,
         )
+        self._last_batch_key = dedup_key
+        self._last_batch_result = {s: list(b) for s, b in result.items()}
+        self._last_batch_at = now
+        return result
 
     def _resolve_batch_request(
         self,
@@ -638,6 +683,13 @@ class AlpacaHistoricalData:
             merged.update({bar.timestamp: bar for bar in bars.get(symbol, [])})
             bars[symbol] = [merged[key] for key in sorted(merged)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
+        # Measured provider-call observability (for signal/universe hardening).
+        try:
+            self.provider_calls += 1
+            self.provider_symbols_requested += len(symbols)
+            self.provider_bars_returned += total
+        except Exception:
+            pass
         return bars
 
     @staticmethod

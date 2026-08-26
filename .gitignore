@@ -247,3 +247,4 @@ data/historical/equity_pit_symmetric_*.csv
 data/research/archive/**/universe.json
 data/research/archive/**/*.csv
 data/research/archive/**/universe_history.csv
+data/runtime/paper_receipts/

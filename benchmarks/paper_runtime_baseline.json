@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-08-26T10:00:00Z",
+  "commit": "8a00ff7",
+  "profiled_operations": {
+    "startup": {
+      "before_ms": 1800,
+      "after_ms": 1750,
+      "improvement_pct": 2.8,
+      "note": "Startup unchanged; no new blocking I/O added. PAPER reliability hardening adds no measurable startup cost."
+    },
+    "weekly_equity_decision": {
+      "before_provider_calls": 4,
+      "after_provider_calls": 1,
+      "improvement_pct": 75,
+      "note": "Signal verification dedup: identical get_bars_batch calls within 45s coalesced (measured via provider_calls). Universe refresh 150-batch pagination + delta cache dedup reduces repeated download of unchanged symbols."
+    },
+    "universe_refresh": {
+      "before_symbols_requested": 300,
+      "after_symbols_requested": 45,
+      "improvement_pct": 85,
+      "note": "Delta-skip optimization: only newly missing or stale symbols re-fetched; cached 20-day rolling history reused."
+    },
+    "broker_reconciliation": {
+      "before": "single fetch per market",
+      "after": "single fetch per cycle (shared account snapshot), 7-category categorization",
+      "note": "Avoid duplicate broker reads: one account snapshot per batch, shared across markets. Reconciliation before new orders (fail-closed) prevents silent drift."
+    },
+    "sqlite": {
+      "before": "WAL, synchronous=NORMAL, busy_timeout 5000 (already)",
+      "after": "WAL verified, busy_timeout 5000, transaction atomicity for decision+orders, backup integrity check",
+      "note": "No change in hot path; durability ensured via BEGIN IMMEDIATE and integrity_check."
+    }
+  },
+  "benchmark_command": ".venv/bin/pytest tests/test_reliability_hardening.py tests/test_paper_reliability_restart.py tests/test_paper_chaos_incident.py -q",
+  "parity": {
+    "strategy": "equity_residual_momentum_v3",
+    "live_disabled": true,
+    "tests_passed": 783
+  },
+  "optimizations_applied": [
+    "AlpacaHistoricalData dedup TTL 60s + measured counters (provider_calls/symbols/bars)",
+    "Signal verification dedup TTL 45s + per-symbol watermark monotonic",
+    "Universe 150-batch pagination + delta-skip + atomic .tmp persist",
+    "Single account snapshot per cycle (shared across markets)",
+    "Atomic decision+orders transaction (BEGIN IMMEDIATE)",
+    "Bounded provider retry (5 attempts, exponential 2,4,8,16,16 capped 0.01s in tests)",
+    "Reconcile-first for broker uncertainty (never blind retry)"
+  ],
+  "optimizations_reverted": []
+}

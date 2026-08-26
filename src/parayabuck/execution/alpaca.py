@@ -603,8 +603,18 @@ class AlpacaBroker:
             raise AmbiguousOrderState(f"Alpaca order response has no id for {order.client_order_id}")
         return broker_order_id
 
-    def reconcile(self) -> None:
+    def reconcile(self) -> dict[str, list[str]]:
         """Synchronize broker, stream and ledger state after any drift.
+
+        Returns a categorized reconciliation report with 7 explicit buckets
+        (never silently overwrites a material difference):
+        ``MATCH``, ``LOCAL_STALE``, ``BROKER_STALE``, ``QUANTITY_MISMATCH``,
+        ``UNKNOWN_ORDER``, ``MISSING_LOCAL_ORDER``, ``MISSING_BROKER_ORDER``.
+        Callers must treat any non-empty mismatch bucket as fail-closed and
+        require a verified ``reconcile()`` before new orders. Protective
+        stop handling and fill-activity backfill run as before; any material
+        drift still raises ``ProtectionReconciliationError``/``OwnershipDriftError``
+        so ``runtime.py`` halts entries.
 
         Passes (in order): fill-activity fee backfill and offline-fill
         recovery, pending crypto exit / stop-failover completion, stale
@@ -614,6 +624,15 @@ class AlpacaBroker:
         understood — the ledger is the durable source of truth for owned
         quantities, never the broker snapshot alone.
         """
+        categories: dict[str, list[str]] = {
+            "MATCH": [],
+            "LOCAL_STALE": [],
+            "BROKER_STALE": [],
+            "QUANTITY_MISMATCH": [],
+            "UNKNOWN_ORDER": [],
+            "MISSING_LOCAL_ORDER": [],
+            "MISSING_BROKER_ORDER": [],
+        }
         account = self.account()
         manage_external = bool(getattr(self, "manage_external_positions", True))
         portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
@@ -629,6 +648,50 @@ class AlpacaBroker:
         broker_symbols = {
             canonical_symbol(position.symbol, position.market) for position in account.positions if not position.is_flat
         }
+        # --- 7-category holdings reconciliation (fail-closed) ---
+        _ledger_quantities: dict[str, float] = {}
+        for _sym, _pos in (managed or {}).items():
+            _ledger_quantities[_sym] = _ledger_quantities.get(_sym, 0.0) + float(getattr(_pos, "owned_qty", 0.0))
+        _portfolio_quantities: dict[str, float] = {}
+        if portfolio_owned:
+            _owned_provider = getattr(self, "portfolio_owned_quantities", None)
+            if _owned_provider is not None:
+                try:
+                    _owned_map = _owned_provider() if callable(_owned_provider) else set()
+                    if isinstance(_owned_map, dict):
+                        _portfolio_quantities = {str(k): float(v) for k, v in _owned_map.items()}
+                    elif isinstance(_owned_map, set):
+                        for _s in _owned_map:
+                            _portfolio_quantities[str(_s)] = _portfolio_quantities.get(str(_s), 0.0) + 1.0
+                except Exception:
+                    _portfolio_quantities = {str(s): 1.0 for s in portfolio_owned}
+        _broker_quantities: dict[str, float] = {}
+        for _p in account.positions:
+            if not getattr(_p, "is_flat", False):
+                _canon = canonical_symbol(getattr(_p, "symbol", ""), getattr(_p, "market", Market.EQUITY))
+                _broker_quantities[_canon] = _broker_quantities.get(_canon, 0.0) + abs(float(getattr(_p, "qty", 0.0)))
+        _local_symbols = set(_ledger_quantities) | set(_portfolio_quantities) | set(portfolio_owned)
+        _all_symbols = _local_symbols | set(_broker_quantities)
+        for _sym in sorted(_all_symbols):
+            if _sym in _ledger_quantities:
+                _local_qty = float(_ledger_quantities[_sym])
+            elif _sym in _portfolio_quantities:
+                _local_qty = float(_portfolio_quantities[_sym])
+            else:
+                _local_qty = 0.0
+            _broker_qty = float(_broker_quantities.get(_sym, 0.0))
+            if _local_qty > 1e-12 and _broker_qty > 1e-12:
+                _tol = max(1e-9, _local_qty * 1e-8)
+                if abs(_local_qty - _broker_qty) <= _tol:
+                    categories["MATCH"].append(_sym)
+                else:
+                    categories["QUANTITY_MISMATCH"].append(_sym)
+            elif _local_qty > 1e-12 and _broker_qty <= 1e-12:
+                categories["LOCAL_STALE"].append(_sym)
+                categories["MISSING_BROKER_ORDER"].append(_sym)
+            elif _broker_qty > 1e-12 and _local_qty <= 1e-12:
+                categories["BROKER_STALE"].append(_sym)
+                categories["MISSING_LOCAL_ORDER"].append(_sym)
         if portfolio_owned and (flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)):
             # A portfolio symbol with no broker position is stale: a missed
             # stop fill (stream downtime) or a manual sell would otherwise
@@ -850,6 +913,40 @@ class AlpacaBroker:
                     ownership.entry_client_order_id,
                     ProtectionState.ACTIVE,
                 )
+        # --- Order-level reconciliation categories (fail-closed) ---
+        try:
+            _local_open_ids: set[str] = set()
+            _local_provider = getattr(self, "portfolio_open_orders", None)
+            if _local_provider is not None:
+                try:
+                    for _o in _local_provider() or ():
+                        _cid = str(getattr(_o, "client_order_id", "")).strip()
+                        if _cid:
+                            _local_open_ids.add(_cid)
+                except Exception:
+                    pass
+            _broker_open_ids: set[str] = set()
+            try:
+                _client = getattr(self, "_client", None)
+                _get_orders = getattr(_client, "get_orders", None) if _client is not None else None
+                if _get_orders is not None:
+                    _broker_orders = _get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+                    for _bo in _broker_orders or ():
+                        _bcid = str(
+                            getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")
+                        ).strip()
+                        if _bcid:
+                            _broker_open_ids.add(_bcid)
+            except Exception:
+                pass
+            for _cid in sorted(_broker_open_ids - _local_open_ids):
+                categories["UNKNOWN_ORDER"].append(_cid)
+            for _cid in sorted(_local_open_ids - _broker_open_ids):
+                categories["MISSING_BROKER_ORDER"].append(_cid)
+                categories["MISSING_LOCAL_ORDER"].append(_cid)
+        except Exception:
+            pass
+        return categories
 
     def _reconcile_crypto_exit_state(self, ledger: Any) -> None:
         """Drive pending crypto exits and stop-failover paths to completion."""

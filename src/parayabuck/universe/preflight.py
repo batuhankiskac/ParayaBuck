@@ -54,11 +54,16 @@ class UniversePreflightResult:
 
 
 def _refresh_with_retry(refresh: Callable[[], object], name: str) -> bool:
-    """Run one universe refresh with a single retry on transient failures.
+    """Run one universe refresh with a single bounded retry on transient failures.
 
-    Returns True when the refresh succeeded. Failures surface through the
-    returned False (the caller reports an explicit ``refresh_failed`` status)
-    instead of being swallowed silently.
+    Bounded retries (exactly one retry after a 1 s backoff): the scan involves
+    a large batched download (150 symbols per request) that must not be
+    hammered during an Alpaca outage. A persistent failure returns False and
+    the caller reports ``refresh_failed`` so production policy can fail closed
+    or keep the last known verified snapshot with its explicit stale age.
+    Retries are bounded to prevent thundering-herd and to keep provider-call
+    budgets predictable (measured as ``historical_requests`` and
+    ``bars_downloaded`` in ``refresh_equity_universe``).
     """
     import time as _time
 
@@ -83,7 +88,37 @@ def ensure_active_universes(
     api_key: str,
     secret_key: str,
 ) -> UniversePreflightResult:
-    """Refresh missing/stale dynamic universes before runtime subscriptions are built."""
+    """Refresh missing/stale dynamic universes before runtime subscriptions are built.
+
+    Semantics (pagination, cache, stale age, no partial universe):
+    * Pagination — history is fetched in 150-symbol batches (Alpaca's
+      preferred ``symbols_per_request`` limit) so a large eligible universe
+      (e.g. 1500 symbols) is scanned in ~10 bounded requests, not one
+      unbounded call. See ``refresh_equity_universe`` ``_chunks(..., 150)``.
+    * Cache — ``refresh_equity_universe`` keeps a rolling 20-day per-symbol
+      daily-bar cache in ``candidate_universe_path`` (``history`` dict) and
+      reuses it via ``_equity_delta_skip_symbols``: a symbol whose cached
+      last bar is the finalized latest completed session (verified via
+      ``equity_day_bar_is_closed``) skips the incremental 10-day refetch.
+      This measures ``refreshed_assets`` vs ``skipped_assets`` for dedup
+      observability. Crypto uses ``WarmupCache`` incremental path.
+    * Retries — one bounded retry (see ``_refresh_with_retry``) on transient
+      failures; no unbounded loops. Provider calls are measured as
+      ``historical_requests``/``bars_downloaded``.
+    * Stale snapshot with explicit age — ``validate_active_universe``/
+      ``validate_active_crypto_universe`` compute staleness from
+      ``selection_timestamp``/``data_timestamp`` vs ``now`` and return
+      ``"stale"`` with an explicit age in hours. Callers surface the age
+      via logs and ``UniversePreflightResult`` status.
+    * No partial universe on failure — ``refresh_*_universe`` writes the
+      candidate/universe JSON atomically via ``Path.with_suffix(".tmp")`` +
+      ``replace``; an exception before the replace leaves the previous file
+      untouched. On ``refresh_failed`` the runtime prefers the last known
+      verified snapshot (even if stale) when ``allow_static_fallback_trading``
+      is set, otherwise it fails closed (``invalid_dynamic_universe`` halt
+      per ``runtime._refresh_runtime_universes``). No partial or truncated
+      file is ever treated as success.
+    """
     equity_status = "disabled"
     crypto_status = "disabled"
     equity_refreshed = False
@@ -168,6 +203,36 @@ def refresh_equity_universe(
     api_key: str,
     secret_key: str,
 ) -> ScannerResult:
+    """Build the equity eligible pool and scan it, with pagination, cache, and atomic persistence.
+
+    Guarantees (production policy):
+    * Pagination — eligible assets are fetched once via ``eligible_equity_assets``,
+      then daily history is fetched in 150-symbol batches (``_chunks(...,150)``)
+      to bound rows per request and keep provider-call budgets linear; metrics
+      ``historical_requests``/``bars_downloaded``/``refreshed_assets``/
+      ``skipped_assets`` measure pagination and dedup.
+    * Cache — incremental mode reuses a 7-day fresh 20-day rolling cache
+      (``candidate_universe_path`` ``history`` dict); symbols whose cached last
+      bar is the finalized latest session (``_equity_delta_skip_symbols``)
+      skip the delta refetch entirely — dedup is measured as skipped_assets.
+    * Retries — transient failures bubble to ``_refresh_with_retry`` (one
+      bounded retry) instead of retrying per-batch; a persistent failure
+      raises and the caller reports ``refresh_failed`` without creating a
+      partial universe.
+    * Stale snapshot — the persisted scanner payload carries
+      ``generated_at``/``data_timestamp``/``selection_timestamp``; staleness
+      is computed as ``now - timestamp`` vs ``active_universe_max_age_hours``
+      with an explicit age surfaced via ``validate_active_universe`` status
+      ``"stale"``. A stale but otherwise valid snapshot is kept on disk.
+    * No partial universe — the candidate JSON and the scanner's active
+      universe are written atomically: ``candidate_universe_path`` via
+      ``.tmp`` + ``replace``, scanner state via ``scanner.persist`` (same
+      atomic pattern). Any exception before the replace leaves the last known
+      verified snapshot untouched; the caller then either prefers that
+      snapshot (even if stale) when ``allow_static_fallback_trading`` is true
+      or fails closed (``invalid_dynamic_universe`` halt) otherwise. No
+      truncated or half-written file is ever treated as success.
+    """
     universe = config.universe.equity
     source_path = Path(universe.candidate_universe_path)
     trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")

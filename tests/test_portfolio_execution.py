@@ -122,7 +122,7 @@ def test_planner_sells_before_buys_quantizes_and_never_sells_external() -> None:
     assert orders[0].quantity == pytest.approx(50.0)
     assert orders[1].symbol == "QQQ"
     assert all(order.symbol != "IWM" for order in orders)
-    assert all(order.client_order_id.startswith("pbp-") for order in orders)
+    assert all(order.client_order_id.startswith("parayabuck-") for order in orders)
 
 
 def test_planner_skips_symbol_with_existing_open_order() -> None:

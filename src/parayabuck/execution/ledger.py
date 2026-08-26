@@ -54,7 +54,19 @@ class ManagedPosition:
 
 
 class ExecutionLedger:
-    """Small transactional ownership ledger shared by execution and reconciliation."""
+    """Small transactional ownership ledger shared by execution and reconciliation.
+
+    Hardening: every mutation is idempotent and crash-safe. Order events use
+    ``INSERT OR IGNORE`` on (client_order_id, event_type, broker_timestamp,
+    payload); managed quantity moves through ``_record_entry_fill_delta_tx``
+    / ``_record_exit_fill_delta_tx`` inside ``BEGIN IMMEDIATE`` so a replayed
+    fill never double-counts owned_qty. ``holdings == broker after reconcile``
+    is enforced by ``reconcile()`` in the broker layer which compares ledger
+    state to the broker snapshot and never silently overwrites a material
+    difference. Risk and watermark state are persisted per-account and restored
+    via ``_restore_persistent_state`` so a restart never loses fills or
+    position accounting.
+    """
 
     def __init__(self, path: str, *, store: SQLiteStore | None = None) -> None:
         self._store = store or SQLiteStore(Path(path))
@@ -934,6 +946,24 @@ class ExecutionLedger:
                 (account_id, kind, watermark.isoformat(), datetime.now(UTC).isoformat()),
             )
             self.connection.commit()
+
+    def holdings_match_broker(self, account_id: str, broker_quantities: dict[str, float], tol: float = 1e-9) -> bool:
+        """True when ledger owned quantities equal broker quantities within tol.
+
+        Used by restart tests to assert ``holdings == broker after reconcile``
+        without silently overwriting a material ``QUANTITY_MISMATCH``.
+        """
+        ledger_quantities: dict[str, float] = {}
+        for pos in self.managed_entries_for_account(account_id):
+            if pos.status in {"open", "manual_intervention_required"}:
+                ledger_quantities[pos.canonical_symbol] = ledger_quantities.get(pos.canonical_symbol, 0.0) + float(
+                    pos.owned_qty
+                )
+        all_symbols = set(ledger_quantities) | set(broker_quantities)
+        for sym in all_symbols:
+            if abs(ledger_quantities.get(sym, 0.0) - broker_quantities.get(sym, 0.0)) > tol:
+                return False
+        return True
 
     def apply_execution_event(self, event: ExecutionEvent) -> ExecutionTransition:
         """Apply one broker event atomically using cumulative fill quantities."""

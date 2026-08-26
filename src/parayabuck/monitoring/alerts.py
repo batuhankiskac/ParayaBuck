@@ -48,6 +48,8 @@ ALERT_KINDS: frozenset[str] = frozenset(
         "circuit_breaker",
         "signal_adjustment_failure",
         "signal_adjustment_recovery",
+        "paper_incident",
+        "paper_receipt",
     }
 )
 
@@ -64,6 +66,7 @@ _WARNING_KINDS: frozenset[str] = frozenset(
         "risk_incident",
         "drawdown_halt",
         "circuit_breaker",
+        "paper_incident",
     }
 )
 
@@ -224,6 +227,36 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def emit_incident(
+    category: str,
+    severity: str,
+    *,
+    message: str,
+    incident_id: str | None = None,
+    account_id: str | None = None,
+    **fields: object,
+) -> None:
+    """Emit a canonical incident record via the alert sink (never raises).
+
+    Thin wrapper over emit() that guarantees incident_id/timestamp/category/
+    severity are present as structured fields. Bounded throttling still applies
+    per kind (paper_incident). Integrates with metrics via caller; this helper
+    only drives the alert sink.
+    """
+    try:
+        emit(
+            "paper_incident",
+            message=message,
+            incident_id=incident_id or "",
+            category=category,
+            severity=severity,
+            account_id=account_id or "unknown",
+            **fields,
+        )
+    except Exception:
+        log.warning("emit_incident failed for category=%s", category, exc_info=True)
+
+
 def alert_stats() -> dict[str, object]:
     """Process-local delivery counters (webhook sends and throttled drops)."""
     with _lock:
@@ -260,5 +293,6 @@ __all__ = [
     "alert_stats",
     "configure_alerting",
     "emit",
+    "emit_incident",
     "reset_for_tests",
 ]

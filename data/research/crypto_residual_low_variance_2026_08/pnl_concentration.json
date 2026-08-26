@@ -1,0 +1,385 @@
+{
+  "generated_at": "2026-08-26T19:25:15.835909+00:00",
+  "pnl_concentration": {
+    "R0": {
+      "candidate_id": "R0",
+      "concentration": {
+        "max_single_weight": 0.0539,
+        "per_symbol": [
+          {
+            "realized_pnl": 2996.24,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2408.19,
+            "symbol": "LTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2027.66,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 890.73,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 651.02,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 94.6,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -179.26,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -246.91,
+            "symbol": "AAVE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -346.98,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -396.29,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -445.57,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -544.15,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -800.71,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -855.41,
+            "symbol": "SOL/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.3304,
+        "top2_share_of_positive_pnl": 0.596,
+        "top3_share_of_positive_pnl": 0.8196,
+        "top_1": {
+          "realized_pnl": 2996.24,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 2408.19,
+          "symbol": "LTC/USD"
+        },
+        "top_3": {
+          "realized_pnl": 2027.66,
+          "symbol": "ETH/USD"
+        }
+      },
+      "label": "CONTROL total vol 22d"
+    },
+    "R1": {
+      "candidate_id": "R1",
+      "concentration": {
+        "max_single_weight": 0.0539,
+        "per_symbol": [
+          {
+            "realized_pnl": 3380.16,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3208.15,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 2726.94,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1204.05,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 793.31,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 792.76,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 452.05,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -514.28,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -935.72,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -951.48,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1341.7,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1719.56,
+            "symbol": "LTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -2043.9,
+            "symbol": "DOT/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.2692,
+        "top2_share_of_positive_pnl": 0.5247,
+        "top3_share_of_positive_pnl": 0.7418,
+        "top_1": {
+          "realized_pnl": 3380.16,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3208.15,
+          "symbol": "ETH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 2726.94,
+          "symbol": "BCH/USD"
+        }
+      },
+      "label": "RESIDUAL 22"
+    },
+    "R2": {
+      "candidate_id": "R2",
+      "concentration": {
+        "max_single_weight": 0.0629,
+        "per_symbol": [
+          {
+            "realized_pnl": 4100.39,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3742.05,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3491.81,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1558.52,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 532.84,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 331.58,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 272.52,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 191.77,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -408.33,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -450.65,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -557.32,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -957.66,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -2760.86,
+            "symbol": "LTC/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.2883,
+        "top2_share_of_positive_pnl": 0.5515,
+        "top3_share_of_positive_pnl": 0.797,
+        "top_1": {
+          "realized_pnl": 4100.39,
+          "symbol": "BTC/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3742.05,
+          "symbol": "SHIB/USD"
+        },
+        "top_3": {
+          "realized_pnl": 3491.81,
+          "symbol": "BCH/USD"
+        }
+      },
+      "label": "RESIDUAL 63"
+    },
+    "R3": {
+      "candidate_id": "R3",
+      "concentration": {
+        "max_single_weight": 0.05,
+        "per_symbol": [
+          {
+            "realized_pnl": 3699.82,
+            "symbol": "SHIB/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 3538.54,
+            "symbol": "BCH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 1024.65,
+            "symbol": "ETH/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 528.93,
+            "symbol": "AVAX/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 314.92,
+            "symbol": "XRP/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": 191.77,
+            "symbol": "GRT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -86.54,
+            "symbol": "DOGE/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -534.84,
+            "symbol": "LINK/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -582.74,
+            "symbol": "ADA/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -757.83,
+            "symbol": "BTC/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -793.74,
+            "symbol": "SOL/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -901.8,
+            "symbol": "DOT/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1394.12,
+            "symbol": "UNI/USD",
+            "trades": null
+          },
+          {
+            "realized_pnl": -1872.5,
+            "symbol": "LTC/USD",
+            "trades": null
+          }
+        ],
+        "symbol_count": 14,
+        "top1_share_of_positive_pnl": 0.3979,
+        "top2_share_of_positive_pnl": 0.7784,
+        "top3_share_of_positive_pnl": 0.8886,
+        "top_1": {
+          "realized_pnl": 3699.82,
+          "symbol": "SHIB/USD"
+        },
+        "top_2": {
+          "realized_pnl": 3538.54,
+          "symbol": "BCH/USD"
+        },
+        "top_3": {
+          "realized_pnl": 1024.65,
+          "symbol": "ETH/USD"
+        }
+      },
+      "label": "RESIDUAL CONSENSUS"
+    }
+  }
+}

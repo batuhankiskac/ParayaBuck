@@ -1,0 +1,117 @@
+{
+  "generated_at": "2026-08-26T19:25:15.835677+00:00",
+  "regime_analysis": {
+    "R0": {
+      "candidate_id": "R0",
+      "label": "CONTROL total vol 22d",
+      "regime": {
+        "classification": "BTC trailing 126d return >+15% BULL, -15..+15 NEUTRAL, <-15 BEAR",
+        "not_exclusively_one_regime": true,
+        "regimes": {
+          "BEAR": {
+            "days": 580,
+            "mean_daily": -0.000139,
+            "sharpe": -1.6343,
+            "total_return": -0.078434
+          },
+          "BULL": {
+            "days": 683,
+            "mean_daily": 0.000165,
+            "sharpe": 1.788,
+            "total_return": 0.117917
+          },
+          "NEUTRAL": {
+            "days": 647,
+            "mean_daily": 5e-06,
+            "sharpe": 0.0548,
+            "total_return": 0.002195
+          }
+        }
+      }
+    },
+    "R1": {
+      "candidate_id": "R1",
+      "label": "RESIDUAL 22",
+      "regime": {
+        "classification": "BTC trailing 126d return >+15% BULL, -15..+15 NEUTRAL, <-15 BEAR",
+        "not_exclusively_one_regime": false,
+        "regimes": {
+          "BEAR": {
+            "days": 580,
+            "mean_daily": -0.00017,
+            "sharpe": -1.6827,
+            "total_return": -0.094617
+          },
+          "BULL": {
+            "days": 683,
+            "mean_daily": 0.000182,
+            "sharpe": 1.7182,
+            "total_return": 0.130696
+          },
+          "NEUTRAL": {
+            "days": 647,
+            "mean_daily": -1e-06,
+            "sharpe": -0.014,
+            "total_return": -0.002033
+          }
+        }
+      }
+    },
+    "R2": {
+      "candidate_id": "R2",
+      "label": "RESIDUAL 63",
+      "regime": {
+        "classification": "BTC trailing 126d return >+15% BULL, -15..+15 NEUTRAL, <-15 BEAR",
+        "not_exclusively_one_regime": true,
+        "regimes": {
+          "BEAR": {
+            "days": 580,
+            "mean_daily": -0.000148,
+            "sharpe": -1.5427,
+            "total_return": -0.083121
+          },
+          "BULL": {
+            "days": 683,
+            "mean_daily": 0.000197,
+            "sharpe": 1.8513,
+            "total_return": 0.142084
+          },
+          "NEUTRAL": {
+            "days": 647,
+            "mean_daily": 2.2e-05,
+            "sharpe": 0.2326,
+            "total_return": 0.013319
+          }
+        }
+      }
+    },
+    "R3": {
+      "candidate_id": "R3",
+      "label": "RESIDUAL CONSENSUS",
+      "regime": {
+        "classification": "BTC trailing 126d return >+15% BULL, -15..+15 NEUTRAL, <-15 BEAR",
+        "not_exclusively_one_regime": false,
+        "regimes": {
+          "BEAR": {
+            "days": 580,
+            "mean_daily": -0.000182,
+            "sharpe": -1.9704,
+            "total_return": -0.100882
+          },
+          "BULL": {
+            "days": 683,
+            "mean_daily": 0.000173,
+            "sharpe": 1.6607,
+            "total_return": 0.12387
+          },
+          "NEUTRAL": {
+            "days": 647,
+            "mean_daily": -1.3e-05,
+            "sharpe": -0.1406,
+            "total_return": -0.009237
+          }
+        }
+      }
+    }
+  }
+}

@@ -21,7 +21,6 @@ import csv
 import hashlib
 import json
 import pathlib
-import sys
 import time
 from datetime import UTC, datetime
 

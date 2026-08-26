@@ -23,7 +23,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from parayabuck.config import load_config
-from parayabuck.universe.crypto_scanner import CRYPTO_CATEGORIES, CryptoUniverseScanner, crypto_scanner_config_digest
+from parayabuck.universe.crypto_scanner import CRYPTO_CATEGORIES, crypto_scanner_config_digest
 
 
 def sha_hex(data: str) -> str:

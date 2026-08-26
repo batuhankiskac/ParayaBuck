@@ -30,45 +30,10 @@ from pathlib import Path
 
 import requests
 
+from parayabuck.monitoring.events import ALERT_KINDS
+from parayabuck.monitoring.events import WARNING_KINDS as _WARNING_KINDS
+
 log = logging.getLogger("parayabuck.monitoring.alerts")
-
-ALERT_KINDS: frozenset[str] = frozenset(
-    {
-        "runtime_started",
-        "runtime_stopped_unexpected",
-        "scanner_refresh_failure",
-        "scanner_recovered",
-        "order_rejected",
-        "ambiguous_order",
-        "reconciliation_failure",
-        "reconciliation_recovered",
-        "risk_incident",
-        "drawdown_halt",
-        "risk_epoch_reset",
-        "circuit_breaker",
-        "signal_adjustment_failure",
-        "signal_adjustment_recovery",
-        "paper_incident",
-        "paper_receipt",
-    }
-)
-
-# Kinds that describe a failure/incident are logged at WARNING; routine
-# lifecycle/recovery events at INFO. Kept next to the kinds so the severity
-# table cannot drift from the event vocabulary.
-_WARNING_KINDS: frozenset[str] = frozenset(
-    {
-        "runtime_stopped_unexpected",
-        "scanner_refresh_failure",
-        "order_rejected",
-        "ambiguous_order",
-        "reconciliation_failure",
-        "risk_incident",
-        "drawdown_halt",
-        "circuit_breaker",
-        "paper_incident",
-    }
-)
 
 _DEFAULT_THROTTLE_SECONDS = 60.0
 _WEBHOOK_TIMEOUT = (3.0, 8.0)  # (connect, read) — never block the caller

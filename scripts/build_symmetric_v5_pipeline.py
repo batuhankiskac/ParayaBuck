@@ -17,14 +17,11 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import math
-import os
 import re
-import statistics
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests

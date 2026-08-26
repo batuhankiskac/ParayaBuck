@@ -2727,7 +2727,7 @@ class EngineRuntime:
                         strategy=portfolio_runtime.strategy.name,
                         error=str(exc),
                         current_state={"market": portfolio_runtime.market.value},
-                        provider_action=lambda: (_ for _ in ()).throw(exc),
+                        provider_action=lambda exc=exc: (_ for _ in ()).throw(exc),  # type: ignore[misc]
                     )
                 else:
                     automate_incident_recovery(
@@ -2862,6 +2862,50 @@ class EngineRuntime:
                             }
                             for o in portfolio_result.orders
                         ]
+                        # T1 hysteresis provenance: rank/retained per selected symbol
+                        ranks: dict[str, int] = {}
+                        retained_map: dict[str, bool] = {}
+                        try:
+                            meta = portfolio_result.target.metadata if portfolio_result.target.metadata else {}
+                            expl = meta.get("explanations", {}) if isinstance(meta.get("explanations"), dict) else {}
+                            for sym in target_w.keys():
+                                info = expl.get(sym, {}) if isinstance(expl.get(sym), dict) else {}
+                                rank = info.get("alpha_rank")
+                                if isinstance(rank, int) and rank > 0:
+                                    ranks[sym] = rank
+                                retained_map[sym] = bool(info.get("retained", sym in meta.get("retained", ())))
+                            # fallback for hysteresis: retained tuple directly
+                            if not retained_map and "retained" in meta:
+                                retained_set = set(meta.get("retained", ()))
+                                for sym in target_w.keys():
+                                    retained_map[sym] = sym in retained_set
+                        except Exception:
+                            ranks = {}
+                            retained_map = {}
+                        # observation strategy digest: per-market provenance
+                        obs_digest = ""
+                        try:
+                            if (
+                                portfolio_runtime.market
+                                == portfolio_runtime.strategy.market
+                                == __import__("parayabuck.core.models", fromlist=["Market"]).Market.CRYPTO
+                            ):
+                                obs_digest = (
+                                    getattr(
+                                        self.app_config.universe.crypto, "observation_strategy_parameters_digest", ""
+                                    )
+                                    or ""
+                                )
+                            else:
+                                obs_digest = (
+                                    getattr(
+                                        self.app_config.universe.equity, "observation_strategy_parameters_digest", ""
+                                    )
+                                    or ""
+                                )
+                                # equity currently stores observation_strategy_name/version but not digest separately; keep empty if absent
+                        except Exception:
+                            obs_digest = ""
                         receipt = build_receipt(
                             decision_timestamp=ts,
                             config_digest=portfolio_runtime.configuration_digest,
@@ -2880,6 +2924,11 @@ class EngineRuntime:
                             positions_after=positions_after,
                             actual_gross_exposure=float(gross),
                             cash_ratio=float(cash_ratio),
+                            ranks=ranks,
+                            retained=retained_map,
+                            previous_holdings=dict(broker_positions_before),
+                            universe_version=portfolio_result.target.universe_version or universe_hash,
+                            observation_strategy_digest=obs_digest,
                             warnings=[],
                             incidents=[],
                         )

@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 import pathlib
 import statistics
-from collections import Counter, defaultdict
-from datetime import UTC, datetime, timedelta
+from collections import defaultdict
+from datetime import datetime
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 V5_CSV = REPO / "data/historical/equity_pit_symmetric_2016_2026_v5.csv"

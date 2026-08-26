@@ -13,19 +13,13 @@ Proves:
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock
-
-import pytest
 
 from parayabuck.config import CryptoUniverseConfig, load_config
 from parayabuck.core.models import Bar, Market
-from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.portfolio import portfolio_strategy_from
-from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV2
 from parayabuck.universe.crypto_scanner import (
     CRYPTO_CATEGORIES,
     CryptoCandidate,

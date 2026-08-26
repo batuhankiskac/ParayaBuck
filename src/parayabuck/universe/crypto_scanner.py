@@ -19,33 +19,9 @@ from parayabuck.markets.symbols import (
     is_stablecoin_pair,
     split_crypto_pair,
 )
+from parayabuck.universe.crypto_metadata import CRYPTO_CATEGORIES
 from parayabuck.universe.history import append_snapshot_history
 from parayabuck.utils.io import atomic_write
-
-CRYPTO_CATEGORIES = {
-    "BTC/USD": "core",
-    "ETH/USD": "core",
-    "SOL/USD": "layer1",
-    "XRP/USD": "layer1",
-    "ADA/USD": "layer1",
-    "AVAX/USD": "layer1",
-    "DOT/USD": "layer1",
-    "LINK/USD": "defi",
-    "UNI/USD": "defi",
-    "AAVE/USD": "defi",
-    "ONDO/USD": "defi",
-    "CRV/USD": "defi",
-    "FIL/USD": "infrastructure",
-    "RENDER/USD": "infrastructure",
-    "GRT/USD": "infrastructure",
-    "LTC/USD": "legacy",
-    "BCH/USD": "legacy",
-    "ARB/USD": "high_beta",
-    "HYPE/USD": "high_beta",
-    "DOGE/USD": "meme",
-    "SHIB/USD": "meme",
-    "PEPE/USD": "meme",
-}
 
 
 def _bar_close_volume(bar: object) -> tuple[float, float] | None:

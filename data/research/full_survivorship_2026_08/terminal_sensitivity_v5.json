@@ -1,0 +1,23 @@
+{
+  "T1_FULL_PROCEEDS": {
+    "return": 0.019983637206019145,
+    "sharpe": 0.06220631982475577,
+    "maxDD": 0.12981504779622666,
+    "ending_equity": 101998.36372060192,
+    "terminal_proceeds": 40131.386825850175
+  },
+  "T2_HAIRCUT_50": {
+    "return": -0.16739888402735115,
+    "sharpe": -0.2429487205867438,
+    "maxDD": 0.2721611407461472,
+    "ending_equity": 83260.11159726488,
+    "terminal_proceeds": 18722.051175649933
+  },
+  "T3_ZERO_RECOVERY": {
+    "return": -0.328621496415069,
+    "sharpe": -0.420536891896719,
+    "maxDD": 0.4130989276665229,
+    "ending_equity": 67137.8503584931,
+    "terminal_proceeds": 0.0
+  }
+}

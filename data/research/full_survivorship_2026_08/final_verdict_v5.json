@@ -1,0 +1,15 @@
+{
+  "verdict": "SYMMETRIC PIT RECONSTRUCTION VALIDATED \u2014 V3 DATA ROBUSTNESS MODERATE",
+  "historical_status": "HISTORICAL V3 RESEARCH FROZEN \u2014 FINAL",
+  "active_supported_universe_count": 6858,
+  "inactive_supported_universe_count": 2152,
+  "total_symmetric_universe_count": 9010,
+  "active_outside_old_stage_a_entrants": 606,
+  "canonical_baseline": "SYMMETRIC_FULL_T1",
+  "canonical_cagr": 0.0018727627297943084,
+  "canonical_sharpe": 0.06220631982475577,
+  "canonical_maxDD": 0.12981504779622666,
+  "quality_geometry_passed": true,
+  "avg_holdings": 3.037984204588191,
+  "avg_exposure": 0.22553330358074308
+}

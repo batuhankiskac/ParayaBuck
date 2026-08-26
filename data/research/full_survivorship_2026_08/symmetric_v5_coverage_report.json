@@ -1,0 +1,628 @@
+{
+  "datasets": {
+    "OLD_1194": {
+      "entities": 1194,
+      "bars": 1738468,
+      "active_entities": 1194,
+      "historical_non_survivors": 0,
+      "survivor_ratio": 1.0
+    },
+    "FULL_v4": {
+      "entities": 3554,
+      "bars": 3925050,
+      "active_entities": 1194,
+      "historical_non_survivors": 2360,
+      "survivor_ratio": 0.336
+    },
+    "SYMMETRIC_v5": {
+      "entities": 9010,
+      "bars": 11686832,
+      "active_entities": 6858,
+      "historical_non_survivors": 2152,
+      "survivor_ratio": 0.7611542730299667
+    }
+  },
+  "stage_a_exact_measurement": {
+    "total_unique_stage_a_candidates": 890,
+    "old_survivors_in_stage_a": 164,
+    "inactive_symbols_in_stage_a": 120,
+    "active_outside_old_in_stage_a": 606,
+    "active_outside_old_total_available": 5675,
+    "active_outside_old_stage_a_percentage": 0.106784140969163,
+    "note": "Exact PIT measurement across all 492 weekly decisions without extrapolation"
+  },
+  "yearly_eligible_population": {
+    "2017": 985,
+    "2018": 1130,
+    "2019": 1139,
+    "2020": 1268,
+    "2021": 1399,
+    "2022": 1262,
+    "2023": 1114,
+    "2024": 1220,
+    "2025": 1468,
+    "2026": 1561
+  },
+  "monthly_pit_breadth_summary": {
+    "overall_mean_eligible_per_week": 915.74,
+    "overall_min_eligible": 595,
+    "overall_max_eligible": 1319,
+    "monthly_details": {
+      "2017-01": {
+        "mean_eligible": 720.3333333333334,
+        "min_eligible": 704,
+        "max_eligible": 731
+      },
+      "2017-02": {
+        "mean_eligible": 735,
+        "min_eligible": 730,
+        "max_eligible": 742
+      },
+      "2017-03": {
+        "mean_eligible": 753.75,
+        "min_eligible": 747,
+        "max_eligible": 760
+      },
+      "2017-04": {
+        "mean_eligible": 742.25,
+        "min_eligible": 734,
+        "max_eligible": 751
+      },
+      "2017-05": {
+        "mean_eligible": 755.25,
+        "min_eligible": 750,
+        "max_eligible": 763
+      },
+      "2017-06": {
+        "mean_eligible": 753,
+        "min_eligible": 747,
+        "max_eligible": 763
+      },
+      "2017-07": {
+        "mean_eligible": 739.2,
+        "min_eligible": 726,
+        "max_eligible": 756
+      },
+      "2017-08": {
+        "mean_eligible": 733.25,
+        "min_eligible": 725,
+        "max_eligible": 744
+      },
+      "2017-09": {
+        "mean_eligible": 735,
+        "min_eligible": 720,
+        "max_eligible": 757
+      },
+      "2017-10": {
+        "mean_eligible": 750.4,
+        "min_eligible": 735,
+        "max_eligible": 770
+      },
+      "2017-11": {
+        "mean_eligible": 783,
+        "min_eligible": 760,
+        "max_eligible": 807
+      },
+      "2017-12": {
+        "mean_eligible": 799.6666666666666,
+        "min_eligible": 795,
+        "max_eligible": 807
+      },
+      "2018-01": {
+        "mean_eligible": 809.3333333333334,
+        "min_eligible": 793,
+        "max_eligible": 836
+      },
+      "2018-02": {
+        "mean_eligible": 866,
+        "min_eligible": 844,
+        "max_eligible": 881
+      },
+      "2018-03": {
+        "mean_eligible": 867.25,
+        "min_eligible": 861,
+        "max_eligible": 880
+      },
+      "2018-04": {
+        "mean_eligible": 828.6,
+        "min_eligible": 809,
+        "max_eligible": 849
+      },
+      "2018-05": {
+        "mean_eligible": 825.3333333333334,
+        "min_eligible": 816,
+        "max_eligible": 835
+      },
+      "2018-06": {
+        "mean_eligible": 867.25,
+        "min_eligible": 851,
+        "max_eligible": 892
+      },
+      "2018-07": {
+        "mean_eligible": 850.6,
+        "min_eligible": 808,
+        "max_eligible": 888
+      },
+      "2018-08": {
+        "mean_eligible": 829,
+        "min_eligible": 816,
+        "max_eligible": 838
+      },
+      "2018-09": {
+        "mean_eligible": 818,
+        "min_eligible": 804,
+        "max_eligible": 835
+      },
+      "2018-10": {
+        "mean_eligible": 860.6,
+        "min_eligible": 847,
+        "max_eligible": 874
+      },
+      "2018-11": {
+        "mean_eligible": 881.5,
+        "min_eligible": 869,
+        "max_eligible": 891
+      },
+      "2018-12": {
+        "mean_eligible": 884,
+        "min_eligible": 868,
+        "max_eligible": 903
+      },
+      "2019-01": {
+        "mean_eligible": 868.6666666666666,
+        "min_eligible": 838,
+        "max_eligible": 888
+      },
+      "2019-02": {
+        "mean_eligible": 816.3333333333334,
+        "min_eligible": 804,
+        "max_eligible": 824
+      },
+      "2019-03": {
+        "mean_eligible": 845.5,
+        "min_eligible": 829,
+        "max_eligible": 856
+      },
+      "2019-04": {
+        "mean_eligible": 812.6,
+        "min_eligible": 792,
+        "max_eligible": 836
+      },
+      "2019-05": {
+        "mean_eligible": 838,
+        "min_eligible": 820,
+        "max_eligible": 854
+      },
+      "2019-06": {
+        "mean_eligible": 813.5,
+        "min_eligible": 798,
+        "max_eligible": 826
+      },
+      "2019-07": {
+        "mean_eligible": 803.6,
+        "min_eligible": 775,
+        "max_eligible": 831
+      },
+      "2019-08": {
+        "mean_eligible": 826.75,
+        "min_eligible": 807,
+        "max_eligible": 845
+      },
+      "2019-09": {
+        "mean_eligible": 813,
+        "min_eligible": 796,
+        "max_eligible": 835
+      },
+      "2019-10": {
+        "mean_eligible": 793.5,
+        "min_eligible": 768,
+        "max_eligible": 831
+      },
+      "2019-11": {
+        "mean_eligible": 790.5,
+        "min_eligible": 778,
+        "max_eligible": 806
+      },
+      "2019-12": {
+        "mean_eligible": 811.2,
+        "min_eligible": 794,
+        "max_eligible": 829
+      },
+      "2020-01": {
+        "mean_eligible": 825.6666666666666,
+        "min_eligible": 822,
+        "max_eligible": 829
+      },
+      "2020-02": {
+        "mean_eligible": 841,
+        "min_eligible": 840,
+        "max_eligible": 842
+      },
+      "2020-03": {
+        "mean_eligible": 773.2,
+        "min_eligible": 595,
+        "max_eligible": 912
+      },
+      "2020-04": {
+        "mean_eligible": 795.75,
+        "min_eligible": 701,
+        "max_eligible": 842
+      },
+      "2020-05": {
+        "mean_eligible": 837,
+        "min_eligible": 832,
+        "max_eligible": 844
+      },
+      "2020-06": {
+        "mean_eligible": 888.8,
+        "min_eligible": 848,
+        "max_eligible": 909
+      },
+      "2020-07": {
+        "mean_eligible": 859.75,
+        "min_eligible": 822,
+        "max_eligible": 897
+      },
+      "2020-08": {
+        "mean_eligible": 822.8,
+        "min_eligible": 804,
+        "max_eligible": 831
+      },
+      "2020-09": {
+        "mean_eligible": 842.6666666666666,
+        "min_eligible": 815,
+        "max_eligible": 866
+      },
+      "2020-10": {
+        "mean_eligible": 841.5,
+        "min_eligible": 819,
+        "max_eligible": 859
+      },
+      "2020-11": {
+        "mean_eligible": 863.8,
+        "min_eligible": 820,
+        "max_eligible": 897
+      },
+      "2020-12": {
+        "mean_eligible": 919.25,
+        "min_eligible": 896,
+        "max_eligible": 935
+      },
+      "2021-01": {
+        "mean_eligible": 928,
+        "min_eligible": 910,
+        "max_eligible": 938
+      },
+      "2021-02": {
+        "mean_eligible": 988,
+        "min_eligible": 982,
+        "max_eligible": 998
+      },
+      "2021-03": {
+        "mean_eligible": 1008,
+        "min_eligible": 978,
+        "max_eligible": 1046
+      },
+      "2021-04": {
+        "mean_eligible": 961.25,
+        "min_eligible": 938,
+        "max_eligible": 997
+      },
+      "2021-05": {
+        "mean_eligible": 951.5,
+        "min_eligible": 927,
+        "max_eligible": 979
+      },
+      "2021-06": {
+        "mean_eligible": 1008,
+        "min_eligible": 1003,
+        "max_eligible": 1017
+      },
+      "2021-07": {
+        "mean_eligible": 945.6666666666666,
+        "min_eligible": 923,
+        "max_eligible": 970
+      },
+      "2021-08": {
+        "mean_eligible": 897.2,
+        "min_eligible": 888,
+        "max_eligible": 911
+      },
+      "2021-09": {
+        "mean_eligible": 917.6666666666666,
+        "min_eligible": 899,
+        "max_eligible": 932
+      },
+      "2021-10": {
+        "mean_eligible": 927.5,
+        "min_eligible": 913,
+        "max_eligible": 940
+      },
+      "2021-11": {
+        "mean_eligible": 934.8,
+        "min_eligible": 905,
+        "max_eligible": 963
+      },
+      "2021-12": {
+        "mean_eligible": 994,
+        "min_eligible": 964,
+        "max_eligible": 1015
+      },
+      "2022-01": {
+        "mean_eligible": 970.5,
+        "min_eligible": 958,
+        "max_eligible": 988
+      },
+      "2022-02": {
+        "mean_eligible": 982.6666666666666,
+        "min_eligible": 980,
+        "max_eligible": 985
+      },
+      "2022-03": {
+        "mean_eligible": 988.75,
+        "min_eligible": 956,
+        "max_eligible": 1029
+      },
+      "2022-04": {
+        "mean_eligible": 969.5,
+        "min_eligible": 954,
+        "max_eligible": 990
+      },
+      "2022-05": {
+        "mean_eligible": 961,
+        "min_eligible": 943,
+        "max_eligible": 972
+      },
+      "2022-06": {
+        "mean_eligible": 934.3333333333334,
+        "min_eligible": 909,
+        "max_eligible": 949
+      },
+      "2022-07": {
+        "mean_eligible": 904.6666666666666,
+        "min_eligible": 870,
+        "max_eligible": 935
+      },
+      "2022-08": {
+        "mean_eligible": 859.2,
+        "min_eligible": 849,
+        "max_eligible": 869
+      },
+      "2022-09": {
+        "mean_eligible": 865.3333333333334,
+        "min_eligible": 849,
+        "max_eligible": 883
+      },
+      "2022-10": {
+        "mean_eligible": 894,
+        "min_eligible": 871,
+        "max_eligible": 908
+      },
+      "2022-11": {
+        "mean_eligible": 888.25,
+        "min_eligible": 877,
+        "max_eligible": 897
+      },
+      "2022-12": {
+        "mean_eligible": 863.6666666666666,
+        "min_eligible": 860,
+        "max_eligible": 867
+      },
+      "2023-01": {
+        "mean_eligible": 848.6666666666666,
+        "min_eligible": 842,
+        "max_eligible": 855
+      },
+      "2023-02": {
+        "mean_eligible": 865.3333333333334,
+        "min_eligible": 861,
+        "max_eligible": 868
+      },
+      "2023-03": {
+        "mean_eligible": 892.25,
+        "min_eligible": 869,
+        "max_eligible": 911
+      },
+      "2023-04": {
+        "mean_eligible": 866.5,
+        "min_eligible": 822,
+        "max_eligible": 899
+      },
+      "2023-05": {
+        "mean_eligible": 826.75,
+        "min_eligible": 818,
+        "max_eligible": 837
+      },
+      "2023-06": {
+        "mean_eligible": 862,
+        "min_eligible": 840,
+        "max_eligible": 892
+      },
+      "2023-07": {
+        "mean_eligible": 861.8,
+        "min_eligible": 853,
+        "max_eligible": 877
+      },
+      "2023-08": {
+        "mean_eligible": 863.75,
+        "min_eligible": 843,
+        "max_eligible": 875
+      },
+      "2023-09": {
+        "mean_eligible": 814,
+        "min_eligible": 806,
+        "max_eligible": 823
+      },
+      "2023-10": {
+        "mean_eligible": 847.8,
+        "min_eligible": 835,
+        "max_eligible": 859
+      },
+      "2023-11": {
+        "mean_eligible": 880.5,
+        "min_eligible": 872,
+        "max_eligible": 892
+      },
+      "2023-12": {
+        "mean_eligible": 895,
+        "min_eligible": 878,
+        "max_eligible": 916
+      },
+      "2024-01": {
+        "mean_eligible": 897.3333333333334,
+        "min_eligible": 878,
+        "max_eligible": 930
+      },
+      "2024-02": {
+        "mean_eligible": 907,
+        "min_eligible": 894,
+        "max_eligible": 923
+      },
+      "2024-03": {
+        "mean_eligible": 929,
+        "min_eligible": 924,
+        "max_eligible": 935
+      },
+      "2024-04": {
+        "mean_eligible": 916.8,
+        "min_eligible": 907,
+        "max_eligible": 930
+      },
+      "2024-05": {
+        "mean_eligible": 932,
+        "min_eligible": 919,
+        "max_eligible": 942
+      },
+      "2024-06": {
+        "mean_eligible": 914.5,
+        "min_eligible": 913,
+        "max_eligible": 916
+      },
+      "2024-07": {
+        "mean_eligible": 930.2,
+        "min_eligible": 904,
+        "max_eligible": 951
+      },
+      "2024-08": {
+        "mean_eligible": 965.25,
+        "min_eligible": 940,
+        "max_eligible": 978
+      },
+      "2024-09": {
+        "mean_eligible": 918,
+        "min_eligible": 897,
+        "max_eligible": 946
+      },
+      "2024-10": {
+        "mean_eligible": 932,
+        "min_eligible": 918,
+        "max_eligible": 944
+      },
+      "2024-11": {
+        "mean_eligible": 981.75,
+        "min_eligible": 920,
+        "max_eligible": 1034
+      },
+      "2024-12": {
+        "mean_eligible": 1011.2,
+        "min_eligible": 1001,
+        "max_eligible": 1030
+      },
+      "2025-01": {
+        "mean_eligible": 997.3333333333334,
+        "min_eligible": 990,
+        "max_eligible": 1006
+      },
+      "2025-02": {
+        "mean_eligible": 1024.3333333333333,
+        "min_eligible": 1016,
+        "max_eligible": 1034
+      },
+      "2025-03": {
+        "mean_eligible": 1070,
+        "min_eligible": 1038,
+        "max_eligible": 1097
+      },
+      "2025-04": {
+        "mean_eligible": 1074.75,
+        "min_eligible": 1064,
+        "max_eligible": 1088
+      },
+      "2025-05": {
+        "mean_eligible": 1041.3333333333333,
+        "min_eligible": 1023,
+        "max_eligible": 1061
+      },
+      "2025-06": {
+        "mean_eligible": 1048,
+        "min_eligible": 1034,
+        "max_eligible": 1070
+      },
+      "2025-07": {
+        "mean_eligible": 1102.75,
+        "min_eligible": 1086,
+        "max_eligible": 1114
+      },
+      "2025-08": {
+        "mean_eligible": 1128.75,
+        "min_eligible": 1111,
+        "max_eligible": 1152
+      },
+      "2025-09": {
+        "mean_eligible": 1139.5,
+        "min_eligible": 1122,
+        "max_eligible": 1167
+      },
+      "2025-10": {
+        "mean_eligible": 1172.75,
+        "min_eligible": 1152,
+        "max_eligible": 1187
+      },
+      "2025-11": {
+        "mean_eligible": 1157,
+        "min_eligible": 1143,
+        "max_eligible": 1184
+      },
+      "2025-12": {
+        "mean_eligible": 1185.4,
+        "min_eligible": 1173,
+        "max_eligible": 1196
+      },
+      "2026-01": {
+        "mean_eligible": 1200.6666666666667,
+        "min_eligible": 1181,
+        "max_eligible": 1228
+      },
+      "2026-02": {
+        "mean_eligible": 1237,
+        "min_eligible": 1232,
+        "max_eligible": 1240
+      },
+      "2026-03": {
+        "mean_eligible": 1261.8,
+        "min_eligible": 1246,
+        "max_eligible": 1272
+      },
+      "2026-04": {
+        "mean_eligible": 1255.75,
+        "min_eligible": 1245,
+        "max_eligible": 1261
+      },
+      "2026-05": {
+        "mean_eligible": 1249,
+        "min_eligible": 1239,
+        "max_eligible": 1256
+      },
+      "2026-06": {
+        "mean_eligible": 1297.6,
+        "min_eligible": 1279,
+        "max_eligible": 1309
+      },
+      "2026-07": {
+        "mean_eligible": 1283.75,
+        "min_eligible": 1254,
+        "max_eligible": 1319
+      }
+    }
+  }
+}

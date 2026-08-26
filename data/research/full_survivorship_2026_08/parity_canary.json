@@ -1,0 +1,386 @@
+{
+  "old_universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+  "v5_universe_hash": "c6f8344b6512ba3e5607316f521c8eaeea179627f8c480990b051a1c9deec122",
+  "effective_params": [
+    [
+      "beta_window_bars",
+      273
+    ],
+    [
+      "formation_bars",
+      252
+    ],
+    [
+      "ivol_reject_quantile",
+      0.7
+    ],
+    [
+      "max_single_weight",
+      0.1
+    ],
+    [
+      "residual_vol_window",
+      63
+    ],
+    [
+      "skip_bars",
+      21
+    ],
+    [
+      "top_n",
+      8
+    ]
+  ],
+  "old_t0_parity": {
+    "days": 3859,
+    "total_return": 1.7201464791377266,
+    "cagr": 0.09927288590994188,
+    "sharpe": 0.795622991563793,
+    "sortino": 1.0156955890618102,
+    "calmar": 0.4505866891041344,
+    "maxDD": 0.22031917122833397,
+    "maxDD_duration_days": 1070,
+    "turnover": 143.86793180836435,
+    "fees": 7595.746250035705,
+    "dividend_cash": 17239.84441478912,
+    "avg_exposure": 0.4962218721453806,
+    "max_exposure": 0.5999999999999999,
+    "avg_holdings": 5.031602708803612,
+    "max_holdings": 6,
+    "ending_equity": 272014.6479137727,
+    "starting_equity": 100000.0,
+    "terminal_events": 0,
+    "terminal_proceeds_total": 0
+  },
+  "full_t1_parity": {
+    "days": 3860,
+    "total_return": 1.1364219478164905,
+    "cagr": 0.07442243680989091,
+    "sharpe": 0.6393460732104441,
+    "sortino": 0.8267229793669596,
+    "calmar": 0.32736690263341484,
+    "maxDD": 0.22733647235325158,
+    "maxDD_duration_days": 1084,
+    "turnover": 146.74820538821072,
+    "fees": 6156.751808066365,
+    "dividend_cash": 10881.16780518212,
+    "avg_exposure": 0.4823573729165177,
+    "max_exposure": 0.5999999999999999,
+    "avg_holdings": 4.924031590823618,
+    "max_holdings": 6,
+    "ending_equity": 213642.19478164907,
+    "starting_equity": 100000.0,
+    "terminal_events": 6,
+    "terminal_proceeds_total": 76561.37938706583
+  },
+  "old_sampled_decisions": [
+    {
+      "timestamp": "2017-02-06T05:00:00+00:00",
+      "snapshot_size": 138,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2017-07-24T04:00:00+00:00",
+      "snapshot_size": 136,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAOI",
+        "AAP"
+      ]
+    },
+    {
+      "timestamp": "2018-01-08T05:00:00+00:00",
+      "snapshot_size": 151,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAOI",
+        "AAP"
+      ]
+    },
+    {
+      "timestamp": "2018-06-25T04:00:00+00:00",
+      "snapshot_size": 155,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAOI",
+        "AAP"
+      ]
+    },
+    {
+      "timestamp": "2018-12-10T05:00:00+00:00",
+      "snapshot_size": 154,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2019-05-28T04:00:00+00:00",
+      "snapshot_size": 157,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2019-11-11T05:00:00+00:00",
+      "snapshot_size": 148,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2020-04-27T04:00:00+00:00",
+      "snapshot_size": 151,
+      "first_5": [
+        "A",
+        "AA",
+        "AAP",
+        "AAPL",
+        "AAXJ"
+      ]
+    },
+    {
+      "timestamp": "2020-10-12T04:00:00+00:00",
+      "snapshot_size": 172,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2021-03-29T04:00:00+00:00",
+      "snapshot_size": 208,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2021-09-13T04:00:00+00:00",
+      "snapshot_size": 190,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2022-02-28T05:00:00+00:00",
+      "snapshot_size": 195,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAMI",
+        "AAP"
+      ]
+    },
+    {
+      "timestamp": "2022-08-15T04:00:00+00:00",
+      "snapshot_size": 181,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2023-01-30T05:00:00+00:00",
+      "snapshot_size": 178,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAP",
+        "AAPL"
+      ]
+    },
+    {
+      "timestamp": "2023-07-17T04:00:00+00:00",
+      "snapshot_size": 180,
+      "first_5": [
+        "A",
+        "AA",
+        "AAL",
+        "AAON",
+        "AAP"
+      ]
+    },
+    {
+      "timestamp": "2024-01-02T05:00:00+00:00",
+      "snapshot_size": 194,
+      "first_5": [
+        "A",
+        "AA",
+        "AAAU",
+        "AAL",
+        "AAOI"
+      ]
+    },
+    {
+      "timestamp": "2024-06-17T04:00:00+00:00",
+      "snapshot_size": 195,
+      "first_5": [
+        "A",
+        "AA",
+        "AAAU",
+        "AAL",
+        "AAON"
+      ]
+    },
+    {
+      "timestamp": "2024-12-02T05:00:00+00:00",
+      "snapshot_size": 227,
+      "first_5": [
+        "A",
+        "AA",
+        "AAAU",
+        "AAL",
+        "AAOI"
+      ]
+    },
+    {
+      "timestamp": "2025-05-19T04:00:00+00:00",
+      "snapshot_size": 223,
+      "first_5": [
+        "A",
+        "AA",
+        "AAAU",
+        "AAL",
+        "AAOI"
+      ]
+    },
+    {
+      "timestamp": "2025-11-03T05:00:00+00:00",
+      "snapshot_size": 246,
+      "first_5": [
+        "A",
+        "AA",
+        "AAAU",
+        "AAL",
+        "AAOI"
+      ]
+    }
+  ],
+  "v5_sampled_decisions": [
+    {
+      "timestamp": "2017-02-06T05:00:00+00:00",
+      "snapshot_size": 276
+    },
+    {
+      "timestamp": "2017-07-24T04:00:00+00:00",
+      "snapshot_size": 277
+    },
+    {
+      "timestamp": "2018-01-08T05:00:00+00:00",
+      "snapshot_size": 297
+    },
+    {
+      "timestamp": "2018-06-25T04:00:00+00:00",
+      "snapshot_size": 292
+    },
+    {
+      "timestamp": "2018-12-10T05:00:00+00:00",
+      "snapshot_size": 286
+    },
+    {
+      "timestamp": "2019-05-28T04:00:00+00:00",
+      "snapshot_size": 280
+    },
+    {
+      "timestamp": "2019-12-16T05:00:00+00:00",
+      "snapshot_size": 278
+    },
+    {
+      "timestamp": "2020-07-06T04:00:00+00:00",
+      "snapshot_size": 285
+    },
+    {
+      "timestamp": "2020-12-21T05:00:00+00:00",
+      "snapshot_size": 274
+    },
+    {
+      "timestamp": "2021-06-07T04:00:00+00:00",
+      "snapshot_size": 280
+    },
+    {
+      "timestamp": "2021-12-13T05:00:00+00:00",
+      "snapshot_size": 263
+    },
+    {
+      "timestamp": "2022-05-31T04:00:00+00:00",
+      "snapshot_size": 232
+    },
+    {
+      "timestamp": "2022-11-14T05:00:00+00:00",
+      "snapshot_size": 203
+    },
+    {
+      "timestamp": "2023-05-01T04:00:00+00:00",
+      "snapshot_size": 191
+    },
+    {
+      "timestamp": "2023-10-16T04:00:00+00:00",
+      "snapshot_size": 197
+    },
+    {
+      "timestamp": "2024-04-01T04:00:00+00:00",
+      "snapshot_size": 217
+    },
+    {
+      "timestamp": "2024-09-16T04:00:00+00:00",
+      "snapshot_size": 210
+    },
+    {
+      "timestamp": "2025-03-03T05:00:00+00:00",
+      "snapshot_size": 255
+    },
+    {
+      "timestamp": "2025-08-18T04:00:00+00:00",
+      "snapshot_size": 274
+    },
+    {
+      "timestamp": "2026-02-02T05:00:00+00:00",
+      "snapshot_size": 282
+    }
+  ],
+  "old_universe_snapshots": 2657,
+  "v5_universe_snapshots": 2658,
+  "old_exposure": 0.4962218721453806,
+  "old_holdings": 5.031602708803612,
+  "v5_exposure": 0.4823573729165177,
+  "v5_holdings": 4.924031590823618
+}

@@ -1,0 +1,4023 @@
+{
+  "rows": [
+    {
+      "decision_timestamp": "2017-02-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-02-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-02-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-02-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-03-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-03-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-03-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-03-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 291,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 291,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-04-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-04-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-04-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-04-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-05-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-05-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 290,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 290,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-05-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-05-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 291,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 291,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-05-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-06-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-06-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-06-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-06-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-08-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-08-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-08-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-08-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-09-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-09-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-09-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-09-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 291,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 291,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-10-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 296,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 296,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-10-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-10-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 292,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 292,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-10-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-10-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 289,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 289,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-11-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-11-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 292,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 292,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-11-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-11-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-12-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 293,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 293,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-12-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-12-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-12-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-29T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 296,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 296,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-02-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 293,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 293,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-02-12T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-02-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 298,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 298,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-02-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 299,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 299,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-03-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-03-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 299,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 299,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-03-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 299,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 299,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-03-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 298,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 298,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-04-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-04-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 296,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 296,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-04-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-04-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-04-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-05-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 296,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 296,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-05-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 298,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 298,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-05-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 296,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 296,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-05-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-06-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-06-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 292,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 292,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-06-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 291,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 291,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-06-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 292,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 292,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-07-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-07-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-07-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 294,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 294,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-07-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 293,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 293,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-07-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 295,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 295,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-08-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 293,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 293,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-08-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 289,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 289,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-08-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-08-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 291,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 291,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-09-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 293,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 293,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-09-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 289,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 289,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-09-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-09-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 290,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 290,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-10-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 290,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 290,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-10-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 290,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 290,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-10-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-10-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-10-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-11-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-11-12T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-11-19T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-11-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-17T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-24T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-31T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 289,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 289,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-01-07T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-01-14T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-01-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-01-28T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-02-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-02-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-02-19T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-02-25T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-03-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-03-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-03-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-03-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-04-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-04-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-04-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-04-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-04-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-05-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-05-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-05-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-05-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-07-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-07-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-07-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-07-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-08-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 271,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 271,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-08-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-08-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-08-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-09-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 271,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 271,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-09-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 266,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 266,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-09-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-09-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-09-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-10-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-10-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-10-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-10-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 260,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 260,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-11-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-11-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 271,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 271,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-11-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-11-25T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-12-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-12-09T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-12-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-01-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-01-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-01-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-01-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-02-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-02-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-02-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-02-24T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-03-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-03-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-03-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 267,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 267,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-04-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 238,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 238,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-04-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 267,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 267,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-04-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 266,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 266,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-05-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-05-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 267,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 267,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-05-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 265,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 265,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-05-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-06-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-06-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-06-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-06-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-06-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-07-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-07-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-07-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-07-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-08-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 269,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 269,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-08-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-08-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 269,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 269,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-08-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-08-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-09-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 254,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 254,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-09-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 256,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 256,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-09-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-09-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 269,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 269,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-10-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-10-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-10-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-10-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 260,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 260,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-11-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 252,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 252,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-11-09T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-11-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-11-23T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-11-30T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-12-07T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-12-14T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-12-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-12-28T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-01-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-01-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-01-19T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-01-25T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-02-01T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-02-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-02-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-02-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-03-01T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 258,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 258,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-03-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 258,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 258,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-03-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-03-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-03-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-04-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-04-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-04-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-04-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-05-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-05-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-05-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-05-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-07-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-07-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-07-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-07-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 271,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 271,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-08-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-08-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 262,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 262,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-08-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-08-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-09-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-09-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 264,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 264,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-10-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-10-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 254,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 254,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-10-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 253,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 253,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-10-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 248,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 248,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-11-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-11-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-11-15T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 257,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 257,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-11-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 262,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 262,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-11-29T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 268,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 268,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-12-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-12-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-12-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 269,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 269,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-12-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-01-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-01-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-01-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-01-24T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-01-31T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-02-07T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 256,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 256,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-02-14T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 254,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 254,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-02-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-02-28T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-03-07T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 247,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 247,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-03-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 247,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 247,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-03-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 260,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 260,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-03-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-04-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-04-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 246,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 246,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-04-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 242,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 242,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-04-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 236,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 236,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 240,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 240,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 233,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 233,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 235,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 235,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 239,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 239,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 232,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 232,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-06-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 230,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 230,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-06-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 221,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 221,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-06-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 220,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 220,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-06-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 227,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 227,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-07-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 225,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 225,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-07-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 223,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 223,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-07-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 216,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 216,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-07-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-08-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 201,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 201,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-08-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-08-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-08-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 201,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 201,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-08-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-09-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 191,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 191,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-09-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 193,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 193,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-09-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 196,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 196,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-09-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-10-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 204,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 204,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-10-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-10-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-10-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 199,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 199,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-10-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 199,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 199,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-11-07T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-11-14T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-11-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 208,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 208,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-11-28T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 207,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 207,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-12-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-12-12T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-12-19T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-12-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-01-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-01-09T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 201,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 201,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-01-17T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-01-23T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-01-30T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-02-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-02-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 199,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 199,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-02-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 194,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 194,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-02-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-03-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 201,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 201,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-03-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-03-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 208,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 208,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-03-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 208,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 208,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-04-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 206,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 206,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-04-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 205,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 205,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-04-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 191,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 191,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-04-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 192,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 192,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 191,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 191,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 193,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 193,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 192,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 192,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 196,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 196,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 193,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 193,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-06-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 194,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 194,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-06-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 195,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 195,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-06-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-06-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 205,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 205,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-07-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 205,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 205,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-07-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-07-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 199,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 199,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-07-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-07-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 198,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 198,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-08-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 206,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 206,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-08-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-08-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-08-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 196,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 196,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-09-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 189,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 189,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-09-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 189,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 189,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-09-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 192,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 192,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-09-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 196,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 196,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 199,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 199,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 202,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 202,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 200,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 200,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-11-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 205,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 205,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-11-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 205,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 205,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-11-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 209,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 209,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-11-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 209,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 209,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-12-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 206,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 206,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-12-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 207,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 207,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-12-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 211,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 211,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-12-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 215,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 215,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-01-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 212,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 212,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-01-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 216,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 216,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-01-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 213,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 213,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-01-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-01-29T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-02-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 208,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 208,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-02-12T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 208,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 208,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-02-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 212,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 212,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-02-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 211,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 211,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-03-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 214,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 214,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-03-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 220,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 220,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-03-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 221,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 221,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-03-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 219,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 219,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 217,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 217,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 217,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 217,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 214,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 214,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 213,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 213,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 216,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 216,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-05-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 219,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 219,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-05-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 220,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 220,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-05-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 215,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 215,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-05-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 217,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 217,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-06-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 216,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 216,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-06-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 215,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 215,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-06-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 216,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 216,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-06-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 217,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 217,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-07-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 221,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 221,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-07-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 218,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 218,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-07-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 223,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 223,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-07-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 231,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 231,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-07-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 234,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 234,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-08-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 236,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 236,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-08-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 237,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 237,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-08-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 235,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 235,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-08-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 219,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 219,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-03T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 207,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 207,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 206,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 206,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 210,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 210,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 218,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 218,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 226,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 226,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-10-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 229,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 229,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-10-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 226,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 226,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-10-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 223,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 223,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-10-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 219,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 219,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-11-04T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 220,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 220,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-11-11T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 227,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 227,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-11-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 233,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 233,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-11-25T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 243,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 243,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-12-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-12-09T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 254,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 254,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-12-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-12-23T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-12-30T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-01-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-01-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 248,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 248,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-01-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 243,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 243,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-01-27T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 241,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 241,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-02-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 245,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 245,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-02-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-02-18T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 254,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 254,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-02-24T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 251,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 251,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 255,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 255,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-10T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 255,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 255,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-17T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 262,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 262,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 267,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 267,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 265,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 265,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-04-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 259,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 259,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-04-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-04-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 256,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 256,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-04-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 256,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 256,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-05-05T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-05-12T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 242,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 242,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-05-19T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-05-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 246,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 246,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-06-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 249,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 249,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-06-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-06-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 250,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 250,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-06-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 260,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 260,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-06-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 261,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 261,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-07-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 266,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 266,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-07-14T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 267,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 267,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-07-21T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 272,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 272,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-07-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 271,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 271,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-08-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 269,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 269,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-08-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 265,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 265,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-08-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-08-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-09-02T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-09-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-09-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-09-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-09-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 279,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 279,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-10-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-10-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-10-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-10-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-11-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-11-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-11-17T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-11-24T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-12-01T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-12-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-12-15T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-12-22T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-12-29T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 289,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 289,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-01-05T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-01-12T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 288,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 288,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-01-20T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-01-26T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-02-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-02-09T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-02-17T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-02-23T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-03-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-03-09T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-03-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-03-23T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-03-30T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-04-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 284,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 284,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-04-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 287,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 287,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-04-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 283,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 283,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-04-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-05-04T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-05-11T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-05-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-05-26T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-06-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-06-08T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 275,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 275,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-06-15T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-06-22T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-06-29T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 270,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 270,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-07-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-07-13T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 281,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 281,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-07-20T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 273,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 273,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-07-27T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    }
+  ],
+  "total_decisions": 482,
+  "sample_20": [
+    {
+      "decision_timestamp": "2017-02-06T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 276,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 276,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2017-07-24T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 277,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 277,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-01-08T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 297,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 297,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-06-25T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 292,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 292,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2018-12-10T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 286,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 286,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-05-28T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2019-12-16T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 278,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 278,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-07-06T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 285,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 285,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2020-12-21T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-06-07T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 280,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 280,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2021-12-13T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 263,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 263,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-05-31T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 232,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 232,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2022-11-14T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 203,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 203,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-05-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 191,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 191,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2023-10-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 197,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 197,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-04-01T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 217,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 217,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2024-09-16T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 210,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 210,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-03-03T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 255,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 255,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2025-08-18T04:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 274,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 274,
+      "observation_set_size": 30
+    },
+    {
+      "decision_timestamp": "2026-02-02T05:00:00+00:00",
+      "broad_candidate_count": 300,
+      "pit_eligible_count": 282,
+      "shortlist_stage_a_count": 300,
+      "scanner_selected_count": 282,
+      "observation_set_size": 30
+    }
+  ]
+}

@@ -30,19 +30,13 @@
     ]
   ],
   "frozen_check": "PASS",
-  "strategy": "equity_residual_momentum_v3",
-  "timeframe": "1d",
-  "target_shortlist": 300,
-  "max_stream_symbols": 30,
-  "formation_bars": 252,
-  "skip_bars": 21,
-  "beta_window_bars": 273,
-  "residual_vol_window": 63,
-  "top_n": 8,
-  "max_single_weight": 0.1,
-  "ivol_reject_quantile": 0.7,
-  "weekly": true,
-  "positive_12_1_gate": true,
-  "consensus": "126/189/252 MH_RAW",
-  "note": "K_FINAL_PARITY_FREEZE manifest - production PIT universe parity, CA parity"
+  "old_universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+  "v5_universe_hash": "c6f8344b6512ba3e5607316f521c8eaeea179627f8c480990b051a1c9deec122",
+  "old_universe_snapshots": 2657,
+  "v5_universe_snapshots": 2658,
+  "ca_source_sha": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "ca_old_count": 16772,
+  "ca_v5_count": 141908,
+  "config_equity_target_shortlist": 300,
+  "config_max_stream_symbols": 30
 }

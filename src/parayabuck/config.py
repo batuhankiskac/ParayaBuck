@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 from parayabuck.core.models import Market
 from parayabuck.markets.timeframes import TIMEFRAME_MINUTES
+from parayabuck.monitoring.events import ALERT_KINDS, ALERT_KINDS_ORDERED, DEFAULT_ALERT_EVENTS
 
 # Single source of truth for the default ledger location: monitoring/metrics
 # and the web dashboard fall back to this path when config resolution fails,
@@ -119,22 +120,9 @@ class LiveConfig:
             raise ValueError("Enabled live mode requires an operator approval file")
 
 
-_ALERT_KINDS = (
-    "runtime_started",
-    "runtime_stopped_unexpected",
-    "scanner_refresh_failure",
-    "scanner_recovered",
-    "order_rejected",
-    "ambiguous_order",
-    "reconciliation_failure",
-    "reconciliation_recovered",
-    "risk_incident",
-    "drawdown_halt",
-    "risk_epoch_reset",
-    "circuit_breaker",
-    "signal_adjustment_failure",
-    "signal_adjustment_recovery",
-)
+# Canonical alert vocabulary is single-sourced in parayabuck.monitoring.events.
+# Keep private alias for any external introspection that imported config._ALERT_KINDS.
+_ALERT_KINDS = ALERT_KINDS_ORDERED
 
 
 @dataclass(frozen=True)
@@ -143,17 +131,19 @@ class AlertingConfig:
 
     enabled: bool = True
     webhook_url: str = ""
-    events: tuple[str, ...] = _ALERT_KINDS
+    # Default webhook-enabled events exclude high-volume paper_receipt (see events.py).
+    # Paper_incident remains enabled; operators may add paper_receipt explicitly.
+    events: tuple[str, ...] = DEFAULT_ALERT_EVENTS
 
     def __post_init__(self) -> None:
-        known = set(_ALERT_KINDS)
+        known = set(ALERT_KINDS)
         unknown = set(self.events) - known
         if unknown:
             raise ValueError(f"alerting.events contains unknown kinds: {sorted(unknown)}")
         object.__setattr__(
             self,
             "events",
-            tuple(dict.fromkeys(kind for kind in _ALERT_KINDS if kind in self.events)),
+            tuple(dict.fromkeys(kind for kind in ALERT_KINDS_ORDERED if kind in self.events)),
         )
 
 
@@ -560,19 +550,19 @@ class CryptoUniverseConfig:
         object.__setattr__(self, "denylist_symbols", denylist)
         # Category metadata integrity: every configured production symbol must
         # have an explicit category; silent unknown_category_penalty is not
-        # acceptable for the frozen PAPER pool.
+        # acceptable for the frozen PAPER pool. 22/22 completeness is mandatory
+        # (no ImportError bypass, no enabled-guard).
         if symbols:
-            try:
-                from parayabuck.universe.crypto_scanner import CRYPTO_CATEGORIES
+            from parayabuck.universe.crypto_metadata import CRYPTO_CATEGORIES
 
-                missing = [s for s in symbols if s not in CRYPTO_CATEGORIES]
-                if missing and self.enabled and self.dynamic_selection_enabled:
-                    raise ValueError(
-                        f"Missing crypto category metadata for configured trade_symbols: {','.join(missing)}; "
-                        "add them to CRYPTO_CATEGORIES"
-                    )
-            except ImportError:
-                pass
+            if len(CRYPTO_CATEGORIES) != 22:
+                raise ValueError(f"CRYPTO_CATEGORIES must contain 22 entries, found {len(CRYPTO_CATEGORIES)}")
+            missing = [s for s in symbols if s not in CRYPTO_CATEGORIES]
+            if missing:
+                raise ValueError(
+                    f"Missing crypto category metadata for configured trade_symbols: {','.join(missing)}; "
+                    "add them to CRYPTO_CATEGORIES"
+                )
 
 
 @dataclass(frozen=True)
@@ -660,11 +650,11 @@ def _resolved_timeframe(strategy: MarketStrategyConfig) -> MarketStrategyConfig:
     comes from the strategy class, so a configured name NEVER inherits another
     market default.
     """
-    from parayabuck.portfolio import portfolio_strategy_from
+    from parayabuck.portfolio import product_strategy_from
 
     return replace(
         strategy,
-        timeframe=portfolio_strategy_from(strategy.name, strategy.parameters, timeframe=strategy.timeframe).timeframe,
+        timeframe=product_strategy_from(strategy.name, strategy.parameters, timeframe=strategy.timeframe).timeframe,
     )
 
 
@@ -765,6 +755,25 @@ def load_config(config_path: str | None = None) -> Config:
                 DeprecationWarning,
                 stacklevel=2,
             )
+    # Fail-closed: when a market universe is enabled the corresponding
+    # strategy.<market> block MUST be present with an explicit name **if that
+    # market's strategy is intended to trade**.  A disabled strategy
+    # (explicit ``enabled: false``) may omit the name — the loader will fill
+    # the packaged default name but keep it disabled, so no silent v1
+    # selection can produce orders.  Dataclass defaults remain for direct
+    # construction, but YAML loading is strict for enabled markets.
+    if equity.enabled:
+        _eq_block = strategy_raw.get("equity")
+        _eq_enabled = True if not isinstance(_eq_block, dict) else bool(_eq_block.get("enabled", True))
+        if _eq_enabled:
+            if not isinstance(_eq_block, dict) or not str(_eq_block.get("name", "")).strip():
+                raise ValueError("strategy.equity block with name is required when universe.equity.enabled is true")
+    if crypto_universe.enabled:
+        _cr_block = strategy_raw.get("crypto")
+        _cr_enabled = True if not isinstance(_cr_block, dict) else bool(_cr_block.get("enabled", True))
+        if _cr_enabled:
+            if not isinstance(_cr_block, dict) or not str(_cr_block.get("name", "")).strip():
+                raise ValueError("strategy.crypto block with name is required when universe.crypto.enabled is true")
     default_strategy = StrategyConfig()
     equity_strategy = _strategy_from_raw(
         default_strategy.equity,
@@ -779,9 +788,9 @@ def load_config(config_path: str | None = None) -> Config:
     equity_strategy = _resolved_timeframe(equity_strategy)
     crypto_strategy = _resolved_timeframe(crypto_strategy)
     if equity_strategy.enabled and equity.dynamic_selection_enabled:
-        from parayabuck.portfolio import portfolio_strategy_from
+        from parayabuck.portfolio import product_strategy_from
 
-        resolved_equity = portfolio_strategy_from(
+        resolved_equity = product_strategy_from(
             equity_strategy.name,
             equity_strategy.parameters,
             timeframe=equity_strategy.timeframe,
@@ -793,9 +802,9 @@ def load_config(config_path: str | None = None) -> Config:
             observation_strategy_timeframe=resolved_equity.timeframe,
         )
     if crypto_strategy.enabled and crypto_universe.dynamic_selection_enabled:
-        from parayabuck.portfolio import portfolio_strategy_from
+        from parayabuck.portfolio import product_strategy_from
 
-        resolved_crypto = portfolio_strategy_from(
+        resolved_crypto = product_strategy_from(
             crypto_strategy.name,
             crypto_strategy.parameters,
             timeframe=crypto_strategy.timeframe,

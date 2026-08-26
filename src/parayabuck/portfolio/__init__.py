@@ -40,6 +40,7 @@ PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
     "equity_residual_momentum_v3",
     "crypto_low_variance_v1",
     "crypto_low_variance_v2",
+    "crypto_low_variance_hysteresis_v1",
 )
 
 
@@ -74,6 +75,27 @@ def portfolio_strategy_from(
             )
         strategy.timeframe = timeframe
     return strategy
+
+
+def product_strategy_from(
+    name: str,
+    parameters: dict[str, object] | None = None,
+    *,
+    timeframe: str | None = None,
+) -> PortfolioStrategy:
+    """Product-gated factory: only PAPER-supported identities.
+
+    Validates ``name`` against ``PRODUCT_STRATEGY_NAMES`` (the PAPER product
+    surface) then delegates to ``portfolio_strategy_from`` for construction.
+    Research-only factories (e.g. hysteresis_v1 before promotion) remain
+    constructible via ``portfolio_strategy_from`` but are rejected here.
+    """
+    if name not in PRODUCT_STRATEGY_NAMES:
+        raise ValueError(
+            f"Unsupported product strategy: {name}; supported product strategies: "
+            f"{', '.join(sorted(PRODUCT_STRATEGY_NAMES))}"
+        )
+    return portfolio_strategy_from(name, parameters, timeframe=timeframe)
 
 
 def validate_strategy_timeframe(strategy: PortfolioStrategy, configured: str) -> None:
@@ -116,18 +138,21 @@ def rebalance_policy_for(strategy: PortfolioStrategy, parameters: dict[str, obje
 __all__ = [
     "CryptoLowVariance1dV1",
     "CryptoLowVariance1dV2",
+    "CryptoLowVarianceHysteresis1dV1",
     "EquityResidualMomentum1dV1",
     "EquityResidualMomentum1dV2",
     "EquityResidualMomentum1dV3",
     "PortfolioContext",
     "PortfolioState",
     "PortfolioStrategy",
+    "PRODUCT_STRATEGY_NAMES",
     "RebalancePolicy",
     "RebalanceReason",
     "StrategySpec",
     "TargetPortfolio",
     "TargetWeight",
     "portfolio_strategy_from",
+    "product_strategy_from",
     "rebalance_policy_for",
     "supported_portfolio_strategies",
     "validate_strategy_timeframe",

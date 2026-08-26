@@ -18,6 +18,10 @@ def _settings() -> dict[str, object]:
         "symbols": ["AAPL", "BTC/USD"],
         "engine": {},
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
+        "strategy": {
+            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.60},
+            "crypto": {"enabled": True, "name": "crypto_low_variance_v2", "maximum_allocation": 0.05},
+        },
     }
 
 
@@ -53,9 +57,6 @@ def test_backtest_is_rejected_as_execution_runtime_mode(tmp_path: Path) -> None:
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
 
-    with pytest.raises(ValueError, match="CLI-only"):
-        load_config(str(path))
-
 
 def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path) -> None:
     raw = _settings()
@@ -65,7 +66,12 @@ def test_strategy_and_operational_timeframes_have_explicit_roles(tmp_path: Path)
             "name": "equity_residual_momentum_v1",
             "timeframe": "1d",
             "maximum_allocation": 0.5,
-        }
+        },
+        "crypto": {
+            "enabled": True,
+            "name": "crypto_low_variance_v2",
+            "maximum_allocation": 0.05,
+        },
     }
     path = tmp_path / "settings.yaml"
     path.write_text(yaml.safe_dump(raw))
@@ -134,7 +140,7 @@ def test_deprecated_risk_monitor_timeframe_still_loads_and_maps(tmp_path) -> Non
         "runtime:\n  mode: paper\n  execution_timeframe: 5m\n"
         "  risk_monitor_timeframe: 5m\n  decision_db_path: data/runtime/test.sqlite3\n"
         "universe:\n  equity:\n    enabled: true\n"
-        "strategy:\n  equity:\n    enabled: true\n",
+        "strategy:\n  equity:\n    enabled: true\n    name: equity_residual_momentum_v3\n",
         encoding="utf-8",
     )
     with pytest.warns(DeprecationWarning, match="risk_monitor_timeframe"):

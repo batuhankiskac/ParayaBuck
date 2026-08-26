@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-08-22T12:25:00Z",
+  "git_head": "036abbb1de9b6a732d96bade4b6f91288e634533",
+  "config": {
+    "equity_allocation": 0.6,
+    "crypto_allocation": 0.05,
+    "max_gross_exposure_pct": 0.6,
+    "cash_buffer_pct": 0.4,
+    "daily_loss_limit_pct": 0.005,
+    "max_drawdown_pct": 0.05,
+    "max_positions": 6,
+    "rebalance_band_pct": 0.005,
+    "minimum_order_notional": 10
+  },
+  "data_hashes": {
+    "equity_1200_2016_2026.csv": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "equity_1200_dividends.csv": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0",
+    "crypto_expanded_1h.csv": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e"
+  },
+  "full_window": {
+    "equity_shadow_1x": {"total_return": 1.2929, "cagr": 0.0906, "sharpe": 0.71, "max_drawdown": 0.2224, "episodes": 26, "blocked": 0, "latched_days": 1452, "de_risks": 0, "final_state": "NORMAL"},
+    "equity_production_1x": {"total_return": 0.1342, "cagr": 0.0132, "sharpe": 0.33, "max_drawdown": 0.122, "episodes": 1, "blocked": 407, "latched_days": 2848, "de_risks": 0, "final_state": "LATCHED"},
+    "equity_hysteresis_1x": {"total_return": 0.1489, "cagr": 0.0146, "sharpe": 0.39, "max_drawdown": 0.1019, "episodes": 1, "blocked": 407, "latched_days": 2848, "de_risks": 1, "final_state": "DEFENSIVE"},
+    "crypto_shadow_1x": {"total_return": 0.0501, "cagr": 0.0092, "sharpe": 0.3, "max_drawdown": 0.0675, "episodes": 7, "blocked": 0, "latched_bars": 228, "de_risks": 0, "final_state": "NORMAL"},
+    "crypto_production_1x": {"total_return": -0.0304, "cagr": -0.0058, "sharpe": -0.29, "max_drawdown": 0.0659, "episodes": 1, "blocked": 333, "latched_bars": 1541, "de_risks": 0, "final_state": "LATCHED"},
+    "crypto_hysteresis_1x": {"total_return": -0.0246, "cagr": -0.0047, "sharpe": -0.24, "max_drawdown": 0.0583, "episodes": 1, "blocked": 332, "latched_bars": 1541, "de_risks": 1, "final_state": "DEFENSIVE"}
+  },
+  "cost_stress": {
+    "equity_shadow_2x_cagr": 0.084, "equity_shadow_3x_cagr": 0.0788,
+    "equity_production_2x_cagr": 0.0123, "equity_production_3x_cagr": 0.0114,
+    "equity_hysteresis_2x_cagr": 0.0137, "equity_hysteresis_3x_cagr": 0.0128,
+    "crypto_shadow_2x_cagr": 0.0045, "crypto_shadow_3x_cagr": -0.0003,
+    "crypto_production_2x_cagr": -0.0069, "crypto_production_3x_cagr": -0.0081,
+    "crypto_hysteresis_2x_cagr": -0.0055, "crypto_hysteresis_3x_cagr": -0.0067
+  },
+  "walk_forward_equity_16folds_2019_2026": {
+    "shadow": {"positive": 12, "median": 0.0666, "mean": 0.0499, "worst": -0.0801, "best": 0.289},
+    "production": {"positive": 9, "median": 0.0242, "mean": 0.0282, "worst": -0.0741, "best": 0.1341},
+    "hysteresis": {"positive": 10, "median": 0.0229, "mean": 0.0245, "worst": -0.0475, "best": 0.1341}
+  },
+  "regimes_equity": {
+    "2020_crash_shadow": {"ret": -0.0261, "cagr": -0.1306, "maxDD": 0.1553},
+    "2020_crash_production": {"ret": -0.0945, "cagr": -0.4085, "maxDD": 0.1165},
+    "2020_crash_hysteresis": {"ret": -0.0734, "cagr": -0.332, "maxDD": 0.0845},
+    "2022_bear_shadow": {"ret": 0.0105, "cagr": 0.0107, "maxDD": 0.1129},
+    "2022_bear_production": {"ret": -0.0261, "cagr": -0.0264, "maxDD": 0.0513},
+    "2022_bear_hysteresis": {"ret": -0.0358, "cagr": -0.0362, "maxDD": 0.0505},
+    "2024_2026_shadow": {"ret": 0.2961, "cagr": 0.1061, "maxDD": 0.1641},
+    "2024_2026_production": {"ret": 0.1355, "cagr": 0.0507, "maxDD": 0.0689},
+    "2024_2026_hysteresis": {"ret": 0.1395, "cagr": 0.0521, "maxDD": 0.0617}
+  },
+  "note": "All runs deterministic, identical PIT universes, warmup, costs, T+1 next-open, SELL-before-BUY, band 0.005, min notional 10. Full per-variant metrics in run logs."
+}

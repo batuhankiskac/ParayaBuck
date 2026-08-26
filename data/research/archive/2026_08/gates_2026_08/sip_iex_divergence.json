@@ -1,0 +1,23 @@
+{
+  "window": {
+    "start": "2020-01-02T00:00:00+00:00",
+    "end": "2020-03-31T00:00:00+00:00"
+  },
+  "symbols": [
+    "SPY",
+    "SH",
+    "PSQ"
+  ],
+  "sip_bars": 183,
+  "iex_bars": 183,
+  "divergence_bps": {
+    "count": 183,
+    "mean": 0.0,
+    "median": 0.0,
+    "p95": 0.0,
+    "max": 0.0
+  },
+  "iex_subset_property": "IEX timestamps subset of SIP (no lookahead)",
+  "note": "SIP consolidates NBBO; IEX is one exchange (conservative). Synthetic IEX mirrors SIP here for deterministic plumbing.",
+  "hash": "548682f2c04a"
+}

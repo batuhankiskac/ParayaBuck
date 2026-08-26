@@ -1,0 +1,144 @@
+{
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "cost_stress": {
+    "1x": {
+      "E0": {
+        "return": 1.6648,
+        "sharpe": 0.821377,
+        "max_drawdown": 0.220319,
+        "cagr": 0.107847,
+        "turnover": 137.980041,
+        "fees_total": 7593.97
+      },
+      "E1": {
+        "return": 1.360465,
+        "sharpe": 0.774398,
+        "max_drawdown": 0.217394,
+        "cagr": 0.093897,
+        "turnover": 160.773057,
+        "fees_total": 7876.15
+      },
+      "E2": {
+        "return": 1.336869,
+        "sharpe": 0.746858,
+        "max_drawdown": 0.219364,
+        "cagr": 0.092749,
+        "turnover": 153.37642,
+        "fees_total": 7566.75
+      },
+      "E3": {
+        "return": 1.587946,
+        "sharpe": 0.811692,
+        "max_drawdown": 0.209949,
+        "cagr": 0.104464,
+        "turnover": 143.33997,
+        "fees_total": 7680.55
+      }
+    },
+    "2x": {
+      "E0": {
+        "return": 1.56068,
+        "sharpe": 0.790669,
+        "max_drawdown": 0.225977,
+        "cagr": 0.103242,
+        "turnover": 137.896042,
+        "fees_total": 14621.94
+      },
+      "E1": {
+        "return": 1.248961,
+        "sharpe": 0.734165,
+        "max_drawdown": 0.227312,
+        "cagr": 0.088379,
+        "turnover": 160.340925,
+        "fees_total": 15069.77
+      },
+      "E2": {
+        "return": 1.236261,
+        "sharpe": 0.711373,
+        "max_drawdown": 0.225789,
+        "cagr": 0.087735,
+        "turnover": 153.032284,
+        "fees_total": 14516.45
+      },
+      "E3": {
+        "return": 1.481135,
+        "sharpe": 0.778487,
+        "max_drawdown": 0.215957,
+        "cagr": 0.09961,
+        "turnover": 143.248673,
+        "fees_total": 14768.73
+      }
+    },
+    "3x": {
+      "E0": {
+        "return": 1.456505,
+        "sharpe": 0.758564,
+        "max_drawdown": 0.231595,
+        "cagr": 0.098465,
+        "turnover": 137.792103,
+        "fees_total": 21317.12
+      },
+      "E1": {
+        "return": 1.145362,
+        "sharpe": 0.695031,
+        "max_drawdown": 0.23652,
+        "cagr": 0.083029,
+        "turnover": 160.192541,
+        "fees_total": 21917.22
+      },
+      "E2": {
+        "return": 1.139676,
+        "sharpe": 0.675784,
+        "max_drawdown": 0.231725,
+        "cagr": 0.082729,
+        "turnover": 152.92896,
+        "fees_total": 21135.85
+      },
+      "E3": {
+        "return": 1.377435,
+        "sharpe": 0.744894,
+        "max_drawdown": 0.221921,
+        "cagr": 0.094716,
+        "turnover": 143.145843,
+        "fees_total": 21516.59
+      }
+    },
+    "5x": {
+      "E0": {
+        "return": 1.265612,
+        "sharpe": 0.696049,
+        "max_drawdown": 0.242714,
+        "cagr": 0.089219,
+        "turnover": 137.614156,
+        "fees_total": 33814.39
+      },
+      "E1": {
+        "return": 0.952054,
+        "sharpe": 0.616647,
+        "max_drawdown": 0.254087,
+        "cagr": 0.072395,
+        "turnover": 159.862237,
+        "fees_total": 34541.09
+      },
+      "E2": {
+        "return": 0.952876,
+        "sharpe": 0.602077,
+        "max_drawdown": 0.244324,
+        "cagr": 0.072442,
+        "turnover": 152.728546,
+        "fees_total": 33370.38
+      },
+      "E3": {
+        "return": 1.184437,
+        "sharpe": 0.678235,
+        "max_drawdown": 0.233719,
+        "cagr": 0.085074,
+        "turnover": 142.957611,
+        "fees_total": 34068.63
+      }
+    }
+  },
+  "note": "Every level is an independent backtest rerun with scaled engine cost inputs (slippage, spread, fees). No heuristic."
+}

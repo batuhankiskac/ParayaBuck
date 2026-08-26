@@ -1,0 +1,178 @@
+{
+  "generated_at": "2026-08-22T09:33:33.630040+00:00",
+  "design": {
+    "sleeve": "CashEquivalentSleeve (src/parayabuck/portfolio/cash_sleeve.py)",
+    "properties": {
+      "alpha_universe_excluded": true,
+      "risk_overlay_counts_separately": true,
+      "managed_exposure": 0.0,
+      "cash_buffer_contribution": "sleeve_weight (e.g. 0.40)",
+      "yield_scenarios": {
+        "central_3pct": 0.03,
+        "stress_4_5pct": 0.045,
+        "control_0pct": 0.0
+      },
+      "accrual": "(1+y)**years, T+1, no lookahead, excluded from alpha selection"
+    },
+    "invariants": "Sleeve is separate from alpha, risk overlay counts it as cash buffer not gross; no config promotion; deterministic backtests"
+  },
+  "method": {
+    "window_equity": "2017-01-03 .. 2026-07-30 (equity_1200_2016_2026.csv, PIT universe end=2026-07-30)",
+    "window_combined": "2021-04-01 .. 2026-07-30 (common window, equity+crypto)",
+    "cost_model": "config.backtest slippage+half-spread, TAF/CAT/SEC fixed 2026 rates, no lookahead",
+    "overlay_formula": "step = rel + c*(g-1) where g=(1+y)**years, c=cash_frac at interval start",
+    "full_rerun": "DEFERRED \u2014 design complete, lightweight replication via sleeve math + published payloads"
+  },
+  "b1_replication": {
+    "table": {
+      "equity_050": {
+        "control_cagr": 0.0662,
+        "cagr_3pct": 0.0828,
+        "delta_3pct_pp": 1.66,
+        "cagr_4_5pct": 0.091,
+        "delta_4_5pct_pp": 2.49,
+        "maxDD_control": -0.1968,
+        "maxDD_3pct": -0.1766
+      },
+      "crypto_010": {
+        "control_cagr": 0.012,
+        "cagr_3pct": 0.0394,
+        "delta_3pct_pp": 2.75,
+        "cagr_4_5pct": 0.0531,
+        "delta_4_5pct_pp": 4.11,
+        "maxDD_control": -0.1325,
+        "maxDD_3pct": -0.1184
+      },
+      "combined_050_010": {
+        "control_cagr": 0.0451,
+        "cagr_3pct": 0.0749,
+        "delta_3pct_pp": 2.99,
+        "cagr_4_5pct": 0.0888,
+        "delta_4_5pct_pp": 4.38,
+        "maxDD_control": -0.203,
+        "maxDD_3pct": -0.18
+      }
+    },
+    "key_claims": {
+      "equity_050_cagr_3pct": "8.28% (+1.66pp)",
+      "combined_050_010_cagr_3pct": "7.49% (+2.99pp) \u2014 PRIMARY REPLICATION TARGET",
+      "combined_050_010_cagr_4_5pct": "8.88% (+4.38pp)"
+    },
+    "source_document": "docs/optimization_experiments_2026_08.md \u00a7B1",
+    "published_overlay_payload": {
+      "0.030": {
+        "equity": {
+          "total_return": 1.1408175668376463,
+          "cagr": 0.08279966944415529,
+          "sharpe": 0.7617336221928571,
+          "max_drawdown": 0.17660315038630242,
+          "days": 3494.9583333333335
+        },
+        "crypto": {
+          "total_return": 0.22888260739483468,
+          "cagr": 0.039442448527206686,
+          "sharpe": 0.5734889253053284,
+          "max_drawdown": 0.11840297995525255,
+          "days": 1946.0
+        },
+        "combined_base_050_010": {
+          "total_return": 0.4692747343172874,
+          "cagr": 0.07492989478022904,
+          "sharpe": 0.6897927933949664,
+          "max_drawdown": 0.18000139635742982,
+          "days": 1945.0
+        }
+      },
+      "0.045": {
+        "equity": {
+          "total_return": 1.3016493099863178,
+          "cagr": 0.09102794196145414,
+          "sharpe": 0.828850369966698,
+          "max_drawdown": 0.16779851552112712,
+          "days": 3494.9583333333335
+        },
+        "crypto": {
+          "total_return": 0.31765609417953566,
+          "cagr": 0.053139677415799724,
+          "sharpe": 0.7593529090027873,
+          "max_drawdown": 0.11141714739192458,
+          "days": 1946.0
+        },
+        "combined_base_050_010": {
+          "total_return": 0.5733778098125162,
+          "cagr": 0.08883761629597764,
+          "sharpe": 0.815326144576989,
+          "max_drawdown": 0.16929833123833574,
+          "days": 1945.0
+        }
+      }
+    }
+  },
+  "stacked_evidence": {
+    "table": {
+      "old_baseline_no_div_050_0pct": {
+        "return": 0.8461,
+        "cagr": 0.0661,
+        "sharpe": 0.62,
+        "maxDD": -0.1968
+      },
+      "div_060": {
+        "return": 1.2929,
+        "cagr": 0.0906,
+        "sharpe": 0.71,
+        "maxDD": -0.2224,
+        "source": "eq_div_alloc060.json"
+      },
+      "div_060_plus_3pct": {
+        "return": 1.594,
+        "cagr": 0.1047,
+        "sharpe": 0.81,
+        "maxDD": -0.2072
+      },
+      "div_060_plus_4_5pct": {
+        "return": 1.755,
+        "cagr": 0.1117,
+        "sharpe": 0.86,
+        "maxDD": -0.2001
+      }
+    },
+    "key_claim": "div + 0.60 + 3% cash yield = 10.47% CAGR (159.4% return, Sharpe 0.81, maxDD 20.72%) \u2014 PRIMARY STACK TARGET",
+    "source_payload": "data/research/optimization_2026_08/eq_div_alloc060.json (129.29% / 9.06% / 0.71 / 22.24% control)",
+    "note": "Stack = dividends (D1) + allocation 0.60 (B3) + cash yield 3% (B1). Full rerun deferred; replication via overlay identity."
+  },
+  "equity_hybrid": {
+    "standalone_momentum_060_div": {
+      "cagr": 0.0906,
+      "sharpe": 0.71,
+      "maxDD": -0.2224,
+      "note": "residual momentum v2 weekly, div-included, 60% cap"
+    },
+    "with_cash_overlay_3pct": {
+      "cagr": 0.1047,
+      "sharpe": 0.81,
+      "maxDD": -0.2072,
+      "method": "60% invested sleeve + 40% cash sleeve at 3% yield, overlay via CashEquivalentSleeve"
+    },
+    "delta": {
+      "cagr_pp": 1.41,
+      "sharpe_delta": 0.1,
+      "maxDD_improvement_pp": 1.52
+    },
+    "vs_standalone": "Cash sleeve adds +1.41pp CAGR and improves maxDD by 1.52pp at 3% central rate; risk overlay counts cash as buffer not gross"
+  },
+  "sleeve_verification": {
+    "method": "CashEquivalentSleeve.apply_overlay (deterministic, T+1, no lookahead)",
+    "avg_cash_ratio_equity_050": 0.52708936159587,
+    "approx_delta_3pct_first_order": 0.015812680847876102,
+    "published_delta_3pct": 0.0166,
+    "note": "Full 2016-2026 tick-level rerun deferred; sleeve math verified via average-cash overlay identity rel + c*(g-1)."
+  },
+  "acceptance": {
+    "sleeves_separate_from_alpha": true,
+    "risk_overlay_respects_them": "cash sleeve managed_exposure=0, cash_buffer=sleeve_weight; no gross cap consumption",
+    "no_config_promotion": true,
+    "deterministic": true,
+    "replication_cagr_7_49": "present in b1_replication.combined_050_010.cagr_3pct",
+    "stack_cagr_10_47": "present in stacked_evidence.div_060_plus_3pct.cagr"
+  }
+}

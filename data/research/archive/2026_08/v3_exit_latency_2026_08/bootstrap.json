@@ -1,0 +1,31 @@
+{
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "bootstrap": {
+    "E0": {
+      "mean": 1.982401,
+      "p5": 0.50593,
+      "p95": 4.173588,
+      "count": 2000
+    },
+    "E1": {
+      "mean": 1.611137,
+      "p5": 0.334398,
+      "p95": 3.494286,
+      "count": 2000
+    },
+    "E2": {
+      "mean": 1.597947,
+      "p5": 0.286116,
+      "p95": 3.491814,
+      "count": 2000
+    },
+    "E3": {
+      "mean": 1.888462,
+      "p5": 0.462347,
+      "p95": 4.054175,
+      "count": 2000
+    }
+  }
+}

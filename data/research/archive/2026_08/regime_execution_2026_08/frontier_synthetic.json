@@ -1,0 +1,53 @@
+{
+  "title": "X3 Crypto Sleeve Frontier — Synthetic (Full Dual-Engine Deferred)",
+  "generated_at": "2026-08-22T00:00:00Z",
+  "note": "Values from prior mission tables (Mission01 shadow, foundation B1, SPY) — not a new combined-engine run. Full synchronized dual-engine is the required follow-up.",
+  "sleeves": {
+    "equity_only_060_cash040_0pct": {
+      "equity_cagr": 0.0906,
+      "sharpe": 0.71,
+      "maxDD": 0.2224,
+      "turnover": 154.96,
+      "cash_yield": 0.0,
+      "description": "Validated equity_residual_momentum_v2 0.60 + 0.40 cash buffers, 2017-2026 shadow"
+    },
+    "equity_060_crypto_005_cash035": {
+      "crypto_standalone_cagr": 0.0092,
+      "crypto_sharpe": 0.30,
+      "crypto_maxDD": 0.0675,
+      "combined_cagr_2021_2026_approx": 0.041,
+      "combined_maxDD_approx": 0.165,
+      "increment_cagr_pp": 0.68,
+      "increment_maxDD_pp": 6.35,
+      "cost_note": "25 bps taker per side; 2x -> 0.45% CAGR, 3x -> -0.03% (Mission01 cost stress)",
+      "verdict": "Not Pareto vs cash/foundation on Sharpe/maxDD"
+    },
+    "equity_060_foundation_B1_040": {
+      "foundation_B1_cagr": 0.0805,
+      "foundation_sharpe": 0.81,
+      "foundation_maxDD": 0.2279,
+      "foundation_turnover_per_year": 0.2,
+      "blend_weighted_cagr_approx": 0.086,
+      "blend_sharpe_approx": 0.80,
+      "blend_maxDD_approx": 0.18,
+      "notes": "9 ETFs SPY/IWM/EFA/EEM/TLT/LQD/GLD/XLRE/DBC total-return, dataset equity_etf_foundation_1d_v1 hash ba5268ef, 2017-2026, monthly rebalance"
+    },
+    "equity_060_cash040_2pct_yield": {
+      "increment_cagr_pp_vs_0pct": 0.008,
+      "sharpe_delta": 0.05,
+      "maxDD_reduction": "cash reduces drawdown by cash weight"
+    },
+    "benchmark_SPY": {
+      "cagr": 0.1541,
+      "sharpe": 0.89,
+      "maxDD": 0.3379,
+      "vol": 0.1795
+    }
+  },
+  "frontier_reading": "SPY 0.89 > B1 0.81 > equity 0.71 > crypto 0.30 on Sharpe. Adding crypto 0.05 does not lift Sharpe vs equity+foundation or equity+cash; it deepens maxDD (+6.35pp) for +0.68pp CAGR. Halving 0.10->0.05 was correct per prior operator decision. Full dual-engine synchronized backtest required before any allocation change.",
+  "artifacts": [
+    "data/research/equity_etf_foundation_1d_v1/manifest.json",
+    "data/research/strategy_foundation_v1/report.md",
+    "docs/risk_epoch_research_2026_08.md Table 4.1"
+  ]
+}

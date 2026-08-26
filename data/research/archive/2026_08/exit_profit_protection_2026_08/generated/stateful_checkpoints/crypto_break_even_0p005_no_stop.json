@@ -1,0 +1,4310 @@
+{
+  "actual_reentries": 242,
+  "baseline_control": "runtime_execution_no_protection_control",
+  "candidate_manifest_digest": "31155b7b9a3c81f9dc7858ba42db8a5888fa81c16e047affbe596187af1da0a4",
+  "cash_idle_periods": [
+    {
+      "idle_hours": 22.166666666666668,
+      "reentry_timestamp": "2024-01-02T00:05:00+00:00",
+      "stop_timestamp": "2024-01-01T01:55:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 21.666666666666668,
+      "reentry_timestamp": "2024-01-02T00:05:00+00:00",
+      "stop_timestamp": "2024-01-01T02:25:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.83333333333333,
+      "reentry_timestamp": "2024-01-06T00:05:00+00:00",
+      "stop_timestamp": "2024-01-02T00:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 551.4166666666666,
+      "reentry_timestamp": "2024-01-25T00:00:00+00:00",
+      "stop_timestamp": "2024-01-02T00:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 58.416666666666664,
+      "reentry_timestamp": "2024-01-10T00:05:00+00:00",
+      "stop_timestamp": "2024-01-07T13:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 683.1666666666666,
+      "reentry_timestamp": "2024-02-07T00:05:00+00:00",
+      "stop_timestamp": "2024-01-09T12:55:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 95.75,
+      "reentry_timestamp": "2024-01-14T00:05:00+00:00",
+      "stop_timestamp": "2024-01-10T00:20:00+00:00",
+      "symbol": "DOGE/USD"
+    },
+    {
+      "idle_hours": 78.08333333333333,
+      "reentry_timestamp": "2024-01-14T00:05:00+00:00",
+      "stop_timestamp": "2024-01-10T18:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 89.16666666666667,
+      "reentry_timestamp": "2024-01-18T00:05:00+00:00",
+      "stop_timestamp": "2024-01-14T06:55:00+00:00",
+      "symbol": "DOGE/USD"
+    },
+    {
+      "idle_hours": 86.08333333333333,
+      "reentry_timestamp": "2024-01-18T00:05:00+00:00",
+      "stop_timestamp": "2024-01-14T10:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 5116.333333333333,
+      "reentry_timestamp": "2024-08-21T00:05:00+00:00",
+      "stop_timestamp": "2024-01-20T19:45:00+00:00",
+      "symbol": "DOGE/USD"
+    },
+    {
+      "idle_hours": 85.66666666666667,
+      "reentry_timestamp": "2024-01-30T00:10:00+00:00",
+      "stop_timestamp": "2024-01-26T10:30:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 84.75,
+      "reentry_timestamp": "2024-01-30T00:05:00+00:00",
+      "stop_timestamp": "2024-01-26T11:20:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 286.4166666666667,
+      "reentry_timestamp": "2024-02-11T00:05:00+00:00",
+      "stop_timestamp": "2024-01-30T01:40:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 94.41666666666667,
+      "reentry_timestamp": "2024-02-03T00:05:00+00:00",
+      "stop_timestamp": "2024-01-30T01:40:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 84.66666666666667,
+      "reentry_timestamp": "2024-02-07T00:05:00+00:00",
+      "stop_timestamp": "2024-02-03T11:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 641.25,
+      "reentry_timestamp": "2024-03-02T00:05:00+00:00",
+      "stop_timestamp": "2024-02-04T06:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 574.9166666666666,
+      "reentry_timestamp": "2024-03-02T00:05:00+00:00",
+      "stop_timestamp": "2024-02-07T01:10:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 78.33333333333333,
+      "reentry_timestamp": "2024-02-11T00:05:00+00:00",
+      "stop_timestamp": "2024-02-07T17:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 92.66666666666667,
+      "reentry_timestamp": "2024-02-15T00:05:00+00:00",
+      "stop_timestamp": "2024-02-11T03:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 69.66666666666667,
+      "reentry_timestamp": "2024-02-15T00:05:00+00:00",
+      "stop_timestamp": "2024-02-12T02:25:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2024-02-19T00:05:00+00:00",
+      "stop_timestamp": "2024-02-15T00:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.5,
+      "reentry_timestamp": "2024-02-19T00:05:00+00:00",
+      "stop_timestamp": "2024-02-15T00:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 94.5,
+      "reentry_timestamp": "2024-02-23T00:05:00+00:00",
+      "stop_timestamp": "2024-02-19T01:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 89.58333333333333,
+      "reentry_timestamp": "2024-02-23T00:05:00+00:00",
+      "stop_timestamp": "2024-02-19T06:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 1703.5833333333333,
+      "reentry_timestamp": "2024-05-05T00:05:00+00:00",
+      "stop_timestamp": "2024-02-24T00:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 438.1666666666667,
+      "reentry_timestamp": "2024-03-14T00:05:00+00:00",
+      "stop_timestamp": "2024-02-24T17:55:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.75,
+      "reentry_timestamp": "2024-03-06T00:05:00+00:00",
+      "stop_timestamp": "2024-03-02T00:20:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.5,
+      "reentry_timestamp": "2024-03-06T00:05:00+00:00",
+      "stop_timestamp": "2024-03-02T00:35:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2024-03-10T00:05:00+00:00",
+      "stop_timestamp": "2024-03-06T00:25:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 95.25,
+      "reentry_timestamp": "2024-03-10T00:05:00+00:00",
+      "stop_timestamp": "2024-03-06T00:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 94.41666666666667,
+      "reentry_timestamp": "2024-03-14T00:05:00+00:00",
+      "stop_timestamp": "2024-03-10T01:40:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 574.3333333333334,
+      "reentry_timestamp": "2024-04-03T00:05:00+00:00",
+      "stop_timestamp": "2024-03-10T01:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 91.91666666666667,
+      "reentry_timestamp": "2024-03-18T00:05:00+00:00",
+      "stop_timestamp": "2024-03-14T04:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 90.66666666666667,
+      "reentry_timestamp": "2024-03-22T00:05:00+00:00",
+      "stop_timestamp": "2024-03-18T05:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.75,
+      "reentry_timestamp": "2024-03-26T00:05:00+00:00",
+      "stop_timestamp": "2024-03-22T00:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.5,
+      "reentry_timestamp": "2024-03-30T00:05:00+00:00",
+      "stop_timestamp": "2024-03-26T00:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 379.0,
+      "reentry_timestamp": "2024-04-15T00:05:00+00:00",
+      "stop_timestamp": "2024-03-30T05:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 87.58333333333333,
+      "reentry_timestamp": "2024-04-07T00:25:00+00:00",
+      "stop_timestamp": "2024-04-03T08:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2024-04-11T00:05:00+00:00",
+      "stop_timestamp": "2024-04-07T01:10:00+00:00",
+      "symbol": "LINK/USD"
+    },
+    {
+      "idle_hours": 86.66666666666667,
+      "reentry_timestamp": "2024-04-11T00:05:00+00:00",
+      "stop_timestamp": "2024-04-07T09:25:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 575.75,
+      "reentry_timestamp": "2024-05-05T00:05:00+00:00",
+      "stop_timestamp": "2024-04-11T00:20:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 20201.16638888889,
+      "reentry_timestamp": null,
+      "stop_timestamp": "2024-04-11T06:50:00+00:00",
+      "symbol": "LINK/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2024-04-19T00:05:00+00:00",
+      "stop_timestamp": "2024-04-15T00:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 79.75,
+      "reentry_timestamp": "2024-04-23T00:05:00+00:00",
+      "stop_timestamp": "2024-04-19T16:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2024-04-27T00:05:00+00:00",
+      "stop_timestamp": "2024-04-23T01:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 68.83333333333333,
+      "reentry_timestamp": "2024-05-01T00:05:00+00:00",
+      "stop_timestamp": "2024-04-28T03:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 419.0,
+      "reentry_timestamp": "2024-05-21T00:05:00+00:00",
+      "stop_timestamp": "2024-05-03T13:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 272.25,
+      "reentry_timestamp": "2024-05-17T00:35:00+00:00",
+      "stop_timestamp": "2024-05-05T16:20:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 73.5,
+      "reentry_timestamp": "2024-05-09T00:05:00+00:00",
+      "stop_timestamp": "2024-05-05T22:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 190.58333333333334,
+      "reentry_timestamp": "2024-05-17T00:05:00+00:00",
+      "stop_timestamp": "2024-05-09T01:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 85.91666666666667,
+      "reentry_timestamp": "2024-05-21T00:05:00+00:00",
+      "stop_timestamp": "2024-05-17T10:10:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 2458.0833333333335,
+      "reentry_timestamp": "2024-08-29T00:05:00+00:00",
+      "stop_timestamp": "2024-05-18T14:00:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2024-05-25T00:05:00+00:00",
+      "stop_timestamp": "2024-05-21T00:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2024-05-25T00:05:00+00:00",
+      "stop_timestamp": "2024-05-21T00:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2024-05-29T00:05:00+00:00",
+      "stop_timestamp": "2024-05-25T01:10:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 87.58333333333333,
+      "reentry_timestamp": "2024-05-29T00:10:00+00:00",
+      "stop_timestamp": "2024-05-25T08:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 93.5,
+      "reentry_timestamp": "2024-06-02T00:05:00+00:00",
+      "stop_timestamp": "2024-05-29T02:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 1436.5,
+      "reentry_timestamp": "2024-07-28T00:05:00+00:00",
+      "stop_timestamp": "2024-05-29T03:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 91.16666666666667,
+      "reentry_timestamp": "2024-06-06T00:05:00+00:00",
+      "stop_timestamp": "2024-06-02T04:55:00+00:00",
+      "symbol": "DOT/USD"
+    },
+    {
+      "idle_hours": 84.08333333333333,
+      "reentry_timestamp": "2024-06-06T00:05:00+00:00",
+      "stop_timestamp": "2024-06-02T12:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 82.25,
+      "reentry_timestamp": "2024-06-10T00:05:00+00:00",
+      "stop_timestamp": "2024-06-06T13:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 80.33333333333333,
+      "reentry_timestamp": "2024-06-14T00:05:00+00:00",
+      "stop_timestamp": "2024-06-10T15:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 2854.1666666666665,
+      "reentry_timestamp": "2024-10-08T00:05:00+00:00",
+      "stop_timestamp": "2024-06-11T01:55:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 83.75,
+      "reentry_timestamp": "2024-06-18T00:05:00+00:00",
+      "stop_timestamp": "2024-06-14T12:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 6.0,
+      "reentry_timestamp": "2024-07-20T00:05:00+00:00",
+      "stop_timestamp": "2024-07-19T18:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 78.83333333333333,
+      "reentry_timestamp": "2024-07-24T00:05:00+00:00",
+      "stop_timestamp": "2024-07-20T17:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 87.41666666666667,
+      "reentry_timestamp": "2024-07-28T00:05:00+00:00",
+      "stop_timestamp": "2024-07-24T08:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2024-08-01T00:05:00+00:00",
+      "stop_timestamp": "2024-07-28T00:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.25,
+      "reentry_timestamp": "2024-08-01T00:05:00+00:00",
+      "stop_timestamp": "2024-07-28T00:50:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 383.3333333333333,
+      "reentry_timestamp": "2024-08-17T00:05:00+00:00",
+      "stop_timestamp": "2024-08-01T00:45:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 74.08333333333333,
+      "reentry_timestamp": "2024-08-05T00:05:00+00:00",
+      "stop_timestamp": "2024-08-01T22:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 27.416666666666668,
+      "reentry_timestamp": "2024-08-13T00:05:00+00:00",
+      "stop_timestamp": "2024-08-11T20:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.16666666666667,
+      "reentry_timestamp": "2024-08-17T00:05:00+00:00",
+      "stop_timestamp": "2024-08-13T00:55:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.16666666666667,
+      "reentry_timestamp": "2024-08-21T00:05:00+00:00",
+      "stop_timestamp": "2024-08-17T00:55:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 279.0833333333333,
+      "reentry_timestamp": "2024-08-29T00:05:00+00:00",
+      "stop_timestamp": "2024-08-17T09:00:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2024-08-25T00:05:00+00:00",
+      "stop_timestamp": "2024-08-21T00:25:00+00:00",
+      "symbol": "DOGE/USD"
+    },
+    {
+      "idle_hours": 93.25,
+      "reentry_timestamp": "2024-08-25T00:05:00+00:00",
+      "stop_timestamp": "2024-08-21T02:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 479.75,
+      "reentry_timestamp": "2024-09-14T00:05:00+00:00",
+      "stop_timestamp": "2024-08-25T00:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2024-09-02T00:05:00+00:00",
+      "stop_timestamp": "2024-08-29T02:45:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 90.58333333333333,
+      "reentry_timestamp": "2024-09-02T00:05:00+00:00",
+      "stop_timestamp": "2024-08-29T05:30:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.16666666666667,
+      "reentry_timestamp": "2024-09-06T00:05:00+00:00",
+      "stop_timestamp": "2024-09-02T00:55:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 87.08333333333333,
+      "reentry_timestamp": "2024-09-06T00:05:00+00:00",
+      "stop_timestamp": "2024-09-02T09:00:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.16666666666667,
+      "reentry_timestamp": "2024-09-10T00:05:00+00:00",
+      "stop_timestamp": "2024-09-06T00:55:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2024-09-10T00:05:00+00:00",
+      "stop_timestamp": "2024-09-06T02:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 365.5833333333333,
+      "reentry_timestamp": "2024-09-26T00:05:00+00:00",
+      "stop_timestamp": "2024-09-10T18:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 75.16666666666667,
+      "reentry_timestamp": "2024-09-14T00:05:00+00:00",
+      "stop_timestamp": "2024-09-10T20:55:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 49.0,
+      "reentry_timestamp": "2024-09-18T00:05:00+00:00",
+      "stop_timestamp": "2024-09-15T23:05:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 8.833333333333334,
+      "reentry_timestamp": "2024-09-18T00:05:00+00:00",
+      "stop_timestamp": "2024-09-17T15:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 93.0,
+      "reentry_timestamp": "2024-09-22T00:05:00+00:00",
+      "stop_timestamp": "2024-09-18T03:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 72.0,
+      "reentry_timestamp": "2024-09-22T00:05:00+00:00",
+      "stop_timestamp": "2024-09-19T00:05:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 767.5,
+      "reentry_timestamp": "2024-10-24T00:05:00+00:00",
+      "stop_timestamp": "2024-09-22T00:35:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 73.25,
+      "reentry_timestamp": "2024-09-26T00:05:00+00:00",
+      "stop_timestamp": "2024-09-22T22:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.08333333333333,
+      "reentry_timestamp": "2024-09-30T00:05:00+00:00",
+      "stop_timestamp": "2024-09-26T01:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 90.58333333333333,
+      "reentry_timestamp": "2024-09-30T00:05:00+00:00",
+      "stop_timestamp": "2024-09-26T05:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.08333333333333,
+      "reentry_timestamp": "2024-10-12T00:05:00+00:00",
+      "stop_timestamp": "2024-10-08T01:00:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 3352.0,
+      "reentry_timestamp": "2025-03-01T00:05:00+00:00",
+      "stop_timestamp": "2024-10-12T08:05:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 33.583333333333336,
+      "reentry_timestamp": "2024-10-16T00:05:00+00:00",
+      "stop_timestamp": "2024-10-14T14:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.66666666666667,
+      "reentry_timestamp": "2024-10-20T00:05:00+00:00",
+      "stop_timestamp": "2024-10-16T01:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 75.25,
+      "reentry_timestamp": "2024-10-24T00:05:00+00:00",
+      "stop_timestamp": "2024-10-20T20:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 191.16666666666666,
+      "reentry_timestamp": "2024-11-01T00:05:00+00:00",
+      "stop_timestamp": "2024-10-24T00:55:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 87.33333333333333,
+      "reentry_timestamp": "2024-10-28T00:05:00+00:00",
+      "stop_timestamp": "2024-10-24T08:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 88.83333333333333,
+      "reentry_timestamp": "2024-11-01T00:05:00+00:00",
+      "stop_timestamp": "2024-10-28T07:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 90.66666666666667,
+      "reentry_timestamp": "2024-11-05T00:05:00+00:00",
+      "stop_timestamp": "2024-11-01T05:25:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 82.41666666666667,
+      "reentry_timestamp": "2024-11-05T00:05:00+00:00",
+      "stop_timestamp": "2024-11-01T13:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.08333333333333,
+      "reentry_timestamp": "2024-11-09T00:05:00+00:00",
+      "stop_timestamp": "2024-11-05T01:00:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 92.0,
+      "reentry_timestamp": "2024-11-09T00:05:00+00:00",
+      "stop_timestamp": "2024-11-05T04:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 4217.333333333333,
+      "reentry_timestamp": "2025-05-04T00:05:00+00:00",
+      "stop_timestamp": "2024-11-09T06:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 72.41666666666667,
+      "reentry_timestamp": "2024-11-13T00:05:00+00:00",
+      "stop_timestamp": "2024-11-09T23:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.75,
+      "reentry_timestamp": "2024-11-17T00:05:00+00:00",
+      "stop_timestamp": "2024-11-13T01:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 86.91666666666667,
+      "reentry_timestamp": "2024-11-21T00:05:00+00:00",
+      "stop_timestamp": "2024-11-17T09:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2024-11-25T00:05:00+00:00",
+      "stop_timestamp": "2024-11-21T00:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 89.83333333333333,
+      "reentry_timestamp": "2024-11-29T00:05:00+00:00",
+      "stop_timestamp": "2024-11-25T06:15:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.0,
+      "reentry_timestamp": "2024-12-03T00:05:00+00:00",
+      "stop_timestamp": "2024-11-29T02:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 70.33333333333333,
+      "reentry_timestamp": "2024-12-07T00:05:00+00:00",
+      "stop_timestamp": "2024-12-04T01:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 8.75,
+      "reentry_timestamp": "2024-12-07T00:05:00+00:00",
+      "stop_timestamp": "2024-12-06T15:20:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2024-12-11T00:05:00+00:00",
+      "stop_timestamp": "2024-12-07T00:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2024-12-15T00:05:00+00:00",
+      "stop_timestamp": "2024-12-11T01:10:00+00:00",
+      "symbol": "SOL/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2024-12-15T00:05:00+00:00",
+      "stop_timestamp": "2024-12-11T02:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.25,
+      "reentry_timestamp": "2024-12-19T00:05:00+00:00",
+      "stop_timestamp": "2024-12-15T01:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 3646.1666666666665,
+      "reentry_timestamp": "2025-05-16T00:05:00+00:00",
+      "stop_timestamp": "2024-12-15T01:55:00+00:00",
+      "symbol": "SOL/USD"
+    },
+    {
+      "idle_hours": 92.33333333333333,
+      "reentry_timestamp": "2024-12-23T00:05:00+00:00",
+      "stop_timestamp": "2024-12-19T03:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 91.41666666666667,
+      "reentry_timestamp": "2024-12-27T00:05:00+00:00",
+      "stop_timestamp": "2024-12-23T04:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 93.5,
+      "reentry_timestamp": "2024-12-31T00:05:00+00:00",
+      "stop_timestamp": "2024-12-27T02:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 78.5,
+      "reentry_timestamp": "2025-01-04T00:05:00+00:00",
+      "stop_timestamp": "2024-12-31T17:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 75.33333333333333,
+      "reentry_timestamp": "2025-01-08T00:05:00+00:00",
+      "stop_timestamp": "2025-01-04T20:45:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 38.083333333333336,
+      "reentry_timestamp": "2025-01-16T00:05:00+00:00",
+      "stop_timestamp": "2025-01-14T10:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 166.25,
+      "reentry_timestamp": "2025-01-24T00:05:00+00:00",
+      "stop_timestamp": "2025-01-17T01:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 91.25,
+      "reentry_timestamp": "2025-01-28T00:05:00+00:00",
+      "stop_timestamp": "2025-01-24T04:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 91.25,
+      "reentry_timestamp": "2025-02-01T00:05:00+00:00",
+      "stop_timestamp": "2025-01-28T04:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 3166.0833333333335,
+      "reentry_timestamp": "2025-07-11T00:05:00+00:00",
+      "stop_timestamp": "2025-03-01T02:00:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 553.25,
+      "reentry_timestamp": "2025-04-30T00:05:00+00:00",
+      "stop_timestamp": "2025-04-06T22:50:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 671.8333333333334,
+      "reentry_timestamp": "2025-05-28T00:05:00+00:00",
+      "stop_timestamp": "2025-04-30T00:15:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2025-05-08T00:05:00+00:00",
+      "stop_timestamp": "2025-05-04T02:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2025-05-12T00:05:00+00:00",
+      "stop_timestamp": "2025-05-08T01:10:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 74.41666666666667,
+      "reentry_timestamp": "2025-05-12T00:05:00+00:00",
+      "stop_timestamp": "2025-05-08T21:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 191.33333333333334,
+      "reentry_timestamp": "2025-05-20T00:05:00+00:00",
+      "stop_timestamp": "2025-05-12T00:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2025-05-16T00:05:00+00:00",
+      "stop_timestamp": "2025-05-12T01:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 1535.6666666666667,
+      "reentry_timestamp": "2025-07-19T00:05:00+00:00",
+      "stop_timestamp": "2025-05-16T00:25:00+00:00",
+      "symbol": "SOL/USD"
+    },
+    {
+      "idle_hours": 80.0,
+      "reentry_timestamp": "2025-05-20T00:05:00+00:00",
+      "stop_timestamp": "2025-05-16T16:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2025-05-24T00:05:00+00:00",
+      "stop_timestamp": "2025-05-20T00:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2025-05-24T00:05:00+00:00",
+      "stop_timestamp": "2025-05-20T00:25:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.91666666666667,
+      "reentry_timestamp": "2025-05-28T00:05:00+00:00",
+      "stop_timestamp": "2025-05-24T00:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 287.1666666666667,
+      "reentry_timestamp": "2025-06-05T00:05:00+00:00",
+      "stop_timestamp": "2025-05-24T00:55:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 766.25,
+      "reentry_timestamp": "2025-06-29T00:05:00+00:00",
+      "stop_timestamp": "2025-05-28T01:50:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 83.75,
+      "reentry_timestamp": "2025-06-09T00:05:00+00:00",
+      "stop_timestamp": "2025-06-05T12:20:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 79.66666666666667,
+      "reentry_timestamp": "2025-06-13T00:05:00+00:00",
+      "stop_timestamp": "2025-06-09T16:25:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 74.75,
+      "reentry_timestamp": "2025-06-13T00:05:00+00:00",
+      "stop_timestamp": "2025-06-09T21:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 87.75,
+      "reentry_timestamp": "2025-06-17T00:05:00+00:00",
+      "stop_timestamp": "2025-06-13T08:20:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 82.0,
+      "reentry_timestamp": "2025-06-17T00:05:00+00:00",
+      "stop_timestamp": "2025-06-13T14:05:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.0,
+      "reentry_timestamp": "2025-06-21T00:05:00+00:00",
+      "stop_timestamp": "2025-06-17T01:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2025-06-21T00:05:00+00:00",
+      "stop_timestamp": "2025-06-17T01:10:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 92.25,
+      "reentry_timestamp": "2025-06-25T00:05:00+00:00",
+      "stop_timestamp": "2025-06-21T03:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 87.08333333333333,
+      "reentry_timestamp": "2025-06-25T00:05:00+00:00",
+      "stop_timestamp": "2025-06-21T09:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 693.8333333333334,
+      "reentry_timestamp": "2025-07-24T00:00:00+00:00",
+      "stop_timestamp": "2025-06-25T02:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 82.66666666666667,
+      "reentry_timestamp": "2025-06-29T00:05:00+00:00",
+      "stop_timestamp": "2025-06-25T13:25:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 89.25,
+      "reentry_timestamp": "2025-07-03T00:05:00+00:00",
+      "stop_timestamp": "2025-06-29T06:50:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 86.58333333333333,
+      "reentry_timestamp": "2025-07-03T00:05:00+00:00",
+      "stop_timestamp": "2025-06-29T09:30:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 92.25,
+      "reentry_timestamp": "2025-07-07T00:05:00+00:00",
+      "stop_timestamp": "2025-07-03T03:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 92.16666666666667,
+      "reentry_timestamp": "2025-07-07T00:05:00+00:00",
+      "stop_timestamp": "2025-07-03T03:55:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 93.66666666666667,
+      "reentry_timestamp": "2025-07-11T00:05:00+00:00",
+      "stop_timestamp": "2025-07-07T02:25:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 1621.8333333333333,
+      "reentry_timestamp": "2025-09-13T00:05:00+00:00",
+      "stop_timestamp": "2025-07-07T10:15:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 93.75,
+      "reentry_timestamp": "2025-07-15T00:05:00+00:00",
+      "stop_timestamp": "2025-07-11T02:20:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 93.58333333333333,
+      "reentry_timestamp": "2025-07-15T00:05:00+00:00",
+      "stop_timestamp": "2025-07-11T02:30:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 1247.4166666666667,
+      "reentry_timestamp": "2025-09-05T00:05:00+00:00",
+      "stop_timestamp": "2025-07-15T00:40:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 51.166666666666664,
+      "reentry_timestamp": "2025-07-19T00:05:00+00:00",
+      "stop_timestamp": "2025-07-16T20:55:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 95.58333333333333,
+      "reentry_timestamp": "2025-07-23T00:05:00+00:00",
+      "stop_timestamp": "2025-07-19T00:30:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 4300.25,
+      "reentry_timestamp": "2026-01-15T00:05:00+00:00",
+      "stop_timestamp": "2025-07-19T19:50:00+00:00",
+      "symbol": "SOL/USD"
+    },
+    {
+      "idle_hours": 572.75,
+      "reentry_timestamp": "2025-08-16T00:05:00+00:00",
+      "stop_timestamp": "2025-07-23T03:20:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 57.0,
+      "reentry_timestamp": "2025-07-27T00:05:00+00:00",
+      "stop_timestamp": "2025-07-24T15:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 81.0,
+      "reentry_timestamp": "2025-07-31T00:05:00+00:00",
+      "stop_timestamp": "2025-07-27T15:05:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.25,
+      "reentry_timestamp": "2025-08-04T00:05:00+00:00",
+      "stop_timestamp": "2025-07-31T00:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 95.25,
+      "reentry_timestamp": "2025-08-08T00:05:00+00:00",
+      "stop_timestamp": "2025-08-04T00:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 78.0,
+      "reentry_timestamp": "2025-08-12T00:05:00+00:00",
+      "stop_timestamp": "2025-08-08T18:05:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 44.666666666666664,
+      "reentry_timestamp": "2025-08-12T00:05:00+00:00",
+      "stop_timestamp": "2025-08-10T03:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 93.41666666666667,
+      "reentry_timestamp": "2025-08-16T00:05:00+00:00",
+      "stop_timestamp": "2025-08-12T02:40:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 2388.9166666666665,
+      "reentry_timestamp": "2025-11-20T00:05:00+00:00",
+      "stop_timestamp": "2025-08-12T11:10:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 94.41666666666667,
+      "reentry_timestamp": "2025-08-20T00:05:00+00:00",
+      "stop_timestamp": "2025-08-16T01:40:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 67.16666666666667,
+      "reentry_timestamp": "2025-08-20T00:05:00+00:00",
+      "stop_timestamp": "2025-08-17T04:55:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 91.33333333333333,
+      "reentry_timestamp": "2025-08-24T00:10:00+00:00",
+      "stop_timestamp": "2025-08-20T04:50:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 88.5,
+      "reentry_timestamp": "2025-08-24T00:05:00+00:00",
+      "stop_timestamp": "2025-08-20T07:35:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2025-08-28T00:05:00+00:00",
+      "stop_timestamp": "2025-08-24T01:10:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 92.5,
+      "reentry_timestamp": "2025-09-01T00:05:00+00:00",
+      "stop_timestamp": "2025-08-28T03:35:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 565.5,
+      "reentry_timestamp": "2025-09-25T00:05:00+00:00",
+      "stop_timestamp": "2025-09-01T10:35:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2025-09-09T00:05:00+00:00",
+      "stop_timestamp": "2025-09-05T02:45:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 2206.75,
+      "reentry_timestamp": "2025-12-10T00:05:00+00:00",
+      "stop_timestamp": "2025-09-09T01:20:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 23.583333333333332,
+      "reentry_timestamp": "2025-09-13T00:05:00+00:00",
+      "stop_timestamp": "2025-09-12T00:30:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 94.75,
+      "reentry_timestamp": "2025-09-17T00:05:00+00:00",
+      "stop_timestamp": "2025-09-13T01:20:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 41.916666666666664,
+      "reentry_timestamp": "2025-09-17T00:05:00+00:00",
+      "stop_timestamp": "2025-09-15T06:10:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 88.66666666666667,
+      "reentry_timestamp": "2025-09-21T00:05:00+00:00",
+      "stop_timestamp": "2025-09-17T07:25:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 78.16666666666667,
+      "reentry_timestamp": "2025-09-21T00:10:00+00:00",
+      "stop_timestamp": "2025-09-17T18:00:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 1052.5833333333333,
+      "reentry_timestamp": "2025-11-04T00:05:00+00:00",
+      "stop_timestamp": "2025-09-21T03:30:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 82.25,
+      "reentry_timestamp": "2025-10-03T00:05:00+00:00",
+      "stop_timestamp": "2025-09-29T13:50:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 39.083333333333336,
+      "reentry_timestamp": "2025-10-03T00:05:00+00:00",
+      "stop_timestamp": "2025-10-01T09:00:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 92.91666666666667,
+      "reentry_timestamp": "2025-10-07T00:05:00+00:00",
+      "stop_timestamp": "2025-10-03T03:10:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 81.25,
+      "reentry_timestamp": "2025-10-07T00:05:00+00:00",
+      "stop_timestamp": "2025-10-03T14:50:00+00:00",
+      "symbol": "BTC/USD"
+    },
+    {
+      "idle_hours": 90.83333333333333,
+      "reentry_timestamp": "2025-11-08T00:05:00+00:00",
+      "stop_timestamp": "2025-11-04T05:15:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 189.41666666666666,
+      "reentry_timestamp": "2025-11-16T00:05:00+00:00",
+      "stop_timestamp": "2025-11-08T02:40:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 765.1666666666666,
+      "reentry_timestamp": "2025-12-18T00:05:00+00:00",
+      "stop_timestamp": "2025-11-16T02:55:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.75,
+      "reentry_timestamp": "2025-11-24T00:05:00+00:00",
+      "stop_timestamp": "2025-11-20T00:20:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 95.0,
+      "reentry_timestamp": "2025-11-28T00:05:00+00:00",
+      "stop_timestamp": "2025-11-24T01:05:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 84.75,
+      "reentry_timestamp": "2025-12-02T00:05:00+00:00",
+      "stop_timestamp": "2025-11-28T11:20:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 94.83333333333333,
+      "reentry_timestamp": "2025-12-06T00:05:00+00:00",
+      "stop_timestamp": "2025-12-02T01:15:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 668.8333333333334,
+      "reentry_timestamp": "2026-01-03T00:05:00+00:00",
+      "stop_timestamp": "2025-12-06T03:15:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 75.83333333333333,
+      "reentry_timestamp": "2025-12-14T00:05:00+00:00",
+      "stop_timestamp": "2025-12-10T20:15:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 190.58333333333334,
+      "reentry_timestamp": "2025-12-22T00:05:00+00:00",
+      "stop_timestamp": "2025-12-14T01:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 1055.0,
+      "reentry_timestamp": "2026-01-31T00:05:00+00:00",
+      "stop_timestamp": "2025-12-18T01:05:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.66666666666667,
+      "reentry_timestamp": "2025-12-26T00:05:00+00:00",
+      "stop_timestamp": "2025-12-22T00:25:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 94.33333333333333,
+      "reentry_timestamp": "2025-12-30T00:05:00+00:00",
+      "stop_timestamp": "2025-12-26T01:45:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 951.75,
+      "reentry_timestamp": "2026-02-08T00:05:00+00:00",
+      "stop_timestamp": "2025-12-30T08:20:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 71.91666666666667,
+      "reentry_timestamp": "2026-01-07T00:05:00+00:00",
+      "stop_timestamp": "2026-01-04T00:10:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 121.75,
+      "reentry_timestamp": "2026-01-19T00:05:00+00:00",
+      "stop_timestamp": "2026-01-13T22:20:00+00:00",
+      "symbol": "ETH/USD"
+    },
+    {
+      "idle_hours": 1992.6666666666667,
+      "reentry_timestamp": "2026-04-21T00:05:00+00:00",
+      "stop_timestamp": "2026-01-27T23:25:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 94.91666666666667,
+      "reentry_timestamp": "2026-02-04T00:05:00+00:00",
+      "stop_timestamp": "2026-01-31T01:10:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 575.4166666666666,
+      "reentry_timestamp": "2026-02-28T00:05:00+00:00",
+      "stop_timestamp": "2026-02-04T00:40:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 93.58333333333333,
+      "reentry_timestamp": "2026-02-12T00:05:00+00:00",
+      "stop_timestamp": "2026-02-08T02:30:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.41666666666667,
+      "reentry_timestamp": "2026-02-16T00:05:00+00:00",
+      "stop_timestamp": "2026-02-12T00:40:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 170.08333333333334,
+      "reentry_timestamp": "2026-02-24T00:05:00+00:00",
+      "stop_timestamp": "2026-02-16T22:00:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 3887.4997222222223,
+      "reentry_timestamp": null,
+      "stop_timestamp": "2026-02-20T00:30:00+00:00",
+      "symbol": "AVAX/USD"
+    },
+    {
+      "idle_hours": 959.0833333333334,
+      "reentry_timestamp": "2026-04-05T00:05:00+00:00",
+      "stop_timestamp": "2026-02-24T01:00:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.16666666666667,
+      "reentry_timestamp": "2026-03-04T00:05:00+00:00",
+      "stop_timestamp": "2026-02-28T00:55:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 88.25,
+      "reentry_timestamp": "2026-03-08T00:05:00+00:00",
+      "stop_timestamp": "2026-03-04T07:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 757.3333333333334,
+      "reentry_timestamp": "2026-04-09T00:05:00+00:00",
+      "stop_timestamp": "2026-03-08T10:45:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 72.83333333333333,
+      "reentry_timestamp": "2026-04-09T00:05:00+00:00",
+      "stop_timestamp": "2026-04-05T23:15:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 93.33333333333333,
+      "reentry_timestamp": "2026-04-13T00:05:00+00:00",
+      "stop_timestamp": "2026-04-09T02:45:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 80.41666666666667,
+      "reentry_timestamp": "2026-04-13T00:05:00+00:00",
+      "stop_timestamp": "2026-04-09T15:40:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.25,
+      "reentry_timestamp": "2026-04-17T00:05:00+00:00",
+      "stop_timestamp": "2026-04-13T00:50:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 94.0,
+      "reentry_timestamp": "2026-04-17T00:05:00+00:00",
+      "stop_timestamp": "2026-04-13T02:05:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 83.16666666666667,
+      "reentry_timestamp": "2026-04-21T00:05:00+00:00",
+      "stop_timestamp": "2026-04-17T12:55:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 543.8333333333334,
+      "reentry_timestamp": "2026-05-11T00:05:00+00:00",
+      "stop_timestamp": "2026-04-18T08:15:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 88.25,
+      "reentry_timestamp": "2026-04-25T00:05:00+00:00",
+      "stop_timestamp": "2026-04-21T07:50:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 85.33333333333333,
+      "reentry_timestamp": "2026-04-25T00:10:00+00:00",
+      "stop_timestamp": "2026-04-21T10:50:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 91.91666666666667,
+      "reentry_timestamp": "2026-04-29T00:05:00+00:00",
+      "stop_timestamp": "2026-04-25T04:10:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 92.0,
+      "reentry_timestamp": "2026-05-03T00:05:00+00:00",
+      "stop_timestamp": "2026-04-29T04:05:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 33.666666666666664,
+      "reentry_timestamp": "2026-05-03T00:05:00+00:00",
+      "stop_timestamp": "2026-05-01T14:25:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 75.41666666666667,
+      "reentry_timestamp": "2026-05-07T00:05:00+00:00",
+      "stop_timestamp": "2026-05-03T20:40:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 2133.4997222222223,
+      "reentry_timestamp": null,
+      "stop_timestamp": "2026-05-04T02:30:00+00:00",
+      "symbol": "BCH/USD"
+    },
+    {
+      "idle_hours": 760.0,
+      "reentry_timestamp": "2026-06-08T00:05:00+00:00",
+      "stop_timestamp": "2026-05-07T08:05:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 1424.5,
+      "reentry_timestamp": "2026-07-10T00:05:00+00:00",
+      "stop_timestamp": "2026-05-11T15:35:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 95.5,
+      "reentry_timestamp": "2026-06-12T00:05:00+00:00",
+      "stop_timestamp": "2026-06-08T00:35:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 95.41666666666667,
+      "reentry_timestamp": "2026-06-16T00:05:00+00:00",
+      "stop_timestamp": "2026-06-12T00:40:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 766.0,
+      "reentry_timestamp": "2026-07-18T00:05:00+00:00",
+      "stop_timestamp": "2026-06-16T02:05:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 94.5,
+      "reentry_timestamp": "2026-07-14T00:05:00+00:00",
+      "stop_timestamp": "2026-07-10T01:35:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 282.8333333333333,
+      "reentry_timestamp": "2026-07-26T00:05:00+00:00",
+      "stop_timestamp": "2026-07-14T05:15:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 334.0830555555556,
+      "reentry_timestamp": null,
+      "stop_timestamp": "2026-07-18T01:55:00+00:00",
+      "symbol": "LTC/USD"
+    },
+    {
+      "idle_hours": 82.91666666666667,
+      "reentry_timestamp": "2026-07-30T00:05:00+00:00",
+      "stop_timestamp": "2026-07-26T13:10:00+00:00",
+      "symbol": "XRP/USD"
+    },
+    {
+      "idle_hours": 46.16638888888889,
+      "reentry_timestamp": null,
+      "stop_timestamp": "2026-07-30T01:50:00+00:00",
+      "symbol": "XRP/USD"
+    }
+  ],
+  "code_version": "stateful-replay-robustness-v9",
+  "config_sha256": "fe71e1f127f5d2d6e1820f1a5d5d85d54382d1392efc87b60ed3b3fbf7e0c899",
+  "dataset_sha256": "aa88c99a561e29c84174cb2a3c7d81cb3571d17ac32d7af0e588aceec39f0ebb",
+  "execution_trace": [],
+  "execution_trace_count": 0,
+  "execution_trace_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "methodology_version": "stateful-portfolio-robustness-v1",
+  "research_head_at_generation": "f74d938f1d5e7ec778c1fb067c593f8ebc0cb931",
+  "reusable_for_promotion": false,
+  "scheduled_decisions": 233,
+  "source_sha256": "dd59e36f68523d455d66a7fb28ca142185321cb8b8476e6b8b7682e70e220b76",
+  "stateful_vs_diagnostic": "DIAGNOSTIC_SUMMARY_CHECKPOINT_ONLY",
+  "stop_events": [
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 42641.62697588998,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 42641.62697588998,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-01-01T01:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 73.3871140590358,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 73.3871140590358,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-01-01T02:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 44563.4499955392,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 44563.4499955392,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-01-02T00:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 75.16241293307982,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 75.16241293307982,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-01-02T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 44356.88225376649,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 44468.05238472831,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-01-07T13:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2268.3379086531077,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 2285.479001161821,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-01-09T12:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.07966596710594916,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 0.07986563118390892,
+      "symbol": "DOGE/USD",
+      "timestamp": "2024-01-10T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 46381.4539034967,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 46381.4539034967,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-01-10T18:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.08137439048672968,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.08137439048672968,
+      "symbol": "DOGE/USD",
+      "timestamp": "2024-01-14T06:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 43074.28777285533,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 43074.28777285533,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-01-14T10:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.08095081975857084,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.08095081975857084,
+      "symbol": "DOGE/USD",
+      "timestamp": "2024-01-20T19:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5165364674747834,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5165364674747834,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-01-26T10:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66.4614964636735,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 66.4614964636735,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-01-26T11:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68.62140716682862,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68.62140716682862,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-01-30T01:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5371607799040647,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5371607799040647,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-01-30T01:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 42964.36271853137,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 42964.36271853137,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-03T11:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5125238479218298,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5125238479218298,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-02-04T06:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2384.3466283274847,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2390.3224344135183,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-02-07T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 43366.2952786195,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 43366.2952786195,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-07T17:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 48024.65508945491,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 48024.65508945491,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-11T03:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 71.17251211750427,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 71.17251211750427,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-02-12T02:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 52223.33732907585,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 52223.33732907585,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-15T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70.36937949921848,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 70.36937949921848,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-02-15T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70.64671348386095,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 71.18056774192539,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-02-19T01:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 52479.0622244236,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 52479.0622244236,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-19T06:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 69.20401754962296,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 69.20401754962296,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-02-24T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 51563.49917120652,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 51563.49917120652,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-02-24T17:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.6026481783126483,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 0.6041585747495221,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-03-02T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3453.2527194192176,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3453.2527194192176,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-03-02T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3580.474998803194,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3580.474998803194,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-03-06T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5940068175282922,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5940068175282922,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-03-06T00:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3934.15060712359,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3934.15060712359,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-03-10T01:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.6225135812743244,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 0.6240737656885458,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-03-10T01:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 73445.09637234735,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 73445.09637234735,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-03-14T04:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68636.27743951447,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68636.27743951447,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-03-18T05:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 65925.75007406977,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 65925.75007406977,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-03-22T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70218.04447567198,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 70218.04447567198,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-03-26T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70317.32868048508,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 70317.32868048508,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-03-30T05:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5915520832931215,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5915520832931215,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-04-03T08:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 17.64569771271684,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 17.64569771271684,
+      "symbol": "LINK/USD",
+      "timestamp": "2024-04-07T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5963148286507921,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5963148286507921,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-04-07T09:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.6192455685646603,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.6192455685646603,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-04-11T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 17.485512043763077,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 17.485512043763077,
+      "symbol": "LINK/USD",
+      "timestamp": "2024-04-11T06:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 65739.01990237729,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 65903.77935075416,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-04-15T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 63689.52103328736,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 63689.52103328736,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-04-19T16:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 67068.13762550788,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 67236.22819599787,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-04-23T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 64136.162215171214,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 64136.162215171214,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-04-28T03:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 61034.91548278364,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 61034.91548278364,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-05-03T13:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.532629793111896,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.532629793111896,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-05-05T16:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 81.44107768895087,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 82.05650144982455,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-05T22:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 81.96775143159795,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 82.17318439257939,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-09T01:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 82.96042444506664,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 82.96042444506664,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-17T10:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5182639225216207,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5182639225216207,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-05-18T14:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 71583.85420481845,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 71763.26236072024,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-05-21T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 89.17326849406379,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 89.17326849406379,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-21T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 85.24809535403053,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 85.24809535403053,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-25T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68988.87955759665,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68988.87955759665,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-05-25T08:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68694.20053217348,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68694.20053217348,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-05-29T02:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 83.65908941196325,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 83.86876131525138,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-05-29T03:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 7.100045523691053,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 7.100045523691053,
+      "symbol": "DOT/USD",
+      "timestamp": "2024-06-02T04:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68136.71481297853,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68136.71481297853,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-06-02T12:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 71369.24305488085,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 71548.11333822641,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-06-06T13:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70061.03454593301,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 70061.03454593301,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-06-10T15:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 459.111,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 477.3045335525235,
+      "symbol": "BCH/USD",
+      "timestamp": "2024-06-11T01:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 67222.2668984896,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 67222.2668984896,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-06-14T12:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66693.41262208478,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 66860.56403216519,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-07-19T18:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 67161.5951573623,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 67161.5951573623,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-07-20T17:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66383.96566272445,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 66383.96566272445,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-07-24T08:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68012.44918816845,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68012.44918816845,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-07-28T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 71.25329494305787,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 71.43187462963195,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-07-28T00:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70.6648119468196,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 70.84191673866626,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-08-01T00:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 64927.31488413852,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 65090.03998409876,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-01T22:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 58416.70650078563,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 58563.11428650188,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-11T20:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 59842.036868663636,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 59842.036868663636,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-13T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 59246.62347178757,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 59246.62347178757,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-17T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66.90561134315269,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 66.90561134315269,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-08-17T09:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.10365043021768452,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.10365043021768452,
+      "symbol": "DOGE/USD",
+      "timestamp": "2024-08-21T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 59479.904175061456,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 59479.904175061456,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-21T02:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 64453.2559340145,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 64614.79291630526,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-08-25T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 62.13785779390964,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 62.13785779390964,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-08-29T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5721404148469663,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 0.5735743507237757,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-08-29T05:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 63.67672426299871,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 63.836315050625274,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-09-02T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5510448377271999,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5510448377271999,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-02T09:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66.25864141795853,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 66.42470317589827,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-09-06T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.547418552600801,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.547418552600801,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-06T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 61.676555027768465,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 61.676555027768465,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-09-10T18:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5415820438683986,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5415820438683986,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-10T20:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5740825626133724,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5740825626133724,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-15T23:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 60811.105520031204,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 60963.51430579569,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-09-17T15:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 60650.23021072991,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 60650.23021072991,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-09-18T03:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5867416531048874,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5867416531048874,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-19T00:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.6004311063562002,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.6004311063562002,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-09-22T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 63623.953399416736,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 63783.41192923983,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-09-22T22:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 62921.4215,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 63547.226152659096,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-09-26T01:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 67.02859725117023,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 67.02859725117023,
+      "symbol": "LTC/USD",
+      "timestamp": "2024-09-26T05:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 326.46150165687936,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 326.46150165687936,
+      "symbol": "BCH/USD",
+      "timestamp": "2024-10-08T01:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 329.1904562504179,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 329.1904562504179,
+      "symbol": "BCH/USD",
+      "timestamp": "2024-10-12T08:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 65893.56059784004,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 65893.56059784004,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-10-14T14:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 67421.57623176597,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 67421.57623176597,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-10-16T01:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68818.65332736218,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68818.65332736218,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-10-20T20:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5292139358817513,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5292139358817513,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-10-24T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 66954.17601849468,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 66954.17601849468,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-10-24T08:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68364.10578473816,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68364.10578473816,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-10-28T07:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5136319493287695,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 0.5136319493287695,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-11-01T05:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 70684.8118080696,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 70684.8118080696,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-01T13:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5043127863482801,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 0.5055767281687019,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-11-05T01:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 68236.70778856493,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 68236.70778856493,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-05T04:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 0.5513,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 0.5555601634189217,
+      "symbol": "XRP/USD",
+      "timestamp": "2024-11-09T06:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 76996.50203008542,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 76996.50203008542,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-09T23:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 88016.69353064575,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 88681.80708377405,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-13T01:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 91200.22007984458,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 91200.22007984458,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-17T09:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 94926.387711438,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 94926.387711438,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-21T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 98474.9965486099,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 98474.9965486099,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-25T06:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 96191.7314041504,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 96191.7314041504,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-11-29T02:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 96429.81973193093,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 96429.81973193093,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-04T01:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 4013.2195653505355,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 4023.2777597499103,
+      "symbol": "ETH/USD",
+      "timestamp": "2024-12-06T15:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 100549.86041360699,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 100549.86041360699,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-07T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 214.29847477059405,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 215.917858710926,
+      "symbol": "SOL/USD",
+      "timestamp": "2024-12-11T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 97426.57235755466,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 97426.57235755466,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-11T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 102077.40845702977,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 102077.40845702977,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-15T01:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 221.4879643492707,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 221.4879643492707,
+      "symbol": "SOL/USD",
+      "timestamp": "2024-12-15T01:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 100931.32120347972,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 101184.28190825034,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-19T03:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 95690.63799966418,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 95690.63799966418,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-23T04:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 96366.31008045161,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 96366.31008045161,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-27T02:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 93234.3362694938,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 93234.3362694938,
+      "symbol": "BTC/USD",
+      "timestamp": "2024-12-31T17:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 98701.29064079752,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 98701.29064079752,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-01-04T20:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 97090.60648373274,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 97333.94133707543,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-01-14T10:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 101214.7503020011,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 101214.7503020011,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-01-17T01:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 104560.52604835956,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 104560.52604835956,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-01-24T04:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 103064.0591083433,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 103064.0591083433,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-01-28T04:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 318.4730636409477,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 318.4730636409477,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-03-01T02:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 69.69426975963401,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 69.69426975963401,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-04-06T22:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 86.35078790116312,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 86.35078790116312,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-04-30T00:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.197812231071437,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2.2033205324024427,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-05-04T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.13798036059398,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.13798036059398,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-05-08T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 102960.98423776447,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 102960.98423776447,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-05-08T21:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.3828600898008157,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.3828600898008157,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-05-12T00:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 104844.51911311748,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 104844.51911311748,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-05-12T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 170.43583402769752,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 170.43583402769752,
+      "symbol": "SOL/USD",
+      "timestamp": "2025-05-16T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 104523.7699441851,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 104523.7699441851,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-05-16T16:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 106096.04470010463,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 106361.94957403973,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-05-20T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.388612355669307,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2.3945988528013102,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-05-20T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 107501.8301587742,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 107501.8301587742,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-05-24T00:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.302421650729531,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.302421650729531,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-05-24T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 96.30021053365155,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 96.30021053365155,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-05-28T01:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.216861392907642,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.216861392907642,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-05T12:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.280617154879618,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.280617154879618,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-09T16:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 109570.65808051446,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 109570.65808051446,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-06-09T21:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 105362.87133112988,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 105362.87133112988,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-06-13T08:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.1392,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 2.189165497117866,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-13T14:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 107379.49552642183,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 107379.49552642183,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-06-17T01:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.244206660613311,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.244206660613311,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-17T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.1334803381804988,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.1334803381804988,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-21T03:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 103828.97147746207,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 103828.97147746207,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-06-21T09:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 106774.74265053945,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 106774.74265053945,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-06-25T02:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.1965365953624976,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2.2020416996115264,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-25T13:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 86.84471280878708,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 86.84471280878708,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-06-29T06:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.194418301483665,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.194418301483665,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-06-29T09:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.244420266254888,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2.2500453797041486,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-07-03T03:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 88.06257126245978,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 88.06257126245978,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-07-03T03:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 87.88976822668845,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 87.88976822668845,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-07-07T02:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.2864994294006116,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.2864994294006116,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-07-07T10:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 95.48682826607411,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 95.48682826607411,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-07-11T02:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 521.4045232062243,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 521.4045232062243,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-07-11T02:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 95.41445243167006,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 96.1354684450076,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-07-15T00:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 503.2,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 507.15863685112004,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-07-16T20:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 516.7497672904467,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 518.0448794891696,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-07-19T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 177.1610656238277,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 178.49981423055686,
+      "symbol": "SOL/USD",
+      "timestamp": "2025-07-19T19:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 526.8465980203644,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 528.1670155592625,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-07-23T03:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 119538.3750637297,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 119538.3750637297,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-07-24T15:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 118635.12875505531,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 118635.12875505531,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-07-27T15:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 118555.16560349283,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 118555.16560349283,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-07-31T00:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 114873.09632622727,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 114873.09632622727,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-08-04T00:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 4039.444400556265,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 4039.444400556265,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-08-08T18:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 118127.94586674492,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 118127.94586674492,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-08-10T03:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 119345.98645712227,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 119345.98645712227,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-08-12T02:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 4260.2992714355205,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 4260.2992714355205,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-08-12T11:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 596.7782489194387,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 596.7782489194387,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-08-16T01:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 118198.35597550258,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 118198.35597550258,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-08-17T04:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 552.9991937383056,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 554.3851566298803,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-08-20T04:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 113880.57368063307,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 113880.57368063307,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-08-20T07:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 595.5155494854974,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 595.5155494854974,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-08-24T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 554.7151035239305,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 554.7151035239305,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-08-28T03:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 544.2288416137058,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 545.5928236728879,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-09-01T10:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 111.99520755905006,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 111.99520755905006,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-09-05T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 112.81643317112687,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 113.6689502983646,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-09-09T01:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 115954.22859903444,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 115954.22859903444,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-09-12T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3.1180041549642388,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3.1180041549642388,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-09-13T01:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 116744.8738412823,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 116744.8738412823,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-09-15T06:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 117458.04282790402,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 117458.04282790402,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-09-17T07:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3.0327652365884634,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 3.0556828580236406,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-09-17T18:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.9973968622440452,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.9973968622440452,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-09-21T03:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 560.8601141798027,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 560.8601141798027,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-09-29T13:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 116117.40117110503,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 116408.4222266717,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-10-01T09:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 597.2622064066488,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 597.2622064066488,
+      "symbol": "BCH/USD",
+      "timestamp": "2025-10-03T03:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 121075.34120373946,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 121075.34120373946,
+      "symbol": "BTC/USD",
+      "timestamp": "2025-10-03T14:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.3226801958341476,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.3226801958341476,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-11-04T05:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.3319417896837833,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 2.3319417896837833,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-11-08T02:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2.238848148359836,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2.244459296601339,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-11-16T02:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3029.695614782167,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3029.695614782167,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-11-20T00:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2782.270451473723,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 2803.295165212819,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-11-24T01:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3024.6566715988124,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 3032.237264760714,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-11-28T11:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 2805.3477719891475,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 2812.3787187861126,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-12-02T01:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3040.8508556624756,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3040.8508556624756,
+      "symbol": "ETH/USD",
+      "timestamp": "2025-12-06T03:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 86.33497418877445,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 86.33497418877445,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-12-10T20:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 81.7454082611801,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 81.7454082611801,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-12-14T01:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.8580319823086975,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 1.8720725262556146,
+      "symbol": "XRP/USD",
+      "timestamp": "2025-12-18T01:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 77.26405113477092,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 77.45769537320393,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-12-22T00:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 76.41881444978577,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 76.41881444978577,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-12-26T01:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 78.46585067242918,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 78.66250693977862,
+      "symbol": "LTC/USD",
+      "timestamp": "2025-12-30T08:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3147.5610869617017,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 3147.5610869617017,
+      "symbol": "ETH/USD",
+      "timestamp": "2026-01-04T00:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 3301.396453971307,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 3309.670630547676,
+      "symbol": "ETH/USD",
+      "timestamp": "2026-01-13T22:20:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 603.0369167547638,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 603.0369167547638,
+      "symbol": "BCH/USD",
+      "timestamp": "2026-01-27T23:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.7429839072175957,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.7429839072175957,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-01-31T01:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.5793996311874605,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.5793996311874605,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-02-04T00:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 55.387722656135104,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 55.52653900364421,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-02-08T02:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 52.7564436264641,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 52.7564436264641,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-02-12T00:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 55.41273105810115,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 55.41273105810115,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-02-16T22:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 8.948958257362655,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 8.948958257362655,
+      "symbol": "AVAX/USD",
+      "timestamp": "2026-02-20T00:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 51.73247106843094,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 51.73247106843094,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-02-24T01:00:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.365216661578344,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.365216661578344,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-02-28T00:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.3709555030136833,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.3709555030136833,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-03-04T07:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.3675290214449514,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.3675290214449514,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-03-08T10:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 53.75124881360512,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 53.8859637229124,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-05T23:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 54.08076778739602,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 54.216308558793,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-09T02:45:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.3481416464707445,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 1.3515204475897187,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-04-09T15:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.3305192864772555,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 1.3338539212804565,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-04-13T00:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 53.9000103721777,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 53.9000103721777,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-13T02:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 56.634075525280664,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 56.634075525280664,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-17T12:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.46139232120329,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.46139232120329,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-04-18T08:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 55.44724241600852,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 55.44724241600852,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-21T07:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 447.04161016372655,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 447.04161016372655,
+      "symbol": "BCH/USD",
+      "timestamp": "2026-04-21T10:50:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 56.77083333948015,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 56.77083333948015,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-25T04:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 55.8062761593075,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 55.946141513090225,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-04-29T04:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 455.1909866703846,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 458.6307170482464,
+      "symbol": "BCH/USD",
+      "timestamp": "2026-05-01T14:25:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 55.6168118879565,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 55.6168118879565,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-05-03T20:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 446.82379307943773,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 447.94365220996264,
+      "symbol": "BCH/USD",
+      "timestamp": "2026-05-04T02:30:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 57.120805295211504,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 57.120805295211504,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-05-07T08:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.4819122086728693,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 1.4856262743587663,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-05-11T15:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 43.01015553872162,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 43.01015553872162,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-06-08T00:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 42.683856651538306,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 42.683856651538306,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-06-12T00:40:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 45.85566378978682,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 45.97059026545044,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-06-16T02:05:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.0951676034878544,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 1.0979123844489767,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-07-10T01:35:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.0689500788456876,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "delayed_fill",
+      "stop_price": 1.071629151725,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-07-14T05:15:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 45.34236936110629,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 45.34236936110629,
+      "symbol": "LTC/USD",
+      "timestamp": "2026-07-18T01:55:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.095385,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "emergency_fallback",
+      "stop_price": 1.1039677041551157,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-07-26T13:10:00+00:00",
+      "variant": "0.005"
+    },
+    {
+      "baseline_control": "runtime_execution_no_protection_control",
+      "exit_price": 1.079346702138111,
+      "market": "crypto",
+      "policy": "break_even",
+      "stop_class": "immediate_fill",
+      "stop_price": 1.079346702138111,
+      "symbol": "XRP/USD",
+      "timestamp": "2026-07-30T01:50:00+00:00",
+      "variant": "0.005"
+    }
+  ],
+  "summary": {
+    "actual_reentries_after_stop": 242,
+    "annualized_volatility": 0.03301030533191344,
+    "average_cash_ratio": 0.9539575785234402,
+    "average_exposure": 0.04604242147655979,
+    "average_holding_hours": 75.61030303030303,
+    "average_holdings_count": 1.0100930184410168,
+    "average_loss": -94.25397991349867,
+    "average_positions": 1.0100930184410168,
+    "average_win": 61.84142267865486,
+    "base_protection_identity": "none",
+    "baseline_control": "runtime_execution_no_protection_control",
+    "benchmark_return": 0.4641201224869327,
+    "benchmark_symbol": "BTC/USD",
+    "best_trade": 1271.2466400033913,
+    "cagr": -0.0352415610456307,
+    "calmar": -0.3251788203527499,
+    "candidate_policy_identity": "break_even",
+    "candidate_variant": "0.005",
+    "cash_idle_period_count": 247,
+    "closed_positions": 276,
+    "duration_days": 942,
+    "end_date": "2026-07-31T00:00:00+00:00",
+    "ending_equity": 91156.39582901231,
+    "event_only_drawdown": null,
+    "excess_return": -0.5525561641968095,
+    "execution_identity": "runtime_like_5m_execution",
+    "execution_symbols": [
+      "AVAX/USD",
+      "BCH/USD",
+      "BTC/USD",
+      "DOGE/USD",
+      "DOT/USD",
+      "ETH/USD",
+      "LINK/USD",
+      "LTC/USD",
+      "SOL/USD",
+      "XRP/USD"
+    ],
+    "execution_timeframe": "5m cache",
+    "expectancy": -32.04204409778531,
+    "experiment_identity": "candidate_replacement",
+    "fee_total": 3732.394410592735,
+    "gross_return": -0.04753089215909989,
+    "mark_to_market_semantics": "cash plus open quantity multiplied by current 5m close; engine curve timestamps are the processed 5m grid",
+    "market": "crypto",
+    "max_drawdown": 0.10837594221973341,
+    "max_drawdown_duration_days": 601,
+    "maximum_concentration": 0.06227255362460813,
+    "maximum_exposure": 0.1,
+    "maximum_positions": 2,
+    "methodology_version": "stateful-portfolio-robustness-v1",
+    "missing_trade_symbols": [],
+    "net_return": -0.08843604170987684,
+    "number_of_trades": 276,
+    "policy_identity": "break_even",
+    "policy_variant": "0.005",
+    "positive_month_ratio": 0.3548387096774194,
+    "profit_factor": 0.4347748077003043,
+    "promotion_role": "primary",
+    "realized_pnl_count": 6438,
+    "realized_pnl_total": -8843.604170988745,
+    "rebalance_count": 233,
+    "scheduled_decisions": 233,
+    "sharpe": -1.070351972980165,
+    "signal_decision_alignment": "completed daily crypto signal bars retain their source UTC timestamps",
+    "slippage_cost_total": 298.59127304804775,
+    "sortino": -1.0890876779140368,
+    "spread_cost_total": 149.29563652402388,
+    "start_date": "2024-01-01T00:00:00+00:00",
+    "starting_equity": 100000.0,
+    "stateful_vs_diagnostic": "AUTHORITATIVE_STATEFUL_PORTFOLIO_REPLAY",
+    "stop_event_count": 247,
+    "stop_limit_classes": {
+      "delayed_fill": 53,
+      "emergency_fallback": 18,
+      "immediate_fill": 176,
+      "stop_fill": 0,
+      "triggered_without_fill": 0
+    },
+    "strategy_name": "crypto_low_variance_v2",
+    "strategy_version": "2.0.0",
+    "total_return": -0.08843604170987684,
+    "turnover": 15.288470553812793,
+    "win_rate": 0.39855072463768115,
+    "worst_month_return": -0.026836154036127602,
+    "worst_trade": -2534.085983092649,
+    "worst_year_return": -0.050996325146487886
+  },
+  "universe_hash": "bccb31ea007fa4c93ca72c4f3deea7ab6d7674bf2bc624ef680f9b60fc2b56ac"
+}

@@ -1,0 +1,164 @@
+{
+  "implementation_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "research_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "schema_version": "1.0.0",
+  "cost_stress": {
+    "R0": {
+      "1x": {
+        "return": 1.6648,
+        "sharpe": 0.821377,
+        "max_drawdown": 0.220319,
+        "cagr": 0.107847,
+        "turnover": 137.980041
+      },
+      "2x": {
+        "return": 1.62683,
+        "sharpe": 0.804949,
+        "max_drawdown": 0.221319,
+        "cagr": 0.106769,
+        "turnover": 137.980041
+      },
+      "3x": {
+        "return": 1.58886,
+        "sharpe": 0.788522,
+        "max_drawdown": 0.222319,
+        "cagr": 0.10569,
+        "turnover": 137.980041
+      },
+      "5x": {
+        "return": 1.512921,
+        "sharpe": 0.755667,
+        "max_drawdown": 0.224319,
+        "cagr": 0.103533,
+        "turnover": 137.980041
+      }
+    },
+    "R1": {
+      "1x": {
+        "return": 0.164978,
+        "sharpe": 0.398631,
+        "max_drawdown": 0.099214,
+        "cagr": 0.016085,
+        "turnover": 25.074238
+      },
+      "2x": {
+        "return": 0.160461,
+        "sharpe": 0.390658,
+        "max_drawdown": 0.100214,
+        "cagr": 0.015924,
+        "turnover": 25.074238
+      },
+      "3x": {
+        "return": 0.155945,
+        "sharpe": 0.382686,
+        "max_drawdown": 0.101214,
+        "cagr": 0.015763,
+        "turnover": 25.074238
+      },
+      "5x": {
+        "return": 0.146912,
+        "sharpe": 0.366741,
+        "max_drawdown": 0.103214,
+        "cagr": 0.015442,
+        "turnover": 25.074238
+      }
+    },
+    "R2": {
+      "1x": {
+        "return": 0.676845,
+        "sharpe": 0.527997,
+        "max_drawdown": 0.231139,
+        "cagr": 0.0555,
+        "turnover": 109.677425
+      },
+      "2x": {
+        "return": 0.65422,
+        "sharpe": 0.517437,
+        "max_drawdown": 0.232139,
+        "cagr": 0.054945,
+        "turnover": 109.677425
+      },
+      "3x": {
+        "return": 0.631595,
+        "sharpe": 0.506877,
+        "max_drawdown": 0.233139,
+        "cagr": 0.05439,
+        "turnover": 109.677425
+      },
+      "5x": {
+        "return": 0.586345,
+        "sharpe": 0.485757,
+        "max_drawdown": 0.235139,
+        "cagr": 0.05328,
+        "turnover": 109.677425
+      }
+    },
+    "R3": {
+      "1x": {
+        "return": 1.038905,
+        "sharpe": 0.672294,
+        "max_drawdown": 0.200368,
+        "cagr": 0.077284,
+        "turnover": 123.02837
+      },
+      "2x": {
+        "return": 1.010389,
+        "sharpe": 0.658848,
+        "max_drawdown": 0.201368,
+        "cagr": 0.076511,
+        "turnover": 123.02837
+      },
+      "3x": {
+        "return": 0.981874,
+        "sharpe": 0.645402,
+        "max_drawdown": 0.202368,
+        "cagr": 0.075738,
+        "turnover": 123.02837
+      },
+      "5x": {
+        "return": 0.924843,
+        "sharpe": 0.61851,
+        "max_drawdown": 0.204368,
+        "cagr": 0.074193,
+        "turnover": 123.02837
+      }
+    },
+    "R4": {
+      "1x": {
+        "return": 1.339767,
+        "sharpe": 0.754355,
+        "max_drawdown": 0.244886,
+        "cagr": 0.09289,
+        "turnover": 128.119943
+      },
+      "2x": {
+        "return": 1.307768,
+        "sharpe": 0.739268,
+        "max_drawdown": 0.245886,
+        "cagr": 0.091961,
+        "turnover": 128.119943
+      },
+      "3x": {
+        "return": 1.275768,
+        "sharpe": 0.724181,
+        "max_drawdown": 0.246886,
+        "cagr": 0.091032,
+        "turnover": 128.119943
+      },
+      "5x": {
+        "return": 1.211769,
+        "sharpe": 0.694007,
+        "max_drawdown": 0.248886,
+        "cagr": 0.089174,
+        "turnover": 128.119943
+      }
+    }
+  }
+}

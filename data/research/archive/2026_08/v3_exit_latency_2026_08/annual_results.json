@@ -1,0 +1,255 @@
+{
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "annual": {
+    "E0": {
+      "2017": {
+        "return": 0.122997,
+        "sharpe": 1.627033,
+        "max_drawdown": 0.04367,
+        "cagr": 0.124807
+      },
+      "2018": {
+        "return": -0.007752,
+        "sharpe": -0.012057,
+        "max_drawdown": 0.106016,
+        "cagr": -0.007859
+      },
+      "2019": {
+        "return": 0.25991,
+        "sharpe": 3.091351,
+        "max_drawdown": 0.039865,
+        "cagr": 0.262324
+      },
+      "2020": {
+        "return": 0.425049,
+        "sharpe": 1.708272,
+        "max_drawdown": 0.168079,
+        "cagr": 0.427833
+      },
+      "2021": {
+        "return": -0.041946,
+        "sharpe": -0.209848,
+        "max_drawdown": 0.153101,
+        "cagr": -0.042516
+      },
+      "2022": {
+        "return": -0.032473,
+        "sharpe": -0.186144,
+        "max_drawdown": 0.104166,
+        "cagr": -0.032827
+      },
+      "2023": {
+        "return": 0.170199,
+        "sharpe": 1.361519,
+        "max_drawdown": 0.065857,
+        "cagr": 0.172756
+      },
+      "2024": {
+        "return": 0.11131,
+        "sharpe": 1.053032,
+        "max_drawdown": 0.076508,
+        "cagr": 0.111956
+      },
+      "2025": {
+        "return": 0.048988,
+        "sharpe": 0.4698,
+        "max_drawdown": 0.138124,
+        "cagr": 0.049404
+      },
+      "2026": {
+        "return": 0.092366,
+        "sharpe": 0.855061,
+        "max_drawdown": 0.120277,
+        "cagr": 0.168569
+      }
+    },
+    "E1": {
+      "2017": {
+        "return": 0.106381,
+        "sharpe": 1.517342,
+        "max_drawdown": 0.043903,
+        "cagr": 0.107936
+      },
+      "2018": {
+        "return": -0.034553,
+        "sharpe": -0.268165,
+        "max_drawdown": 0.102527,
+        "cagr": -0.035025
+      },
+      "2019": {
+        "return": 0.230623,
+        "sharpe": 2.983286,
+        "max_drawdown": 0.041343,
+        "cagr": 0.232742
+      },
+      "2020": {
+        "return": 0.367839,
+        "sharpe": 1.620257,
+        "max_drawdown": 0.159416,
+        "cagr": 0.370202
+      },
+      "2021": {
+        "return": -0.045503,
+        "sharpe": -0.246688,
+        "max_drawdown": 0.151696,
+        "cagr": -0.04612
+      },
+      "2022": {
+        "return": -0.025093,
+        "sharpe": -0.159791,
+        "max_drawdown": 0.100487,
+        "cagr": -0.025368
+      },
+      "2023": {
+        "return": 0.103946,
+        "sharpe": 0.960571,
+        "max_drawdown": 0.077466,
+        "cagr": 0.105464
+      },
+      "2024": {
+        "return": 0.11228,
+        "sharpe": 1.11253,
+        "max_drawdown": 0.05155,
+        "cagr": 0.112932
+      },
+      "2025": {
+        "return": 0.092432,
+        "sharpe": 0.891136,
+        "max_drawdown": 0.11431,
+        "cagr": 0.093232
+      },
+      "2026": {
+        "return": 0.120142,
+        "sharpe": 1.182618,
+        "max_drawdown": 0.12554,
+        "cagr": 0.22147
+      }
+    },
+    "E2": {
+      "2017": {
+        "return": 0.114252,
+        "sharpe": 1.586797,
+        "max_drawdown": 0.043624,
+        "cagr": 0.115928
+      },
+      "2018": {
+        "return": -0.024967,
+        "sharpe": -0.17385,
+        "max_drawdown": 0.101833,
+        "cagr": -0.025309
+      },
+      "2019": {
+        "return": 0.241084,
+        "sharpe": 3.054722,
+        "max_drawdown": 0.038608,
+        "cagr": 0.243308
+      },
+      "2020": {
+        "return": 0.329368,
+        "sharpe": 1.434462,
+        "max_drawdown": 0.170311,
+        "cagr": 0.331455
+      },
+      "2021": {
+        "return": -0.046449,
+        "sharpe": -0.248709,
+        "max_drawdown": 0.156453,
+        "cagr": -0.047079
+      },
+      "2022": {
+        "return": -0.020192,
+        "sharpe": -0.103018,
+        "max_drawdown": 0.111321,
+        "cagr": -0.020414
+      },
+      "2023": {
+        "return": 0.120749,
+        "sharpe": 1.051998,
+        "max_drawdown": 0.066814,
+        "cagr": 0.122525
+      },
+      "2024": {
+        "return": 0.101786,
+        "sharpe": 0.997951,
+        "max_drawdown": 0.067604,
+        "cagr": 0.102374
+      },
+      "2025": {
+        "return": 0.07544,
+        "sharpe": 0.736032,
+        "max_drawdown": 0.119492,
+        "cagr": 0.076088
+      },
+      "2026": {
+        "return": 0.126434,
+        "sharpe": 1.197588,
+        "max_drawdown": 0.126895,
+        "cagr": 0.233593
+      }
+    },
+    "E3": {
+      "2017": {
+        "return": 0.123322,
+        "sharpe": 1.650611,
+        "max_drawdown": 0.043862,
+        "cagr": 0.125138
+      },
+      "2018": {
+        "return": -0.02202,
+        "sharpe": -0.141228,
+        "max_drawdown": 0.109074,
+        "cagr": -0.022322
+      },
+      "2019": {
+        "return": 0.257115,
+        "sharpe": 3.136992,
+        "max_drawdown": 0.034393,
+        "cagr": 0.259501
+      },
+      "2020": {
+        "return": 0.395852,
+        "sharpe": 1.647567,
+        "max_drawdown": 0.161853,
+        "cagr": 0.398419
+      },
+      "2021": {
+        "return": -0.051221,
+        "sharpe": -0.28252,
+        "max_drawdown": 0.16133,
+        "cagr": -0.051914
+      },
+      "2022": {
+        "return": -0.007704,
+        "sharpe": 0.00647,
+        "max_drawdown": 0.111665,
+        "cagr": -0.007789
+      },
+      "2023": {
+        "return": 0.150519,
+        "sharpe": 1.239413,
+        "max_drawdown": 0.070748,
+        "cagr": 0.152762
+      },
+      "2024": {
+        "return": 0.102279,
+        "sharpe": 0.98134,
+        "max_drawdown": 0.076383,
+        "cagr": 0.10287
+      },
+      "2025": {
+        "return": 0.055147,
+        "sharpe": 0.525205,
+        "max_drawdown": 0.13364,
+        "cagr": 0.055617
+      },
+      "2026": {
+        "return": 0.110535,
+        "sharpe": 1.039025,
+        "max_drawdown": 0.119923,
+        "cagr": 0.203057
+      }
+    }
+  }
+}

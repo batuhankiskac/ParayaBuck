@@ -1,0 +1,93 @@
+{
+  "implementation_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "research_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "schema_version": "1.0.0",
+  "thresholds": [
+    -0.03,
+    -0.05,
+    -0.075,
+    -0.1,
+    -0.125,
+    -0.15,
+    -0.2
+  ],
+  "matrix": {
+    "-0.03": {
+      "crossed": 673,
+      "pct_profitable": 0.4591,
+      "pct_recovered": 0.9851,
+      "avg_final_return": 0.022957,
+      "median_final_return": -0.007783,
+      "avg_further_loss_after_threshold": -0.055731,
+      "worst_further_loss_after_threshold": -0.297622,
+      "avg_time_to_recovery_days": 39.99
+    },
+    "-0.05": {
+      "crossed": 475,
+      "pct_profitable": 0.3705,
+      "pct_recovered": 0.9832,
+      "avg_final_return": 0.008678,
+      "median_final_return": -0.025674,
+      "avg_further_loss_after_threshold": -0.057887,
+      "worst_further_loss_after_threshold": -0.277622,
+      "avg_time_to_recovery_days": 42.78
+    },
+    "-0.075": {
+      "crossed": 294,
+      "pct_profitable": 0.2551,
+      "pct_recovered": 0.983,
+      "avg_final_return": -0.027247,
+      "median_final_return": -0.053723,
+      "avg_further_loss_after_threshold": -0.05624,
+      "worst_further_loss_after_threshold": -0.252622,
+      "avg_time_to_recovery_days": 47.17
+    },
+    "-0.1": {
+      "crossed": 187,
+      "pct_profitable": 0.2193,
+      "pct_recovered": 0.9786,
+      "avg_final_return": -0.038388,
+      "median_final_return": -0.078516,
+      "avg_further_loss_after_threshold": -0.05543,
+      "worst_further_loss_after_threshold": -0.227622,
+      "avg_time_to_recovery_days": 50.69
+    },
+    "-0.125": {
+      "crossed": 107,
+      "pct_profitable": 0.1215,
+      "pct_recovered": 0.9813,
+      "avg_final_return": -0.094774,
+      "median_final_return": -0.117282,
+      "avg_further_loss_after_threshold": -0.052643,
+      "worst_further_loss_after_threshold": -0.202622,
+      "avg_time_to_recovery_days": 45.18
+    },
+    "-0.15": {
+      "crossed": 77,
+      "pct_profitable": 0.1169,
+      "pct_recovered": 0.987,
+      "avg_final_return": -0.113737,
+      "median_final_return": -0.142781,
+      "avg_further_loss_after_threshold": -0.042095,
+      "worst_further_loss_after_threshold": -0.177622,
+      "avg_time_to_recovery_days": 48.12
+    },
+    "-0.2": {
+      "crossed": 34,
+      "pct_profitable": 0.1471,
+      "pct_recovered": 1.0,
+      "avg_final_return": -0.120988,
+      "median_final_return": -0.16989,
+      "avg_further_loss_after_threshold": -0.051864,
+      "worst_further_loss_after_threshold": -0.127622,
+      "avg_time_to_recovery_days": 60.65
+    }
+  }
+}

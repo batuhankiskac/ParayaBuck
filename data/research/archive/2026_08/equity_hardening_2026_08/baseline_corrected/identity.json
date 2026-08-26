@@ -1,0 +1,16 @@
+{
+ "commit_head": "036abbb1de9b6a732d96bade4b6f91288e634533",
+ "python": "3.14.7",
+ "strategy": "equity_residual_momentum_v2",
+ "dataset": {
+  "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+  "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+  "dividends_csv": "data/historical/equity_1200_dividends.csv",
+  "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0",
+  "adjustment": "splits (+ explicit dividend cash flows)"
+ },
+ "correctness_fixes_included": [
+  "phase2 alpha-rank position retention",
+  "phase3 nearest-rank ivol quantile"
+ ]
+}

@@ -1,0 +1,137 @@
+{
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "temporal_windows": {
+    "window_2017_2021": {
+      "E0": {
+        "return": 0.859185,
+        "sharpe": 0.963095,
+        "max_drawdown": 0.169462,
+        "cagr": 0.132201
+      },
+      "E1": {
+        "return": 0.659535,
+        "sharpe": 0.834994,
+        "max_drawdown": 0.171434,
+        "cagr": 0.10674
+      },
+      "E2": {
+        "return": 0.65695,
+        "sharpe": 0.815621,
+        "max_drawdown": 0.173932,
+        "cagr": 0.106394
+      },
+      "E3": {
+        "return": 0.782437,
+        "sharpe": 0.916939,
+        "max_drawdown": 0.177383,
+        "cagr": 0.122685
+      }
+    },
+    "window_2022_2026": {
+      "E0": {
+        "return": 0.395378,
+        "sharpe": 0.613094,
+        "max_drawdown": 0.146576,
+        "cagr": 0.075675
+      },
+      "E1": {
+        "return": 0.425412,
+        "sharpe": 0.705635,
+        "max_drawdown": 0.125534,
+        "cagr": 0.080703
+      },
+      "E2": {
+        "return": 0.40679,
+        "sharpe": 0.660709,
+        "max_drawdown": 0.128177,
+        "cagr": 0.077595
+      },
+      "E3": {
+        "return": 0.425099,
+        "sharpe": 0.6595,
+        "max_drawdown": 0.142539,
+        "cagr": 0.080651
+      }
+    },
+    "window_2023_2026": {
+      "E0": {
+        "return": 0.461457,
+        "sharpe": 0.860412,
+        "max_drawdown": 0.146576,
+        "cagr": 0.112233
+      },
+      "E1": {
+        "return": 0.482191,
+        "sharpe": 0.971472,
+        "max_drawdown": 0.125534,
+        "cagr": 0.116634
+      },
+      "E2": {
+        "return": 0.455989,
+        "sharpe": 0.904146,
+        "max_drawdown": 0.128177,
+        "cagr": 0.111065
+      },
+      "E3": {
+        "return": 0.455454,
+        "sharpe": 0.872156,
+        "max_drawdown": 0.142539,
+        "cagr": 0.11095
+      }
+    },
+    "exclude_2020": {
+      "E0": {
+        "return": 0.911625,
+        "sharpe": 0.47503,
+        "max_drawdown": 0.20496,
+        "cagr": 0.057129
+      },
+      "E1": {
+        "return": 0.790767,
+        "sharpe": 0.506949,
+        "max_drawdown": 0.199757,
+        "cagr": 0.057274
+      },
+      "E2": {
+        "return": 0.816767,
+        "sharpe": 0.47755,
+        "max_drawdown": 0.202256,
+        "cagr": 0.0549
+      },
+      "E3": {
+        "return": 0.901018,
+        "sharpe": 0.491642,
+        "max_drawdown": 0.194531,
+        "cagr": 0.058439
+      }
+    },
+    "exclude_2024": {
+      "E0": {
+        "return": 1.413112,
+        "sharpe": 0.609724,
+        "max_drawdown": 0.138124,
+        "cagr": 0.086486
+      },
+      "E1": {
+        "return": 1.133281,
+        "sharpe": 0.94266,
+        "max_drawdown": 0.125534,
+        "cagr": 0.128825
+      },
+      "E2": {
+        "return": 1.167534,
+        "sharpe": 0.86599,
+        "max_drawdown": 0.126894,
+        "cagr": 0.120409
+      },
+      "E3": {
+        "return": 1.381282,
+        "sharpe": 0.718334,
+        "max_drawdown": 0.13364,
+        "cagr": 0.101418
+      }
+    }
+  }
+}

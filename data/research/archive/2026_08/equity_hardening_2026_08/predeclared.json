@@ -1,0 +1,51 @@
+{
+  "mission": "equity_strategy_hardening_2026_08",
+  "declared_before_results": true,
+  "head": "036abbb1de9b6a732d96bade4b6f91288e634533",
+  "correctness_fixes_applied": [
+    "phase2: TargetWeight.rank alpha metadata; PortfolioRiskOverlay position-count enforcement retains best-ranked names (fallback: legacy weight order when unranked)",
+    "phase3: reject_quantile_threshold nearest-rank on [0, n-1] index space keeps floor(q*(n-1))+1 distinct-valued names; ties kept"
+  ],
+  "control": {
+    "name": "equity_residual_momentum_v2 (production params, corrected semantics)",
+    "parameters": {
+      "formation_bars": 252,
+      "skip_bars": 21,
+      "beta_window_bars": 273,
+      "residual_vol_window": 63,
+      "top_n": 8,
+      "max_single_weight": 0.10,
+      "ivol_reject_quantile": 0.70,
+      "exclude_symbols": ["SPY"],
+      "rebalance_frequency": "weekly"
+    },
+    "maximum_allocation": 0.6
+  },
+  "candidates": [
+    {"id": "A1", "hypothesis": "Standardized residual momentum (score / formation-window residual stdev, Blitz-Huij-Martens style) with existing ivol filter and inverse-vol sizing.", "changes": ["score = compounded(residuals over formation+skip window) / stdev(residuals over same window)"], "kept": ["ivol filter q=0.70", "inverse-vol sizing cap 0.10"]},
+    {"id": "A2", "hypothesis": "Standardized score without the ivol rejection: standardization already penalizes volatile residuals; the separate filter may double-count volatility.", "changes": ["same score as A1", "no ivol filter"], "kept": ["inverse-vol sizing cap 0.10"]},
+    {"id": "A3", "hypothesis": "Standardized score with ivol filter and EQUAL sizing isolates selection from sizing effects.", "changes": ["same score as A1", "equal weights 1/n capped at max_single_weight"], "kept": ["ivol filter q=0.70"]},
+    {"id": "B504", "hypothesis": "Longer beta window (504d) stabilizes factor-exposure estimation without touching formation/skip.", "changes": ["beta_window_bars=504"]},
+    {"id": "B756", "hypothesis": "Much longer beta window (756d).", "changes": ["beta_window_bars=756"]},
+    {"id": "C_TR", "hypothesis": "Total-return signal (dividend-reinvested series for scoring) vs split-adjusted price signal control; account accounting unchanged (dividends remain explicit cash flows, never double-counted).", "changes": ["signal_bars = dividend-reinvested series built offline from equity_1200_dividends.csv", "executable bars and corporate actions unchanged"]}
+  ],
+  "topn_rerun_after_phase2": ["TOPN6", "TOPN8 (= CONTROL)", "TOPN9"],
+  "production_policy_scenarios": [
+    {"id": "P0", "rule": "never reset after a drawdown halt (entries blocked forever after first breach)"},
+    {"id": "P1", "rule": "operator resets the risk epoch after 10 consecutive healthy sessions following the halt (healthy = no new breach day)"},
+    {"id": "P2", "rule": "reset at the next scheduled weekly rebalance once observed drawdown has recovered below the 5% halt threshold"},
+    {"id": "P3", "rule": "explicit fixed-delay operator reset 20 trading days after the halt"}
+  ],
+  "robustness_gates_for_every_candidate": [
+    "full canonical window", "anchored walk-forward folds", "cost stress 1x/2x/3x",
+    "symbol jackknife (drop each of top-3 contributors)", "top-contributor concentration",
+    "calendar-year regime decomposition", "turnover", "fees", "exposure", "maxDD",
+    "worst/median fold", "positive fold ratio", "fold wins vs control"
+  ],
+  "promotion_rule": "No promotion from full-window return alone; improvement must be distributed across folds/symbols/regimes and survive 3x costs. Production config stays frozen regardless; candidates are RESEARCH PASS items at most.",
+  "known_limitations_declared_upfront": [
+    "survivorship: dataset membership frozen to download-day survivors (1193/1194 trade through the final bar)",
+    "daily-loss latch between weekly decisions is not modeled intra-day in either curve",
+    "cash yield modeled by engine defaults of the canonical harness"
+  ]
+}

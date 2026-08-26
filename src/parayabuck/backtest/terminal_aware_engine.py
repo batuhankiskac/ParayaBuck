@@ -1,4 +1,6 @@
-"""Research-only path-dependent terminal lifecycle engine (E_FULL freeze).
+"""RESEARCH-ONLY: historical delisting model — not a production/runtime feature.
+
+Research-only path-dependent terminal lifecycle engine (E_FULL freeze).
 
 Implements TerminalAwareResearchEngine that extends PortfolioBacktestEngine
 without mutating production code. For every entity with terminal event,
@@ -12,6 +14,13 @@ Policies:
   T1 — last-close minus normal sell costs
   T2 — 50% recovery plus costs
   T3 — zero recovery
+
+Production/PAPER/LIVE does NOT import this module (verified: grep src/ = 0 hits
+outside this file's own import of terminal_policy). It is retained in-place
+under src/parayabuck/backtest/ for packaging simplicity and to preserve the
+frozen K/L historical validation without introducing a new top-level `research/`
+package. See docs/repository_cleanup_inventory_2026_08.md §4 and
+docs/v3_historical_validation_final.md for the canonical T1 definition.
 """
 
 from __future__ import annotations

@@ -1,0 +1,161 @@
+{
+  "head": "a69cbc36984e516da885c0aed3e2edaff0c68f61",
+  "canonical_dataset": {
+    "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+  },
+  "corporate_actions": {
+    "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "paper_parity": {
+    "head": "a69cbc36984e516da885c0aed3e2edaff0c68f61",
+    "equity": {
+      "strategy": "equity_residual_momentum_v2",
+      "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44",
+      "curve_points": 757,
+      "fills_hash": "60111bc0d642619fcb04fd0af3d521365f315a9c5836a72c638cfc4783d5cc80",
+      "fill_count": 489,
+      "weight_history_hash": "5e6daf037ecd9eb27a4d915667085c69ea12fae9b87303f6eabf35af0f212a81",
+      "universe_history_hash": "2b581bdedf303e013606736516bf09f3fbacaddec6ff3ee1e4b81e23fc2a77c0",
+      "economics": {
+        "net_return": 0.4068313311025833,
+        "max_drawdown": 0.19757919665253057,
+        "turnover": 35.898877906492245,
+        "fee_total": 37.876488071720765,
+        "rebalance_count": 157,
+        "average_holdings_count": 5.591269841269841
+      }
+    },
+    "crypto": {
+      "strategy": "crypto_low_variance_v2",
+      "equity_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff",
+      "curve_points": 2039,
+      "fills_hash": "781baec460a58b823b2070afc58d4c89af7151330b348f0d1213237d318624a1",
+      "fill_count": 805,
+      "weight_history_hash": "7c7447d05a5c741e42942f0ea57c54fa9ed2e558fb87cfff0129236710d4a3de",
+      "universe_history_hash": "13895176875674242ef0a4defcd1d1a80d40e64ae8ac0bdf591e8974f1a97825",
+      "economics": {
+        "net_return": 0.14642278702439993,
+        "max_drawdown": 0.06844946938630776,
+        "turnover": 8.773518294406792,
+        "fee_total": 2536.6424704991523,
+        "rebalance_count": 503,
+        "average_holdings_count": 2.5863591756624142
+      }
+    },
+    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c"
+  },
+  "symmetric_full_T1": {
+    "days": 3860,
+    "total_return": 1.1364219478164905,
+    "cagr": 0.07442243680989091,
+    "sharpe": 0.6393460732104441,
+    "sortino": 0.8267229793669596,
+    "calmar": 0.32736690263341484,
+    "maxDD": 0.22733647235325158,
+    "maxDD_duration_days": 1084,
+    "turnover": 146.74820538821072,
+    "fees": 6156.751808066365,
+    "dividend_cash": 10881.16780518212,
+    "avg_exposure": 0.4823573729165177,
+    "max_exposure": 0.5999999999999999,
+    "avg_holdings": 4.924031590823618,
+    "max_holdings": 6,
+    "ending_equity": 213642.19478164907,
+    "starting_equity": 100000.0,
+    "terminal_events": 6,
+    "terminal_proceeds_total": 76561.37938706583,
+    "effective_params": [
+      [
+        "beta_window_bars",
+        273
+      ],
+      [
+        "formation_bars",
+        252
+      ],
+      [
+        "ivol_reject_quantile",
+        0.7
+      ],
+      [
+        "max_single_weight",
+        0.1
+      ],
+      [
+        "residual_vol_window",
+        63
+      ],
+      [
+        "skip_bars",
+        21
+      ],
+      [
+        "top_n",
+        8
+      ]
+    ],
+    "universe_hash": "c6f8344b6512ba3e5607316f521c8eaeea179627f8c480990b051a1c9deec122",
+    "ca_count": 141908
+  },
+  "old_T0": {
+    "days": 3859,
+    "total_return": 1.7201464791377266,
+    "cagr": 0.09927288590994188,
+    "sharpe": 0.795622991563793,
+    "sortino": 1.0156955890618102,
+    "calmar": 0.4505866891041344,
+    "maxDD": 0.22031917122833397,
+    "maxDD_duration_days": 1070,
+    "turnover": 143.86793180836435,
+    "fees": 7595.746250035705,
+    "dividend_cash": 17239.84441478912,
+    "avg_exposure": 0.4962218721453806,
+    "max_exposure": 0.5999999999999999,
+    "avg_holdings": 5.031602708803612,
+    "max_holdings": 6,
+    "ending_equity": 272014.6479137727,
+    "starting_equity": 100000.0,
+    "terminal_events": 0,
+    "terminal_proceeds_total": 0,
+    "effective_params": [
+      [
+        "beta_window_bars",
+        273
+      ],
+      [
+        "formation_bars",
+        252
+      ],
+      [
+        "ivol_reject_quantile",
+        0.7
+      ],
+      [
+        "max_single_weight",
+        0.1
+      ],
+      [
+        "residual_vol_window",
+        63
+      ],
+      [
+        "skip_bars",
+        21
+      ],
+      [
+        "top_n",
+        8
+      ]
+    ],
+    "universe_hash": "4f253478d6f368a3d1aae8aab3d922865f72bdf408e91788e672ac1380c681b0",
+    "ca_count": 16772
+  },
+  "parity_canary_hash": "3e1ea843a3ec1736",
+  "tests": "745 passed",
+  "ruff": "all checks passed",
+  "mypy": "no issues 72 files",
+  "paper_strategy": "equity_residual_momentum_v3",
+  "live": false
+}

@@ -1,5 +1,13 @@
 # ParayaBuck
 
+> **Project status — 2026-08-26 (post-research cleanup)**
+>
+> - **Equity:** V3 frozen (`equity_residual_momentum_v3` MH_RAW: 12-1 gate → 6/9/12 rank consensus → ivol 0.70 → top8 → inv-vol 0.10, weekly) — historical validation complete, **symmetric PIT validated** (9010 symbols, 11.6M bars), **PAPER forward validation active**, **LIVE disabled**
+> - **Dataset:** `data/historical/equity_pit_symmetric_2016_2026_v5.csv` SHA `bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139` + CA `a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23` — manifests committed, large CSVs gitignored
+> - **Historical result (canonical):** `SYMMETRIC_FULL_T1` +113.6% total / 7.44% CAGR / Sharpe 0.639 / maxDD 22.7% (10.5y, $100k, T1 last-close minus costs, 6 terminal events, `docs/v3_historical_validation_final.md`); `OLD_T0` +172% is survivor-biased reference, `T2/T3` are severe-loss bounds
+> - **Research:** historical V3 cycle closed and archived (`docs/archive/research_2026_08/`, `data/research/archive/2026_08/`), single canonical runner `scripts/run_symmetric_v5_validation.py` (`scripts/research/run_v3_canonical_validation.py` shim)
+> - **Next:** operational PAPER reliability, execution observability, crypto research, infrastructure/deployment — no V4 or parameter sweep on the frozen lineage
+
 Automated multi-market Alpaca trading bot: dynamic universe discovery,
 validated portfolio strategies, strict risk overlay, and deterministic
 execution through the same pipeline in backtest, paper, and live modes.
@@ -7,26 +15,18 @@ execution through the same pipeline in backtest, paper, and live modes.
 Live trading is disabled by default. Supplying Alpaca credentials alone cannot
 enable it (see [Enabling live safely](#enabling-live-safely)).
 
-## Current PAPER strategies (v1.0.0 release)
+## Current PAPER strategies (2026-08-26)
 
-The PAPER product runs two validated, cadence-upgraded strategy identities
-(v2 = same validated alpha as the frozen v1 baseline, faster rebalance
-cadence; see `docs/validated_strategies.md` and
-`docs/capital_utilization_cadence_verdict.md` for the evidence):
+The PAPER product runs two validated identities (see `docs/validated_strategies.md`, `docs/v3_historical_validation_final.md`, `docs/capital_utilization_cadence_verdict.md`):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Residual Momentum v2 (`equity_residual_momentum_v2`) | 1d | weekly | 0.50 |
-| Crypto | Low Realized Variance v2 (`crypto_low_variance_v2`) | 1d | 96h | 0.10 |
+| Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.60 |
+| Crypto | Low Realized Variance v2 (`crypto_low_variance_v2`) | 1d | 96h | 0.05 |
 
-Historical baselines `equity_residual_momentum_v1` (monthly) and
-`crypto_low_variance_v1` (168h) remain constructible and backtestable for
-comparison — v2 evidence is defined relative to them.
+Historical baselines `equity_residual_momentum_v1` (monthly) and `equity_residual_momentum_v2` (weekly) and `crypto_low_variance_v1` (168h) remain constructible for comparison — v3 evidence is defined relative to them and to the frozen PIT dataset above.
 
-Known v2 caveats (disclosed, not blockers): the equity weekly edge is partly
-ASX-driven and a 2024-01..2025-06 sub-window favored monthly; the crypto 96h
-edge is thin, with a mixed walk-forward (7/10 positive folds) and slightly
-worse 3x-cost economics.
+Known caveats (disclosed, not blockers): the equity weekly edge is partly ASX-driven and a 2024-01..2025-06 sub-window favored monthly; the crypto 96h edge is thin, with a mixed walk-forward (7/10 positive folds) and slightly worse 3x-cost economics. Backtest economics do not imply forward live returns; PAPER forward validation is the next gate.
 
 ## Architecture
 
@@ -144,9 +144,14 @@ live.
 ## Documentation
 
 - `docs/product_foundation.md` — frozen product principles
-- `docs/validated_strategies.md` — validated specs: v1 baselines + v2 identities
+- `docs/validated_strategies.md` — validated specs: v1 baselines + v2/v3 identities
+- `docs/v3_historical_validation_final.md` — **canonical V3 historical validation (frozen, 2026-08-26)**
+- `docs/repository_cleanup_inventory_2026_08.md` — pre-cleanup file classification (A/B/C/D)
+- `docs/archive/research_2026_08/README.md` — archived superseded experiments index
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation
 - `docs/deployment.md` — systemd on Google Cloud, update + rollback
 - `docs/dashboard.md` / `docs/alerting.md` — operator surfaces
+- `benchmarks/parity_guard.json` — machine-readable freeze (head + SHAs + parity hashes)
+- `benchmarks/post_research_runtime_baseline.json` — measured runtime baseline + optimization report

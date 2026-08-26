@@ -1,0 +1,179 @@
+{
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "jackknife": {
+    "E0": {
+      "method": "candidate-specific own top-3",
+      "top_symbols": [
+        "AMAT",
+        "NVDA",
+        "ASX"
+      ],
+      "drops": {
+        "drop_AMAT": {
+          "return": 1.460902,
+          "sharpe": 0.766012,
+          "max_drawdown": 0.210701,
+          "dropped": "AMAT"
+        },
+        "drop_NVDA": {
+          "return": 1.671384,
+          "sharpe": 0.827838,
+          "max_drawdown": 0.201943,
+          "dropped": "NVDA"
+        },
+        "drop_ASX": {
+          "return": 1.488745,
+          "sharpe": 0.772945,
+          "max_drawdown": 0.220184,
+          "dropped": "ASX"
+        },
+        "drop_own_top3_combined": {
+          "return": 1.480865,
+          "sharpe": 0.784397,
+          "max_drawdown": 0.166134,
+          "dropped": [
+            "AMAT",
+            "NVDA",
+            "ASX"
+          ]
+        }
+      },
+      "base": {
+        "return": 1.6648,
+        "sharpe": 0.821377,
+        "max_drawdown": 0.220319
+      }
+    },
+    "E1": {
+      "method": "candidate-specific own top-3",
+      "top_symbols": [
+        "AVGO",
+        "NVDA",
+        "AMAT"
+      ],
+      "drops": {
+        "drop_AVGO": {
+          "return": 1.115548,
+          "sharpe": 0.684217,
+          "max_drawdown": 0.205689,
+          "dropped": "AVGO"
+        },
+        "drop_NVDA": {
+          "return": 1.191049,
+          "sharpe": 0.717509,
+          "max_drawdown": 0.196353,
+          "dropped": "NVDA"
+        },
+        "drop_AMAT": {
+          "return": 1.239485,
+          "sharpe": 0.73462,
+          "max_drawdown": 0.214984,
+          "dropped": "AMAT"
+        },
+        "drop_own_top3_combined": {
+          "return": 0.783099,
+          "sharpe": 0.5527,
+          "max_drawdown": 0.206028,
+          "dropped": [
+            "AVGO",
+            "NVDA",
+            "AMAT"
+          ]
+        }
+      },
+      "base": {
+        "return": 1.360465,
+        "sharpe": 0.774398,
+        "max_drawdown": 0.217394
+      }
+    },
+    "E2": {
+      "method": "candidate-specific own top-3",
+      "top_symbols": [
+        "NVDA",
+        "AMAT",
+        "ASX"
+      ],
+      "drops": {
+        "drop_NVDA": {
+          "return": 1.259851,
+          "sharpe": 0.727074,
+          "max_drawdown": 0.210391,
+          "dropped": "NVDA"
+        },
+        "drop_AMAT": {
+          "return": 1.284849,
+          "sharpe": 0.736478,
+          "max_drawdown": 0.210901,
+          "dropped": "AMAT"
+        },
+        "drop_ASX": {
+          "return": 1.085852,
+          "sharpe": 0.659868,
+          "max_drawdown": 0.219803,
+          "dropped": "ASX"
+        },
+        "drop_own_top3_combined": {
+          "return": 1.179605,
+          "sharpe": 0.708469,
+          "max_drawdown": 0.184671,
+          "dropped": [
+            "NVDA",
+            "AMAT",
+            "ASX"
+          ]
+        }
+      },
+      "base": {
+        "return": 1.336869,
+        "sharpe": 0.746858,
+        "max_drawdown": 0.219364
+      }
+    },
+    "E3": {
+      "method": "candidate-specific own top-3",
+      "top_symbols": [
+        "NVDA",
+        "AMAT",
+        "ASX"
+      ],
+      "drops": {
+        "drop_NVDA": {
+          "return": 1.486652,
+          "sharpe": 0.787941,
+          "max_drawdown": 0.209412,
+          "dropped": "NVDA"
+        },
+        "drop_AMAT": {
+          "return": 1.471126,
+          "sharpe": 0.780954,
+          "max_drawdown": 0.189573,
+          "dropped": "AMAT"
+        },
+        "drop_ASX": {
+          "return": 1.357052,
+          "sharpe": 0.745427,
+          "max_drawdown": 0.200397,
+          "dropped": "ASX"
+        },
+        "drop_own_top3_combined": {
+          "return": 1.280284,
+          "sharpe": 0.730073,
+          "max_drawdown": 0.161913,
+          "dropped": [
+            "NVDA",
+            "AMAT",
+            "ASX"
+          ]
+        }
+      },
+      "base": {
+        "return": 1.587946,
+        "sharpe": 0.811692,
+        "max_drawdown": 0.209949
+      }
+    }
+  }
+}

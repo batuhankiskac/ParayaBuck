@@ -1,4 +1,6 @@
-"""Research-local terminal position semantics T0-T3 (no production engine mutation).
+"""RESEARCH-ONLY: historical delisting policy — not a production/runtime feature.
+
+Research-local terminal position semantics T0-T3 (no production engine mutation).
 
 This module implements the predeclared sensitivity policies without modifying
 PortfolioBacktestEngine. It operates as a post-hoc adjustment layer that
@@ -14,7 +16,10 @@ Policies:
 Exclusions: VERIFIED_RENAME / successor continuation / DATA_GAP / TEMPORARY_HALT
 are not haircut. Timing: no look-ahead, event occurs after final bar.
 
-Evidence for testing is deterministic synthetic.
+Evidence for testing is deterministic synthetic. Production/PAPER/LIVE does NOT
+import this module (verified: grep src/ = 0 hits outside terminal_aware_engine).
+Retained in-place to preserve frozen K/L validation (§4 inventory). See
+docs/repository_cleanup_inventory_2026_08.md and docs/v3_historical_validation_final.md.
 """
 
 from __future__ import annotations

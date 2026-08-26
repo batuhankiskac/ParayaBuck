@@ -243,3 +243,7 @@ data/historical/equity_survivorship_aware_full_2016_2026_v3.csv
 data/historical/equity_survivorship_aware_*.csv
 data/historical/equity_survivorship_full_corporate_actions_*.csv
 data/historical/equity_pit_symmetric_*.csv
+# Archive large generated artifacts (too large for GitHub, keep locally)
+data/research/archive/**/universe.json
+data/research/archive/**/*.csv
+data/research/archive/**/universe_history.csv

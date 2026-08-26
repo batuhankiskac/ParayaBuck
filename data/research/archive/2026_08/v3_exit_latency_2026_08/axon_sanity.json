@@ -1,0 +1,347 @@
+{
+  "window": [
+    "2025-02-01T00:00:00+00:00",
+    "2025-03-15T00:00:00+00:00"
+  ],
+  "trace": [
+    {
+      "date": "2025-02-03",
+      "timestamp": "2025-02-03T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.631761,
+      "axon_price": 658.11,
+      "qualified_pool_size": 58
+    },
+    {
+      "date": "2025-02-04",
+      "timestamp": "2025-02-04T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.630641,
+      "axon_price": 662.91,
+      "qualified_pool_size": 58
+    },
+    {
+      "date": "2025-02-05",
+      "timestamp": "2025-02-05T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.631293,
+      "axon_price": 680.52,
+      "qualified_pool_size": 62
+    },
+    {
+      "date": "2025-02-06",
+      "timestamp": "2025-02-06T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.631861,
+      "axon_price": 677.4,
+      "qualified_pool_size": 60
+    },
+    {
+      "date": "2025-02-07",
+      "timestamp": "2025-02-07T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.632019,
+      "axon_price": 679.24,
+      "qualified_pool_size": 61
+    },
+    {
+      "date": "2025-02-10",
+      "timestamp": "2025-02-10T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.632761,
+      "axon_price": 677.85,
+      "qualified_pool_size": 58
+    },
+    {
+      "date": "2025-02-11",
+      "timestamp": "2025-02-11T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.633932,
+      "axon_price": 669.26,
+      "qualified_pool_size": 61
+    },
+    {
+      "date": "2025-02-12",
+      "timestamp": "2025-02-12T05:00:00+00:00",
+      "axon_rank": 1,
+      "axon_qualified": true,
+      "axon_ivol": 0.295033,
+      "axon_price": 665.08,
+      "qualified_pool_size": 61
+    },
+    {
+      "date": "2025-02-13",
+      "timestamp": "2025-02-13T05:00:00+00:00",
+      "axon_rank": 1,
+      "axon_qualified": true,
+      "axon_ivol": 0.293734,
+      "axon_price": 664.7,
+      "qualified_pool_size": 70
+    },
+    {
+      "date": "2025-02-14",
+      "timestamp": "2025-02-14T05:00:00+00:00",
+      "axon_rank": 1,
+      "axon_qualified": true,
+      "axon_ivol": 0.291418,
+      "axon_price": 683.41,
+      "qualified_pool_size": 68
+    },
+    {
+      "date": "2025-02-18",
+      "timestamp": "2025-02-18T05:00:00+00:00",
+      "axon_rank": 1,
+      "axon_qualified": true,
+      "axon_ivol": 0.298798,
+      "axon_price": 710.01,
+      "qualified_pool_size": 73
+    },
+    {
+      "date": "2025-02-19",
+      "timestamp": "2025-02-19T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.450655,
+      "axon_price": 593.42,
+      "qualified_pool_size": 71
+    },
+    {
+      "date": "2025-02-20",
+      "timestamp": "2025-02-20T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.479434,
+      "axon_price": 541.81,
+      "qualified_pool_size": 71
+    },
+    {
+      "date": "2025-02-21",
+      "timestamp": "2025-02-21T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.483497,
+      "axon_price": 513.22,
+      "qualified_pool_size": 70
+    },
+    {
+      "date": "2025-02-24",
+      "timestamp": "2025-02-24T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.483884,
+      "axon_price": 499.73,
+      "qualified_pool_size": 65
+    },
+    {
+      "date": "2025-02-25",
+      "timestamp": "2025-02-25T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.483856,
+      "axon_price": 496.65,
+      "qualified_pool_size": 71
+    },
+    {
+      "date": "2025-02-26",
+      "timestamp": "2025-02-26T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.571314,
+      "axon_price": 572.4,
+      "qualified_pool_size": 71
+    },
+    {
+      "date": "2025-02-27",
+      "timestamp": "2025-02-27T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.584218,
+      "axon_price": 525.44,
+      "qualified_pool_size": 72
+    },
+    {
+      "date": "2025-02-28",
+      "timestamp": "2025-02-28T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.581568,
+      "axon_price": 528.45,
+      "qualified_pool_size": 68
+    },
+    {
+      "date": "2025-03-03",
+      "timestamp": "2025-03-03T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.581699,
+      "axon_price": 525.75,
+      "qualified_pool_size": 73
+    },
+    {
+      "date": "2025-03-04",
+      "timestamp": "2025-03-04T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.582872,
+      "axon_price": 528.28,
+      "qualified_pool_size": 69
+    },
+    {
+      "date": "2025-03-05",
+      "timestamp": "2025-03-05T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.582296,
+      "axon_price": 534.96,
+      "qualified_pool_size": 69
+    },
+    {
+      "date": "2025-03-06",
+      "timestamp": "2025-03-06T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.587622,
+      "axon_price": 499.31,
+      "qualified_pool_size": 73
+    },
+    {
+      "date": "2025-03-07",
+      "timestamp": "2025-03-07T05:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.585875,
+      "axon_price": 526.4,
+      "qualified_pool_size": 74
+    },
+    {
+      "date": "2025-03-10",
+      "timestamp": "2025-03-10T04:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.585066,
+      "axon_price": 515.45,
+      "qualified_pool_size": 76
+    },
+    {
+      "date": "2025-03-11",
+      "timestamp": "2025-03-11T04:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.588912,
+      "axon_price": 526.64,
+      "qualified_pool_size": 73
+    },
+    {
+      "date": "2025-03-12",
+      "timestamp": "2025-03-12T04:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.59897,
+      "axon_price": 557.89,
+      "qualified_pool_size": 75
+    },
+    {
+      "date": "2025-03-13",
+      "timestamp": "2025-03-13T04:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.589114,
+      "axon_price": 534.56,
+      "qualified_pool_size": 75
+    },
+    {
+      "date": "2025-03-14",
+      "timestamp": "2025-03-14T04:00:00+00:00",
+      "axon_rank": null,
+      "axon_qualified": false,
+      "axon_ivol": 0.589768,
+      "axon_price": 556.26,
+      "qualified_pool_size": 72
+    }
+  ],
+  "note": "Daily V3 rank trace for AXON 2025-02 episode. If AXON remains top-ranked after crash, say so plainly.",
+  "implementation_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "research_commit": "f6ae1bb2421635951badf4f5e412b3d919f72188",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "axon_episodes_control": [
+    {
+      "symbol": "AXON",
+      "entry_time": "2025-02-19T05:00:00+00:00",
+      "entry_decision_timestamp": "2025-02-18T05:00:00+00:00",
+      "exit_time": "2025-02-25T05:00:00+00:00",
+      "entry_price_avg": 700.21,
+      "entry_qty": 33.111481,
+      "account_equity_at_entry": 231054.38,
+      "position_notional_at_entry": 23184.99,
+      "initial_position_weight": 0.100344,
+      "realized_pnl": -6670.93,
+      "realized_pnl_over_equity_at_entry": -0.028872,
+      "mae_notional": 7285.63,
+      "mae_over_equity_at_entry": 0.031532,
+      "mae_return_pct": -0.314239,
+      "worst_low": 480.1767,
+      "first_crossing": {
+        "-5%": "2025-02-19T05:00:00+00:00",
+        "-7.5%": "2025-02-19T05:00:00+00:00",
+        "-10%": "2025-02-19T05:00:00+00:00",
+        "-15%": "2025-02-19T05:00:00+00:00"
+      },
+      "days_held": 6
+    },
+    {
+      "symbol": "AXON",
+      "entry_time": "2025-06-17T04:00:00+00:00",
+      "entry_decision_timestamp": "2025-06-16T04:00:00+00:00",
+      "exit_time": "2025-07-15T04:00:00+00:00",
+      "entry_price_avg": 776.6229,
+      "entry_qty": 27.203065,
+      "account_equity_at_entry": 222449.24,
+      "position_notional_at_entry": 21126.52,
+      "initial_position_weight": 0.094972,
+      "realized_pnl": -655.84,
+      "realized_pnl_over_equity_at_entry": -0.002948,
+      "mae_notional": 1458.68,
+      "mae_over_equity_at_entry": 0.006557,
+      "mae_return_pct": -0.069045,
+      "worst_low": 723.001,
+      "first_crossing": {
+        "-5%": "2025-07-10T04:00:00+00:00",
+        "-7.5%": null,
+        "-10%": null,
+        "-15%": null
+      },
+      "days_held": 28
+    },
+    {
+      "symbol": "AXON",
+      "entry_time": "2024-04-02T04:00:00+00:00",
+      "entry_decision_timestamp": "2024-04-01T04:00:00+00:00",
+      "exit_time": "2024-04-09T04:00:00+00:00",
+      "entry_price_avg": 309.4428,
+      "entry_qty": 76.716063,
+      "account_equity_at_entry": 237052.52,
+      "position_notional_at_entry": 23739.23,
+      "initial_position_weight": 0.100143,
+      "realized_pnl": 80.66,
+      "realized_pnl_over_equity_at_entry": 0.00034,
+      "mae_notional": 356.18,
+      "mae_over_equity_at_entry": 0.001503,
+      "mae_return_pct": -0.015004,
+      "worst_low": 304.8,
+      "first_crossing": {
+        "-5%": null,
+        "-7.5%": null,
+        "-10%": null,
+        "-15%": null
+      },
+      "days_held": 7
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "title": "Regime & Execution Research 2026-08 — A1/T1/X1/X2/X3 (Lightweight, Full Run Deferred)",
+  "generated_at": "2026-08-22T00:00:00Z",
+  "git_head": "036abbb + Mission01 hysteresis + RegimeExecution prototypes (uncommitted)",
+  "status": "DESIGN_COMPLETE_LIGHTWEIGHT_EVIDENCE_HEAVY_DEFERRED",
+  "no_live": true,
+  "no_config_prod_change": true,
+  "missions": {
+    "A1_sector_neutral": {
+      "code": "src/parayabuck/portfolio/equity_sector_neutral_momentum.py",
+      "class": "EquitySectorNeutralMomentum1dV1",
+      "idea": "score_neutral = (r - beta_m*mkt).compounded - sector_mean",
+      "lightweight_test": "data/research/regime_execution_2026_08/lightweight_tests.py::test_sector_neutral_demeaning PASS",
+      "full_backtest": "deferred (identical PIT harness, 2017-2026, 16-fold WF, cost stress)",
+      "verdict": "HOLD"
+    },
+    "T1_rank_buffer": {
+      "code": "src/parayabuck/portfolio/equity_rank_buffer.py",
+      "class": "EquityResidualMomentumWithRankBuffer rank_buffer=2 primary",
+      "idea": "incumbents rank [top_n, top_n+B) retained over best non-held threshold",
+      "lightweight_test": "test_rank_buffer PASS",
+      "full_backtest": "deferred (B=0/1/2/3 sweep, turnover delta)",
+      "verdict": "HOLD"
+    },
+    "X1_maker_pilot": {
+      "spec": "docs/crypto_maker_pilot_2026_08.md",
+      "frozen": "data/research/regime_execution_2026_08/paper_ab_spec.json",
+      "type": "PAPER A/B only (no daily-bar backtest)",
+      "lightweight_test": "not applicable — executor unit tests in follow-up",
+      "full_backtest": "not applicable by design",
+      "verdict": "SPEC COMPLETE"
+    },
+    "X2_emergency_stop": {
+      "code": "src/parayabuck/backtest/portfolio_engine.py crypto_emergency_stop_bps (proposed, compile-checked, merge pending)",
+      "idea": "intrabar low <= avg*(1-bps/10000) -> emergency market exit with slippage+taker fee",
+      "lightweight_test": "test_crypto_emergency_stop PASS (3/3 sub-tests)",
+      "full_backtest": "deferred (None vs 500/1000/1500 bps sweep, 2021-2026)",
+      "verdict": "CODE COMPLETE (pending merge)"
+    },
+    "X3_sleeve_frontier": {
+      "frontier": "data/research/regime_execution_2026_08/frontier_synthetic.json",
+      "idea": "equity-only vs equity+crypto0.05 vs equity+foundation B1 vs equity+cash",
+      "lightweight_test": "synthetic frontier from prior tables (Mission01 + foundation B1)",
+      "full_backtest": "deferred (dual-engine synchronized)",
+      "verdict": "NOT PARETO for crypto 0.05 vs foundation/cash (synthetic)"
+    }
+  },
+  "determinism": "no lookahead, T+1, PIT universes, band+notional preserved, SELL-before-BUY, idempotency, restart-safe",
+  "coordination": "RegimeExecution owns sector_neutral+rank_buffer+maker_spec+frontier; portfolio_engine.py extension proposed via hub awaiting sole-owner merge; no concurrent edits to data/alpaca_fetcher, topn9, cash_sleeve, covariance",
+  "next_steps": [
+    "merge X2 diff via sole owner, wire _check_crypto_emergency_stops into run() post-fill",
+    "schedule heavy 2016-2026 PIT batches for A1/T1/X2/X3 overnight",
+    "stand up PAPER env for X1 7-14 days then verdict doc"
+  ]
+}

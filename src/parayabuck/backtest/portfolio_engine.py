@@ -1013,11 +1013,52 @@ class PortfolioBacktestEngine:
         history: dict[str, tuple[Bar, ...]] = {}
         prices: dict[str, float] = {}
         for (symbol, _timeframe), bars in self._history.items():
-            eligible = [bar for bar in bars if bar.timestamp <= timestamp]
+            if not bars:
+                continue
+            # FAST PATH: _history lists are maintained timestamp-ascending and,
+            # during a backtest, all ingested bars are <= decision timestamp
+            # (we ingest in global timestamp order and decide immediately after
+            # the batch). The original list-comprehension `eligible = [b for b
+            # in bars if b.timestamp <= timestamp]` therefore almost always
+            # copies the whole list only to trim it. Avoid the O(B) scan by
+            # checking the tail and slicing directly. Fallback to a reversed
+            # scan handles the rare out-of-order or future-bar case without
+            # changing observable behavior.
+            eligible: list[Bar] | None = None
+            # Common case: bars are sorted and tail <= timestamp -> all eligible
+            if bars[-1].timestamp <= timestamp:
+                # All bars are eligible; apply trim without scanning.
+                if symbol != benchmark_key and len(bars) > trim:
+                    eligible = bars[-trim:]
+                else:
+                    eligible = bars
+            else:
+                # Rare fallback: bars not sorted or contain future timestamps.
+                # Collect eligible bars by scanning. For non-benchmark we only
+                # need the last `trim` eligible bars, so scan backwards and
+                # stop early; for benchmark we need all eligible.
+                if symbol != benchmark_key:
+                    collected: list[Bar] = []
+                    for bar in reversed(bars):
+                        if bar.timestamp <= timestamp:
+                            collected.append(bar)
+                            if len(collected) >= trim:
+                                break
+                    if not collected:
+                        continue
+                    collected.reverse()
+                    eligible = collected
+                else:
+                    # Benchmark: linear forward scan with early break (sorted)
+                    # Fall back to full comprehension if not sorted.
+                    # Check sortedness cheaply by tail check failure already;
+                    # just do comprehension as safe fallback.
+                    filtered = [bar for bar in bars if bar.timestamp <= timestamp]
+                    if not filtered:
+                        continue
+                    eligible = filtered
             if not eligible:
                 continue
-            if symbol != benchmark_key and len(eligible) > trim:
-                eligible = eligible[-trim:]
             history[symbol] = tuple(eligible)
             # Target sizing uses executable/raw prices; signal history may be
             # total-return adjusted and is intentionally not a cash price.

@@ -1,0 +1,343 @@
+{
+  "implementation_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "research_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "schema_version": "1.0.0",
+  "candidates": {
+    "R0": {
+      "candidate": "R0",
+      "label": "ALPHA_REFERENCE",
+      "spec": {
+        "label": "ALPHA_REFERENCE",
+        "threshold": null,
+        "reset": null
+      },
+      "performance": {
+        "return": 1.6648,
+        "cagr": 0.107847,
+        "sharpe": 0.821377,
+        "sortino": 1.100939,
+        "calmar": 0.489502,
+        "max_drawdown": 0.220319,
+        "max_drawdown_duration_days": 1070,
+        "volatility": 0.135981,
+        "worst_year": -0.060104,
+        "worst_month": -0.079732,
+        "positive_month_ratio": 0.6174
+      },
+      "trading": {
+        "turnover": 137.980041,
+        "fees_total": 7593.97,
+        "avg_holdings": 5.558,
+        "avg_exposure": 0.5482
+      },
+      "halts": [],
+      "resets": [],
+      "halt_count": 0,
+      "reset_count": 0,
+      "open_halt_episode": false,
+      "open_halt_episode_cycles": 0,
+      "maxDD_vs_R0_delta": 0.0,
+      "return_cost_of_protection": 0.0
+    },
+    "R1": {
+      "candidate": "R1",
+      "label": "NEVER_RESET_5PCT",
+      "spec": {
+        "label": "NEVER_RESET_5PCT",
+        "threshold": 0.05,
+        "reset": "never"
+      },
+      "performance": {
+        "return": 0.164978,
+        "cagr": 0.016085,
+        "sharpe": 0.398631,
+        "sortino": 0.247646,
+        "calmar": 0.16212,
+        "max_drawdown": 0.099214,
+        "max_drawdown_duration_days": 2858,
+        "volatility": 0.042274,
+        "worst_year": 0.0,
+        "worst_month": -0.068474,
+        "positive_month_ratio": 0.1652
+      },
+      "trading": {
+        "turnover": 25.074238,
+        "fees_total": 903.31,
+        "avg_holdings": 1.151,
+        "avg_exposure": 0.1133
+      },
+      "halts": [
+        {
+          "at": "2018-04-02T04:00:00+00:00"
+        }
+      ],
+      "resets": [],
+      "halt_count": 1,
+      "reset_count": 0,
+      "open_halt_episode": true,
+      "open_halt_episode_cycles": 2093,
+      "maxDD_vs_R0_delta": -0.121105,
+      "return_cost_of_protection": -1.499822
+    },
+    "R2": {
+      "candidate": "R2",
+      "label": "RESET_5PCT_10_SESSIONS",
+      "spec": {
+        "label": "RESET_5PCT_10_SESSIONS",
+        "threshold": 0.05,
+        "reset": "10_sessions"
+      },
+      "performance": {
+        "return": 0.676845,
+        "cagr": 0.0555,
+        "sharpe": 0.527997,
+        "sortino": 0.655869,
+        "calmar": 0.240116,
+        "max_drawdown": 0.231139,
+        "max_drawdown_duration_days": 1076,
+        "volatility": 0.114819,
+        "worst_year": -0.079935,
+        "worst_month": -0.080271,
+        "positive_month_ratio": 0.5739
+      },
+      "trading": {
+        "turnover": 109.677425,
+        "fees_total": 4524.98,
+        "avg_holdings": 4.496,
+        "avg_exposure": 0.4424
+      },
+      "halts": [
+        {
+          "at": "2018-04-02T04:00:00+00:00"
+        },
+        {
+          "at": "2020-02-27T05:00:00+00:00"
+        },
+        {
+          "at": "2020-09-08T04:00:00+00:00"
+        },
+        {
+          "at": "2021-05-20T04:00:00+00:00"
+        },
+        {
+          "at": "2021-12-01T05:00:00+00:00"
+        },
+        {
+          "at": "2022-06-13T04:00:00+00:00"
+        },
+        {
+          "at": "2023-03-13T04:00:00+00:00"
+        },
+        {
+          "at": "2026-01-30T05:00:00+00:00"
+        },
+        {
+          "at": "2026-07-29T04:00:00+00:00"
+        }
+      ],
+      "resets": [
+        {
+          "at": "2019-06-12T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 116497.79,
+          "latched_cycles": 302,
+          "halt_started_at": "2018-04-02T04:00:00+00:00"
+        },
+        {
+          "at": "2020-08-11T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 118898.73,
+          "latched_cycles": 116,
+          "halt_started_at": "2020-02-27T05:00:00+00:00"
+        },
+        {
+          "at": "2021-04-13T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 140654.43,
+          "latched_cycles": 150,
+          "halt_started_at": "2020-09-08T04:00:00+00:00"
+        },
+        {
+          "at": "2021-10-04T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 133014.68,
+          "latched_cycles": 95,
+          "halt_started_at": "2021-05-20T04:00:00+00:00"
+        },
+        {
+          "at": "2022-05-10T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 126639.62,
+          "latched_cycles": 111,
+          "halt_started_at": "2021-12-01T05:00:00+00:00"
+        },
+        {
+          "at": "2022-09-14T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 119821.44,
+          "latched_cycles": 65,
+          "halt_started_at": "2022-06-13T04:00:00+00:00"
+        },
+        {
+          "at": "2025-05-07T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 149726.39,
+          "latched_cycles": 541,
+          "halt_started_at": "2023-03-13T04:00:00+00:00"
+        },
+        {
+          "at": "2026-04-14T04:00:00+00:00",
+          "reason": "R2_10_healthy",
+          "baseline_equity": 161200.91,
+          "latched_cycles": 51,
+          "halt_started_at": "2026-01-30T05:00:00+00:00"
+        }
+      ],
+      "halt_count": 9,
+      "reset_count": 8,
+      "open_halt_episode": true,
+      "open_halt_episode_cycles": 1,
+      "maxDD_vs_R0_delta": 0.01082,
+      "return_cost_of_protection": -0.987955
+    },
+    "R3": {
+      "candidate": "R3",
+      "label": "RESET_7_5PCT_10_SESSIONS",
+      "spec": {
+        "label": "RESET_7_5PCT_10_SESSIONS",
+        "threshold": 0.075,
+        "reset": "10_sessions"
+      },
+      "performance": {
+        "return": 1.038905,
+        "cagr": 0.077284,
+        "sharpe": 0.672294,
+        "sortino": 0.85914,
+        "calmar": 0.385711,
+        "max_drawdown": 0.200368,
+        "max_drawdown_duration_days": 1039,
+        "volatility": 0.1218,
+        "worst_year": -0.054156,
+        "worst_month": -0.080271,
+        "positive_month_ratio": 0.6174
+      },
+      "trading": {
+        "turnover": 123.02837,
+        "fees_total": 5703.11,
+        "avg_holdings": 5.009,
+        "avg_exposure": 0.4932
+      },
+      "halts": [
+        {
+          "at": "2018-10-29T04:00:00+00:00"
+        },
+        {
+          "at": "2021-12-01T05:00:00+00:00"
+        },
+        {
+          "at": "2022-06-17T04:00:00+00:00"
+        },
+        {
+          "at": "2026-02-05T05:00:00+00:00"
+        }
+      ],
+      "resets": [
+        {
+          "at": "2021-08-13T04:00:00+00:00",
+          "reason": "R3_10_healthy",
+          "baseline_equity": 155381.21,
+          "latched_cycles": 703,
+          "halt_started_at": "2018-10-29T04:00:00+00:00"
+        },
+        {
+          "at": "2022-05-10T04:00:00+00:00",
+          "reason": "R3_10_healthy",
+          "baseline_equity": 146582.59,
+          "latched_cycles": 111,
+          "halt_started_at": "2021-12-01T05:00:00+00:00"
+        },
+        {
+          "at": "2025-05-07T04:00:00+00:00",
+          "reason": "R3_10_healthy",
+          "baseline_equity": 175138.58,
+          "latched_cycles": 724,
+          "halt_started_at": "2022-06-17T04:00:00+00:00"
+        }
+      ],
+      "halt_count": 4,
+      "reset_count": 3,
+      "open_halt_episode": true,
+      "open_halt_episode_cycles": 120,
+      "maxDD_vs_R0_delta": -0.019951,
+      "return_cost_of_protection": -0.625895
+    },
+    "R4": {
+      "candidate": "R4",
+      "label": "RESET_10PCT_10_SESSIONS",
+      "spec": {
+        "label": "RESET_10PCT_10_SESSIONS",
+        "threshold": 0.1,
+        "reset": "10_sessions"
+      },
+      "performance": {
+        "return": 1.339767,
+        "cagr": 0.09289,
+        "sharpe": 0.754355,
+        "sortino": 0.982228,
+        "calmar": 0.379321,
+        "max_drawdown": 0.244886,
+        "max_drawdown_duration_days": 1085,
+        "volatility": 0.128781,
+        "worst_year": -0.074077,
+        "worst_month": -0.080271,
+        "positive_month_ratio": 0.6
+      },
+      "trading": {
+        "turnover": 128.119943,
+        "fees_total": 6399.89,
+        "avg_holdings": 5.264,
+        "avg_exposure": 0.5186
+      },
+      "halts": [
+        {
+          "at": "2018-12-24T05:00:00+00:00"
+        },
+        {
+          "at": "2022-05-09T04:00:00+00:00"
+        },
+        {
+          "at": "2025-03-04T05:00:00+00:00"
+        }
+      ],
+      "resets": [
+        {
+          "at": "2021-10-04T04:00:00+00:00",
+          "reason": "R4_10_healthy",
+          "baseline_equity": 171457.42,
+          "latched_cycles": 700,
+          "halt_started_at": "2018-12-24T05:00:00+00:00"
+        },
+        {
+          "at": "2022-09-14T04:00:00+00:00",
+          "reason": "R4_10_healthy",
+          "baseline_equity": 151446.02,
+          "latched_cycles": 89,
+          "halt_started_at": "2022-05-09T04:00:00+00:00"
+        }
+      ],
+      "halt_count": 3,
+      "reset_count": 2,
+      "open_halt_episode": true,
+      "open_halt_episode_cycles": 353,
+      "maxDD_vs_R0_delta": 0.024567,
+      "return_cost_of_protection": -0.325033
+    }
+  }
+}

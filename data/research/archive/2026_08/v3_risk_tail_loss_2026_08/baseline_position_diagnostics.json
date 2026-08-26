@@ -1,0 +1,1885 @@
+{
+  "implementation_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "research_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "schema_version": "1.0.0",
+  "diagnostics": {
+    "episode_count": 1106,
+    "loss_count": 404,
+    "total_losses": 322044.38,
+    "worst_episodes": [
+      {
+        "symbol": "AXON",
+        "entry_timestamp": "2025-02-19T05:00:00+00:00",
+        "exit_timestamp": "2025-02-25T05:00:00+00:00",
+        "entry_price": 700.2099999999999,
+        "exit_price": 498.75532849999996,
+        "qty": 33.11148074421468,
+        "realized_return": -0.2877060760343325,
+        "realized_pnl": -6670.928235475241,
+        "mae": -0.31423901401008264,
+        "mfe": 0.006983619199954443,
+        "worst_low": 480.1767,
+        "best_high": 705.1,
+        "holding_days": 6,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-02-24T05:00:00+00:00|AXON|sell|421"
+      },
+      {
+        "symbol": "AVPT",
+        "entry_timestamp": "2025-02-19T05:00:00+00:00",
+        "exit_timestamp": "2025-03-04T05:00:00+00:00",
+        "entry_price": 19.495846999999998,
+        "exit_price": 14.845545,
+        "qty": 1198.8517309127928,
+        "realized_return": -0.2385278259518552,
+        "realized_pnl": -5575.758344648618,
+        "mae": -0.3142129192950683,
+        "mfe": 0.003803528002656288,
+        "worst_low": 13.37,
+        "best_high": 19.57,
+        "holding_days": 13,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-03-03T05:00:00+00:00|AVPT|sell|422"
+      },
+      {
+        "symbol": "AHCO",
+        "entry_timestamp": "2021-04-13T04:00:00+00:00",
+        "exit_timestamp": "2021-04-20T04:00:00+00:00",
+        "entry_price": 37.161145,
+        "exit_price": 27.931618000000004,
+        "qty": 550.9698365932086,
+        "realized_return": -0.24836497906617233,
+        "realized_pnl": -5085.335034776084,
+        "mae": -0.2634780225420933,
+        "mfe": 0.0037365640913378617,
+        "worst_low": 27.37,
+        "best_high": 37.3,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-04-19T04:00:00+00:00|AHCO|sell|220"
+      },
+      {
+        "symbol": "ALKS",
+        "entry_timestamp": "2021-10-26T04:00:00+00:00",
+        "exit_timestamp": "2021-11-16T05:00:00+00:00",
+        "entry_price": 31.929576,
+        "exit_price": 23.323000999999998,
+        "qty": 559.7429701832816,
+        "realized_return": -0.26954867800311544,
+        "realized_pnl": -4817.603042936482,
+        "mae": -0.2846757501571584,
+        "mfe": 0.008782578259103722,
+        "worst_low": 22.84,
+        "best_high": 32.21,
+        "holding_days": 21,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-11-15T05:00:00+00:00|ALKS|sell|250"
+      },
+      {
+        "symbol": "ARES",
+        "entry_timestamp": "2020-03-03T05:00:00+00:00",
+        "exit_timestamp": "2020-03-24T04:00:00+00:00",
+        "entry_price": 36.530956,
+        "exit_price": 24.562629,
+        "qty": 385.42568226623047,
+        "realized_return": -0.327621510918028,
+        "realized_pnl": -4613.155687420235,
+        "mae": -0.44704157208478207,
+        "mfe": 0.016398256864671137,
+        "worst_low": 20.2001,
+        "best_high": 37.13,
+        "holding_days": 20,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2020-03-23T04:00:00+00:00|ARES|sell|164"
+      },
+      {
+        "symbol": "ATI",
+        "entry_timestamp": "2025-07-29T04:00:00+00:00",
+        "exit_timestamp": "2025-08-05T04:00:00+00:00",
+        "entry_price": 95.92877,
+        "exit_price": 76.55702600000001,
+        "qty": 207.71775527044852,
+        "realized_return": -0.20193883440807167,
+        "realized_pnl": -4023.894230291769,
+        "mae": -0.2309919120197205,
+        "mfe": 0.002201946298279447,
+        "worst_low": 73.77,
+        "best_high": 96.14,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-08-04T04:00:00+00:00|ATI|sell|444"
+      },
+      {
+        "symbol": "ATEC",
+        "entry_timestamp": "2026-01-06T05:00:00+00:00",
+        "exit_timestamp": "2026-01-13T05:00:00+00:00",
+        "entry_price": 21.076321,
+        "exit_price": 17.594720000000002,
+        "qty": 1083.978194201039,
+        "realized_return": -0.165190167676797,
+        "realized_pnl": -3774.1909406563987,
+        "mae": -0.23373723526036644,
+        "mfe": 0.1050315659929453,
+        "worst_low": 16.15,
+        "best_high": 23.29,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-01-12T05:00:00+00:00|ATEC|sell|467"
+      },
+      {
+        "symbol": "ASML",
+        "entry_timestamp": "2026-02-24T05:00:00+00:00",
+        "exit_timestamp": "2026-03-31T04:00:00+00:00",
+        "entry_price": 1500.470006,
+        "exit_price": 1283.9397025,
+        "qty": 16.765272842779037,
+        "realized_return": -0.14430831848297535,
+        "realized_pnl": -3630.1928861354563,
+        "mae": -0.16818730463846412,
+        "mfe": 0.031156900046691114,
+        "worst_low": 1248.11,
+        "best_high": 1547.22,
+        "holding_days": 34,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-03-30T04:00:00+00:00|ASML|sell|478"
+      },
+      {
+        "symbol": "AIS",
+        "entry_timestamp": "2026-06-23T04:00:00+00:00",
+        "exit_timestamp": "2026-07-21T04:00:00+00:00",
+        "entry_price": 80.914267,
+        "exit_price": 69.599114,
+        "qty": 315.8622132572149,
+        "realized_return": -0.13984125939125167,
+        "realized_pnl": -3574.544675484127,
+        "mae": -0.22122510236668144,
+        "mfe": 0.06223541517097359,
+        "worst_low": 63.014,
+        "best_high": 85.95,
+        "holding_days": 28,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-07-20T04:00:00+00:00|AIS|sell|494"
+      },
+      {
+        "symbol": "ARKW",
+        "entry_timestamp": "2025-10-21T04:00:00+00:00",
+        "exit_timestamp": "2025-11-18T05:00:00+00:00",
+        "entry_price": 173.55205,
+        "exit_price": 148.185531,
+        "qty": 139.37854370822154,
+        "realized_return": -0.14616087219943533,
+        "realized_pnl": -3535.5746803331513,
+        "mae": -0.15466282305510076,
+        "mfe": 0.0465448261775069,
+        "worst_low": 146.71,
+        "best_high": 181.63,
+        "holding_days": 28,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-11-17T05:00:00+00:00|ARKW|sell|459"
+      },
+      {
+        "symbol": "NVDA",
+        "entry_timestamp": "2022-04-05T04:00:00+00:00",
+        "exit_timestamp": "2022-04-19T04:00:00+00:00",
+        "entry_price": 27.258174999999998,
+        "exit_price": 21.713484,
+        "qty": 610.3825513161622,
+        "realized_return": -0.20341387492009266,
+        "realized_pnl": -3384.5295815834174,
+        "mae": -0.22665402214198127,
+        "mfe": 0.002268126901379218,
+        "worst_low": 21.08,
+        "best_high": 27.32,
+        "holding_days": 14,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2022-04-18T04:00:00+00:00|NVDA|sell|272"
+      },
+      {
+        "symbol": "AGX",
+        "entry_timestamp": "2026-07-07T04:00:00+00:00",
+        "exit_timestamp": "2026-07-14T04:00:00+00:00",
+        "entry_price": 704.921413,
+        "exit_price": 618.084519,
+        "qty": 38.603790136118235,
+        "realized_return": -0.1231866310181161,
+        "realized_pnl": -3352.732399942985,
+        "mae": -0.16531121179035604,
+        "mfe": 0.001317291520551374,
+        "worst_low": 588.39,
+        "best_high": 705.85,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-07-13T04:00:00+00:00|AGX|sell|493"
+      },
+      {
+        "symbol": "ACGL",
+        "entry_timestamp": "2024-10-01T04:00:00+00:00",
+        "exit_timestamp": "2024-11-19T05:00:00+00:00",
+        "entry_price": 111.823537,
+        "exit_price": 96.06117300000001,
+        "qty": 211.31660430621895,
+        "realized_return": -0.14095748017700416,
+        "realized_pnl": -3331.4587791924864,
+        "mae": -0.15089342952906235,
+        "mfe": 0.04155174415561544,
+        "worst_low": 94.9501,
+        "best_high": 116.47,
+        "holding_days": 49,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2024-11-18T05:00:00+00:00|ACGL|sell|407"
+      },
+      {
+        "symbol": "APGE",
+        "entry_timestamp": "2026-01-21T05:00:00+00:00",
+        "exit_timestamp": "2026-01-27T05:00:00+00:00",
+        "entry_price": 81.46443199999999,
+        "exit_price": 70.07897,
+        "qty": 292.5883613708352,
+        "realized_return": -0.13975991387259645,
+        "realized_pnl": -3331.310724760376,
+        "mae": -0.1656481444564665,
+        "mfe": 0.006574255621152702,
+        "worst_low": 67.97,
+        "best_high": 82.0,
+        "holding_days": 6,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-01-26T05:00:00+00:00|APGE|sell|469"
+      },
+      {
+        "symbol": "ADM",
+        "entry_timestamp": "2022-03-29T04:00:00+00:00",
+        "exit_timestamp": "2022-07-19T04:00:00+00:00",
+        "entry_price": 90.027,
+        "exit_price": 72.928115,
+        "qty": 192.145421893473,
+        "realized_return": -0.1899306319215346,
+        "realized_pnl": -3285.8183443362454,
+        "mae": -0.22223333000099976,
+        "mfe": 0.0983371655170115,
+        "worst_low": 70.02,
+        "best_high": 98.88,
+        "holding_days": 112,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2022-07-18T04:00:00+00:00|ADM|sell|285"
+      },
+      {
+        "symbol": "AGCO",
+        "entry_timestamp": "2021-04-06T04:00:00+00:00",
+        "exit_timestamp": "2021-07-20T04:00:00+00:00",
+        "entry_price": 145.213551,
+        "exit_price": 120.22392200000002,
+        "qty": 129.98184176312878,
+        "realized_return": -0.17208882248186314,
+        "realized_pnl": -3248.2931675631694,
+        "mae": -0.18836087136248045,
+        "mfe": 0.09228786781751529,
+        "worst_low": 117.861,
+        "best_high": 158.615,
+        "holding_days": 105,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-07-19T04:00:00+00:00|AGCO|sell|233"
+      },
+      {
+        "symbol": "ALSN",
+        "entry_timestamp": "2024-12-10T05:00:00+00:00",
+        "exit_timestamp": "2025-03-18T04:00:00+00:00",
+        "entry_price": 113.88415499999999,
+        "exit_price": 96.83094200000001,
+        "qty": 186.17508524676248,
+        "realized_return": -0.1497417529242763,
+        "realized_pnl": -3175.421969945232,
+        "mae": -0.18636618061573182,
+        "mfe": 0.0695956781696278,
+        "worst_low": 92.66,
+        "best_high": 121.81,
+        "holding_days": 97,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-03-17T04:00:00+00:00|ALSN|sell|424"
+      },
+      {
+        "symbol": "ALLE",
+        "entry_timestamp": "2020-03-03T05:00:00+00:00",
+        "exit_timestamp": "2020-03-31T04:00:00+00:00",
+        "entry_price": 120.796228,
+        "exit_price": 93.741869,
+        "qty": 116.39944897168138,
+        "realized_return": -0.22396691890081208,
+        "realized_pnl": -3149.3674756084047,
+        "mae": -0.35949986782699866,
+        "mfe": 0.03248257056503453,
+        "worst_low": 77.37,
+        "best_high": 124.72,
+        "holding_days": 27,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2020-03-30T04:00:00+00:00|ALLE|sell|165"
+      },
+      {
+        "symbol": "ALGM",
+        "entry_timestamp": "2023-08-01T04:00:00+00:00",
+        "exit_timestamp": "2023-08-08T04:00:00+00:00",
+        "entry_price": 49.514849999999996,
+        "exit_price": 41.667496,
+        "qty": 400.3875122061084,
+        "realized_return": -0.15848485858282912,
+        "realized_pnl": -3142.422645671871,
+        "mae": -0.192161543456155,
+        "mfe": 0.002527524570911656,
+        "worst_low": 40.0,
+        "best_high": 49.64,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2023-08-07T04:00:00+00:00|ALGM|sell|340"
+      },
+      {
+        "symbol": "ALNY",
+        "entry_timestamp": "2025-09-30T04:00:00+00:00",
+        "exit_timestamp": "2026-01-13T05:00:00+00:00",
+        "entry_price": 445.353566,
+        "exit_price": 368.98927000000003,
+        "qty": 40.49000205418913,
+        "realized_return": -0.17146892228993618,
+        "realized_pnl": -3091.9983974571055,
+        "mae": -0.20620372892669286,
+        "mfe": 0.11271142263627908,
+        "worst_low": 353.52,
+        "best_high": 495.55,
+        "holding_days": 105,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-01-12T05:00:00+00:00|ALNY|sell|467"
+      }
+    ],
+    "worst_10_table": [
+      {
+        "symbol": "AXON",
+        "entry_timestamp": "2025-02-19T05:00:00+00:00",
+        "exit_timestamp": "2025-02-25T05:00:00+00:00",
+        "entry_price": 700.2099999999999,
+        "exit_price": 498.75532849999996,
+        "qty": 33.11148074421468,
+        "realized_return": -0.2877060760343325,
+        "realized_pnl": -6670.928235475241,
+        "mae": -0.31423901401008264,
+        "mfe": 0.006983619199954443,
+        "worst_low": 480.1767,
+        "best_high": 705.1,
+        "holding_days": 6,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-02-24T05:00:00+00:00|AXON|sell|421"
+      },
+      {
+        "symbol": "AVPT",
+        "entry_timestamp": "2025-02-19T05:00:00+00:00",
+        "exit_timestamp": "2025-03-04T05:00:00+00:00",
+        "entry_price": 19.495846999999998,
+        "exit_price": 14.845545,
+        "qty": 1198.8517309127928,
+        "realized_return": -0.2385278259518552,
+        "realized_pnl": -5575.758344648618,
+        "mae": -0.3142129192950683,
+        "mfe": 0.003803528002656288,
+        "worst_low": 13.37,
+        "best_high": 19.57,
+        "holding_days": 13,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-03-03T05:00:00+00:00|AVPT|sell|422"
+      },
+      {
+        "symbol": "AHCO",
+        "entry_timestamp": "2021-04-13T04:00:00+00:00",
+        "exit_timestamp": "2021-04-20T04:00:00+00:00",
+        "entry_price": 37.161145,
+        "exit_price": 27.931618000000004,
+        "qty": 550.9698365932086,
+        "realized_return": -0.24836497906617233,
+        "realized_pnl": -5085.335034776084,
+        "mae": -0.2634780225420933,
+        "mfe": 0.0037365640913378617,
+        "worst_low": 27.37,
+        "best_high": 37.3,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-04-19T04:00:00+00:00|AHCO|sell|220"
+      },
+      {
+        "symbol": "ALKS",
+        "entry_timestamp": "2021-10-26T04:00:00+00:00",
+        "exit_timestamp": "2021-11-16T05:00:00+00:00",
+        "entry_price": 31.929576,
+        "exit_price": 23.323000999999998,
+        "qty": 559.7429701832816,
+        "realized_return": -0.26954867800311544,
+        "realized_pnl": -4817.603042936482,
+        "mae": -0.2846757501571584,
+        "mfe": 0.008782578259103722,
+        "worst_low": 22.84,
+        "best_high": 32.21,
+        "holding_days": 21,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-11-15T05:00:00+00:00|ALKS|sell|250"
+      },
+      {
+        "symbol": "ARES",
+        "entry_timestamp": "2020-03-03T05:00:00+00:00",
+        "exit_timestamp": "2020-03-24T04:00:00+00:00",
+        "entry_price": 36.530956,
+        "exit_price": 24.562629,
+        "qty": 385.42568226623047,
+        "realized_return": -0.327621510918028,
+        "realized_pnl": -4613.155687420235,
+        "mae": -0.44704157208478207,
+        "mfe": 0.016398256864671137,
+        "worst_low": 20.2001,
+        "best_high": 37.13,
+        "holding_days": 20,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2020-03-23T04:00:00+00:00|ARES|sell|164"
+      },
+      {
+        "symbol": "ATI",
+        "entry_timestamp": "2025-07-29T04:00:00+00:00",
+        "exit_timestamp": "2025-08-05T04:00:00+00:00",
+        "entry_price": 95.92877,
+        "exit_price": 76.55702600000001,
+        "qty": 207.71775527044852,
+        "realized_return": -0.20193883440807167,
+        "realized_pnl": -4023.894230291769,
+        "mae": -0.2309919120197205,
+        "mfe": 0.002201946298279447,
+        "worst_low": 73.77,
+        "best_high": 96.14,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-08-04T04:00:00+00:00|ATI|sell|444"
+      },
+      {
+        "symbol": "ATEC",
+        "entry_timestamp": "2026-01-06T05:00:00+00:00",
+        "exit_timestamp": "2026-01-13T05:00:00+00:00",
+        "entry_price": 21.076321,
+        "exit_price": 17.594720000000002,
+        "qty": 1083.978194201039,
+        "realized_return": -0.165190167676797,
+        "realized_pnl": -3774.1909406563987,
+        "mae": -0.23373723526036644,
+        "mfe": 0.1050315659929453,
+        "worst_low": 16.15,
+        "best_high": 23.29,
+        "holding_days": 7,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-01-12T05:00:00+00:00|ATEC|sell|467"
+      },
+      {
+        "symbol": "ASML",
+        "entry_timestamp": "2026-02-24T05:00:00+00:00",
+        "exit_timestamp": "2026-03-31T04:00:00+00:00",
+        "entry_price": 1500.470006,
+        "exit_price": 1283.9397025,
+        "qty": 16.765272842779037,
+        "realized_return": -0.14430831848297535,
+        "realized_pnl": -3630.1928861354563,
+        "mae": -0.16818730463846412,
+        "mfe": 0.031156900046691114,
+        "worst_low": 1248.11,
+        "best_high": 1547.22,
+        "holding_days": 34,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-03-30T04:00:00+00:00|ASML|sell|478"
+      },
+      {
+        "symbol": "AIS",
+        "entry_timestamp": "2026-06-23T04:00:00+00:00",
+        "exit_timestamp": "2026-07-21T04:00:00+00:00",
+        "entry_price": 80.914267,
+        "exit_price": 69.599114,
+        "qty": 315.8622132572149,
+        "realized_return": -0.13984125939125167,
+        "realized_pnl": -3574.544675484127,
+        "mae": -0.22122510236668144,
+        "mfe": 0.06223541517097359,
+        "worst_low": 63.014,
+        "best_high": 85.95,
+        "holding_days": 28,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": true,
+            "recovered": true
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-07-20T04:00:00+00:00|AIS|sell|494"
+      },
+      {
+        "symbol": "ARKW",
+        "entry_timestamp": "2025-10-21T04:00:00+00:00",
+        "exit_timestamp": "2025-11-18T05:00:00+00:00",
+        "entry_price": 173.55205,
+        "exit_price": 148.185531,
+        "qty": 139.37854370822154,
+        "realized_return": -0.14616087219943533,
+        "realized_pnl": -3535.5746803331513,
+        "mae": -0.15466282305510076,
+        "mfe": 0.0465448261775069,
+        "worst_low": 146.71,
+        "best_high": 181.63,
+        "holding_days": 28,
+        "thresholds": {
+          "-0.03": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.05": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.075": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.1": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.125": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.15": {
+            "crossed": true,
+            "recovered": true
+          },
+          "-0.2": {
+            "crossed": false,
+            "recovered": false
+          }
+        },
+        "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-11-17T05:00:00+00:00|ARKW|sell|459"
+      }
+    ],
+    "concentration": {
+      "top_1_loss": 6670.93,
+      "top_1_share_of_total_losses": 0.0207,
+      "top_3_loss": 17332.02,
+      "top_3_share_of_total_losses": 0.0538,
+      "top_5_loss": 26762.78,
+      "top_5_share_of_total_losses": 0.0831,
+      "top_10_loss": 45301.18,
+      "top_10_share_of_total_losses": 0.1407
+    },
+    "worst_single_pct_account": -6.6709,
+    "p50_losing": -0.03894,
+    "p75_losing": -0.018436,
+    "p90_losing": -0.007211,
+    "p95_losing": -0.003867,
+    "p99_losing": -0.001347,
+    "mae_p50": -0.041878,
+    "mae_p75": -0.016595,
+    "mae_p90": -0.005327,
+    "mae_p95": -0.002709,
+    "mae_avg_winners": -0.034994,
+    "mae_avg_losers": -0.094558
+  },
+  "worst_10": [
+    {
+      "symbol": "AXON",
+      "entry_timestamp": "2025-02-19T05:00:00+00:00",
+      "exit_timestamp": "2025-02-25T05:00:00+00:00",
+      "entry_price": 700.2099999999999,
+      "exit_price": 498.75532849999996,
+      "qty": 33.11148074421468,
+      "realized_return": -0.2877060760343325,
+      "realized_pnl": -6670.928235475241,
+      "mae": -0.31423901401008264,
+      "mfe": 0.006983619199954443,
+      "worst_low": 480.1767,
+      "best_high": 705.1,
+      "holding_days": 6,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-02-24T05:00:00+00:00|AXON|sell|421"
+    },
+    {
+      "symbol": "AVPT",
+      "entry_timestamp": "2025-02-19T05:00:00+00:00",
+      "exit_timestamp": "2025-03-04T05:00:00+00:00",
+      "entry_price": 19.495846999999998,
+      "exit_price": 14.845545,
+      "qty": 1198.8517309127928,
+      "realized_return": -0.2385278259518552,
+      "realized_pnl": -5575.758344648618,
+      "mae": -0.3142129192950683,
+      "mfe": 0.003803528002656288,
+      "worst_low": 13.37,
+      "best_high": 19.57,
+      "holding_days": 13,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-03-03T05:00:00+00:00|AVPT|sell|422"
+    },
+    {
+      "symbol": "AHCO",
+      "entry_timestamp": "2021-04-13T04:00:00+00:00",
+      "exit_timestamp": "2021-04-20T04:00:00+00:00",
+      "entry_price": 37.161145,
+      "exit_price": 27.931618000000004,
+      "qty": 550.9698365932086,
+      "realized_return": -0.24836497906617233,
+      "realized_pnl": -5085.335034776084,
+      "mae": -0.2634780225420933,
+      "mfe": 0.0037365640913378617,
+      "worst_low": 27.37,
+      "best_high": 37.3,
+      "holding_days": 7,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-04-19T04:00:00+00:00|AHCO|sell|220"
+    },
+    {
+      "symbol": "ALKS",
+      "entry_timestamp": "2021-10-26T04:00:00+00:00",
+      "exit_timestamp": "2021-11-16T05:00:00+00:00",
+      "entry_price": 31.929576,
+      "exit_price": 23.323000999999998,
+      "qty": 559.7429701832816,
+      "realized_return": -0.26954867800311544,
+      "realized_pnl": -4817.603042936482,
+      "mae": -0.2846757501571584,
+      "mfe": 0.008782578259103722,
+      "worst_low": 22.84,
+      "best_high": 32.21,
+      "holding_days": 21,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2021-11-15T05:00:00+00:00|ALKS|sell|250"
+    },
+    {
+      "symbol": "ARES",
+      "entry_timestamp": "2020-03-03T05:00:00+00:00",
+      "exit_timestamp": "2020-03-24T04:00:00+00:00",
+      "entry_price": 36.530956,
+      "exit_price": 24.562629,
+      "qty": 385.42568226623047,
+      "realized_return": -0.327621510918028,
+      "realized_pnl": -4613.155687420235,
+      "mae": -0.44704157208478207,
+      "mfe": 0.016398256864671137,
+      "worst_low": 20.2001,
+      "best_high": 37.13,
+      "holding_days": 20,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2020-03-23T04:00:00+00:00|ARES|sell|164"
+    },
+    {
+      "symbol": "ATI",
+      "entry_timestamp": "2025-07-29T04:00:00+00:00",
+      "exit_timestamp": "2025-08-05T04:00:00+00:00",
+      "entry_price": 95.92877,
+      "exit_price": 76.55702600000001,
+      "qty": 207.71775527044852,
+      "realized_return": -0.20193883440807167,
+      "realized_pnl": -4023.894230291769,
+      "mae": -0.2309919120197205,
+      "mfe": 0.002201946298279447,
+      "worst_low": 73.77,
+      "best_high": 96.14,
+      "holding_days": 7,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-08-04T04:00:00+00:00|ATI|sell|444"
+    },
+    {
+      "symbol": "ATEC",
+      "entry_timestamp": "2026-01-06T05:00:00+00:00",
+      "exit_timestamp": "2026-01-13T05:00:00+00:00",
+      "entry_price": 21.076321,
+      "exit_price": 17.594720000000002,
+      "qty": 1083.978194201039,
+      "realized_return": -0.165190167676797,
+      "realized_pnl": -3774.1909406563987,
+      "mae": -0.23373723526036644,
+      "mfe": 0.1050315659929453,
+      "worst_low": 16.15,
+      "best_high": 23.29,
+      "holding_days": 7,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-01-12T05:00:00+00:00|ATEC|sell|467"
+    },
+    {
+      "symbol": "ASML",
+      "entry_timestamp": "2026-02-24T05:00:00+00:00",
+      "exit_timestamp": "2026-03-31T04:00:00+00:00",
+      "entry_price": 1500.470006,
+      "exit_price": 1283.9397025,
+      "qty": 16.765272842779037,
+      "realized_return": -0.14430831848297535,
+      "realized_pnl": -3630.1928861354563,
+      "mae": -0.16818730463846412,
+      "mfe": 0.031156900046691114,
+      "worst_low": 1248.11,
+      "best_high": 1547.22,
+      "holding_days": 34,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": false,
+          "recovered": false
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-03-30T04:00:00+00:00|ASML|sell|478"
+    },
+    {
+      "symbol": "AIS",
+      "entry_timestamp": "2026-06-23T04:00:00+00:00",
+      "exit_timestamp": "2026-07-21T04:00:00+00:00",
+      "entry_price": 80.914267,
+      "exit_price": 69.599114,
+      "qty": 315.8622132572149,
+      "realized_return": -0.13984125939125167,
+      "realized_pnl": -3574.544675484127,
+      "mae": -0.22122510236668144,
+      "mfe": 0.06223541517097359,
+      "worst_low": 63.014,
+      "best_high": 85.95,
+      "holding_days": 28,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": true,
+          "recovered": true
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2026-07-20T04:00:00+00:00|AIS|sell|494"
+    },
+    {
+      "symbol": "ARKW",
+      "entry_timestamp": "2025-10-21T04:00:00+00:00",
+      "exit_timestamp": "2025-11-18T05:00:00+00:00",
+      "entry_price": 173.55205,
+      "exit_price": 148.185531,
+      "qty": 139.37854370822154,
+      "realized_return": -0.14616087219943533,
+      "realized_pnl": -3535.5746803331513,
+      "mae": -0.15466282305510076,
+      "mfe": 0.0465448261775069,
+      "worst_low": 146.71,
+      "best_high": 181.63,
+      "holding_days": 28,
+      "thresholds": {
+        "-0.03": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.05": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.075": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.1": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.125": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.15": {
+          "crossed": true,
+          "recovered": true
+        },
+        "-0.2": {
+          "crossed": false,
+          "recovered": false
+        }
+      },
+      "exit_client_order_id": "equity_residual_momentum_v3|3.0.0|2025-11-17T05:00:00+00:00|ARKW|sell|459"
+    }
+  ]
+}

@@ -1,0 +1,278 @@
+{
+ "variant": "topn6",
+ "strategy_name": "equity_residual_momentum_v2",
+ "parameters": {
+  "beta_window_bars": 273,
+  "exclude_symbols": "['SPY']",
+  "formation_bars": 252,
+  "ivol_reject_quantile": 0.7,
+  "max_single_weight": 0.1,
+  "rebalance_frequency": "weekly",
+  "residual_vol_window": 63,
+  "skip_bars": 21,
+  "top_n": 6
+ },
+ "full_period": {
+  "return": 1.234729,
+  "cagr": 0.079024,
+  "sharpe": 0.646249,
+  "sortino": 0.803829,
+  "calmar": 0.281152,
+  "max_drawdown": 0.281072,
+  "volatility": 0.131001,
+  "turnover": 137.719556,
+  "fees_total": 6690.27,
+  "fees_pct_avg_equity": 0.042885,
+  "fees_pct_gross_pnl": 0.05012,
+  "avg_exposure": 0.5004,
+  "avg_holdings": 5.008,
+  "max_concentration_weight": 0.1293,
+  "rebalance_count": 495,
+  "closed_positions": 642,
+  "dividend_total": 15802.26,
+  "shadow_drawdown_halts": 252,
+  "worst_year": -0.075523,
+  "worst_month": -0.090672,
+  "positive_month_ratio": 0.5118
+ },
+ "concentration": {
+  "top_symbols": [
+   "AVGO",
+   "ASX",
+   "NVDA"
+  ],
+  "top1_share_of_positive_pnl": 0.0578,
+  "top3_share_of_positive_pnl": 0.1585
+ },
+ "yearly_returns": {
+  "2016": 0.0,
+  "2017": 0.152936,
+  "2018": -0.001144,
+  "2019": 0.185257,
+  "2020": 0.317333,
+  "2021": -0.075523,
+  "2022": -0.028,
+  "2023": 0.073613,
+  "2024": 0.288924,
+  "2025": -0.064578,
+  "2026": 0.068474
+ },
+ "walk_forward": {
+  "folds": [
+   {
+    "start": "2017-01-03",
+    "end": "2017-07-02",
+    "return": 0.067927,
+    "sharpe": 1.73995,
+    "max_drawdown": 0.034774,
+    "turnover": 6.153439
+   },
+   {
+    "start": "2017-07-02",
+    "end": "2017-12-29",
+    "return": 0.08399,
+    "sharpe": 2.458357,
+    "max_drawdown": 0.027965,
+    "turnover": 8.714001
+   },
+   {
+    "start": "2017-12-29",
+    "end": "2018-06-27",
+    "return": 0.062867,
+    "sharpe": 1.084089,
+    "max_drawdown": 0.04937,
+    "turnover": 6.777817
+   },
+   {
+    "start": "2018-06-27",
+    "end": "2018-12-24",
+    "return": -0.059696,
+    "sharpe": -0.930273,
+    "max_drawdown": 0.119403,
+    "turnover": 5.838279
+   },
+   {
+    "start": "2018-12-24",
+    "end": "2019-06-22",
+    "return": 0.20017,
+    "sharpe": 4.474075,
+    "max_drawdown": 0.018364,
+    "turnover": 5.435967
+   },
+   {
+    "start": "2019-06-22",
+    "end": "2019-12-19",
+    "return": 0.004326,
+    "sharpe": 0.156806,
+    "max_drawdown": 0.059289,
+    "turnover": 6.216932
+   },
+   {
+    "start": "2019-12-19",
+    "end": "2020-06-16",
+    "return": 0.015911,
+    "sharpe": 0.254459,
+    "max_drawdown": 0.127327,
+    "turnover": 6.968302
+   },
+   {
+    "start": "2020-06-16",
+    "end": "2020-12-13",
+    "return": 0.265108,
+    "sharpe": 2.57376,
+    "max_drawdown": 0.073614,
+    "turnover": 3.570295
+   },
+   {
+    "start": "2020-12-13",
+    "end": "2021-06-11",
+    "return": -0.081051,
+    "sharpe": -0.812126,
+    "max_drawdown": 0.180089,
+    "turnover": 6.926775
+   },
+   {
+    "start": "2021-06-11",
+    "end": "2021-12-08",
+    "return": 0.019741,
+    "sharpe": 0.363995,
+    "max_drawdown": 0.084822,
+    "turnover": 8.178505
+   },
+   {
+    "start": "2021-12-08",
+    "end": "2022-06-06",
+    "return": -0.08215,
+    "sharpe": -1.17265,
+    "max_drawdown": 0.116217,
+    "turnover": 6.532255
+   },
+   {
+    "start": "2022-06-06",
+    "end": "2022-12-03",
+    "return": 0.040235,
+    "sharpe": 0.678445,
+    "max_drawdown": 0.083111,
+    "turnover": 7.646613
+   },
+   {
+    "start": "2022-12-03",
+    "end": "2023-06-01",
+    "return": -0.033192,
+    "sharpe": -0.558717,
+    "max_drawdown": 0.058315,
+    "turnover": 7.876129
+   },
+   {
+    "start": "2023-06-01",
+    "end": "2023-11-28",
+    "return": 0.070835,
+    "sharpe": 1.234521,
+    "max_drawdown": 0.089865,
+    "turnover": 6.942208
+   },
+   {
+    "start": "2023-11-28",
+    "end": "2024-05-26",
+    "return": 0.204817,
+    "sharpe": 3.209256,
+    "max_drawdown": 0.038083,
+    "turnover": 6.941499
+   },
+   {
+    "start": "2024-05-26",
+    "end": "2024-11-22",
+    "return": 0.128056,
+    "sharpe": 2.418022,
+    "max_drawdown": 0.033256,
+    "turnover": 7.393566
+   },
+   {
+    "start": "2024-11-22",
+    "end": "2025-05-21",
+    "return": -0.112164,
+    "sharpe": -1.840019,
+    "max_drawdown": 0.171586,
+    "turnover": 7.515144
+   },
+   {
+    "start": "2025-05-21",
+    "end": "2025-11-17",
+    "return": 0.04061,
+    "sharpe": 0.749171,
+    "max_drawdown": 0.038566,
+    "turnover": 8.171976
+   },
+   {
+    "start": "2025-11-17",
+    "end": "2026-05-16",
+    "return": 0.098481,
+    "sharpe": 1.101104,
+    "max_drawdown": 0.120211,
+    "turnover": 9.962254
+   },
+   {
+    "start": "2026-05-16",
+    "end": "2026-07-30",
+    "return": 0.023307,
+    "sharpe": 0.698239,
+    "max_drawdown": 0.076099,
+    "turnover": 3.830094
+   }
+  ],
+  "fold_count": 20,
+  "median_fold_return": 0.0404225,
+  "worst_fold_return": -0.112164,
+  "best_fold_return": 0.265108,
+  "positive_fold_ratio": 0.75,
+  "median_fold_sharpe": 0.723705
+ },
+ "cost_stress_extra": {
+  "2x": {
+   "return": 1.148045,
+   "sharpe": 0.617589,
+   "max_drawdown": 0.285326,
+   "turnover": 137.394598,
+   "fees_pct_gross_pnl": 0.095783
+  },
+  "3x": {
+   "return": 1.065432,
+   "sharpe": 0.589188,
+   "max_drawdown": 0.289566,
+   "turnover": 137.090966,
+   "fees_pct_gross_pnl": 0.138231
+  }
+ },
+ "jackknife": {
+  "drop_AVGO": {
+   "return": 1.183904,
+   "sharpe": 0.632432,
+   "max_drawdown": 0.283567
+  },
+  "drop_ASX": {
+   "return": 1.20284,
+   "sharpe": 0.637044,
+   "max_drawdown": 0.280379
+  },
+  "drop_NVDA": {
+   "return": 1.249956,
+   "sharpe": 0.660814,
+   "max_drawdown": 0.253879
+  }
+ },
+ "identity": {
+  "head_commit": "2ac8d4452eb108b9350a4e3a9287f6c8624c8188",
+  "python_version": "3.14.7",
+  "dataset": {
+   "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+   "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+   "dividends_csv": "data/historical/equity_1200_dividends.csv",
+   "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "config_digest_sha256": "5129057f7113293edf276f61202f477df63260288ad107eebf9b022a9b2180bb",
+  "generated_at": "2026-08-23T10:19:33.373650+00:00",
+  "eval_start": "2017-01-03",
+  "eval_end": "2026-07-30",
+  "fold_step_months": 6
+ }
+}

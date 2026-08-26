@@ -1,0 +1,14 @@
+{
+  "implementation_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "research_commit": "016afe8b82e3940cc8fefce5ee952354fbb7378b",
+  "config_digest": "458f3231f9af5c314fc3cac4732af4bd9c16a8fbad89f1fd0d1f2b0ccbc71b31",
+  "dataset": {
+    "bars_csv": "data/historical/equity_1200_2016_2026.csv",
+    "bars_sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "dividends_csv": "data/historical/equity_1200_dividends.csv",
+    "dividends_sha256": "7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"
+  },
+  "schema_version": "1.0.0",
+  "interaction": null,
+  "reason": "No clear single winner: best_stop=None best_reset=None \u2014 SKIPPED per mission rule"
+}

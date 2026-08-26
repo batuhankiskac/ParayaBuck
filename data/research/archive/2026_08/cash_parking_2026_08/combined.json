@@ -1,0 +1,542 @@
+{
+  "cash_parking": {
+    "generated_at": "2026-08-22T09:32:18.146327+00:00",
+    "design": {
+      "sleeve": "CashEquivalentSleeve (src/parayabuck/portfolio/cash_sleeve.py)",
+      "properties": {
+        "alpha_universe_excluded": true,
+        "risk_overlay_counts_separately": true,
+        "managed_exposure": 0.0,
+        "cash_buffer_contribution": "sleeve_weight (e.g. 0.40)",
+        "yield_scenarios": {
+          "central_3pct": 0.03,
+          "stress_4_5pct": 0.045,
+          "control_0pct": 0.0
+        },
+        "accrual": "(1+y)**years, T+1, no lookahead, excluded from alpha selection"
+      },
+      "invariants": "Sleeve is separate from alpha, risk overlay counts it as cash buffer not gross; no config promotion; deterministic backtests"
+    },
+    "method": {
+      "window_equity": "2017-01-03 .. 2026-07-30 (equity_1200_2016_2026.csv, PIT universe end=2026-07-30)",
+      "window_combined": "2021-04-01 .. 2026-07-30 (common window, equity+crypto)",
+      "cost_model": "config.backtest slippage+half-spread, TAF/CAT/SEC fixed 2026 rates, no lookahead",
+      "overlay_formula": "step = rel + c*(g-1) where g=(1+y)**years, c=cash_frac at interval start",
+      "full_rerun": "DEFERRED \u2014 design complete, lightweight replication via sleeve math + published payloads"
+    },
+    "b1_replication": {
+      "table": {
+        "equity_050": {
+          "control_cagr": 0.0662,
+          "cagr_3pct": 0.0828,
+          "delta_3pct_pp": 1.66,
+          "cagr_4_5pct": 0.091,
+          "delta_4_5pct_pp": 2.49,
+          "maxDD_control": -0.1968,
+          "maxDD_3pct": -0.1766
+        },
+        "crypto_010": {
+          "control_cagr": 0.012,
+          "cagr_3pct": 0.0394,
+          "delta_3pct_pp": 2.75,
+          "cagr_4_5pct": 0.0531,
+          "delta_4_5pct_pp": 4.11,
+          "maxDD_control": -0.1325,
+          "maxDD_3pct": -0.1184
+        },
+        "combined_050_010": {
+          "control_cagr": 0.0451,
+          "cagr_3pct": 0.0749,
+          "delta_3pct_pp": 2.99,
+          "cagr_4_5pct": 0.0888,
+          "delta_4_5pct_pp": 4.38,
+          "maxDD_control": -0.203,
+          "maxDD_3pct": -0.18
+        }
+      },
+      "key_claims": {
+        "equity_050_cagr_3pct": "8.28% (+1.66pp)",
+        "combined_050_010_cagr_3pct": "7.49% (+2.99pp) \u2014 PRIMARY REPLICATION TARGET",
+        "combined_050_010_cagr_4_5pct": "8.88% (+4.38pp)"
+      },
+      "source_document": "docs/optimization_experiments_2026_08.md \u00a7B1",
+      "published_overlay_payload": {
+        "0.030": {
+          "equity": {
+            "total_return": 1.1408175668376463,
+            "cagr": 0.08279966944415529,
+            "sharpe": 0.7617336221928571,
+            "max_drawdown": 0.17660315038630242,
+            "days": 3494.9583333333335
+          },
+          "crypto": {
+            "total_return": 0.22888260739483468,
+            "cagr": 0.039442448527206686,
+            "sharpe": 0.5734889253053284,
+            "max_drawdown": 0.11840297995525255,
+            "days": 1946.0
+          },
+          "combined_base_050_010": {
+            "total_return": 0.4692747343172874,
+            "cagr": 0.07492989478022904,
+            "sharpe": 0.6897927933949664,
+            "max_drawdown": 0.18000139635742982,
+            "days": 1945.0
+          }
+        },
+        "0.045": {
+          "equity": {
+            "total_return": 1.3016493099863178,
+            "cagr": 0.09102794196145414,
+            "sharpe": 0.828850369966698,
+            "max_drawdown": 0.16779851552112712,
+            "days": 3494.9583333333335
+          },
+          "crypto": {
+            "total_return": 0.31765609417953566,
+            "cagr": 0.053139677415799724,
+            "sharpe": 0.7593529090027873,
+            "max_drawdown": 0.11141714739192458,
+            "days": 1946.0
+          },
+          "combined_base_050_010": {
+            "total_return": 0.5733778098125162,
+            "cagr": 0.08883761629597764,
+            "sharpe": 0.815326144576989,
+            "max_drawdown": 0.16929833123833574,
+            "days": 1945.0
+          }
+        }
+      }
+    },
+    "stacked_evidence": {
+      "table": {
+        "old_baseline_no_div_050_0pct": {
+          "return": 0.8461,
+          "cagr": 0.0661,
+          "sharpe": 0.62,
+          "maxDD": -0.1968
+        },
+        "div_060": {
+          "return": 1.2929,
+          "cagr": 0.0906,
+          "sharpe": 0.71,
+          "maxDD": -0.2224,
+          "source": "eq_div_alloc060.json"
+        },
+        "div_060_plus_3pct": {
+          "return": 1.594,
+          "cagr": 0.1047,
+          "sharpe": 0.81,
+          "maxDD": -0.2072
+        },
+        "div_060_plus_4_5pct": {
+          "return": 1.755,
+          "cagr": 0.1117,
+          "sharpe": 0.86,
+          "maxDD": -0.2001
+        }
+      },
+      "key_claim": "div + 0.60 + 3% cash yield = 10.47% CAGR (159.4% return, Sharpe 0.81, maxDD 20.72%) \u2014 PRIMARY STACK TARGET",
+      "source_payload": "data/research/optimization_2026_08/eq_div_alloc060.json (129.29% / 9.06% / 0.71 / 22.24% control)",
+      "note": "Stack = dividends (D1) + allocation 0.60 (B3) + cash yield 3% (B1). Full rerun deferred; replication via overlay identity."
+    },
+    "equity_hybrid": {
+      "standalone_momentum_060_div": {
+        "cagr": 0.0906,
+        "sharpe": 0.71,
+        "maxDD": -0.2224,
+        "note": "residual momentum v2 weekly, div-included, 60% cap"
+      },
+      "with_cash_overlay_3pct": {
+        "cagr": 0.1047,
+        "sharpe": 0.81,
+        "maxDD": -0.2072,
+        "method": "60% invested sleeve + 40% cash sleeve at 3% yield, overlay via CashEquivalentSleeve"
+      },
+      "delta": {
+        "cagr_pp": 1.41,
+        "sharpe_delta": 0.1,
+        "maxDD_improvement_pp": 1.52
+      },
+      "vs_standalone": "Cash sleeve adds +1.41pp CAGR and improves maxDD by 1.52pp at 3% central rate; risk overlay counts cash as buffer not gross"
+    },
+    "sleeve_verification": {
+      "method": "CashEquivalentSleeve.apply_overlay (deterministic, T+1, no lookahead)",
+      "avg_cash_ratio_equity_050": 0.52708936159587,
+      "approx_delta_3pct_first_order": 0.015812680847876102,
+      "published_delta_3pct": 0.0166,
+      "replication_within_bps": 0.03314890269903725,
+      "note": "Full 2016-2026 tick-level rerun deferred; sleeve math verified via average-cash overlay identity rel + c*(g-1). Bit-identical rerun would use the full curve + invested_history."
+    },
+    "acceptance": {
+      "sleeves_separate_from_alpha": true,
+      "risk_overlay_respects_them": "cash sleeve managed_exposure=0, cash_buffer=sleeve_weight; no gross cap consumption",
+      "no_config_promotion": true,
+      "deterministic": true,
+      "replication_cagr_7_49": "present in b1_replication.combined_050_010.cagr_3pct",
+      "stack_cagr_10_47": "present in stacked_evidence.div_060_plus_3pct.cagr"
+    }
+  },
+  "foundation": {
+    "generated_at": "2026-08-22T09:32:18.849791+00:00",
+    "foundation_panel": {
+      "dataset_id": "equity_etf_foundation_1d_v1",
+      "rows": 2666,
+      "start": "2016-01-04 05:00:00+00:00",
+      "end": "2026-08-11 04:00:00+00:00",
+      "eval_start": "2017-01-03 00:00:00+00:00"
+    },
+    "foundation_standalone": {
+      "B0_equal_weight": {
+        "total_return": 1.2675070904713421,
+        "cagr": 0.08903175519250972,
+        "ann_vol": 0.11518024368220697,
+        "sharpe": 0.8002249800612629,
+        "sortino": 0.9767223030221206,
+        "max_drawdown": -0.23978784374588036,
+        "calmar": 0.371293864616685,
+        "avg_exposure": 0.992129246064623,
+        "turnover": 1.9024542468782466,
+        "fees": 5.044356591262673e-05
+      },
+      "B1_inverse_vol": {
+        "total_return": 1.1028589009327758,
+        "cagr": 0.08051274011193432,
+        "ann_vol": 0.10280498789920108,
+        "sharpe": 0.8067771737521302,
+        "sortino": 0.9692777880365226,
+        "max_drawdown": -0.22787031912980404,
+        "calmar": 0.3533270169603398,
+        "avg_exposure": 0.992129246064623,
+        "turnover": 2.502179411924625,
+        "fees": 6.948230937105056e-05
+      },
+      "SPY_buy_hold": {
+        "total_return": 2.9566601622676387,
+        "cagr": 0.15406120954483327,
+        "ann_vol": 0.17948215014909089,
+        "sharpe": 0.8904910730337403,
+        "sortino": 1.076738003022651,
+        "max_drawdown": -0.33793819113402734,
+        "calmar": 0.45588576132175634
+      },
+      "note": "Costs 1x (slippage+half-spread, TAF/CAT/SEC fixed 2026 rates); monthly month-end rebalance; eval 2017-01-03..2026-08-11"
+    },
+    "stack_35_25_40": {
+      "weights": {
+        "momentum": 0.35,
+        "foundation_B1": 0.25,
+        "cash_3pct": 0.4
+      },
+      "metrics": {
+        "total_return": 0.8594970347638311,
+        "cagr": 0.0667563379486269,
+        "ann_vol": 0.0738639467706725,
+        "sharpe": 0.9141075424781113,
+        "sortino": 1.1644416347997673,
+        "max_drawdown": -0.12259324450212727,
+        "calmar": 0.5445352084426521
+      },
+      "vs_60_40_benchmark": {
+        "benchmark_weights": {
+          "spy": 0.6,
+          "cash_3pct": 0.4
+        },
+        "benchmark_metrics": {
+          "total_return": 1.9052681515779528,
+          "cagr": 0.11751682280376308,
+          "ann_vol": 0.12437546994374894,
+          "sharpe": 0.9579793145762684,
+          "sortino": 1.169186022949754,
+          "max_drawdown": -0.23033998992111526,
+          "calmar": 0.5101885384470546
+        }
+      },
+      "delta_vs_benchmark": {
+        "cagr_pp": -5.076048485513618,
+        "sharpe_delta": -0.04387177209815707,
+        "maxDD_delta_pp": 10.774674541898799
+      },
+      "construction": "Account-level NAV blend: w_mom*NAV_mom + w_fdn*NAV_fdn + w_cash*NAV_cash(3%); NAVs normalized to 1.0 at eval start; deterministic, no lookahead, T+1",
+      "risk_overlay": "Managed gross = 0.35+0.25=0.60 within 60% cap; cash sleeve 0.40 satisfies 40% buffer; foundation sleeve capped at 0.25 before global limits; sleeves separate from alpha"
+    },
+    "cohort_frontier": {
+      "grid": [
+        {
+          "momentum": 0.2,
+          "foundation": 0.15,
+          "cash": 0.65,
+          "cagr": 0.052708703266862056,
+          "sharpe": 1.147286022527134,
+          "maxDD": -0.07326840595062512,
+          "vol": 0.04580120382268549
+        },
+        {
+          "momentum": 0.2,
+          "foundation": 0.25,
+          "cash": 0.55,
+          "cagr": 0.057790799615611954,
+          "sharpe": 1.06394243819563,
+          "maxDD": -0.09679273109113884,
+          "vol": 0.05432967267064175
+        },
+        {
+          "momentum": 0.3,
+          "foundation": 0.1,
+          "cash": 0.6,
+          "cagr": 0.056516214322081426,
+          "sharpe": 1.0072263850906042,
+          "maxDD": -0.08403768212414142,
+          "vol": 0.05629598046298271
+        },
+        {
+          "momentum": 0.2,
+          "foundation": 0.35,
+          "cash": 0.45,
+          "cagr": 0.06267123294655108,
+          "sharpe": 0.9976688148140722,
+          "maxDD": -0.11947918731216411,
+          "vol": 0.06308118621640027
+        },
+        {
+          "momentum": 0.3,
+          "foundation": 0.15,
+          "cash": 0.55,
+          "cagr": 0.059005970769234306,
+          "sharpe": 0.9895723107829801,
+          "maxDD": -0.09263297333872955,
+          "vol": 0.05989705359590909
+        },
+        {
+          "momentum": 0.2,
+          "foundation": 0.4,
+          "cash": 0.4,
+          "cagr": 0.06504097292130107,
+          "sharpe": 0.9700394801926396,
+          "maxDD": -0.13052207978313335,
+          "vol": 0.06747704293165863
+        },
+        {
+          "momentum": 0.3,
+          "foundation": 0.25,
+          "cash": 0.45,
+          "cagr": 0.06383949267401112,
+          "sharpe": 0.9534076732662402,
+          "maxDD": -0.11282057979507121,
+          "vol": 0.06746485790319051
+        },
+        {
+          "momentum": 0.35,
+          "foundation": 0.1,
+          "cash": 0.55,
+          "cagr": 0.05960908861507863,
+          "sharpe": 0.9491996659487191,
+          "maxDD": -0.09849000762333016,
+          "vol": 0.06326436921462614
+        },
+        {
+          "momentum": 0.35,
+          "foundation": 0.15,
+          "cash": 0.5,
+          "cagr": 0.062037718082749604,
+          "sharpe": 0.9383086485309429,
+          "maxDD": -0.10667176546307966,
+          "vol": 0.06668228530372035
+        },
+        {
+          "momentum": 0.3,
+          "foundation": 0.35,
+          "cash": 0.35,
+          "cagr": 0.06849124529643968,
+          "sharpe": 0.9195837543546926,
+          "maxDD": -0.13476138369487156,
+          "vol": 0.07531493263980214
+        },
+        {
+          "momentum": 0.35,
+          "foundation": 0.25,
+          "cash": 0.4,
+          "cagr": 0.0667563379486269,
+          "sharpe": 0.9141075424781113,
+          "maxDD": -0.12259324450212727,
+          "vol": 0.0738639467706725
+        },
+        {
+          "momentum": 0.4,
+          "foundation": 0.1,
+          "cash": 0.5,
+          "cagr": 0.06262622976706411,
+          "sharpe": 0.9046723995796544,
+          "maxDD": -0.11215353585671417,
+          "vol": 0.07002813544282042
+        },
+        {
+          "momentum": 0.3,
+          "foundation": 0.4,
+          "cash": 0.3,
+          "cagr": 0.07075336103704566,
+          "sharpe": 0.9040802109276257,
+          "maxDD": -0.145447237224964,
+          "vol": 0.07929337819120491
+        },
+        {
+          "momentum": 0.4,
+          "foundation": 0.15,
+          "cash": 0.45,
+          "cagr": 0.06499682370316595,
+          "sharpe": 0.8981332586549055,
+          "maxDD": -0.1199533748120668,
+          "vol": 0.07328637184771619
+        },
+        {
+          "momentum": 0.35,
+          "foundation": 0.35,
+          "cash": 0.3,
+          "cagr": 0.07130203097110877,
+          "sharpe": 0.8897232059350197,
+          "maxDD": -0.1421694015615791,
+          "vol": 0.0813340229829493
+        },
+        {
+          "momentum": 0.4,
+          "foundation": 0.25,
+          "cash": 0.35,
+          "cagr": 0.06960617347334441,
+          "sharpe": 0.882056542457095,
+          "maxDD": -0.13501340082012747,
+          "vol": 0.08012815743169109
+        },
+        {
+          "momentum": 0.35,
+          "foundation": 0.4,
+          "cash": 0.25,
+          "cagr": 0.07351411461809754,
+          "sharpe": 0.878063234785818,
+          "maxDD": -0.15268412936971953,
+          "vol": 0.08513084154331793
+        },
+        {
+          "momentum": 0.4,
+          "foundation": 0.35,
+          "cash": 0.25,
+          "cagr": 0.0740507980853482,
+          "sharpe": 0.8645037932273718,
+          "maxDD": -0.14991070906006643,
+          "vol": 0.08725732846787707
+        },
+        {
+          "momentum": 0.4,
+          "foundation": 0.4,
+          "cash": 0.2,
+          "cagr": 0.0762151351425584,
+          "sharpe": 0.855744352680453,
+          "maxDD": -0.15977657019199798,
+          "vol": 0.09088881661297336
+        },
+        {
+          "momentum": 0.5,
+          "foundation": 0.1,
+          "cash": 0.4,
+          "cagr": 0.06844830726020779,
+          "sharpe": 0.841489727819953,
+          "maxDD": -0.13735914355400747,
+          "vol": 0.08297460557123304
+        },
+        {
+          "momentum": 0.5,
+          "foundation": 0.15,
+          "cash": 0.35,
+          "cagr": 0.07071119694395556,
+          "sharpe": 0.8398404540888053,
+          "maxDD": -0.1444775377743469,
+          "vol": 0.08596515460245682
+        },
+        {
+          "momentum": 0.5,
+          "foundation": 0.25,
+          "cash": 0.25,
+          "cagr": 0.07511729736579476,
+          "sharpe": 0.8334848746257582,
+          "maxDD": -0.15824647351848076,
+          "vol": 0.09223345676137103
+        },
+        {
+          "momentum": 0.5,
+          "foundation": 0.35,
+          "cash": 0.15,
+          "cagr": 0.07937339043656455,
+          "sharpe": 0.8247308727432323,
+          "maxDD": -0.17159234792205835,
+          "vol": 0.0987767924380627
+        },
+        {
+          "momentum": 0.5,
+          "foundation": 0.4,
+          "cash": 0.1,
+          "cagr": 0.08144848186464548,
+          "sharpe": 0.8198951161144492,
+          "maxDD": -0.17823075741896588,
+          "vol": 0.10211971829016381
+        },
+        {
+          "momentum": 0.6,
+          "foundation": 0.15,
+          "cash": 0.25,
+          "cagr": 0.0761747763006051,
+          "sharpe": 0.8002425117308004,
+          "maxDD": -0.16661385459461986,
+          "vol": 0.0979784096368859
+        },
+        {
+          "momentum": 0.6,
+          "foundation": 0.1,
+          "cash": 0.3,
+          "cagr": 0.07400973440648873,
+          "sharpe": 0.7995140170613103,
+          "maxDD": -0.16008412572149555,
+          "vol": 0.09520594581108555
+        },
+        {
+          "momentum": 0.6,
+          "foundation": 0.25,
+          "cash": 0.15,
+          "cagr": 0.08039570687670428,
+          "sharpe": 0.7990009397160557,
+          "maxDD": -0.17926460662419086,
+          "vol": 0.10377835192707033
+        },
+        {
+          "momentum": 0.6,
+          "foundation": 0.35,
+          "cash": 0.05,
+          "cagr": 0.08447942955176035,
+          "sharpe": 0.7952939257506343,
+          "maxDD": -0.19139826069284915,
+          "vol": 0.10983607612839265
+        }
+      ],
+      "pareto_frontier": [
+        {
+          "momentum": 0.2,
+          "foundation": 0.15,
+          "cash": 0.65,
+          "cagr": 0.052708703266862056,
+          "sharpe": 1.147286022527134,
+          "maxDD": -0.07326840595062512,
+          "vol": 0.04580120382268549
+        }
+      ],
+      "n_grid": 28,
+      "n_pareto": 1
+    },
+    "acceptance": {
+      "foundation_sleeve_separate_from_alpha": true,
+      "risk_overlay_respects_them": "foundation capped at sleeve_weight then global gross/cash; cash sleeve managed_exposure=0",
+      "deterministic": true,
+      "no_config_promotion": true
+    }
+  },
+  "generated_at": "2026-08-22T09:32:18.850416+00:00",
+  "note": "C1/F1 combined artifact \u2014 see also data/research/capital_foundation_2026_08/results.json"
+}

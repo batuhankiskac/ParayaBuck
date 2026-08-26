@@ -1,0 +1,288 @@
+{
+ "method": "block bootstrap, 20-day blocks, with replacement, vs CONTROL",
+ "seed": 202608230,
+ "block": 20,
+ "resamples": 2000,
+ "deltas": {
+  "a3": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.005467,
+    "p5": -0.023532,
+    "p95": 0.032395
+   },
+   "sharpe_delta": {
+    "median": 0.061782,
+    "p5": -0.150608,
+    "p95": 0.265304
+   },
+   "maxdd_delta": {
+    "median": -0.005001,
+    "p5": -0.069155,
+    "p95": 0.047677
+   },
+   "probability_sharpe_above_control": 0.687,
+   "probability_return_above_control": 0.6135
+  },
+  "h25": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.026056,
+    "p5": -0.043404,
+    "p95": -0.010998
+   },
+   "sharpe_delta": {
+    "median": -0.181542,
+    "p5": -0.296573,
+    "p95": -0.07353
+   },
+   "maxdd_delta": {
+    "median": 0.018944,
+    "p5": -0.01362,
+    "p95": 0.076603
+   },
+   "probability_sharpe_above_control": 0.001,
+   "probability_return_above_control": 0.001
+  },
+  "h50": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.014507,
+    "p5": -0.038806,
+    "p95": 0.008082
+   },
+   "sharpe_delta": {
+    "median": -0.086642,
+    "p5": -0.258194,
+    "p95": 0.082861
+   },
+   "maxdd_delta": {
+    "median": 0.019066,
+    "p5": -0.0304,
+    "p95": 0.083225
+   },
+   "probability_sharpe_above_control": 0.199,
+   "probability_return_above_control": 0.146
+  },
+  "h75": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.008939,
+    "p5": -0.0348,
+    "p95": 0.016447
+   },
+   "sharpe_delta": {
+    "median": -0.033054,
+    "p5": -0.221957,
+    "p95": 0.162091
+   },
+   "maxdd_delta": {
+    "median": 0.003477,
+    "p5": -0.048465,
+    "p95": 0.057157
+   },
+   "probability_sharpe_above_control": 0.387,
+   "probability_return_above_control": 0.276
+  },
+  "mh_raw": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.019568,
+    "p5": -0.008393,
+    "p95": 0.048337
+   },
+   "sharpe_delta": {
+    "median": 0.144593,
+    "p5": -0.059343,
+    "p95": 0.339444
+   },
+   "maxdd_delta": {
+    "median": -0.00826,
+    "p5": -0.080767,
+    "p95": 0.05642
+   },
+   "probability_sharpe_above_control": 0.873,
+   "probability_return_above_control": 0.874
+  },
+  "mh_std": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.008774,
+    "p5": -0.022544,
+    "p95": 0.040309
+   },
+   "sharpe_delta": {
+    "median": 0.14837,
+    "p5": -0.087081,
+    "p95": 0.390541
+   },
+   "maxdd_delta": {
+    "median": -0.030736,
+    "p5": -0.105635,
+    "p95": 0.019943
+   },
+   "probability_sharpe_above_control": 0.8515,
+   "probability_return_above_control": 0.6755
+  },
+  "control_sqrt": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.000847,
+    "p5": -0.003099,
+    "p95": 0.001409
+   },
+   "sharpe_delta": {
+    "median": -0.012103,
+    "p5": -0.028165,
+    "p95": 0.003386
+   },
+   "maxdd_delta": {
+    "median": 0.004003,
+    "p5": -0.00137,
+    "p95": 0.011873
+   },
+   "probability_sharpe_above_control": 0.1025,
+   "probability_return_above_control": 0.2665
+  },
+  "h50_sqrt": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.014488,
+    "p5": -0.037967,
+    "p95": 0.007751
+   },
+   "sharpe_delta": {
+    "median": -0.099199,
+    "p5": -0.267135,
+    "p95": 0.06238
+   },
+   "maxdd_delta": {
+    "median": 0.024965,
+    "p5": -0.024089,
+    "p95": 0.089352
+   },
+   "probability_sharpe_above_control": 0.1625,
+   "probability_return_above_control": 0.1505
+  },
+  "mhstd_sqrt": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.013397,
+    "p5": -0.016616,
+    "p95": 0.044171
+   },
+   "sharpe_delta": {
+    "median": 0.141757,
+    "p5": -0.082214,
+    "p95": 0.368255
+   },
+   "maxdd_delta": {
+    "median": -0.023854,
+    "p5": -0.097681,
+    "p95": 0.02657
+   },
+   "probability_sharpe_above_control": 0.859,
+   "probability_return_above_control": 0.7645
+  },
+  "control_regime": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.007801,
+    "p5": -0.018955,
+    "p95": 0.000893
+   },
+   "sharpe_delta": {
+    "median": -0.027835,
+    "p5": -0.08925,
+    "p95": 0.030502
+   },
+   "maxdd_delta": {
+    "median": -0.004749,
+    "p5": -0.023986,
+    "p95": 0.014044
+   },
+   "probability_sharpe_above_control": 0.2125,
+   "probability_return_above_control": 0.0765
+  },
+  "a3_regime": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.002256,
+    "p5": -0.032511,
+    "p95": 0.025387
+   },
+   "sharpe_delta": {
+    "median": 0.030719,
+    "p5": -0.190231,
+    "p95": 0.244224
+   },
+   "maxdd_delta": {
+    "median": -0.00924,
+    "p5": -0.073557,
+    "p95": 0.044705
+   },
+   "probability_sharpe_above_control": 0.593,
+   "probability_return_above_control": 0.453
+  },
+  "h50_regime": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": -0.016444,
+    "p5": -0.040139,
+    "p95": 0.006477
+   },
+   "sharpe_delta": {
+    "median": -0.082093,
+    "p5": -0.250643,
+    "p95": 0.0963
+   },
+   "maxdd_delta": {
+    "median": 0.009237,
+    "p5": -0.037387,
+    "p95": 0.068298
+   },
+   "probability_sharpe_above_control": 0.2215,
+   "probability_return_above_control": 0.107
+  },
+  "mhstd_regime": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.001001,
+    "p5": -0.031846,
+    "p95": 0.032063
+   },
+   "sharpe_delta": {
+    "median": 0.124713,
+    "p5": -0.110598,
+    "p95": 0.364183
+   },
+   "maxdd_delta": {
+    "median": -0.037026,
+    "p5": -0.115954,
+    "p95": 0.01448
+   },
+   "probability_sharpe_above_control": 0.806,
+   "probability_return_above_control": 0.5155
+  },
+  "control_hyst": {
+   "method": "block bootstrap, block=20, resamples=2000, seed=202608230",
+   "return_delta": {
+    "median": 0.005955,
+    "p5": -0.018553,
+    "p95": 0.030347
+   },
+   "sharpe_delta": {
+    "median": 0.026402,
+    "p5": -0.150825,
+    "p95": 0.198007
+   },
+   "maxdd_delta": {
+    "median": 0.026693,
+    "p5": -0.034128,
+    "p95": 0.100289
+   },
+   "probability_sharpe_above_control": 0.608,
+   "probability_return_above_control": 0.671
+  }
+ }
+}

@@ -1,0 +1,8 @@
+{
+  "csv": "data/historical/equity_1200_dividends.csv",
+  "total": 16878,
+  "pages_500": 34,
+  "first_symbol": "A",
+  "last_symbol": "XOM",
+  "verdict": "PASS"
+}

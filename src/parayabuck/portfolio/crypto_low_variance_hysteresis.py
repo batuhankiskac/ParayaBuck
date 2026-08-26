@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import math
-from datetime import timedelta
-
 from parayabuck.core.models import Market
-from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.crypto_low_variance import CryptoLowVariance1dV2
 from parayabuck.portfolio.models import RebalanceReason, TargetPortfolio, TargetWeight
 
@@ -52,6 +49,15 @@ class CryptoLowVarianceHysteresis1dV1(CryptoLowVariance1dV2):
     default_rebalance_hours = 96
     rebalance_policy_declared = "hours:96"
     cadence_label = "96h"
+    RETENTION_RANK = 4
+
+    def _validate_parameters(self) -> None:
+        if "hysteresis_rank_threshold" in self.parameters:
+            raise ValueError("hysteresis_rank_threshold is not a tunable parameter; retention rank is frozen at 4")
+        if "retention_rank" in self.parameters:
+            raise ValueError("retention_rank is not a tunable parameter; retention rank is frozen at 4")
+        self.parameters.setdefault("rebalance_hours", self.default_rebalance_hours)
+        super()._validate_parameters()
 
     def decide(self, context: PortfolioContext) -> TargetPortfolio:
         top_n = self.param_int("top_n", 2)
@@ -66,7 +72,7 @@ class CryptoLowVarianceHysteresis1dV1(CryptoLowVariance1dV2):
         for symbol in held:
             rank = rank_map.get(symbol)
             in_univ = symbol in eligible_set
-            if hysteresis_should_retain(rank, in_univ, retention_rank=4):
+            if hysteresis_should_retain(rank, in_univ, retention_rank=self.RETENTION_RANK):
                 retained.append(symbol)
         retained.sort(key=lambda s: (rank_map.get(s, 999), s))
         retained = retained[:top_n]

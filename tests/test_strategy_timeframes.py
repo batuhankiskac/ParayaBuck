@@ -195,6 +195,7 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
         mode="paper",
         maximum_allocation=0.50,
         risk_limits=risk,
+        allow_static_universe=True,
     )
     crypto_runtime = PortfolioRuntime(
         crypto,
@@ -205,6 +206,7 @@ def test_multiple_markets_run_simultaneously_with_distinct_cadences(tmp_path) ->
         maximum_allocation=0.10,
         risk_limits=risk,
         account_id="shared-account",
+        allow_static_universe=True,
     )
     assert equity_runtime.strategy.timeframe == "1d"
     assert crypto_runtime.strategy.timeframe == "1d"
@@ -354,7 +356,7 @@ def test_no_same_bar_execution_lookahead() -> None:
     from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
 
     strategy = portfolio_strategy_from("equity_residual_momentum_v1", {"top_n": 2, "exclude_symbols": ["SPY"]})
-    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
+    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy), allow_static_universe=True)
     bars = _daily_series(EQUITY_SYMBOLS, days=320)
     result = engine.run(bars, liquidate_at_end=False)
     assert result.fills

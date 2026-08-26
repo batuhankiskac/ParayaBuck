@@ -423,6 +423,7 @@ def test_engine_fills_next_bar_open_with_28bps_side_cost() -> None:
         slippage_bps=2.0,
         spread_bps=2.0,  # half-spread impact = 1 bp
         crypto_taker_fee_bps=25.0,
+        allow_static_universe=True,
     )
     bars = _crypto_bars(CRYPTO_SYMBOLS)
     result = engine.run(bars, liquidate_at_end=False)
@@ -462,6 +463,7 @@ def test_crypto_sleeve_per_asset_and_position_caps_in_backtest() -> None:
         benchmark_symbol="BTC/USD",
         risk_limits=_risk_limits(),
         maximum_allocation=0.10,
+        allow_static_universe=True,
     )
     bars = _crypto_bars(("LOVOL/USD", "MIDVOL/USD", "XRP/USD", "HIVOL/USD"))
     result = engine.run(bars, liquidate_at_end=False)
@@ -478,9 +480,8 @@ def test_crypto_sleeve_per_asset_and_position_caps_in_backtest() -> None:
 
 
 def test_no_same_bar_execution_lookahead() -> None:
-    """A decision on closed bar t may only fill on the NEXT tradable bar."""
     strategy = _strategy()
-    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy))
+    engine = PortfolioBacktestEngine(strategy, rebalance_policy_for(strategy), allow_static_universe=True)
     result = engine.run(_crypto_bars(CRYPTO_SYMBOLS), liquidate_at_end=False)
     assert result.fills
     for fill in result.fills:

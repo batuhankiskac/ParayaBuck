@@ -7,6 +7,17 @@ symbols become the streamed OBSERVATION SET. Managed positions and open
 managed orders stay pinned regardless of ranking.
 
 Research-free runtime path: the builder is pure code, no manifests.
+
+Fail-closed universe note: :func:`build_observation_set` ranks the *pool*
+itself (``pool_symbols``) and intentionally builds a permissive
+``PortfolioContext`` with ``universe=None`` / ``universe_version=""``.
+That context is a *static pool ranking* — membership is already fixed by
+the caller-supplied pool — and therefore explicitly opts into
+``allow_static_context=True`` via :func:`require_product_universe`.
+Dynamic product allocation decisions (``PortfolioBacktestEngine``,
+``PortfolioRuntime``) MUST NOT use this permissive mode; they call
+``require_product_universe`` without the opt-in and fail closed when the
+PIT universe is missing, lacks ``contains()``, or carries an empty version.
 """
 
 from __future__ import annotations
@@ -16,7 +27,7 @@ from datetime import datetime
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, require_product_universe
 
 
 @dataclass(frozen=True)
@@ -57,7 +68,6 @@ def build_observation_set(
         raise ValueError("Pinned observation symbols exceed maximum_stream_symbols")
     pool = tuple(dict.fromkeys(canonical_symbol(symbol, market) for symbol in pool_symbols))
     available = tuple(symbol for symbol in pool if symbol not in reserved)
-
     ranked: tuple[str, ...] = ()
     strategy_name = ""
     source = "no_ranker"
@@ -74,6 +84,11 @@ def build_observation_set(
             prices={},
             benchmark_symbol="BTC/USD" if market == Market.CRYPTO else "SPY",
         )
+        # Static pool-ranking context: pool membership is caller-supplied, so
+        # the permissive None universe is intentional. Explicit opt-in keeps
+        # the fail-closed invariant visible and prevents copy-paste into the
+        # product decision path.
+        require_product_universe(context, allow_static_context=True)
         ranked = tuple(strategy.rank_candidates(context))
         strategy_name = strategy.name
         # Rankers must only ever return pool members; guard defensively.

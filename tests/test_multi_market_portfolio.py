@@ -346,6 +346,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         mode="paper",
         maximum_allocation=0.50,
         risk_limits=_limits(),
+        allow_static_universe=True,
     )
     crypto_runtime = PortfolioRuntime(
         crypto,
@@ -356,6 +357,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         maximum_allocation=0.10,
         risk_limits=_limits(),
         account_id="shared-account",
+        allow_static_universe=True,
     )
     equity_result = equity_runtime.process_closed_bars(_daily_bars(("AAPL", "MSFT", "NVDA", "SPY")))
     assert equity_result.status == "submitted"
@@ -381,6 +383,7 @@ def test_shared_repository_restart_recovers_both_markets(tmp_path) -> None:
         mode="paper",
         maximum_allocation=0.50,
         risk_limits=_limits(),
+        allow_static_universe=True,
     )
     result = equity_restart.process_closed_bars(_daily_bars(("AAPL", "MSFT", "NVDA", "SPY")))
     assert result.status in {"duplicate_decision", "not_scheduled"}

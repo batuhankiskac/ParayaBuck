@@ -26,17 +26,14 @@ docs/v3_historical_validation_final.md for the canonical T1 definition.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
-from pathlib import Path
+from datetime import date, datetime
 from typing import Any, Literal
 
 from parayabuck.backtest.portfolio_engine import (
     OrderSide,
     PortfolioBacktestEngine,
     PortfolioBacktestResult,
-    PortfolioFill,
     _Position,
-    equity_regulatory_fee,
 )
 from parayabuck.backtest.terminal_policy import TerminalClassification, should_apply_haircut
 from parayabuck.core.models import Bar

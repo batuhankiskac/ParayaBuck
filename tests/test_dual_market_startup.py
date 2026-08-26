@@ -169,6 +169,7 @@ def _equity_runtime(
         maximum_allocation=0.50,
         risk_limits=portfolio_risk_limits_from_config(config.risk),
         account_id="paper-account",
+        allow_static_universe=True,
     )
 
 
@@ -189,6 +190,7 @@ def _crypto_runtime(
         maximum_allocation=0.10,
         risk_limits=portfolio_risk_limits_from_config(config.risk),
         account_id="paper-account",
+        allow_static_universe=True,
     )
 
 

@@ -67,6 +67,13 @@ def _fixture_strategy() -> EquityResidualMomentum1dV1:
     )
 
 
+class _TestUniverse:
+    """Permissive PIT universe for runtime tests: contains all fixture symbols."""
+
+    def contains(self, symbol: str, market: Market, timestamp: datetime) -> bool:
+        return True
+
+
 def _runtime(tmp_path, broker: _Broker, *, mode: str = "paper", cap: float = 0.0):
     return PortfolioRuntime(
         _fixture_strategy(),
@@ -76,6 +83,8 @@ def _runtime(tmp_path, broker: _Broker, *, mode: str = "paper", cap: float = 0.0
         mode=mode,
         maximum_allocation=0.50,
         live_dollar_cap=cap,
+        universe=_TestUniverse(),
+        universe_version="test-universe-v1",
     )
 
 
@@ -354,6 +363,7 @@ def test_portfolio_buy_fill_is_managed_and_full_exit_returns_to_external(
         repo,
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
         account_id="acct",
     )
 
@@ -442,6 +452,7 @@ def test_portfolio_ownership_survives_runtime_restart(tmp_path) -> None:
         repo,
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
         account_id="acct",
     )
     result = first.process_closed_bars(_bars())
@@ -493,6 +504,7 @@ def test_partial_exit_keeps_ownership_until_fully_flat(tmp_path) -> None:
         repo,
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
         account_id="acct",
     )
     result = runtime.process_closed_bars(_bars())
@@ -2225,6 +2237,7 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
         PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
     )
     bars = _bars()
     unlatched = runtime.process_closed_bars(bars)
@@ -2531,6 +2544,7 @@ def test_backtest_decides_but_runtime_waits_for_boundary_then_catch_up_fires(
         strategy,
         RebalancePolicy(Market.EQUITY, "monthly"),
         starting_equity=100_000.0,
+        allow_static_universe=True,
     )
     engine.run(bars, liquidate_at_end=False)
     assert engine._rebalances
@@ -2718,6 +2732,7 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
         repo,
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
         account_id="acct",
     )
     runtime.seed(_bars())
@@ -2786,6 +2801,7 @@ def test_forced_scheduled_with_entry_latch_caps_entries_and_keeps_origin(tmp_pat
         PortfolioStateRepository(tmp_path / "runtime.sqlite3"),
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
     )
     bars = _bars()
     runtime.seed(bars)

@@ -31,7 +31,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import bar_is_closed, equity_day_bar_is_closed
 from parayabuck.portfolio import rebalance_policy_for
-from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, require_product_universe
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.storage import SQLiteStore
 
@@ -1257,6 +1257,7 @@ class PortfolioRuntime:
         account_id: str = "unknown",
         live_dollar_cap: float = 0.0,
         execution_policy: PortfolioExecutionPolicy | None = None,
+        allow_static_universe: bool = False,
     ) -> None:
         if mode not in {"paper", "live"}:
             raise ValueError("PortfolioRuntime mode must be paper or live")
@@ -1277,6 +1278,7 @@ class PortfolioRuntime:
         self.universe = universe
         self.universe_version = universe_version
         self.account_id = account_id
+        self.allow_static_universe = bool(allow_static_universe)
         self.policy = rebalance_policy_for(self.strategy)
         self.execution_policy = execution_policy or PortfolioExecutionPolicy()
         self.decision_service = PortfolioDecisionService()
@@ -1660,6 +1662,30 @@ class PortfolioRuntime:
             universe=self.universe,
             universe_version=self.universe_version,
         )
+        # Fail-closed PAPER product universe guard: dynamic product
+        # strategies must execute against a PIT universe that exposes
+        # ``contains`` and carries a non-empty ``universe_version``.
+        # A missing universe would otherwise make in_universe() return True
+        # for every symbol (permissive fallback). Static/non-product research
+        # contexts explicitly opt in via ``allow_static_universe=True`` on the
+        # runtime or are synthetic non-PRODUCT strategies that retain
+        # permissive behaviour; PAPER product execution never opts in.
+        if self.allow_static_universe:
+            require_product_universe(context, allow_static_context=True)
+        else:
+            try:
+                from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES
+
+                is_product = (
+                    self.strategy.name in PRODUCT_STRATEGY_NAMES
+                    or self.strategy.name == "crypto_low_variance_hysteresis_v1"
+                )
+            except Exception:
+                is_product = False
+            if is_product:
+                require_product_universe(context)
+            elif context.universe is not None:
+                require_product_universe(context)
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         raw_target = self.strategy.decide(context)

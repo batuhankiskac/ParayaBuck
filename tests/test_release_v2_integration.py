@@ -205,6 +205,7 @@ def _runtime(
         maximum_allocation=maximum_allocation,
         risk_limits=portfolio_risk_limits_from_config(load_config().risk),
         account_id="acct",
+        allow_static_universe=True,
     )
 
 

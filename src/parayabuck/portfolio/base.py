@@ -35,12 +35,60 @@ class PortfolioContext:
         return [bar.close for bar in bars]
 
     def in_universe(self, symbol: str) -> bool:
+        """Permissive membership probe (research-compatible).
+
+        Returns ``True`` when ``universe`` is ``None`` or lacks a callable
+        ``contains`` — this keeps static/non-product research contexts
+        usable without a PIT universe. **Dynamic product execution (PAPER
+        backtest/runtime) MUST NOT rely on this fallback**: callers on the
+        product path must invoke :func:`require_product_universe` before
+        ``strategy.decide()`` / ``rank_candidates()`` so a missing universe
+        fails closed instead of treating every symbol as in-universe.
+        """
         if self.universe is None:
             return True
         contains = getattr(self.universe, "contains", None)
         if contains is None:
             return True
         return bool(contains(symbol, self.market, self.decision_timestamp))
+
+
+def require_product_universe(
+    context: PortfolioContext,
+    *,
+    allow_static_context: bool = False,
+) -> None:
+    """Fail-closed invariant for **dynamic product** execution contexts.
+
+    Validates that ``context.universe`` is not ``None``, exposes a callable
+    ``contains(symbol, market, timestamp)``, and that
+    ``context.universe_version`` is a non-empty string. Raises
+    ``RuntimeError`` on violation so the decision path halts instead of
+    silently treating every symbol as tradable.
+
+    Call this BEFORE ``strategy.decide()`` or ``strategy.rank_candidates()``
+    on the PAPER / backtest product path. Static or non-product research
+    contexts that intentionally operate without a PIT universe may pass
+    ``allow_static_context=True`` to retain the permissive
+    :meth:`PortfolioContext.in_universe` behaviour. That opt-in must be
+    explicit at the call site — the default is fail-closed.
+    """
+    if allow_static_context:
+        return
+    if context.universe is None:
+        raise RuntimeError(
+            "Product universe guard: context.universe is None — "
+            "dynamic product strategies require a PIT universe (fail-closed)"
+        )
+    contains = getattr(context.universe, "contains", None)
+    if not callable(contains):
+        raise RuntimeError(
+            "Product universe guard: context.universe must expose a callable "
+            "contains(symbol, market, timestamp) (fail-closed)"
+        )
+    version = context.universe_version
+    if not isinstance(version, str) or not version.strip():
+        raise RuntimeError("Product universe guard: context.universe_version must be a non-empty string (fail-closed)")
 
 
 @dataclass(frozen=True)
@@ -176,4 +224,4 @@ class PortfolioStrategy(ABC):
         return float(value)
 
 
-__all__ = ["PortfolioContext", "PortfolioStrategy", "StrategySpec"]
+__all__ = ["PortfolioContext", "PortfolioStrategy", "StrategySpec", "require_product_universe"]

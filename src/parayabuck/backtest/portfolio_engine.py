@@ -24,7 +24,7 @@ from parayabuck.execution.portfolio import (
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK
-from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy, require_product_universe
 from parayabuck.portfolio.idempotency import IdempotencyKeyFactory
 from parayabuck.portfolio.models import (
     PortfolioState,
@@ -271,6 +271,7 @@ class PortfolioBacktestEngine:
         risk_limits: PortfolioRiskLimits | None = None,
         maximum_allocation: float = 1.0,
         enforce_drawdown_halt: bool = False,
+        allow_static_universe: bool = False,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -325,6 +326,7 @@ class PortfolioBacktestEngine:
         self.universe_version = universe_version or (
             EQUITY_UNIVERSE_VERSION if strategy.market == Market.EQUITY else CRYPTO_UNIVERSE_VERSION
         )
+        self.allow_static_universe = bool(allow_static_universe)
         self.state_path = Path(state_path) if state_path else None
         self.cash_rate_annualized = float(cash_rate_annualized)
         self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
@@ -865,6 +867,35 @@ class PortfolioBacktestEngine:
         ):
             return
         context = self._build_context(timestamp)
+        # Fail-closed product universe guard: a missing or version-less PIT
+        # universe must halt the decision instead of silently treating every
+        # symbol as in-universe via the permissive PortfolioContext.in_universe
+        # fallback. Static/non-product research contexts explicitly opt in via
+        # ``allow_static_universe=True`` on the engine or bypass the guard
+        # when the strategy is not a PRODUCT strategy (synthetic research
+        # strategies). Product backtests run with the default fail-closed guard.
+        if not self.allow_static_universe:
+            # Only enforce for dynamic product strategies; synthetic research
+            # strategies (not in PRODUCT_STRATEGY_NAMES) retain permissive
+            # behaviour without an explicit opt-in.
+            try:
+                from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES
+
+                is_product = (
+                    self.strategy.name in PRODUCT_STRATEGY_NAMES
+                    or self.strategy.name == "crypto_low_variance_hysteresis_v1"
+                )
+            except Exception:
+                is_product = False
+            if is_product:
+                require_product_universe(context)
+            else:
+                # Non-product synthetic strategy: allow permissive universe
+                # but still validate version if universe is present.
+                if context.universe is not None:
+                    require_product_universe(context, allow_static_context=False)
+        else:
+            require_product_universe(context, allow_static_context=True)
         if not self.strategy.supports(context):
             return
         # LIVE PARITY completeness gate: decisions require a closed bar for

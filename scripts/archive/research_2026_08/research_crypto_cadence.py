@@ -37,13 +37,6 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 # Reuse the validated-research helpers instead of reinventing them.
-from scripts.research_helpers import (  # noqa: E402
-    _calendar_fold_window,
-    _cost_stress,
-    _fold_stats,
-    _profit_factor,
-)
-
 from parayabuck.backtest.product import load_csv_bars, run_product_backtest  # noqa: E402
 from parayabuck.backtest.universe import hash_point_in_time_universe  # noqa: E402
 from parayabuck.config import load_config  # noqa: E402
@@ -51,6 +44,12 @@ from parayabuck.core.models import Bar, Market  # noqa: E402
 from parayabuck.data.aggregator import aggregate_historical_bars  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
+from scripts.research_helpers import (  # noqa: E402
+    _calendar_fold_window,
+    _cost_stress,
+    _fold_stats,
+    _profit_factor,
+)
 
 OUTPUT_DIR = REPO / "data" / "research" / "cadence_research_2026_08" / "crypto"
 CRYPTO_CSV = REPO / "data" / "historical" / "crypto_18_1h_extended.csv"

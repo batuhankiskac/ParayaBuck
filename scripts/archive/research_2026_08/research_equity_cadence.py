@@ -31,13 +31,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from scripts.research_helpers import (  # noqa: E402
-    _cost_stress,
-    _fold_stats,
-    _fold_window,
-    _profit_factor,
-)
-
 from parayabuck.backtest.portfolio_engine import OrderSide  # noqa: E402
 from parayabuck.backtest.product import (  # noqa: E402
     build_product_universe,
@@ -49,6 +42,12 @@ from parayabuck.config import load_config  # noqa: E402
 from parayabuck.core.models import Market  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
+from scripts.research_helpers import (  # noqa: E402
+    _cost_stress,
+    _fold_stats,
+    _fold_window,
+    _profit_factor,
+)
 
 OUTPUT_DIR = REPO / "data" / "research" / "cadence_research_2026_08" / "equity"
 EQUITY_CSV = REPO / "data" / "historical" / "equity_1200_2016_2026.csv"

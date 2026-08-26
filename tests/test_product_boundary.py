@@ -10,17 +10,20 @@ from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, portfolio_strategy_from
 
 
 def test_generic_factory_can_construct_research_only() -> None:
-    # Research-only hysteresis is constructible via the generic factory
-    # (FACTORY includes it) even though it is NOT in PRODUCT surface pre-promotion.
-    assert "crypto_low_variance_hysteresis_v1" not in PRODUCT_STRATEGY_NAMES
+    # Post-promotion hysteresis IS product (added to PRODUCT_STRATEGY_NAMES).
+    # Generic factory can construct it, and product factory also now accepts it.
+    assert "crypto_low_variance_hysteresis_v1" in PRODUCT_STRATEGY_NAMES
     strategy = portfolio_strategy_from("crypto_low_variance_hysteresis_v1")
     assert strategy.name == "crypto_low_variance_hysteresis_v1"
     assert strategy.timeframe == "1d"
 
 
 def test_product_factory_rejects_research_only() -> None:
+    # Post-promotion hysteresis is product, so test rejection with a true research-only
+    # tournament identity that remains outside PRODUCT (not in factory nor product).
+    # Use a fake research name that is not in product.
     with pytest.raises(ValueError, match="Unsupported product strategy"):
-        product_strategy_from("crypto_low_variance_hysteresis_v1")
+        product_strategy_from("crypto_tournament_t1_hysteresis")
 
     # Product surface members are still constructible via product factory
     for name in PRODUCT_STRATEGY_NAMES:
@@ -49,7 +52,7 @@ def test_config_loader_rejects_research_only_strategy_identity(tmp_path: Path) -
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
-            "crypto": {"enabled": True, "name": "crypto_low_variance_hysteresis_v1", "maximum_allocation": 0.05},
+            "crypto": {"enabled": True, "name": "crypto_tournament_t1_hysteresis", "maximum_allocation": 0.05},
         },
     }
     path = tmp_path / "settings.yaml"
@@ -73,7 +76,7 @@ def test_config_loader_rejects_research_only_equity_identity(tmp_path: Path) -> 
         },
         "strategy": {
             "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.60},
-            "crypto": {"enabled": True, "name": "crypto_low_variance_hysteresis_v1", "maximum_allocation": 0.05},
+            "crypto": {"enabled": True, "name": "crypto_tournament_t1_hysteresis", "maximum_allocation": 0.05},
         },
     }
     path = tmp_path / "settings.yaml"

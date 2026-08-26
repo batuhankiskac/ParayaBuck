@@ -517,6 +517,14 @@ class CryptoUniverseConfig:
     active_universe_path: str = "data/runtime/active_crypto_universe.json"
     active_universe_max_age_hours: float = 12.0
     require_scanner_config_digest_match: bool = True
+    # Runtime-only identity of the strategy that produced the persisted
+    # strategy-alpha observation set. Excluded from scanner digest: changing
+    # alpha must invalidate observation without pretending scanner economics
+    # changed.
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
+    observation_strategy_timeframe: str | None = None
+    observation_strategy_parameters_digest: str = ""
     scanner: CryptoScannerConfig = field(default_factory=CryptoScannerConfig)
 
     def __post_init__(self) -> None:
@@ -550,6 +558,21 @@ class CryptoUniverseConfig:
         object.__setattr__(self, "pinned_symbols", pinned)
         object.__setattr__(self, "allowlist_symbols", allowlist)
         object.__setattr__(self, "denylist_symbols", denylist)
+        # Category metadata integrity: every configured production symbol must
+        # have an explicit category; silent unknown_category_penalty is not
+        # acceptable for the frozen PAPER pool.
+        if symbols:
+            try:
+                from parayabuck.universe.crypto_scanner import CRYPTO_CATEGORIES
+
+                missing = [s for s in symbols if s not in CRYPTO_CATEGORIES]
+                if missing and self.enabled and self.dynamic_selection_enabled:
+                    raise ValueError(
+                        f"Missing crypto category metadata for configured trade_symbols: {','.join(missing)}; "
+                        "add them to CRYPTO_CATEGORIES"
+                    )
+            except ImportError:
+                pass
 
 
 @dataclass(frozen=True)
@@ -768,6 +791,27 @@ def load_config(config_path: str | None = None) -> Config:
             observation_strategy_name=resolved_equity.name,
             observation_strategy_version=resolved_equity.version,
             observation_strategy_timeframe=resolved_equity.timeframe,
+        )
+    if crypto_strategy.enabled and crypto_universe.dynamic_selection_enabled:
+        from parayabuck.portfolio import portfolio_strategy_from
+
+        resolved_crypto = portfolio_strategy_from(
+            crypto_strategy.name,
+            crypto_strategy.parameters,
+            timeframe=crypto_strategy.timeframe,
+        )
+        import hashlib
+        import json as _json
+
+        params_digest = hashlib.sha256(
+            _json.dumps(crypto_strategy.parameters, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        crypto_universe = replace(
+            crypto_universe,
+            observation_strategy_name=resolved_crypto.name,
+            observation_strategy_version=resolved_crypto.version,
+            observation_strategy_timeframe=resolved_crypto.timeframe,
+            observation_strategy_parameters_digest=params_digest,
         )
     alpaca_raw = dict(raw.get("alpaca", {}))
     legacy_paper = alpaca_raw.pop("paper", None)

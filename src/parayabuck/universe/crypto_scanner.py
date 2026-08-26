@@ -34,13 +34,17 @@ CRYPTO_CATEGORIES = {
     "UNI/USD": "defi",
     "AAVE/USD": "defi",
     "ONDO/USD": "defi",
+    "CRV/USD": "defi",
     "FIL/USD": "infrastructure",
     "RENDER/USD": "infrastructure",
+    "GRT/USD": "infrastructure",
     "LTC/USD": "legacy",
     "BCH/USD": "legacy",
     "ARB/USD": "high_beta",
     "HYPE/USD": "high_beta",
     "DOGE/USD": "meme",
+    "SHIB/USD": "meme",
+    "PEPE/USD": "meme",
 }
 
 
@@ -195,6 +199,10 @@ class CryptoScannerResult:
     # quality ranking is the fallback until a strategy alpha ranker runs.
     observation_set: tuple[str, ...] = ()
     observation_eliminated: dict[str, str] = field(default_factory=dict)
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
+    observation_strategy_timeframe: str | None = None
+    observation_strategy_parameters_digest: str = ""
 
 
 class CryptoUniverseScanner:
@@ -440,7 +448,15 @@ class CryptoUniverseScanner:
 
 
 def crypto_scanner_config_digest(config: CryptoUniverseConfig) -> str:
-    payload = json.dumps(asdict(config), sort_keys=True, separators=(",", ":")).encode()
+    payload_dict = asdict(config)
+    for key in (
+        "observation_strategy_name",
+        "observation_strategy_version",
+        "observation_strategy_timeframe",
+        "observation_strategy_parameters_digest",
+    ):
+        payload_dict.pop(key, None)
+    payload = json.dumps(payload_dict, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -460,6 +476,27 @@ def validate_active_crypto_universe(
             config
         ):
             return (), "digest_mismatch"
+        # Observation strategy provenance: the persisted observation set must
+        # have been produced by the currently selected crypto strategy.
+        expected_name = config.observation_strategy_name
+        if expected_name:
+            if (
+                payload.get("observation_strategy_name") != expected_name
+                or payload.get("observation_strategy_version") != config.observation_strategy_version
+            ):
+                return (), "observation_strategy_mismatch"
+            if payload.get("observation_strategy_timeframe") != config.observation_strategy_timeframe:
+                return (), "observation_timeframe_mismatch"
+            expected_digest = config.observation_strategy_parameters_digest
+            if expected_digest and payload.get("observation_strategy_parameters_digest") not in (
+                None,
+                "",
+                expected_digest,
+            ):
+                if payload.get("observation_strategy_parameters_digest") != expected_digest:
+                    return (), "observation_digest_mismatch"
+            elif expected_digest and not payload.get("observation_strategy_parameters_digest"):
+                return (), "observation_strategy_mismatch"
         selection_at = datetime.fromisoformat(str(payload["selection_timestamp"]))
         data_at = datetime.fromisoformat(str(payload["data_timestamp"]))
         if selection_at.tzinfo is None or data_at.tzinfo is None:

@@ -242,13 +242,13 @@ def test_category_limits_and_score_penalties(tmp_path: Path) -> None:
 
     normal = _candidate("SOL/USD", correlation=0.5)
     correlated = _candidate("ADA/USD", correlation=0.99)
-    unknown = _candidate("SHIB/USD", category="unknown")
+    unknown = _candidate("FOO/USD", category="unknown")
     scored = CryptoUniverseScanner(config).scan(
         [_candidate("BTC/USD"), _candidate("ETH/USD"), normal, correlated, unknown],
         data_timestamp=datetime.now(UTC),
     )
     assert scored.score_breakdown["SOL/USD"]["total"] > scored.score_breakdown["ADA/USD"]["total"]
-    assert scored.score_breakdown["SOL/USD"]["total"] > scored.score_breakdown["SHIB/USD"]["total"]
+    assert scored.score_breakdown["SOL/USD"]["total"] > scored.score_breakdown["FOO/USD"]["total"]
 
 
 def test_duplicate_candidate_is_rejected(tmp_path: Path) -> None:

@@ -155,12 +155,12 @@ strategy:
       exclude_symbols: [SPY]
       rebalance_frequency: weekly
   crypto:
-    # crypto_low_variance_v2 — CADENCE-VALIDATED v2 (2026-08-18 cadence
-    # mission): same validated alpha as v1 (bake-off verdict A), 96h
-    # rebalance. v1 stays frozen as the historical baseline. LIVE remains
-    # disabled.
+    # crypto_low_variance_hysteresis_v1 — TOURNAMENT WINNER T1 (2026-08-26):
+    # same validated alpha as v2 (22d top2), hysteresis retention rank<=4 at 96h,
+    # halves turnover (8.72->4.00) and fees (-53%), doubles return (5.25%->10.54%).
+    # v2 and v1 stay frozen historical baselines for rollback.
     enabled: true
-    name: crypto_low_variance_v2
+    name: crypto_low_variance_hysteresis_v1
     # 2026-08-21 operator decision (docs/optimization_experiments_2026_08.md,
     # A1): sleeve halved 0.10 -> 0.05. Over 2021-2026 the crypto sleeve added
     # +0.68pp combined CAGR but deepened combined maxDD by +6.35pp; halving

@@ -16,12 +16,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from parayabuck.backup import backup_database, verify_backup
 from parayabuck.core.models import Bar, Market
@@ -149,7 +146,6 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
     """Decision + orders must be atomic: half-decision cannot happen."""
     repo = PortfolioStateRepository(tmp_path / "portfolio.sqlite3")
     from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
-    from parayabuck.portfolio.runtime_service import _decision_id
 
     # Build a minimal target
     ts = datetime(2025, 6, 2, 4, 0, tzinfo=UTC)
@@ -162,7 +158,7 @@ def test_crash_consistency_decision_order_atomic(tmp_path: Path) -> None:
         metadata={},
         universe_version="v1",
     )
-    from parayabuck.portfolio.runtime_service import PortfolioRiskLimits, RiskOverlayDecision
+    from parayabuck.portfolio.runtime_service import RiskOverlayDecision
 
     risk = RiskOverlayDecision(target=target, halted=False, reasons=(), gross_before=1.0, gross_after=0.5)
     session_id = repo.begin_session("acct1", "digest1", "paper")
@@ -315,7 +311,6 @@ class FakeHistory:
 
 
 def _engine_with_symbols(symbols: tuple[str, ...]):
-    from unittest.mock import MagicMock
 
     from parayabuck.runtime import EngineRuntime
 
@@ -455,7 +450,6 @@ def test_signal_dedup_identical_provider_calls() -> None:
 
 
 def test_signal_retries_bounded_on_transient() -> None:
-    from parayabuck.runtime import _is_transient_network_error
 
     engine, runtime = _engine_with_symbols(("AAA",))
     dates = _days(20)
@@ -596,9 +590,7 @@ def test_alpaca_dedup_measures_provider_calls() -> None:
 
 
 def test_universe_pagination_150(tmp_path: Path) -> None:
-    import parayabuck.universe.preflight as preflight
-    from parayabuck.config import Config
-    from parayabuck.universe.preflight import _chunks, refresh_equity_universe
+    from parayabuck.universe.preflight import _chunks
 
     # Verify _chunks pagination is 150 for history
     symbols = [f"SYM{i}" for i in range(310)]
@@ -610,7 +602,6 @@ def test_universe_pagination_150(tmp_path: Path) -> None:
 
 
 def test_universe_stale_snapshot_explicit_age(tmp_path: Path) -> None:
-    from parayabuck.config import Config
     from parayabuck.universe.scanner import (
         EquityUniverseConfig,
         EquityUniverseScanner,
@@ -654,8 +645,6 @@ def test_universe_stale_snapshot_explicit_age(tmp_path: Path) -> None:
 def test_universe_no_partial_on_refresh_failure(tmp_path: Path) -> None:
     import parayabuck.universe.preflight as preflight
     from parayabuck.config import Config
-    from parayabuck.universe.preflight import ensure_active_universes
-    from parayabuck.universe.scanner import scanner_config_digest
 
     # Create a valid stale snapshot that would trigger refresh
     Config.load(Path("config/paper.toml")) if Path("config/paper.toml").exists() else None
@@ -696,7 +685,6 @@ def test_universe_no_partial_on_refresh_failure(tmp_path: Path) -> None:
 
 
 def test_universe_refresh_atomic_write(tmp_path: Path) -> None:
-    import json
 
     from parayabuck.universe.scanner import EquityUniverseConfig, EquityUniverseScanner
 

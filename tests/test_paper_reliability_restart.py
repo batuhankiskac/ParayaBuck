@@ -8,7 +8,6 @@ network, no flake.
 
 from __future__ import annotations
 
-import json
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,7 +20,6 @@ from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
 from parayabuck.portfolio.runtime_service import (
-    REBALANCE_PHASE_COMPLETE,
     PortfolioRuntime,
     PortfolioStateRepository,
 )
@@ -605,7 +603,6 @@ def test_order_idempotency_same_decision_twice_one_order(tmp_path: Path) -> None
     tsla_decision = repo.latest_decision_timestamp("acct", rt_fail.configuration_digest, Market.EQUITY)
     assert tsla_decision is not None
     # Find the TSLA order
-    from pathlib import Path as _P
 
     # Verify no duplicate broker submission on retry after reconcile
     rt.close()

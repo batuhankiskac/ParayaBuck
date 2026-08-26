@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestResult, TargetPortfolio, TargetWeight
+from parayabuck.backtest.portfolio_engine import TargetPortfolio, TargetWeight
 from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine, TerminalInfo
-from parayabuck.backtest.terminal_policy import TerminalClassification, should_apply_haircut
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 
@@ -136,7 +135,6 @@ def test_t0_stale_no_removal():
 
 
 def test_t2_t3_proceeds():
-    from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
     from parayabuck.backtest.terminal_aware_engine import _terminal_proceeds
 
     # Mock engine for fee

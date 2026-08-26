@@ -40,6 +40,14 @@ class PaperReceipt:
     positions_after: dict[str, float]
     actual_gross_exposure: float
     cash_ratio: float
+    # T1 hysteresis promotion: crypto receipts include per-symbol rank/retained
+    # and observation strategy provenance. Kept optional with defaults so
+    # existing equity receipts and old tests remain valid.
+    ranks: dict[str, int] = field(default_factory=dict)
+    retained: dict[str, bool] = field(default_factory=dict)
+    previous_holdings: dict[str, float] = field(default_factory=dict)
+    universe_version: str = ""
+    observation_strategy_digest: str = ""
     warnings: list[str] = field(default_factory=list)
     incidents: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -115,6 +123,11 @@ def build_receipt(
     positions_after: dict[str, float],
     actual_gross_exposure: float,
     cash_ratio: float,
+    ranks: dict[str, int] | None = None,
+    retained: dict[str, bool] | None = None,
+    previous_holdings: dict[str, float] | None = None,
+    universe_version: str = "",
+    observation_strategy_digest: str = "",
     warnings: list[str] | None = None,
     incidents: list[dict[str, Any]] | None = None,
 ) -> PaperReceipt:
@@ -136,6 +149,11 @@ def build_receipt(
         positions_after=positions_after,
         actual_gross_exposure=actual_gross_exposure,
         cash_ratio=cash_ratio,
+        ranks=ranks or {},
+        retained=retained or {},
+        previous_holdings=previous_holdings or dict(broker_positions_before),
+        universe_version=universe_version or universe_hash,
+        observation_strategy_digest=observation_strategy_digest,
         warnings=warnings or [],
         incidents=incidents or [],
     )

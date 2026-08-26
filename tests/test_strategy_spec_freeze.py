@@ -99,22 +99,21 @@ def test_production_equity_selection_is_v3(config: Config) -> None:
     assert rebalance_policy_for(strategy).frequency == "weekly"
 
 
-def test_production_crypto_selection_is_v2(config: Config) -> None:
+def test_production_crypto_selection_is_hysteresis_v1(config: Config) -> None:
     crypto = config.strategy.crypto
-    # 2026-08-21 operator decision: sleeve 0.10 -> 0.05 (drawdown evidence,
-    # docs/optimization_experiments_2026_08.md A1).
+    # 2026-08-27 T1 PROMOTION: PAPER now hysteresis v1 (same alpha 22/2/96 + rank<=4)
+    # v2 and v1 stay frozen historical baselines for rollback.
     assert crypto.maximum_allocation == 0.05
     assert crypto.enabled is True
-    assert crypto.name == "crypto_low_variance_v2"
+    assert crypto.name == "crypto_low_variance_hysteresis_v1"
     assert _params_dict(crypto.parameters) == PRODUCTION_CRYPTO_PARAMETERS
     strategy = portfolio_strategy_from(crypto.name, crypto.parameters)
+    assert strategy.RETENTION_RANK == 4  # frozen retention
     assert rebalance_policy_for(strategy).hours == 96
 
 
 def test_production_selections_are_the_only_product_strategies(config: Config) -> None:
-    """The product surface is exactly the four identities: two current
-    selections plus the two frozen v1 baselines. Rejected research families
-    are not part of it."""
+    """The product surface is exactly the current selections plus frozen v1/v2 baselines."""
     registered = set(supported_portfolio_strategies())
     assert registered == {
         "equity_residual_momentum_v1",
@@ -122,6 +121,7 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
         "equity_residual_momentum_v3",
         "crypto_low_variance_v1",
         "crypto_low_variance_v2",
+        "crypto_low_variance_hysteresis_v1",
     }
     assert {config.strategy.equity.name, config.strategy.crypto.name} <= registered
 

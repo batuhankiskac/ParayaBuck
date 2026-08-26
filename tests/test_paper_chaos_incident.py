@@ -8,15 +8,12 @@ no duplicate economic action, no silent drift, safe fail-closed.
 
 from __future__ import annotations
 
-import sqlite3
-import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from parayabuck.core.models import AccountSnapshot, Bar, Fill, Market, OrderIntent, OrderRole, PositionSnapshot
+from parayabuck.core.models import AccountSnapshot, Bar, Fill, Market, OrderIntent, PositionSnapshot
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.monitoring import alerts, metrics
 from parayabuck.monitoring.incident import IncidentCategory
@@ -301,7 +298,6 @@ def test_restart_resumes_without_duplicate_orders(tmp_path: Path) -> None:
     # Create minimal session and decision row via begin_session + dummy insert
     sid = repo.begin_session(account_id, "cfg123", "paper")
     # Insert dummy decision to satisfy FK
-    import sqlite3 as _sql
 
     with repo.store.lock, repo.store.connection:
         repo.store.connection.execute(

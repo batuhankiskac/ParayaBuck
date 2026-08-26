@@ -15,8 +15,7 @@ from __future__ import annotations
 
 import math
 import statistics
-from datetime import UTC, datetime, timedelta, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 import pytest
 

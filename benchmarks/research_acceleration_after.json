@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-08-28T00:00:00Z",
-  "head": "a66aafd82ba310c2ada58dd29695d52a90120701",
+  "head": "7041357d9ff4b4279fc0ec17094141afb361491d",
   "starting_head": "849555ed12fe8d5ec9410a59c07585cb908b5a92",
   "branch": "mission-0a-research-acceleration",
   "machine": {
@@ -41,7 +41,7 @@
     "universe_cache_hit": true
   },
   "hardening_verification": {
-    "head": "a66aafd82ba310c2ada58dd29695d52a90120701",
+    "head": "7041357d9ff4b4279fc0ec17094141afb361491d",
     "parity_combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
     "workers_memory": {
       "w1_elapsed_s": 15.08,

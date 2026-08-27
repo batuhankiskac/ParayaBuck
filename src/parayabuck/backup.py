@@ -106,11 +106,13 @@ def backup_database(
     # - File fsync failure means the snapshot is NOT durable: remove the new
     #   file (and sidecars), preserve previous verified backups, do NOT prune,
     #   and raise BackupDurabilityError.
-    # - Directory fsync failure is platform-specific: EINVAL/EBADF/ENOTSUP
-    #   indicate the OS/filesystem does not support fsync on directories
-    #   (e.g., some network filesystems, Windows). These are documented and
-    #   treated as best-effort (not durable failure). Other OSError on
-    #   directory fsync is treated as durability failure likewise.
+    # - Directory fsync failure: only EINVAL/ENOTSUP/EOPNOTSUPP indicate the
+    #   OS/filesystem does not support fsync on directories and are treated
+    #   as best-effort (file fsync already succeeded). All other errors —
+    #   notably EPERM/EACCES/EBADF on Linux which are permission failures —
+    #   must be treated as durability failures: remove the new file
+    #   (and sidecars), preserve previous backups, do NOT prune, and raise
+    #   BackupDurabilityError.
     try:
         with open(destination, "rb") as fh:
             os.fsync(fh.fileno())
@@ -130,10 +132,13 @@ def backup_database(
         finally:
             os.close(dir_fd)
     except OSError as exc:
-        # Unsupported directory fsync on this platform/filesystem — documented
-        # as best-effort; do not treat as durability failure.
-        if exc.errno in (errno.EINVAL, errno.EBADF, errno.ENOTSUP, errno.EPERM, errno.EACCES):
-            pass  # platform does not support directory fsync; file fsync already succeeded
+        # Only EINVAL and ENOTSUP/EOPNOTSUPP are best-effort.
+        _best_effort_errnos: set[int] = {errno.EINVAL, errno.ENOTSUP}
+        _eop = getattr(errno, "EOPNOTSUPP", None)
+        if _eop is not None:
+            _best_effort_errnos.add(_eop)
+        if exc.errno in _best_effort_errnos:
+            pass  # filesystem does not support directory fsync; file fsync already succeeded
         else:
             for p in (destination, Path(f"{destination}-wal"), Path(f"{destination}-shm")):
                 try:

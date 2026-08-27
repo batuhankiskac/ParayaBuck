@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from parayabuck.backup import backup_database, prune_backups, verify_backup
+from parayabuck.backup import BackupDurabilityError, backup_database, prune_backups, verify_backup
 from parayabuck.storage import SQLiteStore
 
 
@@ -171,3 +173,81 @@ def test_verify_backup_rejects_corrupt_file(tmp_path: Path) -> None:
 
 def test_prune_backups_missing_directory_is_noop(tmp_path: Path) -> None:
     assert prune_backups(tmp_path / "nope", retention_days=7) == []
+
+
+def test_backup_directory_fsync_eacces_raises_and_preserves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Directory fsync EACCES must be treated as durability failure (Linux)."""
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        # Previous verified backup that must be preserved.
+        prev = backup_database(source, backup_dir, retention_days=7)
+        assert prev.exists()
+        # Expired backup that would be pruned if prune ran — must survive the failure.
+        expired = backup_dir / "parayabuck-19990101T000000000000Z.sqlite3"
+        shutil.copy(prev, expired)
+        old_mtime = prev.stat().st_mtime - 20 * 86_400
+        os.utime(expired, (old_mtime, old_mtime))
+        # Also age prev so we can distinguish, but keep it within retention.
+        # Make prev look slightly older than now but still inside retention.
+        prev_mtime = prev.stat().st_mtime - 1 * 86_400
+        os.utime(prev, (prev_mtime, prev_mtime))
+        before = set(p.name for p in backup_dir.iterdir())
+        assert prev.name in before and expired.name in before
+        calls = {"n": 0}
+
+        def fake_fsync(fd: int) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None  # file fsync succeeds
+            raise OSError(errno.EACCES, os.strerror(errno.EACCES))
+
+        monkeypatch.setattr(os, "fsync", fake_fsync)
+        with pytest.raises(BackupDurabilityError, match="directory fsync"):
+            backup_database(source, backup_dir, retention_days=7)
+        after = set(p.name for p in backup_dir.iterdir())
+        # New backup must have been cleaned up; previous and expired preserved, no prune.
+        assert after == before, f"expected no net files added, before={before} after={after}"
+        assert prev.exists()
+        assert expired.exists()
+        assert calls["n"] == 2
+    finally:
+        store.release()
+
+
+def test_backup_directory_fsync_eperm_raises_and_preserves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Directory fsync EPERM must be treated as durability failure (Linux)."""
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        prev = backup_database(source, backup_dir, retention_days=7)
+        assert prev.exists()
+        expired = backup_dir / "parayabuck-19990101T000000000000Z.sqlite3"
+        shutil.copy(prev, expired)
+        old_mtime = prev.stat().st_mtime - 20 * 86_400
+        os.utime(expired, (old_mtime, old_mtime))
+        prev_mtime = prev.stat().st_mtime - 1 * 86_400
+        os.utime(prev, (prev_mtime, prev_mtime))
+        before = set(p.name for p in backup_dir.iterdir())
+        calls = {"n": 0}
+
+        def fake_fsync(fd: int) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            raise OSError(errno.EPERM, os.strerror(errno.EPERM))
+
+        monkeypatch.setattr(os, "fsync", fake_fsync)
+        with pytest.raises(BackupDurabilityError, match="directory fsync"):
+            backup_database(source, backup_dir, retention_days=7)
+        after = set(p.name for p in backup_dir.iterdir())
+        assert after == before
+        assert prev.exists()
+        assert expired.exists()
+        assert calls["n"] == 2
+    finally:
+        store.release()

@@ -105,7 +105,7 @@ def test_peak_atomic_write_fault_injection_preserves_old(tmp_path):
 
 
 def test_peak_sidecar_deletion_restores_persisted(tmp_path):
-    """Peak sidecar deleted but SQLite holds peak -> restore max persisted."""
+    """Peak sidecar deleted but SQLite holds peak -> restore max persisted (account-scoped)."""
     from datetime import UTC, datetime
 
     from parayabuck.execution.ledger import ExecutionLedger
@@ -133,17 +133,45 @@ def test_peak_sidecar_deletion_restores_persisted(tmp_path):
             peak_epoch=0,
         )
     )
-    # Create broker with sidecar present then delete sidecar to simulate loss
+    # Create broker with legacy sidecar (pre-account-scoped format) then delete sidecar to simulate loss
     peak = tmp_path / "paper_equity_peak.json"
     peak.write_text(json.dumps({"peak_equity": 100000.0, "epoch": 0}))
+
+    class FakeAccountInit:
+        equity = 100000.0
+        last_equity = 100000.0
+        cash = 100000.0
+        account_blocked = False
+        trading_blocked = False
+        trade_suspended_by_user = False
+        id = "acct-test"
+        crypto_status = "ACTIVE"
+        non_marginable_buying_power = None
+
+    class FakeClientInit:
+        def get_account(self):
+            return FakeAccountInit()
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
     broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    broker._client = FakeClientInit()
+    # Trigger account-scoped reconciliation (legacy sidecar -> max with persisted, rebind)
+    snap_init = broker.account()
+    assert snap_init.peak_equity == 100000.0
     assert broker._peak_equity == 100000.0
+    # Sidecar should now be bound to acct-test
+    assert json.loads(peak.read_text()).get("account_id") == "acct-test"
     # Delete sidecar, simulate restart with current equity 94000
     peak.unlink()
     # Create new broker instance sharing same ledger (restart)
     broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
-    # Must restore 100000, not rebase to 0 or 94000
-    assert broker2._peak_equity == 100000.0
+    # Before account() peak is 0 (not yet reconciled); after account() must restore 100000, not rebase to 0 or 94000
+    assert broker2._peak_equity == 0.0
+    assert broker2._peak_account_id is None
 
     # Simulate account fetch at 94000 -> drawdown 6%
     class FakeAccount:
@@ -170,9 +198,10 @@ def test_peak_sidecar_deletion_restores_persisted(tmp_path):
     snap = broker2.account()
     assert snap.peak_equity == 100000.0
     assert abs(snap.drawdown_pct - 0.06) < 1e-9
-    # Sidecar should have been restored
+    # Sidecar should have been restored bound to acct-test
     assert peak.exists()
     assert json.loads(peak.read_text())["peak_equity"] == 100000.0
+    assert json.loads(peak.read_text()).get("account_id") == "acct-test"
 
 
 def test_peak_missing_with_no_persisted_bootstraps_zero(tmp_path):
@@ -198,18 +227,47 @@ def test_peak_max_when_both_exist(tmp_path):
     repo.update_high_water("acct-test", 90000.0)
     peak = tmp_path / "paper_equity_peak.json"
     peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))
+
+    class FakeAccountA:
+        equity = 95000.0
+        last_equity = 95000.0
+        cash = 95000.0
+        account_blocked = False
+        trading_blocked = False
+        trade_suspended_by_user = False
+        id = "acct-test"
+        crypto_status = "ACTIVE"
+        non_marginable_buying_power = None
+
+    class FakeClientA:
+        def get_account(self):
+            return FakeAccountA()
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
     broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    broker._client = FakeClientA()
+    snap = broker.account()
     # sidecar 95k > persisted 90k same epoch -> max wins 95k
+    assert snap.peak_equity == 95000.0
     assert broker._peak_equity == 95000.0
-    # Now persist higher 100k and reload sidecar still 95k -> should pick 100k
+    # Now persist higher 100k and reload sidecar still 95k -> should pick 100k (account-scoped)
     repo.update_high_water("acct-test", 100000.0)
-    peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))
+    peak.write_text(json.dumps({"account_id": "acct-test", "peak_equity": 95000.0, "epoch": 0}))
     broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    broker2._client = FakeClientA()
+    # Need to mock same account but with current equity maybe still 95k; reconciliation should pick persisted 100k
+    # Use a fresh fake that returns 95000 equity (below persisted peak)
+    snap2 = broker2.account()
+    assert snap2.peak_equity == 100000.0
     assert broker2._peak_equity == 100000.0
 
 
 def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
-    """Explicit reset epoch increments; old higher peak must not resurrect."""
+    """Explicit reset epoch increments; old higher peak must not resurrect (account-scoped)."""
     from datetime import UTC, datetime
 
     from parayabuck.execution.ledger import ExecutionLedger
@@ -223,9 +281,33 @@ def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
     # Historical peak 100k epoch 0
     repo.update_high_water("acct-test", 100000.0)
     peak.write_text(json.dumps({"peak_equity": 100000.0, "epoch": 0}))
+
+    class FakeAccount100:
+        equity = 100000.0
+        last_equity = 100000.0
+        cash = 100000.0
+        account_blocked = False
+        trading_blocked = False
+        trade_suspended_by_user = False
+        id = "acct-test"
+        crypto_status = "ACTIVE"
+        non_marginable_buying_power = None
+
+    class FakeClient100:
+        def get_account(self):
+            return FakeAccount100()
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
     broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    broker._client = FakeClient100()
+    snap = broker.account()
+    assert snap.peak_equity == 100000.0
     assert broker._peak_equity == 100000.0
-    # Operator explicit reset to 94000 -> epoch 1
+    # Operator explicit reset to 94000 -> epoch 1 (account-scoped)
     broker.reset_peak_equity(94000.0)
     repo.reset_high_water("acct-test", 94000.0)
     ledger.save_risk_state(
@@ -245,9 +327,36 @@ def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
     )
     assert broker._peak_epoch == 1
     # Simulate old risk_state row with epoch 0 still present (historical)
-    # Already present; new broker restart with sidecar deleted should NOT resurrect 100k
+    # Already present; new broker restart with sidecar deleted should NOT resurrect 100k for acct-test
     peak.unlink()
     broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker2._peak_equity == 0.0
+    assert broker2._peak_account_id is None
+
+    # Reconcile via account() — epoch 1 should win, not old 100k epoch 0
+    class FakeAccount94:
+        equity = 94000.0
+        last_equity = 94000.0
+        cash = 94000.0
+        account_blocked = False
+        trading_blocked = False
+        trade_suspended_by_user = False
+        id = "acct-test"
+        crypto_status = "ACTIVE"
+        non_marginable_buying_power = None
+
+    class FakeClient94:
+        def get_account(self):
+            return FakeAccount94()
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
+    broker2._client = FakeClient94()
+    snap2 = broker2.account()
+    assert snap2.peak_equity == 94000.0
     assert broker2._peak_equity == 94000.0
     assert broker2._peak_epoch == 1
 
@@ -616,3 +725,270 @@ def test_webhook_throttle_distinct_incidents():
         alerts.emit("paper_incident", message="inc1 dup", category="risk", incident_id="id1")
         stats2 = alerts.alert_stats()
         assert stats2["suppressed"] == 1
+
+
+# --- Account-scoped peak recovery A-G ---
+
+
+def _make_fake_account(account_id: str, equity: float):
+    class FakeAccount:
+        pass
+
+    fa = FakeAccount()
+    fa.equity = equity
+    fa.last_equity = equity
+    fa.cash = equity
+    fa.account_blocked = False
+    fa.trading_blocked = False
+    fa.trade_suspended_by_user = False
+    fa.id = account_id
+    fa.crypto_status = "ACTIVE"
+    fa.non_marginable_buying_power = None
+    return fa
+
+
+def _make_broker_for_account(tmp_path, ledger, peak_path, account_id, equity):
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak_path, ledger=ledger)
+
+    class FakeClient:
+        def get_account(self):
+            return _make_fake_account(account_id, equity)
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
+    broker._client = FakeClient()
+    return broker
+
+
+def test_peak_account_scoped_A_isolation(tmp_path):
+    """A: peaks are isolated per account — A 100k does not leak to B 50k."""
+
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "a_isolation.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-A", 100000.0)
+    repo.update_high_water("acct-B", 50000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    # No sidecar
+    if peak.exists():
+        peak.unlink()
+    # Account A reconciles to 100k
+    broker_a = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 100000.0)
+    snap_a = broker_a.account()
+    assert snap_a.peak_equity == 100000.0
+    assert broker_a._peak_account_id == "acct-A"
+    assert broker_a._peak_epoch == 0
+    # Simulate B on same broker path but fresh broker instance (restart as B)
+    # Delete sidecar to force DB restore for B
+    peak.unlink()
+    broker_b = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 50000.0)
+    snap_b = broker_b.account()
+    assert snap_b.peak_equity == 50000.0
+    assert snap_b.drawdown_pct == 0.0
+    # Ensure B's drawdown not computed against A's 100k
+    assert broker_b._peak_equity == 50000.0
+    # Now B drops to 47000 -> 6% drawdown vs 50k, not vs 100k (which would be 53%)
+    broker_b2 = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 47000.0)
+    # Reuse same ledger, but need to keep sidecar bound to B (reuse peak file)
+    snap_b2 = broker_b2.account()
+    assert abs(snap_b2.drawdown_pct - 0.06) < 1e-9
+    assert snap_b2.peak_equity == 50000.0
+
+
+def test_peak_account_scoped_B_legacy_max(tmp_path):
+    """B: legacy sidecar without account_id -> max(legacy, persisted) then rebind."""
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "b_legacy.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-test", 90000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    # Legacy sidecar 95000 (higher than persisted 90k)
+    peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-test", 92000.0)
+    snap = broker.account()
+    # Legacy 95k vs persisted 90k -> max is 95k, sidecar rewritten bound
+    assert snap.peak_equity == 95000.0
+    assert json.loads(peak.read_text())["account_id"] == "acct-test"
+    assert json.loads(peak.read_text())["peak_equity"] == 95000.0
+    # Now legacy lower than persisted: persisted 100k, legacy 95000 -> persisted wins
+    repo.update_high_water("acct-test", 100000.0)
+    peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))  # legacy again
+    broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+
+    class FakeClient:
+        def get_account(self):
+            return _make_fake_account("acct-test", 95000.0)
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
+    broker2._client = FakeClient()
+    snap2 = broker2.account()
+    assert snap2.peak_equity == 100000.0
+    assert json.loads(peak.read_text())["peak_equity"] == 100000.0
+
+
+def test_peak_account_scoped_C_sidecar_mismatch_ignored(tmp_path):
+    """C: sidecar bound to acct-A is ignored when current account is B."""
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "c_mismatch.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-B", 70000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    # Sidecar bound to A with 120k
+    peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 120000.0, "epoch": 0}))
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 70000.0)
+    snap = broker.account()
+    # Must ignore A's 120k and use B's 70k
+    assert snap.peak_equity == 70000.0
+    assert broker._peak_account_id == "acct-B"
+    # Sidecar rewritten to B
+    data = json.loads(peak.read_text())
+    assert data["account_id"] == "acct-B"
+    assert data["peak_equity"] == 70000.0
+
+
+def test_peak_account_scoped_D_no_cross_account_pollution(tmp_path):
+    """D: deleting sidecar for A does not resurrect B's peak."""
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "d_pollution.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-A", 200000.0)
+    repo.update_high_water("acct-B", 30000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 200000.0, "epoch": 0}))
+    # Broker for A correctly restores 200k
+    broker_a = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 200000.0)
+    snap_a = broker_a.account()
+    assert snap_a.peak_equity == 200000.0
+    # Now switch to B, sidecar still bound to A, but B should get 30k not 200k
+    broker_b = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 30000.0)
+    # Before account(), peak is 0; after, should be 30k
+    assert broker_b._peak_equity == 0.0
+    snap_b = broker_b.account()
+    assert snap_b.peak_equity == 30000.0
+    assert snap_b.peak_equity != 200000.0
+
+
+def test_peak_account_scoped_E_epoch_isolated_per_account(tmp_path):
+    """E: epoch reset for A does not affect B."""
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+    from parayabuck.risk.state import RiskState
+
+    db = tmp_path / "e_epoch.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-A", 100000.0)
+    repo.update_high_water("acct-B", 80000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    # Bootstrap A at epoch 0 100k
+    peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 100000.0, "epoch": 0}))
+
+    broker_a = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 100000.0)
+    snap_a = broker_a.account()
+    assert snap_a.peak_equity == 100000.0
+    assert broker_a._peak_epoch == 0
+    # Reset A to epoch 1 at 60000
+    broker_a.reset_peak_equity(60000.0)
+    repo.reset_high_water("acct-A", 60000.0)
+    ledger.save_risk_state(
+        RiskState(
+            account_id="acct-A",
+            session_date=datetime.now(UTC).date(),
+            day_start_equity=60000.0,
+            peak_equity=60000.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            fees=0.0,
+            consecutive_losses=0,
+            circuit_breaker_reason=None,
+            updated_at=datetime.now(UTC),
+            peak_epoch=broker_a._peak_epoch,
+        )
+    )
+    assert broker_a._peak_epoch == 1
+    # B should still be epoch 0 and peak 80k, not affected
+    # Need fresh broker file bound to B; delete A-bound sidecar first to test DB restore for B
+    peak.unlink()
+    broker_b = _make_broker_for_account(tmp_path, ledger, peak, "acct-B", 80000.0)
+    snap_b = broker_b.account()
+    assert snap_b.peak_equity == 80000.0
+    assert broker_b._peak_epoch == 0
+    # A's epoch 1 still holds when we come back to A (even with sidecar deleted)
+    peak.unlink()
+    broker_a2 = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 60000.0)
+    snap_a2 = broker_a2.account()
+    assert snap_a2.peak_equity == 60000.0
+    assert broker_a2._peak_epoch == 1
+    # Simulate old high_water row for A epoch 0 still at 100k — must not resurrect
+    assert snap_a2.peak_equity != 100000.0
+
+
+def test_peak_account_scoped_F_identity_change_fails_closed(tmp_path):
+    """F: changing account_id on same broker instance raises RuntimeError."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "f_identity.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
+    broker.account()
+    assert broker._peak_account_id == "acct-A"
+    # Now try to fetch as different account on same broker (should fail closed)
+    broker._client.get_account = lambda: _make_fake_account("acct-B", 50000.0)
+    with pytest.raises(RuntimeError, match="Account identity changed"):
+        broker.account()
+
+
+def test_peak_account_scoped_G_first_run_zero_and_legacy_no_sqlite(tmp_path):
+    """G: first run with no sidecar and no SQLite bootstraps to 0, then to equity;
+    legacy sidecar with no SQLite is used with warning and rebound."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "g_first.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    # No persisted, no sidecar -> first run 0 then max with equity
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-new", 42000.0)
+    assert broker._peak_equity == 0.0
+    assert broker._peak_account_id is None
+    snap = broker.account()
+    # Peak should now be max(0, 42000) = 42000
+    assert snap.peak_equity == 42000.0
+    assert broker._peak_equity == 42000.0
+    assert broker._peak_account_id == "acct-new"
+    assert json.loads(peak.read_text())["account_id"] == "acct-new"
+    assert json.loads(peak.read_text())["peak_equity"] == 42000.0
+    # Legacy with no SQLite persisted: use legacy and rebound
+    db2 = tmp_path / "g_legacy.sqlite3"
+    ledger2 = ExecutionLedger(str(db2))
+    peak2 = tmp_path / "paper_equity_peak2.json"
+    peak2.write_text(json.dumps({"peak_equity": 77000.0, "epoch": 0}))  # legacy, no account_id, no DB row
+    broker2 = _make_broker_for_account(tmp_path, ledger2, peak2, "acct-legacy", 77000.0)
+    snap2 = broker2.account()
+    assert snap2.peak_equity == 77000.0
+    assert json.loads(peak2.read_text())["account_id"] == "acct-legacy"
+    # Reset must require account known
+    broker3 = AlpacaBroker("k", "s", paper=True, peak_state_path=tmp_path / "paper_equity_peak3.json", ledger=ledger2)
+    with pytest.raises(RuntimeError, match="before account is known"):
+        broker3.reset_peak_equity(10000.0)

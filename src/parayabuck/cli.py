@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
+import sqlite3
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,14 +20,14 @@ from parayabuck.backtest.product import (
     optimize_grid,
     run_product_backtest,
 )
-from parayabuck.config import Config, load_config
+from parayabuck.config import Config, RuntimeMode, load_config
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
 from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
 from parayabuck.logger import get_logger
-from parayabuck.portfolio import portfolio_strategy_from
+from parayabuck.portfolio import portfolio_strategy_from, product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import (
     ensure_active_universes,
@@ -52,6 +55,16 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="override the configured backup retention (days)",
     )
+    backup.add_argument(
+        "--verify-only",
+        type=str,
+        default=None,
+        help="verify integrity of an existing backup file instead of creating one",
+    )
+    doctor = commands.add_parser("doctor", help="read-only deployment preflight (no orders)")
+    doctor.add_argument("--strict", action="store_true", help="fail on warnings")
+    doctor.add_argument("--paper", action="store_true", help="require paper mode invariants")
+    doctor.add_argument("--offline", action="store_true", help="skip network reachability checks")
     authorize = commands.add_parser("authorize-live", help="create a short-lived account/config-bound live approval")
     authorize.add_argument("--operator", required=True)
     authorize.add_argument("--expires-minutes", type=int, default=15)
@@ -113,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
 
         web_main()
         return 0
+    if args.command == "doctor":
+        return _run_doctor(args)
     config = load_config(args.config)
     if args.command == "authorize-live":
         return _authorize_live(config, args)
@@ -256,9 +271,20 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
 def _run_backup(config: Config, args: argparse.Namespace) -> int:
     """Snapshot the runtime decision database with the sqlite3 online backup
     API (safe while the runtime keeps the WAL database open), then prune
-    backups older than the retention window."""
+    backups older than the retention window.
+
+    With --verify-only, verify an existing backup instead of creating one.
+    """
     from parayabuck.backup import backup_database, verify_backup
 
+    if args.verify_only:
+        target = Path(args.verify_only)
+        ok = verify_backup(target)
+        if ok:
+            print(f"Backup OK: {target}")
+            return 0
+        print(f"Backup CORRUPT: {target}", file=sys.stderr)
+        return 1
     retention_days = args.retention_days if args.retention_days is not None else config.backup.retention_days
     destination = backup_database(
         config.runtime.decision_db_path,
@@ -269,6 +295,198 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
         raise SystemExit(f"Backup failed integrity check: {destination}")
     print(f"Backup written: {destination}")
     print(f"Retention: {retention_days:g} day(s); older backups pruned")
+    return 0
+
+
+def _run_doctor(args: argparse.Namespace) -> int:
+    """Read-only deployment preflight. No orders."""
+    import importlib.metadata
+
+    checks: list[tuple[str, str, str]] = []
+    blocker = False
+    warning = False
+
+    def add(name: str, ok: bool, detail: str = "", is_blocker: bool = True) -> None:
+        nonlocal blocker, warning
+        status = "PASS" if ok else "FAIL"
+        checks.append((name, status, detail))
+        if not ok:
+            if is_blocker:
+                blocker = True
+            else:
+                warning = True
+
+    config_path = args.config
+    config: Config | None = None
+    try:
+        config = load_config(config_path)
+        add("config parses", True, str(config_path or "config/settings.yaml"))
+        for market_name in ("equity", "crypto"):
+            sel = config.strategy.equity if market_name == "equity" else config.strategy.crypto
+            if sel.enabled:
+                try:
+                    strat = product_strategy_from(sel.name, sel.parameters, timeframe=sel.timeframe)
+                    add(
+                        f"strategy {market_name} {sel.name}",
+                        True,
+                        f"{strat.spec().version} {strat.timeframe} alloc {sel.maximum_allocation}",
+                    )
+                except Exception as exc:
+                    add(f"strategy {market_name} {sel.name}", False, str(exc))
+            else:
+                add(f"strategy {market_name} disabled", True, "skipped")
+        if args.paper:
+            add("runtime.mode paper", config.runtime.mode == RuntimeMode.PAPER, str(config.runtime.mode))
+            add("live.enabled false", not config.live.enabled, str(config.live.enabled))
+            add("live hard_dollar_cap 0", config.live.hard_dollar_cap == 0, str(config.live.hard_dollar_cap))
+        env_path = Path(os.getenv("ENV_PATH") or ".env")
+        load_dotenv(env_path, override=False)
+        load_dotenv(Path(".env"), override=False)
+        api_key = os.getenv("ALPACA_API_KEY", "").strip()
+        secret = os.getenv("ALPACA_SECRET_KEY", "").strip()
+        add("credentials present", bool(api_key and secret), "present" if api_key and secret else "missing")
+        if args.paper:
+            live_env = os.getenv("PARAYABUCK_ENABLE_LIVE", "")
+            add(
+                "no live endpoint in --paper",
+                live_env.lower() not in {"1", "true", "yes"},
+                "PARAYABUCK_ENABLE_LIVE not set",
+            )
+        for label, path_str in [
+            ("runtime data dir writable", str(Path(config.runtime.decision_db_path).parent)),
+            ("reports path writable", config.backtest.output_dir),
+            ("backup path writable", config.backup.path),
+        ]:
+            p = Path(path_str)
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+                test = p / ".doctor_write_test"
+                test.write_text("ok")
+                test.unlink()
+                add(label, True, str(p))
+            except Exception as exc:
+                add(label, False, f"{p}: {exc}")
+        cfg_p = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
+        if not cfg_p.exists():
+            cfg_p = Path("config/settings.yaml")
+        try:
+            cfg_p.parent.mkdir(parents=True, exist_ok=True)
+            add("config state writable", os.access(cfg_p.parent, os.W_OK), str(cfg_p.parent))
+        except Exception as exc:
+            add("config state writable", False, str(exc))
+        db_path = Path(config.runtime.decision_db_path)
+        if db_path.exists():
+            try:
+                conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True, timeout=5)
+                try:
+                    # busy_timeout and foreign_keys are per-connection; set before checking capability
+                    try:
+                        conn.execute("PRAGMA busy_timeout=5000")
+                    except Exception:
+                        pass
+                    try:
+                        conn.execute("PRAGMA foreign_keys=ON")
+                    except Exception:
+                        pass
+                    row = conn.execute("PRAGMA integrity_check").fetchone()
+                    add("sqlite integrity_check", row is not None and row[0] == "ok", row[0] if row else "no row")
+                    jm = conn.execute("PRAGMA journal_mode").fetchone()
+                    jm_val = str(jm[0]).lower() if jm and jm[0] else ""
+                    add("sqlite journal_mode WAL", jm_val == "wal", jm_val, is_blocker=False)
+                    fk = conn.execute("PRAGMA foreign_keys").fetchone()
+                    fk_val = int(fk[0]) if fk and fk[0] is not None else 0
+                    add("sqlite foreign_keys ON", fk_val == 1, str(fk_val), is_blocker=False)
+                    bt = conn.execute("PRAGMA busy_timeout").fetchone()
+                    bt_val = int(bt[0]) if bt and bt[0] is not None else 0
+                    add("sqlite busy_timeout >=5000", bt_val >= 5000, str(bt_val), is_blocker=False)
+                finally:
+                    conn.close()
+            except Exception as exc:
+                add("sqlite checks", False, str(exc))
+        else:
+            add("sqlite exists", True, "no DB yet (fresh install)", is_blocker=False)
+            try:
+                import tempfile
+
+                with tempfile.TemporaryDirectory() as td:
+                    from parayabuck.storage import SQLiteStore
+
+                    probe = Path(td) / "probe.sqlite3"
+                    store = SQLiteStore(probe)
+                    add("sqlite WAL capability", True, "probe WAL ok")
+                    store.connection.close()
+            except Exception as exc:
+                add("sqlite WAL capability", False, str(exc))
+        for market in (Market.EQUITY, Market.CRYPTO):
+            uni_cfg = config.universe.equity if market == Market.EQUITY else config.universe.crypto
+            if not uni_cfg.enabled:
+                add(f"universe {market.value} disabled", True, "skipped")
+                continue
+            active_path = Path(uni_cfg.active_universe_path)
+            if active_path.exists():
+                try:
+                    data = json.loads(active_path.read_text())
+                    add(f"universe {market.value} active present", True, str(active_path))
+                    add(f"universe {market.value} parseable", True, f"keys {list(data.keys())[:3]}")
+                except Exception as exc:
+                    add(f"universe {market.value} active present", False, str(exc))
+            else:
+                add(f"universe {market.value} active present", True, "no active universe yet", is_blocker=False)
+            strat_name = config.strategy.equity.name if market == Market.EQUITY else config.strategy.crypto.name
+            add(f"universe {market.value} strategy identity", True, strat_name)
+        try:
+            result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True, timeout=5)
+            tracked = result.stdout.decode(errors="ignore").split("\0")
+            has_env = any(t == ".env" or t.endswith("/.env") for t in tracked)
+            add("no tracked .env", not has_env, "tracked .env found" if has_env else "clean")
+        except Exception:
+            add("no tracked .env", True, "git not available (skip)", is_blocker=False)
+        try:
+            raw: dict[str, object] = {}
+            cfg_file = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
+            if cfg_file.exists():
+                raw = yaml.safe_load(cfg_file.read_text()) or {}
+            digest = hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12]
+            add("config digest", True, digest)
+        except Exception as exc:
+            add("config digest", False, str(exc))
+        try:
+            ver = importlib.metadata.version("parayabuck")
+            add("package version", True, ver)
+        except Exception as exc:
+            add("package version", False, str(exc), is_blocker=False)
+        if not args.offline and args.paper and api_key and secret:
+            try:
+                broker = AlpacaBroker(api_key, secret, paper=True)
+                broker._client.get_account()
+                add("alpaca PAPER reachable", True, "account ok")
+            except Exception as exc:
+                msg = str(exc).lower()
+                transient = any(
+                    w in msg
+                    for w in ["timeout", "timed out", "connection", "temporary", "unreachable", "dns", "network"]
+                )
+                if transient:
+                    add("alpaca PAPER reachable", True, f"transient: {exc}", is_blocker=False)
+                    checks.append(("network transient", "WARN", str(exc)))
+                else:
+                    add("alpaca PAPER reachable", False, str(exc))
+        elif args.offline:
+            add("network offline", True, "--offline skip")
+    except Exception as exc:
+        add("config parses", False, str(exc))
+        blocker = True
+    print("=== ParayaBuck Doctor ===")
+    for name, status, detail in checks:
+        print(f"{status:4} {name}: {detail}")
+    total_fail = sum(1 for _, s, _ in checks if s == "FAIL")
+    if blocker:
+        print(f"\nDoctor: {total_fail} failure(s) — BLOCKER", file=sys.stderr)
+        return 1
+    if warning and args.strict:
+        print("\nDoctor: warnings present with --strict — BLOCKER", file=sys.stderr)
+        return 1
+    print(f"\nDoctor: {len(checks) - total_fail}/{len(checks)} checks passed — READY")
     return 0
 
 

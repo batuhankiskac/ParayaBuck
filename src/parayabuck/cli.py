@@ -83,6 +83,33 @@ def _parser() -> argparse.ArgumentParser:
     optimize.add_argument("--train-end")
     optimize.add_argument("--oos-start")
     optimize.add_argument("--oos-end")
+    research = commands.add_parser("research", help="run research batch with invariant reuse and parallel trials")
+    research.add_argument("spec", nargs="?", help="optional spec YAML/JSON file defining trials")
+    research.add_argument("--tier", choices=("smoke", "quick", "robustness", "canonical"), default="quick")
+    research.add_argument("--workers", default="1", help="1, N, or auto")
+    research.add_argument("--market", choices=("equity", "crypto"), default="equity")
+    research.add_argument("--strategy", default=None)
+    research.add_argument("--data", help="offline CSV containing OHLCV bars")
+    research.add_argument("--start", help="window start ISO date")
+    research.add_argument("--end", help="window end ISO date")
+    research.add_argument("--output-dir", default=None)
+    research.add_argument(
+        "--persist-artifacts",
+        dest="persist_artifacts",
+        action="store_true",
+        default=None,
+        help="persist report/universe artifacts (default tier default)",
+    )
+    research.add_argument(
+        "--no-persist-artifacts", dest="persist_artifacts", action="store_false", help="do not persist artifacts"
+    )
+    research.add_argument(
+        "--cost-stress", action="store_true", help="run cost multipliers 1.0,2.0,3.0 as separate trials"
+    )
+    research.add_argument(
+        "--param", action="append", default=[], metavar="NAME=VALUE", help="base strategy param override"
+    )
+    research.add_argument("--fail-fast", action="store_true", help="fail fast on first trial error")
     return parser
 
 
@@ -133,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
         return _authorize_live(config, args)
     if args.command == "backup":
         return _run_backup(config, args)
+    if args.command == "research":
+        return _run_research(config, args)
     market = Market(args.market)
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
@@ -768,6 +797,134 @@ def _print_summary(summary: dict[str, object], output_dir: str) -> None:
         f"trades={summary['number_of_trades']}"
     )
     print(f"Results: {output_dir}")
+
+
+def _run_research(config: Config, args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from parayabuck.core.models import Market
+    from parayabuck.research import ResearchJob, ResearchTier, ResearchTrial
+    from parayabuck.research.runner import ResearchRunner
+
+    tier = ResearchTier(args.tier)
+    workers: int | str = args.workers
+    market = Market(args.market)
+    # Base parameters from --param
+    base_params: dict[str, object] | None = {}
+    for item in args.param:
+        if "=" not in item:
+            raise SystemExit(f"Invalid --param {item!r}; expected NAME=VALUE")
+        name, value = item.split("=", 1)
+        base_params[name] = __import__("yaml").safe_load(value)  # type: ignore[index]
+    if not base_params:
+        base_params = None
+    start = _date(args.start) if args.start else None
+    end = _date(args.end, end_of_day=True) if args.end else None
+    trials: list[ResearchTrial] = []
+    if args.spec:
+        spec_path = Path(args.spec)
+        if not spec_path.exists():
+            raise SystemExit(f"Spec file not found: {spec_path}")
+        raw = spec_path.read_text(encoding="utf-8")
+        if spec_path.suffix in {".yaml", ".yml"}:
+            spec = __import__("yaml").safe_load(raw)
+        else:
+            spec = json.loads(raw)
+        if not isinstance(spec, dict):
+            raise SystemExit("Spec must be a mapping")
+        # Override CLI if spec provides values
+        if "tier" in spec:
+            tier = ResearchTier(str(spec["tier"]))
+        if "workers" in spec:
+            workers = spec["workers"]
+        if "market" in spec:
+            market = Market(str(spec["market"]))
+        if "strategy" in spec and spec["strategy"]:
+            args.strategy = str(spec["strategy"])
+        if "dataset" in spec and spec["dataset"]:
+            args.data = str(spec["dataset"])
+        if "start" in spec and spec["start"]:
+            start = _date(str(spec["start"]))
+        if "end" in spec and spec["end"]:
+            end = _date(str(spec["end"]), end_of_day=True)
+        if "base_parameters" in spec and isinstance(spec["base_parameters"], dict):
+            base_params = dict(spec["base_parameters"])
+        if "trials" in spec and isinstance(spec["trials"], list):
+            for idx, t in enumerate(spec["trials"]):
+                if not isinstance(t, dict):
+                    raise SystemExit(f"Trial {idx} must be a mapping")
+                trials.append(
+                    ResearchTrial(
+                        label=str(t.get("label", f"trial_{idx}")),
+                        parameters=t.get("parameters"),
+                        cost_multiplier=float(t.get("cost_multiplier", 1.0)),
+                        metadata=dict(t.get("metadata", {})),
+                        execution_overrides=t.get("execution_overrides"),
+                    )
+                )
+        if "output_dir" in spec and spec["output_dir"]:
+            args.output_dir = str(spec["output_dir"])
+    if not trials:
+        # Build from CLI cost_stress or single
+        if args.cost_stress:
+            for mult in (1.0, 2.0, 3.0):
+                trials.append(ResearchTrial(label=f"cost_{mult}x", cost_multiplier=mult))
+        else:
+            trials.append(ResearchTrial(label="trial_0", cost_multiplier=1.0))
+    job = ResearchJob(
+        market=market,
+        strategy_name=args.strategy,
+        dataset_path=args.data,
+        start=start,
+        end=end,
+        base_parameters=base_params,
+        trials=tuple(trials),
+        tier=tier,
+        workers=workers,
+        persist_artifacts=args.persist_artifacts,
+        persist_db=None,
+        output_dir=args.output_dir,
+        fail_fast=bool(args.fail_fast),
+    )
+    runner = ResearchRunner(config=config)
+    result = runner.run(job)
+    # Print summary
+    print(f"Research batch: tier={result.tier} workers={result.workers} elapsed={result.elapsed_s:.2f}s")
+    print(f"Universe reused: {result.universe_reused} prepared reused: {result.prepared_reused}")
+    for r in result.results:
+        if r.status == "ok":
+            print(
+                f"{r.label}: return={r.total_return:.4f} cagr={r.cagr:.4f} sharpe={r.sharpe:.4f} trades={r.trade_count} elapsed={r.elapsed_s:.2f}s"
+            )
+        else:
+            print(f"{r.label}: FAILED {r.error}")
+    # Optionally write results JSON if output_dir
+    if args.output_dir:
+        out = Path(args.output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "tier": str(result.tier),
+            "workers": result.workers,
+            "elapsed_s": result.elapsed_s,
+            "results": [
+                {
+                    "label": r.label,
+                    "status": r.status,
+                    "total_return": r.total_return,
+                    "cagr": r.cagr,
+                    "sharpe": r.sharpe,
+                    "sortino": r.sortino,
+                    "max_drawdown": r.max_drawdown,
+                    "trade_count": r.trade_count,
+                    "elapsed_s": r.elapsed_s,
+                    "error": r.error,
+                }
+                for r in result.results
+            ],
+        }
+        (out / "research_results.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return 0
 
 
 __all__ = ["backtest_main", "main"]

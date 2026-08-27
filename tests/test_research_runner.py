@@ -310,7 +310,7 @@ def test_tier_smoke_no_economic_conclusions() -> None:
 
 def test_execution_overrides_positive_sequential_and_parallel(tmp_path: Path) -> None:
     # Valid rebalance_band_pct and minimum_order_notional should be applied and observable
-    # Use smoke with deterministic fixture; high band should reduce trades
+    # Use smoke with deterministic fixture; high band should reduce trades/fills
     job_seq = ResearchJob(
         market=Market.EQUITY,
         strategy_name="equity_residual_momentum_v2",
@@ -324,8 +324,18 @@ def test_execution_overrides_positive_sequential_and_parallel(tmp_path: Path) ->
     runner = ResearchRunner()
     res_seq = runner.run(job_seq)
     assert all(r.status == "ok" for r in res_seq.results)
-    # High band should have fewer or equal trades (observable)
-    # Just verify it runs and parallel gives same
+    # High band (50%) should suppress rebalancing -> fewer trades/fills than normal 0.5%
+    # This catches a future recurrence of the missing-return bug where override is ignored
+    a = res_seq.results[0]
+    b = res_seq.results[1]
+    # At least one of trade_count/fill_count should differ; high band must have <= default
+    # With deterministic smoke fixture, high band produces strictly fewer
+    assert b.trade_count is not None and a.trade_count is not None
+    assert b.trade_count <= a.trade_count, f"high_band {b.trade_count} should be <= default {a.trade_count}"
+    # In this smoke fixture high band is extreme, so we expect strictly fewer
+    # If fixture changes, we at least assert not more; but with current deterministic bars it is strictly fewer
+    assert b.trade_count < a.trade_count or b.fill_count < a.fill_count
+    # Parallel must give same observable difference
     job_par = ResearchJob(
         market=Market.EQUITY,
         strategy_name="equity_residual_momentum_v2",
@@ -340,16 +350,23 @@ def test_execution_overrides_positive_sequential_and_parallel(tmp_path: Path) ->
     for a, b in zip(res_seq.results, res_par.results):
         assert a.status == b.status == "ok"
         assert a.total_return == b.total_return
-    # Also test minimum_order_notional
+        assert a.trade_count == b.trade_count
+    # Also test minimum_order_notional: high notional should suppress small orders
     job2 = ResearchJob(
         market=Market.EQUITY,
         strategy_name="equity_residual_momentum_v2",
         tier=ResearchTier.SMOKE,
         workers=1,
-        trials=(ResearchTrial(label="min_notional", execution_overrides={"minimum_order_notional": 10000}),),
+        trials=(
+            ResearchTrial(label="low_notional", execution_overrides={"minimum_order_notional": 0.0}),
+            ResearchTrial(label="high_notional", execution_overrides={"minimum_order_notional": 10000}),
+        ),
     )
     res2 = runner.run(job2)
-    assert res2.results[0].status == "ok"
+    assert all(r.status == "ok" for r in res2.results)
+    # High notional should not have more trades than low notional
+    assert res2.results[1].trade_count is not None
+    assert res2.results[1].trade_count <= res2.results[0].trade_count
 
 
 def test_strategy_param_override_honors_config() -> None:
@@ -377,9 +394,10 @@ def test_strategy_param_override_honors_config() -> None:
     new_strategy = replace(config.strategy, equity=new_selection)
     custom_config = replace(config, strategy=new_strategy)
     # Job with no base/trial overrides should use config's custom_value
+    # Must research the SAME strategy identity as configured (Case A)
     job = ResearchJob(
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name=selection.name,
         tier=ResearchTier.SMOKE,
         workers=1,
         trials=(ResearchTrial(label="t1"),),
@@ -388,10 +406,9 @@ def test_strategy_param_override_honors_config() -> None:
     res = runner.run(job)
     assert res.results[0].status == "ok"
     assert res.results[0].parameters[test_key] == custom_value
-    # Now test job base overrides
     job2 = ResearchJob(
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name=selection.name,
         tier=ResearchTier.SMOKE,
         workers=1,
         base_parameters={test_key: 5 if isinstance(original_val, int) else 0.5},
@@ -402,7 +419,7 @@ def test_strategy_param_override_honors_config() -> None:
     # Trial overrides job
     job3 = ResearchJob(
         market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
+        strategy_name=selection.name,
         tier=ResearchTier.SMOKE,
         workers=1,
         base_parameters={test_key: 5 if isinstance(original_val, int) else 0.5},
@@ -616,39 +633,13 @@ def test_fail_fast_truthful_completion_order() -> None:
         assert elapsed < 1.0, f"fail_fast not truthful, took {elapsed:.2f}s"
 
 
-def test_trial_timeout_no_hardcoded_600() -> None:
-    # Verify ResearchJob has trial_timeout_seconds and that None means no timeout
-    job = ResearchJob(
-        market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
-        tier=ResearchTier.SMOKE,
-        workers=2,
-        trials=(ResearchTrial(label="t1"),),
-        trial_timeout_seconds=None,
-    )
-    assert job.trial_timeout_seconds is None
-    job2 = ResearchJob(
-        market=Market.EQUITY,
-        strategy_name="equity_residual_momentum_v2",
-        tier=ResearchTier.SMOKE,
-        workers=2,
-        trials=(ResearchTrial(label="t1"),),
-        trial_timeout_seconds=30.0,
-    )
-    assert job2.trial_timeout_seconds == 30.0
-    # Run with timeout None should succeed (no 600s hard limit)
-    runner = ResearchRunner()
-    res = runner.run(job)
-    assert res.results[0].status == "ok"
-
-
 def test_sqlite_protection() -> None:
     job = ResearchJob(
         market=Market.EQUITY,
         strategy_name="equity_residual_momentum_v2",
         tier=ResearchTier.SMOKE,
         workers=2,
-        trials=(ResearchTrial(label="t1"),),
+        trials=(ResearchTrial(label="t1"), ResearchTrial(label="t2")),
         persist_db=True,
     )
     runner = ResearchRunner()
@@ -708,3 +699,156 @@ def test_profiling_dataset_sha_full(tmp_path: Path) -> None:
     p2.write_bytes(data2)
     h2 = _sha256_file(p2)
     assert h2 == hashlib.sha256(data2).hexdigest()
+
+
+def test_smoke_derives_timeframe_and_history() -> None:
+    """Smoke must derive timeframe/min_history from effective strategy, not hardcode 1d."""
+    # Use a large beta_window to prove smoke generates enough history via effective params
+    # If smoke hardcoded 273+40=313 bars, a 500-bar requirement would fail (0 rebalances or error)
+    job = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers=1,
+        base_parameters={"beta_window_bars": 500},
+        trials=(
+            ResearchTrial(label="t1"),
+            ResearchTrial(label="t2", parameters={"beta_window_bars": 600}),
+        ),
+    )
+    runner = ResearchRunner()
+    res = runner.run(job)
+    assert all(r.status == "ok" for r in res.results), f"failed {res.results}"
+    # Both trials should have reached decision logic (at least one rebalance)
+    # This proves smoke generated max(500,600)+40 bars, not 273+40
+    for r in res.results:
+        assert r.rebalance_count is not None and r.rebalance_count > 0, f"{r.label} no rebalance"
+
+
+def test_smoke_timeframe_not_hardcoded(monkeypatch) -> None:
+    """Prove smoke timeframe is not hardcoded by simulating 1h strategy."""
+    from parayabuck.config import Config
+    from parayabuck.portfolio import portfolio_strategy_from as real_psf
+
+    config = Config()
+
+    def fake_psf_1h(name, parameters=None, timeframe=None):
+        strat = real_psf(name, parameters=parameters, timeframe=timeframe)
+        object.__setattr__(strat, "timeframe", "1h")
+        object.__setattr__(strat, "_timeframe", "1h")
+        return strat
+
+    monkeypatch.setattr("parayabuck.portfolio.portfolio_strategy_from", fake_psf_1h)
+    monkeypatch.setattr("parayabuck.research.runner.portfolio_strategy_from", fake_psf_1h)
+    monkeypatch.setattr("parayabuck.backtest.product.portfolio_strategy_from", fake_psf_1h)
+    captured = {}
+    from parayabuck.research.runner import _synthetic_bars as orig
+
+    def capture_synthetic(market, timeframe, strategy_name, base_params):
+        captured["timeframe"] = timeframe
+        return orig(market, timeframe, strategy_name, base_params)
+
+    monkeypatch.setattr("parayabuck.research.runner._synthetic_bars", capture_synthetic)
+
+    job = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers=1,
+        trials=(ResearchTrial(label="t1"),),
+    )
+    runner = ResearchRunner(config=config)
+    res = runner.run(job)
+    assert res.results[0].status == "ok"
+    assert captured["timeframe"] == "1h"
+
+
+def test_strategy_identity_no_leak() -> None:
+    """Parameters from strategy A must not leak into strategy B."""
+    from dataclasses import replace
+
+    from parayabuck.config import Config
+
+    config = Config()
+    selection = config.strategy.equity
+    custom_params = dict(selection.parameters)
+    custom_params["top_n"] = 8
+    new_selection = replace(selection, parameters=custom_params)
+    new_strategy = replace(config.strategy, equity=new_selection)
+    custom_config = replace(config, strategy=new_strategy)
+    # Case A: same identity should see top_n
+    job_same = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name=selection.name,
+        tier=ResearchTier.SMOKE,
+        workers=1,
+        trials=(ResearchTrial(label="t1"),),
+    )
+    runner = ResearchRunner(config=custom_config)
+    res_same = runner.run(job_same)
+    assert res_same.results[0].status == "ok"
+    assert res_same.results[0].parameters.get("top_n") == 8
+    # Case B: different identity must NOT see top_n
+    job_diff = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers=1,
+        trials=(ResearchTrial(label="t1"),),
+    )
+    # If selection is already v2, pick v3 as diff
+    if selection.name == "equity_residual_momentum_v2":
+        job_diff = ResearchJob(
+            market=Market.EQUITY,
+            strategy_name="equity_residual_momentum_v3",
+            tier=ResearchTier.SMOKE,
+            workers=1,
+            trials=(ResearchTrial(label="t1"),),
+        )
+    res_diff = runner.run(job_diff)
+    assert res_diff.results[0].status == "ok"
+    assert "top_n" not in res_diff.results[0].parameters or res_diff.results[0].parameters.get("top_n") != 8
+    # Cross-market: crypto should not have equity top_n
+    job_crypto = ResearchJob(
+        market=Market.CRYPTO,
+        strategy_name="crypto_low_variance_v2",
+        tier=ResearchTier.SMOKE,
+        workers=1,
+        trials=(ResearchTrial(label="t1"),),
+    )
+    res_crypto = runner.run(job_crypto)
+    assert res_crypto.results[0].status == "ok"
+    assert "top_n" not in res_crypto.results[0].parameters
+
+
+def test_actual_workers_capped() -> None:
+    """actual workers <= number of trials."""
+    job1 = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers=4,
+        trials=(ResearchTrial(label="only_one"),),
+    )
+    runner = ResearchRunner()
+    res1 = runner.run(job1)
+    assert res1.workers == 1, f"1 trial workers=4 should cap to 1, got {res1.workers}"
+    job2 = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers=4,
+        trials=(ResearchTrial(label="a"), ResearchTrial(label="b")),
+    )
+    res2 = runner.run(job2)
+    assert res2.workers == 2, f"2 trials workers=4 should cap to 2, got {res2.workers}"
+    # Also test auto
+    job3 = ResearchJob(
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v2",
+        tier=ResearchTier.SMOKE,
+        workers="auto",
+        trials=(ResearchTrial(label="solo"),),
+    )
+    res3 = runner.run(job3)
+    assert res3.workers == 1

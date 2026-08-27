@@ -53,7 +53,6 @@ class ResearchJob:
     corporate_actions_path: str | None = None
     initial_cash: float | None = None
     config_path: str | None = None
-    trial_timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)

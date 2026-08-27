@@ -186,9 +186,11 @@ def run_product_backtest(
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
+    # Explicit None-check: {} means "use requested strategy defaults", None means "use configured selection"
+    # This allows Case B research (different strategy identity) to pass {} and not leak selection params.
     strategy = portfolio_strategy_from(
         strategy_name or selection.name,
-        parameters or selection.parameters,
+        parameters if parameters is not None else selection.parameters,
         timeframe=strategy_timeframe or selection.timeframe,
     )
     if prepared_inputs is None:

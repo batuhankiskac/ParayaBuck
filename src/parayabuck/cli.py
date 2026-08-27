@@ -110,9 +110,6 @@ def _parser() -> argparse.ArgumentParser:
         "--param", action="append", default=[], metavar="NAME=VALUE", help="base strategy param override"
     )
     research.add_argument("--fail-fast", action="store_true", help="fail fast on first trial error")
-    research.add_argument(
-        "--trial-timeout", type=float, default=None, help="per-trial timeout seconds (default no timeout)"
-    )
     return parser
 
 
@@ -889,7 +886,6 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
         persist_db=None,
         output_dir=args.output_dir,
         fail_fast=bool(args.fail_fast),
-        trial_timeout_seconds=args.trial_timeout,
     )
     runner = ResearchRunner(config=config)
     result = runner.run(job)

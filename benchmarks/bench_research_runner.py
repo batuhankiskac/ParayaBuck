@@ -27,15 +27,51 @@ def _job(workers: int | str) -> ResearchJob:
     return ResearchJob(
         market=Market.EQUITY,
         strategy_name="equity_residual_momentum_v2",
-        dataset_path=str(EQUITY_CSV),
-        start=START,
-        end=END,
         tier=ResearchTier.QUICK,
         workers=workers,
         trials=trials,
-        persist_artifacts=False,
-        persist_db=False,
+        start=START,
+        end=END,
+        dataset_path=str(EQUITY_CSV),
     )
+
+
+def _memory_report(result) -> dict:
+    """Build corrected memory evidence from TrialResult fields.
+
+    Returns dict with:
+      parent_peak_rss_mb
+      unique_worker_count
+      worker_peak_rss_mb_by_pid
+      sum_worker_peak_rss_mb
+      upper_bound_parent_plus_worker_peaks_mb (upper-bound, not simultaneous)
+    """
+    parent_peak = mb(peak_rss_bytes())
+    # aggregate worker peaks by pid (max per pid, since each worker may handle multiple trials)
+    by_pid: dict[int, float] = {}
+    for r in result.results:
+        if r.worker_pid is not None and r.worker_peak_rss_mb is not None:
+            pid = r.worker_pid
+            by_pid[pid] = max(by_pid.get(pid, 0.0), float(r.worker_peak_rss_mb))
+    # For workers=1, worker is parent, so pid may equal parent pid; still count unique
+    worker_peak_by_pid = {str(k): round(v, 1) for k, v in sorted(by_pid.items())}
+    sum_worker = round(sum(by_pid.values()), 1) if by_pid else 0.0
+    # Upper bound: parent peak + sum of unique worker peaks (peaks may not be simultaneous)
+    # If worker is parent (workers=1), avoid double counting: upper bound is max(parent, sum)
+    # For clarity, we report parent + sum but note it is an upper-bound estimate.
+    # When workers=1, parent and worker are same process, so upper bound is parent itself.
+    if len(by_pid) == 1 and result.workers == 1:
+        upper = round(parent_peak, 1)
+    else:
+        upper = round(parent_peak + sum_worker, 1)
+    return {
+        "parent_peak_rss_mb": round(parent_peak, 1),
+        "unique_worker_count": len(by_pid),
+        "worker_peak_rss_mb_by_pid": worker_peak_by_pid,
+        "sum_worker_peak_rss_mb": sum_worker,
+        "upper_bound_parent_plus_worker_peaks_mb": upper,
+        "note": "sum of independent peak RSS values is an upper-bound estimate, not necessarily simultaneous observed peak",
+    }
 
 
 def run(report: Report) -> None:
@@ -43,21 +79,24 @@ def run(report: Report) -> None:
     runner = ResearchRunner()
     # Warm cache first so measurements are not dominated by first-build cost
     print("Warming cache with one sequential run...")
-    runner.run(_job(1))
+    warm = runner.run(_job(1))
+    print(f"warm parent {mb(peak_rss_bytes()):.1f} MB, workers {warm.workers} actual, mem {_memory_report(warm)}")
 
     def seq():
-        runner.run(_job(1))
+        return runner.run(_job(1))
 
-    timing, _ = timeit(seq, label="research 4 trials workers=1 (quick, cached)", warmup=0, runs=3)
+    timing, res1 = timeit(seq, label="research 4 trials workers=1 (quick, cached)", warmup=0, runs=3)
     report.add(timing)
-    print(f"workers=1 median {timing.median:.3f}s")
+    mem1 = _memory_report(res1) if res1 else {}
+    print(f"workers=1 median {timing.median:.3f}s mem {mem1}")
 
     def par2():
-        runner.run(_job(2))
+        return runner.run(_job(2))
 
-    timing2, _ = timeit(par2, label="research 4 trials workers=2 (quick, cached)", warmup=0, runs=3)
+    timing2, res2 = timeit(par2, label="research 4 trials workers=2 (quick, cached)", warmup=0, runs=3)
     report.add(timing2)
-    print(f"workers=2 median {timing2.median:.3f}s speedup {timing.median / timing2.median:.2f}x")
+    mem2 = _memory_report(res2) if res2 else {}
+    print(f"workers=2 median {timing2.median:.3f}s speedup {timing.median / timing2.median:.2f}x mem {mem2}")
 
     # Only test 4 workers if we have enough cores and RAM
     import os
@@ -66,11 +105,12 @@ def run(report: Report) -> None:
     if logical >= 4:
 
         def par4():
-            runner.run(_job(4))
+            return runner.run(_job(4))
 
-        timing4, _ = timeit(par4, label="research 4 trials workers=4 (quick, cached)", warmup=0, runs=3)
+        timing4, res4 = timeit(par4, label="research 4 trials workers=4 (quick, cached)", warmup=0, runs=3)
         report.add(timing4)
-        print(f"workers=4 median {timing4.median:.3f}s speedup {timing.median / timing4.median:.2f}x")
+        mem4 = _memory_report(res4) if res4 else {}
+        print(f"workers=4 median {timing4.median:.3f}s speedup {timing.median / timing4.median:.2f}x mem {mem4}")
     else:
         print("Skipping workers=4: not enough cores")
 
@@ -79,28 +119,35 @@ def run(report: Report) -> None:
         job = ResearchJob(
             market=Market.EQUITY,
             strategy_name="equity_residual_momentum_v2",
-            dataset_path=str(EQUITY_CSV),
-            start=START,
-            end=END,
             tier=ResearchTier.QUICK,
             workers=1,
             trials=(ResearchTrial(label="single", cost_multiplier=1.0),),
-            persist_artifacts=False,
+            start=START,
+            end=END,
+            dataset_path=str(EQUITY_CSV),
         )
-        runner.run(job)
+        return runner.run(job)
 
-    timing_s, _ = timeit(single, label="research single trial workers=1", warmup=0, runs=3)
+    timing_s, res_s = timeit(single, label="research single trial workers=1", warmup=0, runs=3)
     report.add(timing_s)
+    mem_s = _memory_report(res_s) if res_s else {}
+    print(f"single median {timing_s.median:.3f}s mem {mem_s}")
 
     # Memory: measure RSS after each run
     print(f"peak RSS {mb(peak_rss_bytes()):.1f} MB rss current {mb(rss_bytes()):.1f} MB")
+    # Also report final memory evidence table
+    print("\nCorrected memory evidence (upper-bound):")
+    print(f"  workers=1: {mem1}")
+    print(f"  workers=2: {mem2}")
+    if logical >= 4:
+        print(f"  workers=4: {mem4}")
 
 
 if __name__ == "__main__":
     from benchmarks.harness import Report
 
-    baseline = peak_rss_bytes()
     report = Report()
+    baseline = peak_rss_bytes()
     run(report)
     report.print_table()
     print(f"peak RSS delta {mb(peak_rss_bytes() - baseline):.1f} MB")

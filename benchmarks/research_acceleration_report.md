@@ -273,6 +273,70 @@ Post-report audit fixed 15 reviewed items without changing economics or benchmar
 - `parity.py` combined_hash `93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c` unchanged
 - `bench_research_runner` medians: w1 12.77s, w2 11.789s (1.08×), w4 11.46s (1.11×), peak parent 2400MB, speedup vs naive 82.3s → 7.18×
 - `w1 15.08s peak 1874MB, w2 13.28s peak 2012MB worker 999MB, w4 12.20s peak 2146MB worker 950MB, auto=4`
+---
+
+## Final Cleanup (2026-08-28, head 5b53b0ba95a → next)
+
+Post-hardening review addressed 6 remaining findings. No architecture redesign.
+
+### 1. Removed fake trial timeout
+- Deleted `ResearchJob.trial_timeout_seconds`, CLI `--trial-timeout`, and `future.result(timeout=…)` dead logic (which called `as_completed` then `timeout` on already-completed future).
+- There is now NO hidden timeout; a trial may run as long as necessary.
+- Test `test_trial_timeout_no_hardcoded_600` removed; no timeout field remains.
+
+### 2. Smoke fully strategy-aware
+- Resolves actual strategy first via `_effective_strategy_params` (selection→job→trial) for **each** trial.
+- Derives `strategy.timeframe` and `minimum_history_bars` from the same effective params the trial will use.
+- Uses `max(min_history)` across trials +40, `max(300, …)` bars, tiny 8+benchmark symbols; crypto now uses `TOKxxx/USD` valid pairs.
+- Isolated `_duration_for_timeframe` (1d→1 day, 1h→1 hour) with doc; equity skips weekends, crypto 24/7.
+- Example that must be prevented is now handled: config `beta_window=500/600` → smoke generates 641 bars (601+40) not 313, so both trials reach rebalance.
+- Tests: `test_smoke_derives_timeframe_and_history` (500/600 still rebalance>0) and `test_smoke_timeframe_not_hardcoded` (patches to 1h, captures `_synthetic_bars` timeframe==1h).
+
+### 3. Explicit strategy parameter identity
+- `_effective_strategy_params` now:
+  - **Case A** (`requested == selection`): `dict(selection.parameters) → job → trial`
+  - **Case B** (`requested != selection`): `{} → job → trial` (no leak; requested defaults applied internally by `portfolio_strategy_from`; empty map means “use defaults”, documented).
+- Fixed canonical helper `run_product_backtest` to `parameters if parameters is not None else selection.parameters` so `{}` correctly means defaults, not selection.
+- `TrialResult.parameters` reflects explicit inputs (empty when defaults).
+- Regression test with two identities (`equity_residual_momentum_v3` configured top_n=8 vs `equity_residual_momentum_v2` diff, plus crypto) proves no leak; production parity unchanged.
+
+### 4. Corrected multiprocessing memory evidence
+- `bench_research_runner.py` now uses `TrialResult.worker_pid`/`worker_peak_rss_mb` to build reproducible evidence.
+- For each worker count reports: `parent_peak_rss_mb`, `unique_worker_count`, `worker_peak_rss_mb_by_pid`, `sum_worker_peak_rss_mb`, `upper_bound_parent_plus_worker_peaks_mb`.
+- Explicit note: sum of independent peaks is an upper-bound estimate, not necessarily simultaneous.
+- New table (M5, 2019-2021, 4×cost, cache warm):
+
+| workers | median | parent_peak | unique | worker peaks (MB) | sum worker | upper bound | trials/s |
+|---:|---:|---:|---:|---|---:|---:|---:|
+|1|12.988s|2183.3|1|{48584:2183.3}|2183.3|2183.3|0.308|
+|2|13.050s|2392.3|2|{951.2,951.1}|1902.4|4294.7|0.307|
+|4|11.627s|2400.1|4|{941.3,940.3,942.9,915.8}|3740.3|6140.4|0.344|
+
+Previous report incorrectly described 2.4GB parent peak as aggregate; 4×950 already ≈3.8GB child peaks plus parent → 6.1GB upper bound.
+- `after.json` and this report now carry corrected numbers; historical timings not rewritten, new numbers distinguished as “final cleanup”.
+- 1.2GB per-worker assumption revisited: measured ~950MB, so heuristic remains conservative (headroom 2GB, cap 4).
+
+### 5. Do not spawn useless workers
+- `workers = min(requested_workers, len(trials))` after `_resolve_workers`.
+- `ResearchBatchResult.workers` now reports **actual** workers used.
+- Tests: 1 trial workers=4→1, 2 trials workers=4→2, 1 trial workers=auto→1.
+- Reduces memory/startup; `test_sqlite_protection` updated to 2 trials for contention case.
+
+### 6. Strengthened execution override regression test
+- `rebalance_band_pct` 0.005 (normal) vs 0.5 (extreme) now asserts `high_band.trade_count < default.trade_count` and `fill_count` diff, both seq and par (same totals).
+- `minimum_order_notional` 0.0 vs 10000 asserts high notional ≤ low notional trades.
+- Catches future recurrence of missing-return bug (override must change observable execution).
+
+### Verification final
+- `ruff check .` All checks passed! `ruff format --check` 259 formatted
+- `mypy src` Success 82 files
+- `pytest -q` 981 passed 11 skipped (research 29 passed)
+- `python benchmarks/parity.py` combined_hash `93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c` unchanged
+- `python benchmarks/bench_research_runner.py` as above; no speed chase, still >6× vs naive (6.34×/6.31×/7.08×).
+
+### Verdict
+`MISSION 0A FINAL: PASS / MERGE READY`
+
 - No economic change; cache warm hit verified.
 
 

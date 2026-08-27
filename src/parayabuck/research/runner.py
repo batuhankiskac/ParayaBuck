@@ -263,9 +263,12 @@ def _synthetic_bars(
     bars: list[Bar] = []
     start = datetime(2023, 1, 1, tzinfo=UTC)
     # Keep symbol count tiny for speed: 8 symbols + benchmark
-    symbols = [f"S{i:03d}" for i in range(8)]
-    symbols.append("SPY" if market == Market.EQUITY else "BTC/USD")
-    # Generate enough business-day timestamps deterministically
+    if market == Market.EQUITY:
+        symbols = [f"S{i:03d}" for i in range(8)]
+        symbols.append("SPY")
+    else:
+        symbols = [f"TOK{i:03d}/USD" for i in range(8)]
+        symbols.append("BTC/USD")
     timestamps: list[datetime] = []
     cur = start
     while len(timestamps) < num_bars:
@@ -331,16 +334,27 @@ def _effective_strategy_params(
     job_base: dict[str, object] | None,
     trial_params: dict[str, object] | None,
 ) -> dict[str, object]:
-    """Build effective params: selection → job base → trial overrides."""
+    """Build effective params: selection → job base → trial overrides.
+
+    Case A: researching the configured market strategy (requested == selection)
+        → start from configured selection parameters.
+    Case B: researching a different strategy identity
+        → do NOT inherit unrelated configured parameters; start from empty
+          (requested strategy defaults are applied internally by
+           portfolio_strategy_from; an empty mapping means "use defaults").
+    TrialResult.parameters therefore reflects the explicit research inputs
+    (selection-or-empty + job + trial). When internal defaults are not
+    materialized, the mapping may be empty — this is intentional and
+    documented rather than fabricated.
+    """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    # If explicit strategy_name differs, still use selection's parameters as base
-    # (config only stores one per market). This preserves configured economics.
-    # If strategy_name is provided and differs, we still start from selection,
-    # but the strategy instance will be created with strategy_name; the params
-    # are the overrides. This matches run_product_backtest's handling where
-    # parameters or selection.parameters is passed to portfolio_strategy_from.
-    # The task says: effective = dict(selection.parameters) + job + trial
-    effective: dict[str, object] = dict(selection.parameters)
+    requested_name = strategy_name or selection.name
+    if requested_name == selection.name:
+        # Case A: configured strategy — honor configured economics
+        effective: dict[str, object] = dict(selection.parameters)
+    else:
+        # Case B: different identity — no leak
+        effective = {}
     if job_base:
         effective.update(job_base)
     if trial_params:
@@ -381,7 +395,7 @@ def _execute_single_trial(
             effective_bars,
             market=market,
             strategy_name=strategy_name,
-            parameters=effective or None,
+            parameters=effective,
             start=start,
             end=end,
             initial_cash=initial_cash,
@@ -461,7 +475,9 @@ class ResearchRunner:
 
     def run(self, job: ResearchJob, bars_override: list[Bar] | None = None) -> ResearchBatchResult:
         start_time = time.perf_counter()
-        workers = _resolve_workers(job.workers)
+        requested_workers = _resolve_workers(job.workers)
+        # Do not spawn useless workers
+        workers = min(requested_workers, len(job.trials)) if job.trials else requested_workers
         # Enforce tier window requirements
         start, end = resolve_window(job.tier, job.start, job.end)
         if not job.trials:
@@ -493,10 +509,35 @@ class ResearchRunner:
             strat_name = job.strategy_name or (
                 config.strategy.equity.name if market == Market.EQUITY else config.strategy.crypto.name
             )
-            smoke_base = job.base_parameters or {}
-            bars = _synthetic_bars(market, "1d", strat_name, smoke_base)
-            universe = build_product_universe(config, bars, market=market, end=end, timeframe="1d")
-            prepared = _prepared_window(bars, market, "1d", start, end)
+            # Smoke is tiny but must exercise real strategy path.
+            # Resolve timeframe/min_history from SAME effective params the trials will use.
+            # Use max history across trials so shared bars satisfy the most demanding trial.
+            per_trial_effective: list[dict[str, object]] = []
+            timeframes: set[str] = set()
+            histories: list[int] = []
+            for trial in job.trials:
+                eff = _effective_strategy_params(config, market, strat_name, job.base_parameters, trial.parameters)
+                per_trial_effective.append(eff)
+                try:
+                    strat = portfolio_strategy_from(
+                        strat_name
+                        or ("equity_residual_momentum_v2" if market == Market.EQUITY else "crypto_low_variance_v2"),
+                        parameters=eff or None,
+                    )
+                    timeframes.add(strat.timeframe)
+                    histories.append(int(getattr(strat, "minimum_history_bars", 274)))
+                except Exception:
+                    histories.append(274)
+                    timeframes.add("1d")
+            # Require single timeframe for smoke batch; if mixed, use sorted first and generate enough
+            timeframe = sorted(timeframes)[0] if timeframes else "1d"
+            max_hist = max(histories) if histories else 274
+            # Pick effective that gave max_hist for generation (so _synthetic_bars derives same history)
+            idx_max = histories.index(max_hist) if histories else 0
+            effective_for_gen = per_trial_effective[idx_max] if per_trial_effective else {}
+            bars = _synthetic_bars(market, timeframe, strat_name, effective_for_gen)
+            universe = build_product_universe(config, bars, market=market, end=end, timeframe=timeframe)
+            prepared = _prepared_window(bars, market, timeframe, start, end)
             prepared_reused = True
         else:
             # Load bars if not provided
@@ -651,11 +692,7 @@ class ResearchRunner:
                         payload = future_to_payload[fut]
                         trial, expected_idx = payload
                         try:
-                            timeout = job.trial_timeout_seconds
-                            if timeout is not None:
-                                res = fut.result(timeout=timeout)
-                            else:
-                                res = fut.result()
+                            res = fut.result()
                         except Exception as exc:
                             tb = traceback.format_exc()
                             effective = _effective_strategy_params(
@@ -683,7 +720,6 @@ class ResearchRunner:
                                 fut2.cancel()
                             executor.shutdown(wait=False, cancel_futures=True)
                             raise RuntimeError(f"Trial {res.label} failed (fail_fast): {res.error}")
-                # Deterministic ordering
                 for idx in range(len(job.trials)):
                     if idx not in results_by_idx:
                         trial = job.trials[idx]

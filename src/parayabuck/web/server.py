@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -27,7 +28,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.requests import Request
 
 from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config
@@ -344,16 +345,25 @@ class EngineManager:
 
         Every rejection path raises ``ValueError`` BEFORE any engine is
         stopped or any file is written.
+
+        Implements PATCH semantics: fields not in ``payload.model_fields_set``
+        preserve the current config instead of clobbering with defaults.
         """
         if self.engine_state in {"starting", "stopping"}:
             raise ValueError("Bot is currently changing state; wait a moment and try again")
 
-        # The web server and trading engine have separate lifecycles. Runtime
-        # settings (timeframe and risk limits) only require the
-        # trading engine to restart; shutting down the whole application also
-        # removes the UI and is both confusing and unnecessary.
+        fields_set = payload.model_fields_set
+
+        # Determine current paper mode before mutation for entering_live detection and digest.
         current_paper = self.is_paper_mode()
-        entering_live = current_paper and not payload.paper_mode
+        # paper_mode is explicit in payload; otherwise derive from live_trading_enabled if provided.
+        if "paper_mode" in fields_set:
+            target_paper = payload.paper_mode
+        elif "live_trading_enabled" in fields_set:
+            target_paper = not payload.live_trading_enabled
+        else:
+            target_paper = current_paper
+        entering_live = current_paper and not target_paper
         if entering_live and payload.restart_engine:
             raise ValueError("Saving live mode requires restart_engine=false; start live separately after arming")
         if entering_live:
@@ -366,10 +376,36 @@ class EngineManager:
                 consume=False,
             )
         current_key, current_secret = self.get_credentials()
-        api_key = payload.api_key.strip() or current_key or ""
-        secret_key = payload.secret_key.strip() or current_secret or ""
+        # Preserve credentials when fields omitted or empty.
+        if "api_key" in fields_set:
+            api_key = payload.api_key.strip() or current_key or ""
+        else:
+            api_key = current_key or ""
+        if "secret_key" in fields_set:
+            secret_key = payload.secret_key.strip() or current_secret or ""
+        else:
+            secret_key = current_secret or ""
         if any(char in api_key + secret_key for char in "\r\n"):
             raise ValueError("Credentials may not contain newlines")
+        # Container credential immutability: in container mode credentials are external secrets.
+        credentials_changed = (api_key, secret_key) != (
+            current_key or "",
+            current_secret or "",
+        )
+        if credentials_changed and os.getenv("PARAYABUCK_CONTAINER") == "YES":
+            raise ValueError(
+                "Credential changes are not allowed in container mode; update the host .env or secret manager and recreate the container"
+            )
+        # Live dollar cap finite check before assignment.
+        if "live_dollar_cap" in fields_set:
+            if not math.isfinite(payload.live_dollar_cap):
+                raise ValueError("live.hard_dollar_cap must be finite")
+        if "daily_loss_limit_pct" in fields_set:
+            if not math.isfinite(payload.daily_loss_limit_pct):
+                raise ValueError("Risk ratios must be finite")
+        if "max_drawdown_pct" in fields_set:
+            if not math.isfinite(payload.max_drawdown_pct):
+                raise ValueError("Risk ratios must be finite")
         # Write settings.yaml
         cfg_raw: dict[str, Any] = {}
         if self.config_path.exists():
@@ -420,26 +456,49 @@ class EngineManager:
         runtime_save = dict(cfg_raw["runtime"])
         if "risk_monitor_timeframe" in runtime_save:
             runtime_save.setdefault("market_state_timeframe", runtime_save.pop("risk_monitor_timeframe"))
-        runtime_save["mode"] = "paper" if payload.paper_mode else "live"
-        runtime_save["execution_timeframe"] = payload.execution_timeframe
+        # PATCH semantics for runtime
+        if "paper_mode" in fields_set or "live_trading_enabled" in fields_set:
+            runtime_save["mode"] = "paper" if target_paper else "live"
+        if "execution_timeframe" in fields_set:
+            runtime_save["execution_timeframe"] = payload.execution_timeframe
         cfg_raw["runtime"] = runtime_save
         live = cfg_raw.setdefault("live", {})
-        live["enabled"] = not payload.paper_mode
-        live["hard_dollar_cap"] = payload.live_dollar_cap
-        live["operator_approval_path"] = payload.live_operator_approval_path
+        if "paper_mode" in fields_set or "live_trading_enabled" in fields_set:
+            live["enabled"] = not target_paper
+        if "live_dollar_cap" in fields_set:
+            live["hard_dollar_cap"] = payload.live_dollar_cap
+        if "live_operator_approval_path" in fields_set:
+            live["operator_approval_path"] = payload.live_operator_approval_path
         strategy = cfg_raw.setdefault("strategy", {})
         risk = cfg_raw["risk"]
-        risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
-        risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
-        strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
-        strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
-        cfg_raw["app"] = {
-            "host": payload.host.strip() or "127.0.0.1",
-            "port": payload.port,
-            "open_browser": payload.open_browser,
-            "auto_start_engine": old_app.get("auto_start_engine", True),
-            "log_level": payload.log_level.upper(),
-        }
+        if "daily_loss_limit_pct" in fields_set:
+            risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
+        if "max_drawdown_pct" in fields_set:
+            risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
+        if "equity_trading_enabled" in fields_set:
+            strategy.setdefault("equity", {})["enabled"] = payload.equity_trading_enabled
+        if "crypto_trading_enabled" in fields_set:
+            strategy.setdefault("crypto", {})["enabled"] = payload.crypto_trading_enabled
+        # App PATCH semantics
+        app_patch: dict[str, Any] = {}
+        if "host" in fields_set:
+            app_patch["host"] = payload.host.strip() or "127.0.0.1"
+        else:
+            app_patch["host"] = old_app.get("host", "127.0.0.1")
+        if "port" in fields_set:
+            app_patch["port"] = payload.port
+        else:
+            app_patch["port"] = old_app.get("port", 8000)
+        if "open_browser" in fields_set:
+            app_patch["open_browser"] = payload.open_browser
+        else:
+            app_patch["open_browser"] = old_app.get("open_browser", True)
+        if "log_level" in fields_set:
+            app_patch["log_level"] = payload.log_level.upper()
+        else:
+            app_patch["log_level"] = old_app.get("log_level", "INFO")
+        app_patch["auto_start_engine"] = old_app.get("auto_start_engine", True)
+        cfg_raw["app"] = app_patch
 
         # Validate the complete temporary configuration before persistence.
         temporary_config = self.config_path.with_name(f".{self.config_path.name}.validate")
@@ -452,10 +511,6 @@ class EngineManager:
                 load_config(str(temporary_config))
         finally:
             temporary_config.unlink(missing_ok=True)
-        credentials_changed = (api_key, secret_key) != (
-            current_key or "",
-            current_secret or "",
-        )
         if entering_live and credentials_changed:
             self.invalidate_live_arming()
             raise ValueError("Credentials changed; request and type a fresh live confirmation first")
@@ -1089,7 +1144,7 @@ class EngineManager:
         try:
             cfg = load_config(str(self.config_path))
             from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
-            from parayabuck.portfolio import portfolio_strategy_from
+            from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
             from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
             from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
@@ -1110,7 +1165,7 @@ class EngineManager:
             ):
                 if not selection.enabled or not symbols:
                     continue
-                strategy = portfolio_strategy_from(selection.name, selection.parameters)
+                strategy = product_strategy_from(selection.name, selection.parameters)
                 digests.append(
                     configuration_digest(
                         strategy,
@@ -1429,7 +1484,6 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
-# Pydantic Schemas
 @dataclass(frozen=True)
 class ValidatedSettings:
     """Validated settings-save result: the new config mapping and credentials."""
@@ -1442,6 +1496,7 @@ class ValidatedSettings:
 
 
 class SettingsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     api_key: str = Field("", description="Alpaca API Key")
     secret_key: str = Field("", description="Alpaca Secret Key")
     paper_mode: bool = Field(True, description="Paper mode toggle")
@@ -1458,21 +1513,26 @@ class SettingsPayload(BaseModel):
     live_trading_enabled: bool = False
     live_dollar_cap: float = Field(0.0, ge=0)
     live_operator_approval_path: str = ""
+    expected_config_digest: str | None = Field(default=None, description="Optimistic concurrency digest")
 
 
 class ModePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     paper: bool
 
 
 class LiveConfirmationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     phrase: str
 
 
 class WebSocketTicketPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     kind: Literal["stream", "logs"]
 
 
 class BacktestPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     market: Literal["equity", "crypto"] = "equity"
     strategy: str = ""
     parameters: dict[str, object] = Field(default_factory=dict)
@@ -1950,6 +2010,10 @@ async def get_settings() -> dict[str, Any]:
     strategy_cfg = _section("strategy")
     live_cfg = _section("live")
 
+    try:
+        current_digest = manager._config_digest(paper=manager.is_paper_mode())
+    except Exception:
+        current_digest = manager._digest_config(cfg_raw, paper=manager.is_paper_mode())
     return {
         # Never send credentials back to the browser. Empty fields mean
         # "preserve the existing value" when settings are saved.
@@ -1957,83 +2021,137 @@ async def get_settings() -> dict[str, Any]:
         "secret_key": "",
         "has_credentials": bool(key and secret),
         "paper_mode": manager.is_paper_mode(),
-        "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", 0.015),
-        "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", 0.10),
+        "daily_loss_limit_pct": 100 * risk_cfg.get("daily_loss_limit_pct", 0.005),
+        "max_drawdown_pct": 100 * risk_cfg.get("max_drawdown_pct", 0.05),
         "timeframe": runtime_cfg.get("execution_timeframe", "5m"),
+        "execution_timeframe": runtime_cfg.get("execution_timeframe", "5m"),
         "host": app_cfg.get("host", "127.0.0.1"),
         "port": app_cfg.get("port", 8000),
         "open_browser": app_cfg.get("open_browser", True),
         "log_level": app_cfg.get("log_level", "INFO"),
         "equity_trading_enabled": (strategy_cfg.get("equity") or {}).get("enabled", True),
-        "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", False),
+        "crypto_trading_enabled": (strategy_cfg.get("crypto") or {}).get("enabled", True),
         "live_trading_enabled": live_cfg.get("enabled", False),
         "live_dollar_cap": live_cfg.get("hard_dollar_cap", 0.0),
         "live_operator_approval_path": live_cfg.get("operator_approval_path", ""),
+        "config_digest": current_digest,
+        "config_version": current_digest,
+    }
+
+
+async def _handle_save_settings(payload: SettingsPayload) -> dict[str, Any]:
+    # Optimistic concurrency: if client provided expected digest, verify against current before any mutation.
+    if payload.expected_config_digest is not None:
+        try:
+            current = manager._config_digest(paper=manager.is_paper_mode())
+        except Exception:
+            # Fallback: digest of current raw if file unreadable
+            raw_tmp: dict[str, Any] = {}
+            if manager.config_path.exists():
+                try:
+                    raw_tmp = yaml.safe_load(manager.config_path.read_text(encoding="utf-8")) or {}
+                except Exception:
+                    pass
+            current = manager._digest_config(raw_tmp, paper=manager.is_paper_mode())
+        if current != payload.expected_config_digest:
+            raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
+    validated = manager._validated_settings_payload(payload)
+    cfg_raw = validated.cfg_raw
+    old_app = validated.old_app
+    api_key = validated.api_key
+    secret_key = validated.secret_key
+    credentials_changed = validated.credentials_changed
+
+    # Validation and live-token checks are complete before a healthy
+    # runtime is stopped.
+    active_runtime = manager.has_active_runtime()
+    restart_engine = active_runtime and payload.restart_engine
+    if active_runtime and not payload.restart_engine:
+        raise ValueError("Stop the bot before saving settings without a restart")
+    if restart_engine:
+        await asyncio.to_thread(manager.stop_engine)
+        if manager.engine_state != "stopped":
+            raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
+    # TOCTOU: re-read digest immediately before atomic write; if changed since validation, abort.
+    if payload.expected_config_digest is not None:
+        try:
+            latest = manager._config_digest(paper=manager.is_paper_mode())
+        except Exception:
+            latest_tmp: dict[str, Any] = {}
+            if manager.config_path.exists():
+                try:
+                    latest_tmp = yaml.safe_load(manager.config_path.read_text(encoding="utf-8")) or {}
+                except Exception:
+                    pass
+            latest = manager._digest_config(latest_tmp, paper=manager.is_paper_mode())
+        if latest != payload.expected_config_digest:
+            raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
+        # Also ensure the file we validated against is still the same digest: compare to digest of cfg before mutation?
+        # The check above covers concurrent mutation between validation and write.
+    _atomic_update_credentials(manager.env_path, api_key, secret_key)
+    atomic_write(
+        manager.config_path,
+        yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
+    )
+
+    manager.reset_broker()
+    if credentials_changed:
+        manager.invalidate_live_arming()
+    restart_error: str | None = None
+    if restart_engine:
+        try:
+            await asyncio.to_thread(manager.start_engine)
+        except Exception as exc:
+            # The settings are already safely persisted. A transient
+            # Alpaca timeout during the automatic restart must not report
+            # the entire save operation as a 500 failure.
+            restart_error = str(exc)
+            log.warning("Settings saved, but automatic engine restart failed: %s", exc)
+
+    # These values belong to the web process itself. Saving them is safe,
+    # but they take effect the next time the application is launched.
+    app_restart_required = any(
+        old_app.get(name, default) != getattr(payload, name)
+        for name, default in {
+            "host": "127.0.0.1",
+            "port": 8000,
+            "open_browser": True,
+            "log_level": "INFO",
+        }.items()
+        if name in payload.model_fields_set
+    )
+    return {
+        "status": "success",
+        "message": (
+            "Settings saved, but the bot could not restart automatically."
+            if restart_error
+            else "Settings and credentials saved."
+        ),
+        "engine_restarted": restart_engine and restart_error is None,
+        "restart_error": restart_error,
+        "app_restart_required": app_restart_required,
     }
 
 
 @app.post("/api/settings")
 async def save_settings(payload: SettingsPayload) -> dict[str, Any]:
     try:
-        validated = manager._validated_settings_payload(payload)
-        cfg_raw = validated.cfg_raw
-        old_app = validated.old_app
-        api_key = validated.api_key
-        secret_key = validated.secret_key
-        credentials_changed = validated.credentials_changed
+        return await _handle_save_settings(payload)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        log.exception("Settings save failed with an unexpected error")
+        raise HTTPException(status_code=500, detail="Settings could not be saved") from None
 
-        # Validation and live-token checks are complete before a healthy
-        # runtime is stopped.
-        active_runtime = manager.has_active_runtime()
-        restart_engine = active_runtime and payload.restart_engine
-        if active_runtime and not payload.restart_engine:
-            raise ValueError("Stop the bot before saving settings without a restart")
-        if restart_engine:
-            await asyncio.to_thread(manager.stop_engine)
-            if manager.engine_state != "stopped":
-                raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
-        _atomic_update_credentials(manager.env_path, api_key, secret_key)
-        atomic_write(
-            manager.config_path,
-            yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
-        )
 
-        manager.reset_broker()
-        if credentials_changed:
-            manager.invalidate_live_arming()
-        restart_error: str | None = None
-        if restart_engine:
-            try:
-                await asyncio.to_thread(manager.start_engine)
-            except Exception as exc:
-                # The settings are already safely persisted. A transient
-                # Alpaca timeout during the automatic restart must not report
-                # the entire save operation as a 500 failure.
-                restart_error = str(exc)
-                log.warning("Settings saved, but automatic engine restart failed: %s", exc)
-
-        # These values belong to the web process itself. Saving them is safe,
-        # but they take effect the next time the application is launched.
-        app_restart_required = any(
-            old_app.get(name, default) != getattr(payload, name)
-            for name, default in {
-                "host": "127.0.0.1",
-                "port": 8000,
-                "open_browser": True,
-                "log_level": "INFO",
-            }.items()
-        )
-        return {
-            "status": "success",
-            "message": (
-                "Settings saved, but the bot could not restart automatically."
-                if restart_error
-                else "Settings and credentials saved."
-            ),
-            "engine_restarted": restart_engine and restart_error is None,
-            "restart_error": restart_error,
-            "app_restart_required": app_restart_required,
-        }
+@app.patch("/api/settings")
+async def patch_settings(payload: SettingsPayload) -> dict[str, Any]:
+    try:
+        return await _handle_save_settings(payload)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception:

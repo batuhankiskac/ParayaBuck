@@ -58,13 +58,20 @@ def main() -> None:
 
     host = os.getenv("HOST", str(app_config.get("host", "127.0.0.1")))
     container_bind = os.getenv("PARAYABUCK_CONTAINER") == "YES" and host == "0.0.0.0"
+    if container_bind:
+        import logging
+
+        logging.getLogger("parayabuck.web.app").warning(
+            "Container is binding 0.0.0.0:%s internally; HOST publication MUST remain 127.0.0.1:%s:8000 (loopback-only). Remote access = SSH tunnel, no public firewall for 8000.",
+            os.getenv("PORT", str(app_config.get("port", 8000))),
+            os.getenv("PORT", str(app_config.get("port", 8000))),
+        )
     if host not in {"127.0.0.1", "localhost", "::1"} and not container_bind:
         raise ValueError(
             "ParayaBuck may only bind to loopback addresses because its trading "
             "control API is intentionally local-only."
         )
     port = int(os.getenv("PORT", str(app_config.get("port", 8000))))
-    # Must precede uvicorn.run AND the browser thread: a port that cannot be
     # bound must never start the engine (lifespan) just to tear it down.
     _probe_web_bind(host, port)
     url_host = f"[{host}]" if ":" in host else host

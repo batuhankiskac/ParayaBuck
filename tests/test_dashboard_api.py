@@ -213,6 +213,8 @@ def test_dashboard_live_active_badge(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    if not Path("data/universe/equity_candidates.json").exists():
+        pytest.skip("equity candidates data not present in CI (gitignored 36M) — skip")
     config_path = _repo_config(tmp_path)
     monkeypatch.setattr(server, "manager", _stub_manager(config_path))
 

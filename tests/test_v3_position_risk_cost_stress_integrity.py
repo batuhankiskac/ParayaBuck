@@ -117,14 +117,16 @@ def test_effective_dated_fees_remains_true():
 
 
 def test_make_engine_stores_correct_multiplier_and_costs():
+    if not (REPO / "data/historical/equity_1200_2016_2026.csv").exists():
+        import pytest
+
+        pytest.skip("historical equity_1200_2016_2026.csv not present in CI (gitignored 124M) — skip")
     from parayabuck.backtest.product import build_product_universe, load_csv_bars
     from parayabuck.core.models import Market
     from scripts.research_v3_position_risk import make_engine
 
     config = load_config(str(REPO / "config/settings.yaml"))
     bars = load_csv_bars(str(REPO / "data/historical/equity_1200_2016_2026.csv"), default_market=Market.EQUITY)
-    # Need universe for make_engine (can be None? but build one)
-    from datetime import datetime
 
     # Use minimal universe via build_product_universe
     universe = build_product_universe(config, bars, market=Market.EQUITY, end=datetime(2026, 7, 30, tzinfo=UTC))
@@ -150,6 +152,10 @@ def test_make_engine_stores_correct_multiplier_and_costs():
 
 
 def test_1x_full_candidate_engine_reproduces_baseline():
+    if not (REPO / "data/historical/equity_1200_2016_2026.csv").exists():
+        import pytest
+
+        pytest.skip("historical equity_1200_2016_2026.csv not present in CI (gitignored 124M) — skip")
     # Lightweight: ensure make_engine with P0 1x does not error and produces expected risk geometry
     from parayabuck.backtest.product import build_product_universe, load_csv_bars
     from scripts.research_v3_position_risk import make_engine

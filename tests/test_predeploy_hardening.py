@@ -21,9 +21,9 @@ from parayabuck.web.server import SettingsPayload, manager
 def test_peak_missing_bootstrap(tmp_path, monkeypatch):
     peak = tmp_path / "paper_equity_peak.json"
     broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak)
-    # Should bootstrap to 0.0 when missing
+    # Should bootstrap to 0.0 when missing and NOT create file until save
     assert broker._peak_equity == 0.0
-    assert not peak.exists() or peak.read_text().strip() == "" or True  # bootstrap not yet persisted until save
+    assert not peak.exists()
 
 
 def test_peak_valid_restore(tmp_path):
@@ -74,6 +74,182 @@ def test_peak_atomic_write_survives(tmp_path):
     # Simulate interruption: write tmp file without replace should not corrupt original
     # atomic_write already tested via backup; just ensure previous good survives
     assert peak.exists()
+
+
+def test_peak_atomic_write_fault_injection_preserves_old(tmp_path):
+    """Fault-injection: os.replace failure must leave old valid file byte-identical."""
+
+    peak = tmp_path / "paper_equity_peak.json"
+    original_payload = json.dumps({"peak_equity": 1000, "epoch": 0})
+    peak.write_text(original_payload)
+    original_bytes = peak.read_bytes()
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak)
+    broker._peak_equity = 2000
+    # Patch the replace inside atomic_write to raise before the file is swapped
+    with patch("parayabuck.utils.io.os.replace", side_effect=OSError("injected failure")):
+        try:
+            broker._save_peak_equity()
+            assert False, "expected OSError from injected fault"
+        except OSError as exc:
+            assert "injected failure" in str(exc)
+    # Old file must be byte-identical, no partial temp authoritative
+    assert peak.read_bytes() == original_bytes
+    assert json.loads(peak.read_text())["peak_equity"] == 1000
+    # No stray temp files should remain as authoritative peak
+    assert not list(tmp_path.glob(".paper_equity_peak.json.*")) or all(
+        not p.exists() for p in tmp_path.glob(".paper_equity_peak.json.*")
+    )
+    # Next load must restore old peak, not 2000
+    broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak)
+    assert broker2._peak_equity == 1000
+
+
+def test_peak_sidecar_deletion_restores_persisted(tmp_path):
+    """Peak sidecar deleted but SQLite holds peak -> restore max persisted."""
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+    from parayabuck.risk.state import RiskState
+
+    db = tmp_path / "persist.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    # Persist historical peak 100000 via high_water and risk_state
+    repo.update_high_water("acct-test", 100000.0)
+    # also via risk_state
+    ledger.save_risk_state(
+        RiskState(
+            account_id="acct-test",
+            session_date=datetime.now(UTC).date(),
+            day_start_equity=100000.0,
+            peak_equity=100000.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            fees=0.0,
+            consecutive_losses=0,
+            circuit_breaker_reason=None,
+            updated_at=datetime.now(UTC),
+            peak_epoch=0,
+        )
+    )
+    # Create broker with sidecar present then delete sidecar to simulate loss
+    peak = tmp_path / "paper_equity_peak.json"
+    peak.write_text(json.dumps({"peak_equity": 100000.0, "epoch": 0}))
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker._peak_equity == 100000.0
+    # Delete sidecar, simulate restart with current equity 94000
+    peak.unlink()
+    # Create new broker instance sharing same ledger (restart)
+    broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    # Must restore 100000, not rebase to 0 or 94000
+    assert broker2._peak_equity == 100000.0
+
+    # Simulate account fetch at 94000 -> drawdown 6%
+    class FakeAccount:
+        equity = 94000.0
+        last_equity = 94000.0
+        cash = 94000.0
+        account_blocked = False
+        trading_blocked = False
+        trade_suspended_by_user = False
+        id = "acct-test"
+        crypto_status = "ACTIVE"
+        non_marginable_buying_power = None
+
+    class FakeClient:
+        def get_account(self):
+            return FakeAccount()
+
+        def get_all_positions(self):
+            return []
+
+        _session = None
+
+    broker2._client = FakeClient()
+    snap = broker2.account()
+    assert snap.peak_equity == 100000.0
+    assert abs(snap.drawdown_pct - 0.06) < 1e-9
+    # Sidecar should have been restored
+    assert peak.exists()
+    assert json.loads(peak.read_text())["peak_equity"] == 100000.0
+
+
+def test_peak_missing_with_no_persisted_bootstraps_zero(tmp_path):
+    """Case A: sidecar absent and no persisted peak -> genuine first run 0.0."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "empty.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    # No persisted peak: fresh DB, no high_water, no risk_state
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker._peak_equity == 0.0
+    assert broker._peak_epoch == 0
+
+
+def test_peak_max_when_both_exist(tmp_path):
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "both.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-test", 90000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    # sidecar 95k > persisted 90k same epoch -> max wins 95k
+    assert broker._peak_equity == 95000.0
+    # Now persist higher 100k and reload sidecar still 95k -> should pick 100k
+    repo.update_high_water("acct-test", 100000.0)
+    peak.write_text(json.dumps({"peak_equity": 95000.0, "epoch": 0}))
+    broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker2._peak_equity == 100000.0
+
+
+def test_peak_epoch_reset_not_undone_by_old_history(tmp_path):
+    """Explicit reset epoch increments; old higher peak must not resurrect."""
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+    from parayabuck.risk.state import RiskState
+
+    db = tmp_path / "epoch.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    peak = tmp_path / "paper_equity_peak.json"
+    # Historical peak 100k epoch 0
+    repo.update_high_water("acct-test", 100000.0)
+    peak.write_text(json.dumps({"peak_equity": 100000.0, "epoch": 0}))
+    broker = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker._peak_equity == 100000.0
+    # Operator explicit reset to 94000 -> epoch 1
+    broker.reset_peak_equity(94000.0)
+    repo.reset_high_water("acct-test", 94000.0)
+    ledger.save_risk_state(
+        RiskState(
+            account_id="acct-test",
+            session_date=datetime.now(UTC).date(),
+            day_start_equity=94000.0,
+            peak_equity=94000.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            fees=0.0,
+            consecutive_losses=0,
+            circuit_breaker_reason=None,
+            updated_at=datetime.now(UTC),
+            peak_epoch=broker._peak_epoch,
+        )
+    )
+    assert broker._peak_epoch == 1
+    # Simulate old risk_state row with epoch 0 still present (historical)
+    # Already present; new broker restart with sidecar deleted should NOT resurrect 100k
+    peak.unlink()
+    broker2 = AlpacaBroker("k", "s", paper=True, peak_state_path=peak, ledger=ledger)
+    assert broker2._peak_equity == 94000.0
+    assert broker2._peak_epoch == 1
 
 
 def test_peak_preserved_when_equity_below(tmp_path, monkeypatch):

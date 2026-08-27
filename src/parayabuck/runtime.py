@@ -3543,6 +3543,7 @@ class EngineRuntime:
                     consecutive_losses=current_losses,
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
+                    peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
                 )
             )
 

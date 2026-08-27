@@ -317,6 +317,18 @@ class PortfolioStateRepository:
                        WHERE fill_delay_seconds IS NULL"""
                 )
             self._ensure_hot_path_indexes()
+            # Epoch for monotonic peak: old history must not undo an explicit
+            # operator risk-epoch reset. The epoch is stored alongside
+            # high_water (and the sidecar JSON) and every persisted RiskState
+            # row carries its epoch. A missing sidecar restores the max peak
+            # only from rows/values whose epoch equals the current epoch.
+            hw_columns = {
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_high_water)")
+            }
+            if "epoch" not in hw_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_high_water ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _ensure_hot_path_indexes(self) -> None:
         """Additive, backward-compatible hot-path indexes (idempotent).
@@ -1025,17 +1037,29 @@ class PortfolioStateRepository:
     def update_high_water(self, account_id: str, equity: float) -> float:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
-                "SELECT equity FROM portfolio_high_water WHERE account_id = ?",
+                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
                 (account_id,),
             ).fetchone()
-            high_water = max(float(row[0]) if row else 0.0, equity)
-            self.store.connection.execute(
-                """INSERT INTO portfolio_high_water(account_id, equity, updated_at)
-                   VALUES (?, ?, ?)
+            if row is not None:
+                existing_equity = float(row[0])
+                existing_epoch = int(row[1] or 0)
+                high_water = max(existing_equity, equity)
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
                    ON CONFLICT(account_id) DO UPDATE SET
-                     equity = excluded.equity, updated_at = excluded.updated_at""",
-                (account_id, high_water, datetime.now(UTC).isoformat()),
-            )
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                    (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
+                )
+            else:
+                high_water = equity
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                    (account_id, high_water, datetime.now(UTC).isoformat(), 0),
+                )
         return high_water
 
     def high_water(self, account_id: str) -> float:
@@ -1046,6 +1070,25 @@ class PortfolioStateRepository:
             ).fetchone()
         return float(row[0]) if row is not None else 0.0
 
+    def high_water_with_epoch(self, account_id: str) -> tuple[float, int]:
+        """Return (equity, epoch) for ``account_id``; epoch defaults to 0."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        if row is None:
+            return 0.0, 0
+        return float(row[0]), int(row[1] or 0)
+
+    def high_water_epoch(self, account_id: str) -> int:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        return int(row[0] or 0) if row is not None else 0
+
     def reset_high_water(self, account_id: str, equity: float) -> None:
         """Rebase the persisted portfolio high-water to ``equity`` (a new
         risk epoch started by the operator after a verified drawdown
@@ -1053,12 +1096,17 @@ class PortfolioStateRepository:
         instead of taking the max, so decisions resume measuring drawdown
         from the reset-time equity."""
         with self.store.lock, self.store.connection:
+            row = self.store.connection.execute(
+                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+            new_epoch = int(row[0] or 0) + 1 if row is not None else 1
             self.store.connection.execute(
-                """INSERT INTO portfolio_high_water(account_id, equity, updated_at)
-                   VALUES (?, ?, ?)
+                """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
                    ON CONFLICT(account_id) DO UPDATE SET
-                     equity = excluded.equity, updated_at = excluded.updated_at""",
-                (account_id, equity, datetime.now(UTC).isoformat()),
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                (account_id, equity, datetime.now(UTC).isoformat(), new_epoch),
             )
 
     def owned_quantities(self, account_id: str = "unknown", market: Market | None = None) -> dict[str, float]:

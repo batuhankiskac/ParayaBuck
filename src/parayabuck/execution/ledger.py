@@ -1432,6 +1432,7 @@ class ExecutionLedger:
                 "fees": state.fees,
                 "consecutive_losses": state.consecutive_losses,
                 "circuit_breaker_reason": state.circuit_breaker_reason,
+                "peak_epoch": int(getattr(state, "peak_epoch", 0) or 0),
             },
             sort_keys=True,
         )
@@ -1476,6 +1477,7 @@ class ExecutionLedger:
                 consecutive_losses=int(payload["consecutive_losses"]),
                 circuit_breaker_reason=payload.get("circuit_breaker_reason"),
                 updated_at=datetime.fromisoformat(str(row[1])),
+                peak_epoch=int(payload.get("peak_epoch", 0) or 0),
             )
         except (TypeError, ValueError, KeyError):
             # A corrupt/truncated risk_state row (bad JSON payload, missing

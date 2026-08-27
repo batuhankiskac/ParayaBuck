@@ -148,10 +148,11 @@ class AlpacaBroker:
             self._peak_state_path = Path("data/runtime") / (
                 "paper_equity_peak.json" if paper else "live_equity_peak.json"
             )
-        self._peak_equity = self._load_peak_equity()
         self._asset_cache: dict[str, Any] = {}
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
+        self._peak_epoch = 0
+        self._peak_equity = self._load_peak_equity()
         self.portfolio_owned_quantities = portfolio_owned_quantities
         self.portfolio_open_orders = portfolio_open_orders
         self.portfolio_fill_recovered = portfolio_fill_recovered
@@ -2395,37 +2396,148 @@ class AlpacaBroker:
     def _field(value: Any, name: str, default: Any = None) -> Any:
         return field_value(value, name, default)
 
+    def _query_persisted_peak(self) -> tuple[float | None, int | None]:
+        """Return (max_persisted_peak, epoch) from SQLite, or (None,None) if none."""
+        if self.ledger is None:
+            return None, None
+        try:
+            with self.ledger._lock:
+                hw_peak: float | None = None
+                hw_epoch: int | None = None
+                try:
+                    row = self.ledger.connection.execute(
+                        "SELECT equity, epoch FROM portfolio_high_water ORDER BY epoch DESC, equity DESC LIMIT 1"
+                    ).fetchone()
+                    if row is not None:
+                        hw_peak = float(row[0])
+                        hw_epoch = int(row[1] or 0)
+                except Exception:
+                    hw_peak, hw_epoch = None, None
+                rs_peak: float | None = None
+                rs_epoch: int | None = None
+                try:
+                    rows = self.ledger.connection.execute("SELECT payload FROM risk_state").fetchall()
+                    best: dict[int, float] = {}
+                    for (payload_str,) in rows:
+                        try:
+                            p = json.loads(payload_str)
+                            pe = int(p.get("peak_epoch", 0) or 0)
+                            pk = float(p.get("peak_equity", 0))
+                            if not math.isfinite(pk) or pk < 0:
+                                continue
+                            if pe not in best or pk > best[pe]:
+                                best[pe] = pk
+                        except Exception:
+                            continue
+                    if best:
+                        max_epoch = max(best.keys())
+                        rs_peak = best[max_epoch]
+                        rs_epoch = max_epoch
+                except Exception:
+                    rs_peak, rs_epoch = None, None
+                if hw_peak is None and rs_peak is None:
+                    return None, None
+                if hw_peak is None:
+                    return rs_peak, rs_epoch
+                if rs_peak is None:
+                    return hw_peak, hw_epoch
+                if hw_epoch is None or rs_epoch is None:
+                    return max(hw_peak, rs_peak), hw_epoch if hw_epoch is not None else rs_epoch
+                if hw_epoch != rs_epoch:
+                    return (hw_peak, hw_epoch) if hw_epoch > rs_epoch else (rs_peak, rs_epoch)
+                return max(hw_peak, rs_peak), hw_epoch
+        except Exception:
+            return None, None
+
     def _load_peak_equity(self) -> float:
-        if not self._peak_state_path.exists():
+        sidecar_peak: float | None = None
+        sidecar_epoch = 0
+        sidecar_exists = self._peak_state_path.exists()
+        if sidecar_exists:
+            try:
+                raw = self._peak_state_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise RiskStatePersistenceError(
+                    f"Peak equity file unreadable at {self._peak_state_path}: {exc}"
+                ) from exc
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RiskStatePersistenceError(
+                    f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
+                ) from exc
+            if not isinstance(data, dict) or "peak_equity" not in data:
+                raise RiskStatePersistenceError(
+                    f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}"
+                )
+            try:
+                peak = float(data["peak_equity"])
+            except (TypeError, ValueError) as exc:
+                raise RiskStatePersistenceError(
+                    f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
+                ) from exc
+            if not math.isfinite(peak):
+                raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
+            if peak < 0:
+                raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
+            try:
+                sidecar_epoch = int(data.get("epoch", 0) or 0)
+            except (TypeError, ValueError) as exc:
+                raise RiskStatePersistenceError(
+                    f"Peak epoch is not an integer at {self._peak_state_path}: {data.get('epoch')!r}"
+                ) from exc
+            if sidecar_epoch < 0:
+                raise RiskStatePersistenceError(f"Peak epoch is negative at {self._peak_state_path}: {sidecar_epoch!r}")
+            sidecar_peak = peak
+        persisted_peak, persisted_epoch = self._query_persisted_peak()
+        # Case A: no sidecar and no persisted -> genuine first run
+        if sidecar_peak is None and persisted_peak is None:
+            self._peak_epoch = 0
             return 0.0
-        try:
-            raw = self._peak_state_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            raise RiskStatePersistenceError(f"Peak equity file unreadable at {self._peak_state_path}: {exc}") from exc
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RiskStatePersistenceError(
-                f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
-            ) from exc
-        if not isinstance(data, dict) or "peak_equity" not in data:
-            raise RiskStatePersistenceError(f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}")
-        try:
-            peak = float(data["peak_equity"])
-        except (TypeError, ValueError) as exc:
-            raise RiskStatePersistenceError(
-                f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
-            ) from exc
-        if not math.isfinite(peak):
-            raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
-        if peak < 0:
-            raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
+        # Case B: sidecar missing but persisted exists -> restore persisted
+        if sidecar_peak is None:
+            assert persisted_peak is not None and persisted_epoch is not None
+            self._peak_epoch = int(persisted_epoch)
+            # restore sidecar atomically so next restart is consistent
+            try:
+                payload = json.dumps({"peak_equity": float(persisted_peak), "epoch": int(persisted_epoch)})
+                atomic_write(self._peak_state_path, payload)
+            except Exception:
+                log.warning("Failed to restore peak sidecar after deletion; will retry on next load", exc_info=True)
+            return float(persisted_peak)
+        # sidecar present, no persisted -> use sidecar
+        if persisted_peak is None:
+            self._peak_epoch = int(sidecar_epoch)
+            return float(sidecar_peak)
+        # both exist: epoch mismatch -> newer epoch wins
+        assert persisted_epoch is not None
+        if int(sidecar_epoch) != int(persisted_epoch):
+            if int(persisted_epoch) > int(sidecar_epoch):
+                self._peak_epoch = int(persisted_epoch)
+                try:
+                    payload = json.dumps({"peak_equity": float(persisted_peak), "epoch": int(persisted_epoch)})
+                    atomic_write(self._peak_state_path, payload)
+                except Exception:
+                    log.warning("Failed to reconcile peak sidecar to newer persisted epoch", exc_info=True)
+                return float(persisted_peak)
+            self._peak_epoch = int(sidecar_epoch)
+            return float(sidecar_peak)
+        # same epoch: max wins, and reconcile sidecar if persisted larger
+        peak = max(float(sidecar_peak), float(persisted_peak))
+        self._peak_epoch = int(sidecar_epoch)
+        if peak != float(sidecar_peak):
+            try:
+                payload = json.dumps({"peak_equity": peak, "epoch": int(sidecar_epoch)})
+                atomic_write(self._peak_state_path, payload)
+            except Exception:
+                log.warning("Failed to reconcile peak sidecar to persisted high-water", exc_info=True)
         return peak
 
     def _save_peak_equity(self) -> None:
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
             raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")
-        payload = json.dumps({"peak_equity": self._peak_equity})
+        epoch = int(getattr(self, "_peak_epoch", 0) or 0)
+        payload = json.dumps({"peak_equity": self._peak_equity, "epoch": epoch})
         atomic_write(self._peak_state_path, payload)
 
     def reset_peak_equity(self, equity: float) -> None:
@@ -2437,11 +2549,19 @@ class AlpacaBroker:
         """
         if equity <= 0:
             raise ValueError("Cannot reset the equity peak to a non-positive value")
+        # New epoch is max of sidecar and persisted +1 so old history cannot
+        # resurrect the previous high peak after the explicit reset.
+        _, persisted_epoch = self._query_persisted_peak()
+        current_epoch = int(getattr(self, "_peak_epoch", 0) or 0)
+        if persisted_epoch is not None:
+            current_epoch = max(current_epoch, int(persisted_epoch))
+        self._peak_epoch = current_epoch + 1
         self._peak_equity = float(equity)
         self._save_peak_equity()
         log.warning(
-            "Equity peak rebased to %.2f (%s)",
+            "Equity peak rebased to %.2f (epoch %d, %s)",
             self._peak_equity,
+            self._peak_epoch,
             "paper" if self._paper else "live",
         )
 

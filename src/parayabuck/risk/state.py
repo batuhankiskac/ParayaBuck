@@ -18,6 +18,7 @@ class RiskState:
     consecutive_losses: int
     circuit_breaker_reason: str | None
     updated_at: datetime
+    peak_epoch: int = 0
 
 
 @dataclass(frozen=True)

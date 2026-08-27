@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import threading
 import time
@@ -45,11 +46,22 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import patch_session_timeout
+from parayabuck.utils.io import atomic_write
 from parayabuck.utils.objects import field_value
 
 log = get_logger("parayabuck.execution.alpaca")
 
 CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
+
+
+class RiskStatePersistenceError(RuntimeError):
+    """Peak equity sidecar is present but unreadable or invalid.
+
+    Raised when ``paper_equity_peak.json`` / ``live_equity_peak.json`` exists
+    but is malformed, truncated, non-finite, negative, or unreadable. The
+    caller must halt entries fail-closed rather than fall back to 0.0 and
+    erase the drawdown watermark. Missing file bootstraps to 0.0.
+    """
 
 
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
@@ -120,11 +132,22 @@ class AlpacaBroker:
         crypto_emergency_exit_bps: float = 75.0,
         crypto_stop_cancel_timeout_seconds: float = 5.0,
         crypto_stop_cancel_poll_interval_seconds: float = 0.25,
+        runtime_state_dir: str | Path | None = None,
+        peak_state_path: str | Path | None = None,
     ) -> None:
         self._client = TradingClient(api_key, secret_key, paper=paper)
         patch_session_timeout(self._client._session, timeout=15.0)
         self._paper = paper
-        self._peak_state_path = Path("data/runtime") / ("paper_equity_peak.json" if paper else "live_equity_peak.json")
+        if peak_state_path is not None:
+            self._peak_state_path = Path(peak_state_path)
+        elif runtime_state_dir is not None:
+            self._peak_state_path = Path(runtime_state_dir) / (
+                "paper_equity_peak.json" if paper else "live_equity_peak.json"
+            )
+        else:
+            self._peak_state_path = Path("data/runtime") / (
+                "paper_equity_peak.json" if paper else "live_equity_peak.json"
+            )
         self._peak_equity = self._load_peak_equity()
         self._asset_cache: dict[str, Any] = {}
         self.manage_external_positions = manage_external_positions
@@ -2376,16 +2399,34 @@ class AlpacaBroker:
         if not self._peak_state_path.exists():
             return 0.0
         try:
-            return max(0.0, float(json.loads(self._peak_state_path.read_text())["peak_equity"]))
-        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
-            log.warning("Could not read persisted equity peak; starting from current equity")
-            return 0.0
+            raw = self._peak_state_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise RiskStatePersistenceError(f"Peak equity file unreadable at {self._peak_state_path}: {exc}") from exc
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RiskStatePersistenceError(
+                f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
+            ) from exc
+        if not isinstance(data, dict) or "peak_equity" not in data:
+            raise RiskStatePersistenceError(f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}")
+        try:
+            peak = float(data["peak_equity"])
+        except (TypeError, ValueError) as exc:
+            raise RiskStatePersistenceError(
+                f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
+            ) from exc
+        if not math.isfinite(peak):
+            raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
+        if peak < 0:
+            raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
+        return peak
 
     def _save_peak_equity(self) -> None:
-        self._peak_state_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self._peak_state_path.with_suffix(".tmp")
-        temporary.write_text(json.dumps({"peak_equity": self._peak_equity}))
-        temporary.replace(self._peak_state_path)
+        if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
+            raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")
+        payload = json.dumps({"peak_equity": self._peak_equity})
+        atomic_write(self._peak_state_path, payload)
 
     def reset_peak_equity(self, equity: float) -> None:
         """Start a new risk epoch: rebase the drawdown peak to ``equity``.
@@ -2405,4 +2446,4 @@ class AlpacaBroker:
         )
 
 
-__all__ = ["AlpacaBroker", "CryptoPriceObservation"]
+__all__ = ["AlpacaBroker", "CryptoPriceObservation", "RiskStatePersistenceError"]

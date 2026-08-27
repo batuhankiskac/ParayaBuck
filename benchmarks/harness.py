@@ -59,7 +59,7 @@ class Timing:
         )
 
 
-def timeit(
+def timeit(  # noqa: UP047
     fn: Callable[[], T],
     *,
     label: str,

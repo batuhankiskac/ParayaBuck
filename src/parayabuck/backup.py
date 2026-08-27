@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import math
 import os
 import sqlite3
@@ -8,36 +9,10 @@ from pathlib import Path
 
 """Consistent SQLite backups of the runtime decision database.
 
-The runtime ledger is a WAL-mode SQLite database that stays open for the
-lifetime of the process, so a raw file copy is NOT safe: committed frames may
-still live in ``-wal`` when the main file is copied. This module uses the
-``sqlite3`` online backup API (``Connection.backup``), which produces a
-consistent snapshot of every committed transaction regardless of WAL state,
-without requiring the runtime to stop or checkpoint.
-
-Backups are timestamped files under a configured directory and pruned by
-retention (oldest deleted first). Stdlib only.
-
-Durability & crash-consistency semantics (WAL, synchronous=NORMAL, busy_timeout):
-* Source databases are opened with ``busy_timeout=5000`` so a concurrent
-  runtime write does not fail the backup with SQLITE_BUSY; the backup API
-  retries internally while the runtime keeps writing.
-* The snapshot is transaction-consistent: it contains every committed
-  transaction at the instant the backup runs and excludes in-flight
-  uncommitted work — a crash mid-backup never produces a half-decision file.
-* The backup API copies the source file header verbatim, so a backup of a
-  WAL runtime is itself WAL-format; it is normalized to DELETE mode
-  (``PRAGMA journal_mode=DELETE``) so the snapshot is a standalone
-  rollback-journal file with no ``-wal``/``-shm`` sidecars and is portable
-  and restorable read-only.
-* Corruption recovery: ``verify_backup`` runs ``PRAGMA integrity_check`` on
-  the snapshot (read-only open); a backup that fails verification is
-  discarded and the runtime falls back to the previous verified backup or
-  fails closed per production policy.
-* Concurrent handling: pruning deletes only files older than
-  ``retention_days`` by mtime (oldest first) and never touches the
-  just-created file; sidecar siblings (``-wal``/``-shm``) from
-  pre-normalization backups are cleaned up.
+Uses the sqlite3 online backup API for a consistent snapshot while the
+runtime WAL database is open. The snapshot is verified via
+PRAGMA integrity_check before pruning old backups, and fsync durability
+is enforced so a verified backup survives a crash.
 """
 
 BACKUP_PREFIX = "parayabuck-"
@@ -46,6 +21,14 @@ BACKUP_SUFFIX = ".sqlite3"
 
 class BackupVerificationError(RuntimeError):
     """Raised when a newly created backup fails integrity verification."""
+
+
+class BackupDurabilityError(RuntimeError):
+    """Raised when the backup file cannot be fsynced durably.
+
+    The new snapshot is removed (or marked unusable) and previous verified
+    backups are preserved; pruning is not performed.
+    """
 
 
 def _validate_retention(retention_days: float) -> float:
@@ -119,17 +102,46 @@ def backup_database(
     finally:
         destination_connection.close()
         source_connection.close()
-    # fsync the destination file so the verified snapshot is durable.
+    # Durability: fsync file and directory.
+    # - File fsync failure means the snapshot is NOT durable: remove the new
+    #   file (and sidecars), preserve previous verified backups, do NOT prune,
+    #   and raise BackupDurabilityError.
+    # - Directory fsync failure is platform-specific: EINVAL/EBADF/ENOTSUP
+    #   indicate the OS/filesystem does not support fsync on directories
+    #   (e.g., some network filesystems, Windows). These are documented and
+    #   treated as best-effort (not durable failure). Other OSError on
+    #   directory fsync is treated as durability failure likewise.
     try:
         with open(destination, "rb") as fh:
             os.fsync(fh.fileno())
+    except OSError as exc:
+        # File fsync failed — snapshot not durable.
+        for p in (destination, Path(f"{destination}-wal"), Path(f"{destination}-shm")):
+            try:
+                if p.is_file():
+                    p.unlink()
+            except OSError:
+                pass
+        raise BackupDurabilityError(f"Backup durability fsync failed for {destination}: {exc}") from exc
+    try:
         dir_fd = os.open(target_dir, os.O_RDONLY)
         try:
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
-    except OSError:
-        pass  # best-effort durability; verification will catch corruption
+    except OSError as exc:
+        # Unsupported directory fsync on this platform/filesystem — documented
+        # as best-effort; do not treat as durability failure.
+        if exc.errno in (errno.EINVAL, errno.EBADF, errno.ENOTSUP, errno.EPERM, errno.EACCES):
+            pass  # platform does not support directory fsync; file fsync already succeeded
+        else:
+            for p in (destination, Path(f"{destination}-wal"), Path(f"{destination}-shm")):
+                try:
+                    if p.is_file():
+                        p.unlink()
+                except OSError:
+                    pass
+            raise BackupDurabilityError(f"Backup directory fsync failed for {target_dir}: {exc}") from exc
     # Verify BEFORE prune: invalid backup must be deleted and must not prune.
     if not verify_backup(destination):
         # Delete the corrupt/incomplete new file; preserve previous backups.
@@ -215,6 +227,7 @@ def latest_verified_backup(backup_dir: str | Path) -> Path | None:
 __all__ = [
     "BACKUP_PREFIX",
     "BACKUP_SUFFIX",
+    "BackupDurabilityError",
     "BackupVerificationError",
     "backup_database",
     "latest_verified_backup",

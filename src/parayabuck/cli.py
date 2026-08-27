@@ -239,7 +239,9 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             continue
         if not symbols:
             raise SystemExit(f"No active {market.value} universe is available")
-        strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+        # Live gate must use the product surface: only PAPER-supported strategies
+        # may produce a live approval. Research paths keep portfolio_strategy_from.
+        strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
         digests.append(
             configuration_digest(
                 strategy,
@@ -419,21 +421,57 @@ def _run_doctor(args: argparse.Namespace) -> int:
                 add("sqlite WAL capability", False, str(exc))
         for market in (Market.EQUITY, Market.CRYPTO):
             uni_cfg = config.universe.equity if market == Market.EQUITY else config.universe.crypto
+            strat_sel = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
             if not uni_cfg.enabled:
                 add(f"universe {market.value} disabled", True, "skipped")
                 continue
-            active_path = Path(uni_cfg.active_universe_path)
-            if active_path.exists():
-                try:
-                    data = json.loads(active_path.read_text())
-                    add(f"universe {market.value} active present", True, str(active_path))
-                    add(f"universe {market.value} parseable", True, f"keys {list(data.keys())[:3]}")
-                except Exception as exc:
-                    add(f"universe {market.value} active present", False, str(exc))
+            if not uni_cfg.dynamic_selection_enabled:
+                # Static universe - no snapshot validation required.
+                add(f"universe {market.value} static", True, "dynamic_selection disabled")
+                continue
+            # Enabled dynamic universe: use canonical validators.
+            # Validators evaluate: snapshot exists, JSON parses, freshness vs
+            # active_universe_max_age_hours, scanner config digest match,
+            # observation strategy identity (name/version/timeframe/params digest),
+            # and scanner version.
+            if market == Market.EQUITY:
+                eq_cfg = config.universe.equity
+                symbols, status = validate_active_universe(eq_cfg)
+                cfg_digest = scanner_config_digest(eq_cfg)[:12]
             else:
-                add(f"universe {market.value} active present", True, "no active universe yet", is_blocker=False)
-            strat_name = config.strategy.equity.name if market == Market.EQUITY else config.strategy.crypto.name
-            add(f"universe {market.value} strategy identity", True, strat_name)
+                cr_cfg = config.universe.crypto
+                symbols, status = validate_active_crypto_universe(cr_cfg)
+                cfg_digest = crypto_scanner_config_digest(cr_cfg)[:12]
+            obs = f"{uni_cfg.observation_strategy_name}/{uni_cfg.observation_strategy_version}/{uni_cfg.observation_strategy_timeframe}"
+            detail = (
+                f"status={status} symbols={len(symbols)} cfg={cfg_digest} obs={obs} path={uni_cfg.active_universe_path}"
+            )
+            if status == "success":
+                add(f"universe {market.value} active", True, detail)
+            else:
+                requires = (
+                    config.runtime.mode == RuntimeMode.PAPER
+                    and strat_sel.enabled
+                    and uni_cfg.enabled
+                    and uni_cfg.dynamic_selection_enabled
+                )
+                fallback_allowed = uni_cfg.allow_static_fallback_trading
+                if requires and not fallback_allowed:
+                    if args.offline:
+                        # Offline preflight (ExecStartPre): snapshot stale/missing but runtime
+                        # can refresh after network startup. Classify as REFRESH_NEEDED
+                        # explicitly, not PASS. Non-blocking even with --strict so first
+                        # boot / ExecStartPre does not fail when network is still down.
+                        checks.append((f"universe {market.value} active", "REFRESH_NEEDED", detail))
+                    else:
+                        # Strict paper online (no --offline): fail-closed, runtime would halt.
+                        add(f"universe {market.value} active", False, detail)
+                else:
+                    # Degraded: fallback allowed or non-PAPER runtime; emit WARN, not FAIL.
+                    # WARN means strict failure (warning=True) except for transient network
+                    # below which is explicitly non-blocking.
+                    checks.append((f"universe {market.value} active", "WARN", detail))
+                    warning = True
         try:
             result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True, timeout=5)
             tracked = result.stdout.decode(errors="ignore").split("\0")
@@ -456,6 +494,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
         except Exception as exc:
             add("package version", False, str(exc), is_blocker=False)
         if not args.offline and args.paper and api_key and secret:
+            broker = None
             try:
                 broker = AlpacaBroker(api_key, secret, paper=True)
                 broker._client.get_account()
@@ -467,10 +506,19 @@ def _run_doctor(args: argparse.Namespace) -> int:
                     for w in ["timeout", "timed out", "connection", "temporary", "unreachable", "dns", "network"]
                 )
                 if transient:
+                    # Transient network blip is intentionally non-blocking even with --strict:
+                    # it is informational WARN, does NOT set warning flag, so strict paper
+                    # preflight still passes when the network is flaky. Documented explicitly.
                     add("alpaca PAPER reachable", True, f"transient: {exc}", is_blocker=False)
                     checks.append(("network transient", "WARN", str(exc)))
                 else:
                     add("alpaca PAPER reachable", False, str(exc))
+            finally:
+                if broker is not None:
+                    try:
+                        broker.close()
+                    except Exception:
+                        pass
         elif args.offline:
             add("network offline", True, "--offline skip")
     except Exception as exc:

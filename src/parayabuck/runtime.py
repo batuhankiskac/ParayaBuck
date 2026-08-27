@@ -10,6 +10,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Protocol
 
 from requests.exceptions import RequestException
@@ -47,7 +48,7 @@ from parayabuck.monitoring import metrics as runtime_metrics_store
 from parayabuck.monitoring.incident import IncidentCategory
 from parayabuck.monitoring.paper_incident import automate_incident_recovery
 from parayabuck.monitoring.receipt import build_receipt, default_receipt_dir
-from parayabuck.portfolio import portfolio_strategy_from, validate_strategy_timeframe
+from parayabuck.portfolio import product_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
     PortfolioRuntime,
@@ -371,13 +372,14 @@ class EngineRuntime:
         ):
             if not selection.enabled or not symbols:
                 continue
-            strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+            strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
             if strategy.market != market:
                 raise ValueError(f"Configured {market.value} strategy has the wrong market")
             # The strategy owns its signal timeframe; the configured value must
             # match one of its validated timeframes (never silently
-            # reinterpreted). portfolio_strategy_from already enforces this,
-            # and validate_strategy_timeframe keeps the invariant explicit.
+            # reinterpreted). product_strategy_from already enforces product
+            # boundary, and validate_strategy_timeframe keeps the invariant
+            # explicit. Research harness may still use portfolio_strategy_from.
             validate_strategy_timeframe(strategy, selection.timeframe or strategy.timeframe)
             strategy_specs.append((strategy, tuple(symbols), selection.maximum_allocation))
         self._strategy_specs = tuple(strategy_specs)
@@ -391,6 +393,8 @@ class EngineRuntime:
         self.store = SQLiteStore(database_path)
         self.ledger = ExecutionLedger(database_path, store=self.store)
         self._portfolio_repository = PortfolioStateRepository(database_path, store=self.store)
+        # Derive runtime state dir from decision DB parent to avoid split state (peak vs sqlite).
+        runtime_state_dir = str(Path(database_path).parent)
         self.broker = AlpacaBroker(
             api_key,
             secret_key,
@@ -416,10 +420,9 @@ class EngineRuntime:
                 self._portfolio_repository.clear_stale_ownership(self.broker.account_id or "unknown", symbol, market)
                 or None
             ),
-            crypto_stop_limit_offset_bps=self.config.crypto_stop_limit_offset_bps,
-            crypto_emergency_exit_bps=self.config.crypto_emergency_exit_bps,
             crypto_stop_cancel_timeout_seconds=self.config.crypto_stop_cancel_timeout_seconds,
             crypto_stop_cancel_poll_interval_seconds=(self.config.crypto_stop_cancel_poll_interval_seconds),
+            runtime_state_dir=runtime_state_dir,
         )
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.market_state = RuntimeMarketState(

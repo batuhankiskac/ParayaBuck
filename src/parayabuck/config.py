@@ -40,7 +40,7 @@ class RuntimeConfig:
             raise ValueError("runtime.execution_timeframe is unsupported")
         if self.market_state_timeframe not in TIMEFRAME_MINUTES:
             raise ValueError("runtime.market_state_timeframe is unsupported")
-        if self.scanner_refresh_hours <= 0:
+        if not math.isfinite(self.scanner_refresh_hours) or self.scanner_refresh_hours <= 0:
             raise ValueError("runtime.scanner_refresh_hours must be positive")
 
 
@@ -61,7 +61,7 @@ class MarketStrategyConfig:
             raise ValueError("strategy name must not be empty")
         if self.timeframe is not None and self.timeframe not in TIMEFRAME_MINUTES:
             raise ValueError(f"Unsupported strategy timeframe: {self.timeframe}")
-        if not 0 < self.maximum_allocation <= 1:
+        if not math.isfinite(self.maximum_allocation) or not 0 < self.maximum_allocation <= 1:
             raise ValueError("strategy maximum_allocation must be in (0, 1]")
 
 
@@ -112,7 +112,7 @@ class LiveConfig:
     operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
 
     def __post_init__(self) -> None:
-        if self.hard_dollar_cap < 0:
+        if not math.isfinite(self.hard_dollar_cap) or self.hard_dollar_cap < 0:
             raise ValueError("live.hard_dollar_cap must be non-negative")
         if self.enabled and self.hard_dollar_cap <= 0:
             raise ValueError("Enabled live mode requires a positive hard dollar cap")
@@ -200,7 +200,7 @@ class ExecutionConfig:
     minimum_order_notional: float = 10.0
 
     def __post_init__(self) -> None:
-        if not 0 <= self.rebalance_band_pct < 1:
+        if not math.isfinite(self.rebalance_band_pct) or not 0 <= self.rebalance_band_pct < 1:
             raise ValueError("execution.rebalance_band_pct must be in [0, 1)")
         if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
             raise ValueError("execution.minimum_order_notional must be non-negative")
@@ -233,6 +233,7 @@ class RiskLimits:
             self.max_positions <= 0
             or self.max_crypto_positions <= 0
             or self.max_crypto_positions > self.max_positions
+            or not math.isfinite(self.cash_buffer_pct)
             or not 0 <= self.cash_buffer_pct < 1
         ):
             raise ValueError("Invalid risk limits")
@@ -348,17 +349,30 @@ class EquityScannerConfig:
     unknown_sector_penalty: float = 2.0
 
     def __post_init__(self) -> None:
-        if self.minimum_price <= 0 or self.minimum_median_dollar_volume <= 0:
+        if not math.isfinite(self.minimum_price) or self.minimum_price <= 0:
             raise ValueError("Equity scanner price and liquidity thresholds must be positive")
-        if not 0 < self.minimum_data_completeness <= 1:
+        if not math.isfinite(self.minimum_median_dollar_volume) or self.minimum_median_dollar_volume <= 0:
+            raise ValueError("Equity scanner price and liquidity thresholds must be positive")
+        if not math.isfinite(self.minimum_data_completeness) or not 0 < self.minimum_data_completeness <= 1:
             raise ValueError("Equity scanner completeness must be in (0, 1]")
-        if not 0 < self.minimum_atr_pct < self.maximum_atr_pct <= 1:
+        if (
+            not math.isfinite(self.minimum_atr_pct)
+            or not math.isfinite(self.maximum_atr_pct)
+            or not 0 < self.minimum_atr_pct < self.maximum_atr_pct <= 1
+        ):
             raise ValueError("Equity scanner ATR range is invalid")
-        if not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct:
+        if (
+            not math.isfinite(self.volatility_optimum_pct)
+            or not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct
+        ):
             raise ValueError("Equity scanner volatility optimum must be inside the ATR range")
-        if self.maximum_per_sector <= 0 or self.spread_quality_ceiling_bps <= 0:
+        if (
+            self.maximum_per_sector <= 0
+            or not math.isfinite(self.spread_quality_ceiling_bps)
+            or self.spread_quality_ceiling_bps <= 0
+        ):
             raise ValueError("Equity scanner sector and spread limits must be positive")
-        if self.unknown_sector_penalty < 0:
+        if not math.isfinite(self.unknown_sector_penalty) or self.unknown_sector_penalty < 0:
             raise ValueError("Equity scanner unknown-sector penalty must not be negative")
 
 
@@ -424,7 +438,7 @@ class EquityUniverseConfig:
             raise ValueError("universe.equity.target_shortlist must cover the active universe")
         if not self.supported_exchanges:
             raise ValueError("universe.equity.supported_exchanges must not be empty")
-        if self.active_universe_max_age_hours <= 0:
+        if not math.isfinite(self.active_universe_max_age_hours) or self.active_universe_max_age_hours <= 0:
             raise ValueError("universe.equity.active_universe_max_age_hours must be positive")
         if len(references) > self.maximum_stream_symbols:
             raise ValueError("Equity reference symbols exceed maximum_stream_symbols")
@@ -480,17 +494,34 @@ class CryptoScannerConfig:
             self.maximum_btc_correlation,
             self.volatility_optimum_pct,
         )
-        if any(not 0 < value <= 1 for value in ratios):
+        if any(not math.isfinite(value) or not 0 < value <= 1 for value in ratios):
             raise ValueError("Crypto scanner ratios must be in (0, 1]")
-        if self.minimum_atr_pct >= self.maximum_atr_pct:
+        if (
+            not math.isfinite(self.minimum_atr_pct)
+            or not math.isfinite(self.maximum_atr_pct)
+            or self.minimum_atr_pct >= self.maximum_atr_pct
+        ):
             raise ValueError("Crypto scanner ATR range is invalid")
-        if not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct:
+        if (
+            not math.isfinite(self.volatility_optimum_pct)
+            or not self.minimum_atr_pct <= self.volatility_optimum_pct <= self.maximum_atr_pct
+        ):
             raise ValueError("Crypto scanner volatility optimum must be inside the ATR range")
-        if self.minimum_median_dollar_volume <= 0 or self.maximum_spread_bps <= 0:
+        if (
+            not math.isfinite(self.minimum_median_dollar_volume)
+            or self.minimum_median_dollar_volume <= 0
+            or not math.isfinite(self.maximum_spread_bps)
+            or self.maximum_spread_bps <= 0
+        ):
             raise ValueError("Crypto scanner liquidity and spread thresholds must be positive")
         if self.maximum_per_category <= 0 or self.maximum_meme_symbols < 0 or self.maximum_high_beta_symbols < 0:
             raise ValueError("Crypto scanner category limits are invalid")
-        if self.unknown_category_penalty < 0 or self.high_correlation_penalty < 0:
+        if (
+            not math.isfinite(self.unknown_category_penalty)
+            or self.unknown_category_penalty < 0
+            or not math.isfinite(self.high_correlation_penalty)
+            or self.high_correlation_penalty < 0
+        ):
             raise ValueError("Crypto scanner score penalties must not be negative")
 
 

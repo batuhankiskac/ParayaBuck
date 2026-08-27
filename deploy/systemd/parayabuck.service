@@ -1,0 +1,28 @@
+[Unit]
+Description=ParayaBuck Paper Trading Engine
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=parayabuck
+Group=parayabuck
+WorkingDirectory=/opt/parayabuck
+EnvironmentFile=/opt/parayabuck/.env
+ExecStartPre=/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offline
+ExecStart=/opt/parayabuck/.venv/bin/parayabuck web
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=35
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data /opt/parayabuck/reports
+# Loopback-only UI: the app itself validates host is 127.0.0.1
+# Systemd hardening: ensure tmp writable for atomic writes
+# Requires explicit ReadWritePaths for state persistence; all else read-only.
+
+[Install]
+WantedBy=multi-user.target

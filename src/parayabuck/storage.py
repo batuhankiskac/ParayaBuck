@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import threading
 from pathlib import Path
+
+
+class StorageInitializationError(RuntimeError):
+    """Raised when the SQLite runtime store cannot be initialized safely.
+
+    Covers WAL not taking effect, foreign_keys off, busy_timeout too low,
+    unexpected synchronous mode, or the parent directory being unwritable.
+    """
 
 
 class SQLiteStore:
@@ -52,19 +61,90 @@ class SQLiteStore:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.path, check_same_thread=False)
-        # WAL must be set before any other pragma that depends on it.
-        self.connection.execute("PRAGMA journal_mode=WAL")
-        self.connection.execute("PRAGMA synchronous=NORMAL")
-        self.connection.execute("PRAGMA foreign_keys=ON")
-        self.connection.execute("PRAGMA busy_timeout=5000")
-        # Verify the requested mode actually took effect — a read-only
-        # filesystem or VFS mismatch silently keeps DELETE mode.
+        # Ensure parent exists; fail clearly if it cannot be created or is
+        # unwritable (read-only mount, permission error, stale NFS).
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise StorageInitializationError(f"Cannot create database directory {self.path.parent}: {exc}") from exc
+        # Explicit writable check: mkdir with exist_ok succeeds on read-only
+        # parent on some platforms but subsequent SQLite connect would fail
+        # with a vague error. Fail closed early with a clear message.
+        try:
+            # Require write + execute on the parent to create/lock files.
+            if not os.access(self.path.parent, os.W_OK | os.X_OK):
+                raise StorageInitializationError(f"Database directory is not writable: {self.path.parent}")
+        except StorageInitializationError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            raise StorageInitializationError(f"Cannot verify database directory {self.path.parent}: {exc}") from exc
+        try:
+            self.connection = sqlite3.connect(self.path, check_same_thread=False)
+        except sqlite3.Error as exc:
+            raise StorageInitializationError(f"Cannot open SQLite database at {self.path}: {exc}") from exc
+        # Also handle the case where the parent exists but the file cannot be
+        # created due to permissions: ensure we can write the file itself.
+        try:
+            # WAL must be set before any other pragma that depends on it.
+            self.connection.execute("PRAGMA journal_mode=WAL")
+            self.connection.execute("PRAGMA synchronous=NORMAL")
+            self.connection.execute("PRAGMA foreign_keys=ON")
+            self.connection.execute("PRAGMA busy_timeout=5000")
+        except sqlite3.Error as exc:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            raise StorageInitializationError(f"Failed to configure SQLite pragmas: {exc}") from exc
+        # Verify every critical pragma actually took effect — previously silent
+        # pass at line 67 meant a VFS mismatch or read-only FS kept DELETE mode.
         journal_mode = self.connection.execute("PRAGMA journal_mode").fetchone()
         if journal_mode is None or str(journal_mode[0]).lower() != "wal":
-            # Non-fatal: log but do not crash startup; tests assert WAL.
-            pass
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            raise StorageInitializationError(
+                f"SQLite journal_mode is {journal_mode[0] if journal_mode else None!r}, expected WAL"
+            )
+        foreign_keys = self.connection.execute("PRAGMA foreign_keys").fetchone()
+        try:
+            fk_val = int(foreign_keys[0]) if foreign_keys is not None else 0
+        except Exception:
+            fk_val = 0
+        if fk_val != 1:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            raise StorageInitializationError(f"SQLite foreign_keys is {fk_val}, expected ON (1)")
+        busy = self.connection.execute("PRAGMA busy_timeout").fetchone()
+        try:
+            busy_val = int(busy[0]) if busy is not None else 0
+        except Exception:
+            busy_val = 0
+        if busy_val < 5000:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            raise StorageInitializationError(f"SQLite busy_timeout is {busy_val}, expected >= 5000")
+        sync = self.connection.execute("PRAGMA synchronous").fetchone()
+        raw_sync = sync[0] if sync is not None else None
+        # Normalize: SQLite may return int (0|1|2|3) or string ("NORMAL").
+        if isinstance(raw_sync, str):
+            sync_ok = raw_sync.lower() == "normal" or raw_sync.strip() == "1"
+        else:
+            try:
+                sync_ok = int(raw_sync) == 1  # type: ignore[arg-type]
+            except Exception:
+                sync_ok = False
+        if not sync_ok:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            raise StorageInitializationError(f"SQLite synchronous is {raw_sync!r}, expected NORMAL (1)")
         self.lock = threading.RLock()
         self._references = 0
         self._closed = False
@@ -122,4 +202,4 @@ def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:
     return True
 
 
-__all__ = ["SQLiteStore", "migrate_legacy_decision_orders"]
+__all__ = ["SQLiteStore", "StorageInitializationError", "migrate_legacy_decision_orders"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +44,10 @@ BACKUP_PREFIX = "parayabuck-"
 BACKUP_SUFFIX = ".sqlite3"
 
 
+class BackupVerificationError(RuntimeError):
+    """Raised when a newly created backup fails integrity verification."""
+
+
 def _validate_retention(retention_days: float) -> float:
     if not math.isfinite(retention_days) or retention_days <= 0:
         raise ValueError("retention_days must be a positive number")
@@ -72,9 +77,12 @@ def backup_database(
     Uses the sqlite3 online backup API, which is safe on a WAL database that
     another process has open: the snapshot contains every committed
     transaction at the instant the backup runs and excludes any in-flight
-    uncommitted work. After the snapshot, backups older than
-    ``retention_days`` are pruned (oldest first). Returns the created backup
-    path.
+    uncommitted work. After the snapshot, the backup is verified via
+    ``verify_backup``; IF VALID, backups older than ``retention_days`` are
+    pruned (oldest first) and the verified path is returned. IF INVALID, the
+    new invalid backup is deleted, previous backups are preserved, and a
+    ``BackupVerificationError`` is raised — pruning never happens before
+    validation.
 
     Crash-consistency: a backup that is interrupted (process crash, power
     loss) may leave a partial file; callers should run ``verify_backup`` on
@@ -111,7 +119,32 @@ def backup_database(
     finally:
         destination_connection.close()
         source_connection.close()
-
+    # fsync the destination file so the verified snapshot is durable.
+    try:
+        with open(destination, "rb") as fh:
+            os.fsync(fh.fileno())
+        dir_fd = os.open(target_dir, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass  # best-effort durability; verification will catch corruption
+    # Verify BEFORE prune: invalid backup must be deleted and must not prune.
+    if not verify_backup(destination):
+        # Delete the corrupt/incomplete new file; preserve previous backups.
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        for sidecar in (Path(f"{destination}-wal"), Path(f"{destination}-shm")):
+            try:
+                if sidecar.is_file():
+                    sidecar.unlink()
+            except OSError:
+                pass
+        raise BackupVerificationError(f"Backup failed integrity check and was removed: {destination}")
+    # Only after successful verification do we prune expired backups.
     prune_backups(target_dir, retention_days=retention, now=stamp)
     return destination
 
@@ -163,4 +196,28 @@ def prune_backups(
     return removed
 
 
-__all__ = ["BACKUP_PREFIX", "BACKUP_SUFFIX", "backup_database", "prune_backups", "verify_backup"]
+def latest_verified_backup(backup_dir: str | Path) -> Path | None:
+    """Return the most recent verified backup in ``backup_dir``, or None."""
+    directory = Path(backup_dir)
+    if not directory.is_dir():
+        return None
+    backups = sorted(
+        (candidate for candidate in directory.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}") if candidate.is_file()),
+        key=lambda candidate: candidate.stat().st_mtime,
+        reverse=True,
+    )
+    for candidate in backups:
+        if verify_backup(candidate):
+            return candidate
+    return None
+
+
+__all__ = [
+    "BACKUP_PREFIX",
+    "BACKUP_SUFFIX",
+    "BackupVerificationError",
+    "backup_database",
+    "latest_verified_backup",
+    "prune_backups",
+    "verify_backup",
+]

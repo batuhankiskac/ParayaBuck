@@ -202,6 +202,8 @@ def refresh_equity_universe(
     config: Config,
     api_key: str,
     secret_key: str,
+    *,
+    now: datetime | None = None,
 ) -> ScannerResult:
     """Build the equity eligible pool and scan it, with pagination, cache, and atomic persistence.
 
@@ -239,6 +241,10 @@ def refresh_equity_universe(
     if (session := getattr(trading, "_session", None)) is not None:
         patch_session_timeout(session, timeout=15.0)
     started = time.monotonic()
+    # Clock injection for deterministic tests: production passes None -> wall clock,
+    # tests pass a fixed UTC timestamp so window boundaries, cache age and
+    # skip decisions are deterministic (no datetime.now() nondeterminism).
+    end = now if now is not None else datetime.now(UTC)
     allowed = eligible_equity_assets(config, trading)
     reserved = {
         *universe.reference_symbols,
@@ -251,12 +257,14 @@ def refresh_equity_universe(
     try:
         cached_payload = json.loads(source_path.read_text(encoding="utf-8"))
         generated_at = datetime.fromisoformat(str(cached_payload["generated_at"]))
-        cache_age = datetime.now(UTC) - generated_at.astimezone(UTC)
+        cache_age = end - generated_at.astimezone(UTC)
         raw_history = cached_payload.get("history")
         if cache_age <= timedelta(days=7) and isinstance(raw_history, dict):
             for symbol, rows in raw_history.items():
                 if isinstance(rows, list) and all(isinstance(row, list) for row in rows):
-                    cached_history[symbol] = rows
+                    normalized = _normalize_history_rows(rows)
+                    if normalized:
+                        cached_history[symbol] = normalized
             if cached_history:
                 # Rolling 20-day state cache: every eligible symbol keeps its
                 # last 20 daily bars locally, so each refresh only fetches the
@@ -272,7 +280,6 @@ def refresh_equity_universe(
         stock_feed=config.alpaca.stock_historical_feed,
         data_delayed=config.alpaca.data_delayed,
     )
-    end = datetime.now(UTC)
     historical_requests = 0
     bars_downloaded = 0
     by_symbol: dict[str, list[Bar]] = {}
@@ -753,6 +760,38 @@ def _observation_scope_digest(base_digest: str, selection: object) -> str:
         "parameters": getattr(selection, "parameters", {}),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _normalize_history_rows(rows: list[list[Any]]) -> list[tuple[str, float, float, float, float, float]]:
+    """Normalize cached history rows to float tuples at the load boundary.
+
+    Cached JSON may contain ints (e.g. 100) from older code or test fixtures;
+    the production contract promises float bar values (see _bar_to_tuple).
+    Normalizing here at the single load boundary ensures 1 == 1.0 is treated
+    identically and downstream merges always emit floats, without scattering
+    casts through call sites.
+    """
+    normalized: list[tuple[str, float, float, float, float, float]] = []
+    for row in rows:
+        if not isinstance(row, (list, tuple)) or len(row) != 6:
+            continue
+        ts, open_, high, low, close, volume = row
+        try:
+            # Validate timestamp isoformat; keep original string for dedup key.
+            datetime.fromisoformat(str(ts))
+            normalized.append(
+                (
+                    str(ts),
+                    float(open_),
+                    float(high),
+                    float(low),
+                    float(close),
+                    float(volume),
+                )
+            )
+        except (ValueError, TypeError):
+            continue
+    return normalized
 
 
 def _bar_to_tuple(bar: Bar) -> tuple[str, float, float, float, float, float]:

@@ -54,7 +54,7 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
 
 ## Installation
 
-Python 3.11 or newer is required.
+Python 3.12 or newer is required.
 
 ```bash
 python -m venv .venv

@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-08-27T21:00:00Z",
+  "head": "8fc70509d9fdbee9bdb9c12c23578f1311fbe5b3",
+  "starting_head": "849555ed12fe8d5ec9410a59c07585cb908b5a92",
+  "branch": "mission-0a-research-acceleration",
+  "machine": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "cpu_count_logical": 10,
+    "ram_total_gb": 16.0
+  },
+  "dataset": {
+    "path": "data/historical/equity_1200_2016_2026.csv",
+    "sha256": "3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a",
+    "bars_total": 1738468
+  },
+  "before": {
+    "single_with_reuse_median_s": 3.2309,
+    "single_without_reuse_s": 20.1404,
+    "csv_load_s": 4.7105,
+    "universe_s": 16.8298,
+    "prepared_s": 0.2616,
+    "batch_4_naive_median_s": 82.3113,
+    "batch_4_reuse_median_s": 13.2849,
+    "batch_4_reuse_speedup_vs_naive": 6.196,
+    "optimizer_4_median_s": 31.5442,
+    "peak_rss_mb": 1784.6
+  },
+  "after": {
+    "single_runner_median_s": 4.5239,
+    "batch_4_workers_1_median_s": 13.3484,
+    "batch_4_workers_2_median_s": 11.7565,
+    "batch_4_workers_4_median_s": 10.3166,
+    "speedup_workers_1_vs_naive": 6.17,
+    "speedup_workers_2_vs_naive": 7.0,
+    "speedup_workers_4_vs_naive": 7.98,
+    "speedup_workers_4_vs_before_reuse": 1.29,
+    "peak_rss_mb": 2456.5,
+    "peak_rss_delta_mb": 2362.8,
+    "cache_warm": true,
+    "universe_cache_hit": true
+  },
+  "notes": {
+    "workers": "1,2,4 measured after cache warm (universe cached 0.05s vs 16.8s build)",
+    "date_range": "2019-01-01 to 2021-12-31",
+    "strategy": "equity_residual_momentum_v2",
+    "throughput_before_naive_trials_per_s": 0.0486,
+    "throughput_after_workers_4_trials_per_s": 0.3877
+  }
+}

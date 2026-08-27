@@ -53,14 +53,14 @@ shows **LIVE (devre dışı)** — visually dimmed and struck through. The same
 state is exposed as `mode.badge` / `mode.live_active` / `mode.live_disabled`
 in the overview payload.
 
-### Equity card — "Residual Momentum v2 (weekly)"
+### Equity card — "Residual Momentum v3 (weekly)"
 Strategy contract (display name, signal timeframe `1d`, rebalance cadence
 `weekly`, minimum history) from `StrategySpec` via `_strategy_metadata`.
 `Eligible pool` — shortlist count from
 `universe.equity.candidate_universe_path`; `observation set` — active-universe
 `selected_symbols` size; `positions` / `current allocation %` — account
 positions weighted by market value over equity; `maximum allocation %` —
-`strategy.equity.maximum_allocation`. Status derivation:
+`strategy.equity.maximum_allocation` (0.60). Status derivation:
 active / warming / halted (entry halt or circuit breaker) / scanner_issue /
 disabled / engine states. `Next expected decision` — the last persisted
 `portfolio_decisions` timestamp advanced by the strategy's rebalance policy
@@ -69,7 +69,7 @@ boundary, not a guarantee. Holdings carry target weight (from the decision's
 `target_json`), current weight (account), rank among the decision's
 `selected_symbols`, and the per-weight `reason` + strategy `hypothesis`.
 
-### Crypto card — "Low Realized Variance v2 (96h)"
+### Crypto card — "Low Realized Variance Hysteresis v1 (96h, retention 4)"
 Same shape plus: `lookback 22g` (the frozen `variance_lookback_days`),
 `22g vol` per holding — the trailing 22-day realized volatility computed
 with the strategy's own `realized_volatility` over cached 1d bars
@@ -77,7 +77,7 @@ with the strategy's own `realized_volatility` over cached 1d bars
 `rank` — the symbol's position in the decision's `selected_symbols`
 (lowest-vol first), `target weight` — equal-weight from the decision,
 `current weight` — account market value over equity. Rebalance cadence
-`hours:96`. Each card also shows the startup catch-up status
+`hours:96`, retention rank ≤4, max allocation 0.05. Each card also shows the startup catch-up status
 (`submitted` / `warming_up` / `blocked:*` / `already_invested` /
 `catch_up_superseded` / `duplicate_decision` / `rebalance_in_progress`).
 

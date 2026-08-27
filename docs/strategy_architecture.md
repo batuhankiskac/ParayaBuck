@@ -207,8 +207,8 @@ strategy families are archived (implementation removed) in
 | `equity_residual_momentum_v2` | equity | 1d | 1d | weekly | frozen prior PAPER identity (superseded 2026-08-24) |
 | `equity_residual_momentum_v3` | equity | 1d | 1d | weekly | PAPER production selection (2026-08-24) |
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
-| `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | PAPER production selection (2026-08-18) |
-
+| `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | frozen prior PAPER selection (superseded 2026-08-26) |
+| `crypto_low_variance_hysteresis_v1` | crypto | 1d | 1d | hours:96 (retention rank 4, lookback 22, top2, alloc 0.05) | PAPER production selection (2026-08-26) |
 There are no research-only identities: rejected strategy families were
 removed from the runtime on 2026-08-18 and are archived in
 `docs/rejected_strategies.md`. `portfolio_strategy_from` rejects any other

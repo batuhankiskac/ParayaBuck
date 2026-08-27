@@ -27,9 +27,12 @@ paper mode with credentials). `REPLACE:` values are install-time.
 
 ## systemd unit (`/etc/systemd/system/parayabuck.service`)
 
+Track actual hardened templates in `deploy/systemd/`:
+`parayabuck.service` (non-root, loopback, `EnvironmentFile`, `Restart=on-failure`, `TimeoutStopSec=35`, `UMask=0077`, `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectSystem=strict`, `ProtectHome=true` with `ReadWritePaths` for `/opt/parayabuck/{config,data,reports}`, `ExecStartPre=parayabuck doctor --strict --paper --offline`), plus `parayabuck-backup.service`/`parayabuck-backup.timer` every 6h with verified backups.
+
 ```ini
 [Unit]
-Description=ParayaBuck paper trading web console and engine
+Description=ParayaBuck Paper Trading Engine
 Wants=network-online.target
 After=network-online.target
 
@@ -39,15 +42,17 @@ User=REPLACE:non-root-user
 Group=REPLACE:non-root-group
 WorkingDirectory=REPLACE:/opt/parayabuck
 EnvironmentFile=REPLACE:/opt/parayabuck/.env
+ExecStartPre=REPLACE:/opt/parayabuck/.venv/bin/parayabuck doctor --strict --paper --offline
 ExecStart=REPLACE:/opt/parayabuck/.venv/bin/parayabuck web
 Restart=on-failure
 RestartSec=5
-# Optional hardening (verify data/config/reports paths before enabling):
-# ProtectSystem=strict
-# ReadWritePaths=REPLACE:/opt/parayabuck/data REPLACE:/opt/parayabuck/config REPLACE:/opt/parayabuck/reports
-# ProtectHome=true
-# PrivateTmp=true
-# NoNewPrivileges=true
+TimeoutStopSec=35
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=REPLACE:/opt/parayabuck/data REPLACE:/opt/parayabuck/config REPLACE:/opt/parayabuck/reports
 
 [Install]
 WantedBy=multi-user.target
@@ -126,9 +131,8 @@ sudo journalctl -u parayabuck -f
    ```
 
    Dashboard (`http://127.0.0.1:8000/` via SSH tunnel) must show: PAPER
-   badge, `equity_residual_momentum_v3` (weekly) and `crypto_low_variance_v2`
-   (96h) cards, engine running, catch-up status per card.
-
+   badge, `equity_residual_momentum_v3` (weekly, allocation 0.60) and `crypto_low_variance_hysteresis_v1`
+   (96h, lookback 22, top2, retention rank 4, allocation 0.05) cards, engine running, catch-up status per card.
 9. **Verify the persisted catch-up decision** (fresh account only):
 
    ```bash

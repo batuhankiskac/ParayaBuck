@@ -22,7 +22,7 @@ The PAPER product runs two validated identities (see `docs/validated_strategies.
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
 | Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.60 |
-| Crypto | Low Realized Variance v2 (`crypto_low_variance_v2`) | 1d | 96h | 0.05 |
+| Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
 Historical baselines `equity_residual_momentum_v1` (monthly) and `equity_residual_momentum_v2` (weekly) and `crypto_low_variance_v1` (168h) remain constructible for comparison — v3 evidence is defined relative to them and to the frozen PIT dataset above.
 
@@ -41,10 +41,7 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
 - Dynamic universes (equity ~300-candidate shortlist → ~30 streamed; crypto
   from supported USD pairs) rebuilt point-in-time by the production scanner;
   static symbols are fallback/allowlist/denylist inputs only.
-- Strict risk overlay: allocation sleeves (0.50 equity / 0.10 crypto), gross
-  cap 0.60, cash buffer 0.40, per-position and count caps, daily-loss and
-  drawdown latches, stale-account pauses, ownership-drift halts, duplicate
-  order/decision protection.
+- Strict risk overlay: allocation sleeves (0.60 equity / 0.05 crypto), risk caps 0.10 crypto exposure / 0.05 crypto position / max 2 crypto positions, gross cap 0.60, cash buffer 0.40, per-position and count caps, daily-loss 0.5% and drawdown 5% latches, stale-account pauses, ownership-drift halts, duplicate order/decision protection.
 - Startup catch-up: a fresh mid-period deployment decides immediately on the
   latest closed warmup bars (`decision_origin: startup_catch_up`) instead of
   sitting in cash until the next cadence boundary. Restart-safe — never

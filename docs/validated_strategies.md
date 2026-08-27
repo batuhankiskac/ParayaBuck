@@ -89,9 +89,10 @@ the frozen raw 6-1/9-1/12-1 percentile-rank consensus. Operational evidence
 and the no-data soak status are recorded in
 `docs/mh_raw_v3_paper_promotion_2026_08.md`; no LIVE readiness is implied.
 
-## What is NOT frozen here
+## Current PAPER crypto promotion (hysteresis v1, 2026-08-26)
 
-Strategy parameters are frozen; everything around them (robustness evidence,
-execution telemetry, observability, dashboard, operations) is product work
-and intentionally does not touch these values. See `docs/strategy_robustness.md`,
+`crypto_low_variance_hysteresis_v1` is the current PAPER crypto identity (T1 tournament winner). It keeps
+exactly the validated alpha of `crypto_low_variance_v2` (22d realized variance, 1d signal, 96h rebalance, top2 equal) and adds hysteresis retention: at 96h a held symbol stays if scanner-eligible AND rank ≤ 4, exits if ineligible OR rank > 4; empty slots filled from rank 1 upward, max 2 equal (see `docs/crypto_candidate_tournament_validation.md`). Sleeve halved 0.10 → 0.05 per 2026-08-21 operator decision (allocation 0.05, risk caps 0.10 exposure / 0.05 position / 2 positions). `crypto_low_variance_v2` and v1 remain frozen historical baselines.
+
+## What is NOT frozen here
 `docs/paper_operations.md`, `docs/dashboard.md`.

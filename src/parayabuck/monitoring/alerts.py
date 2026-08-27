@@ -49,6 +49,10 @@ _configured = False
 _last_emitted_at: dict[str, float] = {}
 _suppressed_count = 0
 _delivered_counts: dict[str, int] = {}
+_webhook_attempted = 0
+_webhook_succeeded = 0
+_webhook_failed = 0
+# Legacy alias kept for backward compatibility
 _webhook_count = 0
 _config_sources: list[str] = []
 
@@ -124,15 +128,30 @@ def _discover_settings() -> None:
         _configured = True
 
 
+def _throttle_key(kind: str, fields: dict[str, object]) -> str:
+    """Incident-style events throttle per distinct incident, not per kind."""
+    if kind == "paper_incident":
+        category = str(fields.get("category", "") or "").strip()
+        incident_id = str(fields.get("incident_id", "") or "").strip()
+        return f"{kind}:{category}:{incident_id}"
+    return kind
+
+
 def _severity(kind: str) -> int:
     return logging.WARNING if kind in _WARNING_KINDS else logging.INFO
 
 
 def _post_webhook(url: str, payload: dict[str, object]) -> None:
-    """Daemon-thread webhook POST; failures are logged, never raised."""
     try:
-        requests.post(url, json=payload, timeout=_WEBHOOK_TIMEOUT)
+        response = requests.post(url, json=payload, timeout=_WEBHOOK_TIMEOUT)
+        response.raise_for_status()
+        with _lock:
+            global _webhook_succeeded
+            _webhook_succeeded += 1
     except Exception as exc:
+        with _lock:
+            global _webhook_failed
+            _webhook_failed += 1
         log.warning("Alert webhook delivery failed for kind=%s: %s", payload.get("kind"), exc)
 
 
@@ -142,13 +161,16 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
     The event is always written to the local log sink. When alerting is
     enabled and ``kind`` is in the configured webhook event set, the event is
     also POSTed (fire-and-forget) to the configured webhook URL. Per-kind
-    throttling coalesces repeat failures within the throttle window.
+    throttling coalesces repeat failures within the throttle window; for
+    ``paper_incident`` the throttle is per (kind, category, incident_id) so
+    two distinct incidents are both delivered.
     """
     try:
         if kind not in ALERT_KINDS:
             log.error("Ignored alert with unknown kind=%r", kind)
             return
         _discover_settings()
+        throttle_key = _throttle_key(kind, dict(fields))
         with _lock:
             enabled = bool(_settings["enabled"])
             webhook_url = str(_settings.get("webhook_url", "")).strip()
@@ -157,21 +179,22 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             throttle_raw = _settings.get("throttle_seconds", _DEFAULT_THROTTLE_SECONDS)
             throttle = float(throttle_raw) if isinstance(throttle_raw, (int, float)) else 0.0
             now = time.monotonic()
-            last = _last_emitted_at.get(kind)
+            last = _last_emitted_at.get(throttle_key)
             if last is not None and throttle > 0.0 and now - last < throttle:
                 global _suppressed_count
                 _suppressed_count += 1
                 log.debug("Alert %s suppressed (throttle window %.0fs)", kind, throttle)
                 return
-            _last_emitted_at[kind] = now
+            _last_emitted_at[throttle_key] = now
         with _lock:
             _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, dict(fields))
         if not enabled or not webhook_url or kind not in events:
             return
         with _lock:
-            global _webhook_count
+            global _webhook_count, _webhook_attempted
             _webhook_count += 1
+            _webhook_attempted += 1
         payload: dict[str, object] = {
             "kind": kind,
             "message": message,
@@ -229,13 +252,23 @@ def alert_stats() -> dict[str, object]:
             "suppressed": _suppressed_count,
             "delivered": dict(_delivered_counts),
             "webhook_sent": _webhook_count,
+            "webhook_attempted": _webhook_attempted,
+            "webhook_succeeded": _webhook_succeeded,
+            "webhook_failed": _webhook_failed,
             "configured_from": list(_config_sources),
         }
 
 
 def reset_for_tests() -> None:
     """Clear configuration, throttle state and counters (test helper only)."""
-    global _configured, _suppressed_count, _webhook_count, _delivered_counts
+    global \
+        _configured, \
+        _suppressed_count, \
+        _webhook_count, \
+        _webhook_attempted, \
+        _webhook_succeeded, \
+        _webhook_failed, \
+        _delivered_counts
     with _lock:
         _settings.update(
             {
@@ -250,6 +283,9 @@ def reset_for_tests() -> None:
         _suppressed_count = 0
         _delivered_counts = {}
         _webhook_count = 0
+        _webhook_attempted = 0
+        _webhook_succeeded = 0
+        _webhook_failed = 0
         _config_sources.clear()
 
 

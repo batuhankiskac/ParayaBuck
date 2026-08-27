@@ -93,7 +93,16 @@ def _parser() -> argparse.ArgumentParser:
     research.add_argument("--start", help="window start ISO date")
     research.add_argument("--end", help="window end ISO date")
     research.add_argument("--output-dir", default=None)
-    research.add_argument("--persist-artifacts", action="store_true", help="persist report/universe artifacts")
+    research.add_argument(
+        "--persist-artifacts",
+        dest="persist_artifacts",
+        action="store_true",
+        default=None,
+        help="persist report/universe artifacts (default tier default)",
+    )
+    research.add_argument(
+        "--no-persist-artifacts", dest="persist_artifacts", action="store_false", help="do not persist artifacts"
+    )
     research.add_argument(
         "--cost-stress", action="store_true", help="run cost multipliers 1.0,2.0,3.0 as separate trials"
     )
@@ -101,6 +110,9 @@ def _parser() -> argparse.ArgumentParser:
         "--param", action="append", default=[], metavar="NAME=VALUE", help="base strategy param override"
     )
     research.add_argument("--fail-fast", action="store_true", help="fail fast on first trial error")
+    research.add_argument(
+        "--trial-timeout", type=float, default=None, help="per-trial timeout seconds (default no timeout)"
+    )
     return parser
 
 
@@ -862,7 +874,6 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
             for mult in (1.0, 2.0, 3.0):
                 trials.append(ResearchTrial(label=f"cost_{mult}x", cost_multiplier=mult))
         else:
-            # Single trial with base params
             trials.append(ResearchTrial(label="trial_0", cost_multiplier=1.0))
     job = ResearchJob(
         market=market,
@@ -874,10 +885,11 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
         trials=tuple(trials),
         tier=tier,
         workers=workers,
-        persist_artifacts=bool(args.persist_artifacts),
-        persist_db=False,
+        persist_artifacts=args.persist_artifacts,
+        persist_db=None,
         output_dir=args.output_dir,
         fail_fast=bool(args.fail_fast),
+        trial_timeout_seconds=args.trial_timeout,
     )
     runner = ResearchRunner(config=config)
     result = runner.run(job)

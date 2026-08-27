@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T21:00:00Z",
-  "head": "8fc70509d9fdbee9bdb9c12c23578f1311fbe5b3",
+  "generated_at": "2026-08-28T00:00:00Z",
+  "head": "a66aafd82ba310c2ada58dd29695d52a90120701",
   "starting_head": "849555ed12fe8d5ec9410a59c07585cb908b5a92",
   "branch": "mission-0a-research-acceleration",
   "machine": {
@@ -28,23 +28,59 @@
   },
   "after": {
     "single_runner_median_s": 4.5239,
-    "batch_4_workers_1_median_s": 13.3484,
-    "batch_4_workers_2_median_s": 11.7565,
-    "batch_4_workers_4_median_s": 10.3166,
-    "speedup_workers_1_vs_naive": 6.17,
-    "speedup_workers_2_vs_naive": 7.0,
-    "speedup_workers_4_vs_naive": 7.98,
-    "speedup_workers_4_vs_before_reuse": 1.29,
-    "peak_rss_mb": 2456.5,
-    "peak_rss_delta_mb": 2362.8,
+    "batch_4_workers_1_median_s": 12.772,
+    "batch_4_workers_2_median_s": 11.789,
+    "batch_4_workers_4_median_s": 11.4624,
+    "speedup_workers_1_vs_naive": 6.44,
+    "speedup_workers_2_vs_naive": 6.98,
+    "speedup_workers_4_vs_naive": 7.18,
+    "speedup_workers_4_vs_before_reuse": 1.16,
+    "peak_rss_mb": 2400.3,
+    "peak_rss_delta_mb": 2306.3,
     "cache_warm": true,
     "universe_cache_hit": true
+  },
+  "hardening_verification": {
+    "head": "a66aafd82ba310c2ada58dd29695d52a90120701",
+    "parity_combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
+    "workers_memory": {
+      "w1_elapsed_s": 15.08,
+      "w1_peak_mb": 1874.0,
+      "w1_worker_peak_mb": 1874.0,
+      "w2_elapsed_s": 13.28,
+      "w2_peak_mb": 2012.6,
+      "w2_worker_peak_mb": 999.9,
+      "w4_elapsed_s": 12.2,
+      "w4_peak_mb": 2146.5,
+      "w4_worker_peak_mb": 950.3,
+      "auto_workers": 4
+    },
+    "tests": "26 passed",
+    "ruff": "All checks passed!",
+    "mypy": "Success: no issues found in 82 source files",
+    "hardenings": [
+      "execution_overrides return + positive tests",
+      "strategy param override config->job->trial",
+      "smoke deterministic hashlib + min_history+bars + rebalance assert",
+      "tiers robustness/canonical require explicit window",
+      "canonical persistence tri-state defaults",
+      "removed huge per-trial list concatenation",
+      "auto-worker linux/container safe",
+      "per-worker RSS measurement",
+      "hardened cache fingerprints",
+      "worker failure bookkeeping preserve index/label",
+      "fail_fast completion-order",
+      "removed hard-coded 600s timeout / trial_timeout_seconds",
+      "sqlite protection workers>1",
+      "profiling SHA256 full hash",
+      "WorkerPolicy cleanup + metadata carry"
+    ]
   },
   "notes": {
     "workers": "1,2,4 measured after cache warm (universe cached 0.05s vs 16.8s build)",
     "date_range": "2019-01-01 to 2021-12-31",
     "strategy": "equity_residual_momentum_v2",
     "throughput_before_naive_trials_per_s": 0.0486,
-    "throughput_after_workers_4_trials_per_s": 0.3877
+    "throughput_after_workers_4_trials_per_s": 0.3489
   }
 }

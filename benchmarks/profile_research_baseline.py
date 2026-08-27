@@ -40,18 +40,9 @@ EQUITY_END = datetime(2021, 12, 31, tzinfo=UTC)
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
-        size = path.stat().st_size
-        if size < 200 * 1024 * 1024:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-            return h.hexdigest()
-        head = f.read(10 * 1024 * 1024)
-        h.update(head)
-        f.seek(max(0, size - 10 * 1024 * 1024))
-        tail = f.read(10 * 1024 * 1024)
-        h.update(tail)
-        h.update(str(size).encode())
-        return h.hexdigest()
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _machine_info() -> dict:

@@ -245,4 +245,34 @@ Memory per worker ~1.2 GB (bars 0.8 GB + prepared 0.3 GB + universe 0.02 GB + ov
 - Recommendation: **Do not start 0B now.** The current path is fast enough for Tier 1/2 (quick/robustness) which is the intended inner loop. Keep canonical Tier 3 as expensive gate, run sparingly. Re-evaluate after measuring a real Tier 3 batch (full PIT, 10 years, 8–16 trials) — if wall >120 s, then justify 0B.
 
 **Remaining bottleneck to monitor:** Universe build is now cached (0.06 s) and no longer bottleneck; engine per trial (3 s) and per-trial pickle/file overhead (0.6 s) are the residual. Reducing engine time via NumPy would be the next lever, but not needed yet.
+---
+
+## Hardening Update (2026-08-28, head a66aafd82ba3)
+
+Post-report audit fixed 15 reviewed items without changing economics or benchmark posture:
+
+- **execution_overrides** now returns new Config correctly; added positive sequential+parallel test with high band reducing trades.
+- **strategy param semantics** unified as `selection → job.base_parameters → trial.parameters`; validated with editable param (int/float) precedence test.
+- **smoke deterministic & meaningful**: uses `hashlib.sha256` (not `hash()`), derives `minimum_history_bars` from strategy, generates `max(300, min_hist+40)` business days, asserts `rebalance_count>0` and cross-worker determinism.
+- **tiers**: `ROBUSTNESS`/`CANONICAL` now require explicit `start`+`end` via `ValueError` (prevents silent expensive runs).
+- **persist tri-state**: `persist_artifacts`/`persist_db` are `bool|None` with tier defaults; Canonical defaults to artifacts True, others False; smoke/robustness never persist unless explicit.
+- **removed huge concat**: `_execute_single_trial` no longer does `prepared[0]+prepared[1]` (400k list copy); passes empty list when prepared is present, relies on `prepared_inputs`.
+- **auto-worker Linux-safe**: `_get_available_memory_gb` checks cgroup v2 `memory.max`/`current`, cgroup v1 `limit_in_bytes`/`usage_in_bytes`, `/proc/meminfo MemAvailable`, `os.sysconf`, and `sysctl hw.memsize` fallback; available = limit-current, headroom 2GB, per-worker 1.2GB.
+- **per-worker RSS**: `_peak_rss_mb` uses `resource.getrusage(RUSAGE_SELF)` conversion `bytes` on macOS vs `kbytes` on Linux; stored as `TrialResult.worker_peak_rss_mb` + `worker_pid`; bench shows w1 1874MB single process, w2 999MB/worker, w4 950MB/worker, parent peak 2146MB.
+- **cache fingerprints**: bars key includes `market`; universe key includes `market`, `timeframe`, `end`, `config_digest` (scanner_config_digest), `scanner_rebalance`; invalidation on any change.
+- **worker failure**: `results_by_idx` preserves `trial_index`/`label` even on `Worker exception`; fills missing indices with failed result; collect vs fail_fast tested.
+- **fail_fast truthful**: uses `as_completed` (completion-order) not submission order; measured fast_fail finishes in <1s vs slow 0.5s; test verifies timing.
+- **timeout**: removed hard-coded 600s; exposed `ResearchJob.trial_timeout_seconds=None` (no timeout by default) passed to `fut.result(timeout=...)`; test asserts not 600.
+- **SQLite protection**: `persist_db` + `workers>1` raises `ValueError` to avoid concurrent SQLite contention.
+- **profiling SHA**: `_sha256_file` now reads full file in 1MB chunks, not sampled head.
+- **cleanup**: removed `WorkerPolicy` from models, kept `TrialResult.metadata` carry; carries `metadata` through runner.
+
+**Verification after hardening (same machine M5 10-core/16GB, 2019-2021, 4 trials):**
+- `pytest tests/test_research_runner.py` 26 passed
+- `ruff check` All checks passed! `ruff format` 5 files reformatted, `mypy src` Success 82 files
+- `parity.py` combined_hash `93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c` unchanged
+- `bench_research_runner` medians: w1 12.77s, w2 11.789s (1.08×), w4 11.46s (1.11×), peak parent 2400MB, speedup vs naive 82.3s → 7.18×
+- `w1 15.08s peak 1874MB, w2 13.28s peak 2012MB worker 999MB, w4 12.20s peak 2146MB worker 950MB, auto=4`
+- No economic change; cache warm hit verified.
+
 

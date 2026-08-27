@@ -13,8 +13,8 @@ from parayabuck.backtest.universe import PointInTimeUniverse
 from parayabuck.core.models import Bar, Market
 
 # Bump when Bar / cache schema changes.
-BAR_CACHE_VERSION = 1
-UNIVERSE_CACHE_VERSION = 1
+BAR_CACHE_VERSION = 2
+UNIVERSE_CACHE_VERSION = 2
 
 CACHE_ROOT = Path("data/cache/research")
 
@@ -27,7 +27,7 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _fingerprint_bars(csv_path: Path) -> dict[str, Any]:
+def _fingerprint_bars(csv_path: Path, market: Market) -> dict[str, Any]:
     sha = _sha256_file(csv_path)
     stat = csv_path.stat()
     return {
@@ -36,6 +36,7 @@ def _fingerprint_bars(csv_path: Path) -> dict[str, Any]:
         "source_sha256": sha,
         "source_size": stat.st_size,
         "source_mtime": stat.st_mtime,
+        "market": market.value,
     }
 
 
@@ -45,8 +46,9 @@ def _fingerprint_universe(
     timeframe: str | None,
     end: datetime | None,
     config_digest: str,
+    scanner_rebalance: str,
 ) -> dict[str, Any]:
-    base = _fingerprint_bars(csv_path)
+    base = _fingerprint_bars(csv_path, market)
     return {
         **base,
         "schema_version": UNIVERSE_CACHE_VERSION,
@@ -54,6 +56,7 @@ def _fingerprint_universe(
         "timeframe": timeframe,
         "end": end.isoformat() if end else None,
         "config_digest": config_digest,
+        "scanner_rebalance": scanner_rebalance,
     }
 
 
@@ -61,18 +64,16 @@ def _cache_path(kind: str, key: dict[str, Any]) -> Path:
     # Deterministic file name from key hash.
     payload = json.dumps(key, sort_keys=True, default=str).encode()
     digest = hashlib.sha256(payload).hexdigest()[:16]
-    # Include market/timeframe in path for readability.
     market = key.get("market", "bars")
     return CACHE_ROOT / kind / f"{market}_{digest}.pkl"
 
 
-def load_cached_bars(csv_path: Path) -> list[Bar] | None:
+def load_cached_bars(csv_path: Path, market: Market) -> list[Bar] | None:
     try:
-        key = _fingerprint_bars(csv_path)
+        key = _fingerprint_bars(csv_path, market)
         path = _cache_path("bars", key)
         if not path.exists():
             return None
-        # Validate fingerprint stored inside file matches current file.
         with path.open("rb") as f:
             payload = pickle.load(f)
         if not isinstance(payload, dict):
@@ -83,7 +84,6 @@ def load_cached_bars(csv_path: Path) -> list[Bar] | None:
         bars = payload.get("bars")
         if not isinstance(bars, list) or not bars:
             return None
-        # Quick sanity: first element is Bar
         if not isinstance(bars[0], Bar):
             return None
         return bars
@@ -91,9 +91,9 @@ def load_cached_bars(csv_path: Path) -> list[Bar] | None:
         return None
 
 
-def store_cached_bars(csv_path: Path, bars: list[Bar]) -> None:
+def store_cached_bars(csv_path: Path, market: Market, bars: list[Bar]) -> None:
     try:
-        key = _fingerprint_bars(csv_path)
+        key = _fingerprint_bars(csv_path, market)
         path = _cache_path("bars", key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
@@ -111,9 +111,10 @@ def load_cached_universe(
     timeframe: str | None,
     end: datetime | None,
     config_digest: str,
+    scanner_rebalance: str,
 ) -> PointInTimeUniverse | None:
     try:
-        key = _fingerprint_universe(csv_path, market, timeframe, end, config_digest)
+        key = _fingerprint_universe(csv_path, market, timeframe, end, config_digest, scanner_rebalance)
         path = _cache_path("universe", key)
         if not path.exists():
             return None
@@ -127,7 +128,6 @@ def load_cached_universe(
         universe = payload.get("universe")
         if not isinstance(universe, PointInTimeUniverse):
             return None
-        # Optional extra check: hash matches content
         return universe
     except Exception:
         return None
@@ -139,10 +139,11 @@ def store_cached_universe(
     timeframe: str | None,
     end: datetime | None,
     config_digest: str,
+    scanner_rebalance: str,
     universe: PointInTimeUniverse,
 ) -> None:
     try:
-        key = _fingerprint_universe(csv_path, market, timeframe, end, config_digest)
+        key = _fingerprint_universe(csv_path, market, timeframe, end, config_digest, scanner_rebalance)
         path = _cache_path("universe", key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")

@@ -17,10 +17,6 @@ class ResearchTier(StrEnum):
     CANONICAL = "canonical"
 
 
-class WorkerPolicy(StrEnum):
-    SINGLE = "single"
-
-
 @dataclass(frozen=True)
 class ResearchTrial:
     """One independent research trial.
@@ -49,13 +45,15 @@ class ResearchJob:
     trials: tuple[ResearchTrial, ...] = ()
     tier: ResearchTier = ResearchTier.QUICK
     workers: int | str = 1
-    persist_artifacts: bool = False
-    persist_db: bool = False
+    # Tri-state: None = tier default, True = force on, False = explicit opt-out
+    persist_artifacts: bool | None = None
+    persist_db: bool | None = None
     output_dir: str | None = None
     fail_fast: bool = False
     corporate_actions_path: str | None = None
     initial_cash: float | None = None
     config_path: str | None = None
+    trial_timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +79,9 @@ class TrialResult:
     final_equity: float | None = None
     error: str | None = None
     summary: dict[str, Any] | None = None
+    metadata: dict[str, object] | None = None
+    worker_pid: int | None = None
+    worker_peak_rss_mb: float | None = None
 
 
 @dataclass(frozen=True)

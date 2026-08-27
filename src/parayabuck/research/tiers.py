@@ -83,7 +83,11 @@ def resolve_window(
     explicit_start: datetime | None,
     explicit_end: datetime | None,
 ) -> tuple[datetime | None, datetime | None]:
-    """Tier provides defaults only when caller did not specify explicit window."""
+    """Tier provides defaults only when caller did not specify explicit window.
+
+    For ROBUSTNESS and CANONICAL, require explicit start AND end to prevent
+    accidental expensive full-history runs.
+    """
     spec = TIER_SPECS[tier]
     if tier == ResearchTier.SMOKE:
         # Smoke uses caller-provided synthetic bars; no default window.
@@ -92,7 +96,32 @@ def resolve_window(
         # Quick defaults to 2019-2021 if not specified.
         return explicit_start or spec.default_start, explicit_end or spec.default_end
     # Robustness and canonical: caller must be explicit; no silent default.
+    if tier in (ResearchTier.ROBUSTNESS, ResearchTier.CANONICAL):
+        if explicit_start is None or explicit_end is None:
+            raise ValueError(f"Tier {tier.value} requires explicit start and end to prevent accidental expensive runs")
     return explicit_start, explicit_end
+
+
+def resolve_persist_artifacts(
+    tier: ResearchTier,
+    explicit: bool | None,
+) -> bool:
+    """Resolve tri-state persist_artifacts: None = tier default."""
+    if explicit is not None:
+        return explicit
+    return TIER_SPECS[tier].default_persist_artifacts
+
+
+def resolve_persist_db(
+    tier: ResearchTier,
+    explicit: bool | None,
+) -> bool:
+    """Resolve tri-state persist_db: None = tier default (False for all)."""
+    if explicit is not None:
+        return explicit
+    # For now, all tiers default to no DB persistence; canonical could enable if needed
+    # Keep False for all, but allow tier default to be consulted if needed
+    return False
 
 
 def default_dataset_for_tier(tier: ResearchTier, market: Market) -> Path | None:
@@ -101,9 +130,7 @@ def default_dataset_for_tier(tier: ResearchTier, market: Market) -> Path | None:
     if tier == ResearchTier.SMOKE:
         return None
     if market == Market.CRYPTO:
-        # Use extended crypto path as canonical; quick uses same file but with window.
         return root / "data" / "historical" / "crypto_18_1d_extended.csv"
-    # Equity: quick uses 1200 sym file; canonical uses PIT symmetric.
     if tier == ResearchTier.CANONICAL:
         return root / "data" / "historical" / "equity_pit_symmetric_2016_2026_v5.csv"
     return root / "data" / "historical" / "equity_1200_2016_2026.csv"

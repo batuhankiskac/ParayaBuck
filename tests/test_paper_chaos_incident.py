@@ -479,8 +479,8 @@ def test_receipt_has_17_fields_and_is_json_serializable(tmp_path: Path) -> None:
         cash_ratio=0.9,
     )
     d = receipt.to_dict()
-    # 17 required + 3 extras = 20 total; required 17 must be present
-    assert len([k for k in d if k not in {"warnings", "incidents", "created_at"}]) == 17
+    # 22 required (17 original + 5 T1 hysteresis provenance) + 3 extras = 25 total; required 22 must be present
+    assert len([k for k in d if k not in {"warnings", "incidents", "created_at"}]) == 22
     # JSON round-trips and file write is atomic
     path = receipt.write(tmp_path / "out")
     import json

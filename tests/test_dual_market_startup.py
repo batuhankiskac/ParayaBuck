@@ -139,7 +139,7 @@ def _assert_frozen_config():
     assert config.strategy.equity.enabled and config.strategy.crypto.enabled
     assert config.live.enabled is False
     assert config.strategy.equity.name == "equity_residual_momentum_v3"
-    assert config.strategy.crypto.name == "crypto_low_variance_v2"
+    assert config.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
     # 2026-08-21 operator decisions: docs/optimization_experiments_2026_08.md
     assert config.strategy.equity.maximum_allocation == 0.60
     assert config.strategy.crypto.maximum_allocation == 0.05

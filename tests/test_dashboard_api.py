@@ -230,8 +230,8 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
 
-    assert crypto["name"] == "crypto_low_variance_v2"
-    assert crypto["strategy"]["display_name"] == "Low Realized Variance v2 (96h)"
+    assert crypto["name"] == "crypto_low_variance_hysteresis_v1"
+    assert crypto["strategy"]["display_name"] == "Low Variance Hysteresis v1 (T1)"
     assert crypto["strategy"]["rebalance_cadence"] == "hours:96"
     assert crypto["maximum_allocation_pct"] == 5.0
 

@@ -476,7 +476,9 @@ def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(tmp_pat
 
     config = _equity_refresh_config(tmp_path)
     asset = SimpleNamespace(sector="technology", exchange="NASDAQ", tradable=True, status="active")
-    now = datetime.now(UTC)
+    # Fixed UTC timestamp inside equity session (10:30 ET Thursday) to make
+    # skip-symbol logic and window boundaries deterministic (no datetime.now).
+    now = datetime(2025, 6, 12, 14, 30, tzinfo=UTC)
     cached_history = {
         "AAA": [
             (bar.timestamp.isoformat(), 100, 101, 99, 100, 5_000_000) for bar in _daily_bars(now, 20, "AAA", 5_000_000)
@@ -546,7 +548,7 @@ def test_equity_refresh_uses_rolling_cache_delta_windows_and_real_spread(tmp_pat
     monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
     monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
 
-    result = preflight_module.refresh_equity_universe(config, "key", "secret")
+    result = preflight_module.refresh_equity_universe(config, "key", "secret", now=now)
 
     # NEW had no cached history: it gets the full 45d backfill window first,
     # then the shared incremental window covers every symbol.
@@ -634,7 +636,10 @@ def test_rolling_cache_last_write_wins_for_same_day_bars(tmp_path, monkeypatch) 
 
     config = _equity_refresh_config(tmp_path)
     asset = SimpleNamespace(sector=None, exchange="NASDAQ", tradable=True, status="active")
-    now = datetime.now(UTC)
+    # Fixed UTC timestamp inside session for deterministic skip decision and
+    # window alignment; production now is injected so the test never depends
+    # on wall-clock time or int-vs-float representation.
+    now = datetime(2025, 6, 12, 14, 30, tzinfo=UTC)
     cached_rows = [
         (now.isoformat(), 100, 101, 99, 100, 100_000),  # partial volume
     ]
@@ -689,10 +694,195 @@ def test_rolling_cache_last_write_wins_for_same_day_bars(tmp_path, monkeypatch) 
     monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
     monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
 
-    preflight_module.refresh_equity_universe(config, "key", "secret")
+    preflight_module.refresh_equity_universe(config, "key", "secret", now=now)
 
     saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
     rows = saved["history"]["AAA"]
     day_rows = [row for row in rows if row[0] == now.isoformat()]
     assert day_rows == [[now.isoformat(), 100.0, 101.0, 99.0, 100.5, 9_000_000.0]]
     assert len(rows) == 1  # replaced, not duplicated
+
+
+def test_cached_history_int_float_normalization_at_boundary(tmp_path, monkeypatch) -> None:
+    """Int-valued cached rows must be normalized to floats at the load boundary.
+
+    Production contract (_bar_to_tuple) promises float OHLCV. Cached JSON may
+    contain ints (e.g. 100) from older code or fixtures. The merge must treat
+    100 and 100.0 as identical market values and persist floats. This is a
+    focused regression for the reported int-vs-float replacement flake.
+    """
+    from parayabuck.universe import preflight as preflight_module
+
+    config = _equity_refresh_config(tmp_path)
+    asset = SimpleNamespace(sector=None, exchange="NASDAQ", tradable=True, status="active")
+    # Fixed inside-session timestamp for deterministic skip and window.
+    now = datetime(2025, 6, 12, 14, 30, tzinfo=UTC)
+    # Cached history contains ints (not floats) — older representation.
+    cached_rows = [(now.isoformat(), 100, 101, 99, 100, 200_000)]
+    (tmp_path / "equity_candidates.json").write_text(
+        json.dumps(
+            {
+                "generated_at": now.isoformat(),
+                "symbols": ["AAA"],
+                "shortlist_symbols": ["AAA"],
+                "candidates": [],
+                "history": {"AAA": cached_rows},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeTrading:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def feed_status(self) -> dict[str, object]:
+            return {"configured": "sip", "effective": "sip", "sip_fallback_active": False, "note": ""}
+
+        def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
+            raise RuntimeError("no quotes")
+
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "raw",
+        ) -> dict[str, list[Bar]]:
+            # Return a bar with same timestamp but different close/volume as floats.
+            return {"AAA": [Bar(now, "AAA", "1d", 100.1, 101.1, 99.1, 100.9, 9_000_000, Market.EQUITY)]}
+
+    monkeypatch.setattr(preflight_module, "eligible_equity_assets", lambda _c, _t: {"AAA": asset})
+    monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
+
+    preflight_module.refresh_equity_universe(config, "key", "secret", now=now)
+
+    saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
+    rows = saved["history"]["AAA"]
+    assert len(rows) == 1
+    # Persisted must be floats, and last-write-wins must have replaced int row.
+    assert rows[0] == [now.isoformat(), 100.1, 101.1, 99.1, 100.9, 9000000.0]
+    assert all(isinstance(v, float) for v in rows[0][1:])
+
+
+def test_rolling_cache_window_boundaries_and_ordering(tmp_path, monkeypatch) -> None:
+    """Audit rolling history window construction with fixed UTC timestamps.
+
+    Verifies: inclusive/exclusive timestamps, latest completed bar,
+    oldest retained bar, requested lookback, cache refresh boundary,
+    deterministic symbol ordering, stale replacement behavior. No
+    datetime.now() dependency.
+    """
+    from parayabuck.universe import preflight as preflight_module
+
+    config = _equity_refresh_config(tmp_path)
+    asset = SimpleNamespace(sector="technology", exchange="NASDAQ", tradable=True, status="active")
+    now = datetime(2025, 6, 12, 14, 30, tzinfo=UTC)
+    # 20-day cached history ending at now, two symbols with different volumes.
+    cached_history = {
+        "AAA": [
+            (bar.timestamp.isoformat(), 100.0, 101.0, 99.0, 100.0, 5_000_000.0)
+            for bar in _daily_bars(now, 20, "AAA", 5_000_000)
+        ],
+        "BBB": [
+            (bar.timestamp.isoformat(), 100.0, 101.0, 99.0, 100.0, 1_000_000.0)
+            for bar in _daily_bars(now, 20, "BBB", 1_000_000)
+        ],
+    }
+    (tmp_path / "equity_candidates.json").write_text(
+        json.dumps(
+            {
+                "generated_at": now.isoformat(),
+                "symbols": ["AAA", "BBB"],
+                "shortlist_symbols": ["AAA", "BBB"],
+                "candidates": [],
+                "history": cached_history,
+            }
+        ),
+        encoding="utf-8",
+    )
+    windows: list[tuple[tuple[str, ...], str, str, str]] = []
+
+    class FakeTrading:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    class FakeHistory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def feed_status(self) -> dict[str, object]:
+            return {"configured": "sip", "effective": "sip", "sip_fallback_active": False, "note": ""}
+
+        def get_latest_stock_quotes(self, symbols: list[str]) -> dict[str, object]:
+            return {"AAA": SimpleNamespace(bid_price=99.5, ask_price=100.5)}
+
+        def get_bars_batch(
+            self,
+            symbols: list[str],
+            timeframe: str,
+            *,
+            start: datetime,
+            end: datetime,
+            adjustment: str = "raw",
+        ) -> dict[str, list[Bar]]:
+            windows.append((tuple(symbols), timeframe, start.isoformat(), end.isoformat()))
+            # Full backfill for missing symbols (span >30d) returns 20 bars,
+            # incremental delta (span <=10d) returns 3 bars.
+            span_days = (end - start).days
+            bar_count = 20 if span_days > 30 else 3
+            vol = 10_000_000 if "NEW" in symbols else 1_000_000
+            return {sym: _daily_bars(end, bar_count, sym, vol) for sym in symbols}
+
+    monkeypatch.setattr(
+        preflight_module, "eligible_equity_assets", lambda _c, _t: {"AAA": asset, "BBB": asset, "NEW": asset}
+    )
+    monkeypatch.setattr(preflight_module, "TradingClient", FakeTrading)
+    monkeypatch.setattr(preflight_module, "AlpacaHistoricalData", FakeHistory)
+
+    result = preflight_module.refresh_equity_universe(config, "key", "secret", now=now)
+
+    # Cache refresh boundary: cache_age = now - generated_at = 0 days <=7, so incremental mode.
+    # NEW had no cached history: full 45d window first, then shared incremental 10d window.
+    assert result is not None
+    full_calls = [w for w in windows if (now - datetime.fromisoformat(w[2])).days > 30]
+    delta_calls = [w for w in windows if (now - datetime.fromisoformat(w[2])).days <= 10]
+    assert any("NEW" in w[0] for w in full_calls), "missing symbols must get 45d full backfill"
+    assert delta_calls, "incremental delta window must be fetched"
+    # Deterministic ordering: eligible universe batches must be sorted for
+    # pagination determinism; observation-set fetch order is strategy-ranked,
+    # so only assert determinism for eligible batches (without SPY prefix).
+    for symbols, *_ in windows:
+        if symbols and symbols[0] == "SPY":
+            continue
+        assert tuple(symbols) == tuple(sorted(symbols)), "eligible batch symbol ordering must be deterministic sorted"
+    # Latest completed bar: delta window end == now (injected), start == now-10d
+    delta_start = datetime.fromisoformat(delta_calls[0][2])
+    delta_end = datetime.fromisoformat(delta_calls[0][3])
+    assert delta_end == now, "latest completed bar must be the injected now"
+    assert delta_start == now - timedelta(days=10), "requested lookback 10d must be exact"
+    assert full_calls[0][2] == (now - timedelta(days=45)).isoformat(), "full lookback 45d must be exact"
+    # Oldest retained bar: history keeps last 20 daily bars, newest at now.
+    saved = json.loads((tmp_path / "equity_candidates.json").read_text(encoding="utf-8"))
+    for sym in ("AAA", "BBB", "NEW"):
+        rows = saved["history"][sym]
+        assert len(rows) == 20, f"{sym} must retain exactly 20 bars"
+        oldest = datetime.fromisoformat(rows[0][0])
+        latest = datetime.fromisoformat(rows[-1][0])
+        assert latest == now, f"{sym} latest retained bar must be now"
+        assert oldest == now - timedelta(days=19), f"{sym} oldest retained bar must be now-19d"
+        # All persisted rows must be floats (production contract) and sorted.
+        assert rows == sorted(rows, key=lambda r: r[0]), "history rows must be sorted deterministically"
+        for row in rows:
+            assert all(isinstance(v, float) for v in row[1:]), "persisted OHLCV must be float"
+    # Stale replacement: NEW entered and is selected; AAA spread from quote.
+    assert "NEW" in result.selected_symbols
+    # Cache isolation: saved history symbols are sorted keys (deterministic).
+    assert list(saved["history"].keys()) == sorted(saved["history"].keys())

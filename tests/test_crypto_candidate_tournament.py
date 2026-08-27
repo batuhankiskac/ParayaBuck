@@ -622,8 +622,8 @@ class TestGlobalInvariantsHandComputable:
         from parayabuck.config import load_config  # type: ignore[import-not-found]
 
         c = load_config()
-        # PAPER must stay crypto_low_variance_v2 and equity_residual_momentum_v3 per plan §9
-        assert c.strategy.crypto.name == "crypto_low_variance_v2"
+        # PAPER must stay crypto_low_variance_hysteresis_v1 (T1 promotion) and equity_residual_momentum_v3 per plan §9
+        assert c.strategy.crypto.name == "crypto_low_variance_hysteresis_v1"
         assert c.strategy.equity.name == "equity_residual_momentum_v3"
         assert c.live.enabled is False
 

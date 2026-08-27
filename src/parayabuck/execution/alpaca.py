@@ -2456,63 +2456,97 @@ class AlpacaBroker:
         return field_value(value, name, default)
 
     def _query_persisted_peak(self, account_id: str) -> tuple[float | None, int | None]:
-        """Return (max_persisted_peak, epoch) for ``account_id``, or (None,None) if none."""
+        """Return (max_persisted_peak, epoch) for ``account_id``, or (None,None) if none.
+
+        Fail-closed: any unexpected SQLite read failure raises
+        ``RiskStatePersistenceError`` and must prevent peak reconciliation.
+        (None,None) is only returned when the query succeeds and genuinely finds
+        no rows for this account (first run). Malformed individual
+        ``risk_state`` payloads are tolerated per-row, but if *all* rows for the
+        account are unreadable/corrupt, this is a durability failure, not
+        \"no history\".
+        """
         if not account_id:
             return None, None
         if self.ledger is None:
             return None, None
-        try:
-            with self.ledger._lock:
-                hw_peak: float | None = None
-                hw_epoch: int | None = None
+        # Do not swallow DB errors — they must fail closed.
+        with self.ledger._lock:
+            # -- portfolio_high_water --
+            hw_peak: float | None = None
+            hw_epoch: int | None = None
+            row = None
+            try:
+                row = self.ledger.connection.execute(
+                    "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
+                    (account_id,),
+                ).fetchone()
+            except Exception as exc:
+                if "no such table" in str(exc):
+                    row = None
+                else:
+                    raise RiskStatePersistenceError(
+                        f"portfolio_high_water read failed for {account_id}: {exc}"
+                    ) from exc
+            if row is not None:
                 try:
-                    row = self.ledger.connection.execute(
-                        "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
-                        (account_id,),
-                    ).fetchone()
-                    if row is not None:
-                        hw_peak = float(row[0])
-                        hw_epoch = int(row[1] or 0)
-                except Exception:
-                    hw_peak, hw_epoch = None, None
-                rs_peak: float | None = None
-                rs_epoch: int | None = None
-                try:
-                    rows = self.ledger.connection.execute(
-                        "SELECT payload FROM risk_state WHERE account_id = ?",
-                        (account_id,),
-                    ).fetchall()
-                    best: dict[int, float] = {}
-                    for (payload_str,) in rows:
-                        try:
-                            p = json.loads(payload_str)
-                            pe = int(p.get("peak_epoch", 0) or 0)
-                            pk = float(p.get("peak_equity", 0))
-                            if not math.isfinite(pk) or pk < 0:
-                                continue
-                            if pe not in best or pk > best[pe]:
-                                best[pe] = pk
-                        except Exception:
+                    hw_peak = float(row[0])
+                    hw_epoch = int(row[1] or 0)
+                except Exception as exc:
+                    raise RiskStatePersistenceError(
+                        f"portfolio_high_water row corrupt for {account_id}: {row!r}: {exc}"
+                    ) from exc
+                if hw_peak is not None and (not math.isfinite(hw_peak) or hw_peak < 0):
+                    raise RiskStatePersistenceError(f"portfolio_high_water peak corrupt for {account_id}: {hw_peak!r}")
+            # -- risk_state --
+            try:
+                rows = self.ledger.connection.execute(
+                    "SELECT payload FROM risk_state WHERE account_id = ?",
+                    (account_id,),
+                ).fetchall()
+            except Exception as exc:
+                if "no such table" in str(exc):
+                    rows = []
+                else:
+                    raise RiskStatePersistenceError(f"risk_state read failed for {account_id}: {exc}") from exc
+            rs_peak: float | None = None
+            rs_epoch: int | None = None
+            if rows:
+                best: dict[int, float] = {}
+                corrupt = 0
+                for (payload_str,) in rows:
+                    try:
+                        p = json.loads(payload_str)
+                        pe = int(p.get("peak_epoch", 0) or 0)
+                        pk = float(p.get("peak_equity", 0))
+                        if not math.isfinite(pk) or pk < 0:
+                            corrupt += 1
                             continue
-                    if best:
-                        max_epoch = max(best.keys())
-                        rs_peak = best[max_epoch]
-                        rs_epoch = max_epoch
-                except Exception:
-                    rs_peak, rs_epoch = None, None
-                if hw_peak is None and rs_peak is None:
-                    return None, None
-                if hw_peak is None:
-                    return rs_peak, rs_epoch
-                if rs_peak is None:
-                    return hw_peak, hw_epoch
-                if hw_epoch is None or rs_epoch is None:
-                    return max(hw_peak, rs_peak), hw_epoch if hw_epoch is not None else rs_epoch
-                if hw_epoch != rs_epoch:
-                    return (hw_peak, hw_epoch) if hw_epoch > rs_epoch else (rs_peak, rs_epoch)
-                return max(hw_peak, rs_peak), hw_epoch
-        except Exception:
-            return None, None
+                        if pe not in best or pk > best[pe]:
+                            best[pe] = pk
+                    except Exception:
+                        corrupt += 1
+                        continue
+                if best:
+                    max_epoch = max(best.keys())
+                    rs_peak = best[max_epoch]
+                    rs_epoch = max_epoch
+                elif len(rows) > 0:
+                    # All rows unreadable/corrupt — not \"no history\"
+                    raise RiskStatePersistenceError(
+                        f"risk_state rows for {account_id} all unreadable/corrupt: {len(rows)} rows"
+                    )
+            if hw_peak is None and rs_peak is None:
+                return None, None
+            if hw_peak is None:
+                return rs_peak, rs_epoch
+            if rs_peak is None:
+                return hw_peak, hw_epoch
+            if hw_epoch is None or rs_epoch is None:
+                return max(hw_peak, rs_peak), hw_epoch if hw_epoch is not None else rs_epoch
+            if hw_epoch != rs_epoch:
+                return (hw_peak, hw_epoch) if hw_epoch > rs_epoch else (rs_peak, rs_epoch)
+            return max(hw_peak, rs_peak), hw_epoch
 
     def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
         """Account-scoped peak reconciliation, called once per account_id.
@@ -2767,15 +2801,7 @@ class AlpacaBroker:
         acct = getattr(self, "_peak_account_id", None) or getattr(self, "_account_id", None)
         if acct:
             # Account known — do full reconciliation (current_equity not yet known, pass peak)
-            try:
-                self._ensure_peak_reconciled(str(acct), float(getattr(self, "_peak_equity", 0.0) or 0.0))
-            except RiskStatePersistenceError:
-                raise
-            except RuntimeError:
-                raise
-            except Exception:
-                # Fallback to 0 for unexpected errors (should not happen)
-                pass
+            self._ensure_peak_reconciled(str(acct), float(getattr(self, "_peak_equity", 0.0) or 0.0))
             return float(self._peak_equity)
         # No account known and no ledger — keep old behavior for backward compat
         if self.ledger is None:

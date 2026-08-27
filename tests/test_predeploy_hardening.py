@@ -992,3 +992,173 @@ def test_peak_account_scoped_G_first_run_zero_and_legacy_no_sqlite(tmp_path):
     broker3 = AlpacaBroker("k", "s", paper=True, peak_state_path=tmp_path / "paper_equity_peak3.json", ledger=ledger2)
     with pytest.raises(RuntimeError, match="before account is known"):
         broker3.reset_peak_equity(10000.0)
+
+
+def test_peak_db_no_history_first_run_allowed(tmp_path):
+    """A: no sidecar, SQLite succeeds, no rows -> genuine first run 0 allowed."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "db_no_history.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    # No sidecar, no persisted rows for acct-new
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-new", 42000.0)
+    # Before account(), peak is 0 (deferred)
+    assert broker._peak_equity == 0.0
+    assert broker._peak_account_id is None
+    snap = broker.account()
+    # Genuine first run: peak becomes current equity
+    assert snap.peak_equity == 42000.0
+    assert broker._peak_equity == 42000.0
+    assert broker._peak_account_id == "acct-new"
+    assert json.loads(peak.read_text())["account_id"] == "acct-new"
+
+
+def test_peak_db_high_water_raises_fail_closed(tmp_path):
+    """B: no sidecar, portfolio_high_water SELECT raises -> fail closed."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "db_hw_fail.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
+    with patch.object(
+        AlpacaBroker,
+        "_query_persisted_peak",
+        side_effect=RiskStatePersistenceError(
+            "portfolio_high_water read failed for acct-A: injected high_water failure"
+        ),
+    ):
+        with pytest.raises(RiskStatePersistenceError, match="portfolio_high_water read failed"):
+            broker.account()
+    # Must not have created sidecar or mutated peak to 50000
+    assert not peak.exists() or json.loads(peak.read_text()).get("peak_equity") != 50000.0
+    # Peak should remain 0 and not reconciled
+    assert broker._peak_equity == 0.0
+    assert broker._peak_account_id is None or broker._peak_account_id != "acct-A"
+
+
+def test_peak_db_risk_state_raises_fail_closed(tmp_path):
+    """C: no sidecar, risk_state SELECT raises -> fail closed."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "db_rs_fail.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
+    with patch.object(
+        AlpacaBroker,
+        "_query_persisted_peak",
+        side_effect=RiskStatePersistenceError("risk_state read failed for acct-A: injected risk_state failure"),
+    ):
+        with pytest.raises(RiskStatePersistenceError, match="risk_state read failed"):
+            broker.account()
+    assert broker._peak_equity == 0.0
+
+
+def test_peak_db_persisted_100k_injected_failure_not_rebase(tmp_path):
+    """D: persisted 100k, sidecar missing, injected failure -> must not rebase to 94000."""
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+    from parayabuck.risk.state import RiskState
+
+    db = tmp_path / "db_persisted_fail.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-A", 100000.0)
+    ledger.save_risk_state(
+        RiskState(
+            account_id="acct-A",
+            session_date=datetime.now(UTC).date(),
+            day_start_equity=100000.0,
+            peak_equity=100000.0,
+            realized_pnl=0.0,
+            unrealized_pnl=0.0,
+            fees=0.0,
+            consecutive_losses=0,
+            circuit_breaker_reason=None,
+            updated_at=datetime.now(UTC),
+            peak_epoch=0,
+        )
+    )
+    peak = tmp_path / "paper_equity_peak.json"
+    assert not peak.exists()
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
+    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected failure")):
+        with pytest.raises(RiskStatePersistenceError):
+            broker.account()
+    # Must not have rebased to 94000
+    assert broker._peak_equity == 0.0
+    # DB still has 100k, sidecar not created as 94k
+    assert not peak.exists() or json.loads(peak.read_text()).get("peak_equity") != 94000.0
+    # After removing injection, restart must restore 100k, not 94k
+    broker2 = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
+    snap2 = broker2.account()
+    assert snap2.peak_equity == 100000.0
+    assert snap2.drawdown_pct == pytest.approx(0.06, rel=1e-6)
+
+
+def test_peak_db_sidecar_valid_sqlite_fails_fail_closed(tmp_path):
+    """E: sidecar valid and account-bound, SQLite fails -> fail closed."""
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "db_sidecar_valid_fail.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    peak = tmp_path / "paper_equity_peak.json"
+    peak.write_text(json.dumps({"account_id": "acct-A", "peak_equity": 100000.0, "epoch": 0}))
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 94000.0)
+    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected")):
+        with pytest.raises(RiskStatePersistenceError):
+            broker.account()
+    # Must not have used sidecar alone to return 100k
+    assert broker._peak_equity == 0.0
+
+
+def test_peak_db_all_rows_corrupt_fail_closed(tmp_path):
+    """Malformed risk_state rows all corrupt -> fail closed, not no-history."""
+    from datetime import UTC, datetime
+
+    from parayabuck.execution.ledger import ExecutionLedger
+
+    db = tmp_path / "db_corrupt_rows.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    # Insert corrupt payloads for acct-A directly
+    ledger.connection.execute(
+        "INSERT INTO risk_state (account_id, session_date, payload, updated_at) VALUES (?, ?, ?, ?)",
+        ("acct-A", "2026-08-27", "{ not json", datetime.now(UTC).isoformat()),
+    )
+    ledger.connection.execute(
+        "INSERT INTO risk_state (account_id, session_date, payload, updated_at) VALUES (?, ?, ?, ?)",
+        ("acct-A", "2026-08-28", json.dumps({"peak_equity": "nan", "peak_epoch": 0}), datetime.now(UTC).isoformat()),
+    )
+    ledger.connection.commit()
+    peak = tmp_path / "paper_equity_peak.json"
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
+    with pytest.raises(RiskStatePersistenceError, match="all unreadable"):
+        broker.account()
+
+
+def test_peak_db_different_account_rows_ignored(tmp_path):
+    """F: different account rows remain ignored; DB failure for current still fails closed."""
+    from parayabuck.execution.ledger import ExecutionLedger
+    from parayabuck.portfolio.runtime_service import PortfolioStateRepository
+
+    db = tmp_path / "db_diff_acct.sqlite3"
+    ledger = ExecutionLedger(str(db))
+    repo = PortfolioStateRepository(str(db), store=ledger._store)
+    repo.update_high_water("acct-B", 500000.0)
+    peak = tmp_path / "paper_equity_peak.json"
+    broker = _make_broker_for_account(tmp_path, ledger, peak, "acct-A", 50000.0)
+    # Should not see B's 500k
+    snap = broker.account()
+    assert snap.peak_equity == 50000.0
+    # Now inject failure for A, ensure still fail closed even though B has data
+    broker2 = _make_broker_for_account(tmp_path, ledger, tmp_path / "paper2.json", "acct-A", 50000.0)
+    # Force fresh reconciliation by clearing flag
+    broker2._peak_reconciled = False
+    broker2._peak_account_id = None
+    with patch.object(AlpacaBroker, "_query_persisted_peak", side_effect=RiskStatePersistenceError("injected for A")):
+        with pytest.raises(RiskStatePersistenceError):
+            broker2.account()

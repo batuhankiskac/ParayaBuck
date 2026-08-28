@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import math
-import statistics
 from bisect import bisect_right
 from datetime import datetime
+
+import numpy as np
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
@@ -126,8 +127,6 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         spy_bars = context.history.get(benchmark_key, ())
         if len(spy_bars) < beta_window + 1:
             return (), {}
-        # The market close-by-timestamp lookup is symbol-independent: build it
-        # once per decision instead of once per candidate symbol.
         market_close_by_timestamp: dict[datetime, float] = {
             bar.timestamp: bar.close for bar in spy_bars if bar.close > 0
         }
@@ -135,34 +134,70 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         scored: list[tuple[float, str]] = []
         residual_vols: dict[str, float] = {}
         residuals_by_symbol: dict[str, list[float]] = {}
-        # The momentum window needs formation + skip aligned return pairs; the
-        # volatility window and the beta floor are smaller by construction.
         minimum_aligned = max(formation + skip, vol_window + 1, _MIN_BETA_RETURNS)
-        for symbol in sorted(context.history):
-            if symbol in excluded or not context.in_universe(symbol):
-                continue
-            bars = context.history[symbol]
-            if len(bars) < self.minimum_history_bars:
-                continue
-            aligned = _aligned_returns(bars, market_close_by_timestamp, beta_window)
-            if aligned is None or len(aligned[0]) < minimum_aligned:
-                continue
-            stock_returns, market_returns = aligned
-            beta = _ols_beta(stock_returns, market_returns)
-            residuals = [stock - beta * market for stock, market in zip(stock_returns, market_returns, strict=True)]
-            score = self._candidate_score(residuals, formation=formation, skip=skip)
-            residual_vol = _volatility(residuals[-vol_window:])
-            if not math.isfinite(score) or not math.isfinite(residual_vol):
-                continue
-            if score <= 0 or residual_vol <= 0:
-                continue
-            scored.append((score, symbol))
-            residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
-            residuals_by_symbol[symbol] = residuals
-
-        # Cross-sectional RESEARCH hook: variants may RE-SCORE the qualified
-        # pool as a cross-section (raw/standardized blends, multi-horizon
-        # consensus) without touching the shared beta/residual/eligibility
+        # Precompute universe membership set once per decision (avoid per-symbol bisect).
+        universe_set: frozenset[str] | None = None
+        try:
+            snapshots = getattr(context.universe, "snapshots", None)
+            if snapshots:
+                idx = bisect_right(snapshots, context.decision_timestamp, key=lambda x: x.effective_at)
+                if idx > 0:
+                    universe_set = snapshots[idx - 1].symbols
+                else:
+                    universe_set = frozenset()
+        except Exception:
+            universe_set = None
+        history = context.history
+        min_history_bars = self.minimum_history_bars
+        in_universe = context.in_universe
+        # Iterate over universe symbols directly when possible (155 avg vs 1200 history keys) to reduce per-decision overhead 7x.
+        if universe_set is not None:
+            for symbol in sorted(universe_set):
+                if symbol in excluded:
+                    continue
+                bars = history.get(symbol)
+                if bars is None or len(bars) < min_history_bars:
+                    continue
+                aligned = _aligned_returns(bars, market_close_by_timestamp, beta_window)
+                if aligned is None or len(aligned[0]) < minimum_aligned:
+                    continue
+                stock_returns, market_returns = aligned
+                beta = _ols_beta(stock_returns, market_returns)
+                residuals = [stock - beta * market for stock, market in zip(stock_returns, market_returns, strict=True)]
+                score = self._candidate_score(residuals, formation=formation, skip=skip)
+                residual_vol = _volatility(residuals[-vol_window:])
+                if not math.isfinite(score) or not math.isfinite(residual_vol):
+                    continue
+                if score <= 0 or residual_vol <= 0:
+                    continue
+                scored.append((score, symbol))
+                residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
+                residuals_by_symbol[symbol] = residuals
+        else:
+            sorted_symbols = sorted(history)
+            for symbol in sorted_symbols:
+                if symbol in excluded:
+                    continue
+                if not in_universe(symbol):
+                    continue
+                bars = history[symbol]
+                if len(bars) < min_history_bars:
+                    continue
+                aligned = _aligned_returns(bars, market_close_by_timestamp, beta_window)
+                if aligned is None or len(aligned[0]) < minimum_aligned:
+                    continue
+                stock_returns, market_returns = aligned
+                beta = _ols_beta(stock_returns, market_returns)
+                residuals = [stock - beta * market for stock, market in zip(stock_returns, market_returns, strict=True)]
+                score = self._candidate_score(residuals, formation=formation, skip=skip)
+                residual_vol = _volatility(residuals[-vol_window:])
+                if not math.isfinite(score) or not math.isfinite(residual_vol):
+                    continue
+                if score <= 0 or residual_vol <= 0:
+                    continue
+                scored.append((score, symbol))
+                residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
+                residuals_by_symbol[symbol] = residuals
         # pipeline. Default: per-symbol scores pass through unchanged.
         scored = self._transform_cross_sectional_scores(
             scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
@@ -392,39 +427,69 @@ def _aligned_returns(
     is the market's close lookup, built once per decision.
     """
     stock = stock_bars[-(window + 1) :]
-    pairs: list[tuple[float, float]] = []
+    get = market_close_by_timestamp.get
+    stock_closes: list[float] = []
+    market_closes: list[float] = []
     for bar in stock:
-        if bar.close <= 0:
+        c = bar.close
+        if c <= 0:
             continue
-        market_close = market_close_by_timestamp.get(bar.timestamp)
-        if market_close is not None:
-            pairs.append((bar.close, market_close))
-    if len(pairs) < 3:
+        mc = get(bar.timestamp)
+        if mc is not None and mc > 0:
+            stock_closes.append(c)
+            market_closes.append(mc)
+    if len(stock_closes) < 3:
         return None
-    stock_returns: list[float] = []
-    market_returns: list[float] = []
-    for index in range(1, len(pairs)):
-        previous_stock, previous_market = pairs[index - 1]
-        current_stock, current_market = pairs[index]
-        if previous_stock > 0 and previous_market > 0:
-            stock_returns.append(current_stock / previous_stock - 1)
-            market_returns.append(current_market / previous_market - 1)
-    if len(stock_returns) < 2:
+    n = len(stock_closes)
+    if n < 32:
+        stock_returns: list[float] = []
+        market_returns: list[float] = []
+        for i in range(1, n):
+            prev_s = stock_closes[i - 1]
+            prev_m = market_closes[i - 1]
+            if prev_s > 0 and prev_m > 0:
+                stock_returns.append(stock_closes[i] / prev_s - 1)
+                market_returns.append(market_closes[i] / prev_m - 1)
+        if len(stock_returns) < 2:
+            return None
+        return stock_returns, market_returns
+    s_arr = np.array(stock_closes, dtype=np.float64)
+    m_arr = np.array(market_closes, dtype=np.float64)
+    stock_returns_arr = s_arr[1:] / s_arr[:-1] - 1.0
+    market_returns_arr = m_arr[1:] / m_arr[:-1] - 1.0
+    if len(stock_returns_arr) < 2:
         return None
-    return stock_returns, market_returns
+    return stock_returns_arr.tolist(), market_returns_arr.tolist()
 
 
 def _ols_beta(stock_returns: list[float], market_returns: list[float]) -> float:
     """OLS slope of stock returns on market returns (aligned pairs)."""
-    market_mean = statistics.fmean(market_returns)
-    stock_mean = statistics.fmean(stock_returns)
-    variance = sum((value - market_mean) ** 2 for value in market_returns) / (len(market_returns) - 1)
+    n = len(stock_returns)
+    if n < 2:
+        return 0.0
+    market_mean = sum(market_returns) / n
+    stock_mean = sum(stock_returns) / n
+    if n >= 64:
+        m_arr = np.array(market_returns, dtype=np.float64)
+        s_arr = np.array(stock_returns, dtype=np.float64)
+        dm = m_arr - market_mean
+        ds = s_arr - stock_mean
+        var = float(np.dot(dm, dm) / (n - 1))
+        if var <= 1e-12:
+            return 0.0
+        cov = float(np.dot(ds, dm) / (n - 1))
+        return cov / var
+    var_sum = 0.0
+    for v in market_returns:
+        d = v - market_mean
+        var_sum += d * d
+    variance = var_sum / (n - 1)
     if variance <= 1e-12:
         return 0.0
-    covariance = sum(
-        (stock - stock_mean) * (market - market_mean)
-        for stock, market in zip(stock_returns, market_returns, strict=True)
-    ) / (len(stock_returns) - 1)
+    cov_sum = 0.0
+    for s, m in zip(stock_returns, market_returns, strict=True):
+        cov_sum += (s - stock_mean) * (m - market_mean)
+    covariance = cov_sum / (n - 1)
     return covariance / variance
 
 
@@ -442,8 +507,17 @@ def _compounded_return(residuals: list[float]) -> float:
 def _volatility(residuals: list[float]) -> float:
     if len(residuals) < 2:
         return 0.0
-    mean = statistics.fmean(residuals)
-    return math.sqrt(sum((value - mean) ** 2 for value in residuals) / (len(residuals) - 1))
+    n = len(residuals)
+    mean = sum(residuals) / n
+    if n >= 64:
+        arr = np.array(residuals, dtype=np.float64)
+        diff = arr - mean
+        return math.sqrt(float(np.dot(diff, diff) / (n - 1)))
+    var_sum = 0.0
+    for v in residuals:
+        d = v - mean
+        var_sum += d * d
+    return math.sqrt(var_sum / (n - 1))
 
 
 class EquityResidualMomentum1dV2(EquityResidualMomentum1dV1):

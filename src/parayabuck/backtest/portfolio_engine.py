@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+from bisect import bisect_right
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from itertools import groupby, pairwise
+from itertools import pairwise
 from pathlib import Path
 
 from parayabuck.backtest.stats import sample_stddev
@@ -467,7 +468,8 @@ class PortfolioBacktestEngine:
             cutoff = datetime.fromisoformat(watermark)
             ordered = [bar for bar in ordered if bar.timestamp > cutoff]
             decision_bars = [bar for bar in decision_bars if bar.timestamp > cutoff]
-        for bar in sorted(warmup or [], key=lambda item: (item.timestamp, item.symbol)):
+        # Warmup is already sorted and canonicalized in _prepared_window; avoid per-trial sort.
+        for bar in warmup or []:
             self._ingest(bar)
             self._ingest_execution(bar)
         action_queue = sorted(corporate_actions or [], key=lambda item: item.timestamp)
@@ -475,29 +477,54 @@ class PortfolioBacktestEngine:
         decision_index = 0
         curve: list[float] = []
         curve_timestamps: list[datetime] = []
-        for _, grouped in groupby(ordered, key=lambda bar: bar.timestamp):
-            cycle = list(grouped)
+        # Local aliases for hot loop (avoid attribute lookups per bar)
+        _ingest_exec = self._ingest_execution
+        _ingest = self._ingest
+        _fill_cycle = self._fill_cycle
+        _last_price = self._last_price
+        _update_risk = self._update_risk_state
+        _decide = self._decide
+        _equity = self._equity
+        _record_holdings = self._record_holdings_snapshot
+        # Manual grouping to avoid groupby lambda overhead
+        n = len(ordered)
+        i = 0
+        while i < n:
+            ts = ordered[i].timestamp
+            j = i + 1
+            while j < n and ordered[j].timestamp == ts:
+                j += 1
+            cycle = ordered[i:j]
             for bar in cycle:
-                self._ingest_execution(bar)
-            while decision_index < len(decision_bars) and decision_bars[decision_index].timestamp <= cycle[0].timestamp:
-                self._ingest(decision_bars[decision_index])
+                _ingest_exec(bar)
+            while decision_index < len(decision_bars) and decision_bars[decision_index].timestamp <= ts:
+                _ingest(decision_bars[decision_index])
                 decision_index += 1
-            while action_index < len(action_queue) and action_queue[action_index].timestamp <= cycle[0].timestamp:
+            while action_index < len(action_queue) and action_queue[action_index].timestamp <= ts:
                 self._apply_corporate_action(action_queue[action_index])
                 action_index += 1
-            self._fill_cycle(cycle)
+            _fill_cycle(cycle)
             for bar in cycle:
-                self._last_price[canonical_symbol(bar.symbol, bar.market)] = bar.close
-            # Advance the daily-loss/high-water lifecycle on every bar, not
-            # only when the strategy rebalances: a weekly strategy must still
-            # measure drawdown and daily PnL from the bars between decisions.
-            self._update_risk_state(cycle[0].timestamp)
-            self._decide(cycle[0].timestamp)
-            curve.append(self._equity())
-            curve_timestamps.append(cycle[0].timestamp)
-            self._record_holdings_snapshot(cycle[0].timestamp)
+                _last_price[bar.symbol] = bar.close
+            _update_risk(ts)
+            _decide(ts)
+            curve.append(_equity())
+            curve_timestamps.append(ts)
+            _record_holdings(ts)
+            i = j
         if liquidate_at_end and self._positions:
-            last_bar: dict[tuple[str, str], Bar] = {self._key(bar): bar for bar in ordered}
+            # Build last-bar map only for positions we actually need, scanning
+            # ordered in reverse and stopping early. Original built dict of all
+            # 428k bars per trial (8% of 3y run) just to liquidate 5 holdings.
+            needed_symbols = {pos.symbol for pos in self._positions.values()}
+            last_bar: dict[tuple[str, str], Bar] = {}
+            # Timeframe is strategy timeframe for all positions
+            tf = self.strategy.timeframe
+            for bar in reversed(ordered):
+                if bar.symbol in needed_symbols and (bar.symbol, tf) not in last_bar:
+                    last_bar[(bar.symbol, tf)] = bar
+                    if len(last_bar) == len(needed_symbols):
+                        break
             for position in list(self._positions.values()):
                 exit_bar = last_bar.get((position.symbol, position.timeframe))
                 if exit_bar is not None:
@@ -564,7 +591,9 @@ class PortfolioBacktestEngine:
     # -- internals ----------------------------------------------------------
 
     def _key(self, bar: Bar) -> tuple[str, str]:
-        return canonical_symbol(bar.symbol, bar.market), bar.timeframe
+        # Bars are canonicalized at ingestion boundary (_deduplicate), so
+        # symbol is already canonical. Fast path avoids per-bar cache lookup.
+        return bar.symbol, bar.timeframe
 
     @staticmethod
     def _order_to_dict(order: PortfolioOrder) -> dict[str, object]:
@@ -594,13 +623,19 @@ class PortfolioBacktestEngine:
             return None
 
     def _ingest(self, bar: Bar) -> None:
-        series = self._history.setdefault(self._key(bar), [])
-        if not series or series[-1].timestamp < bar.timestamp:
+        key = (bar.symbol, bar.timeframe)
+        series = self._history.get(key)
+        if series is None:
+            self._history[key] = [bar]
+        elif series[-1].timestamp < bar.timestamp:
             series.append(bar)
 
     def _ingest_execution(self, bar: Bar) -> None:
-        series = self._execution_history.setdefault(self._key(bar), [])
-        if not series or series[-1].timestamp < bar.timestamp:
+        key = (bar.symbol, bar.timeframe)
+        series = self._execution_history.get(key)
+        if series is None:
+            self._execution_history[key] = [bar]
+        elif series[-1].timestamp < bar.timestamp:
             series.append(bar)
 
     def _apply_corporate_action(self, action: CorporateAction) -> None:
@@ -624,7 +659,20 @@ class PortfolioBacktestEngine:
     def _deduplicate(bars: list[Bar]) -> list[Bar]:
         unique: dict[tuple[str, str, datetime], Bar] = {}
         for bar in bars:
-            key = (canonical_symbol(bar.symbol, bar.market), bar.timeframe, bar.timestamp)
+            canonical = canonical_symbol(bar.symbol, bar.market)
+            if canonical != bar.symbol:
+                bar = Bar(
+                    timestamp=bar.timestamp,
+                    symbol=canonical,
+                    timeframe=bar.timeframe,
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    volume=bar.volume,
+                    market=bar.market,
+                )
+            key = (canonical, bar.timeframe, bar.timestamp)
             previous = unique.get(key)
             if previous is None:
                 unique[key] = bar
@@ -738,7 +786,7 @@ class PortfolioBacktestEngine:
         )
 
     def _fill_side(self, bar: Bar, side: OrderSide) -> None:
-        symbol = canonical_symbol(bar.symbol, bar.market)
+        symbol = bar.symbol
         remaining: list[PortfolioOrder] = []
         for order in self._pending:
             if order.symbol != symbol or order.side != side:
@@ -1227,24 +1275,27 @@ class PortfolioBacktestEngine:
 
     def _universe_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
         snapshots = getattr(self.universe, "snapshots", ())
-        eligible = [item for item in snapshots if item.effective_at <= timestamp]
-        if not eligible:
+        if not snapshots:
             return None
-        return tuple(sorted(eligible[-1].symbols))
+        index = bisect_right(snapshots, timestamp, key=lambda item: item.effective_at)
+        if index == 0:
+            return None
+        return tuple(sorted(snapshots[index - 1].symbols))
 
     def _universe_observation_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
         """The snapshot's STREAMED OBSERVATION SET (live parity for the
         completeness gate), falling back to the full pool for snapshots that
         carry no observation set."""
         snapshots = getattr(self.universe, "snapshots", ())
-        eligible = [item for item in snapshots if item.effective_at <= timestamp]
-        if not eligible:
+        if not snapshots:
             return None
-        observation = getattr(eligible[-1], "observation_set", None)
+        index = bisect_right(snapshots, timestamp, key=lambda item: item.effective_at)
+        if index == 0:
+            return None
+        observation = getattr(snapshots[index - 1], "observation_set", None)
         if observation:
             return tuple(sorted(observation))
-        return tuple(sorted(eligible[-1].symbols))
-
+        return tuple(sorted(snapshots[index - 1].symbols))
     def _close_position(self, position: _Position, bar: Bar) -> None:
         if position.qty <= 0:
             return

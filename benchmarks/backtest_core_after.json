@@ -1,0 +1,73 @@
+{
+  "cases": {
+    "A_realistic_3y": {
+      "bars_per_sec": 342196.5,
+      "bars_total": 753178,
+      "batch4_no_timing_s": 8.9827,
+      "batch4_s": 8.9181,
+      "decisions": 157,
+      "decisions_per_sec": 71.33,
+      "ending_equity": 162224.85124561534,
+      "engine_max_s": 2.2021,
+      "engine_median_s": 2.201,
+      "engine_min_s": 2.1934,
+      "engine_p95_s": 2.2021,
+      "fills": 525,
+      "hash": "6d5995b49039d9ab",
+      "label": "equity_3y",
+      "peak_rss_delta_mb": 0.0,
+      "peak_rss_mb": 1104.7,
+      "product_median_s": 2.2253,
+      "product_single_s": 2.2243,
+      "rss_delta_mb": 0.0
+    },
+    "B_6m": {
+      "bars_per_sec": 1034710.9,
+      "bars_total": 385491,
+      "batch4_no_timing_s": 1.5606,
+      "batch4_s": 1.535,
+      "decisions": 26,
+      "decisions_per_sec": 69.79,
+      "ending_equity": 119693.42106319882,
+      "engine_max_s": 0.3728,
+      "engine_median_s": 0.3726,
+      "engine_min_s": 0.3718,
+      "engine_p95_s": 0.3728,
+      "fills": 81,
+      "hash": "4cadaf1bfe267547",
+      "label": "equity_6m",
+      "peak_rss_delta_mb": 0.0,
+      "peak_rss_mb": 1104.7,
+      "product_median_s": 0.3841,
+      "product_single_s": 0.3875,
+      "rss_delta_mb": 0.0
+    },
+    "C_synthetic": {
+      "bars_per_sec": 1151869.9,
+      "bars_total": 14229,
+      "batch4_no_timing_s": 0.0554,
+      "batch4_s": 0.0542,
+      "decisions": 2,
+      "decisions_per_sec": 161.9,
+      "ending_equity": 98580.33703548647,
+      "engine_max_s": 0.0127,
+      "engine_median_s": 0.0124,
+      "engine_min_s": 0.012,
+      "engine_p95_s": 0.0127,
+      "fills": 6,
+      "hash": "88e56480ac4ab887",
+      "label": "synthetic",
+      "peak_rss_delta_mb": 1.6,
+      "peak_rss_mb": 110.9,
+      "product_median_s": 0.0136,
+      "product_single_s": 0.015,
+      "rss_delta_mb": 1.6
+    }
+  },
+  "generated_at": "2026-08-28T14:32:29.957939+00:00",
+  "machine": {
+    "head": "63b7c72e907b81623023e549f458b8c026d59507",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  }
+}

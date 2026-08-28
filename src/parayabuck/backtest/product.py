@@ -468,12 +468,31 @@ def _prepared_window(
     ]
     filtered = [bar for bar in available if start is None or bar.timestamp >= start]
     warmup = [bar for bar in available if start is not None and bar.timestamp < start]
+    if warmup:
+        from parayabuck.markets.symbols import canonical_symbol
+
+        canon_warmup: list[Bar] = []
+        for bar in warmup:
+            can = canonical_symbol(bar.symbol, bar.market)
+            if can != bar.symbol:
+                bar = Bar(
+                    timestamp=bar.timestamp,
+                    symbol=can,
+                    timeframe=bar.timeframe,
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    volume=bar.volume,
+                    market=bar.market,
+                )
+            canon_warmup.append(bar)
+        warmup = sorted(canon_warmup, key=lambda b: (b.timestamp, b.symbol))
     ordered = decision_bars = sorted(
         PortfolioBacktestEngine._deduplicate(filtered),
         key=lambda bar: (bar.timestamp, bar.symbol),
     )
     return filtered, warmup, (ordered, decision_bars)
-
 
 def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:
     score = item.get("score")

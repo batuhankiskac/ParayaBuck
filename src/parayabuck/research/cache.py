@@ -11,7 +11,9 @@ from typing import Any
 
 from parayabuck.backtest.universe import PointInTimeUniverse
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 
+log = get_logger("parayabuck.research.cache")
 # Bump when Bar / cache schema changes.
 BAR_CACHE_VERSION = 2
 UNIVERSE_CACHE_VERSION = 2
@@ -87,7 +89,8 @@ def load_cached_bars(csv_path: Path, market: Market) -> list[Bar] | None:
         if not isinstance(bars[0], Bar):
             return None
         return bars
-    except Exception:
+    except (OSError, pickle.PickleError, ValueError, KeyError, AttributeError) as exc:
+        log.warning("Research bar cache read failed for %s: %s", csv_path, exc)
         return None
 
 
@@ -96,13 +99,13 @@ def store_cached_bars(csv_path: Path, market: Market, bars: list[Bar]) -> None:
         key = _fingerprint_bars(csv_path, market)
         path = _cache_path("bars", key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        tmp = path.with_name(path.name + ".tmp")
         payload = {"_key": key, "bars": bars}
         with tmp.open("wb") as f:
             pickle.dump(payload, f, protocol=4)
         tmp.replace(path)
-    except Exception:
-        pass
+    except (OSError, pickle.PickleError) as exc:
+        log.warning("Research bar cache write failed for %s: %s", csv_path, exc)
 
 
 def load_cached_universe(
@@ -129,7 +132,8 @@ def load_cached_universe(
         if not isinstance(universe, PointInTimeUniverse):
             return None
         return universe
-    except Exception:
+    except (OSError, pickle.PickleError, ValueError, KeyError, AttributeError) as exc:
+        log.warning("Research universe cache read failed for %s: %s", csv_path, exc)
         return None
 
 
@@ -146,13 +150,13 @@ def store_cached_universe(
         key = _fingerprint_universe(csv_path, market, timeframe, end, config_digest, scanner_rebalance)
         path = _cache_path("universe", key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        tmp = path.with_name(path.name + ".tmp")
         payload = {"_key": key, "universe": universe}
         with tmp.open("wb") as f:
             pickle.dump(payload, f, protocol=4)
         tmp.replace(path)
-    except Exception:
-        pass
+    except (OSError, pickle.PickleError) as exc:
+        log.warning("Research universe cache write failed for %s: %s", csv_path, exc)
 
 
 def cache_stats() -> dict[str, Any]:

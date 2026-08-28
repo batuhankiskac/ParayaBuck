@@ -305,8 +305,12 @@ def _entry_block_duration_seconds(incidents: dict[str, object]) -> float | None:
         activated_at = incident.get("activated_at")
         if not activated_at:
             return None
+        raw = str(activated_at).strip()
+        # Legacy incidents used trailing 'Z' for UTC; fromisoformat requires '+00:00'
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
         try:
-            activated = datetime.fromisoformat(str(activated_at))
+            activated = datetime.fromisoformat(raw)
         except ValueError:
             return None
         return max(0.0, (datetime.now(UTC) - activated).total_seconds())

@@ -461,6 +461,10 @@ def floor_increment(value: float, increment: float) -> float:
     by AlpacaBroker submission/fill-verification paths and by the portfolio
     repository so all three can never disagree on a floored quantity.
     """
+    if not math.isfinite(value) or not math.isfinite(increment) or increment <= 0:
+        raise ValueError(
+            f"floor_increment requires finite positive increment, got value={value!r} increment={increment!r}"
+        )
     raw = Decimal(str(value))
     step = Decimal(str(increment))
     return float((raw / step).to_integral_value(rounding=ROUND_DOWN) * step)

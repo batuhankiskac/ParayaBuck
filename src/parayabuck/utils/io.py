@@ -34,7 +34,15 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
         os.replace(temporary, path)
         if mode is not None:
             os.chmod(path, mode)
-        directory_fd = os.open(path.parent, os.O_RDONLY)
+        # O_DIRECTORY ensures we fsync the directory itself, not a file.
+        # Fall back to O_RDONLY alone on platforms without O_DIRECTORY.
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        try:
+            directory_fd = os.open(path.parent, flags)
+        except OSError:
+            return
         try:
             os.fsync(directory_fd)
         finally:

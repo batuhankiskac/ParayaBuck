@@ -55,19 +55,19 @@ def _to_float(value: object, default: float = 0.0) -> float:
 def _open_readonly(db_path: str | Path) -> sqlite3.Connection | None:
     """Open the runtime database read-only, or ``None`` when it is absent."""
     path = Path(db_path)
-    if not path.exists():
-        return None
+    # No exists() TOCTOU — try connect directly, handle missing file via OperationalError
     try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        # Encode path for URI: escape ? and # which would be parsed as query/fragment
+        safe = str(path).replace("?", "%3F").replace("#", "%23")
+        connection = sqlite3.connect(f"file:{safe}?mode=ro", uri=True)
         connection.execute("PRAGMA query_only=ON")
         return connection
-    except sqlite3.OperationalError:
-        return None
-
-
-def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
-    row = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
-    return row is not None
+    except sqlite3.OperationalError as exc:
+        # Only suppress "no such file/table" missing-DB case; re-raise corruption/I/O errors
+        msg = str(exc).lower()
+        if "unable to open" in msg or "no such file" in msg or "no such table" in msg:
+            return None
+        raise
 
 
 def _query(
@@ -77,36 +77,59 @@ def _query(
 ) -> list[tuple[Any, ...]]:
     try:
         return list(connection.execute(sql, params).fetchall())
-    except sqlite3.OperationalError:
-        return []
+    except sqlite3.OperationalError as exc:
+        msg = str(exc).lower()
+        if "no such table" in msg or "no such column" in msg:
+            return []
+        raise
+
+
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    row = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    return row is not None
 
 
 def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
     if not _table_exists(connection, table):
         return set()
-    return {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
+    # Validate identifier to prevent injection if table name ever flows from external input
+    if not table.replace("_", "").isalnum() or not table[0].isalpha():
+        return set()
+    quoted = '"' + table.replace('"', '""') + '"'
+    return {str(row[1]) for row in connection.execute(f"PRAGMA table_info({quoted})")}
 
 
 def _percentile(sorted_values: list[float], percentile: float) -> float | None:
     """Linear-interpolation percentile (numpy-default-like) of sorted values."""
+    if not 0 <= percentile <= 100:
+        raise ValueError(f"percentile must be 0..100, got {percentile!r}")
     if not sorted_values:
         return None
     if len(sorted_values) == 1:
         return sorted_values[0]
-    rank = (percentile / 100.0) * (len(sorted_values) - 1)
+    # Filter non-finite before ranking to avoid NaN poisoning
+    finite = [v for v in sorted_values if math.isfinite(v)]
+    if not finite:
+        return None
+    ordered = sorted(finite)
+    rank = (percentile / 100.0) * (len(ordered) - 1)
     lower = math.floor(rank)
-    upper = min(lower + 1, len(sorted_values) - 1)
+    upper = min(lower + 1, len(ordered) - 1)
     weight = rank - lower
-    return sorted_values[lower] * (1.0 - weight) + sorted_values[upper] * weight
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
 
 def _stat_summary(values: list[float]) -> dict[str, float | None]:
     if not values:
         return {"count": 0, "mean": None, "median": None, "p75": None, "p95": None}
-    ordered = sorted(values)
+    # Drop non-finite to prevent NaN poisoning of mean/median/p95
+    finite = [v for v in values if math.isfinite(v)]
+    if not finite:
+        return {"count": 0, "mean": None, "median": None, "p75": None, "p95": None}
+    ordered = sorted(finite)
     return {
-        "count": len(values),
-        "mean": sum(values) / len(values),
+        "count": len(finite),
+        "mean": sum(finite) / len(finite),
         "median": _percentile(ordered, 50),
         "p75": _percentile(ordered, 75),
         "p95": _percentile(ordered, 95),

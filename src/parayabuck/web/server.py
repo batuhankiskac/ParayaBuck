@@ -129,7 +129,13 @@ class BacktestManager:
         if strategy:
             argv += ["--strategy", strategy]
         for name, value in sorted(dict(payload.get("parameters") or {}).items()):
-            argv += ["--param", f"{name}={json.dumps(value)}"]
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name)):
+                raise ValueError(f"Invalid parameter name: {name!r}")
+            # Cap serialized value size to prevent argv blowup
+            serialized = json.dumps(value)
+            if len(serialized) > 4096:
+                raise ValueError(f"Parameter value too large for {name!r}")
+            argv += ["--param", f"{name}={serialized}"]
         return argv
 
     def _run(self, argv: list[str]) -> None:
@@ -1459,7 +1465,11 @@ def _trusted_browser_origin(origin: str | None) -> bool:
 async def protect_local_control_api(request: Request, call_next: Any) -> Any:
     host_header = request.headers.get("host") or ""
     host = urlparse(f"//{host_header}").hostname or ""
-    if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
+    allowed = {"127.0.0.1", "localhost", "::1"}
+    # Allow testserver only inside pytest; otherwise loopback-only
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        allowed = allowed | {"testserver"}
+    if host not in allowed:
         return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
     if request.method not in {"GET", "HEAD", "OPTIONS"} and not _trusted_browser_origin(request.headers.get("origin")):
         return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})

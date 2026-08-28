@@ -57,13 +57,16 @@ class WarmupCache:
         self._migrate_legacy_schema()
 
     def _primary_key_columns(self) -> set[str]:
-        pk_name = next(
-            (row[1] for row in self.connection.execute("PRAGMA index_list(bars)").fetchall() if row[3] == "pk"),
-            None,
-        )
-        if pk_name is None:
-            return set()
-        return {row[2] for row in self.connection.execute(f"PRAGMA index_info({pk_name})").fetchall()}
+        # Use PRAGMA index_list to locate the primary-key autoindex; the
+        # sqlite_master sql LIKE '%PRIMARY KEY%' trick fails for
+        # sqlite_autoindex_* where sql is NULL.
+        for row in self.connection.execute("PRAGMA index_list(bars)").fetchall():
+            # row: (seq, name, unique, origin, partial)
+            if len(row) >= 4 and row[3] == "pk":
+                pk_name = row[1]
+                quoted = '"' + str(pk_name).replace('"', '""') + '"'
+                return {r[2] for r in self.connection.execute(f"PRAGMA index_info({quoted})").fetchall()}
+        return set()
 
     def _migrate_legacy_schema(self) -> None:
         """Rebuild caches created before ``market`` joined the primary key.
@@ -77,6 +80,8 @@ class WarmupCache:
         if "adjustment" in columns and "market" in self._primary_key_columns():
             return
         with self._lock:
+            # Clean up leftover from interrupted migration
+            self.connection.execute("DROP TABLE IF EXISTS bars_legacy")
             self.connection.execute("ALTER TABLE bars RENAME TO bars_legacy")
             self.connection.execute(self._SCHEMA)
             if "adjustment" in columns:
@@ -135,7 +140,8 @@ class WarmupCache:
         with self._lock:
             self.connection.executemany(
                 """
-                INSERT INTO bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp, open, high, low, close, volume, retrieved_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(feed, symbol, market, timeframe, adjustment, timestamp)
                 DO UPDATE SET
                     open=excluded.open, high=excluded.high, low=excluded.low,
@@ -157,7 +163,7 @@ class WarmupCache:
         end: datetime,
         adjustment: str = "all",
     ) -> list[Bar]:
-        canonical = canonical_symbol(symbol)
+        canonical = canonical_symbol(symbol, market)
         with self._lock:
             rows = self.connection.execute(
                 """

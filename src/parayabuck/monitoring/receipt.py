@@ -60,14 +60,22 @@ class PaperReceipt:
         directory.mkdir(parents=True, exist_ok=True)
         # Filename: 2026-08-26_equity_v3.json  (date + market + strategy)
         date = self.decision_timestamp[:10]
-        market = "equity" if "equity" in self.strategy_name else "crypto"
+        # Use explicit market field if available, else heuristic on strategy name
+        market = getattr(self, "market", None) or ("equity" if "equity" in self.strategy_name else "crypto")
         filename = f"{date}_{market}_{self.strategy_name}.json"
         path = directory / filename
-        # Atomic write via temp file
-        tmp = path.with_suffix(".tmp")
+        # Atomic write via temp file in same dir — avoid with_suffix collision
+        tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(self.to_dict(), indent=2, sort_keys=True))
-        tmp.replace(path)
-        # Observability side-effects (never raise)
+        try:
+            tmp.replace(path)
+        except Exception:
+            # Cross-mount replace can fail; ensure cleanup
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
         try:
             from parayabuck.monitoring import alerts as _alerts
             from parayabuck.monitoring import metrics as _metrics

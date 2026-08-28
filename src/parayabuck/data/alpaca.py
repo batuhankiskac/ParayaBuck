@@ -552,18 +552,18 @@ class AlpacaHistoricalData:
         entitlement; anything ambiguous is NOT treated as an entitlement
         problem so real outages still propagate to the caller.
         """
+        import re
+
         message = f"{exc}".lower()
-        return any(
-            token in message
-            for token in (
-                "entitlement",
-                "not entitled",
-                "unauthorized feed",
-                "feed.",
-                "sip",
-                "data feed",
-            )
+        patterns = (
+            r"\bentitlement\b",
+            r"not entitled",
+            r"unauthorized.*feed",
+            r"\bsip\b",
+            r"\biex\b.*\bfeed\b",
+            r"data feed",
         )
+        return any(re.search(pat, message) for pat in patterns)
 
     def _fetch_window(
         self,

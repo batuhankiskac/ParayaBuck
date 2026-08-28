@@ -355,9 +355,16 @@ class ExecutionLedger:
         )
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
-        columns = {str(row[1]) for row in self.connection.execute(f"PRAGMA table_info({table})")}
+        # Validate and quote identifiers to prevent injection
+        if not table.replace("_", "").isalnum() or not table[0].isalpha():
+            raise ValueError(f"Invalid table name: {table!r}")
+        if not name.replace("_", "").isalnum() or not name[0].isalpha():
+            raise ValueError(f"Invalid column name: {name!r}")
+        quoted_table = '"' + table.replace('"', '""') + '"'
+        columns = {str(row[1]) for row in self.connection.execute(f"PRAGMA table_info({quoted_table})")}
         if name not in columns:
-            self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+            quoted_col = '"' + name.replace('"', '""') + '"'
+            self.connection.execute(f"ALTER TABLE {quoted_table} ADD COLUMN {quoted_col} {definition}")
 
     def register_entry_order(
         self,

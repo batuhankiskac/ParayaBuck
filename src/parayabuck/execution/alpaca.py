@@ -160,55 +160,59 @@ class AlpacaBroker:
         # account() after account_id is known. For ledger=None (no account
         # scoping needed) eagerly bootstrap from legacy sidecar so old unit
         # tests that construct a broker without a ledger keep working.
-        if ledger is None and self._peak_state_path.exists():
+        if ledger is None:
             # Eager bootstrap when there is no ledger to scope against.
+            # No exists() check — try read directly to avoid TOCTOU.
             try:
                 raw = self._peak_state_path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                pass
             except OSError as exc:
                 raise RiskStatePersistenceError(
                     f"Peak equity file unreadable at {self._peak_state_path}: {exc}"
                 ) from exc
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
-                ) from exc
-            if not isinstance(data, dict) or "peak_equity" not in data:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}"
-                )
-            try:
-                peak = float(data["peak_equity"])
-            except (TypeError, ValueError) as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
-                ) from exc
-            if not math.isfinite(peak):
-                raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
-            if peak < 0:
-                raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
-            try:
-                epoch = int(data.get("epoch", 0) or 0)
-            except (TypeError, ValueError) as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak epoch is not an integer at {self._peak_state_path}: {data.get('epoch')!r}"
-                ) from exc
-            if epoch < 0:
-                raise RiskStatePersistenceError(f"Peak epoch is negative at {self._peak_state_path}: {epoch!r}")
-            self._peak_equity = float(peak)
-            self._peak_epoch = int(epoch)
-            # Preserve plaintext account_id if present, else remain None
-            acct = data.get("account_id")
-            if isinstance(acct, str) and acct.strip():
-                self._peak_account_id = acct.strip()
-                self._peak_reconciled = True
             else:
-                # Legacy file without binding — keep unreconciled so first
-                # account() will rebind it, but keep the peak visible for
-                # no-ledger callers (tests).
-                self._peak_account_id = None
-                self._peak_reconciled = False
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    raise RiskStatePersistenceError(
+                        f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
+                    ) from exc
+                if not isinstance(data, dict) or "peak_equity" not in data:
+                    raise RiskStatePersistenceError(
+                        f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}"
+                    )
+                try:
+                    peak = float(data["peak_equity"])
+                except (TypeError, ValueError) as exc:
+                    raise RiskStatePersistenceError(
+                        f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
+                    ) from exc
+                if not math.isfinite(peak):
+                    raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
+                if peak < 0:
+                    raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
+                try:
+                    epoch = int(data.get("epoch", 0) or 0)
+                except (TypeError, ValueError) as exc:
+                    raise RiskStatePersistenceError(
+                        f"Peak epoch is not an integer at {self._peak_state_path}: {data.get('epoch')!r}"
+                    ) from exc
+                if epoch < 0:
+                    raise RiskStatePersistenceError(f"Peak epoch is negative at {self._peak_state_path}: {epoch!r}")
+                self._peak_equity = float(peak)
+                self._peak_epoch = int(epoch)
+                # Preserve plaintext account_id if present, else remain None
+                acct = data.get("account_id")
+                if isinstance(acct, str) and acct.strip():
+                    self._peak_account_id = acct.strip()
+                    self._peak_reconciled = True
+                else:
+                    # Legacy file without binding — keep unreconciled so first
+                    # account() will rebind it, but keep the peak visible for
+                    # no-ledger callers (tests).
+                    self._peak_account_id = None
+                    self._peak_reconciled = False
         self.portfolio_owned_quantities = portfolio_owned_quantities
         self.portfolio_open_orders = portfolio_open_orders
         self.portfolio_fill_recovered = portfolio_fill_recovered
@@ -226,6 +230,7 @@ class AlpacaBroker:
         self.crypto_stop_cancel_timeout_seconds = crypto_stop_cancel_timeout_seconds
         self.crypto_stop_cancel_poll_interval_seconds = crypto_stop_cancel_poll_interval_seconds
         self._symbol_exit_locks: dict[str, threading.Lock] = {}
+        self._symbol_exit_locks_guard = threading.Lock()
 
     @property
     def account_suffix(self) -> str:
@@ -1914,7 +1919,15 @@ class AlpacaBroker:
         if ledger is None or not self._account_id:
             return None
         symbol = canonical_symbol(observation.symbol, Market.CRYPTO)
-        lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
+        # Defensive fallback for test-constructed brokers via __new__ that bypass __init__
+        guard = getattr(self, "_symbol_exit_locks_guard", None)
+        if guard is None:
+            self._symbol_exit_locks_guard = threading.Lock()
+            guard = self._symbol_exit_locks_guard
+        if not hasattr(self, "_symbol_exit_locks"):
+            self._symbol_exit_locks = {}
+        with guard:
+            lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
         if not lock.acquire(blocking=False):
             log.warning(
                 "Crypto exit observation deferred because symbol lock is busy: symbol=%s source=%s observed_at=%s",

@@ -80,6 +80,9 @@ def configure_alerting(
                 _settings["webhook_url"] = str(webhook_url).strip()
             if events is not None:
                 known = sorted(set(events) & ALERT_KINDS)
+                unknown = sorted(set(events) - ALERT_KINDS)
+                if unknown:
+                    log.warning("Alerting config ignored unknown events: %s", unknown)
                 _settings["events"] = tuple(known)
             if throttle_seconds is not None:
                 _settings["throttle_seconds"] = max(0.0, float(throttle_seconds))
@@ -133,7 +136,12 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
     if kind == "paper_incident":
         category = str(fields.get("category", "") or "").strip()
         incident_id = str(fields.get("incident_id", "") or "").strip()
-        return f"{kind}:{category}:{incident_id}"
+        if incident_id:
+            return f"{kind}:{category}:{incident_id}"
+        # No incident_id → throttle per message hash to avoid collapsing distinct incidents
+        msg = str(fields.get("message", "") or fields.get("detail", "") or "")
+        digest = str(hash(msg)) if msg else "empty"
+        return f"{kind}:{category}:{digest}"
     return kind
 
 

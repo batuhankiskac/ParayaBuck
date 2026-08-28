@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sqlite3
 import threading
 from pathlib import Path
@@ -67,17 +66,8 @@ class SQLiteStore:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             raise StorageInitializationError(f"Cannot create database directory {self.path.parent}: {exc}") from exc
-        # Explicit writable check: mkdir with exist_ok succeeds on read-only
-        # parent on some platforms but subsequent SQLite connect would fail
-        # with a vague error. Fail closed early with a clear message.
-        try:
-            # Require write + execute on the parent to create/lock files.
-            if not os.access(self.path.parent, os.W_OK | os.X_OK):
-                raise StorageInitializationError(f"Database directory is not writable: {self.path.parent}")
-        except StorageInitializationError:
-            raise
-        except Exception as exc:  # pragma: no cover - defensive
-            raise StorageInitializationError(f"Cannot verify database directory {self.path.parent}: {exc}") from exc
+        # No os.access TOCTOU check — mkdir success does not guarantee writability
+        # on read-only mounts. Rely on sqlite3.connect to fail with clear error.
         try:
             self.connection = sqlite3.connect(self.path, check_same_thread=False)
         except sqlite3.Error as exc:

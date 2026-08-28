@@ -83,7 +83,6 @@ def make_bars():
 def build_contexts(bars, numeric_view=None):
     # Build 26 decision contexts weekly
     # Create simple universe with all symbols
-    all_syms = sorted({b.symbol for b in bars if b.symbol != "SPY"})
     # Use 26 decision timestamps: every 7 days after first 274 days
     sorted_ts = sorted({b.timestamp for b in bars})
     # need at least 274 bars before first decision
@@ -138,7 +137,6 @@ def bench_legacy(contexts):
         hist = ctx.history
         spy_bars = hist.get("SPY", ())
         market_dict = {b.timestamp: b.close for b in spy_bars if b.close > 0}
-        t0 = time.perf_counter()
         for sym, bars in hist.items():
             if sym == "SPY":
                 continue

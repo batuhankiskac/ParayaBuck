@@ -1,0 +1,48 @@
+# Small reproducible research experiment — CI-safe (uses smoke tier synthetic data)
+# Commands:
+#   parayabuck research plan examples/research/equity_v3_small_grid.yaml
+#   parayabuck research run examples/research/equity_v3_small_grid.yaml --workers 1
+#   parayabuck research inspect research_runs/<run>
+#   parayabuck research compare research_runs/<runA> research_runs/<runB>
+#   parayabuck research resume research_runs/<run> --retry-failed
+
+name: equity-v3-small-grid
+market: equity
+strategy: equity_residual_momentum_v3
+tier: smoke
+workers: 1
+
+# smoke tier ignores dataset; synthetic bars are deterministic
+# dataset: data/historical/equity_1200_2016_2026.csv
+# start: 2019-01-01
+# end: 2024-12-31
+
+base_parameters:
+  top_n: 8
+  consensus_hysteresis_bps: 5
+
+trials:
+  - label: baseline
+    parameters:
+      beta_window_bars: 273
+      residual_vol_window: 63
+  - label: low-vol-42
+    parameters:
+      beta_window_bars: 273
+      residual_vol_window: 42
+
+# Grid expands deterministically (sorted keys, Cartesian product)
+grid:
+  beta_window_bars: [273, 300]
+  residual_vol_window: [42, 63]
+
+# Merged trials = 2 explicit + 4 grid = 6 total (explosion guard default 500)
+# Order: explicit first (baseline, low-vol-42), then grid in sorted key order
+
+baseline: baseline
+tags:
+  - equity
+  - residual-momentum
+  - beta-study
+max_trials: 500
+fail_fast: false

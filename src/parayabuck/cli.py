@@ -8,8 +8,11 @@ import secrets
 import sqlite3
 import subprocess
 import sys
+import traceback
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -84,7 +87,41 @@ def _parser() -> argparse.ArgumentParser:
     optimize.add_argument("--oos-start")
     optimize.add_argument("--oos-end")
     research = commands.add_parser("research", help="run research batch with invariant reuse and parallel trials")
-    research.add_argument("spec", nargs="?", help="optional spec YAML/JSON file defining trials")
+    # Subcommands for Mission 3 experiment platform (plan/run/resume/inspect/compare)
+    research_sub = research.add_subparsers(dest="research_cmd", help="experiment platform")
+    # plan
+    plan_p = research_sub.add_parser("plan", help="resolve experiment without running")
+    plan_p.add_argument("spec", help="spec YAML/JSON file")
+    plan_p.add_argument("--workers", default=None, help="override workers (1, N, auto)")
+    plan_p.add_argument("--output-dir", default=None, help="override output parent dir")
+    plan_p.add_argument("--allow-large", action="store_true", help="allow grid explosion beyond limit")
+    plan_p.add_argument("--config", default=None, help="config YAML path")
+    # run
+    run_p = research_sub.add_parser("run", help="run experiment (or resume if --resume)")
+    run_p.add_argument("spec", help="spec YAML/JSON file")
+    run_p.add_argument("--workers", default=None, help="override workers")
+    run_p.add_argument("--output-dir", default=None, help="override output parent dir")
+    run_p.add_argument("--allow-large", action="store_true", help="allow large grid")
+    run_p.add_argument("--config", default=None, help="config YAML path")
+    run_p.add_argument("--resume", action="store_true", help="resume if run exists (validate experiment_id)")
+    run_p.add_argument("--retry-failed", action="store_true", help="retry failed trials on resume")
+    run_p.add_argument("--fail-fast", action="store_true", help="fail fast")
+    # resume
+    resume_p = research_sub.add_parser("resume", help="resume an existing run directory")
+    resume_p.add_argument("run_dir", help="research_runs/<run> directory")
+    resume_p.add_argument("--retry-failed", action="store_true", help="retry failed trials")
+    resume_p.add_argument("--workers", default=None, help="override workers for resume")
+    resume_p.add_argument("--config", default=None, help="config YAML path")
+    # inspect
+    inspect_p = research_sub.add_parser("inspect", help="inspect a run (read-only)")
+    inspect_p.add_argument("run_dir", help="research_runs/<run> directory")
+    # compare
+    compare_p = research_sub.add_parser("compare", help="compare two runs")
+    compare_p.add_argument("run_a", help="first run directory")
+    compare_p.add_argument("run_b", help="second run directory")
+    compare_p.add_argument("--output", default=None, help="optional output JSON path")
+    # Legacy args (maintain backward compat when no subcommand)
+    research.add_argument("legacy_spec", nargs="?", help=argparse.SUPPRESS)
     research.add_argument("--tier", choices=("smoke", "quick", "robustness", "canonical"), default="quick")
     research.add_argument("--workers", default="1", help="1, N, or auto")
     research.add_argument("--market", choices=("equity", "crypto"), default="equity")
@@ -800,6 +837,19 @@ def _print_summary(summary: dict[str, object], output_dir: str) -> None:
 
 
 def _run_research(config: Config, args: argparse.Namespace) -> int:
+    # Dispatch to Mission 3 experiment platform if subcommand present
+    cmd = getattr(args, "research_cmd", None)
+    if cmd == "plan":
+        return _run_research_plan(config, args)
+    if cmd == "run":
+        return _run_research_experiment_run(config, args)
+    if cmd == "resume":
+        return _run_research_resume(config, args)
+    if cmd == "inspect":
+        return _run_research_inspect(config, args)
+    if cmd == "compare":
+        return _run_research_compare(config, args)
+    # Legacy path (no subcommand) — preserve existing behavior
     import json
     from pathlib import Path
 
@@ -822,8 +872,9 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
     trials: list[ResearchTrial] = []
-    if args.spec:
-        spec_path = Path(args.spec)
+    legacy_spec = getattr(args, "legacy_spec", None)
+    if legacy_spec:
+        spec_path = Path(legacy_spec)
         if not spec_path.exists():
             raise SystemExit(f"Spec file not found: {spec_path}")
         raw = spec_path.read_text(encoding="utf-8")
@@ -927,8 +978,500 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_research_plan(config: Config, args: argparse.Namespace) -> int:
+    from parayabuck.config import load_config
+    from parayabuck.research.experiment import plan_experiment, resolve_experiment
+
+    cfg = load_config(args.config) if getattr(args, "config", None) else config
+    try:
+        resolved = resolve_experiment(
+            args.spec,
+            config=cfg,
+            workers_override=getattr(args, "workers", None),
+            allow_large=bool(getattr(args, "allow_large", False)),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    # Try to prepare invariants for cache estimates (best effort, no failure)
+    inv = None
+    try:
+        from parayabuck.research.experiment import _prepare_invariants
+
+        inv = _prepare_invariants(resolved.job, cfg, enable_cache=True)
+    except Exception:
+        inv = None
+    plan = plan_experiment(resolved, inv)
+    # Human-readable output
+    print(f"Experiment: {plan['name']}")
+    print(f"Experiment ID: {plan['experiment_id']}")
+    print(f"Strategy: {plan['strategy']}")
+    print(f"Market: {plan['market']} Tier: {plan['tier']}")
+    ds = plan.get("dataset") or "(synthetic/default)"
+    print(f"Dataset: {ds}")
+    if plan.get("dataset_fingerprint_id"):
+        print(f"Dataset fingerprint: {plan['dataset_fingerprint_id']}")
+    win = plan.get("window", {})
+    print(f"Window: {win.get('start')} -> {win.get('end')}")
+    print(f"Trials: {plan['trial_count']}")
+    print(f"Workers: {plan['workers_resolved']} (requested {plan['workers_requested']})")
+    print(
+        f"Estimated reusable inputs: bars cache: {'hit' if plan.get('bars_cache_hit') else 'miss' if plan.get('bars_cache_hit') is not None else 'unknown'}"
+    )
+    print(
+        f"  universe cache: {'hit' if plan.get('universe_cache_hit') else 'miss' if plan.get('universe_cache_hit') is not None else 'unknown'}"
+    )
+    print(f"  numeric history: {plan.get('numeric_history')}")
+    if plan.get("baseline"):
+        print(f"Baseline: {plan['baseline']}")
+    if plan.get("tags"):
+        print(f"Tags: {', '.join(plan['tags'])}")
+    print("Trial list:")
+    for t in plan.get("trials", []):
+        print(f"  - {t['label']} (id {t['trial_id']}) params={t['parameters']}")
+    return 0
+
+
+def _run_research_experiment_run(config: Config, args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from parayabuck.config import load_config
+    from parayabuck.research.experiment import resolve_experiment, run_experiment
+    from parayabuck.research.persistence import ExperimentStore
+
+    cfg = load_config(args.config) if getattr(args, "config", None) else config
+    workers_override = getattr(args, "workers", None)
+    try:
+        resolved = resolve_experiment(
+            args.spec,
+            config=cfg,
+            workers_override=workers_override,
+            allow_large=bool(getattr(args, "allow_large", False)),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    # Determine output base
+    output_base = getattr(args, "output_dir", None)
+    # If --resume and output_base is None, try to find latest run for this experiment? Spec says
+    # `research run spec.yaml --resume` should resume existing. We need to locate existing run dir by experiment_id.
+    if bool(getattr(args, "resume", False)):
+        # If output_base points to a run_dir that exists, use it
+        if output_base and Path(output_base).exists() and (Path(output_base) / "manifest.json").exists():
+            store = ExperimentStore.load(Path(output_base))
+            store.validate_resume(resolved.experiment_id)
+            store = run_experiment(
+                resolved, cfg, store=store, resume=True, retry_failed=bool(getattr(args, "retry_failed", False))
+            )
+            print(f"Resumed: {store.run_dir}")
+            print(
+                f"Completed: {len([t for t in store.load_trials() if t.get('status') == 'ok'])} Failed: {len([t for t in store.load_trials() if t.get('status') == 'failed'])}"
+            )
+            return 0
+        # Otherwise, search for existing run with same experiment_id under research_runs
+        parent = Path(output_base) if output_base else Path("research_runs")
+        candidates: list[Path] = []
+        if parent.exists():
+            for child in parent.iterdir():
+                if child.is_dir() and (child / "manifest.json").exists():
+                    try:
+                        m = ExperimentStore.load(child).load_manifest()
+                        if m.get("experiment_id") == resolved.experiment_id:
+                            candidates.append(child)
+                    except Exception:
+                        continue
+        if candidates:
+            # Pick most recent by mtime
+            candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            store_path = candidates[0]
+            store = ExperimentStore.load(store_path)
+            store = run_experiment(
+                resolved, cfg, store=store, resume=True, retry_failed=bool(getattr(args, "retry_failed", False))
+            )
+            print(f"Resumed: {store.run_dir}")
+            print(
+                f"Completed: {len([t for t in store.load_trials() if t.get('status') == 'ok'])} Failed: {len([t for t in store.load_trials() if t.get('status') == 'failed'])}"
+            )
+            return 0
+        # No existing found, fall through to new
+        print("No existing run found for --resume, creating new")
+    # Normal new run
+    # Use output_base as parent dir if provided, else default research_runs
+    base = output_base
+    # run_experiment will create new bundle
+    # Need to handle fail_fast override from CLI
+    if getattr(args, "fail_fast", False):
+        # Patch job fail_fast
+        resolved = replace(resolved, job=replace(resolved.job, fail_fast=True))
+    store = run_experiment(
+        resolved, cfg, output_base=base, resume=False, retry_failed=bool(getattr(args, "retry_failed", False))
+    )
+    print(f"Experiment: {resolved.spec.name} ID {resolved.experiment_id} Run {resolved.run_id}")
+    print(f"Output: {store.run_dir}")
+    trials = store.load_trials()
+    ok = sum(1 for t in trials if t.get("status") == "ok")
+    failed = sum(1 for t in trials if t.get("status") == "failed")
+    print(f"Completed: {ok} Failed: {failed} Total: {len(trials)}")
+    # Print best
+    if ok:
+        try:
+            best = max([t for t in trials if t.get("status") == "ok"], key=lambda x: x.get("sharpe") or float("-inf"))
+            print(f"Best: {best.get('label')} Sharpe {best.get('sharpe'):.4f} CAGR {best.get('cagr'):.4f}")
+            if resolved.spec.baseline:
+                base_t = next((t for t in trials if t.get("label") == resolved.spec.baseline), None)
+                if base_t and base_t.get("status") == "ok":
+                    for t in trials:
+                        if t.get("status") != "ok" or t.get("label") == resolved.spec.baseline:
+                            continue
+                        d_sharpe = (t.get("sharpe") or 0) - (base_t.get("sharpe") or 0)
+                        d_cagr = (t.get("cagr") or 0) - (base_t.get("cagr") or 0)
+                        print(
+                            f"  {t.get('label')}: Sharpe {t.get('sharpe'):.4f} ({d_sharpe:+.4f}) CAGR {t.get('cagr'):.4f} ({d_cagr:+.4f})"
+                        )
+        except Exception:
+            pass
+    return 0
+
+
+def _run_research_resume(config: Config, args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from parayabuck.config import load_config
+    from parayabuck.research.persistence import ExperimentStore
+
+    cfg = load_config(args.config) if getattr(args, "config", None) else config
+    run_dir = Path(args.run_dir)
+    if not run_dir.exists():
+        raise SystemExit(f"Run directory not found: {run_dir}")
+    store = ExperimentStore.load(run_dir)
+    return _resume_from_store(
+        store,
+        cfg,
+        retry_failed=bool(getattr(args, "retry_failed", False)),
+        workers_override=getattr(args, "workers", None),
+    )
+
+
+def _resume_from_store(store: Any, config: Config, retry_failed: bool = False, workers_override: Any = None) -> int:
+    from pathlib import Path
+
+    from parayabuck.research.experiment import _prepare_invariants, _trial_result_to_dict
+    from parayabuck.research.models import ResearchJob, ResearchTier, ResearchTrial, TrialResult
+    from parayabuck.research.runner import _execute_single_trial, _resolve_workers
+
+    manifest = store.load_manifest()
+    job_data = store.load_job().get("job") or {}
+    # Reconstruct ResearchJob from job_data (may be normalized dict)
+    try:
+        from datetime import datetime
+
+        from parayabuck.core.models import Market
+
+        market = (
+            Market(job_data.get("market", "equity"))
+            if job_data.get("market")
+            else Market(manifest.get("market", "equity"))
+        )
+        tier = ResearchTier(job_data.get("tier", manifest.get("tier", "quick")))
+        # Trials from manifest's trial list (preserves label/params)
+        trials_info = manifest.get("trials") or []
+        trials: list[ResearchTrial] = []
+        for t in trials_info:
+            trials.append(
+                ResearchTrial(
+                    label=t.get("label", "trial"),
+                    parameters=t.get("parameters"),
+                    cost_multiplier=float(t.get("cost_multiplier", 1.0)),
+                    metadata=t.get("metadata") or {},
+                    execution_overrides=t.get("execution_overrides"),
+                )
+            )
+        # Fallback: if trials_info empty, use job_data trials
+        if not trials and job_data.get("trials"):
+            for idx, t in enumerate(job_data.get("trials") or []):
+                trials.append(
+                    ResearchTrial(
+                        label=t.get("label", f"trial_{idx}"),
+                        parameters=t.get("parameters"),
+                        cost_multiplier=float(t.get("cost_multiplier", 1.0)),
+                        metadata=t.get("metadata") or {},
+                        execution_overrides=t.get("execution_overrides"),
+                    )
+                )
+        start = None
+        end = None
+        if job_data.get("start"):
+            try:
+                start = datetime.fromisoformat(job_data["start"])
+            except Exception:
+                start = None
+        if job_data.get("end"):
+            try:
+                end = datetime.fromisoformat(job_data["end"])
+            except Exception:
+                end = None
+        job = ResearchJob(
+            market=market,
+            strategy_name=job_data.get("strategy_name") or manifest.get("strategy_name"),
+            dataset_path=job_data.get("dataset_path") or manifest.get("dataset_path"),
+            start=start,
+            end=end,
+            base_parameters=job_data.get("base_parameters") or manifest.get("base_parameters"),
+            trials=tuple(trials),
+            tier=tier,
+            workers=workers_override or job_data.get("workers") or manifest.get("workers_requested") or 1,
+            persist_artifacts=None,
+            persist_db=None,
+            output_dir=str(store.run_dir),
+            fail_fast=bool(job_data.get("fail_fast", False)),
+            corporate_actions_path=job_data.get("corporate_actions_path") or manifest.get("corporate_actions_path"),
+            initial_cash=job_data.get("initial_cash") or manifest.get("initial_cash"),
+        )
+    except Exception as exc:
+        raise SystemExit(f"Failed to reconstruct job from store: {exc}\n{traceback.format_exc()}") from exc
+    # Prepare invariants
+    inv = _prepare_invariants(job, config, enable_cache=True)
+    bars = inv["bars"]
+    universe = inv["universe"]
+    prepared = inv["prepared"]
+    start = inv["start"]
+    end = inv["end"]
+    # Determine pending
+    existing = store.load_trials()
+    existing_by_label = {t.get("label"): t for t in existing}
+    # Use trial_ids from manifest if available, else label
+    trial_ids = [t.get("trial_id") or t.get("label") for t in manifest.get("trials", [])]
+    if not trial_ids:
+        trial_ids = [f"trial_{i}" for i in range(len(trials))]
+    pending: list[int] = []
+    for idx, tid in enumerate(trial_ids):
+        # Find existing trial with same id
+        found = next((x for x in existing if x.get("trial_id") == tid), None)
+        if found is None:
+            # Try label
+            found = existing_by_label.get(trials[idx].label)
+        if found is None:
+            pending.append(idx)
+        else:
+            if found.get("status") == "ok":
+                continue
+            if found.get("status") == "failed" and retry_failed:
+                pending.append(idx)
+    if not pending:
+        print(
+            f"Completed: {len([t for t in existing if t.get('status') == 'ok'])} Pending: 0 Failed: {len([t for t in existing if t.get('status') == 'failed'])}"
+        )
+        store.mark_completed("completed")
+        return 0
+    print(
+        f"Resuming {store.run_dir}: completed {len([t for t in existing if t.get('status') == 'ok'])} pending {len(pending)} failed {len([t for t in existing if t.get('status') == 'failed'])}"
+    )
+    # Execute pending (use same logic as run_experiment but directly)
+    import multiprocessing
+    import os
+    import pickle
+    import tempfile
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from dataclasses import replace
+
+    from parayabuck.research.runner import _pool_initializer, _pool_worker
+    from parayabuck.research.tiers import resolve_persist_artifacts, resolve_persist_db
+
+    persist_artifacts = resolve_persist_artifacts(job.tier, job.persist_artifacts)
+    persist_db = resolve_persist_db(job.tier, job.persist_db)
+    corporate_actions = None
+    if job.corporate_actions_path:
+        from parayabuck.backtest.product import load_csv_corporate_actions
+
+        try:
+            corporate_actions = load_csv_corporate_actions(job.corporate_actions_path)
+        except Exception:
+            corporate_actions = None
+    requested_workers = _resolve_workers(workers_override or job.workers) if hasattr(job, "workers") else 1
+    workers = min(requested_workers, len(pending)) if pending else requested_workers
+    if workers == 1:
+        for idx in pending:
+            trial = trials[idx]
+            tid = trial_ids[idx]
+            res = _execute_single_trial(
+                config,
+                bars,
+                universe,
+                prepared,
+                job.market,
+                job.strategy_name,
+                job.base_parameters,
+                trial,
+                start,
+                end,
+                job.initial_cash,
+                persist_db,
+                persist_artifacts,
+                None,
+                corporate_actions,
+            )
+            from dataclasses import replace as rep
+
+            res = rep(res, trial_index=idx)
+            d = _trial_result_to_dict(
+                res,
+                tid,
+                {
+                    "label": trial.label,
+                    "parameters": trial.parameters,
+                    "execution_overrides": trial.execution_overrides,
+                },
+            )
+            store.append_trial(d)
+            if res.status == "failed" and job.fail_fast:
+                store.mark_completed("failed")
+                raise RuntimeError(f"Trial {res.label} failed: {res.error}")
+    else:
+        ctx = multiprocessing.get_context("spawn")
+        invariants = (
+            config,
+            universe,
+            prepared,
+            job.market,
+            job.strategy_name,
+            job.base_parameters,
+            start,
+            end,
+            job.initial_cash,
+            persist_db,
+            persist_artifacts,
+            None,
+            corporate_actions,
+        )
+        fd, tmp_name = tempfile.mkstemp(suffix=".pkl", prefix="parayabuck_invariants_")
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            with tmp_path.open("wb") as f:
+                pickle.dump(invariants, f, protocol=4)
+            payloads = [(trials[i], i) for i in pending]
+            idx_to_tid = {i: trial_ids[i] for i in pending}
+            with ProcessPoolExecutor(
+                max_workers=workers, mp_context=ctx, initializer=_pool_initializer, initargs=(str(tmp_path),)
+            ) as executor:
+                future_to_idx = {executor.submit(_pool_worker, p): p[1] for p in payloads}
+                for fut in as_completed(future_to_idx):
+                    idx = future_to_idx[fut]
+                    trial = trials[idx]
+                    tid = idx_to_tid[idx]
+                    try:
+                        res = fut.result()
+                    except Exception as exc:
+                        tb = traceback.format_exc()
+                        res = TrialResult(
+                            trial_index=idx,
+                            label=trial.label,
+                            status="failed",
+                            parameters=trial.parameters or {},
+                            cost_multiplier=trial.cost_multiplier,
+                            elapsed_s=0.0,
+                            error=f"Worker exception: {exc}\n{tb}",
+                        )
+                    if res.trial_index == -1:
+                        res = replace(res, trial_index=idx)
+                    d = _trial_result_to_dict(
+                        res,
+                        tid,
+                        {
+                            "label": trial.label,
+                            "parameters": trial.parameters,
+                            "execution_overrides": trial.execution_overrides,
+                        },
+                    )
+                    store.append_trial(d)
+                    if res.status == "failed" and job.fail_fast:
+                        for fut2 in future_to_idx:
+                            fut2.cancel()
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        store.mark_completed("failed")
+                        raise RuntimeError(f"Trial {res.label} failed")
+        finally:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
+    store.mark_completed("completed")
+    print(f"Resumed completed. Dir: {store.run_dir}")
+    print(
+        f"Completed: {len([t for t in store.load_trials() if t.get('status') == 'ok'])} Failed: {len([t for t in store.load_trials() if t.get('status') == 'failed'])}"
+    )
+    return 0
+
+
+def _run_research_inspect(config: Config, args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from parayabuck.research.persistence import ExperimentStore
+
+    store = ExperimentStore.load(Path(args.run_dir))
+    info = store.inspect()
+    manifest = info["manifest"]
+    print(f"Status: {manifest.get('status')}")
+    print(f"Experiment ID: {manifest.get('experiment_id')}")
+    print(f"Run ID: {manifest.get('run_id')}")
+    print(f"Strategy: {manifest.get('strategy_name')} Market: {manifest.get('market')} Tier: {manifest.get('tier')}")
+    print(f"Window: {manifest.get('start')} -> {manifest.get('end')}")
+    print(f"Dataset: {manifest.get('dataset_path')} ({manifest.get('dataset_fingerprint_id')})")
+    print(f"Universe: {manifest.get('universe_fingerprint_id')}")
+    print(f"Workers: {manifest.get('workers_resolved')} (requested {manifest.get('workers_requested')})")
+    print(f"Created: {manifest.get('created_at')} Completed: {manifest.get('completed_at')}")
+    print(
+        f"Trials: {manifest.get('trial_count')} Completed: {info['completed']} Failed: {info['failed']} Pending: {info['pending']}"
+    )
+    if info.get("best"):
+        b = info["best"]
+        print(
+            f"Best: {b.get('label')} Sharpe {b.get('sharpe'):.4f} CAGR {b.get('cagr'):.4f} Drawdown {b.get('max_drawdown'):.4f}"
+        )
+    print("Trials:")
+    for t in info["trials"]:
+        status = t.get("status")
+        label = t.get("label")
+        sharpe = t.get("sharpe")
+        cagr = t.get("cagr")
+        if status == "ok":
+            print(
+                f"  - {label}: {status} Sharpe {sharpe:.4f} CAGR {cagr:.4f} Equity {t.get('final_equity'):.2f} elapsed {t.get('elapsed_s'):.2f}s"
+            )
+        else:
+            print(f"  - {label}: {status} error {str(t.get('error'))[:120]}")
+    return 0
+
+
+def _run_research_compare(config: Config, args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from parayabuck.research.experiment import compare_experiments
+    from parayabuck.research.persistence import ExperimentStore
+
+    store_a = ExperimentStore.load(Path(args.run_a))
+    store_b = ExperimentStore.load(Path(args.run_b))
+    comp = compare_experiments(store_a, store_b)
+    print(f"Compare: {args.run_a} vs {args.run_b}")
+    print(f"Common trials: {comp['common_trials']}")
+    if comp["only_in_a"]:
+        print(f"Only in A: {comp['only_in_a']}")
+    if comp["only_in_b"]:
+        print(f"Only in B: {comp['only_in_b']}")
+    for d in comp["deltas"]:
+        print(f"{d['label']} (id {d['trial_id']}):")
+        print(f"  CAGR delta {d['cagr_delta']:+.4f} (A {d['a']['cagr']:.4f} -> B {d['b']['cagr']:.4f})")
+        print(f"  Sharpe delta {d['sharpe_delta']:+.4f} (A {d['a']['sharpe']:.4f} -> B {d['b']['sharpe']:.4f})")
+        print(f"  Sortino delta {d['sortino_delta']:+.4f} MaxDD delta {d['max_drawdown_delta']:+.4f}")
+        print(
+            f"  Turnover delta {d['turnover_delta']:+.4f} Costs delta {d['costs_delta']:+.4f} Fills {d['a']['fill_count']}->{d['b']['fill_count']}"
+        )
+    if getattr(args, "output", None):
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(comp, indent=2, default=str), encoding="utf-8")
+        print(f"Wrote compare to {out}")
+    return 0
+
+
 __all__ = ["backtest_main", "main"]
-
-
-if __name__ == "__main__":
-    main()

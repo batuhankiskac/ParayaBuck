@@ -1,0 +1,1137 @@
+"""PortfolioStateRepository — persistence / DB.
+
+Extracted from runtime_service.py to isolate DB concerns. Knows nothing about
+strategy decisions, risk policy, or broker APIs.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import threading
+from dataclasses import asdict
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
+
+from parayabuck.core.models import Market
+from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
+from parayabuck.execution.portfolio import PortfolioOrderRequest, RiskOverlayDecision
+from parayabuck.logger import get_logger
+from parayabuck.portfolio.models import TargetPortfolio
+from parayabuck.portfolio.runtime_models import (
+    TERMINAL_ORDER_STATUSES_SQL,
+    OpenPortfolioOrder,
+    RebalanceExecutionState,
+    _decision_id,
+)
+from parayabuck.storage import SQLiteStore
+
+log = get_logger("parayabuck.portfolio.runtime_repository")
+
+
+class PortfolioStateRepository:
+    def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
+        self.store = store or SQLiteStore(path)
+        self._owns_store = store is None
+        self._lock = threading.RLock()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS portfolio_runtime_sessions (
+                    session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL,
+                    configuration_digest TEXT NOT NULL, mode TEXT NOT NULL,
+                    started_at TEXT NOT NULL, ended_at TEXT, status TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_decisions (
+                    decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL DEFAULT '', configuration_digest TEXT NOT NULL,
+                    decision_timestamp TEXT NOT NULL, market TEXT NOT NULL,
+                    strategy_name TEXT NOT NULL,
+                    target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
+                    UNIQUE(account_id, configuration_digest, decision_timestamp, market),
+                    FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_orders (
+                    client_order_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL, market TEXT NOT NULL, side TEXT NOT NULL,
+                    quantity REAL NOT NULL, reference_price REAL NOT NULL,
+                    status TEXT NOT NULL, broker_order_id TEXT NOT NULL DEFAULT '',
+                    cumulative_filled_quantity REAL NOT NULL DEFAULT 0,
+                    average_fill_price REAL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_fills (
+                    activity_id TEXT PRIMARY KEY, client_order_id TEXT NOT NULL,
+                    occurred_at TEXT NOT NULL, quantity REAL NOT NULL,
+                    price REAL NOT NULL, fee REAL NOT NULL,
+                    realized_pnl REAL NOT NULL, unrealized_pnl REAL NOT NULL,
+                    slippage REAL NOT NULL,
+                    FOREIGN KEY(client_order_id) REFERENCES portfolio_orders(client_order_id)
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_high_water (
+                    account_id TEXT PRIMARY KEY, equity REAL NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_ownership_adjustments (
+                    adjustment_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    kind TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    consumed_quantity REAL NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_rebalance_executions (
+                    decision_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    buy_orders_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES portfolio_decisions(decision_id)
+                );
+                """
+            )
+            session_columns = {
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_runtime_sessions)")
+            }
+            if "manifest_checksum" in session_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_runtime_sessions RENAME COLUMN manifest_checksum TO configuration_digest"
+                )
+            if "stage" in session_columns:
+                self.store.connection.execute("ALTER TABLE portfolio_runtime_sessions RENAME COLUMN stage TO mode")
+            decision_columns = {
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_decisions)")
+            }
+            if "manifest_checksum" in decision_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_decisions RENAME COLUMN manifest_checksum TO configuration_digest"
+                )
+            if "account_id" not in decision_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_decisions ADD COLUMN account_id TEXT NOT NULL DEFAULT ''"
+                )
+            self._rebuild_decisions_unique_constraint()
+            self.store.connection.execute(
+                """UPDATE portfolio_decisions SET account_id = COALESCE((
+                       SELECT s.account_id FROM portfolio_runtime_sessions s
+                       WHERE s.session_id = portfolio_decisions.session_id
+                   ), '') WHERE account_id = ''"""
+            )
+            columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")}
+            if "cumulative_filled_quantity" not in columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_orders ADD COLUMN cumulative_filled_quantity REAL NOT NULL DEFAULT 0"
+                )
+                # Legacy databases kept fills in portfolio_fills while the
+                # orders table had no cumulative quantity. Restore the real
+                # bookkeeping instead of leaving migrated orders at zero.
+                self.store.connection.execute(
+                    """UPDATE portfolio_orders
+                       SET cumulative_filled_quantity = COALESCE((
+                           SELECT SUM(f.quantity) FROM portfolio_fills f
+                           WHERE f.client_order_id = portfolio_orders.client_order_id
+                       ), 0)
+                       WHERE cumulative_filled_quantity = 0"""
+                )
+            if "average_fill_price" not in columns:
+                self.store.connection.execute("ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL")
+                self.store.connection.execute(
+                    """UPDATE portfolio_orders
+                       SET average_fill_price = (
+                           SELECT SUM(f.quantity * f.price) / NULLIF(SUM(f.quantity), 0)
+                           FROM portfolio_fills f
+                           WHERE f.client_order_id = portfolio_orders.client_order_id
+                       )
+                       WHERE average_fill_price IS NULL"""
+                )
+            fill_columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_fills)")}
+            # Execution-quality capture (telemetry, REPORT ONLY): submission ->
+            # fill delay per fill. Nullable; legacy rows stay valid.
+            if "fill_delay_seconds" not in fill_columns:
+                self.store.connection.execute("ALTER TABLE portfolio_fills ADD COLUMN fill_delay_seconds REAL")
+                self.store.connection.execute(
+                    """UPDATE portfolio_fills
+                       SET fill_delay_seconds = (
+                           SELECT CASE
+                               WHEN o.created_at IS NOT NULL AND
+                                    julianday(portfolio_fills.occurred_at) >=
+                                    julianday(o.created_at)
+                               THEN (julianday(portfolio_fills.occurred_at)
+                                     - julianday(o.created_at)) * 86400.0
+                               ELSE NULL
+                           END
+                           FROM portfolio_orders o
+                           WHERE o.client_order_id = portfolio_fills.client_order_id
+                       )
+                       WHERE fill_delay_seconds IS NULL"""
+                )
+            self._ensure_hot_path_indexes()
+            # Epoch for monotonic peak: old history must not undo an explicit
+            # operator risk-epoch reset. The epoch is stored alongside
+            # high_water (and the sidecar JSON) and every persisted RiskState
+            # row carries its epoch. A missing sidecar restores the max peak
+            # only from rows/values whose epoch equals the current epoch.
+            hw_columns = {
+                str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_high_water)")
+            }
+            if "epoch" not in hw_columns:
+                self.store.connection.execute(
+                    "ALTER TABLE portfolio_high_water ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0"
+                )
+
+    def _ensure_hot_path_indexes(self) -> None:
+        """Additive, backward-compatible hot-path indexes (idempotent).
+
+        Created last so legacy databases (which gain ``account_id`` columns
+        and a rebuilt ``portfolio_decisions`` table earlier in ``_migrate``)
+        end up with the same final schema as fresh ones. All consumers are
+        read-only dashboard/report queries; index maintenance is amortized
+        against the existing per-transaction writes.
+        """
+        self.store.connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_portfolio_runtime_sessions_account
+                ON portfolio_runtime_sessions(account_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_account_ts
+                ON portfolio_decisions(account_id, decision_timestamp);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_session_id
+                ON portfolio_decisions(session_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_orders_decision_id
+                ON portfolio_orders(decision_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_fills_client_order_id
+                ON portfolio_fills(client_order_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_ownership_adjustments_account
+                ON portfolio_ownership_adjustments(account_id, consumed_quantity);
+            """
+        )
+
+    def _rebuild_decisions_unique_constraint(self) -> None:
+        """Replace the pre-account UNIQUE(configuration_digest, timestamp, market)
+        with UNIQUE(account_id, configuration_digest, timestamp, market).
+
+        SQLite cannot drop a UNIQUE constraint in place, so the table is
+        rebuilt (the documented foreign-key-preserving recipe) whenever the
+        legacy definition is detected. Fresh databases already carry the new
+        constraint and skip the rebuild.
+        """
+        row = self.store.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'portfolio_decisions'"
+        ).fetchone()
+        if row is None:
+            return
+        create_sql = str(row[0])
+        if "UNIQUE(account_id, configuration_digest, decision_timestamp, market)" in create_sql:
+            return
+        self.store.connection.execute("PRAGMA foreign_keys=OFF")
+        try:
+            # An interrupted previous rebuild must not brick startup: the
+            # staging table is dropped and recreated idempotently.
+            self.store.connection.execute("DROP TABLE IF EXISTS portfolio_decisions_account_scoped")
+            self.store.connection.execute(
+                """
+                CREATE TABLE portfolio_decisions_account_scoped (
+                    decision_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL DEFAULT '', configuration_digest TEXT NOT NULL,
+                    decision_timestamp TEXT NOT NULL, market TEXT NOT NULL,
+                    strategy_name TEXT NOT NULL,
+                    target_json TEXT NOT NULL, risk_json TEXT NOT NULL,
+                    UNIQUE(account_id, configuration_digest, decision_timestamp, market),
+                    FOREIGN KEY(session_id) REFERENCES portfolio_runtime_sessions(session_id)
+                )
+                """
+            )
+            self.store.connection.execute(
+                """
+                INSERT INTO portfolio_decisions_account_scoped(
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                )
+                SELECT decision_id, session_id, account_id, configuration_digest,
+                       decision_timestamp, market, strategy_name, target_json, risk_json
+                FROM portfolio_decisions
+                """
+            )
+            self.store.connection.execute("DROP TABLE portfolio_decisions")
+            self.store.connection.execute(
+                "ALTER TABLE portfolio_decisions_account_scoped RENAME TO portfolio_decisions"
+            )
+            # The INSERT above opened a transaction; commit before restoring
+            # foreign keys, otherwise the pragma would be a silent no-op.
+            self.store.connection.commit()
+        finally:
+            self.store.connection.execute("PRAGMA foreign_keys=ON")
+
+    def begin_session(self, account_id: str, configuration_digest: str, mode: str) -> str:
+        session_id = uuid4().hex
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_runtime_sessions(
+                    session_id, account_id, configuration_digest, mode, started_at, status
+                ) VALUES (?, ?, ?, ?, ?, 'running')""",
+                (
+                    session_id,
+                    account_id,
+                    configuration_digest,
+                    mode,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+        return session_id
+
+    def end_session(self, session_id: str, status: str) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_runtime_sessions
+                   SET ended_at = ?, status = ? WHERE session_id = ?""",
+                (datetime.now(UTC).isoformat(), status, session_id),
+            )
+
+    def has_decision(self, account_id: str, configuration_digest: str, timestamp: datetime, market: Market) -> bool:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT 1 FROM portfolio_decisions
+                   WHERE account_id = ? AND configuration_digest = ?
+                     AND decision_timestamp = ? AND market = ?""",
+                (account_id, configuration_digest, timestamp.isoformat(), market.value),
+            ).fetchone()
+        return row is not None
+
+    def latest_decision_timestamp(self, account_id: str, configuration_digest: str, market: Market) -> datetime | None:
+        """Return the last persisted decision boundary for restart-safe scheduling."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT MAX(decision_timestamp) FROM portfolio_decisions
+                   WHERE account_id = ? AND configuration_digest = ? AND market = ?""",
+                (account_id, configuration_digest, market.value),
+            ).fetchone()
+        return datetime.fromisoformat(str(row[0])) if row and row[0] is not None else None
+
+    def record_decision(
+        self,
+        session_id: str,
+        account_id: str,
+        configuration_digest: str,
+        target: TargetPortfolio,
+        risk: RiskOverlayDecision,
+        market: Market,
+    ) -> str:
+        """Persist one decision (without orders). Prefer ``record_decision_with_orders`` for crash-consistency."""
+        decision_id: str = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_decisions(
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    decision_id,
+                    session_id,
+                    account_id,
+                    configuration_digest,
+                    target.decision_timestamp.isoformat(),
+                    market.value,
+                    target.strategy_name,
+                    json.dumps(target.to_dict(), sort_keys=True, default=str),
+                    json.dumps(asdict(risk), sort_keys=True, default=str),
+                ),
+            )
+        return decision_id
+
+    def record_decision_with_orders(
+        self,
+        session_id: str,
+        account_id: str,
+        configuration_digest: str,
+        target: TargetPortfolio,
+        risk: RiskOverlayDecision,
+        market: Market,
+        orders: tuple[PortfolioOrderRequest, ...],
+        *,
+        initial_status: str = "submitting",
+        buy_orders_json: str | None = None,
+        rebalance_phase: str | None = None,
+    ) -> str:
+        """Atomically persist a decision, its orders, and optional rebalance phase.
+
+        Crash-consistency: the decision row, every order row for that decision,
+        and (when ``rebalance_phase`` is set) the rebalance-execution row are
+        written in a SINGLE SQLite transaction (``BEGIN IMMEDIATE`` via
+        ``with connection``). A crash mid-write cannot leave a half-decision
+        (decision without orders) or a half-rebalance (decision+orders without
+        the sell_pending marker). The transaction is bounded by ``store.lock``
+        plus WAL ``busy_timeout=5000`` so concurrent writers serialize.
+        """
+        decision_id: str = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
+        created_at = datetime.now(UTC).isoformat()
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_decisions(
+                    decision_id, session_id, account_id, configuration_digest,
+                    decision_timestamp, market, strategy_name, target_json, risk_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    decision_id,
+                    session_id,
+                    account_id,
+                    configuration_digest,
+                    target.decision_timestamp.isoformat(),
+                    market.value,
+                    target.strategy_name,
+                    json.dumps(target.to_dict(), sort_keys=True, default=str),
+                    json.dumps(asdict(risk), sort_keys=True, default=str),
+                ),
+            )
+            for order in orders:
+                self.store.connection.execute(
+                    """INSERT OR IGNORE INTO portfolio_orders(
+                        client_order_id, decision_id, symbol, market, side, quantity,
+                        reference_price, status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        order.client_order_id,
+                        decision_id,
+                        order.symbol,
+                        order.market.value,
+                        order.side.value,
+                        order.quantity,
+                        order.reference_price,
+                        initial_status,
+                        created_at,
+                    ),
+                )
+            if rebalance_phase is not None:
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_rebalance_executions(
+                        decision_id, account_id, market, phase, status, buy_orders_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(decision_id) DO UPDATE SET
+                        phase = excluded.phase,
+                        status = excluded.status,
+                        buy_orders_json = excluded.buy_orders_json,
+                        updated_at = excluded.updated_at""",
+                    (
+                        decision_id,
+                        account_id,
+                        market.value,
+                        rebalance_phase,
+                        "active",
+                        buy_orders_json or "[]",
+                        created_at,
+                    ),
+                )
+        return decision_id
+
+    def record_order(self, order: PortfolioOrderRequest, status: str) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_orders(
+                    client_order_id, decision_id, symbol, market, side, quantity,
+                    reference_price, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    order.client_order_id,
+                    order.decision_id,
+                    order.symbol,
+                    order.market.value,
+                    order.side.value,
+                    order.quantity,
+                    order.reference_price,
+                    status,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def save_rebalance_execution(
+        self,
+        decision_id: str,
+        account_id: str,
+        market: Market,
+        phase: str,
+        *,
+        buy_orders_json: str = "[]",
+        status: str = "active",
+    ) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_rebalance_executions(
+                    decision_id, account_id, market, phase, status, buy_orders_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(decision_id) DO UPDATE SET
+                    phase = excluded.phase,
+                    status = excluded.status,
+                    buy_orders_json = excluded.buy_orders_json,
+                    updated_at = excluded.updated_at""",
+                (
+                    decision_id,
+                    account_id,
+                    market.value,
+                    phase,
+                    status,
+                    buy_orders_json,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def update_rebalance_execution(
+        self,
+        decision_id: str,
+        phase: str,
+        *,
+        status: str | None = None,
+    ) -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_rebalance_executions
+                   SET phase = ?, status = COALESCE(?, status), updated_at = ?
+                   WHERE decision_id = ?""",
+                (phase, status, datetime.now(UTC).isoformat(), decision_id),
+            )
+
+    def current_rebalance_execution(self, account_id: str, market: Market) -> RebalanceExecutionState | None:
+        """The newest persisted rebalance execution for one account/market.
+
+        Includes completed and blocked executions so callers can distinguish
+        "no two-phase rebalance has ever run" from "the last one is done".
+        """
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT decision_id, account_id, market, phase, status, updated_at
+                   FROM portfolio_rebalance_executions
+                   WHERE account_id = ? AND market = ?
+                   ORDER BY updated_at DESC LIMIT 1""",
+                (account_id, market.value),
+            ).fetchall()
+        if not rows:
+            return None
+        row = rows[0]
+        return RebalanceExecutionState(
+            decision_id=str(row[0]),
+            account_id=str(row[1]),
+            market=Market(str(row[2])),
+            phase=str(row[3]),
+            status=str(row[4]),
+            updated_at=datetime.fromisoformat(str(row[5])),
+        )
+
+    def decision_row(self, decision_id: str) -> dict[str, object] | None:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT target_json, risk_json, market, decision_timestamp
+                   FROM portfolio_decisions WHERE decision_id = ?""",
+                (decision_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "target_json": str(row[0]),
+            "risk_json": str(row[1]),
+            "market": str(row[2]),
+            "decision_timestamp": str(row[3]),
+        }
+
+    def rebalance_buy_orders(self, decision_id: str) -> tuple[dict[str, object], ...]:
+        """The BUY orders planned at decision time (deferred for the SELL phase).
+
+        Used as a price fallback when restart recovery runs before warmup has
+        repopulated history: the deferred BUY side must still be re-plannable.
+        """
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT buy_orders_json FROM portfolio_rebalance_executions WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+        if row is None or not row[0]:
+            return ()
+        try:
+            parsed = json.loads(str(row[0]))
+        except (TypeError, ValueError):
+            return ()
+        return tuple(dict(item) for item in parsed if isinstance(item, dict))
+
+    def orders_for_decision(self, decision_id: str, side: str | None = None) -> tuple[dict[str, object], ...]:
+        """Order rows attributed to one decision (used by rebalance recovery)."""
+        query = """SELECT client_order_id, symbol, market, side, quantity,
+                          status, cumulative_filled_quantity
+                   FROM portfolio_orders WHERE decision_id = ?"""
+        params: tuple[object, ...] = (decision_id,)
+        if side is not None:
+            query += " AND side = ?"
+            params = (decision_id, side)
+        query += " ORDER BY created_at"
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+        return tuple(
+            {
+                "client_order_id": str(row[0]),
+                "symbol": str(row[1]),
+                "market": str(row[2]),
+                "side": str(row[3]),
+                "quantity": float(row[4] or 0.0),
+                "status": str(row[5]),
+                "cumulative_filled_quantity": float(row[6] or 0.0),
+            }
+            for row in rows
+        )
+
+    def update_order(self, client_order_id: str, status: str, broker_order_id: str = "") -> None:
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?
+                   WHERE client_order_id = ?""",
+                (status, broker_order_id, client_order_id),
+            )
+
+    def record_protective_order(
+        self,
+        account_id: str,
+        client_order_id: str,
+        symbol: str,
+        market: Market,
+        quantity: float,
+        reference_price: float,
+    ) -> None:
+        """Record a protective/emergency stop for a portfolio-owned position.
+
+        The stop is inserted as a SELL leg under the owning entry's decision,
+        so a later fill flows through ``apply_trade_update`` and decrements
+        the net owned quantity exactly like a planned exit. Without this, a
+        stop fill would leave the repository claiming ownership of a flat
+        broker position forever. ``reference_price`` is the stop trigger price
+        so slippage is measured against the stop, not the entry.
+        """
+        with self.store.lock, self.store.connection:
+            lineage = self._latest_entry_lineage(account_id, symbol, market)
+            if lineage is None:
+                # No portfolio entry lineage: booking a SELL leg would violate
+                # the decision foreign key and could grant managed ownership
+                # without a matching buy. The stop itself is already accepted
+                # broker-side; ownership release for it is a reconcile concern.
+                log.error(
+                    "Protective stop for %s has no portfolio entry lineage; ownership bookkeeping skipped",
+                    symbol,
+                )
+                return
+            decision_id, _entry_reference = lineage
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_orders(
+                    client_order_id, decision_id, symbol, market, side, quantity,
+                    reference_price, status, created_at
+                ) VALUES (?, ?, ?, ?, 'sell', ?, ?, 'submitted', ?)""",
+                (
+                    client_order_id,
+                    decision_id,
+                    symbol,
+                    market.value,
+                    quantity,
+                    reference_price,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def clear_stale_ownership(self, account_id: str, symbol: str, market: Market) -> float:
+        """Record an explicit ownership reconciliation adjustment when the
+        broker holds no position and no real fill could be recovered.
+
+        This never books a synthetic precise SELL fill at an invented price:
+        an unknown exit is an anomaly, not a normal trading fill. The
+        adjustment reduces owned quantity and can be consumed later by a real
+        fill arriving after reconciliation (stream downtime race). Idempotent:
+        returns the adjusted quantity (0.0 when nothing is owned anymore)."""
+        owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
+        if owned <= 1e-12:
+            return 0.0
+        self.record_ownership_adjustment(
+            account_id,
+            symbol,
+            market,
+            owned,
+            kind="stale_ownership_clear",
+            note="broker position absent and no real fill found in activity history",
+        )
+        log.warning(
+            "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s (no broker position found)",
+            account_id,
+            symbol,
+            owned,
+        )
+        return owned
+
+    def record_ownership_adjustment(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        quantity: float,
+        *,
+        kind: str,
+        note: str = "",
+    ) -> None:
+        """Persist an explicit ownership reconciliation adjustment/anomaly."""
+        if not kind.strip():
+            raise ValueError("Adjustment kind is required")
+        if not math.isfinite(quantity) or quantity <= 0:
+            raise ValueError("Adjustment quantity must be finite and positive")
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """INSERT INTO portfolio_ownership_adjustments(
+                    adjustment_id, account_id, symbol, market, quantity, kind,
+                    note, created_at, consumed_quantity
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+                (
+                    uuid4().hex,
+                    account_id,
+                    symbol,
+                    market.value,
+                    quantity,
+                    kind,
+                    note,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def _consume_ownership_adjustments_tx(
+        self, account_id: str, symbol: str, market: Market, sell_delta: float
+    ) -> None:
+        """Consume pending stale-clear adjustments up to a real SELL fill.
+
+        The race: broker stop fills while the stream is delayed; reconcile
+        sees a flat broker and records an adjustment; the real fill arrives
+        late. The real fill is the ground truth, so it cancels the provisional
+        adjustment instead of booking a second SELL on top of it."""
+        if sell_delta <= 0:
+            return
+        remaining = float(sell_delta)
+        rows = self.store.connection.execute(
+            """SELECT adjustment_id, quantity, consumed_quantity
+               FROM portfolio_ownership_adjustments
+               WHERE account_id = ? AND symbol = ? AND market = ? AND kind = 'stale_ownership_clear'
+                 AND consumed_quantity < quantity
+               ORDER BY created_at""",
+            (account_id, symbol, market.value),
+        ).fetchall()
+        for adjustment_id, quantity, consumed in rows:
+            if remaining <= 1e-12:
+                break
+            capacity = float(quantity) - float(consumed)
+            consume = min(capacity, remaining)
+            self.store.connection.execute(
+                """UPDATE portfolio_ownership_adjustments
+                   SET consumed_quantity = consumed_quantity + ?
+                   WHERE adjustment_id = ?""",
+                (consume, str(adjustment_id)),
+            )
+            remaining -= consume
+
+    def _latest_entry_lineage(self, account_id: str, symbol: str, market: Market) -> tuple[str, float] | None:
+        """Decision id and reference price of the most recent BUY entry row."""
+        row = self.store.connection.execute(
+            """
+            SELECT o.decision_id, o.reference_price FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE o.symbol = ? AND o.market = ? AND o.side = 'buy'
+              AND s.account_id = ?
+            ORDER BY o.created_at DESC LIMIT 1
+            """,
+            (symbol, market.value, account_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row[0]), float(row[1] or 0.0)
+
+    def has_order(self, client_order_id: str) -> bool:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT 1 FROM portfolio_orders WHERE client_order_id = ?",
+                (client_order_id,),
+            ).fetchone()
+        return row is not None
+
+    def open_orders(self, account_id: str = "unknown", market: Market | None = None) -> tuple[OpenPortfolioOrder, ...]:
+        """Non-terminal portfolio orders attributed to one account.
+
+        Orders are attributed through the persisted decision/session lineage,
+        so manual/external broker orders can never appear here: a manual
+        order must not suppress ownership drift or consume universe pins.
+        """
+        query = f"""
+            SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                   o.cumulative_filled_quantity
+            FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ? AND o.status NOT IN ({TERMINAL_ORDER_STATUSES_SQL})
+        """
+        params: tuple[object, ...] = (account_id,)
+        if market is not None:
+            query += " AND o.market = ?"
+            params = (account_id, market.value)
+        query += " ORDER BY o.created_at"
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+        return tuple(
+            OpenPortfolioOrder(
+                client_order_id=str(row[0]),
+                symbol=str(row[1]),
+                market=Market(str(row[2])),
+                side=str(row[3]),
+                quantity=float(row[4] or 0.0),
+                cumulative_filled_quantity=float(row[5] or 0.0),
+            )
+            for row in rows
+        )
+
+    def apply_trade_update(
+        self,
+        *,
+        client_order_id: str,
+        broker_order_id: str,
+        status: str,
+        cumulative_filled_quantity: float,
+        average_fill_price: float | None,
+        occurred_at: datetime,
+        activity_id: str,
+        fee: float,
+        realized_pnl: float,
+        unrealized_pnl: float,
+    ) -> bool:
+        with self.store.lock, self.store.connection:
+            row = self.store.connection.execute(
+                """SELECT o.cumulative_filled_quantity, o.reference_price, o.side,
+                          o.market, s.account_id, o.created_at
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE o.client_order_id = ?""",
+                (client_order_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            previous = float(row[0] or 0.0)
+            reference = float(row[1] or 0.0)
+            side = str(row[2])
+            market = str(row[3] or "")
+            account_id = str(row[4])
+            created_at = str(row[5]) if row[5] is not None else None
+            # Alpaca deducts the taker fee from the acquired units on crypto
+            # buys (position = fill qty * (1 - fee)); the gross fill would
+            # overstate ownership by exactly the fee, and after a partial
+            # exit that constant offset grows beyond the fee-reserve band and
+            # halts the runtime on ownership drift. Book the NET quantity so
+            # repository ownership tracks broker positions exactly. Sells are
+            # left gross: the position drops by the full sold quantity.
+            if side == "buy" and market == "crypto":
+                cumulative_filled_quantity = float(
+                    Decimal(str(cumulative_filled_quantity)) * (Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
+                )
+            fill_delta = max(0.0, cumulative_filled_quantity - previous)
+            delay_seconds: float | None = None
+            if created_at:
+                try:
+                    raw_delay = (occurred_at - datetime.fromisoformat(created_at)).total_seconds()
+                    if raw_delay >= 0:
+                        delay_seconds = raw_delay
+                except (TypeError, ValueError):
+                    delay_seconds = None
+            self.store.connection.execute(
+                """UPDATE portfolio_orders SET status = ?, broker_order_id = ?,
+                   cumulative_filled_quantity = ?, average_fill_price = ?
+                   WHERE client_order_id = ?""",
+                (
+                    status,
+                    broker_order_id,
+                    max(previous, cumulative_filled_quantity),
+                    average_fill_price,
+                    client_order_id,
+                ),
+            )
+            if fill_delta > 0 and average_fill_price is not None:
+                direction = 1.0 if side == "buy" else -1.0
+                slippage = (average_fill_price - reference) * fill_delta * direction
+                self.store.connection.execute(
+                    """INSERT OR IGNORE INTO portfolio_fills(
+                        activity_id, client_order_id, occurred_at, quantity, price,
+                        fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        activity_id,
+                        client_order_id,
+                        occurred_at.isoformat(),
+                        fill_delta,
+                        average_fill_price,
+                        fee,
+                        realized_pnl,
+                        unrealized_pnl,
+                        slippage,
+                        delay_seconds,
+                    ),
+                )
+                if side == "sell":
+                    # A real SELL fill proves the sale that a stale-clear
+                    # adjustment assumed; consume the adjustment instead of
+                    # booking a second SELL on top of it.
+                    symbol = self.store.connection.execute(
+                        "SELECT symbol, market FROM portfolio_orders WHERE client_order_id = ?",
+                        (client_order_id,),
+                    ).fetchone()
+                    if symbol is not None:
+                        self._consume_ownership_adjustments_tx(
+                            account_id,
+                            str(symbol[0]),
+                            Market(str(symbol[1])),
+                            fill_delta,
+                        )
+        return True
+
+    def update_high_water(self, account_id: str, equity: float) -> float:
+        with self.store.lock, self.store.connection:
+            row = self.store.connection.execute(
+                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+            if row is not None:
+                existing_equity = float(row[0])
+                existing_epoch = int(row[1] or 0)
+                high_water = max(existing_equity, equity)
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                    (account_id, high_water, datetime.now(UTC).isoformat(), existing_epoch),
+                )
+            else:
+                high_water = equity
+                self.store.connection.execute(
+                    """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                    (account_id, high_water, datetime.now(UTC).isoformat(), 0),
+                )
+        return high_water
+
+    def high_water(self, account_id: str) -> float:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT equity FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        return float(row[0]) if row is not None else 0.0
+
+    def high_water_with_epoch(self, account_id: str) -> tuple[float, int]:
+        """Return (equity, epoch) for ``account_id``; epoch defaults to 0."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        if row is None:
+            return 0.0, 0
+        return float(row[0]), int(row[1] or 0)
+
+    def high_water_epoch(self, account_id: str) -> int:
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        return int(row[0] or 0) if row is not None else 0
+
+    def reset_high_water(self, account_id: str, equity: float) -> None:
+        """Rebase the persisted portfolio high-water to ``equity`` (a new
+        risk epoch started by the operator after a verified drawdown
+        incident). Unlike ``update_high_water`` this REPLACES the baseline
+        instead of taking the max, so decisions resume measuring drawdown
+        from the reset-time equity."""
+        with self.store.lock, self.store.connection:
+            row = self.store.connection.execute(
+                "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+            new_epoch = int(row[0] or 0) + 1 if row is not None else 1
+            self.store.connection.execute(
+                """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     equity = excluded.equity, updated_at = excluded.updated_at, epoch = excluded.epoch""",
+                (account_id, equity, datetime.now(UTC).isoformat(), new_epoch),
+            )
+
+    def owned_quantities(self, account_id: str = "unknown", market: Market | None = None) -> dict[str, float]:
+        """Net filled quantity per symbol for one account.
+
+        Orders are attributed to an account through the persisted
+        decision/session lineage, so a stale paper session can never mark
+        symbols as owned for a different (live) account.
+        Delegates pure net calculation to ``runtime_ownership`` for testability.
+        """
+        query = """
+            SELECT o.symbol, o.market, o.side, o.cumulative_filled_quantity
+            FROM portfolio_orders o
+            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+            JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+            WHERE s.account_id = ?
+        """
+        params: tuple[object, ...] = (account_id,)
+        if market is not None:
+            query += " AND o.market = ?"
+            params = (account_id, market.value)
+        with self.store.lock:
+            rows = self.store.connection.execute(query, params).fetchall()
+            adjustments = self.store.connection.execute(
+                """SELECT symbol, SUM(quantity - consumed_quantity)
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND consumed_quantity < quantity
+                   GROUP BY symbol""",
+                (account_id,),
+            ).fetchall()
+        # Pure computation delegated
+        from parayabuck.portfolio.runtime_ownership import net_owned_quantities
+
+        order_tuples = [(str(r[0]), str(r[2]), float(r[3] or 0.0)) for r in rows]
+        adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
+        return net_owned_quantities(order_tuples, adj_tuples)
+
+    def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
+        """Symbols the portfolio path still owns: net filled quantity > 0.
+
+        Ownership is computed from cumulative fills (buy minus sell) so a
+        partially or fully exited position loses ``managed`` status exactly
+        when its broker quantity reaches zero. This is the authoritative
+        portfolio-side input to the broker's unified managed-position view.
+        """
+        return set(self.owned_quantities(account_id, market))
+
+    def ownership_adjustments(self, account_id: str = "unknown") -> tuple[dict[str, object], ...]:
+        """Outstanding ownership reconciliation adjustments/anomalies."""
+        with self.store.lock:
+            rows = self.store.connection.execute(
+                """SELECT adjustment_id, symbol, market, quantity, consumed_quantity,
+                          kind, note, created_at
+                   FROM portfolio_ownership_adjustments
+                   WHERE account_id = ? AND consumed_quantity < quantity
+                   ORDER BY created_at""",
+                (account_id,),
+            ).fetchall()
+        return tuple(
+            {
+                "adjustment_id": str(row[0]),
+                "symbol": str(row[1]),
+                "market": str(row[2]),
+                "quantity": float(row[3]),
+                "consumed_quantity": float(row[4]),
+                "outstanding_quantity": float(row[3]) - float(row[4]),
+                "kind": str(row[5]),
+                "note": str(row[6]),
+                "created_at": str(row[7]),
+            }
+            for row in rows
+        )
+
+    def operations_snapshot(self, account_id: str) -> dict[str, object]:
+        """Operator-facing snapshot scoped to one account.
+
+        Every section (last decision, pending orders, recent fills) is
+        attributed through the persisted fills -> orders -> decisions ->
+        sessions -> account lineage, so switching credentials can never show
+        another account's fills or orders.
+        """
+        with self.store.lock:
+            last_decision = self.store.connection.execute(
+                """SELECT decision_timestamp, strategy_name, market, target_json, risk_json
+                   FROM portfolio_decisions
+                   WHERE account_id = ?
+                   ORDER BY decision_timestamp DESC LIMIT 1""",
+                (account_id,),
+            ).fetchone()
+            pending = self.store.connection.execute(
+                f"""SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                          o.status, o.created_at
+                   FROM portfolio_orders o
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ?
+                     AND o.status NOT IN ({TERMINAL_ORDER_STATUSES_SQL})
+                   ORDER BY o.created_at DESC LIMIT 25""",
+                (account_id,),
+            ).fetchall()
+            fills = self.store.connection.execute(
+                """SELECT f.activity_id, f.client_order_id, f.occurred_at, f.quantity,
+                          f.price, f.fee, f.realized_pnl, f.unrealized_pnl, f.slippage
+                   FROM portfolio_fills f
+                   JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
+                   JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+                   JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+                   WHERE s.account_id = ?
+                   ORDER BY f.occurred_at DESC LIMIT 25""",
+                (account_id,),
+            ).fetchall()
+        return {
+            "last_decision": (
+                {
+                    "timestamp": str(last_decision[0]),
+                    "strategy": str(last_decision[1]),
+                    "market": str(last_decision[2]),
+                    "target": json.loads(str(last_decision[3])),
+                    "risk": json.loads(str(last_decision[4])),
+                }
+                if last_decision is not None
+                else None
+            ),
+            "pending_orders": [
+                dict(
+                    zip(
+                        (
+                            "client_order_id",
+                            "symbol",
+                            "market",
+                            "side",
+                            "quantity",
+                            "status",
+                            "created_at",
+                        ),
+                        row,
+                        strict=True,
+                    )
+                )
+                for row in pending
+            ],
+            "recent_fills": [
+                dict(
+                    zip(
+                        (
+                            "activity_id",
+                            "client_order_id",
+                            "occurred_at",
+                            "quantity",
+                            "price",
+                            "fee",
+                            "realized_pnl",
+                            "unrealized_pnl",
+                            "slippage",
+                        ),
+                        row,
+                        strict=True,
+                    )
+                )
+                for row in fills
+            ],
+            "reconciliation_anomalies": list(self.ownership_adjustments(account_id)),
+        }
+
+    def close(self) -> None:
+        if self._owns_store:
+            self.store.acquire()
+            self.store.release()

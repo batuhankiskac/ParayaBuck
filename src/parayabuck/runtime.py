@@ -44,6 +44,15 @@ from parayabuck.markets.timeframes import (
 )
 from parayabuck.monitoring import alerts
 from parayabuck.monitoring import metrics as runtime_metrics_store
+
+try:
+    from parayabuck.monitoring import observe as _observe
+except Exception:  # pragma: no cover
+    _observe = None  # type: ignore
+try:
+    from parayabuck.monitoring.snapshot import SnapshotWriter
+except Exception:  # pragma: no cover
+    SnapshotWriter = None  # type: ignore
 from parayabuck.monitoring.incident import IncidentCategory
 from parayabuck.monitoring.paper_incident import automate_incident_recovery
 from parayabuck.monitoring.receipt import build_receipt, default_receipt_dir
@@ -343,6 +352,29 @@ class EngineRuntime:
         self._last_account_snapshot: AccountSnapshot | None = None
         self._last_account_snapshot_at: datetime | None = None
         self._last_reconciliation_at: datetime | None = None
+        # Observability snapshot writer — isolated, bounded, never blocks trading
+        self._snapshot_writer = None
+        try:
+            if SnapshotWriter is not None:
+                # Use config observability if available else defaults
+                snap_path = getattr(getattr(self, "app_config", None), "observability", None)
+                if snap_path is not None:
+                    snap_path = getattr(snap_path, "snapshot_path", None) or "data/runtime/health_snapshot.json"
+                    interval = getattr(
+                        getattr(self, "app_config", None).observability,
+                        "snapshot_interval_seconds",
+                        30.0,  # type: ignore[union-attr]
+                    )
+                else:
+                    snap_path = "data/runtime/health_snapshot.json"
+                    interval = 30.0
+                self._snapshot_writer = SnapshotWriter(
+                    path=snap_path,
+                    interval_seconds=interval,
+                    provider=lambda: self.health() if hasattr(self, "health") else None,
+                )
+        except Exception:
+            self._snapshot_writer = None
         self._circuit_breaker_reason: str | None = None
         self._series_watermarks: dict[tuple[str, str], datetime] = {}
         self._portfolio_watermarks: dict[Market, datetime] = {}
@@ -696,6 +728,20 @@ class EngineRuntime:
         }
 
     def start(self) -> None:
+        try:
+            if _observe is not None:
+                _observe.on_runtime_started(
+                    session_id=getattr(self, "_session_id", None),
+                    mode=getattr(self, "mode", None).value if hasattr(self, "mode") else None,  # type: ignore[union-attr]
+                    pid=None,
+                )
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_snapshot_writer", None) is not None:
+                self._snapshot_writer.start()  # type: ignore[union-attr]
+        except Exception:
+            pass
         if self._running:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
@@ -1515,18 +1561,37 @@ class EngineRuntime:
             self._state = "stopping"
             self._running = False
             self._stop_event.set()
-            try:
+        try:
+            if _observe is not None:
+                _observe.on_runtime_stopping(session_id=getattr(self, "_session_id", None), reason="stop")
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_snapshot_writer", None) is not None:
+                self._snapshot_writer.write_stopped()  # type: ignore[union-attr]
+                self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_events") and hasattr(self._events, "put_nowait"):
                 self._events.put_nowait(None)
-            except queue.Full:
+        except queue.Full:
+            try:
                 with contextlib.suppress(queue.Empty):
-                    self._events.get_nowait()
+                    if hasattr(self, "_events"):
+                        self._events.get_nowait()
                 with contextlib.suppress(queue.Full):
-                    self._events.put_nowait(None)
-            for stream in (self.stream, self.trading_updates):
-                try:
-                    stream.stop()
-                except Exception as exc:
-                    log.warning("Stream stop warning: %s", exc)
+                    if hasattr(self, "_events"):
+                        self._events.put_nowait(None)
+            except Exception:
+                pass
+        for stream in (getattr(self, "stream", None), getattr(self, "trading_updates", None)):
+            if stream is None:
+                continue
+            try:
+                stream.stop()
+            except Exception as exc:
+                log.warning("Stream stop warning: %s", exc)
         # The join phase runs on EVERY stop attempt, not only the first: a
         # prior attempt may have timed out (stop_failed) with workers still
         # finishing. Re-running it guarantees storage below is closed only
@@ -2882,12 +2947,34 @@ class EngineRuntime:
             reasons.append(f"runtime_state:{self._state}")
         if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
             reasons.append("event_queue_stale")
-        if (
+        stale = (
             self._last_account_at is None
             or (datetime.now(UTC) - self._last_account_at).total_seconds()
             > self.config.maximum_account_age_for_entry_seconds
-        ):
+        )
+        if stale:
             reasons.append("account_snapshot_stale")
+            try:
+                if _observe is not None:
+                    age = None
+                    if self._last_account_at is not None:
+                        age = (datetime.now(UTC) - self._last_account_at).total_seconds()
+                    _observe.on_account_stale(
+                        age_seconds=age,
+                        session_id=getattr(self, "_session_id", None),
+                        account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
+                    )
+            except Exception:
+                pass
+        else:
+            try:
+                if _observe is not None:
+                    _observe.on_account_recovered(
+                        session_id=getattr(self, "_session_id", None),
+                        account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
+                    )
+            except Exception:
+                pass
         if self._circuit_breaker_reason:
             reasons.append(self._circuit_breaker_reason)
         relevant_stream = (

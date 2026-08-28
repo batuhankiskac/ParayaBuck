@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
+from typing import Any
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import verify_against_provider
@@ -48,6 +49,12 @@ from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 
 log = get_logger("parayabuck.portfolio.runtime_service")
 
+# Observability hook — isolated, never raises, lazy import inside functions to avoid cycles
+try:
+    from parayabuck.monitoring import observe as _observe
+except Exception:  # pragma: no cover
+    _observe = None  # type: ignore
+
 # Re-exports for backward compatibility (public facade)
 __all__ = [
     "REBALANCE_PHASE_BLOCKED",
@@ -65,6 +72,96 @@ __all__ = [
     "configuration_digest",
     "is_terminal_order_status",
 ]
+
+
+def _emit_decision_summary_safe(
+    *,
+    decision_id: str,
+    market: str | None = None,
+    strategy: str | None = None,
+    session_id: str | None = None,
+    account_id: str | None = None,
+    universe_version: str | None = None,
+    planned: list[Any] | tuple[Any, ...] | None = None,
+    submitted: list[Any] | tuple[Any, ...] | None = None,
+    no_trade_reason: str | None = None,
+) -> None:
+    try:
+        if _observe is None:
+            return
+        # Determine counts
+        sells = 0
+        buys = 0
+        if planned is not None:
+            try:
+                sells = sum(
+                    1
+                    for o in planned
+                    if getattr(o, "side", None) == "SELL"
+                    or getattr(o, "side", None) == "sell"
+                    or (isinstance(o, dict) and o.get("side") == "SELL")
+                )
+                buys = sum(
+                    1
+                    for o in planned
+                    if getattr(o, "side", None) == "BUY"
+                    or getattr(o, "side", None) == "buy"
+                    or (isinstance(o, dict) and o.get("side") == "BUY")
+                )
+                # fallback for PortfolioOrderRequest
+                if sells == 0 and buys == 0:
+                    # try string comparison
+                    for o in planned:
+                        s = str(getattr(o, "side", "")).upper()
+                        if s == "SELL":
+                            sells += 1
+                        elif s == "BUY":
+                            buys += 1
+            except Exception:
+                pass
+        sub = len(submitted) if submitted is not None else 0
+        # map no-trade reason if no orders
+        if not planned and not no_trade_reason:
+            no_trade_reason = "NO_TARGET_CHANGE"
+        elif planned is not None and len(planned) == 0 and not no_trade_reason:
+            no_trade_reason = "NO_TARGET_CHANGE"
+        _observe.on_decision_summary(
+            decision_id=decision_id,
+            market=str(market) if market else None,
+            strategy=strategy,
+            session_id=session_id,
+            account_id=account_id,
+            universe_version=universe_version,
+            planned_sell_count=sells,
+            planned_buy_count=buys,
+            submitted_count=sub,
+            no_trade_reason=no_trade_reason,
+        )
+    except Exception:
+        pass
+
+
+def _emit_rebalance_phase_safe(
+    decision_id: str,
+    from_phase: str | None,
+    to_phase: str | None,
+    market: str | None = None,
+    account_id: str | None = None,
+    session_id: str | None = None,
+) -> None:
+    try:
+        if _observe is None:
+            return
+        _observe.on_rebalance_phase_changed(
+            decision_id=decision_id,
+            market=str(market) if market else None,
+            account_id=account_id,
+            session_id=session_id,
+            from_phase=from_phase,
+            to_phase=to_phase,
+        )
+    except Exception:
+        pass
 
 
 class PortfolioRuntime:
@@ -437,7 +534,30 @@ class PortfolioRuntime:
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
+                _emit_decision_summary_safe(
+                    decision_id=current_rebalance.decision_id,
+                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    strategy=getattr(self, "strategy_name", None)
+                    or getattr(getattr(self, "strategy", None), "name", None),
+                    session_id=self.session_id,
+                    account_id=self.account_id,
+                    universe_version=self.universe_version,
+                    planned=(),
+                    submitted=(),
+                    no_trade_reason="SELL_PHASE_PENDING",
+                )
                 return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
+            _emit_decision_summary_safe(
+                decision_id=current_rebalance.decision_id,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                session_id=self.session_id,
+                account_id=self.account_id,
+                universe_version=self.universe_version,
+                planned=(),
+                submitted=(),
+                no_trade_reason="SELL_PHASE_PENDING",
+            )
             return PortfolioRuntimeResult(
                 current_rebalance.decision_id,
                 None,
@@ -625,6 +745,16 @@ class PortfolioRuntime:
             )
             # Orders are already persisted as submitting; submit them idempotently.
             submitted = self._submit_orders(orders)
+            _emit_decision_summary_safe(
+                decision_id=decision_id,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                session_id=self.session_id,
+                account_id=self.account_id,
+                universe_version=self.universe_version,
+                planned=orders,
+                submitted=submitted,
+            )
             return PortfolioRuntimeResult(
                 decision_id,
                 risk.target,
@@ -652,6 +782,24 @@ class PortfolioRuntime:
                 rebalance_phase=REBALANCE_PHASE_SELL_PENDING,
             )
             submitted = self._submit_orders(sells)
+            _emit_decision_summary_safe(
+                decision_id=decision_id,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+                session_id=self.session_id,
+                account_id=self.account_id,
+                universe_version=self.universe_version,
+                planned=orders,
+                submitted=submitted,
+            )
+            _emit_rebalance_phase_safe(
+                decision_id,
+                None,
+                REBALANCE_PHASE_SELL_PENDING,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                account_id=self.account_id,
+                session_id=self.session_id,
+            )
             return PortfolioRuntimeResult(
                 decision_id,
                 risk.target,
@@ -673,6 +821,16 @@ class PortfolioRuntime:
             initial_status="submitting",
         )
         submitted = self._submit_orders(buys)
+        _emit_decision_summary_safe(
+            decision_id=decision_id,
+            market=self.market.value if hasattr(self.market, "value") else str(self.market),
+            strategy=getattr(self, "strategy_name", None) or getattr(getattr(self, "strategy", None), "name", None),
+            session_id=self.session_id,
+            account_id=self.account_id,
+            universe_version=self.universe_version,
+            planned=orders,
+            submitted=submitted,
+        )
         return PortfolioRuntimeResult(
             decision_id,
             risk.target,
@@ -718,6 +876,14 @@ class PortfolioRuntime:
                 buys = resolved
             if buys and all(is_terminal_order_status(str(item["status"])) for item in buys):
                 self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_COMPLETE)
+                _emit_rebalance_phase_safe(
+                    current.decision_id,
+                    REBALANCE_PHASE_BUY_PENDING,
+                    REBALANCE_PHASE_COMPLETE,
+                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    account_id=self.account_id,
+                    session_id=self.session_id,
+                )
                 return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_complete")
             return None
         # sell_pending: wait until every required sell is terminal.
@@ -800,6 +966,14 @@ class PortfolioRuntime:
         decision = self.repository.decision_row(decision_id)
         if decision is None:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BLOCKED)
+            _emit_rebalance_phase_safe(
+                decision_id,
+                REBALANCE_PHASE_BUY_READY,
+                REBALANCE_PHASE_BLOCKED,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                account_id=self.account_id,
+                session_id=self.session_id,
+            )
             return None
         try:
             adjusted_target = TargetPortfolio.from_dict(json.loads(str(decision["risk_json"]))["target"])
@@ -807,6 +981,14 @@ class PortfolioRuntime:
             log.error("Cannot restore rebalance target for %s: %s", decision_id, exc)
             self.repository.update_rebalance_execution(
                 decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required"
+            )
+            _emit_rebalance_phase_safe(
+                decision_id,
+                REBALANCE_PHASE_BUY_READY,
+                REBALANCE_PHASE_BLOCKED,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                account_id=self.account_id,
+                session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
         account = self.broker.account()
@@ -850,6 +1032,14 @@ class PortfolioRuntime:
         )
         if not buy_orders:
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            _emit_rebalance_phase_safe(
+                decision_id,
+                REBALANCE_PHASE_BUY_READY,
+                REBALANCE_PHASE_COMPLETE,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                account_id=self.account_id,
+                session_id=self.session_id,
+            )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         buy_orders = self._size_buys_to_safe_capacity(buy_orders, account)
         if not buy_orders:
@@ -858,9 +1048,25 @@ class PortfolioRuntime:
                 decision_id,
             )
             self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+            _emit_rebalance_phase_safe(
+                decision_id,
+                REBALANCE_PHASE_BUY_READY,
+                REBALANCE_PHASE_COMPLETE,
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                account_id=self.account_id,
+                session_id=self.session_id,
+            )
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
         submitted = self._submit_orders(buy_orders)
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_BUY_PENDING)
+        _emit_rebalance_phase_safe(
+            decision_id,
+            REBALANCE_PHASE_BUY_READY,
+            REBALANCE_PHASE_BUY_PENDING,
+            market=self.market.value if hasattr(self.market, "value") else str(self.market),
+            account_id=self.account_id,
+            session_id=self.session_id,
+        )
         return PortfolioRuntimeResult(
             decision_id,
             risk.target,

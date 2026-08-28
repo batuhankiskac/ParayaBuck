@@ -242,6 +242,7 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         corporate_actions: list[CorporateAction] | None = None,
         cash_rates: list[CashRateObservation] | None = None,
         prepared_inputs: tuple[list[Bar], list[Bar]] | None = None,
+        numeric_history: object | None = None,
     ) -> PortfolioBacktestResult:
         # Policy T0: delegate to parent with no lifecycle (stale)
         if self.policy == "T0":
@@ -254,6 +255,7 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
                 corporate_actions=corporate_actions,
                 cash_rates=cash_rates,
                 prepared_inputs=prepared_inputs,
+                numeric_history=numeric_history,
             )
         # Path-dependent run
         from itertools import groupby
@@ -291,6 +293,7 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
             cutoff = datetime.fromisoformat(watermark)
             ordered = [b for b in ordered if b.timestamp > cutoff]
             decision_bars = [b for b in decision_bars if b.timestamp > cutoff]
+        self._numeric_history = None if watermark else numeric_history
         for bar in sorted(warmup or [], key=lambda x: (x.timestamp, x.symbol)):
             self._ingest(bar)
             self._ingest_execution(bar)

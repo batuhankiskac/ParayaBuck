@@ -28,6 +28,12 @@ from parayabuck.execution.portfolio import (
 from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
 
+try:
+    from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history
+except ImportError:  # pragma: no cover
+    NumericHistoryView = object  # type: ignore
+    build_numeric_history = None  # type: ignore
+
 _MAX_OPTIMIZATION_COMBINATIONS = 256
 
 
@@ -182,6 +188,7 @@ def run_product_backtest(
     universe: PointInTimeUniverse | None = None,
     data_feed: str | None = None,
     prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
+    numeric_history: object | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -206,6 +213,14 @@ def run_product_backtest(
         if universe is None:
             universe = build_product_universe(config, bars, market=market, end=end, timeframe=strategy.timeframe)
         prepared = None
+        # Build numeric view once for this trial (will be reused if caller builds prepared)
+        if numeric_history is None and build_numeric_history is not None:
+            try:
+                # Use deduplicated sorted available for view (PIT safe)
+                deduped = PortfolioBacktestEngine._deduplicate(available)
+                numeric_history = build_numeric_history(deduped, market=market, timeframe=strategy.timeframe)
+            except Exception:
+                numeric_history = None
     else:
         filtered, warmup, (ordered, decision_bars) = prepared_inputs
         if not filtered:
@@ -213,6 +228,15 @@ def run_product_backtest(
         if universe is None:
             raise ValueError("prepared_inputs requires an explicit universe")
         prepared = (ordered, decision_bars)
+        if numeric_history is None and build_numeric_history is not None:
+            try:
+                # Reuse warmup+ordered which are already deduped/sorted
+                combined = (warmup or []) + ordered
+                # Filter to market/timeframe (already) and deduplicate combined if needed
+                # combined is already canonicalized/deduped per _prepared_window, so direct build
+                numeric_history = build_numeric_history(combined, market=market, timeframe=strategy.timeframe)
+            except Exception:
+                numeric_history = None
     risk = portfolio_risk_limits_from_config(config.risk)
     benchmark = "SPY" if market == Market.EQUITY else "BTC/USD"
     engine = PortfolioBacktestEngine(
@@ -243,6 +267,7 @@ def run_product_backtest(
         warmup=warmup,
         corporate_actions=corporate_actions,
         prepared_inputs=prepared,
+        numeric_history=numeric_history,
     )
     report = build_portfolio_report(
         result,
@@ -493,6 +518,7 @@ def _prepared_window(
         key=lambda bar: (bar.timestamp, bar.symbol),
     )
     return filtered, warmup, (ordered, decision_bars)
+
 
 def _optimization_sort_key(item: dict[str, object]) -> tuple[float, str]:
     score = item.get("score")

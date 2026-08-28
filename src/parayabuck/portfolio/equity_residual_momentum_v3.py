@@ -44,6 +44,7 @@ from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum
 # (21 bars = 1 trading month). FROZEN by the MH_RAW promotion mission.
 _DEFAULT_HORIZONS = (6 * 21, 9 * 21, 12 * 21)
 
+
 def percentile_ranks(scores: Mapping[str, float]) -> dict[str, float]:
     """Cross-sectional percentile rank with averaged ties.
 
@@ -72,18 +73,20 @@ def _compounded(residuals: Sequence[float]) -> float:
     if n == 0:
         return float("-inf")
     # Use numpy prod for large windows (faster) while preserving -inf semantics.
-    # For small windows, Python loop avoids overhead.
-    if n >= 32 and isinstance(residuals, (list, tuple)):
-        # Fast path for list/tuple via numpy (common case: residuals slice is list)
-        arr: np.ndarray = np.asarray(residuals, dtype=np.float64)
-        vals: np.ndarray = 1.0 + arr
-        if np.any(vals <= 0) or not np.all(np.isfinite(vals)):
-            return float("-inf")
-        prod = float(np.prod(vals))
-        if not math.isfinite(prod) or prod <= 0:
-            return float("-inf")
-        return prod - 1.0
-    # Fallback for numpy arrays or small sizes: Python loop (exact parity)
+    # For small windows, Python loop avoids overhead. Accept list/tuple/ndarray.
+    if n >= 32:
+        try:
+            arr: np.ndarray = np.asarray(residuals, dtype=np.float64)
+            vals: np.ndarray = 1.0 + arr
+            if np.any(vals <= 0) or not np.all(np.isfinite(vals)):
+                return float("-inf")
+            prod = float(np.prod(vals))
+            if not math.isfinite(prod) or prod <= 0:
+                return float("-inf")
+            return prod - 1.0
+        except Exception:
+            pass
+    # Fallback for small sizes or on error: Python loop (exact parity)
     value = 1.0
     for residual in residuals:
         value *= 1.0 + residual

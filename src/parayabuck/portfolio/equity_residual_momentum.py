@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_right
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 
@@ -124,6 +125,44 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             raise ValueError("exclude_symbols must be a list of symbols")
         excluded = {str(symbol).strip().upper() for symbol in (*excluded_raw, context.benchmark_symbol)}
         benchmark_key = canonical_symbol(context.benchmark_symbol, Market.EQUITY)
+        # Fast numeric path: if a prepared NumericHistoryView is attached, use
+        # vectorized searchsorted slices and keep everything as numpy arrays.
+        # This avoids per-symbol list[Bar] → numpy conversion (the 45% bottleneck)
+        # and keeps the same math (beta via dot, residuals via vector, compounded
+        # via prod) with identical PIT inner-join semantics.
+        numeric_view = getattr(context, "numeric_history", None)
+        if numeric_view is not None:
+            try:
+                from parayabuck.backtest.numeric_history import (
+                    aligned_returns_numeric,
+                    compounded_return_array,
+                    ols_beta_arrays,
+                    volatility_array,
+                )
+
+                bench_series = numeric_view.series(benchmark_key)
+                if bench_series is not None:
+                    # Only use numeric path if bench has enough history up to decision
+                    # (searchsorted check inside aligned will handle missing, but quick check here)
+                    return self._score_candidates_numeric(
+                        context,
+                        numeric_view,
+                        bench_series,
+                        aligned_returns_numeric,
+                        ols_beta_arrays,
+                        volatility_array,
+                        compounded_return_array,
+                        formation,
+                        skip,
+                        beta_window,
+                        vol_window,
+                        ivol_quantile,
+                        excluded,
+                        benchmark_key,
+                    )
+            except Exception:
+                # Fall through to Bar path on any numeric error (parity safe)
+                pass
         spy_bars = context.history.get(benchmark_key, ())
         if len(spy_bars) < beta_window + 1:
             return (), {}
@@ -207,6 +246,165 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         # ``reject_quantile_threshold`` keeps ~q of the qualified pool (ties
         # kept); the previous ``int(q * n)`` index over-retained one name
         # (q*n + 1 of n), materially so for small pools.
+        scored = self._apply_ivol_filter(scored, residual_vols, ivol_quantile)
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return tuple(scored), residual_vols
+
+    def _score_candidates_numeric(
+        self,
+        context: PortfolioContext,
+        numeric_view: Any,
+        bench_series: Any,
+        aligned_fn: Any,
+        beta_fn: Any,
+        vol_fn: Any,
+        compounded_fn: Any,
+        formation: int,
+        skip: int,
+        beta_window: int,
+        vol_window: int,
+        ivol_quantile: float,
+        excluded: set[str],
+        benchmark_key: str,
+    ) -> tuple[tuple[tuple[float, str], ...], dict[str, float]]:
+        """Numeric fast path for scoring using ``NumericHistoryView``.
+
+        Keeps the same PIT inner-join and math but operates on immutable
+        ``np.ndarray`` views (searchsorted slices) without per-symbol
+        ``list[Bar]`` allocation or ``.tolist()`` round trips. Falls back to
+        the Bar path on any error to preserve parity.
+        """
+        # Local aliases for speed and to avoid attribute lookup per symbol
+        minimum_aligned = max(formation + skip, vol_window + 1, _MIN_BETA_RETURNS)
+        min_history_bars = self.minimum_history_bars
+        # Universe set once per decision
+        universe_set: frozenset[str] | None = None
+        try:
+            snapshots = getattr(context.universe, "snapshots", None)
+            if snapshots:
+                idx = bisect_right(snapshots, context.decision_timestamp, key=lambda x: x.effective_at)
+                if idx > 0:
+                    universe_set = snapshots[idx - 1].symbols
+                else:
+                    universe_set = frozenset()
+        except Exception:
+            universe_set = None
+        # Bench length check via searchsorted quickly: need at least beta_window+1 closes up to decision
+        try:
+            import numpy as np
+
+            bench_ts = bench_series.timestamps
+            bench_dt = np.datetime64(context.decision_timestamp.replace(tzinfo=None))
+            bench_end = int(np.searchsorted(bench_ts, bench_dt, side="right"))
+            if bench_end < beta_window + 1:
+                return (), {}
+        except Exception:
+            return (), {}
+        scored: list[tuple[float, str]] = []
+        residual_vols: dict[str, float] = {}
+        # residuals_by_symbol may hold ndarrays for V3 consensus
+        residuals_by_symbol: dict[str, Any] = {}
+        if universe_set is not None:
+            # Numeric view fallback: history symbols may include via view.symbols()
+            # but we iterate universe directly
+            for symbol in sorted(universe_set):
+                if symbol in excluded:
+                    continue
+                stock_series = numeric_view.series(symbol)
+                if stock_series is None:
+                    continue
+                # Quick history length check via searchsorted (PIT)
+                try:
+                    import numpy as np
+
+                    end = int(
+                        np.searchsorted(
+                            stock_series.timestamps,
+                            np.datetime64(context.decision_timestamp.replace(tzinfo=None)),
+                            side="right",
+                        )
+                    )
+                    if end < min_history_bars:
+                        continue
+                except Exception:
+                    continue
+                aligned = aligned_fn(stock_series, bench_series, context.decision_timestamp, beta_window)
+                if aligned is None:
+                    continue
+                stock_returns, market_returns = aligned
+                if len(stock_returns) < minimum_aligned:
+                    continue
+                beta = beta_fn(stock_returns, market_returns)
+                # residuals as ndarray (no python loop)
+                residuals = stock_returns - beta * market_returns
+                # formation/skip slice via numpy
+                if len(residuals) < formation + skip:
+                    continue
+                # Use array slicing; compounded expects ndarray
+                score_slice = residuals[-(formation + skip) : -skip if skip != 0 else None]
+                score = compounded_fn(score_slice)
+                vol_slice = residuals[-vol_window:]
+                residual_vol = vol_fn(vol_slice)
+                if not math.isfinite(score) or not math.isfinite(residual_vol):
+                    continue
+                if score <= 0 or residual_vol <= 0:
+                    continue
+                scored.append((float(score), symbol))
+                residual_vols[symbol] = annualize_period_volatility(float(residual_vol), 252)
+                residuals_by_symbol[symbol] = residuals
+        else:
+            # Static/permissive universe: iterate view symbols and check in_universe
+            try:
+                symbols = sorted(numeric_view.series_by_symbol.keys())
+            except AttributeError:
+                symbols = sorted(numeric_view.symbols())
+            in_universe = context.in_universe
+            for symbol in symbols:
+                if symbol in excluded:
+                    continue
+                if not in_universe(symbol):
+                    continue
+                stock_series = numeric_view.series(symbol)
+                if stock_series is None:
+                    continue
+                try:
+                    import numpy as np
+
+                    end = int(
+                        np.searchsorted(
+                            stock_series.timestamps,
+                            np.datetime64(context.decision_timestamp.replace(tzinfo=None)),
+                            side="right",
+                        )
+                    )
+                    if end < min_history_bars:
+                        continue
+                except Exception:
+                    continue
+                aligned = aligned_fn(stock_series, bench_series, context.decision_timestamp, beta_window)
+                if aligned is None:
+                    continue
+                stock_returns, market_returns = aligned
+                if len(stock_returns) < minimum_aligned:
+                    continue
+                beta = beta_fn(stock_returns, market_returns)
+                residuals = stock_returns - beta * market_returns
+                if len(residuals) < formation + skip:
+                    continue
+                score_slice = residuals[-(formation + skip) : -skip if skip != 0 else None]
+                score = compounded_fn(score_slice)
+                vol_slice = residuals[-vol_window:]
+                residual_vol = vol_fn(vol_slice)
+                if not math.isfinite(score) or not math.isfinite(residual_vol):
+                    continue
+                if score <= 0 or residual_vol <= 0:
+                    continue
+                scored.append((float(score), symbol))
+                residual_vols[symbol] = annualize_period_volatility(float(residual_vol), 252)
+                residuals_by_symbol[symbol] = residuals
+        scored = self._transform_cross_sectional_scores(
+            scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
+        )
         scored = self._apply_ivol_filter(scored, residual_vols, ivol_quantile)
         scored.sort(key=lambda item: (-item[0], item[1]))
         return tuple(scored), residual_vols

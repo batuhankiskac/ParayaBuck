@@ -1620,8 +1620,9 @@ def _run_research_list(config: Config, args: argparse.Namespace) -> int:
         rows.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
     elif sort_key == "best_sharpe":
         rows.sort(
-            key=lambda r: r.get("best_sharpe") if r.get("best_sharpe") is not None else float("-inf"), reverse=True
-        )  # type: ignore[arg-type, return-value]
+            key=lambda r: r.get("best_sharpe") if r.get("best_sharpe") is not None else float("-inf"),  # type: ignore[arg-type, return-value]
+            reverse=True,
+        )
     elif sort_key == "best_cagr":
         rows.sort(key=lambda r: r.get("best_cagr") if r.get("best_cagr") is not None else float("-inf"), reverse=True)  # type: ignore[arg-type, return-value]
     elif sort_key == "status":
@@ -1700,15 +1701,19 @@ def _run_research_top(config: Config, args: argparse.Namespace) -> int:
     if metric == "max_drawdown":
         # Higher (e.g., -0.05 better than -0.20) → max
         sorted_trials = sorted(
-            ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"), reverse=True
-        )  # type: ignore[arg-type, return-value]
+            ok_trials,
+            key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"),  # type: ignore[arg-type, return-value]
+            reverse=True,
+        )
     elif metric == "turnover":
         # Lower turnover better
         sorted_trials = sorted(ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("inf"))  # type: ignore[arg-type, return-value]
     else:
         sorted_trials = sorted(
-            ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"), reverse=True
-        )  # type: ignore[arg-type, return-value]
+            ok_trials,
+            key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"),  # type: ignore[arg-type, return-value]
+            reverse=True,
+        )
     top = sorted_trials[:limit]
     if getattr(args, "json", False):
         print(json.dumps(top, indent=2, default=str))

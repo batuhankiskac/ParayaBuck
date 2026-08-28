@@ -12,6 +12,7 @@ exposes pure helpers and state for future extraction.
 Threading: refresh is driven by EngineRuntime's dedicated universe thread;
 state is protected by EngineRuntime's existing locks (not duplicated here).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

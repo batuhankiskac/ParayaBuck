@@ -86,15 +86,18 @@ CSV Bars (validated, canonical)
 @dataclass(frozen=True)
 class NumericSeries:
     symbol: str
-    timestamps: np.ndarray # datetime64[ns], sorted asc, writeable=False
-    closes: np.ndarray     # float64, same len, writeable=False
+    timestamps: np.ndarray  # datetime64[ns], sorted asc, writeable=False
+    closes: np.ndarray  # float64, same len, writeable=False
+
     def slice_up_to(self, ts, window_plus_one) -> (view, view): ...
+
 
 @dataclass(frozen=True)
 class NumericHistoryView:
     series_by_symbol: dict[str, NumericSeries]
     market: Market
     timeframe: str
+
     def series(self, symbol) -> NumericSeries | None: ...
 ```
 

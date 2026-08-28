@@ -1,0 +1,85 @@
+{
+  "job": {
+    "base_parameters": {
+      "consensus_hysteresis_bps": 5,
+      "top_n": 8
+    },
+    "config_path": null,
+    "corporate_actions_path": null,
+    "dataset_path": null,
+    "end": null,
+    "fail_fast": false,
+    "initial_cash": null,
+    "market": "equity",
+    "output_dir": null,
+    "persist_artifacts": null,
+    "persist_db": null,
+    "start": null,
+    "strategy_name": "equity_residual_momentum_v3",
+    "tier": "smoke",
+    "trials": [
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "baseline",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 273,
+          "residual_vol_window": 63
+        }
+      },
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "low-vol-42",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 273,
+          "residual_vol_window": 42
+        }
+      },
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "grid_000__beta_window_bars=273__residual_vol_window=42",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 273,
+          "residual_vol_window": 42
+        }
+      },
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "grid_001__beta_window_bars=273__residual_vol_window=63",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 273,
+          "residual_vol_window": 63
+        }
+      },
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "grid_002__beta_window_bars=300__residual_vol_window=42",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 300,
+          "residual_vol_window": 42
+        }
+      },
+      {
+        "cost_multiplier": 1.0,
+        "execution_overrides": null,
+        "label": "grid_003__beta_window_bars=300__residual_vol_window=63",
+        "metadata": {},
+        "parameters": {
+          "beta_window_bars": 300,
+          "residual_vol_window": 63
+        }
+      }
+    ],
+    "workers": "1"
+  },
+  "schema_version": 1
+}

@@ -115,12 +115,35 @@ def _parser() -> argparse.ArgumentParser:
     # inspect
     inspect_p = research_sub.add_parser("inspect", help="inspect a run (read-only)")
     inspect_p.add_argument("run_dir", help="research_runs/<run> directory")
+    inspect_p.add_argument("--json", action="store_true", help="json output")
     # compare
     compare_p = research_sub.add_parser("compare", help="compare two runs")
     compare_p.add_argument("run_a", help="first run directory")
     compare_p.add_argument("run_b", help="second run directory")
     compare_p.add_argument("--output", default=None, help="optional output JSON path")
-    # Legacy args (maintain backward compat when no subcommand)
+    # list
+    list_p = research_sub.add_parser("list", help="list research runs", aliases=["ls"])
+    list_p.add_argument("--root", default=None, help="research runs parent dir (default research_runs)")
+    list_p.add_argument("--status", default=None, help="filter by status")
+    list_p.add_argument("--strategy", default=None, help="filter by strategy")
+    list_p.add_argument("--market", default=None, help="filter by market")
+    list_p.add_argument("--tag", default=None, help="filter by tag")
+    list_p.add_argument("--limit", type=int, default=None, help="limit rows")
+    list_p.add_argument(
+        "--sort", choices=("created", "best_sharpe", "best_cagr", "status"), default="created", help="sort key"
+    )
+    list_p.add_argument("--json", action="store_true", help="json output")
+    # top
+    top_p = research_sub.add_parser("top", help="show top trials for a run")
+    top_p.add_argument("run_dir", help="research_runs/<run> directory")
+    top_p.add_argument(
+        "--metric",
+        choices=("sharpe", "sortino", "cagr", "calmar", "max_drawdown", "turnover"),
+        default="sharpe",
+        help="metric to rank",
+    )
+    top_p.add_argument("--limit", type=int, default=10, help="top N")
+    top_p.add_argument("--json", action="store_true", help="json output")
     research.add_argument("legacy_spec", nargs="?", help=argparse.SUPPRESS)
     research.add_argument("--tier", choices=("smoke", "quick", "robustness", "canonical"), default="quick")
     research.add_argument("--workers", default="1", help="1, N, or auto")
@@ -849,7 +872,10 @@ def _run_research(config: Config, args: argparse.Namespace) -> int:
         return _run_research_inspect(config, args)
     if cmd == "compare":
         return _run_research_compare(config, args)
-    # Legacy path (no subcommand) — preserve existing behavior
+    if cmd in ("list", "ls"):
+        return _run_research_list(config, args)
+    if cmd == "top":
+        return _run_research_top(config, args)
     import json
     from pathlib import Path
 
@@ -1403,6 +1429,7 @@ def _resume_from_store(store: Any, config: Config, retry_failed: bool = False, w
 
 
 def _run_research_inspect(config: Config, args: argparse.Namespace) -> int:
+    import json
     from pathlib import Path
 
     from parayabuck.research.persistence import ExperimentStore
@@ -1410,6 +1437,19 @@ def _run_research_inspect(config: Config, args: argparse.Namespace) -> int:
     store = ExperimentStore.load(Path(args.run_dir))
     info = store.inspect()
     manifest = info["manifest"]
+    if getattr(args, "json", False):
+        # JSON output: manifest + computed best + counts
+        payload = {
+            "manifest": manifest,
+            "completed": info["completed"],
+            "failed": info["failed"],
+            "pending": info["pending"],
+            "best": info.get("best"),
+            "trials": info["trials"],
+            "run_dir": str(store.run_dir),
+        }
+        print(json.dumps(payload, indent=2, default=str))
+        return 0
     print(f"Status: {manifest.get('status')}")
     print(f"Experiment ID: {manifest.get('experiment_id')}")
     print(f"Run ID: {manifest.get('run_id')}")
@@ -1417,28 +1457,40 @@ def _run_research_inspect(config: Config, args: argparse.Namespace) -> int:
     print(f"Window: {manifest.get('start')} -> {manifest.get('end')}")
     print(f"Dataset: {manifest.get('dataset_path')} ({manifest.get('dataset_fingerprint_id')})")
     print(f"Universe: {manifest.get('universe_fingerprint_id')}")
+    print(f"Corporate Actions: {manifest.get('corporate_actions_fingerprint')}")
     print(f"Workers: {manifest.get('workers_resolved')} (requested {manifest.get('workers_requested')})")
     print(f"Created: {manifest.get('created_at')} Completed: {manifest.get('completed_at')}")
+    print(f"Tags: {manifest.get('tags')}")
+    print(
+        f"Git: {manifest.get('git_commit')} dirty={manifest.get('git_dirty')} branch={manifest.get('git_branch')} repro={manifest.get('reproducibility')}"
+    )
+    print(f"Config Digest: {manifest.get('config_digest_id')}")
+    print(f"Bundle: {store.run_dir}")
     print(
         f"Trials: {manifest.get('trial_count')} Completed: {info['completed']} Failed: {info['failed']} Pending: {info['pending']}"
     )
     if info.get("best"):
         b = info["best"]
         print(
-            f"Best: {b.get('label')} Sharpe {b.get('sharpe'):.4f} CAGR {b.get('cagr'):.4f} Drawdown {b.get('max_drawdown'):.4f}"
+            f"Best: {b.get('label')} (id {b.get('trial_id')}) Sharpe {b.get('sharpe'):.4f} CAGR {b.get('cagr'):.4f} Drawdown {b.get('max_drawdown'):.4f} Trials {b.get('label')}"
         )
+    # Baseline trial if present
+    baseline = manifest.get("baseline")
+    if baseline:
+        print(f"Baseline: {baseline}")
     print("Trials:")
     for t in info["trials"]:
         status = t.get("status")
         label = t.get("label")
         sharpe = t.get("sharpe")
         cagr = t.get("cagr")
+        trial_id = t.get("trial_id", "")[:8]
         if status == "ok":
             print(
-                f"  - {label}: {status} Sharpe {sharpe:.4f} CAGR {cagr:.4f} Equity {t.get('final_equity'):.2f} elapsed {t.get('elapsed_s'):.2f}s"
+                f"  - {label} [{trial_id}]: {status} Sharpe {sharpe:.4f} CAGR {cagr:.4f} Equity {t.get('final_equity'):.2f} elapsed {t.get('elapsed_s'):.2f}s"
             )
         else:
-            print(f"  - {label}: {status} error {str(t.get('error'))[:120]}")
+            print(f"  - {label} [{trial_id}]: {status} error {str(t.get('error'))[:120]}")
     return 0
 
 
@@ -1474,4 +1526,203 @@ def _run_research_compare(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
-__all__ = ["backtest_main", "main"]
+def _run_research_list(config: Config, args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    root = Path(getattr(args, "root", None) or "research_runs")
+    if not root.exists():
+        print(f"Root {root} does not exist — no runs")
+        return 0
+    # Discover run dirs: any immediate child containing manifest.json, or recursive one level
+    candidates: list[Path] = []
+    for child in root.iterdir():
+        if child.is_dir() and (child / "manifest.json").exists():
+            candidates.append(child)
+        elif child.is_dir():
+            # Check one level deeper for nested research_runs (e.g., tmp)
+            for sub in child.iterdir():
+                if sub.is_dir() and (sub / "manifest.json").exists():
+                    candidates.append(sub)
+    # Also support root being a single run dir itself
+    if (root / "manifest.json").exists():
+        candidates.append(root)
+    rows: list[dict[str, object]] = []
+    for run_dir in candidates:
+        try:
+            manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        # Prefer summary.json for trial stats (fast), fall back to manifest
+        summary_path = run_dir / "summary.json"
+        trials_completed = 0
+        trials_failed = 0
+        best_sharpe = None
+        best_cagr = None
+        trial_count = manifest.get("trial_count", 0)
+        status = manifest.get("status", "unknown")
+        # Load summary if exists (do not load full trials.jsonl for 500 runs)
+        if summary_path.exists():
+            try:
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                trials = summary.get("trials", []) if isinstance(summary, dict) else []
+                trials_completed = sum(1 for t in trials if t.get("status") == "ok")
+                trials_failed = sum(1 for t in trials if t.get("status") == "failed")
+                ok_trials = [t for t in trials if t.get("status") == "ok"]
+                if ok_trials:
+                    # Best by sharpe, then cagr
+                    try:
+                        best = max(
+                            ok_trials, key=lambda x: (x.get("sharpe") or float("-inf"), x.get("cagr") or float("-inf"))
+                        )
+                        best_sharpe = best.get("sharpe")
+                        best_cagr = best.get("cagr")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        else:
+            # Fallback: try to count via trials.jsonl existence without loading all? Just use manifest counts
+            pass
+        # Filters
+        if getattr(args, "status", None) and str(status) != str(args.status):
+            continue
+        if getattr(args, "strategy", None) and str(manifest.get("strategy_name")) != str(args.strategy):
+            continue
+        if getattr(args, "market", None) and str(manifest.get("market")) != str(args.market):
+            continue
+        if getattr(args, "tag", None):
+            tags = manifest.get("tags") or []
+            if str(args.tag) not in [str(t) for t in tags]:
+                continue
+        rows.append(
+            {
+                "created": manifest.get("created_at") or "",
+                "status": status,
+                "experiment": str(manifest.get("experiment_id", ""))[:8],
+                "experiment_full": manifest.get("experiment_id", ""),
+                "run_id": str(manifest.get("run_id", ""))[:8],
+                "strategy": manifest.get("strategy_name", ""),
+                "market": manifest.get("market", ""),
+                "tier": manifest.get("tier", ""),
+                "trials": trial_count,
+                "completed": trials_completed,
+                "failed": trials_failed,
+                "best_sharpe": best_sharpe,
+                "best_cagr": best_cagr,
+                "run_dir": str(run_dir),
+                "tags": ",".join(str(t) for t in (manifest.get("tags") or [])),
+            }
+        )
+    # Sorting
+    sort_key = getattr(args, "sort", "created")
+    if sort_key == "created":
+        rows.sort(key=lambda r: str(r.get("created") or ""), reverse=True)
+    elif sort_key == "best_sharpe":
+        rows.sort(
+            key=lambda r: r.get("best_sharpe") if r.get("best_sharpe") is not None else float("-inf"), reverse=True
+        )  # type: ignore[arg-type, return-value]
+    elif sort_key == "best_cagr":
+        rows.sort(key=lambda r: r.get("best_cagr") if r.get("best_cagr") is not None else float("-inf"), reverse=True)  # type: ignore[arg-type, return-value]
+    elif sort_key == "status":
+        rows.sort(key=lambda r: str(r.get("status") or ""))
+    # Limit
+    limit = getattr(args, "limit", None)
+    if limit is not None:
+        rows = rows[: int(limit)]
+    if getattr(args, "json", False):
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    if not rows:
+        print("No runs match filters")
+        return 0
+    # Table header
+    header = f"{'created':<20} {'status':<10} {'exp':<8} {'strat':<28} {'mkt':<6} {'tier':<8} {'tri':<3} {'ok':<3} {'fail':<4} {'sharpe':<7} {'cagr':<7} run_dir"
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        created = str(r.get("created") or "")[:19]
+        sharpe = f"{r['best_sharpe']:.3f}" if r.get("best_sharpe") is not None else "-"
+        cagr = f"{r['best_cagr']:.3f}" if r.get("best_cagr") is not None else "-"
+        print(
+            f"{created:<20} {str(r['status']):<10} {str(r['experiment']):<8} {str(r['strategy']):<28} {str(r['market']):<6} {str(r['tier']):<8} {r['trials']:<3} {r['completed']:<3} {r['failed']:<4} {sharpe:<7} {cagr:<7} {r['run_dir']}"
+        )
+    # Experiment grouping summary (presentation only)
+    from collections import Counter
+
+    exp_counts = Counter(r["experiment_full"] for r in rows if r.get("experiment_full"))
+    grouped = {k: v for k, v in exp_counts.items() if v > 1}
+    if grouped:
+        print("\nExperiment grouping (runs sharing experiment_id):")
+        for exp_id, count in sorted(grouped.items(), key=lambda x: -x[1]):
+            short = str(exp_id)[:8]
+            latest = max((r for r in rows if r["experiment_full"] == exp_id), key=lambda x: str(x["created"]))
+            print(f"  {short} ({exp_id}): runs={count} latest={latest['status']} dir={latest['run_dir']}")
+    return 0
+
+
+def _run_research_top(config: Config, args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    run_dir = Path(args.run_dir)
+    metric = getattr(args, "metric", "sharpe")
+    limit = int(getattr(args, "limit", 10) or 10)
+    allowed = {"sharpe", "sortino", "cagr", "calmar", "max_drawdown", "turnover"}
+    if metric not in allowed:
+        print(f"Unsupported metric {metric!r}; choose from {sorted(allowed)}")
+        return 2
+    # Load summary or trials
+    summary_path = run_dir / "summary.json"
+    trials: list[dict[str, object]] = []
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            trials = summary.get("trials", []) if isinstance(summary, dict) else []
+        except Exception:
+            trials = []
+    if not trials:
+        # Fallback to trials.jsonl (rare, but for completeness)
+        trials_path = run_dir / "trials.jsonl"
+        if trials_path.exists():
+            try:
+                for line in trials_path.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        trials.append(json.loads(line))
+            except Exception:
+                pass
+    ok_trials = [t for t in trials if t.get("status") == "ok"]
+    if not ok_trials:
+        print(f"No completed trials in {run_dir}")
+        return 0
+    # Sorting: max_drawdown is better when smaller (less negative? Actually max_drawdown is negative, smaller magnitude better? Use most closest to 0)
+    # For max_drawdown, higher (less negative) is better; for turnover, lower is better. Define ranking accordingly.
+    if metric == "max_drawdown":
+        # Higher (e.g., -0.05 better than -0.20) → max
+        sorted_trials = sorted(
+            ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"), reverse=True
+        )  # type: ignore[arg-type, return-value]
+    elif metric == "turnover":
+        # Lower turnover better
+        sorted_trials = sorted(ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("inf"))  # type: ignore[arg-type, return-value]
+    else:
+        sorted_trials = sorted(
+            ok_trials, key=lambda t: t.get(metric) if t.get(metric) is not None else float("-inf"), reverse=True
+        )  # type: ignore[arg-type, return-value]
+    top = sorted_trials[:limit]
+    if getattr(args, "json", False):
+        print(json.dumps(top, indent=2, default=str))
+        return 0
+    print(f"Top {len(top)} trials by {metric} — {run_dir}")
+    print(f"{'rank':<4} {'label':<28} {metric:<10} {'sharpe':<7} {'cagr':<7} {'drawdown':<9} {'turnover':<8}")
+    print("-" * 80)
+    for idx, t in enumerate(top, start=1):
+        label = str(t.get("label", ""))[:28]
+        val = t.get(metric)
+        val_str = f"{val:.4f}" if isinstance(val, (int, float)) else str(val)
+        sharpe = f"{t.get('sharpe'):.3f}" if isinstance(t.get("sharpe"), (int, float)) else "-"
+        cagr = f"{t.get('cagr'):.3f}" if isinstance(t.get("cagr"), (int, float)) else "-"
+        dd = f"{t.get('max_drawdown'):.3f}" if isinstance(t.get("max_drawdown"), (int, float)) else "-"
+        to = f"{t.get('turnover'):.2f}" if isinstance(t.get("turnover"), (int, float)) else "-"
+        print(f"{idx:<4} {label:<28} {val_str:<10} {sharpe:<7} {cagr:<7} {dd:<9} {to:<8}")
+    return 0

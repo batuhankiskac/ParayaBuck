@@ -6,9 +6,8 @@ import os
 import queue
 import threading
 import time
-from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
@@ -56,6 +55,8 @@ from parayabuck.portfolio.runtime_service import (
     is_terminal_order_status,
 )
 from parayabuck.risk.state import RiskState
+from parayabuck.runtime_events import _Event, _EventQueue
+from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
 from parayabuck.runtime_state import RuntimeMarketState
 from parayabuck.storage import SQLiteStore
 from parayabuck.universe import (
@@ -153,145 +154,7 @@ def required_aggregation_timeframes(
     return frozenset(timeframes)
 
 
-@dataclass
-class WorkerHealth:
-    started_at: datetime
-    last_heartbeat: datetime
-    last_event_at: datetime | None = None
-    last_error: str | None = None
-    restart_count: int = 0
-    alive: bool = False
-
-
-@dataclass(frozen=True)
-class RuntimeHealth:
-    state: str
-    healthy: bool
-    circuit_breaker_reason: str | None
-    queue_size: int
-    queue_age_seconds: float
-    dropped_events: int
-    coalesced_events: int
-    workers: dict[str, dict[str, object]]
-    markets: dict[str, dict[str, object]]
-    strategy_status: str = "configured"
-    strategies: tuple[dict[str, object], ...] = ()
-    last_reconciliation_at: str | None = None
-    universe_refresh: dict[str, object] = field(default_factory=dict)
-    entry_risk_latch: dict[str, str | None] = field(default_factory=dict)
-    signal_adjustment: dict[str, object] = field(default_factory=dict)
-
-
-def _portfolio_catch_up_health(runtime: object) -> dict[str, str | None]:
-    """Health-only catch-up snapshot for one portfolio runtime (or none).
-
-    ``status`` is the last startup_catch_up result status (None before the
-    first attempt), ``at`` the UTC attempt timestamp, and
-    ``next_boundary_after`` the next cadence boundary strictly after the last
-    processed timestamp (None when no history has been processed yet).
-    """
-    if runtime is None:
-        return {"status": None, "at": None, "next_boundary_after": None}
-    catch_up_at = getattr(runtime, "startup_catch_up_at", None)
-    previous_timestamp = getattr(runtime, "previous_timestamp", None)
-    next_boundary: str | None = None
-    if previous_timestamp is not None:
-        policy = getattr(runtime, "policy", None)
-        if policy is not None:
-            next_boundary = policy.next_boundary_after(previous_timestamp).isoformat()
-    return {
-        "status": getattr(runtime, "startup_catch_up_status", None),
-        "at": catch_up_at.isoformat() if catch_up_at is not None else None,
-        "next_boundary_after": next_boundary,
-    }
-
-
-@dataclass(frozen=True)
-class _Event:
-    kind: str
-    bar: Bar
-    received_at: datetime
-
-
-class _EventQueue:
-    """Bounded queue with domain-aware coalescing and overflow policy."""
-
-    def __init__(self, maxsize: int) -> None:
-        self.maxsize = maxsize
-        self._items: deque[_Event | None] = deque()
-        self._condition = threading.Condition()
-
-    def put_nowait(self, item: _Event | None) -> None:
-        with self._condition:
-            if len(self._items) >= self.maxsize:
-                raise queue.Full
-            self._items.append(item)
-            self._condition.notify()
-
-    def get(self, timeout: float | None = None) -> _Event | None:
-        deadline = None if timeout is None else time.monotonic() + timeout
-        with self._condition:
-            while not self._items:
-                remaining = None if deadline is None else deadline - time.monotonic()
-                if remaining is not None and remaining <= 0:
-                    raise queue.Empty
-                self._condition.wait(remaining)
-            return self._items.popleft()
-
-    def get_nowait(self) -> _Event | None:
-        with self._condition:
-            if not self._items:
-                raise queue.Empty
-            return self._items.popleft()
-
-    def qsize(self) -> int:
-        with self._condition:
-            return len(self._items)
-
-    def empty(self) -> bool:
-        return self.qsize() == 0
-
-    def put_market_event(self, event: _Event) -> str:
-        with self._condition:
-            if len(self._items) < self.maxsize:
-                self._items.append(event)
-                self._condition.notify()
-                return "added"
-            key = (event.kind, event.bar.symbol, event.bar.timeframe, event.bar.timestamp)
-            for index in range(len(self._items) - 1, -1, -1):
-                candidate = self._items[index]
-                if candidate is None:
-                    continue
-                candidate_key = (
-                    candidate.kind,
-                    candidate.bar.symbol,
-                    candidate.bar.timeframe,
-                    candidate.bar.timestamp,
-                )
-                if candidate_key == key:
-                    self._items[index] = event
-                    return "coalesced"
-            if event.kind == "primary":
-                return "overflow"
-            victim = None
-            for index in range(len(self._items) - 1, -1, -1):
-                candidate = self._items[index]
-                if candidate is not None and candidate.kind != "primary":
-                    victim = index
-                    break
-            if victim is None:
-                return "overflow"
-            self._items[victim] = event
-            return "replaced"
-
-    def snapshot(self) -> tuple[_Event | None, ...]:
-        with self._condition:
-            return tuple(self._items)
-
-    def oldest_received_at(self) -> datetime | None:
-        with self._condition:
-            received = [item.received_at for item in self._items if item is not None]
-            return min(received) if received else None
+# Health and event types are imported from runtime_health / runtime_events (see above)
 
 
 class EngineRuntime:

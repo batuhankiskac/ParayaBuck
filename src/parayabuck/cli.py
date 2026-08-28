@@ -145,31 +145,54 @@ def _parser() -> argparse.ArgumentParser:
     top_p.add_argument("--limit", type=int, default=10, help="top N")
     top_p.add_argument("--json", action="store_true", help="json output")
     research.add_argument("legacy_spec", nargs="?", help=argparse.SUPPRESS)
-    research.add_argument("--tier", choices=("smoke", "quick", "robustness", "canonical"), default="quick")
-    research.add_argument("--workers", default="1", help="1, N, or auto")
-    research.add_argument("--market", choices=("equity", "crypto"), default="equity")
-    research.add_argument("--strategy", default=None)
-    research.add_argument("--data", help="offline CSV containing OHLCV bars")
-    research.add_argument("--start", help="window start ISO date")
-    research.add_argument("--end", help="window end ISO date")
-    research.add_argument("--output-dir", default=None)
-    research.add_argument(
-        "--persist-artifacts",
-        dest="persist_artifacts",
-        action="store_true",
-        default=None,
-        help="persist report/universe artifacts (default tier default)",
-    )
-    research.add_argument(
-        "--no-persist-artifacts", dest="persist_artifacts", action="store_false", help="do not persist artifacts"
-    )
-    research.add_argument(
-        "--cost-stress", action="store_true", help="run cost multipliers 1.0,2.0,3.0 as separate trials"
-    )
-    research.add_argument(
-        "--param", action="append", default=[], metavar="NAME=VALUE", help="base strategy param override"
-    )
     research.add_argument("--fail-fast", action="store_true", help="fail fast on first trial error")
+    # --- Ops: operational observability (Mission 5) ---
+    ops = commands.add_parser("ops", help="operational observability, diagnostics & forensics")
+    ops_sub = ops.add_subparsers(dest="ops_cmd")
+    status_p = ops_sub.add_parser("status", help="live runtime status from snapshot + health")
+    status_p.add_argument("--json", action="store_true", help="stable JSON output")
+    status_p.add_argument("--snapshot", default=None, help="snapshot path override")
+    status_p.add_argument("--db", default=None, help="decision DB path override")
+    doctor_p = ops_sub.add_parser("doctor", help="offline diagnostics, read-only")
+    doctor_p.add_argument("--json", action="store_true")
+    doctor_p.add_argument("--snapshot", default=None)
+    doctor_p.add_argument("--db", default=None)
+    doctor_p.add_argument("--journal", default=None)
+    events_p = ops_sub.add_parser("events", help="query operational event journal")
+    events_p.add_argument("--since", default=None, help="since time (ISO or 30m,2h,1d)")
+    events_p.add_argument("--until", default=None, help="until time (ISO or relative)")
+    events_p.add_argument("--kind", default=None)
+    events_p.add_argument("--severity", default=None)
+    events_p.add_argument("--market", default=None)
+    events_p.add_argument("--decision", default=None)
+    events_p.add_argument("--order", default=None)
+    events_p.add_argument("--incident", default=None)
+    events_p.add_argument("--limit", type=int, default=50)
+    events_p.add_argument("--json", action="store_true")
+    events_p.add_argument("--journal", default=None)
+    timeline_p = ops_sub.add_parser("timeline", help="correlation forensic view")
+    timeline_p.add_argument("--decision", default=None)
+    timeline_p.add_argument("--order", default=None)
+    timeline_p.add_argument("--incident", default=None)
+    timeline_p.add_argument("--limit", type=int, default=100)
+    timeline_p.add_argument("--json", action="store_true")
+    timeline_p.add_argument("--journal", default=None)
+    timeline_p.add_argument("--db", default=None)
+    explain_p = ops_sub.add_parser("explain", help="explain why latest decision produced no trade")
+    explain_p.add_argument("target", nargs="?", default="latest", help="latest or decision_id")
+    explain_p.add_argument("--json", action="store_true")
+    explain_p.add_argument("--db", default=None)
+    explain_p.add_argument("--journal", default=None)
+    decision_p = ops_sub.add_parser("decision", help="alias for explain (decision latest)")
+    decision_p.add_argument("target", nargs="?", default="latest")
+    decision_p.add_argument("--json", action="store_true")
+    decision_p.add_argument("--db", default=None)
+    decision_p.add_argument("--journal", default=None)
+    bundle_p = ops_sub.add_parser("bundle", help="sanitized diagnostic bundle")
+    bundle_p.add_argument("--output", default=None)
+    bundle_p.add_argument("--snapshot", default=None)
+    bundle_p.add_argument("--journal", default=None)
+    bundle_p.add_argument("--db", default=None)
     return parser
 
 
@@ -215,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "doctor":
         return _run_doctor(args)
+    if args.command == "ops":
+        return _run_ops(args)
     config = load_config(args.config)
     if args.command == "authorize-live":
         return _authorize_live(config, args)
@@ -625,6 +650,570 @@ def _run_doctor(args: argparse.Namespace) -> int:
         return 1
     print(f"\nDoctor: {len(checks) - total_fail}/{len(checks)} checks passed — READY")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Ops commands — operational observability (Mission 5)
+# ---------------------------------------------------------------------------
+
+
+def _parse_time_arg(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    value = value.strip()
+    # relative: 30m, 2h, 1d, 5s
+    import re
+
+    m = re.fullmatch(r"(\d+)([smhd])", value)
+    if m:
+        num = int(m.group(1))
+        unit = m.group(2)
+        delta = {
+            "s": timedelta(seconds=num),
+            "m": timedelta(minutes=num),
+            "h": timedelta(hours=num),
+            "d": timedelta(days=num),
+        }[unit]
+        return datetime.now(UTC) - delta
+    # ISO
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt
+    except Exception:
+        raise SystemExit(f"Invalid time value: {value} (use ISO or 30m/2h/1d)")
+
+
+def _run_ops(args: argparse.Namespace) -> int:
+    cmd = getattr(args, "ops_cmd", None)
+    if cmd is None or cmd == "status":
+        return _ops_status(args)
+    if cmd == "doctor":
+        return _ops_doctor(args)
+    if cmd == "events":
+        return _ops_events(args)
+    if cmd == "timeline":
+        return _ops_timeline(args)
+    if cmd in {"explain", "decision"}:
+        return _ops_explain(args)
+    if cmd == "bundle":
+        return _ops_bundle(args)
+    print(f"Unknown ops command: {cmd}", file=sys.stderr)
+    return 2
+
+
+def _ops_status(args: argparse.Namespace) -> int:
+    # Load config optionally
+    config = None
+    try:
+        config = load_config(getattr(args, "config", None))
+    except Exception:
+        from parayabuck.config import Config as _Cfg
+
+        config = _Cfg()
+    snapshot_path = (
+        getattr(args, "snapshot", None)
+        or getattr(config, "observability", None)
+        and getattr(config.observability, "snapshot_path", None)
+        or "data/runtime/health_snapshot.json"
+    )
+    db_path = (
+        getattr(args, "db", None)
+        or getattr(config, "runtime", None)
+        and getattr(config.runtime, "decision_db_path", None)
+        or "data/runtime/parayabuck.sqlite3"
+    )
+    # allow explicit snapshot path via config.observability
+    if config is not None and hasattr(config, "observability"):
+        if not getattr(args, "snapshot", None):
+            snapshot_path = config.observability.snapshot_path
+        if not getattr(args, "db", None):
+            db_path = config.runtime.decision_db_path
+    from parayabuck.monitoring.health import evaluate_health
+
+    health = evaluate_health(snapshot_path=snapshot_path, database_path=db_path, config=config)
+    if getattr(args, "json", False):
+        print(json.dumps(health, indent=2, default=str))
+        return 0
+    # Text formatting similar to spec
+    # Determine snapshot age string
+    age = health.get("snapshot_age_seconds")
+    age_str = f"{age:.0f}s ago" if isinstance(age, (int, float)) else "unknown"
+    overall = health.get("overall_health", "UNKNOWN")
+    trading = health.get("trading_state", "UNKNOWN")
+    # Try to extract session / mode from snapshot
+    snap_data = None
+    try:
+        import json as _json
+        from pathlib import Path as _P
+
+        p = _P(snapshot_path)
+        if p.exists():
+            snap_data = _json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        snap_data = None
+    mode = (snap_data.get("mode") if isinstance(snap_data, dict) else None) or (
+        config.runtime.mode.value if config and hasattr(config, "runtime") else "unknown"
+    )
+    session = (snap_data.get("session_id") if isinstance(snap_data, dict) else None) or "—"
+    # Build checks map
+    checks = {c["code"]: c for c in health.get("checks", []) if isinstance(c, dict)}
+
+    def _check_line(code: str, label: str) -> str:
+        c = checks.get(code)
+        if not c:
+            return f"{label:<14} UNKNOWN"
+        status = c.get("status", "UNKNOWN")
+        summary = c.get("summary", "")
+        return f"{label:<14} {status:<8} — {summary}"
+
+    print(f"ParayaBuck {str(mode).upper()}")
+    print("=" * 16)
+    print(f"Runtime       {overall}")
+    print(f"Trading       {trading}")
+    # Heartbeat
+    hb = checks.get("runtime_heartbeat", {})
+    print(f"Heartbeat     {hb.get('summary', 'unknown')} ({age_str})")
+    print(f"Session       {session}")
+    print("")
+    # Markets
+    for market_label in ("equity", "crypto"):
+        # health markets are per market? We have workers check etc. For now show from checks
+        pass
+    print(_check_line("workers", "Workers"))
+    print(_check_line("reconciliation", "Reconcile"))
+    print(_check_line("account", "Account"))
+    print(_check_line("universe", "Universe"))
+    print(_check_line("signal_adjustment", "Adjustment"))
+    print("")
+    # Queue
+    q = checks.get("queue", {})
+    print(f"Queue         {q.get('observed', '—')}  {q.get('summary', '')}")
+    # Risk
+    print("")
+    print("Risk")
+    print(f"  {_check_line('risk', 'risk').strip()}")
+    # Execution
+    print("")
+    print("Execution")
+    print(f"  {_check_line('execution', 'execution').strip()}")
+    # Alerts
+    print("")
+    print("Alerts")
+    print(f"  {_check_line('alerts', 'alerts').strip()}")
+    # Observability
+    print(f"  {_check_line('observability', 'observability').strip()}")
+    # Active incidents summary if present
+    try:
+        from parayabuck.monitoring import metrics as _m
+
+        snap = _m.runtime_metrics(database_path=db_path)
+        inc = (snap.get("incidents") or {}).get("active") if isinstance(snap.get("incidents"), dict) else None  # type: ignore[attr-defined]
+        if isinstance(inc, list) and inc:
+            print("")
+            print("Active incidents")
+            for it in inc[:5]:
+                print(f"  - {it}")
+    except Exception:
+        pass
+    # Observability degradation
+    return 0
+
+
+def _ops_doctor(args: argparse.Namespace) -> int:
+    # Use diagnostic _run_doctor_checks
+    config_path = getattr(args, "config", None) or "config/settings.yaml"
+    snapshot_path = getattr(args, "snapshot", None) or "data/runtime/health_snapshot.json"
+    journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    db_path = getattr(args, "db", None)
+    # Try to get db from config if not provided
+    if not db_path:
+        try:
+            cfg = load_config(config_path if Path(config_path).exists() else None)
+            db_path = cfg.runtime.decision_db_path
+            if not snapshot_path or snapshot_path == "data/runtime/health_snapshot.json":
+                # allow observability snapshot path
+                try:
+                    snapshot_path = cfg.observability.snapshot_path
+                except Exception:
+                    pass
+            if not journal_path or journal_path == "data/runtime/observability.sqlite3":
+                try:
+                    journal_path = cfg.observability.journal_path
+                except Exception:
+                    pass
+        except Exception:
+            db_path = "data/runtime/parayabuck.sqlite3"
+    try:
+        from parayabuck.monitoring.diagnostic import _run_doctor_checks
+
+        result = _run_doctor_checks(
+            config_path=config_path, snapshot_path=snapshot_path, journal_path=journal_path, decision_db_path=db_path
+        )
+    except Exception as exc:
+        print(f"Doctor failed: {exc}", file=sys.stderr)
+        return 2
+    if getattr(args, "json", False):
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        print("ParayaBuck Ops Doctor")
+        print("=====================")
+        for chk in result.get("checks", []):
+            print(f"{chk.get('status', 'UNKNOWN'):9} {chk.get('code', '')}: {chk.get('summary', '')}")
+        print(f"\nOverall: {result.get('overall', 'UNKNOWN')}")
+    overall = result.get("overall", "UNKNOWN")
+    if overall == "CRITICAL":
+        return 2
+    if overall in {"DEGRADED", "UNKNOWN"}:
+        # UNKNOWN is degraded for script friendliness? spec says 1=degraded/warnings, 2=critical
+        # Map UNKNOWN to 1 unless caller expects 2
+        return 1
+    return 0
+
+
+def _ops_events(args: argparse.Namespace) -> int:
+    since = _parse_time_arg(getattr(args, "since", None))
+    until = _parse_time_arg(getattr(args, "until", None))
+    journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    # allow config override
+    try:
+        cfg = load_config(getattr(args, "config", None))
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+    except Exception:
+        pass
+    from parayabuck.monitoring.journal import EventJournal
+
+    # Handle missing DB gracefully
+    if not Path(journal_path).exists():
+        if getattr(args, "json", False):
+            print(json.dumps([], indent=2))
+        else:
+            print("No event journal found — fresh install (no events)")
+        return 0
+    j = EventJournal(journal_path)
+    events = j.query(
+        since=since,
+        until=until,
+        kind=getattr(args, "kind", None),
+        severity=getattr(args, "severity", None),
+        market=getattr(args, "market", None),
+        decision_id=getattr(args, "decision", None),
+        client_order_id=getattr(args, "order", None),
+        incident_id=getattr(args, "incident", None),
+        limit=int(getattr(args, "limit", 50) or 50),
+    )
+    if getattr(args, "json", False):
+        print(json.dumps([e.to_dict() for e in events], indent=2, default=str))
+    else:
+        if not events:
+            print("No events matching filter")
+        for e in events:
+            ts = e.occurred_at.isoformat()
+            corr = ""
+            if e.decision_id:
+                corr += f" decision={e.decision_id[:8]}"
+            if e.client_order_id:
+                corr += f" order={e.client_order_id[:8]}"
+            print(f"{ts} {e.severity:8} {e.kind:30} {e.message}{corr}")
+    return 0
+
+
+def _ops_timeline(args: argparse.Namespace) -> int:
+    decision_id = getattr(args, "decision", None)
+    order_id = getattr(args, "order", None)
+    incident_id = getattr(args, "incident", None)
+    journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    db_path = getattr(args, "db", None)
+    if not db_path:
+        try:
+            cfg = load_config(getattr(args, "config", None))
+            db_path = cfg.runtime.decision_db_path
+            if not getattr(args, "journal", None):
+                try:
+                    journal_path = cfg.observability.journal_path
+                except Exception:
+                    pass
+        except Exception:
+            db_path = "data/runtime/parayabuck.sqlite3"
+    limit = int(getattr(args, "limit", 100) or 100)
+    events: list[Any] = []
+    # Query journal
+    try:
+        from parayabuck.monitoring.journal import EventJournal
+
+        if Path(journal_path).exists():
+            j = EventJournal(journal_path)
+            if decision_id:
+                events = j.query(decision_id=decision_id, limit=limit)
+            elif order_id:
+                events = j.query(client_order_id=order_id, limit=limit)
+            elif incident_id:
+                events = j.query(incident_id=incident_id, limit=limit)
+            else:
+                events = j.query(limit=limit)
+    except Exception as exc:
+        print(f"timeline journal query failed: {exc}", file=sys.stderr)
+    # Also reconstruct decision if decision_id
+    reconstruction = None
+    if decision_id:
+        try:
+            from parayabuck.monitoring.forensics import decision_reconstruction
+
+            reconstruction = decision_reconstruction(db_path, decision_id, journal_path=journal_path)
+        except Exception as exc:
+            reconstruction = {"error": str(exc)}
+    if getattr(args, "json", False):
+        payload = {
+            "events": [e.to_dict() if hasattr(e, "to_dict") else e for e in events],
+            "reconstruction": reconstruction,
+        }
+        print(json.dumps(payload, indent=2, default=str))
+        return 0
+    # Text output
+    if decision_id:
+        print(f"Timeline for decision {decision_id}")
+        print("=" * 40)
+        if reconstruction:
+            dec = reconstruction.get("decision")
+            if dec:
+                print(f"Decision: {dec}")
+            orders = reconstruction.get("orders") or []
+            print(f"Orders: {len(orders)}")
+            for o in orders[:10]:
+                print(
+                    f"  {o.get('client_order_id')} {o.get('symbol')} {o.get('side')} {o.get('quantity')} {o.get('status')}"
+                )
+            fills = reconstruction.get("fills") or []
+            print(f"Fills: {len(fills)}")
+            rb = reconstruction.get("rebalance")
+            if rb:
+                print(f"Rebalance: {rb}")
+            receipt = reconstruction.get("receipt")
+            if receipt:
+                print(f"Receipt: {receipt.get('decision_timestamp') if isinstance(receipt, dict) else receipt}")
+    elif order_id:
+        print(f"Timeline for order {order_id}")
+        print("=" * 40)
+    elif incident_id:
+        print(f"Timeline for incident {incident_id}")
+        print("=" * 40)
+    else:
+        print("Recent timeline")
+        print("=" * 40)
+    if not events:
+        print("No operational events found for correlation")
+    else:
+        for e in events:
+            ts = e.occurred_at.isoformat() if hasattr(e, "occurred_at") else str(e.get("occurred_at"))
+            kind = e.kind if hasattr(e, "kind") else e.get("kind")
+            msg = e.message if hasattr(e, "message") else e.get("message")
+            print(f"{ts} {kind:30} {msg}")
+            if hasattr(e, "fields") and e.fields:
+                print(f"  fields: {e.fields}")
+    return 0
+
+
+def _ops_explain(args: argparse.Namespace) -> int:
+    target = getattr(args, "target", "latest") or "latest"
+    db_path = getattr(args, "db", None)
+    journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    config_path = getattr(args, "config", None)
+    cfg = None
+    try:
+        cfg = load_config(config_path)
+        if not db_path:
+            db_path = cfg.runtime.decision_db_path
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+    except Exception:
+        if not db_path:
+            db_path = "data/runtime/parayabuck.sqlite3"
+    # Find latest decision if needed
+    decision_id = target if target != "latest" else None
+    if decision_id is None:
+        # Query latest portfolio_decisions
+        try:
+            import sqlite3
+
+            if Path(str(db_path)).exists():
+                conn = sqlite3.connect(str(db_path), timeout=2.0)
+                conn.row_factory = sqlite3.Row
+                try:
+                    cur = conn.execute(
+                        "SELECT decision_id, decision_timestamp, market, strategy_name FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        decision_id = row["decision_id"]
+                        print(
+                            f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}"
+                        )
+                    else:
+                        print("No decisions found in DB")
+                        return 0
+                finally:
+                    conn.close()
+            else:
+                print("No decision DB found — fresh install")
+                return 0
+        except Exception as exc:
+            print(f"Failed to find latest decision: {exc}", file=sys.stderr)
+            return 1
+    # Reconstruct
+    try:
+        from parayabuck.monitoring.forensics import decision_reconstruction, map_no_trade_reason
+        from parayabuck.monitoring.journal import EventJournal
+
+        recon = decision_reconstruction(db_path, decision_id, journal_path=journal_path)
+        decision = recon.get("decision")
+        orders = recon.get("orders") or []
+        fills = recon.get("fills") or []
+        rebalance = recon.get("rebalance")
+        # Also query decision_summary events
+        summary_events = []
+        if Path(str(journal_path)).exists():
+            j = EventJournal(str(journal_path))
+            summary_events = [e for e in j.query(decision_id=decision_id, limit=20) if e.kind == "decision_summary"]
+        # Determine no-trade reason
+        no_trade_reason = None
+        detail = ""
+        if not orders:
+            # Try to infer from decision target/risk or summary event
+            if summary_events:
+                se = summary_events[0]
+                no_trade_reason = se.fields.get("no_trade_reason") or se.fields.get("decision_status")
+                detail = str(se.fields)
+            elif decision:
+                try:
+                    target_json = decision.get("target_json") if isinstance(decision, dict) else None
+                    if target_json:
+                        import json as _json
+
+                        tj = _json.loads(target_json) if isinstance(target_json, str) else target_json
+                        # heuristic: if target unchanged?
+                        no_trade_reason = map_no_trade_reason(str(tj.get("reason") or tj.get("no_trade_reason") or ""))
+                        detail = str(tj)[:500]
+                except Exception:
+                    pass
+            if not no_trade_reason:
+                no_trade_reason = "NO_TARGET_CHANGE"
+        # Build explanation
+        if getattr(args, "json", False):
+            payload = {
+                "decision_id": decision_id,
+                "decision": decision,
+                "orders": orders,
+                "fills": fills,
+                "rebalance": rebalance,
+                "no_trade_reason": no_trade_reason,
+                "detail": detail,
+                "reconstruction": recon,
+                "summary_events": [e.to_dict() for e in summary_events],
+            }
+            print(json.dumps(payload, indent=2, default=str))
+            return 0
+        # Text
+        if orders:
+            print(f"\nDECISION TRADED — {len(orders)} orders")
+            for o in orders:
+                print(
+                    f"  {o.get('client_order_id')} {o.get('symbol')} {o.get('side')} qty={o.get('quantity')} status={o.get('status')}"
+                )
+            if fills:
+                print(f"Fills: {len(fills)}")
+            if rebalance:
+                print(f"Rebalance phase: {rebalance.get('phase')}")
+        else:
+            print("\nNO TRADE")
+            print(f"Reason: {no_trade_reason}")
+            if detail:
+                print(f"Detail: {detail}")
+            if decision:
+                # show target change if available
+                try:
+                    import json as _json
+
+                    tj = decision.get("target_json") if isinstance(decision, dict) else None
+                    if tj:
+                        parsed = _json.loads(tj) if isinstance(tj, str) else tj
+                        print(f"Target: {str(parsed)[:500]}")
+                    rj = decision.get("risk_json") if isinstance(decision, dict) else None
+                    if rj:
+                        parsed = _json.loads(rj) if isinstance(rj, str) else rj
+                        print(f"Risk: {str(parsed)[:500]}")
+                except Exception:
+                    pass
+            # Check account/universe staleness etc via health
+            try:
+                from parayabuck.monitoring.health import evaluate_health
+
+                h = evaluate_health(database_path=db_path)
+                for chk in h.get("checks", []):
+                    if chk.get("status") in {"BLOCKED", "DEGRADED", "CRITICAL"}:
+                        print(f"Health {chk.get('code')}: {chk.get('summary')}")
+            except Exception:
+                pass
+        return 0
+    except Exception as exc:
+        print(f"Explain failed: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
+
+
+def _ops_bundle(args: argparse.Namespace) -> int:
+    output = getattr(args, "output", None)
+    snapshot_path = getattr(args, "snapshot", None) or "data/runtime/health_snapshot.json"
+    journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
+    db_path = getattr(args, "db", None)
+    config_path = getattr(args, "config", None) or "config/settings.yaml"
+    # Allow config overrides
+    try:
+        cfg = load_config(config_path if Path(config_path).exists() else None)
+        if not getattr(args, "snapshot", None):
+            try:
+                snapshot_path = cfg.observability.snapshot_path
+            except Exception:
+                pass
+        if not getattr(args, "journal", None):
+            try:
+                journal_path = cfg.observability.journal_path
+            except Exception:
+                pass
+        if not getattr(args, "db", None):
+            db_path = cfg.runtime.decision_db_path
+    except Exception:
+        if not db_path:
+            db_path = "data/runtime/parayabuck.sqlite3"
+    try:
+        from parayabuck.monitoring.diagnostic import create_bundle_zip
+
+        out = create_bundle_zip(
+            output,
+            config_path=config_path,
+            snapshot_path=snapshot_path,
+            journal_path=journal_path,
+            decision_db_path=db_path,
+        )
+        print(f"Bundle written: {out}")
+        # print size
+        try:
+            sz = out.stat().st_size
+            print(f"Size: {sz} bytes")
+        except Exception:
+            pass
+        return 0
+    except Exception as exc:
+        print(f"Bundle failed: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
 
 
 def _load_bars(

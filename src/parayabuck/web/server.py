@@ -1867,6 +1867,37 @@ async def get_status() -> dict[str, Any]:
     return result
 
 
+@app.get("/api/ops/status")
+async def get_ops_status() -> dict[str, Any]:
+    """Consolidated operational status — offline health evaluation (Mission 5)."""
+    try:
+        from parayabuck.monitoring.health import evaluate_health
+
+        cfg = None
+        try:
+            cfg = load_config(str(manager.config_path))
+        except Exception:
+            cfg = None
+        snap = "data/runtime/health_snapshot.json"
+        db = "data/runtime/parayabuck.sqlite3"
+        if cfg is not None:
+            try:
+                snap = cfg.observability.snapshot_path
+                db = cfg.runtime.decision_db_path
+            except Exception:
+                pass
+        return evaluate_health(snapshot_path=snap, database_path=db, config=cfg)
+    except Exception as exc:  # pragma: no cover
+        log.warning("ops status probe failed: %s", exc)
+        return {
+            "error": str(exc),
+            "overall_health": "UNKNOWN",
+            "trading_state": "UNKNOWN",
+            "checks": [],
+            "as_of": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
+        }
+
+
 @app.get("/api/account")
 async def get_account() -> dict[str, Any]:
     return await asyncio.to_thread(manager.fetch_account_snapshot)

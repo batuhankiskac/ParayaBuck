@@ -1,0 +1,545 @@
+"""Durable operational event journal — isolated from trading path.
+
+Architecture choice: **Option A — Dedicated SQLite store**
+(``data/runtime/observability.sqlite3``).
+
+Rationale:
+* Isolation: trading/runtime DB (``parayabuck.sqlite3``) uses WAL + busy_timeout
+  for portfolio decisions/orders. Observability writes must never contend with
+  those transactions or cause SQLITE_BUSY on the trading path. A separate file
+  eliminates cross-domain lock contention.
+* Queryability: SQLite gives indexed queries (time, kind, severity, correlation)
+  needed for ``ops events`` / ``timeline`` without implementing JSONL indexing.
+* Recovery: existing ``SQLiteStore`` utilities already handle WAL/synchronous
+  durability and migrations — reuse without reinventing.
+* Bounded async writer: single writer thread + bounded queue ensures emit is
+  non-blocking and cannot OOM or spawn unbounded threads.
+
+Alternative B (table in existing DB) rejected: couples observability failures
+to trading lock state. Alternative C (JSONL) rejected: poor indexed query
+performance and no atomic retention.
+
+Isolation: ``emit()`` enqueues to a bounded queue; the single writer thread
+drains to SQLite. Any exception increments ``event_journal_failed`` / dropped
+counters and is logged — never propagated to the trading caller.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import queue
+import sqlite3
+import threading
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from parayabuck.monitoring.operational_event import OperationalEvent
+
+log = logging.getLogger("parayabuck.monitoring.journal")
+
+DEFAULT_JOURNAL_PATH = "data/runtime/observability.sqlite3"
+DEFAULT_RETENTION_DAYS = 30
+DEFAULT_MAX_EVENTS = 50000
+DEFAULT_QUEUE_SIZE = 2048
+SCHEMA_VERSION = 1
+
+_JOURNAL_SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS operational_events (
+    event_id TEXT PRIMARY KEY,
+    occurred_at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    message TEXT NOT NULL,
+    session_id TEXT,
+    account_id TEXT,
+    mode TEXT,
+    market TEXT,
+    strategy TEXT,
+    decision_id TEXT,
+    client_order_id TEXT,
+    broker_order_id TEXT,
+    incident_id TEXT,
+    correlation_id TEXT,
+    fields_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_op_events_occurred_at ON operational_events(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_op_events_kind ON operational_events(kind);
+CREATE INDEX IF NOT EXISTS idx_op_events_severity ON operational_events(severity);
+CREATE INDEX IF NOT EXISTS idx_op_events_session ON operational_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_op_events_decision ON operational_events(decision_id);
+CREATE INDEX IF NOT EXISTS idx_op_events_order ON operational_events(client_order_id);
+CREATE INDEX IF NOT EXISTS idx_op_events_incident ON operational_events(incident_id);
+"""
+
+
+@dataclass
+class JournalStats:
+    written: int = 0
+    failed: int = 0
+    dropped: int = 0
+    queue_depth: int = 0
+    last_success_at: str | None = None
+
+
+class EventJournal:
+    """Bounded async durable journal."""
+
+    def __init__(
+        self,
+        path: str | Path = DEFAULT_JOURNAL_PATH,
+        *,
+        queue_size: int = DEFAULT_QUEUE_SIZE,
+        retention_days: int = DEFAULT_RETENTION_DAYS,
+        max_events: int = DEFAULT_MAX_EVENTS,
+    ) -> None:
+        self.path = Path(path)
+        self.queue_size = max(1, int(queue_size))
+        self.retention_days = max(0, int(retention_days))
+        self.max_events = max(0, int(max_events))
+        self._queue: queue.Queue[OperationalEvent | None] = queue.Queue(maxsize=self.queue_size)
+        self._writer_thread: threading.Thread | None = None
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._stats = JournalStats()
+        self._writes_since_cleanup = 0
+        self._started = False
+        self._ensure_schema()
+
+    # ------------------------------------------------------------------ schema
+    def _connect(self) -> sqlite3.Connection:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.path), timeout=5.0, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+    def _ensure_schema(self) -> None:
+        try:
+            conn = self._connect()
+            try:
+                conn.executescript(_JOURNAL_SCHEMA)
+                cur = conn.execute("SELECT version FROM schema_version WHERE version=?", (SCHEMA_VERSION,))
+                if cur.fetchone() is None:
+                    conn.execute(
+                        "INSERT INTO schema_version(version, applied_at) VALUES (?, ?)",
+                        (SCHEMA_VERSION, datetime.now(UTC).isoformat()),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            log.warning("journal schema ensure failed", exc_info=True)
+
+    # ---------------------------------------------------------------- writer
+    def start(self) -> None:
+        with self._lock:
+            if self._started:
+                return
+            self._stop.clear()
+            self._writer_thread = threading.Thread(target=self._writer_loop, name="pb-journal-writer", daemon=True)
+            self._writer_thread.start()
+            self._started = True
+
+    def stop(self, *, timeout: float = 2.0) -> None:
+        with self._lock:
+            if not self._started:
+                return
+            self._stop.set()
+            # unblock writer
+            try:
+                self._queue.put_nowait(None)
+            except queue.Full:
+                pass
+            thread = self._writer_thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+
+    def _writer_loop(self) -> None:
+        batch: list[OperationalEvent] = []
+        while not self._stop.is_set():
+            try:
+                item = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                if batch:
+                    self._flush_batch(batch)
+                    batch.clear()
+                continue
+            if item is None:
+                if batch:
+                    self._flush_batch(batch)
+                break
+            batch.append(item)
+            # drain additional without blocking
+            while len(batch) < 100:
+                try:
+                    nxt = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+                if nxt is None:
+                    self._flush_batch(batch)
+                    batch.clear()
+                    return
+                batch.append(nxt)
+            self._flush_batch(batch)
+            batch.clear()
+
+    def _flush_batch(self, batch: list[OperationalEvent]) -> None:
+        if not batch:
+            return
+        try:
+            conn = self._connect()
+            try:
+                now_iso = datetime.now(UTC).isoformat()
+                rows = [
+                    (
+                        e.event_id,
+                        e.occurred_at.isoformat(),
+                        e.kind,
+                        e.severity,
+                        e.message,
+                        e.session_id,
+                        e.account_id,
+                        e.mode,
+                        e.market,
+                        e.strategy,
+                        e.decision_id,
+                        e.client_order_id,
+                        e.broker_order_id,
+                        e.incident_id,
+                        e.correlation_id,
+                        json.dumps(dict(e.fields), separators=(",", ":"), ensure_ascii=False),
+                        now_iso,
+                    )
+                    for e in batch
+                ]
+                conn.executemany(
+                    """INSERT OR IGNORE INTO operational_events
+                    (event_id, occurred_at, kind, severity, message,
+                     session_id, account_id, mode, market, strategy,
+                     decision_id, client_order_id, broker_order_id,
+                     incident_id, correlation_id, fields_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    rows,
+                )
+                conn.commit()
+                with self._lock:
+                    self._stats.written += len(rows)
+                    self._stats.last_success_at = now_iso
+                    self._stats.queue_depth = self._queue.qsize()
+                self._writes_since_cleanup += len(rows)
+                if self._writes_since_cleanup >= 100:
+                    self._writes_since_cleanup = 0
+                    self._retention_cleanup(conn)
+            finally:
+                conn.close()
+        except Exception:
+            with self._lock:
+                self._stats.failed += len(batch)
+            log.warning("journal batch write failed for %d events", len(batch), exc_info=True)
+
+    def _retention_cleanup(self, conn: sqlite3.Connection) -> None:
+        try:
+            if self.retention_days > 0:
+                cutoff = (datetime.now(UTC) - timedelta(days=self.retention_days)).isoformat()
+                conn.execute("DELETE FROM operational_events WHERE occurred_at < ?", (cutoff,))
+            if self.max_events > 0:
+                cur = conn.execute("SELECT COUNT(*) FROM operational_events")
+                count = int(cur.fetchone()[0])
+                if count > self.max_events:
+                    excess = count - self.max_events
+                    conn.execute(
+                        "DELETE FROM operational_events WHERE event_id IN "
+                        "(SELECT event_id FROM operational_events ORDER BY occurred_at ASC LIMIT ?)",
+                        (excess,),
+                    )
+            conn.commit()
+        except Exception:
+            log.warning("journal retention cleanup failed", exc_info=True)
+
+    # ---------------------------------------------------------------- emit
+    def emit(self, event: OperationalEvent) -> bool:
+        """Enqueue event for durable write. Never raises, never blocks trading.
+
+        Returns True if queued, False if dropped (queue full).
+        """
+        try:
+            # ensure writer started lazily
+            if not self._started:
+                self.start()
+            self._queue.put_nowait(event)
+            with self._lock:
+                self._stats.queue_depth = self._queue.qsize()
+            return True
+        except queue.Full:
+            with self._lock:
+                self._stats.dropped += 1
+                self._stats.queue_depth = self._queue.qsize()
+            log.warning("journal queue full; dropping event kind=%s", event.kind)
+            return False
+        except Exception:
+            with self._lock:
+                self._stats.failed += 1
+            log.warning("journal emit failed for kind=%s", event.kind, exc_info=True)
+            return False
+
+    def emit_sync(self, event: OperationalEvent) -> bool:
+        """Synchronous write (for tests / CLI without writer thread). Never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """INSERT OR IGNORE INTO operational_events
+                    (event_id, occurred_at, kind, severity, message,
+                     session_id, account_id, mode, market, strategy,
+                     decision_id, client_order_id, broker_order_id,
+                     incident_id, correlation_id, fields_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.event_id,
+                        event.occurred_at.isoformat(),
+                        event.kind,
+                        event.severity,
+                        event.message,
+                        event.session_id,
+                        event.account_id,
+                        event.mode,
+                        event.market,
+                        event.strategy,
+                        event.decision_id,
+                        event.client_order_id,
+                        event.broker_order_id,
+                        event.incident_id,
+                        event.correlation_id,
+                        json.dumps(dict(event.fields), separators=(",", ":"), ensure_ascii=False),
+                        datetime.now(UTC).isoformat(),
+                    ),
+                )
+                conn.commit()
+                with self._lock:
+                    self._stats.written += 1
+                    self._stats.last_success_at = datetime.now(UTC).isoformat()
+                return True
+            finally:
+                conn.close()
+        except Exception:
+            with self._lock:
+                self._stats.failed += 1
+            log.warning("journal sync write failed", exc_info=True)
+            return False
+
+    def flush(self, timeout: float = 2.0) -> None:
+        """Wait until queue drained (best effort)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline and not self._queue.empty():
+            time.sleep(0.02)
+
+    # ---------------------------------------------------------------- query
+    def query(
+        self,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        kind: str | None = None,
+        severity: str | None = None,
+        market: str | None = None,
+        decision_id: str | None = None,
+        client_order_id: str | None = None,
+        incident_id: str | None = None,
+        session_id: str | None = None,
+        limit: int = 100,
+        order: str = "desc",
+    ) -> list[OperationalEvent]:
+        try:
+            conn = sqlite3.connect(str(self.path), timeout=5.0)
+            conn.row_factory = sqlite3.Row
+            try:
+                sql = "SELECT * FROM operational_events WHERE 1=1"
+                params: list[object] = []
+                if since is not None:
+                    sql += " AND occurred_at >= ?"
+                    params.append(since.isoformat())
+                if until is not None:
+                    sql += " AND occurred_at <= ?"
+                    params.append(until.isoformat())
+                if kind is not None:
+                    sql += " AND kind = ?"
+                    params.append(kind)
+                if severity is not None:
+                    sql += " AND severity = ?"
+                    params.append(severity)
+                if market is not None:
+                    sql += " AND market = ?"
+                    params.append(market)
+                if decision_id is not None:
+                    sql += " AND decision_id = ?"
+                    params.append(decision_id)
+                if client_order_id is not None:
+                    sql += " AND client_order_id = ?"
+                    params.append(client_order_id)
+                if incident_id is not None:
+                    sql += " AND incident_id = ?"
+                    params.append(incident_id)
+                if session_id is not None:
+                    sql += " AND session_id = ?"
+                    params.append(session_id)
+                sql += f" ORDER BY occurred_at {'DESC' if order == 'desc' else 'ASC'} LIMIT ?"
+                params.append(int(limit))
+                cur = conn.execute(sql, tuple(params))
+                rows = cur.fetchall()
+                events: list[OperationalEvent] = []
+                for row in rows:
+                    fields = {}
+                    try:
+                        fields = json.loads(row["fields_json"] or "{}")
+                    except Exception:
+                        fields = {"_corrupt_fields": row["fields_json"]}
+                    # parse occurred_at
+                    occ = row["occurred_at"]
+                    try:
+                        occ_dt = datetime.fromisoformat(occ)
+                        if occ_dt.tzinfo is None:
+                            occ_dt = occ_dt.replace(tzinfo=UTC)
+                    except Exception:
+                        occ_dt = datetime.now(UTC)
+                    events.append(
+                        OperationalEvent(
+                            event_id=row["event_id"],
+                            occurred_at=occ_dt,
+                            kind=row["kind"],
+                            severity=row["severity"],
+                            message=row["message"],
+                            session_id=row["session_id"],
+                            account_id=row["account_id"],
+                            mode=row["mode"],
+                            market=row["market"],
+                            strategy=row["strategy"],
+                            decision_id=row["decision_id"],
+                            client_order_id=row["client_order_id"],
+                            broker_order_id=row["broker_order_id"],
+                            incident_id=row["incident_id"],
+                            correlation_id=row["correlation_id"],
+                            fields=fields,
+                        )
+                    )
+                return events
+            finally:
+                conn.close()
+        except Exception:
+            log.warning("journal query failed", exc_info=True)
+            return []
+
+    def stats(self) -> dict[str, object]:
+        with self._lock:
+            return {
+                "event_journal_written": self._stats.written,
+                "event_journal_failed": self._stats.failed,
+                "event_journal_dropped": self._stats.dropped,
+                "event_journal_queue_depth": self._queue.qsize(),
+                "event_journal_last_success_at": self._stats.last_success_at,
+            }
+
+    def reset_for_tests(self) -> None:
+        """Clear queue and reset counters (tests only)."""
+        try:
+            while not self._queue.empty():
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    break
+        except Exception:
+            pass
+        with self._lock:
+            self._stats = JournalStats()
+        # clear DB
+        try:
+            conn = self._connect()
+            try:
+                conn.execute("DELETE FROM operational_events")
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
+
+# ----------------------------------------------------------------------
+# Global singleton (process-local)
+# ----------------------------------------------------------------------
+_global_journal: EventJournal | None = None
+_global_lock = threading.Lock()
+
+
+def get_journal(path: str | Path | None = None) -> EventJournal:
+    global _global_journal
+    with _global_lock:
+        if _global_journal is None:
+            _global_journal = EventJournal(path or DEFAULT_JOURNAL_PATH)
+        elif path is not None and str(path) != str(_global_journal.path):
+            # allow tests to request isolated path
+            return EventJournal(path)
+        return _global_journal
+
+
+def emit_journal(event: OperationalEvent, *, path: str | Path | None = None) -> bool:
+    """Emit to global journal without raising (trading-safe)."""
+    try:
+        journal = get_journal(path)
+        return journal.emit(event)
+    except Exception:
+        log.warning("emit_journal failed for kind=%s", event.kind, exc_info=True)
+        return False
+
+
+def journal_stats(path: str | Path | None = None) -> dict[str, object]:
+    try:
+        return get_journal(path).stats()
+    except Exception:
+        return {
+            "event_journal_written": 0,
+            "event_journal_failed": 0,
+            "event_journal_dropped": 0,
+            "event_journal_queue_depth": 0,
+            "event_journal_last_success_at": None,
+        }
+
+
+def reset_journal_for_tests(path: str | Path | None = None) -> None:
+    global _global_journal
+    with _global_lock:
+        if _global_journal is not None:
+            try:
+                _global_journal.stop(timeout=0.5)
+            except Exception:
+                pass
+            _global_journal = None
+    if path is not None:
+        try:
+            Path(path).unlink(missing_ok=True)
+            for suffix in ("-wal", "-shm"):
+                Path(str(path) + suffix).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+__all__ = [
+    "DEFAULT_JOURNAL_PATH",
+    "DEFAULT_MAX_EVENTS",
+    "DEFAULT_QUEUE_SIZE",
+    "DEFAULT_RETENTION_DAYS",
+    "EventJournal",
+    "SCHEMA_VERSION",
+    "emit_journal",
+    "get_journal",
+    "journal_stats",
+    "reset_journal_for_tests",
+]

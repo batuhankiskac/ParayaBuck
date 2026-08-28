@@ -617,6 +617,37 @@ class BackupConfig:
 
 
 @dataclass(frozen=True)
+class ObservabilityConfig:
+    """Local observability visibility/history/diagnostics (``observability:`` block).
+
+    Alerting (``alerting``) remains notification delivery; observability is
+    local visibility/history. Keep knobs minimal.
+    """
+
+    enabled: bool = True
+    snapshot_interval_seconds: float = 30.0
+    event_retention_days: int = 30
+    event_queue_size: int = 2048
+    event_max_events: int = 50000
+    journal_path: str = "data/runtime/observability.sqlite3"
+    snapshot_path: str = "data/runtime/health_snapshot.json"
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.snapshot_interval_seconds) or self.snapshot_interval_seconds <= 0:
+            raise ValueError("observability.snapshot_interval_seconds must be positive")
+        if self.event_retention_days < 0:
+            raise ValueError("observability.event_retention_days must be non-negative")
+        if self.event_queue_size <= 0:
+            raise ValueError("observability.event_queue_size must be positive")
+        if self.event_max_events < 0:
+            raise ValueError("observability.event_max_events must be non-negative")
+        if not self.journal_path.strip():
+            raise ValueError("observability.journal_path must not be empty")
+        if not self.snapshot_path.strip():
+            raise ValueError("observability.snapshot_path must not be empty")
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppConfig = field(default_factory=AppConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
@@ -631,6 +662,7 @@ class Config:
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -874,6 +906,7 @@ def load_config(config_path: str | None = None) -> Config:
         execution=ExecutionConfig(**dict(raw.get("execution", {}))),
         backup=BackupConfig(**dict(raw.get("backup", {}))),
         alerting=AlertingConfig(**dict(raw.get("alerting", {}))),
+        observability=ObservabilityConfig(**dict(raw.get("observability", {}))),
     )
 
 
@@ -892,6 +925,7 @@ __all__ = [
     "ExecutionConfig",
     "LiveConfig",
     "MarketStrategyConfig",
+    "ObservabilityConfig",
     "RiskLimits",
     "RuntimeConfig",
     "RuntimeMode",

@@ -1,42 +1,8 @@
 {
-  "generated_at": "2026-08-26T10:00:00Z",
-  "commit": "8a00ff7",
-  "profiled_operations": {
-    "startup": {
-      "before_ms": 1800,
-      "after_ms": 1750,
-      "improvement_pct": 2.8,
-      "note": "Startup unchanged; no new blocking I/O added. PAPER reliability hardening adds no measurable startup cost."
-    },
-    "weekly_equity_decision": {
-      "before_provider_calls": 4,
-      "after_provider_calls": 1,
-      "improvement_pct": 75,
-      "note": "Signal verification dedup: identical get_bars_batch calls within 45s coalesced (measured via provider_calls). Universe refresh 150-batch pagination + delta cache dedup reduces repeated download of unchanged symbols."
-    },
-    "universe_refresh": {
-      "before_symbols_requested": 300,
-      "after_symbols_requested": 45,
-      "improvement_pct": 85,
-      "note": "Delta-skip optimization: only newly missing or stale symbols re-fetched; cached 20-day rolling history reused."
-    },
-    "broker_reconciliation": {
-      "before": "single fetch per market",
-      "after": "single fetch per cycle (shared account snapshot), 7-category categorization",
-      "note": "Avoid duplicate broker reads: one account snapshot per batch, shared across markets. Reconciliation before new orders (fail-closed) prevents silent drift."
-    },
-    "sqlite": {
-      "before": "WAL, synchronous=NORMAL, busy_timeout 5000 (already)",
-      "after": "WAL verified, busy_timeout 5000, transaction atomicity for decision+orders, backup integrity check",
-      "note": "No change in hot path; durability ensured via BEGIN IMMEDIATE and integrity_check."
-    }
-  },
+  "_artifact_label": "historical baseline \u2014 PAPER runtime baseline 2026-08-26 at commit 8a00ff7 \u2014 frozen, for startup/weekly decision comparison",
   "benchmark_command": ".venv/bin/pytest tests/test_reliability_hardening.py tests/test_paper_reliability_restart.py tests/test_paper_chaos_incident.py -q",
-  "parity": {
-    "strategy": "equity_residual_momentum_v3",
-    "live_disabled": true,
-    "tests_passed": 783
-  },
+  "commit": "8a00ff7",
+  "generated_at": "2026-08-26T10:00:00Z",
   "optimizations_applied": [
     "AlpacaHistoricalData dedup TTL 60s + measured counters (provider_calls/symbols/bars)",
     "Signal verification dedup TTL 45s + per-symbol watermark monotonic",
@@ -46,5 +12,40 @@
     "Bounded provider retry (5 attempts, exponential 2,4,8,16,16 capped 0.01s in tests)",
     "Reconcile-first for broker uncertainty (never blind retry)"
   ],
-  "optimizations_reverted": []
+  "optimizations_reverted": [],
+  "parity": {
+    "live_disabled": true,
+    "strategy": "equity_residual_momentum_v3",
+    "tests_passed": 783
+  },
+  "profiled_operations": {
+    "broker_reconciliation": {
+      "after": "single fetch per cycle (shared account snapshot), 7-category categorization",
+      "before": "single fetch per market",
+      "note": "Avoid duplicate broker reads: one account snapshot per batch, shared across markets. Reconciliation before new orders (fail-closed) prevents silent drift."
+    },
+    "sqlite": {
+      "after": "WAL verified, busy_timeout 5000, transaction atomicity for decision+orders, backup integrity check",
+      "before": "WAL, synchronous=NORMAL, busy_timeout 5000 (already)",
+      "note": "No change in hot path; durability ensured via BEGIN IMMEDIATE and integrity_check."
+    },
+    "startup": {
+      "after_ms": 1750,
+      "before_ms": 1800,
+      "improvement_pct": 2.8,
+      "note": "Startup unchanged; no new blocking I/O added. PAPER reliability hardening adds no measurable startup cost."
+    },
+    "universe_refresh": {
+      "after_symbols_requested": 45,
+      "before_symbols_requested": 300,
+      "improvement_pct": 85,
+      "note": "Delta-skip optimization: only newly missing or stale symbols re-fetched; cached 20-day rolling history reused."
+    },
+    "weekly_equity_decision": {
+      "after_provider_calls": 1,
+      "before_provider_calls": 4,
+      "improvement_pct": 75,
+      "note": "Signal verification dedup: identical get_bars_batch calls within 45s coalesced (measured via provider_calls). Universe refresh 150-batch pagination + delta cache dedup reduces repeated download of unchanged symbols."
+    }
+  }
 }

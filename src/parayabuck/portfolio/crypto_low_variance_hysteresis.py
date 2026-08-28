@@ -20,7 +20,7 @@ def hysteresis_should_retain(rank: int | None, in_universe: bool, retention_rank
 
 
 class CryptoLowVarianceHysteresis1dV1(CryptoLowVariance1dV2):
-    """Tournament winner T1 — hysteresis low-variance (research frozen, not PAPER).
+    """Tournament winner T1 — hysteresis low-variance (research frozen, PAPER).
 
     Alpha ranking is EXACTLY the validated T0 control (22d total realized
     volatility, 23 consecutive bars, lowest first). Only the portfolio
@@ -36,8 +36,11 @@ class CryptoLowVarianceHysteresis1dV1(CryptoLowVariance1dV2):
     2021-04-01 → 2026-07-31 window under identical PIT/costs/folds, passing
     all 13 hard gates (see docs/crypto_candidate_tournament_validation.md).
 
-    The class is frozen for research reproducibility; promotion to PAPER
-    remains a separate operator decision (do not select in config).
+    Math is frozen for research reproducibility (no subsequent alpha
+    changes). Promoted to PAPER as an active product strategy 2026-08
+    (see docs/crypto_t1_promotion.md / audit script
+    scripts/audit_crypto_t1_promotion_parity.py). Select
+    ``crypto_low_variance_hysteresis_v1`` in PAPER config to trade it.
     """
 
     name = "crypto_low_variance_hysteresis_v1"

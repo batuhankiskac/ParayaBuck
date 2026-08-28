@@ -1,113 +1,114 @@
 {
-  "generated_at": "2026-08-26T11:58:00Z",
-  "head": "a69cbc36984e516da885c0aed3e2edaff0c68f61",
-  "host": "darwin 25.5.0 arm64 Apple M5",
+  "_artifact_label": "historical baseline \u2014 post-research runtime baseline 2026-08-26 \u2014 frozen parity before/after",
   "benchmark_command": ".venv/bin/python benchmarks/bench_backtest.py && .venv/bin/python benchmarks/bench_strategy.py && .venv/bin/python benchmarks/bench_startup.py && .venv/bin/python benchmarks/parity.py",
-  "parity_before": {
-    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
-    "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44",
-    "crypto_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff"
-  },
-  "parity_after": {
-    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
-    "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44",
-    "crypto_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff",
-    "parity_match": true
-  },
-  "operations": {
-    "equity_csv_load_1.7M_rows": {
-      "before_med_s": 3.9925,
-      "after_med_s": 3.5519,
-      "improvement_pct": 11.03,
-      "note": "CSV load dominated by I/O; improvement is noise but within 10% threshold"
-    },
-    "equity_v2_backtest_2019_2021": {
-      "before_med_s": 19.8682,
-      "after_med_s": 17.7021,
-      "improvement_pct": 10.90,
-      "benchmark": "benchmarks/bench_backtest.py equity v2 backtest 2019-2021 (3 runs, 1.7M bars, 1200 sym, 157 rebalances)",
-      "threshold_met": true
-    },
-    "crypto_csv_load_22K_rows": {
-      "before_med_s": 0.0501,
-      "after_med_s": 0.0469,
-      "improvement_pct": 6.39
-    },
-    "crypto_v2_backtest_full": {
-      "before_med_s": 0.9606,
-      "after_med_s": 0.8571,
-      "improvement_pct": 10.77,
-      "benchmark": "benchmarks/bench_backtest.py crypto v2 full (3 runs, 22K bars, 18 symb, 503 rebalances)",
-      "threshold_met": true
-    },
-    "equity_rank_candidates_300sym": {
-      "before_med_s": 0.0215,
-      "after_med_s": 0.0214,
-      "improvement_pct": 0.47
-    },
-    "equity_decide_300sym": {
-      "before_med_s": 0.0216,
-      "after_med_s": 0.0213,
-      "improvement_pct": 1.39
-    },
-    "equity_rank_plus_decide_combined": {
-      "before_med_s": 0.0431,
-      "after_med_s": 0.0427,
-      "improvement_pct": 0.93
-    },
-    "config_load": {
-      "before_med_s": 0.0038,
-      "after_med_s": 0.0038,
-      "improvement_pct": 0.0
-    },
-    "sqlite_store_open": {
-      "before_med_s": 0.0003,
-      "after_med_s": 0.0003,
-      "improvement_pct": 0.0
-    },
-    "engine_runtime_construction_faked": {
-      "before_med_s": 0.0047,
-      "after_med_s": 0.0047,
-      "improvement_pct": 0.0
-    },
-    "peak_rss_delta_MB": {
-      "before": 1084.4,
-      "after": 1084.0,
-      "improvement_pct": 0.04,
-      "note": "RSS unchanged; allocation churn reduced but not visible at peak (1.7M bars dominate)"
-    }
-  },
-  "optimization_applied": {
-    "name": "portfolio_engine._build_context trailing-window fast path",
-    "file": "src/parayabuck/backtest/portfolio_engine.py:997-1079",
-    "description": "Avoid O(B) per-symbol per-decision scan of full history (`[b for b in bars if b.timestamp <= ts]`) when _history lists are already timestamp-sorted and tail <= decision timestamp (common in backtest). Take `bars[-trim:]` slice directly (O(trim)) vs scanning entire history (O(B) ~1500). Fallback to reversed scan for out-of-order/future-bar rare case. Preserves benchmark_key exempt semantics (SPY/BTC not trimmed).",
-    "behavior_preserving": true,
-    "parity_verified": true,
-    "parity_command": ".venv/bin/python benchmarks/parity.py",
-    "hot_path": "equity v2 backtest 2019-2021 and crypto v2 full (bench_backtest.py)",
-    "improvement": "10.9% equity, 10.8% crypto — meets >=10% threshold",
-    "risk": "Low — relies on _history sorted invariant (ingestion in global timestamp order). Fallback handles unsorted/future bars without changing observable history keys, last bar, or trimmed window."
-  },
-  "optimizations_attempted_but_reverted": [
-    {
-      "name": "equity_candidate_from_bars sorted avoidance",
-      "reason": "Validated `valid` already sorted but benefit <1% for 20-bar window (36k sorts * 20 elements) — not measurable, not merged",
-      "file": "src/parayabuck/universe/scanner.py:56"
-    },
-    {
-      "name": "BarStore.get list-copy avoidance",
-      "reason": "Would change return type from list to tuple/view and break `is_contiguous` pairwise scan that expects list copy — not needed for current threshold, deferred",
-      "file": "src/parayabuck/data/buffers.py:72"
-    }
-  ],
   "canonical_dataset_verified": {
     "equity_pit_symmetric_2016_2026_v5.csv": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
     "equity_survivorship_full_corporate_actions_v5.csv": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
     "full_v3_results_v5.json_SYMMETRIC_FULL_T1": {
-      "total_return": 1.1364219478164905,
       "cagr": 0.07442243680989091,
+      "maxDD": 0.22733647235325158,
       "sharpe": 0.6393460732104441,
-      "maxDD": 0.22733647235325158
+      "total_return": 1.1364219478164905
     }
+  },
+  "generated_at": "2026-08-26T11:58:00Z",
+  "head": "a69cbc36984e516da885c0aed3e2edaff0c68f61",
+  "host": "darwin 25.5.0 arm64 Apple M5",
+  "operations": {
+    "config_load": {
+      "after_med_s": 0.0038,
+      "before_med_s": 0.0038,
+      "improvement_pct": 0.0
+    },
+    "crypto_csv_load_22K_rows": {
+      "after_med_s": 0.0469,
+      "before_med_s": 0.0501,
+      "improvement_pct": 6.39
+    },
+    "crypto_v2_backtest_full": {
+      "after_med_s": 0.8571,
+      "before_med_s": 0.9606,
+      "benchmark": "benchmarks/bench_backtest.py crypto v2 full (3 runs, 22K bars, 18 symb, 503 rebalances)",
+      "improvement_pct": 10.77,
+      "threshold_met": true
+    },
+    "engine_runtime_construction_faked": {
+      "after_med_s": 0.0047,
+      "before_med_s": 0.0047,
+      "improvement_pct": 0.0
+    },
+    "equity_csv_load_1.7M_rows": {
+      "after_med_s": 3.5519,
+      "before_med_s": 3.9925,
+      "improvement_pct": 11.03,
+      "note": "CSV load dominated by I/O; improvement is noise but within 10% threshold"
+    },
+    "equity_decide_300sym": {
+      "after_med_s": 0.0213,
+      "before_med_s": 0.0216,
+      "improvement_pct": 1.39
+    },
+    "equity_rank_candidates_300sym": {
+      "after_med_s": 0.0214,
+      "before_med_s": 0.0215,
+      "improvement_pct": 0.47
+    },
+    "equity_rank_plus_decide_combined": {
+      "after_med_s": 0.0427,
+      "before_med_s": 0.0431,
+      "improvement_pct": 0.93
+    },
+    "equity_v2_backtest_2019_2021": {
+      "after_med_s": 17.7021,
+      "before_med_s": 19.8682,
+      "benchmark": "benchmarks/bench_backtest.py equity v2 backtest 2019-2021 (3 runs, 1.7M bars, 1200 sym, 157 rebalances)",
+      "improvement_pct": 10.9,
+      "threshold_met": true
+    },
+    "peak_rss_delta_MB": {
+      "after": 1084.0,
+      "before": 1084.4,
+      "improvement_pct": 0.04,
+      "note": "RSS unchanged; allocation churn reduced but not visible at peak (1.7M bars dominate)"
+    },
+    "sqlite_store_open": {
+      "after_med_s": 0.0003,
+      "before_med_s": 0.0003,
+      "improvement_pct": 0.0
+    }
+  },
+  "optimization_applied": {
+    "behavior_preserving": true,
+    "description": "Avoid O(B) per-symbol per-decision scan of full history (`[b for b in bars if b.timestamp <= ts]`) when _history lists are already timestamp-sorted and tail <= decision timestamp (common in backtest). Take `bars[-trim:]` slice directly (O(trim)) vs scanning entire history (O(B) ~1500). Fallback to reversed scan for out-of-order/future-bar rare case. Preserves benchmark_key exempt semantics (SPY/BTC not trimmed).",
+    "file": "src/parayabuck/backtest/portfolio_engine.py:997-1079",
+    "hot_path": "equity v2 backtest 2019-2021 and crypto v2 full (bench_backtest.py)",
+    "improvement": "10.9% equity, 10.8% crypto \u2014 meets >=10% threshold",
+    "name": "portfolio_engine._build_context trailing-window fast path",
+    "parity_command": ".venv/bin/python benchmarks/parity.py",
+    "parity_verified": true,
+    "risk": "Low \u2014 relies on _history sorted invariant (ingestion in global timestamp order). Fallback handles unsorted/future bars without changing observable history keys, last bar, or trimmed window."
+  },
+  "optimizations_attempted_but_reverted": [
+    {
+      "file": "src/parayabuck/universe/scanner.py:56",
+      "name": "equity_candidate_from_bars sorted avoidance",
+      "reason": "Validated `valid` already sorted but benefit <1% for 20-bar window (36k sorts * 20 elements) \u2014 not measurable, not merged"
+    },
+    {
+      "file": "src/parayabuck/data/buffers.py:72",
+      "name": "BarStore.get list-copy avoidance",
+      "reason": "Would change return type from list to tuple/view and break `is_contiguous` pairwise scan that expects list copy \u2014 not needed for current threshold, deferred"
+    }
+  ],
+  "parity_after": {
+    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
+    "crypto_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff",
+    "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44",
+    "parity_match": true
+  },
+  "parity_before": {
+    "combined_hash": "93fd28374f3b48ac4d1684952bd80fe1c7f1b69dd9d688f7b4d0858bbe4dd10c",
+    "crypto_curve_hash": "004735795b1c0148009d7cef4ac5bb7675136819be3b92b4eff4ff862c2721ff",
+    "equity_curve_hash": "4ff7343f294701fe6439679394d32be96c91df87fbdf4c98967fc66cdaee0f44"
   }
 }

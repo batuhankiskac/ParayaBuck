@@ -75,39 +75,187 @@ class WarmupCache:
         schema, RAW price basis) or key rows without ``market``. Rows whose
         key does not include the market can silently collide across markets,
         so the table is rebuilt whenever the primary key is missing it.
+
+        Crash-safe recovery:
+          A: modern bars, no legacy → no-op.
+          B: old bars, no legacy → atomic rename → create → copy → drop.
+          C: no bars, legacy exists (crash after rename) → recreate bars and
+             copy legacy back, then drop legacy.
+          D: modern bars empty/full + legacy exists (crash after CREATE
+             but before DROP, or before COPY) → idempotently merge legacy
+             into bars then drop legacy.
+          E: both exist → determine schema state; never blindly DROP legacy
+             at the start (previous bug). Legacy is only removed after its
+             rows are proven present in the new table or after a logged merge.
         """
-        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
-        if "adjustment" in columns and "market" in self._primary_key_columns():
-            return
         with self._lock:
-            # Clean up leftover from interrupted migration
-            self.connection.execute("DROP TABLE IF EXISTS bars_legacy")
-            self.connection.execute("ALTER TABLE bars RENAME TO bars_legacy")
-            self.connection.execute(self._SCHEMA)
-            if "adjustment" in columns:
-                self.connection.execute(
-                    """
-                    INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
-                                      open, high, low, close, volume, retrieved_at)
-                    SELECT feed, symbol, market, timeframe, adjustment, timestamp,
-                           open, high, low, close, volume, retrieved_at
-                    FROM bars_legacy
-                    """
+            tables = {
+                str(row[0])
+                for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            bars_exists = "bars" in tables
+            legacy_exists = "bars_legacy" in tables
+
+            def _is_modern_bars() -> bool:
+                if not bars_exists:
+                    return False
+                cols = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
+                return "adjustment" in cols and "market" in self._primary_key_columns()
+
+            # Scenario A: already modern, no legacy → no-op
+            if bars_exists and _is_modern_bars() and not legacy_exists:
+                return
+
+            # Scenario C: interrupted after RENAME, before COPY/COMMIT — bars missing
+            if not bars_exists and legacy_exists:
+                legacy_cols = {
+                    str(row[1]) for row in self.connection.execute("PRAGMA table_info(bars_legacy)").fetchall()
+                }
+                log.warning(
+                    "WarmupCache: recovering interrupted migration — bars missing, restoring %s rows from bars_legacy",
+                    self.connection.execute("SELECT COUNT(*) FROM bars_legacy").fetchone()[0],
                 )
-            else:
-                # Legacy rows carry no market/adjustment; pre-adjustment data
-                # was fetched on the RAW basis, so 'raw' is the honest label.
-                self.connection.execute(
-                    """
-                    INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
-                                      open, high, low, close, volume, retrieved_at)
-                    SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
-                           open, high, low, close, volume, retrieved_at
-                    FROM bars_legacy
-                    """
+                self.connection.execute(self._SCHEMA)
+                if "adjustment" in legacy_cols:
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                    open, high, low, close, volume, retrieved_at)
+                        SELECT feed, symbol, market, timeframe, adjustment, timestamp,
+                               open, high, low, close, volume, retrieved_at
+                        FROM bars_legacy
+                        """
+                    )
+                else:
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                    open, high, low, close, volume, retrieved_at)
+                        SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
+                               open, high, low, close, volume, retrieved_at
+                        FROM bars_legacy
+                        """
+                    )
+                self.connection.execute("DROP TABLE bars_legacy")
+                self.connection.commit()
+                return
+
+            # Both tables exist
+            if bars_exists and legacy_exists:
+                if _is_modern_bars():
+                    bars_count = int(self.connection.execute("SELECT COUNT(*) FROM bars").fetchone()[0] or 0)
+                    legacy_count = int(self.connection.execute("SELECT COUNT(*) FROM bars_legacy").fetchone()[0] or 0)
+                    legacy_cols = {
+                        str(row[1]) for row in self.connection.execute("PRAGMA table_info(bars_legacy)").fetchall()
+                    }
+                    if bars_count == 0 and legacy_count > 0:
+                        # D: CREATE succeeded but COPY never happened — copy now
+                        if "adjustment" in legacy_cols:
+                            self.connection.execute(
+                                """
+                                INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                            open, high, low, close, volume, retrieved_at)
+                                SELECT feed, symbol, market, timeframe, adjustment, timestamp,
+                                       open, high, low, close, volume, retrieved_at
+                                FROM bars_legacy
+                                """
+                            )
+                        else:
+                            self.connection.execute(
+                                """
+                                INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                            open, high, low, close, volume, retrieved_at)
+                                SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
+                                       open, high, low, close, volume, retrieved_at
+                                FROM bars_legacy
+                                """
+                            )
+                        self.connection.execute("DROP TABLE bars_legacy")
+                        self.connection.commit()
+                        log.info(
+                            "WarmupCache: recovered interrupted migration (bars empty) — copied %s rows",
+                            legacy_count,
+                        )
+                        return
+                    # D/E: both populated modern+legacy — idempotently merge then drop
+                    # INSERT OR IGNORE makes the merge safe even if rows already copied
+                    if "adjustment" in legacy_cols:
+                        self.connection.execute(
+                            """
+                            INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                        open, high, low, close, volume, retrieved_at)
+                            SELECT feed, symbol, market, timeframe, adjustment, timestamp,
+                                   open, high, low, close, volume, retrieved_at
+                            FROM bars_legacy
+                            """
+                        )
+                    else:
+                        self.connection.execute(
+                            """
+                            INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                        open, high, low, close, volume, retrieved_at)
+                            SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
+                                   open, high, low, close, volume, retrieved_at
+                            FROM bars_legacy
+                            """
+                        )
+                    after = int(self.connection.execute("SELECT COUNT(*) FROM bars").fetchone()[0] or 0)
+                    self.connection.execute("DROP TABLE bars_legacy")
+                    self.connection.commit()
+                    log.warning(
+                        "WarmupCache: both bars and bars_legacy existed (bars %s → %s rows, legacy %s rows) — "
+                        "merged legacy and removed bars_legacy",
+                        bars_count,
+                        after,
+                        legacy_count,
+                    )
+                    return
+                # bars is old schema but legacy also exists — ambiguous E, do not drop legacy blindly
+                log.warning(
+                    "WarmupCache: both bars (old schema) and bars_legacy exist — "
+                    "preserving bars_legacy and migrating bars via backup"
                 )
-            self.connection.execute("DROP TABLE bars_legacy")
-            self.connection.commit()
+                # Move legacy aside so the normal B path can run without data loss
+                self.connection.execute("ALTER TABLE bars_legacy RENAME TO bars_legacy_backup")
+                self.connection.commit()
+                # Update existence flags for the fall-through B path
+                tables = {
+                    str(row[0])
+                    for row in self.connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                }
+                bars_exists = "bars" in tables
+                legacy_exists = "bars_legacy" in tables  # now False, backup holds old legacy
+                # Fall through to normal migration of old bars; backup left for inspection
+
+            # Normal Scenario B: old bars, no legacy (or after E backup move)
+            if bars_exists and not _is_modern_bars():
+                cols = {str(row[1]) for row in self.connection.execute("PRAGMA table_info(bars)").fetchall()}
+                # Atomic: RENAME → CREATE → COPY → DROP within one transaction (commit at end)
+                self.connection.execute("ALTER TABLE bars RENAME TO bars_legacy")
+                self.connection.execute(self._SCHEMA)
+                if "adjustment" in cols:
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                    open, high, low, close, volume, retrieved_at)
+                        SELECT feed, symbol, market, timeframe, adjustment, timestamp,
+                               open, high, low, close, volume, retrieved_at
+                        FROM bars_legacy
+                        """
+                    )
+                else:
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO bars (feed, symbol, market, timeframe, adjustment, timestamp,
+                                                    open, high, low, close, volume, retrieved_at)
+                        SELECT feed, symbol, 'equity', timeframe, 'raw', timestamp,
+                               open, high, low, close, volume, retrieved_at
+                        FROM bars_legacy
+                        """
+                    )
+                self.connection.execute("DROP TABLE bars_legacy")
+                self.connection.commit()
+                return
 
     def close(self) -> None:
         with self._lock:

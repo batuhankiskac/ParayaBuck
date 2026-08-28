@@ -1,4 +1,5 @@
 {
+  "_artifact_label": "frozen baseline \u2014 Mission 1 after (2.20s 3y) \u2014 legacy parity fixture, do not compare as current",
   "cases": {
     "A_realistic_3y": {
       "bars_per_sec": 342196.5,

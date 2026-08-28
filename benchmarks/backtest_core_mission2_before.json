@@ -1,4 +1,5 @@
 {
+  "_artifact_label": "frozen baseline \u2014 Mission 2 before (2.20s) \u2014 historical, before numeric history acceleration",
   "cases": {
     "A_realistic_3y": {
       "bars_per_sec": 342001.1,

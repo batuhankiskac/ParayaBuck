@@ -3,8 +3,8 @@
 **Starting HEAD:** `89e87c7` (Mission 3 final) → `83a2be1` (backtest fix) → Mission 4 work on top  
 **Date:** 2026-08-29  
 **Machine:** darwin 25.5.0 arm64 Apple M5, Python 3.13.12  
-**Tests:** 1050 collected (1020 original + 19 characterization + 11 existing skipped) → 1050 passed after Mission 4 (was 1020)  
-**Ruff:** pass  **Format:** pass  **Mypy:** pass (94 files)
+**Tests:** 1050 collected (1020 original + 19 characterization + 11 existing) → 1039 passed, 11 skipped after Mission 4 (was 1020 passed, 11 skipped)  
+**Ruff:** pass  **Format:** pass  **Mypy:** pass (95 files)
 
 ---
 

@@ -3062,7 +3062,7 @@ class EngineRuntime:
         history = self._historical
         if history is None:
             return
-        series = self.market_state.bars.get(bar.symbol, bar.timeframe)
+        series = self.market_state.bars.get(bar.symbol, bar.timeframe, bar.market)
         previous = next(
             (candidate for candidate in reversed(series[:-1]) if candidate.timestamp < bar.timestamp),
             None,

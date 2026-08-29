@@ -69,8 +69,8 @@ class BarStore:
         series.append(normalized)
         return mutation
 
-    def get(self, symbol: str, timeframe: str) -> list[Bar]:
-        key = (canonical_symbol(symbol), timeframe)
+    def get(self, symbol: str, timeframe: str, market: Market | None = None) -> list[Bar]:
+        key = (canonical_symbol(symbol, market), timeframe)
         series = self._bars.get(key)
         if series is None:
             return []
@@ -91,8 +91,8 @@ class BarStore:
                 maxlen=self.capacity,
             )
 
-    def is_contiguous(self, symbol: str, timeframe: str) -> bool:
-        series = self.get(symbol, timeframe)
+    def is_contiguous(self, symbol: str, timeframe: str, market: Market | None = None) -> bool:
+        series = self.get(symbol, timeframe, market)
         expected_seconds = timeframe_duration(timeframe).total_seconds()
         for previous, current in pairwise(series):
             if current.market == Market.EQUITY:

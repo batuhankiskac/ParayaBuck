@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from parayabuck.core.models import Bar, Market
@@ -440,14 +440,6 @@ class WarmupCache:
         if not valid:
             log.warning("WarmupCache.replace_window has no valid bars after filtering; cache preserved")
             return False
-        # Truncation guard: if caller supplied start/end, ensure each symbol
-        # contributes at least one bar; otherwise treat as incomplete response
-        # and preserve cache (provider may have truncated at 10k row limit).
-        if start is not None and end is not None:
-            symbols_in_valid = {canonical_symbol(b.symbol, b.market) for b in valid}
-            symbols_in_raw = {canonical_symbol(b.symbol, b.market) for b in bars}
-            # If raw had symbols but valid lost them, that's off-grid only; already handled
-            _ = symbols_in_raw
         # Determine window bounds from bars if not supplied
         if start is None:
             start = min(b.timestamp for b in valid)
@@ -539,7 +531,7 @@ class WarmupCache:
         - symbols_last_timestamp_spread_seconds: max-min last timestamp across symbols.
         """
         now = datetime.now(UTC)
-        start_check = now - __import__("datetime").timedelta(days=lookback_days)  # type: ignore[attr-defined]
+        start_check = now - timedelta(days=lookback_days)
         off_grid = 0
         duplicate_day = 0
         last_timestamps: list[datetime] = []

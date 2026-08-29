@@ -852,3 +852,19 @@ def test_actual_workers_capped() -> None:
     )
     res3 = runner.run(job3)
     assert res3.workers == 1
+
+def test_tier_exceeds_recommended_logs_warning(caplog) -> None:
+    """Exceeding tier max_trials_recommended must emit a warning via logger (not print)."""
+    import logging
+
+    from parayabuck.research.runner import ResearchRunner
+
+    # SMOKE recommends <=4; 5 trials should trigger warning
+    job = _smoke_job(workers=1, n=5)
+    assert job.tier == ResearchTier.SMOKE
+    caplog.set_level(logging.WARNING, logger="parayabuck.research.runner")
+    runner = ResearchRunner()
+    # run will log warning before execution; capture it and still produce results
+    res = runner.run(job)
+    assert len(res.results) == 5
+    assert any("recommends <=" in rec.message and "got 5" in rec.message for rec in caplog.records), caplog.text

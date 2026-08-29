@@ -1,0 +1,28 @@
+/* dashboard.css — cohesive dashboard + ops panel styles (extracted from style.css Phase 7) */
+.ops-panel { margin-top: 20px; }
+.ops-summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 12px 16px; }
+.ops-summary-item { background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.ops-summary-item small { display: block; color: var(--text-muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.ops-summary-item strong { display: block; margin-top: 4px; font-size: 14px; }
+.ops-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.ops-badge.ok { background: rgba(52,211,153,.14); color: #34D399; }
+.ops-badge.blocked { background: rgba(251,191,36,.14); color: #FBBF24; }
+.ops-badge.critical { background: rgba(248,113,113,.16); color: #F87171; }
+.ops-badge.degraded { background: rgba(251,191,36,.14); color: #FBBF24; }
+.ops-badge.unknown { background: rgba(148,163,184,.14); color: #94A3B8; }
+.ops-check { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: rgba(255,255,255,0.02); }
+.ops-check.ok { border-color: rgba(52,211,153,.25); }
+.ops-check.blocked { border-color: rgba(251,191,36,.35); }
+.ops-check.critical { border-color: rgba(248,113,113,.35); }
+.ops-check.degraded { border-color: rgba(251,191,36,.25); }
+.ops-check-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.ops-check-status { font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 999px; }
+.ops-check-status.ok { background: rgba(52,211,153,.14); color:#34D399; }
+.ops-check-status.blocked { background: rgba(251,191,36,.14); color:#FBBF24; }
+.ops-check-status.critical { background: rgba(248,113,113,.16); color:#F87171; }
+.ops-check-summary { margin-top: 6px; font-size: 12px; color: var(--text); }
+.ops-check-action { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.ops-check-observed { margin-top: 6px; background: rgba(0,0,0,.2); border-radius: 6px; padding: 6px 8px; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: auto; }
+.ops-event { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.ops-event:last-child { border-bottom: none; }
+@media (max-width: 900px){ .ops-summary{ grid-template-columns: repeat(2,1fr);} }

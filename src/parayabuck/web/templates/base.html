@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="parayabuck-control-token" content="{{ control_token }}">
+    <meta name="theme-color" content="#080b0f">
+    <title>{% block title %}ParayaBuck — Trading Control Center{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=20260813-3">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260829-1">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="/" aria-label="ParayaBuck ana sayfa">
+                <span class="brand-mark" aria-hidden="true">PB</span>
+                <span class="brand-copy">
+                    <strong>ParayaBuck</strong>
+                    <small>Trading Control Center</small>
+                </span>
+            </a>
+            <div class="topbar-context" aria-label="Sistem durumu">
+                <div id="modeChip" class="mode-chip paper" role="button" tabindex="0" aria-label="İşlem modunu değiştir">
+                    <span class="chip-signal" aria-hidden="true"></span>
+                    <span>
+                        <small>İşlem modu</small>
+                        <strong id="modeText">Paper demo</strong>
+                    </span>
+                    <span id="modeIcon" class="chip-chevron" aria-hidden="true">⌄</span>
+                </div>
+                <div class="engine-state">
+                    <span id="statusDot" class="status-dot stopped" aria-hidden="true"></span>
+                    <span>
+                        <small>Motor durumu</small>
+                        <strong id="statusText">Durdu</strong>
+                    </span>
+                </div>
+                <span id="modeBadge" class="mode-badge paper" aria-label="İşlem modu rozeti">PAPER</span>
+            </div>
+            <div class="nav-actions">
+                <button id="startBtn" class="btn btn-primary">
+                    <span class="button-icon" aria-hidden="true">▶</span>
+                    <span>Motoru başlat</span>
+                </button>
+                <button id="stopBtn" class="btn btn-danger" disabled>
+                    <span class="stop-icon" aria-hidden="true"></span>
+                    <span>Durdur</span>
+                </button>
+                <button id="resetSafetyBtn" class="btn btn-quiet" hidden>
+                    <span class="button-icon" aria-hidden="true">↻</span>
+                    <span>Güvenlik kilidini doğrula</span>
+                </button>
+                <button id="riskEpochBtn" class="btn btn-quiet" hidden title="Drawdown >%5 kalıcı kilitlenmesin: doğrulama sonrası risk dönemi başlatır, drawdown tabanını mevcut özkaynağa çeker">
+                    <span class="button-icon" aria-hidden="true">⟲</span>
+                    <span>Yeni risk dönemi</span>
+                </button>
+                <button id="settingsBtn" class="btn btn-quiet" aria-haspopup="dialog">
+                    <span class="button-icon" aria-hidden="true">⚙</span>
+                    <span>Ayarlar</span>
+                </button>
+            </div>
+        </header>
+
+        <section class="system-strip" aria-label="Piyasa ve tarayıcı durumu">
+            <div class="system-strip-label">
+                <span class="live-pulse" aria-hidden="true"></span><span>Canlı sistem özeti</span>
+            </div>
+            <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
+            <span class="system-time">{% block system_time %}bağımsız strateji zaman dilimleri{% endblock %}</span>
+        </section>
+
+        <nav class="page-nav" aria-label="Ana bölümler">
+            <a class="page-nav-link {% if request.url.path == '/' %}active{% endif %}" href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
+            <a class="page-nav-link {% if request.url.path == '/tools' %}active{% endif %}" href="/tools" {% if request.url.path == '/tools' %}aria-current="page"{% endif %}>Araçlar</a>
+            <a class="page-nav-link {% if request.url.path == '/research' %}active{% endif %}" href="/research" {% if request.url.path == '/research' %}aria-current="page"{% endif %}>Araştırma</a>
+        </nav>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

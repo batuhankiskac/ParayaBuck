@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}ParayaBuck — Araştırma{% endblock %}
+{% block system_time %}araştırma denemeleri{% endblock %}
+{% block head_extra %}
+<style>
+.research-filters { display: flex; gap: 12px; flex-wrap: wrap; padding: 16px 20px; }
+.research-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.research-filters select, .research-filters input { min-width: 160px; }
+</style>
+{% endblock %}
+{% block content %}
+<main class="dashboard-content research-content">
+    <section class="panel" aria-label="Araştırma denemeleri">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">ARAŞTIRMA</span>
+                <h2>Deney sonuçları</h2>
+            </div>
+            <span id="researchCountBadge" class="count-badge">—</span>
+        </div>
+        <div class="research-filters">
+            <label>Strateji
+                <select id="filterStrategy"><option value="">Tümü</option></select>
+            </label>
+            <label>Piyasa
+                <select id="filterMarket"><option value="">Tümü</option><option value="equity">equity</option><option value="crypto">crypto</option></select>
+            </label>
+            <label>Durum
+                <select id="filterStatus"><option value="">Tümü</option><option value="ok">ok</option><option value="failed">failed</option><option value="pending">pending</option></select>
+            </label>
+            <label>Etiket / Tag
+                <input id="filterTag" type="text" placeholder="tag ara...">
+            </label>
+        </div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Strateji</th><th>Piyasa</th><th>Durum</th><th>Tag</th><th>Sharpe</th><th>Getiri</th><th>MaxDD</th><th>Tarih</th></tr>
+                </thead>
+                <tbody id="researchBody">
+                    <tr><td colspan="8" class="empty-state"><span class="empty-icon">—</span>Deneme yükleniyor…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/api.js?v=20260829-1"></script>
+<script src="/static/js/research.js?v=20260829-1"></script>
+{% endblock %}

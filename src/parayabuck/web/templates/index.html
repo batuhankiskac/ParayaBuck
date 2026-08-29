@@ -8,6 +8,7 @@
     <title>ParayaBuck — Trading Control Center</title>
     <script src="/static/js/chart-lite.js?v=20260812-1"></script>
     <link rel="stylesheet" href="/static/css/style.css?v=20260813-3">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=20260829-1">
 </head>
 <body>
     <div class="ambient ambient-one"></div>
@@ -74,10 +75,10 @@
             <p id="marketStatusText">Equity ve kripto durumu yükleniyor…</p>
             <span class="system-time">bağımsız strateji zaman dilimleri</span>
         </section>
-
         <nav class="page-nav" aria-label="Ana bölümler">
             <a class="page-nav-link active" href="/" aria-current="page">Dashboard</a>
             <a class="page-nav-link" href="/tools">Araçlar</a>
+            <a class="page-nav-link" href="/research">Araştırma</a>
         </nav>
 
         <main class="dashboard-content">
@@ -404,6 +405,30 @@
                 </div>
             </section>
 
+            <section id="opsSummaryPanel" class="panel ops-panel" aria-label="Operasyon durumu">
+                <div class="panel-header">
+                    <div>
+                        <span class="eyebrow">OPS</span>
+                        <h2>Operasyon özeti</h2>
+                    </div>
+                    <span id="opsHeartbeatBadge" class="count-badge">—</span>
+                </div>
+                <div class="ops-summary">
+                    <div class="ops-summary-item"><small>Overall health</small><strong><span id="opsOverall" class="ops-badge unknown">—</span></strong></div>
+                    <div class="ops-summary-item"><small>Trading state</small><strong><span id="opsTradingState" class="ops-badge unknown">—</span></strong></div>
+                    <div class="ops-summary-item"><small>Heartbeat</small><strong id="opsHeartbeat">—</strong></div>
+                    <div class="ops-summary-item"><small>Snapshot age</small><strong id="opsSnapshotAge">—</strong></div>
+                </div>
+                <div class="table-wrapper" style="padding: 0 16px;">
+                    <h3 style="font-size:12px; color:var(--text-muted); margin:12px 0 6px;">Health checks</h3>
+                    <div id="opsChecks"></div>
+                    <h3 style="font-size:12px; color:var(--text-muted); margin:16px 0 6px;">Recent events</h3>
+                    <div id="opsRecentEvents" class="empty-state">Yükleniyor…</div>
+                    <h3 style="font-size:12px; color:var(--text-muted); margin:16px 0 6px;">Decision explanation</h3>
+                    <pre id="opsDecisionExplanation" class="ops-check-observed" style="white-space:pre-wrap;">Yükleniyor…</pre>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -577,6 +602,10 @@
     </div>
 
     <div id="statusToast" class="status-toast" role="status" aria-live="polite" hidden></div>
-    <script src="/static/js/app.js?v=20260813-1"></script>
+    <script src="/static/js/api.js?v=20260829-1"></script>
+    <script src="/static/js/websocket.js?v=20260829-1"></script>
+    <script src="/static/js/controls.js?v=20260829-1"></script>
+    <script src="/static/js/dashboard.js?v=20260829-1"></script>
+    <script src="/static/js/ops.js?v=20260829-1"></script>
 </body>
 </html>

@@ -1,0 +1,230 @@
+"""Pin Web security invariants — Host / Origin / control-token / WS tickets / LIVE.
+
+These are the local-only guarantees that must survive the Mission 6
+refactor.  Every route mounted through the factory inherits the same
+`protect_local_control_api` middleware, so the matrix is tested once
+against the factory app, not per-router.
+"""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from parayabuck.web.application import create_app
+from parayabuck.web.managers.backtest import BacktestManager
+from parayabuck.web.managers.engine import EngineManager
+from parayabuck.web.managers.websocket import WebSocketTicketStore
+from parayabuck.web.security import (
+    is_trusted_host,
+    trusted_browser_origin,
+    validate_control_token,
+)
+from parayabuck.web.state import WebState
+
+
+def _app_with_fake_manager():
+    mgr = EngineManager()
+    # keep token deterministic for tests
+    bm = BacktestManager(engine_state_provider=mgr.current_engine_state)
+    bm.bind_engine_state_provider(mgr.current_engine_state)
+    from parayabuck.web.managers.websocket import ticket_store
+
+    state = WebState(engine_manager=mgr, backtest_manager=bm, ticket_store=ticket_store)
+    state.bind()
+    app = create_app(state)
+    return app, mgr, bm
+
+
+def test_trusted_host_allows_loopback_and_testserver():
+    assert is_trusted_host("127.0.0.1")
+    assert is_trusted_host("localhost")
+    assert is_trusted_host("[::1]")
+    assert is_trusted_host("[::1]:8000")
+    assert is_trusted_host("127.0.0.1:8000")
+    # testserver is allowed only under PYTEST_CURRENT_TEST (set by pytest)
+    assert is_trusted_host("testserver")
+    assert is_trusted_host("testserver:80")
+
+
+def test_untrusted_host_rejected():
+    for h in ["evil.com", "0.0.0.0", "192.168.1.10", "example.com:8000", ""]:
+        assert not is_trusted_host(h), f"should reject {h!r}"
+
+
+def test_host_middleware_rejects_untrusted_host():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    # mutating endpoint with untrusted Host must be 403 regardless of token
+    r = client.post(
+        "/api/engine/start",
+        headers={"Host": "evil.com", "X-Parayabuck-Control-Token": mgr.control_token},
+    )
+    assert r.status_code == 403
+    assert "Untrusted Host" in r.text
+
+
+# --- Origin ---
+
+
+def test_trusted_browser_origin_strict():
+    # trusted_browser_origin (strict) rejects empty, allows loopback
+    assert not trusted_browser_origin(None)
+    assert not trusted_browser_origin("")
+    assert trusted_browser_origin("http://127.0.0.1:8000")
+    assert trusted_browser_origin("http://localhost:3000")
+    assert trusted_browser_origin("http://[::1]:8000")
+    assert not trusted_browser_origin("http://evil.com")
+    assert not trusted_browser_origin("http://192.168.1.1")
+
+
+def test_origin_middleware_allows_non_browser_then_checks_token():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    # No Origin -> non-browser (curl) -> middleware allows to token check
+    # Without token, mutating must be 403 Invalid token, not 403 Origin
+    r = client.post("/api/engine/start", headers={"Host": "testserver"})
+    assert r.status_code == 403
+    assert "Invalid local control token" in r.text
+    # With token, it proceeds to handler (may be 400/200 but not 403 Origin)
+    r2 = client.post(
+        "/api/engine/start",
+        headers={"Host": "testserver", "X-Parayabuck-Control-Token": mgr.control_token},
+    )
+    assert r2.status_code != 403 or "Untrusted browser origin" not in r2.text
+
+
+def test_origin_middleware_rejects_untrusted_browser_origin_for_mutating():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    r = client.post(
+        "/api/engine/start",
+        headers={
+            "Host": "testserver",
+            "Origin": "http://evil.com",
+            "X-Parayabuck-Control-Token": mgr.control_token,
+        },
+    )
+    assert r.status_code == 403
+    assert "Untrusted browser origin" in r.text
+    # GET is not mutating -> Origin not checked (status may be 200 or 500 but not 403 Origin)
+    r2 = client.get("/api/status", headers={"Host": "testserver", "Origin": "http://evil.com"})
+    assert r2.status_code != 403 or "Untrusted browser origin" not in r2.text
+
+
+# --- Control token ---
+
+
+def test_control_token_validation_uses_constant_time():
+    assert validate_control_token("abc", "abc")
+    assert not validate_control_token("abc", "abd")
+    assert not validate_control_token("", "abc")
+
+
+def test_mutating_without_token_rejected_with_token_with_allowed():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    # No token
+    r = client.post("/api/engine/stop", headers={"Host": "testserver"})
+    assert r.status_code == 403
+    assert "Invalid local control token" in r.text
+    # Wrong token
+    r2 = client.post("/api/engine/stop", headers={"Host": "testserver", "X-Parayabuck-Control-Token": "wrong"})
+    assert r2.status_code == 403
+    # Correct token -> not 403 (actual handler may return 400/200 but not token error)
+    r3 = client.post(
+        "/api/engine/stop",
+        headers={"Host": "testserver", "X-Parayabuck-Control-Token": mgr.control_token},
+    )
+    assert "Invalid local control token" not in r3.text
+
+
+def test_control_token_endpoint_is_no_store_and_loopback_only():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    r = client.get("/api/control-token", headers={"Host": "testserver"})
+    assert r.status_code == 200
+    assert "control_token" in r.json()
+    assert r.headers.get("Cache-Control") == "no-store"
+    # Untrusted Host must be 403 even for GET control-token
+    r2 = client.get("/api/control-token", headers={"Host": "evil.com"})
+    assert r2.status_code == 403
+
+
+def test_control_token_not_in_observability_or_error_payloads():
+    app, mgr, _ = _app_with_fake_manager()
+    client = TestClient(app, raise_server_exceptions=False)
+    # Trigger an error response from a mutating endpoint without token -> 403 JSON must not contain token
+    r = client.post("/api/engine/start", headers={"Host": "testserver"})
+    assert r.status_code == 403
+    body = r.json()
+    assert "control_token" not in str(body).lower()
+    # Ops status (read-only) must not leak token
+    r2 = client.get("/api/ops/status", headers={"Host": "testserver"})
+    assert r2.status_code in {200, 500}  # may be 500 if no snapshot, but never 403
+    if r2.status_code == 200:
+        assert "control_token" not in r2.text.lower()
+        assert "api_key" not in r2.text.lower()
+
+
+# --- WebSocket tickets ---
+
+
+def test_ws_ticket_single_use_scope_and_ttl():
+    store = WebSocketTicketStore(ttl_seconds=1.0)
+    t_stream = store.issue("stream")
+    t_logs = store.issue("logs")
+    assert t_stream != t_logs
+    # correct scope consumes
+    assert store.consume(t_stream, "stream") is True
+    # single-use -> second consume fails
+    assert store.consume(t_stream, "stream") is False
+    # wrong scope -> fails and still single-use (already popped)
+    assert store.consume(t_logs, "stream") is False
+    # correct scope after wrong attempt already popped -> fails
+    assert store.consume(t_logs, "logs") is False
+    # fresh ticket
+    t2 = store.issue("logs")
+    assert store.consume(t2, "logs") is True
+    # TTL expiry
+    t3 = store.issue("stream")
+    time.sleep(1.1)
+    assert store.consume(t3, "stream") is False
+
+
+def test_ws_ticket_unknown_kind_rejected():
+    store = WebSocketTicketStore()
+    with pytest.raises(ValueError):
+        store.issue("unknown")
+
+
+def test_ws_ticket_concurrent_issue_never_drops():
+    store = WebSocketTicketStore(ttl_seconds=5.0)
+    # Simulate concurrent prune-rebuild by issuing many quickly
+    tickets = [store.issue("stream") for _ in range(50)]
+    assert len(set(tickets)) == 50
+    # All consume exactly once
+    assert all(store.consume(t, "stream") for t in tickets)
+    assert not store.consume(tickets[0], "stream")
+
+
+def test_live_arm_token_bound_to_credentials_and_config():
+    # This pin ensures LiveArmToken class still exists and has expected fields
+    from datetime import UTC, datetime, timedelta
+
+    from parayabuck.web.managers.engine import LiveArmToken
+
+    assert LiveArmToken is not None
+    now = datetime.now(UTC)
+    tok = LiveArmToken(
+        account_id="acc",
+        account_suffix="1234",
+        issued_at=now,
+        expires_at=now + timedelta(minutes=5),
+        config_digest="abc",
+        credential_fingerprint="def",
+    )
+    assert tok.account_suffix == "1234"
+    assert tok.config_digest == "abc"

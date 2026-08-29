@@ -361,9 +361,9 @@ class EngineRuntime:
                 if snap_path is not None:
                     snap_path = getattr(snap_path, "snapshot_path", None) or "data/runtime/health_snapshot.json"
                     interval = getattr(
-                        getattr(self, "app_config", None).observability,
+                        getattr(getattr(self, "app_config", None), "observability", None),
                         "snapshot_interval_seconds",
-                        30.0,  # type: ignore[union-attr]
+                        30.0,
                     )
                 else:
                     snap_path = "data/runtime/health_snapshot.json"

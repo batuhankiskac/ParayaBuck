@@ -2537,7 +2537,7 @@ class EngineRuntime:
             try:
                 market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
             except TypeError:
-                market_reasons[candidate_market] = gate(candidate_market)  # type: ignore[call-arg]
+                market_reasons[candidate_market] = gate(candidate_market)
         if not any(
             symbol not in self._not_ready_symbols
             and not self._engine_has_symbol_gap(symbol)
@@ -2590,7 +2590,7 @@ class EngineRuntime:
             try:
                 readiness_reasons = gate(portfolio_runtime.market, **gate_kwargs)
             except TypeError:
-                readiness_reasons = gate(portfolio_runtime.market)  # type: ignore[call-arg]
+                readiness_reasons = gate(portfolio_runtime.market)
             if readiness_reasons:
                 if portfolio_runtime.strategy.name == "equity_residual_momentum_v3":
                     log.info(
@@ -2600,9 +2600,10 @@ class EngineRuntime:
                     )
                 # Visibility: readiness gate blocked decision — emit no-trade
                 try:
+                    from datetime import datetime as _dt
+
                     from parayabuck.monitoring.journal import emit_journal
                     from parayabuck.monitoring.operational_event import create_event
-                    from datetime import datetime as _dt
 
                     # Build single sentence message
                     market_name = portfolio_runtime.market.value if hasattr(portfolio_runtime.market, "value") else str(portfolio_runtime.market)

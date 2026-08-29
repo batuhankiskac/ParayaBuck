@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -204,7 +203,7 @@ def repair_runtime_db():
             "UPDATE runtime_sessions SET ended_at=?, state='interrupted' WHERE ended_at IS NULL",
             (now,),
         )
-        print(f"  Closed runtime sessions as interrupted")
+        print("  Closed runtime sessions as interrupted")
     # Check safety incident
     cur = con.execute("SELECT * FROM safety_incidents WHERE reason='decision_worker_crashed'")
     rows = cur.fetchall()
@@ -222,8 +221,8 @@ def repair_runtime_db():
         secret = os.getenv("ALPACA_SECRET_KEY")
         if api_key and secret:
             from parayabuck.execution.alpaca import AlpacaBroker
-            from parayabuck.storage import SQLiteStore
             from parayabuck.execution.ledger import ExecutionLedger
+            from parayabuck.storage import SQLiteStore
 
             store = SQLiteStore(str(LEDGER))
             ledger = ExecutionLedger(str(LEDGER), store=store)
@@ -264,9 +263,6 @@ def repair_runtime_db():
             print("  Cleared incident (operator override: local repair)")
 
     # Fix risk_state for today: clear circuit_breaker_reason
-    today = datetime.now(UTC).date().isoformat()
-    # Actual today from DB was 2026-08-29, use that date if exists else today
-    # Find latest risk_state entry
     cur = con.execute("SELECT session_date, payload FROM risk_state ORDER BY session_date DESC LIMIT 1")
     row = cur.fetchone()
     if row:
@@ -315,10 +311,11 @@ def attempt_warmup_refresh():
         print("  No keys, skip warmup refresh — next engine start will fetch")
         return False
     try:
-        from parayabuck.config import load_config
-        from parayabuck.data.alpaca import AlpacaHistoricalData
-        from parayabuck.core.models import Market
         from datetime import timedelta
+
+        from parayabuck.config import load_config
+        from parayabuck.core.models import Market
+        from parayabuck.data.alpaca import AlpacaHistoricalData
 
         cfg = load_config()
         # Determine symbols: use trade_symbols from config
@@ -329,7 +326,7 @@ def attempt_warmup_refresh():
         hist = AlpacaHistoricalData(api_key, secret, stock_feed=cfg.alpaca.stock_historical_feed)
         end = datetime.now(UTC)
         start = end - timedelta(days=60)
-        bars = hist.get_bars_batch(crypto_syms, "1d", start=start, end=end, adjustment="raw")
+        hist.get_bars_batch(crypto_syms, "1d", start=start, end=end, adjustment="raw")
         hist.close()
         # Verify
         from parayabuck.data.cache import WarmupCache

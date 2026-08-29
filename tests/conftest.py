@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -11,16 +10,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from parayabuck.web.state import get_web_state, set_web_state
-
 from parayabuck.data import cache as cache_module
 from parayabuck.data.cache import WarmupCache
 from parayabuck.monitoring import journal as journal_module
-from parayabuck.monitoring.journal import EventJournal, DEFAULT_JOURNAL_PATH
-from parayabuck.monitoring import snapshot as snapshot_module
-from parayabuck.monitoring.snapshot import SnapshotWriter, DEFAULT_SNAPSHOT_PATH
 from parayabuck.monitoring import receipt as receipt_module
+from parayabuck.monitoring import snapshot as snapshot_module
+from parayabuck.monitoring.journal import DEFAULT_JOURNAL_PATH, EventJournal
+from parayabuck.monitoring.snapshot import DEFAULT_SNAPSHOT_PATH, SnapshotWriter
 from parayabuck.storage import SQLiteStore
+from parayabuck.web.state import get_web_state, set_web_state
 
 _PROTECTED_PATHS = [
     Path("data/cache/warmup.sqlite3"),

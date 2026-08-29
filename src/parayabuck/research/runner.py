@@ -21,6 +21,7 @@ from parayabuck.backtest.product import (
 )
 from parayabuck.config import Config, load_config
 from parayabuck.core.models import Bar, Market
+from parayabuck.logger import get_logger
 from parayabuck.portfolio import portfolio_strategy_from
 
 from .cache import load_cached_bars, load_cached_universe, store_cached_bars, store_cached_universe
@@ -31,6 +32,9 @@ from .tiers import (
     resolve_window,
     tier_spec,
 )
+
+log = get_logger("parayabuck.research.runner")
+
 
 # Worker globals for file-based initializer (spawn-safe)
 _W_CONFIG: Config | None = None
@@ -487,7 +491,7 @@ class ResearchRunner:
                 raise ValueError(f"Trial {tr.label} has non-positive cost_multiplier")
         spec = tier_spec(job.tier)
         if spec.max_trials_recommended is not None and len(job.trials) > spec.max_trials_recommended:
-            print(f"Warning: tier {job.tier} recommends <= {spec.max_trials_recommended} trials, got {len(job.trials)}")
+            log.warning("Tier %s recommends <= %s trials, got %s", job.tier, spec.max_trials_recommended, len(job.trials))
         config = self._config or load_config(job.config_path)
         # Protect SQLite under multiprocessing
         # Resolve persist flags with tier defaults (tri-state)

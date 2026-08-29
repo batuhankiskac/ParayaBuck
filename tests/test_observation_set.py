@@ -205,6 +205,41 @@ def test_observation_set_falls_back_when_no_ranker() -> None:
     assert observation.observation_set == ("SPY", "AAPL", "JPM")
 
 
+def test_strategy_fallback_leaves_capacity_empty_for_young_or_stale_symbols() -> None:
+    class _Ranker:
+        name = "test_ranker"
+        minimum_history_bars = 3
+
+        @staticmethod
+        def rank_candidates(_context: PortfolioContext) -> tuple[str, ...]:
+            return ("READY",)
+
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def series(symbol: str, days: tuple[int, ...]) -> tuple[Bar, ...]:
+        return tuple(_bar(symbol, start + timedelta(days=day), 100.0 + day, Market.EQUITY) for day in days)
+
+    observation = build_observation_set(
+        _Ranker(),  # type: ignore[arg-type]
+        {
+            "SPY": series("SPY", (0, 1, 2)),
+            "READY": series("READY", (0, 1, 2)),
+            "YOUNG": series("YOUNG", (1, 2)),
+            "STALE": series("STALE", (0, 1, 1)),
+        },
+        ("SPY", "READY", "YOUNG", "STALE"),
+        market=Market.EQUITY,
+        timeframe="1d",
+        decision_timestamp=start + timedelta(days=2),
+        maximum_stream_symbols=4,
+        pinned_symbols=("SPY",),
+        scanner_fallback=("YOUNG", "STALE"),
+    )
+
+    assert observation.observation_set == ("SPY", "READY")
+    assert observation.source == "strategy_alpha"
+
+
 def test_observation_set_respects_capacity_and_rejects_overflow_pins() -> None:
     with pytest.raises(ValueError, match="exceed maximum_stream_symbols"):
         build_observation_set(

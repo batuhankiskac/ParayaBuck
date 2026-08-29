@@ -67,6 +67,7 @@ from parayabuck.risk.state import RiskState
 from parayabuck.runtime_events import _Event, _EventQueue
 from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
 from parayabuck.runtime_state import RuntimeMarketState
+from parayabuck.runtime_universe import ActiveProductUniverse, load_active_product_universe
 from parayabuck.storage import SQLiteStore
 from parayabuck.universe import (
     ensure_active_universes,
@@ -196,6 +197,17 @@ class EngineRuntime:
             if config.universe.crypto.enabled
             else ()
         )
+        self._product_universes_by_market: dict[Market, ActiveProductUniverse] = {}
+        if active_equities:
+            self._product_universes_by_market[Market.EQUITY] = self._load_product_universe(
+                Market.EQUITY,
+                tuple(active_equities),
+            )
+        if active_crypto:
+            self._product_universes_by_market[Market.CRYPTO] = self._load_product_universe(
+                Market.CRYPTO,
+                tuple(active_crypto),
+            )
         self._active_crypto_symbols = active_crypto if config.strategy.crypto.enabled else ()
         # Live observation membership is driven by the enabled strategies'
         # universe symbols plus managed-position/open-order pins. A market
@@ -440,6 +452,43 @@ class EngineRuntime:
         if enabled and dynamic and status != "success" and not fallback_allowed:
             return "invalid_dynamic_universe"
         return None
+
+    def _load_product_universe(
+        self,
+        market: Market,
+        observation_symbols: tuple[str, ...],
+    ) -> ActiveProductUniverse:
+        """Bind runtime observation membership to a concrete product snapshot."""
+
+        if market == Market.EQUITY:
+            equity_config = self.app_config.universe.equity
+            status = self.universe_preflight.equity_status
+            policy_digest = scanner_config_digest(equity_config)
+            dynamic = equity_config.dynamic_selection_enabled
+            active_path = equity_config.active_universe_path
+        else:
+            crypto_config = self.app_config.universe.crypto
+            status = self.universe_preflight.crypto_status
+            policy_digest = crypto_scanner_config_digest(crypto_config)
+            dynamic = crypto_config.dynamic_selection_enabled
+            active_path = crypto_config.active_universe_path
+        if dynamic and status == "success":
+            return load_active_product_universe(
+                active_path,
+                market=market,
+                expected_observation_symbols=observation_symbols,
+                expected_config_digest=policy_digest,
+            )
+        # A disabled/failed dynamic scanner may still keep explicit fallback
+        # symbols observable for managed exits. Entry-halt policy remains in
+        # _initial_universe_halt; this adapter only removes the permissive
+        # universe=None behavior.
+        return ActiveProductUniverse.configured(
+            market,
+            observation_symbols,
+            snapshot_id=f"{market.value}:configured:{policy_digest}",
+            config_digest=policy_digest,
+        )
 
     @property
     def is_running(self) -> bool:
@@ -799,29 +848,38 @@ class EngineRuntime:
         self._strategy_specs = tuple(refreshed_specs)
         configured_live_cap = self.app_config.live.hard_dollar_cap if not self.paper else 0.0
         portfolio_limits = portfolio_risk_limits_from_config(self.app_config.risk)
-        self._portfolio_runtimes = tuple(
-            PortfolioRuntime(
-                strategy,
-                symbols,
-                self.broker,
-                self._portfolio_repository,
-                mode=self.mode.value,
-                maximum_allocation=maximum_allocation,
-                risk_limits=portfolio_limits,
-                universe_version=(
-                    scanner_config_digest(self.app_config.universe.equity)
-                    if strategy.market == Market.EQUITY
-                    else crypto_scanner_config_digest(self.app_config.universe.crypto)
-                ),
-                account_id=self.broker.account_id or "unknown",
-                live_dollar_cap=configured_live_cap,
-                execution_policy=PortfolioExecutionPolicy(
-                    rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
-                    minimum_order_notional=self.app_config.execution.minimum_order_notional,
-                ),
+        portfolio_runtimes: list[PortfolioRuntime] = []
+        for strategy, symbols, maximum_allocation in self._strategy_specs:
+            product_universe = self._product_universes_by_market.get(strategy.market)
+            if product_universe is None:
+                raise RuntimeError(f"Missing product universe composition for {strategy.market.value}")
+            product_universe = product_universe.with_observation_symbols(symbols)
+            self._product_universes_by_market[strategy.market] = product_universe
+            universe_version = (
+                scanner_config_digest(self.app_config.universe.equity)
+                if strategy.market == Market.EQUITY
+                else crypto_scanner_config_digest(self.app_config.universe.crypto)
             )
-            for strategy, symbols, maximum_allocation in self._strategy_specs
-        )
+            portfolio_runtimes.append(
+                PortfolioRuntime(
+                    strategy,
+                    symbols,
+                    self.broker,
+                    self._portfolio_repository,
+                    mode=self.mode.value,
+                    maximum_allocation=maximum_allocation,
+                    risk_limits=portfolio_limits,
+                    universe=product_universe,
+                    universe_version=universe_version,
+                    account_id=self.broker.account_id or "unknown",
+                    live_dollar_cap=configured_live_cap,
+                    execution_policy=PortfolioExecutionPolicy(
+                        rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
+                        minimum_order_notional=self.app_config.execution.minimum_order_notional,
+                    ),
+                )
+            )
+        self._portfolio_runtimes = tuple(portfolio_runtimes)
         if not self.paper:
             secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
             approval = LiveOperatorApproval.load_verified(
@@ -966,8 +1024,19 @@ class EngineRuntime:
         # Seeded warmup history exists and the account snapshot is fresh: a
         # mid-period start must not leave a fresh account in cash until the
         # next cadence boundary (backtest decides on its first usable bar).
-        # Catch-up failures are logged, never fatal — normal cadence resumes.
-        self._run_startup_catch_up()
+        # Normal no-trade/readiness outcomes are result statuses. Unexpected
+        # exceptions are invalid composition/safety/provider failures and
+        # must not be hidden behind an apparently running engine.
+        try:
+            self._run_startup_catch_up()
+        except Exception as exc:
+            self._state = "error"
+            self.stop()
+            if _is_transient_network_error(exc):
+                raise TransientStartupError(
+                    f"Startup catch-up deferred after transient network failure: {exc}"
+                ) from exc
+            raise
         self._refresh_readiness()
         self._state = "running" if self._has_ready_symbols() else "warming_up"
         record_session = getattr(self.ledger, "record_runtime_session", None)
@@ -1178,13 +1247,18 @@ class EngineRuntime:
                     exc,
                 )
         desired: dict[Market, tuple[str, ...]] = {}
+        product_universes: dict[Market, ActiveProductUniverse] = {}
 
-        def refresh_one(market: Market, operation: Callable[[], tuple[str, ...]]) -> None:
+        def refresh_one(
+            market: Market,
+            operation: Callable[[], tuple[tuple[str, ...], ActiveProductUniverse]],
+        ) -> None:
             try:
-                selected = operation()
+                selected, product_universe = operation()
                 if not selected:
                     raise RuntimeError(f"Scanner produced no valid {market.value} universe")
                 desired[market] = tuple(selected)
+                product_universes[market] = product_universe
                 self._universe_refresh_status[market.value] = "success"
                 self._last_universe_refresh_error[market.value] = None
             except Exception as exc:
@@ -1203,22 +1277,34 @@ class EngineRuntime:
         equity_config = self.app_config.universe.equity
         if target in {None, Market.EQUITY} and equity_config.enabled and equity_config.dynamic_selection_enabled:
 
-            def refresh_equity() -> tuple[str, ...]:
+            def refresh_equity() -> tuple[tuple[str, ...], ActiveProductUniverse]:
                 refresh_equity_universe(self.app_config, self.api_key, self.secret_key)
-                return load_active_symbols(equity_config, log_rejection=False)
+                selected = load_active_symbols(equity_config, log_rejection=False)
+                return selected, load_active_product_universe(
+                    equity_config.active_universe_path,
+                    market=Market.EQUITY,
+                    expected_observation_symbols=selected,
+                    expected_config_digest=scanner_config_digest(equity_config),
+                )
 
             refresh_one(Market.EQUITY, refresh_equity)
         crypto_config = self.app_config.universe.crypto
         if target in {None, Market.CRYPTO} and crypto_config.enabled and crypto_config.dynamic_selection_enabled:
 
-            def refresh_crypto() -> tuple[str, ...]:
+            def refresh_crypto() -> tuple[tuple[str, ...], ActiveProductUniverse]:
                 refresh_crypto_universe(self.app_config, self.api_key, self.secret_key)
-                return load_active_crypto_symbols(crypto_config, log_rejection=False)
+                selected = load_active_crypto_symbols(crypto_config, log_rejection=False)
+                return selected, load_active_product_universe(
+                    crypto_config.active_universe_path,
+                    market=Market.CRYPTO,
+                    expected_observation_symbols=selected,
+                    expected_config_digest=crypto_scanner_config_digest(crypto_config),
+                )
 
             refresh_one(Market.CRYPTO, refresh_crypto)
         if desired:
             try:
-                self._apply_runtime_universes(desired)
+                self._apply_runtime_universes(desired, product_universes=product_universes)
             except Exception as exc:
                 for market in desired:
                     self._universe_refresh_status[market.value] = "apply_failed"
@@ -1231,9 +1317,13 @@ class EngineRuntime:
         self._last_universe_refresh_at = datetime.now(UTC)
 
     def _apply_runtime_universes(
-        self, desired_by_market: dict[Market, tuple[str, ...]]
+        self,
+        desired_by_market: dict[Market, tuple[str, ...]],
+        *,
+        product_universes: dict[Market, ActiveProductUniverse] | None = None,
     ) -> dict[Market, dict[str, tuple[str, ...]]]:
         """Apply scanner changes while retaining every owned/open-order symbol."""
+        product_universes = product_universes or {}
         account = self.broker.account()
         account_id = self.broker.account_id or "unknown"
         manage_external = bool(getattr(getattr(self, "config", None), "manage_external_positions", False))
@@ -1285,6 +1375,18 @@ class EngineRuntime:
             changes[market] = {"added": added, "removed": removed}
 
         if not any(result["added"] or result["removed"] for result in changes.values()):
+            if product_universes:
+                state_lock = getattr(self, "_state_lock", threading.RLock())
+                portfolio_lock = getattr(self, "_portfolio_lock", threading.RLock())
+                with self._ingestion_lock, state_lock, portfolio_lock:
+                    current_snapshots = dict(getattr(self, "_product_universes_by_market", {}))
+                    for market, snapshot in product_universes.items():
+                        bound = snapshot.with_observation_symbols(applied[market])
+                        current_snapshots[market] = bound
+                        for runtime in self._portfolio_runtimes:
+                            if runtime.market == market:
+                                runtime.universe = bound
+                    self._product_universes_by_market = current_snapshots
             log.info("Universe hot-swap produced no membership change; subscription kept")
             return changes
 
@@ -1349,11 +1451,24 @@ class EngineRuntime:
                 previous_portfolio_symbols = {
                     runtime.market: getattr(runtime, "symbols", ()) for runtime in self._portfolio_runtimes
                 }
+                previous_portfolio_universes = [
+                    (runtime, getattr(runtime, "universe", None)) for runtime in self._portfolio_runtimes
+                ]
+                previous_product_universes = dict(getattr(self, "_product_universes_by_market", {}))
                 for market, selected in applied.items():
                     self._symbols_by_market[market] = set(selected)
+                    bound_universe = (
+                        product_universes[market].with_observation_symbols(selected)
+                        if market in product_universes
+                        else None
+                    )
                     for runtime in self._portfolio_runtimes:
                         if runtime.market == market:
                             runtime.update_symbols(selected)
+                            if bound_universe is not None:
+                                runtime.universe = bound_universe
+                    if bound_universe is not None:
+                        self._product_universes_by_market[market] = bound_universe
                 # New members were staged during warmup but could only be
                 # seeded now that the runtimes include them; seeding inside
                 # this transaction keeps the transition atomic.
@@ -1397,6 +1512,9 @@ class EngineRuntime:
                                 # the rollback; the symbol set is restored
                                 # below and the stream reverts regardless.
                                 log.exception("Portfolio runtime restore failed for %s", market.value)
+                for runtime, previous_universe in previous_portfolio_universes:
+                    runtime.universe = previous_universe
+                self._product_universes_by_market = previous_product_universes
                 self.symbols = sorted(self._symbols_by_market[Market.EQUITY] | self._symbols_by_market[Market.CRYPTO])
                 self._expected_all_symbols = set(self.symbols)
                 self._not_ready_symbols = previous_not_ready
@@ -2529,7 +2647,9 @@ class EngineRuntime:
             return
         self._refresh_readiness()
         gate = self._entry_readiness_reasons
-        if health is None and (getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)):
+        if health is None and (
+            getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
+        ):
             health = self.health()
         gate_kwargs = {"health": health} if health is not None else {}
         market_reasons: dict[Market, tuple[str, ...]] = {}
@@ -2538,11 +2658,13 @@ class EngineRuntime:
                 market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
             except TypeError:
                 market_reasons[candidate_market] = gate(candidate_market)
+
         def _has_symbol_gap(sym: str, mkt: Market) -> bool:
             try:
                 return bool(self._engine_has_symbol_gap(sym, mkt))
             except TypeError:
                 return bool(self._engine_has_symbol_gap(sym))
+
         if not any(
             symbol not in self._not_ready_symbols
             and not _has_symbol_gap(symbol, bar.market)
@@ -2588,7 +2710,9 @@ class EngineRuntime:
             # not even risk-reducing target sells. Broker-native protective
             # exits (resting stops) continue independently at the broker.
             gate = self._entry_readiness_reasons
-            if health is None and (getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)):
+            if health is None and (
+                getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
+            ):
                 health = self.health()
             gate_kwargs = {"health": health} if health is not None else {}
             # Robust dispatch: overridden stubs may not accept health kwarg
@@ -2611,7 +2735,11 @@ class EngineRuntime:
                     from parayabuck.monitoring.operational_event import create_event
 
                     # Build single sentence message
-                    market_name = portfolio_runtime.market.value if hasattr(portfolio_runtime.market, "value") else str(portfolio_runtime.market)
+                    market_name = (
+                        portfolio_runtime.market.value
+                        if hasattr(portfolio_runtime.market, "value")
+                        else str(portfolio_runtime.market)
+                    )
                     first_reason = readiness_reasons[0] if readiness_reasons else "readiness_blocked"
                     msg_map = {
                         "account_snapshot_stale": "hesap görüntüsü eski",
@@ -2634,7 +2762,9 @@ class EngineRuntime:
                             "reason": first_reason,
                             "readiness_reasons": list(readiness_reasons),
                             "relevant_bar_count": len(relevant),
-                            "decision_timestamp": max(bar.timestamp for bar in relevant).isoformat() if relevant else None,
+                            "decision_timestamp": max(bar.timestamp for bar in relevant).isoformat()
+                            if relevant
+                            else None,
                         },
                     )
                     emit_journal(evt)
@@ -2940,10 +3070,10 @@ class EngineRuntime:
 
         A fresh account started mid-period would otherwise sit in cash until
         the next cadence boundary (the backtest engine decides on its first
-        usable bar). The catch-up is an OPTIMIZATION: any gate, readiness
-        failure or exception blocks only the catch-up and records a
-        ``blocked:...`` status — normal cadence decisions continue exactly as
-        before this mission. No alerts are emitted for catch-up results.
+        usable bar). Expected gates/readiness/no-trade outcomes are returned
+        as ``PortfolioRuntimeResult`` statuses. Exceptions are invariant,
+        persistence, safety, or provider failures and propagate to ``start``
+        so an invalid engine cannot advertise itself as running.
         """
         if (
             not self._running
@@ -2966,16 +3096,8 @@ class EngineRuntime:
                 basis_reason = self._equity_signal_basis_latch(newest) if newest is not None else None
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
-            try:
-                with self._portfolio_lock:
-                    result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch)
-            except Exception:
-                log.exception(
-                    "Startup catch-up failed for market=%s; normal cadence continues",
-                    portfolio_runtime.market.value,
-                )
-                portfolio_runtime.startup_catch_up_status = "blocked:startup_catch_up_failed"
-                continue
+            with self._portfolio_lock:
+                result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch)
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",
                 portfolio_runtime.market.value,
@@ -3453,17 +3575,33 @@ class EngineRuntime:
             self._record_signal_adjustment_failure("stale: no successful reconciliation in over 26h")
 
     def _refresh_readiness(self) -> None:
-        for symbol in tuple(self._not_ready_symbols):
+        runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
+        required_symbols = {symbol for runtime in runtimes for symbol in runtime.symbols}
+        for symbol in required_symbols:
             market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-            relevant = [
-                runtime
-                for runtime in self._portfolio_runtimes
-                if runtime.market == market and symbol in runtime.history
-            ]
-            if relevant and all(
-                len(runtime.history[symbol]) >= runtime.strategy.minimum_history_bars for runtime in relevant
-            ):
+            relevant = [runtime for runtime in runtimes if runtime.market == market and symbol in runtime.history]
+            ready = bool(relevant)
+            for runtime in relevant:
+                series = runtime.history[symbol]
+                benchmark_symbol = "BTC/USD" if market == Market.CRYPTO else "SPY"
+                benchmark_series = runtime.history.get(benchmark_symbol, ())
+                expected_latest = (
+                    benchmark_series[-1].timestamp
+                    if benchmark_series
+                    else max(
+                        (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
+                        default=None,
+                    )
+                )
+                ready = ready and (
+                    len(series) >= runtime.strategy.minimum_history_bars
+                    and expected_latest is not None
+                    and series[-1].timestamp == expected_latest
+                )
+            if ready:
                 self._not_ready_symbols.discard(symbol)
+            else:
+                self._not_ready_symbols.add(symbol)
         if (
             self._running
             and self._not_ready_symbols
@@ -3501,7 +3639,10 @@ class EngineRuntime:
         self._refresh_readiness()
 
     def _has_ready_symbols(self) -> bool:
-        return any(symbol not in self._not_ready_symbols for symbol in self.symbols)
+        required = {
+            symbol for runtime in getattr(self, "_portfolio_runtimes", ()) for symbol in getattr(runtime, "symbols", ())
+        }
+        return bool(required) and not (required & self._not_ready_symbols)
 
     def _persist_risk_state(self, account: AccountSnapshot) -> None:
         # _account_loop, the decision loop and reconciliation call this
@@ -3954,7 +4095,14 @@ class EngineRuntime:
         self._historical = history
         log.info("Warmup starting for %d symbols", len(self.symbols))
         self._warmup_symbols(history, self.symbols, retry=False)
-        log.info("Warmup complete")
+        self._refresh_readiness()
+        if self._has_ready_symbols():
+            log.info("Warmup complete")
+        else:
+            log.warning(
+                "Warmup incomplete; runtime remains warming_up symbols=%s",
+                ",".join(sorted(self._not_ready_symbols)),
+            )
 
     def _warmup_config_digest(self) -> str:
         """Cache-scope digest for the runtime warmup fetch.

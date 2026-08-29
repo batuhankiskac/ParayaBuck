@@ -36,6 +36,7 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioStateRepository,
 )
+from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.universe.crypto_scanner import load_active_crypto_symbols
 from parayabuck.universe.scanner import load_active_symbols
 
@@ -168,7 +169,12 @@ def _equity_runtime(
         maximum_allocation=0.50,
         risk_limits=portfolio_risk_limits_from_config(config.risk),
         account_id="paper-account",
-        allow_static_universe=True,
+        universe=ActiveProductUniverse.configured(
+            Market.EQUITY,
+            EQUITY_SYMBOLS,
+            snapshot_id="dual-market-equity",
+        ),
+        universe_version="dual-market-equity-policy",
     )
 
 
@@ -189,7 +195,12 @@ def _crypto_runtime(
         maximum_allocation=0.10,
         risk_limits=portfolio_risk_limits_from_config(config.risk),
         account_id="paper-account",
-        allow_static_universe=True,
+        universe=ActiveProductUniverse.configured(
+            Market.CRYPTO,
+            CRYPTO_SYMBOLS,
+            snapshot_id="dual-market-crypto",
+        ),
+        universe_version="dual-market-crypto-policy",
     )
 
 
@@ -213,6 +224,8 @@ def test_dual_market_startup_contract_offline(tmp_path: Path) -> None:
     broker = _PaperBroker()
     equity_runtime = _equity_runtime(repository, broker, config)
     crypto_runtime = _crypto_runtime(repository, broker, config)
+    assert equity_runtime.universe is not None and not equity_runtime.allow_static_universe
+    assert crypto_runtime.universe is not None and not crypto_runtime.allow_static_universe
 
     # Stage 2: warmup — seed 300 daily bars into both strategy histories.
     total_days = 360

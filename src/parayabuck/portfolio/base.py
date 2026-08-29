@@ -85,19 +85,30 @@ def require_product_universe(
     """
     if allow_static_context:
         return
-    if context.universe is None:
+    require_product_universe_dependency(context.universe, context.universe_version)
+
+
+def require_product_universe_dependency(universe: object | None, universe_version: str) -> None:
+    """Validate a product universe before any persistent runtime side effect.
+
+    ``PortfolioRuntime`` calls this during construction, before opening its
+    session row. Decision paths call :func:`require_product_universe`, which
+    delegates here so the same fail-closed contract and error vocabulary are
+    enforced at both composition and execution boundaries.
+    """
+
+    if universe is None:
         raise RuntimeError(
             "Product universe guard: context.universe is None — "
             "dynamic product strategies require a PIT universe (fail-closed)"
         )
-    contains = getattr(context.universe, "contains", None)
+    contains = getattr(universe, "contains", None)
     if not callable(contains):
         raise RuntimeError(
             "Product universe guard: context.universe must expose a callable "
             "contains(symbol, market, timestamp) (fail-closed)"
         )
-    version = context.universe_version
-    if not isinstance(version, str) or not version.strip():
+    if not isinstance(universe_version, str) or not universe_version.strip():
         raise RuntimeError("Product universe guard: context.universe_version must be a non-empty string (fail-closed)")
 
 

@@ -1522,7 +1522,7 @@ class SettingsPayload(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     restart_engine: bool = True
     equity_trading_enabled: bool = True
-    crypto_trading_enabled: bool = False
+    crypto_trading_enabled: bool = True
     live_trading_enabled: bool = False
     live_dollar_cap: float = Field(0.0, ge=0)
     live_operator_approval_path: str = ""

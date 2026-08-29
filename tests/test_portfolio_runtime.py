@@ -206,6 +206,7 @@ def test_live_policy_digest_is_independent_of_ephemeral_active_symbols(tmp_path)
         mode="live",
         maximum_allocation=0.50,
         risk_limits=limits,
+        universe=_TestUniverse(),
         universe_version="scanner-policy",
         live_dollar_cap=1_000,
     )
@@ -217,6 +218,7 @@ def test_live_policy_digest_is_independent_of_ephemeral_active_symbols(tmp_path)
         mode="live",
         maximum_allocation=0.50,
         risk_limits=limits,
+        universe=_TestUniverse(),
         universe_version="scanner-policy",
         live_dollar_cap=1_000,
     )
@@ -2872,9 +2874,9 @@ def test_engine_run_startup_catch_up_propagates_entry_latch() -> None:
     assert fake.startup_catch_up_status is None
 
 
-def test_engine_run_startup_catch_up_failure_does_not_halt() -> None:
-    """A catch-up exception is logged and recorded as blocked; the engine is
-    NOT halted (the catch-up is an optimization — normal cadence continues)."""
+def test_engine_run_startup_catch_up_propagates_invariant_failure() -> None:
+    """Unexpected catch-up exceptions are startup failures, not no-trade
+    statuses that may be hidden while the engine appears healthy."""
     runtime = _catch_up_engine()
 
     class _BoomCatchUp(_CatchUpRecorder):
@@ -2883,9 +2885,10 @@ def test_engine_run_startup_catch_up_failure_does_not_halt() -> None:
 
     fake = _BoomCatchUp()
     runtime._portfolio_runtimes = (fake,)
-    runtime._run_startup_catch_up()
-    assert fake.startup_catch_up_status == "blocked:startup_catch_up_failed"
-    assert runtime._state == "warming_up"  # not halted
+    with pytest.raises(RuntimeError, match="catch-up boom"):
+        runtime._run_startup_catch_up()
+    assert fake.startup_catch_up_status is None
+    assert runtime._state == "warming_up"
     assert runtime._circuit_breaker_reason is None
 
 

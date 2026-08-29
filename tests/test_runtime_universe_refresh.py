@@ -12,6 +12,7 @@ import parayabuck.runtime as runtime_module
 from parayabuck.config import Config
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.runtime import EngineRuntime, WorkerHealth
+from parayabuck.runtime_universe import ActiveProductUniverse
 
 
 def test_invalid_dynamic_snapshot_blocks_entries_unless_fallback_is_explicit() -> None:
@@ -32,6 +33,85 @@ def test_invalid_dynamic_snapshot_blocks_entries_unless_fallback_is_explicit() -
         ),
     )
     assert runtime._initial_universe_halt(Market.EQUITY) is None
+
+
+def test_engine_readiness_requires_every_portfolio_symbol() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.symbols = ["AAPL", "MSFT"]
+    runtime._not_ready_symbols = {"MSFT"}
+    runtime._portfolio_runtimes = (SimpleNamespace(symbols=("AAPL", "MSFT")),)
+
+    assert runtime._has_ready_symbols() is False
+
+    runtime._not_ready_symbols.clear()
+    assert runtime._has_ready_symbols() is True
+
+
+def test_refresh_readiness_requires_latest_timestamp_alignment() -> None:
+    from parayabuck.core.models import Bar
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = False
+    runtime._state = "warming_up"
+    runtime._not_ready_symbols = set()
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def bar(symbol: str, day: int) -> Bar:
+        return Bar(start + timedelta(days=day), symbol, "1d", 100, 100, 100, 100, 1_000, Market.EQUITY)
+
+    portfolio_runtime = SimpleNamespace(
+        market=Market.EQUITY,
+        symbols=("SPY", "AAPL"),
+        strategy=SimpleNamespace(minimum_history_bars=2),
+        history={
+            "SPY": [bar("SPY", 0), bar("SPY", 1)],
+            "AAPL": [bar("AAPL", 0), bar("AAPL", 0)],
+        },
+    )
+    runtime._portfolio_runtimes = (portfolio_runtime,)
+
+    runtime._refresh_readiness()
+    assert runtime._not_ready_symbols == {"AAPL"}
+    assert runtime._has_ready_symbols() is False
+
+    portfolio_runtime.history["AAPL"][-1] = bar("AAPL", 1)
+    runtime._refresh_readiness()
+    assert runtime._not_ready_symbols == set()
+    assert runtime._has_ready_symbols() is True
+
+
+def test_hot_swap_updates_product_universe_in_same_commit() -> None:
+    runtime = _hot_swap_runtime({"SPY", "OLD"})
+    previous = ActiveProductUniverse.configured(
+        Market.EQUITY,
+        ("SPY", "OLD"),
+        snapshot_id="old",
+    )
+    replacement = ActiveProductUniverse.configured(
+        Market.EQUITY,
+        ("SPY", "MSFT", "NVDA", "TSLA"),
+        snapshot_id="new",
+    )
+    portfolio_runtime = SimpleNamespace(
+        market=Market.EQUITY,
+        symbols=("SPY", "OLD"),
+        universe=previous,
+        update_symbols=lambda symbols: setattr(portfolio_runtime, "symbols", symbols),
+    )
+    runtime._portfolio_runtimes = (portfolio_runtime,)
+    runtime._product_universes_by_market = {Market.EQUITY: previous}
+    runtime.stream = SimpleNamespace(update_subscriptions=lambda stocks, crypto: None)
+    runtime._warmup_symbols = lambda _history, symbols, *, retry, staged_only=False: None
+    runtime._refresh_readiness = lambda: None
+
+    runtime._apply_runtime_universes(
+        {Market.EQUITY: ("SPY", "MSFT", "NVDA", "TSLA")},
+        product_universes={Market.EQUITY: replacement},
+    )
+
+    assert portfolio_runtime.universe.snapshot_id == "new"
+    assert portfolio_runtime.universe.observation_symbols == ("SPY", "MSFT", "NVDA", "TSLA")
+    assert runtime._product_universes_by_market[Market.EQUITY] is portfolio_runtime.universe
 
 
 def test_hot_swap_pins_positions_and_open_orders_within_stream_capacity() -> None:
@@ -522,6 +602,16 @@ def test_disabled_crypto_strategy_without_positions_streams_nothing(tmp_path, mo
         "load_active_crypto_symbols",
         lambda config, log_rejection=True: ("BTC/USD", "ETH/USD", "SOL/USD"),
     )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_product_universe",
+        lambda _path, *, market, expected_observation_symbols, expected_config_digest: ActiveProductUniverse.configured(
+            market,
+            expected_observation_symbols,
+            snapshot_id=f"test:{market.value}",
+            config_digest=expected_config_digest,
+        ),
+    )
     runtime = EngineRuntime("key", "secret", _crypto_disabled_config(tmp_path))
     assert runtime._strategy_enabled[Market.CRYPTO] is False
     assert runtime._symbols_by_market[Market.CRYPTO] == set()
@@ -557,6 +647,16 @@ def test_disabled_crypto_strategy_with_managed_position_stays_protected(tmp_path
         runtime_module,
         "load_active_crypto_symbols",
         lambda config, log_rejection=True: ("BTC/USD", "ETH/USD"),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "load_active_product_universe",
+        lambda _path, *, market, expected_observation_symbols, expected_config_digest: ActiveProductUniverse.configured(
+            market,
+            expected_observation_symbols,
+            snapshot_id=f"test:{market.value}",
+            config_digest=expected_config_digest,
+        ),
     )
     runtime = EngineRuntime("key", "secret", _crypto_disabled_config(tmp_path))
     assert runtime._symbols_by_market[Market.CRYPTO] == set()

@@ -263,6 +263,7 @@ def test_disabled_strategy_creates_no_orders(tmp_path) -> None:
         PortfolioStateRepository(tmp_path / "r.sqlite3"),
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
     )
     start = datetime(2024, 1, 1, tzinfo=UTC)
     crypto_bars = [

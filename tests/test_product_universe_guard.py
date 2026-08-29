@@ -111,7 +111,7 @@ def test_backtest_engine_fail_closes_on_missing_universe() -> None:
         engine.run(bars, liquidate_at_end=False)
 
 
-def test_runtime_service_fail_closes_on_missing_universe(tmp_path) -> None:
+def test_runtime_service_rejects_missing_universe_before_opening_session(tmp_path) -> None:
     from parayabuck.core.models import AccountSnapshot
     from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest
     from parayabuck.portfolio import portfolio_strategy_from
@@ -136,30 +136,16 @@ def test_runtime_service_fail_closes_on_missing_universe(tmp_path) -> None:
             return "oid"
 
     repo = PortfolioStateRepository(tmp_path / "guard.sqlite3")
-    runtime = PortfolioRuntime(
-        strategy=strat,
-        symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
-        broker=_Broker(),  # type: ignore[arg-type]
-        repository=repo,
-        mode="paper",
-        maximum_allocation=0.9,
-        universe=None,
-        universe_version="",
-    )
-    # Seed enough history to clear warmup (min 23 bars for lookback 22).
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    bars: list[Bar] = []
-    for i in range(30):
-        ts = start + timedelta(days=i)
-        for sym in ("BTC/USD", "ETH/USD", "SOL/USD"):
-            bars.append(Bar(ts, sym, "1d", 100.0 + i, 100.0 + i, 100.0 + i, 100.0 + i, 1_000_000, Market.CRYPTO))
-    runtime.seed(bars)
-    latest = max(b.timestamp for b in bars)
-    deciding_batch = [
-        Bar(latest, "BTC/USD", "1d", 110, 110, 110, 110, 1_000_000, Market.CRYPTO),
-        Bar(latest, "ETH/USD", "1d", 110, 110, 110, 110, 1_000_000, Market.CRYPTO),
-        Bar(latest, "SOL/USD", "1d", 110, 110, 110, 110, 1_000_000, Market.CRYPTO),
-    ]
-    runtime.previous_timestamp = None
     with pytest.raises(RuntimeError, match="Product universe guard"):
-        runtime.process_closed_bars(deciding_batch)
+        PortfolioRuntime(
+            strategy=strat,
+            symbols=("BTC/USD", "ETH/USD", "SOL/USD"),
+            broker=_Broker(),  # type: ignore[arg-type]
+            repository=repo,
+            mode="paper",
+            maximum_allocation=0.9,
+            universe=None,
+            universe_version="",
+        )
+    sessions = repo.store.connection.execute("SELECT COUNT(*) FROM portfolio_runtime_sessions").fetchone()[0]
+    assert sessions == 0

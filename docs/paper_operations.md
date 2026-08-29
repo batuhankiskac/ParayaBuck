@@ -22,16 +22,22 @@ before the next begins:
    restart never resurrects them.
 4. **Strategy runtimes** — one `PortfolioRuntime` per market on a SINGLE
    shared repository/account: equity weekly (1d), crypto 96h
-   (`rebalance_hours: 96`, 1d). Both runtimes decide simultaneously.
-5. **Warmup** — each runtime seeds completed bars until every symbol meets
-   the strategy's minimum history (equity: beta window + 1; crypto:
-   variance lookback + 1).
+   (`rebalance_hours: 96`, 1d). Each receives an immutable active product
+   universe snapshot: `selected_symbols` owns PIT eligibility and
+   `observation_set` owns bounded stream completeness. Missing/invalid
+   universe dependencies fail before a portfolio session row is opened.
+5. **Warmup** — each runtime seeds completed bars until every decision-required
+   symbol meets the strategy's minimum history and the latest timestamps are
+   aligned (equity: beta window + 1; crypto: variance lookback + 1). One ready
+   symbol is not sufficient to enter `running`.
 6. **Startup catch-up** — after warmup the engine forces ONE immediate
    full-target decision per market on the latest closed bars (backtest/PAPER
    parity) unless the account already holds managed positions in that market
    (`already_invested`) or a decision already exists (restart:
    `catch_up_superseded`/`duplicate_decision`). Tagged
-   `decision_origin: startup_catch_up`.
+   `decision_origin: startup_catch_up`. Expected no-trade gates are explicit
+   result statuses; unexpected invariant/persistence/provider exceptions fail
+   startup instead of being converted to a blocked informational status.
 7. **Account reconciliation** — a fresh broker snapshot is taken between
    phases and before any order sizing (stale account data pauses decisions
    for that market).
@@ -39,8 +45,9 @@ before the next begins:
    symbol history and the decision loop is live.
 
 Offline verification of this contract lives in
-`tests/test_dual_market_startup.py` (fake broker, no network) and in the
-paper-chaos gate (`scripts/run_paper_chaos.py`).
+`tests/test_runtime_product_universe.py`, `tests/test_dual_market_startup.py`
+(real membership adapters, fake broker, no network), and in the paper-chaos
+gate (`scripts/run_paper_chaos.py`).
 
 ## PAPER smoke policy
 

@@ -55,9 +55,10 @@ def build_observation_set(
     streamed observation set.
 
     ``pinned_symbols`` (references, inverse hedges, configured pins) are
-    force-kept. ``scanner_fallback`` fills remaining slots when the strategy
-    ranks fewer names than the stream capacity (e.g. young symbols without
-    the strategy's warmup history).
+    force-kept. ``scanner_fallback`` may fill remaining slots only when its
+    history meets the strategy's minimum window and latest-bar alignment;
+    young/stale names leave capacity empty instead of wedging every runtime
+    decision at the completeness gate.
     """
     if maximum_stream_symbols <= 0:
         raise ValueError("maximum_stream_symbols must be positive")
@@ -95,7 +96,24 @@ def build_observation_set(
         ranked = tuple(symbol for symbol in ranked if symbol in available)
         source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
-        fill = tuple(symbol for symbol in scanner_fallback if symbol not in reserved and symbol not in ranked)
+        fallback_candidates = tuple(
+            canonical_symbol(symbol, market)
+            for symbol in scanner_fallback
+            if canonical_symbol(symbol, market) not in reserved and canonical_symbol(symbol, market) not in ranked
+        )
+        if strategy is not None:
+            benchmark = "BTC/USD" if market == Market.CRYPTO else "SPY"
+            benchmark_history = history.get(benchmark, ())
+            expected_latest = benchmark_history[-1].timestamp if benchmark_history else None
+            minimum_history = strategy.minimum_history_bars
+            fallback_candidates = tuple(
+                symbol
+                for symbol in fallback_candidates
+                if len(history.get(symbol, ())) >= minimum_history
+                and expected_latest is not None
+                and history[symbol][-1].timestamp == expected_latest
+            )
+        fill = fallback_candidates
         ranked = (*ranked, *fill)
         if source == "no_ranker" and fill:
             source = "scanner_quality_fallback"

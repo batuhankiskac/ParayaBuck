@@ -198,16 +198,17 @@ class TestProductUniverseFailClosed:
                 return "id"
 
         broker = FakeBroker()
-        PortfolioRuntime(
-            strat,
-            ("BTC/USD", "ETH/USD"),
-            broker,
-            repo,
-            mode="paper",
-            maximum_allocation=0.5,
-            universe=None,
-            universe_version="",
-        )
+        with pytest.raises(RuntimeError, match="fail-closed"):
+            PortfolioRuntime(
+                strat,
+                ("BTC/USD", "ETH/USD"),
+                broker,
+                repo,
+                mode="paper",
+                maximum_allocation=0.5,
+                universe=None,
+                universe_version="",
+            )
         ctx2 = PortfolioContext(
             decision_timestamp=ts,
             market=Market.CRYPTO,

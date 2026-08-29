@@ -129,6 +129,7 @@ def _engine(tmp_path: Path, broker: _CountingBroker) -> EngineRuntime:
             repository,
             mode="paper",
             maximum_allocation=0.50,
+            allow_static_universe=True,
         ),
     )
     return runtime

@@ -23,7 +23,11 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import bar_is_closed, equity_day_bar_is_closed
 from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, rebalance_policy_for
-from parayabuck.portfolio.base import PortfolioStrategy, require_product_universe
+from parayabuck.portfolio.base import (
+    PortfolioStrategy,
+    require_product_universe,
+    require_product_universe_dependency,
+)
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_models import (
     _AMBIGUOUS_ORDER_STATUSES,
@@ -234,7 +238,13 @@ def _emit_no_trade_safe(
             "circuit_breaker": "devre kesici aktif",
         }
         tr = reason_tr.get(reason, reason)
-        market_tr = "Kripto" if (market or "").lower() == "crypto" else "Hisse" if (market or "").lower() == "equity" else (market or "Piyasa")
+        market_tr = (
+            "Kripto"
+            if (market or "").lower() == "crypto"
+            else "Hisse"
+            if (market or "").lower() == "equity"
+            else (market or "Piyasa")
+        )
         if missing_symbols:
             detail = "/".join(missing_symbols[:3])
             msg = f"{market_tr} alınmadı: {detail} {tr}."
@@ -281,6 +291,11 @@ class PortfolioRuntime:
             raise ValueError("maximum_allocation must be in (0, 1]")
         if mode == "live" and live_dollar_cap <= 0:
             raise ValueError("Live portfolio execution requires a positive hard dollar cap")
+        if strategy.name in PRODUCT_STRATEGY_NAMES and not allow_static_universe:
+            # Composition invariant: reject a missing/invalid PIT universe
+            # BEFORE repository.begin_session creates a misleading running
+            # session. Static research must opt in explicitly.
+            require_product_universe_dependency(universe, universe_version)
         self.strategy = strategy
         self.market = strategy.market
         self.symbols = tuple(dict.fromkeys(canonical_symbol(symbol, strategy.market) for symbol in symbols))
@@ -445,10 +460,18 @@ class PortfolioRuntime:
         ):
             self.startup_catch_up_status = "warming_up"
             # Visibility: persistent no-trade event
-            warming = tuple(sorted(s for s, ser in self.history.items() if len(ser) < self.strategy.minimum_history_bars))
+            warming = tuple(
+                sorted(s for s, ser in self.history.items() if len(ser) < self.strategy.minimum_history_bars)
+            )
             last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
             try:
-                next_boundary = self.policy.next_boundary_after(max((t for t in timestamps if t is not None), default=self.startup_catch_up_at)).isoformat() if timestamps and any(timestamps) else None
+                next_boundary = (
+                    self.policy.next_boundary_after(
+                        max((t for t in timestamps if t is not None), default=self.startup_catch_up_at)
+                    ).isoformat()
+                    if timestamps and any(timestamps)
+                    else None
+                )
             except Exception:
                 next_boundary = None
             _emit_no_trade_safe(
@@ -474,7 +497,15 @@ class PortfolioRuntime:
                 reason="incomplete_strategy_batch",
                 decision_timestamp=self.startup_catch_up_at,
                 data_timestamp=max((t for t in timestamps if t is not None), default=None),
-                missing_symbols=tuple(sorted({s for s, ser in self.history.items() if not ser or ser[-1].timestamp != max(t for t in timestamps if t is not None)})),
+                missing_symbols=tuple(
+                    sorted(
+                        {
+                            s
+                            for s, ser in self.history.items()
+                            if not ser or ser[-1].timestamp != max(t for t in timestamps if t is not None)
+                        }
+                    )
+                ),
                 last_timestamps=last_ts,
                 session_id=self.session_id,
                 account_id=self.account_id,
@@ -838,7 +869,9 @@ class PortfolioRuntime:
                 reason="not_scheduled",
                 decision_timestamp=timestamp,
                 data_timestamp=timestamp,
-                next_boundary_after=self.policy.next_boundary_after(timestamp).isoformat() if hasattr(self.policy, "next_boundary_after") else None,
+                next_boundary_after=self.policy.next_boundary_after(timestamp).isoformat()
+                if hasattr(self.policy, "next_boundary_after")
+                else None,
                 session_id=self.session_id,
                 account_id=self.account_id,
             )

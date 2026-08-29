@@ -43,6 +43,15 @@
 - **Risk:** Strategy ranks/orders symbols outside eligible pool.
 - **Fix:** Kept `in_universe()` permissive for static research but added `require_product_universe(context, allow_static_context=False)` helper (`src/parayabuck/portfolio/base.py:55-95`). `PortfolioBacktestEngine._decide` and `PortfolioRuntime.process_closed_bars` now invoke guard before `decide()`/`rank_candidates()`; product identities (`PRODUCT_STRATEGY_NAMES` + hysteresis) fail closed, synthetic/research retain permissive via `allow_static_universe=True` or non-PRODUCT name. Regression: `tests/test_product_universe_guard.py` (8 tests). Patched legacy offline tests to set `allow_static_universe=True`.
 
+**2026-08-29 completion note:** The guard exposed a production composition
+gap: `EngineRuntime` did not pass any universe object to `PortfolioRuntime`.
+The runtime now loads an immutable active snapshot (eligible pool plus bounded
+observation membership), passes it at construction, validates it before
+opening the portfolio session, updates it atomically with hot-swapped symbols,
+and propagates unexpected startup catch-up failures. The composition and
+persisted-decision contract is covered by `tests/test_runtime_product_universe.py`
+and `tests/test_dual_market_startup.py` without a static-universe bypass.
+
 ---
 
 ## P1 — Reliability (fixed)
@@ -88,4 +97,3 @@
 - Extract `strategy registry` already done (events, crypto_metadata); further ledger/broker split deferred.
 - Move `alert event vocabulary` already done; no further.
 - Move `crypto metadata` already done; no further.
-

@@ -1,8 +1,8 @@
 # ParayaBuck
 
-> **Project status — 2026-08-26 (post-research cleanup)**
+> **Project status — 2026-08-29 (PAPER composition repair)**
 >
-> - **Equity:** V3 frozen (`equity_residual_momentum_v3` MH_RAW: 12-1 gate → 6/9/12 rank consensus → ivol 0.70 → top8 → inv-vol 0.10, weekly) — historical validation complete, **symmetric PIT validated** (9010 symbols, 11.6M bars), **PAPER forward validation active**, **LIVE disabled**
+> - **Equity:** V3 frozen (`equity_residual_momentum_v3` MH_RAW: 12-1 gate → 6/9/12 rank consensus → ivol 0.70 → top8 → inv-vol 0.10, weekly) — historical validation complete, **symmetric PIT validated** (9010 symbols, 11.6M bars), **PAPER runtime composition repaired; persisted forward sample pending controlled deployment acceptance**, **LIVE disabled**
 > - **Dataset:** `data/historical/equity_pit_symmetric_2016_2026_v5.csv` SHA `bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139` + CA `a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23` — manifests committed, large CSVs gitignored
 > - **Historical result (canonical):** `SYMMETRIC_FULL_T1` +113.6% total / 7.44% CAGR / Sharpe 0.639 / maxDD 22.7% (10.5y, $100k, T1 last-close minus costs, 6 terminal events, `docs/v3_historical_validation_final.md`); `OLD_T0` +172% is survivor-biased reference, `T2/T3` are severe-loss bounds
 > - **Research:** historical V3 cycle closed and archived (`docs/archive/research_2026_08/`, `data/research/archive/2026_08/`), single canonical runner `scripts/run_symmetric_v5_validation.py` (`scripts/research/run_v3_canonical_validation.py` shim)
@@ -21,7 +21,7 @@ The PAPER product runs two validated identities (see `docs/validated_strategies.
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
-| Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.60 |
+| Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.55 |
 | Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
 Historical baselines `equity_residual_momentum_v1` (monthly) and `equity_residual_momentum_v2` (weekly) and `crypto_low_variance_v1` (168h) remain constructible for comparison — v3 evidence is defined relative to them and to the frozen PIT dataset above.
@@ -41,7 +41,7 @@ Alpaca assets/data -> eligibility filters -> dynamic scanner -> active universe
 - Dynamic universes (equity ~300-candidate shortlist → ~30 streamed; crypto
   from supported USD pairs) rebuilt point-in-time by the production scanner;
   static symbols are fallback/allowlist/denylist inputs only.
-- Strict risk overlay: allocation sleeves (0.60 equity / 0.05 crypto), risk caps 0.10 crypto exposure / 0.05 crypto position / max 2 crypto positions, gross cap 0.60, cash buffer 0.40, per-position and count caps, daily-loss 0.5% and drawdown 5% latches, stale-account pauses, ownership-drift halts, duplicate order/decision protection.
+- Strict risk overlay: allocation sleeves (0.55 equity / 0.05 crypto), risk caps 0.10 crypto exposure / 0.05 crypto position / max 2 crypto positions, gross cap 0.60, cash buffer 0.40, per-position and count caps, daily-loss 0.5% and drawdown 5% latches, stale-account pauses, ownership-drift halts, duplicate order/decision protection.
 - Startup catch-up: a fresh mid-period deployment decides immediately on the
   latest closed warmup bars (`decision_origin: startup_catch_up`) instead of
   sitting in cash until the next cadence boundary. Restart-safe — never

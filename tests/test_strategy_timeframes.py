@@ -277,6 +277,7 @@ def test_paper_runtime_uses_same_strategy_timeframe(tmp_path) -> None:
         PortfolioStateRepository(tmp_path / "r.sqlite3"),
         mode="paper",
         maximum_allocation=0.50,
+        allow_static_universe=True,
     )
     # Seeding non-strategy-timeframe bars must be ignored.
     runtime.seed(_crypto_4h_series(("BTC/USD",), hours=10))

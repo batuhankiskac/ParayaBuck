@@ -378,6 +378,7 @@ def test_missing_symbol_incomplete_batch_fails_closed(tmp_path: Path) -> None:
         mode="paper",
         maximum_allocation=1.0,
         account_id="acct",
+        allow_static_universe=True,
     )
     # Seed only one symbol's history; second missing -> incomplete_strategy_batch
     bar = _bar("AAPL", close=100.0)

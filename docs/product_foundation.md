@@ -67,8 +67,11 @@ correctness or safety defects.
 
 - Quality gates: ruff, format, mypy (64 files), 426 pytest, build, paper
   chaos (90 marked scenarios), pip-audit — all PASS.
-- PAPER lifecycle verified live: clean startup → auto universe scans →
-  `state=running` → `/readyz` 200 → clean SIGTERM → no orphans; bind
-  conflict exits rc=1 with the engine never started.
+- Earlier PAPER lifecycle smoke verified process startup, universe scans,
+  `/readyz`, shutdown, and bind-conflict handling, but did not establish a
+  persisted v3/hysteresis decision. Product-universe composition is now
+  covered offline; controlled deployment must still prove one persisted
+  startup-catch-up decision per enabled market before forward validation is
+  called active.
 - Docker gate: NOT RUN — no daemon available on the audit machine.
 - Scorecard: PASS 20 · PARTIAL 0 · FAIL 0.

@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# GPT Pro handoff artifacts (prompts/reports) — local, never committed
+gptpro/
+
 # C extensions
 *.so
 

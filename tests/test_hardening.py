@@ -350,7 +350,7 @@ def test_late_primary_bar_is_ingested_and_duplicate_is_correction() -> None:
     assert corrections == ["AAPL"]
 
 
-def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
+def test_runtime_leaves_warmup_only_when_every_symbol_is_ready() -> None:
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime.symbols = ["AAPL", "DOG"]
     runtime._not_ready_symbols = {"AAPL", "DOG"}
@@ -359,14 +359,23 @@ def test_runtime_leaves_warmup_when_at_least_one_symbol_is_ready() -> None:
     runtime._portfolio_runtimes = (
         SimpleNamespace(
             market=Market.EQUITY,
+            symbols=("AAPL", "DOG"),
             strategy=SimpleNamespace(minimum_history_bars=250),
-            history={"AAPL": [object()] * 250, "DOG": [object()] * 241},
+            history={
+                "AAPL": [SimpleNamespace(timestamp=datetime(2025, 1, 1, tzinfo=UTC))] * 250,
+                "DOG": [SimpleNamespace(timestamp=datetime(2025, 1, 1, tzinfo=UTC))] * 241,
+            },
         ),
     )
 
     runtime._refresh_readiness()
 
     assert runtime._not_ready_symbols == {"DOG"}
+    assert runtime._state == "warming_up"
+
+    runtime._portfolio_runtimes[0].history["DOG"] = [SimpleNamespace(timestamp=datetime(2025, 1, 1, tzinfo=UTC))] * 250
+    runtime._refresh_readiness()
+    assert runtime._not_ready_symbols == set()
     assert runtime._state == "running"
 
 
@@ -379,8 +388,9 @@ def test_runtime_stays_in_warmup_when_no_symbol_is_ready() -> None:
     runtime._portfolio_runtimes = (
         SimpleNamespace(
             market=Market.EQUITY,
+            symbols=("DOG",),
             strategy=SimpleNamespace(minimum_history_bars=250),
-            history={"DOG": [object()] * 241},
+            history={"DOG": [SimpleNamespace(timestamp=datetime(2025, 1, 1, tzinfo=UTC))] * 241},
         ),
     )
 

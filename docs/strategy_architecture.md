@@ -66,8 +66,10 @@ Mechanics:
 - `build_observation_set` (universe/observation_set.py) produces the streamed
   set: pinned symbols (references, inverse hedges, configured pins, managed
   positions) first, then the alpha-top candidates up to
-  `maximum_stream_symbols`, filling any shortfall from the scanner's quality
-  ranking (e.g. young symbols without the strategy's warmup history).
+  `maximum_stream_symbols`. Scanner-quality fallback names fill a shortfall
+  only when they meet the strategy minimum-history window and align with the
+  benchmark's latest closed timestamp; young or stale names leave stream
+  capacity empty so one fallback cannot wedge the whole decision batch.
 - The universe refresh fetches strategy-warmup batch history for the pool
   (`bars_to_calendar_days`), ranks it, and persists `observation_set` in the
   active universe file. `load_active_symbols` / `load_active_crypto_symbols`

@@ -44,6 +44,8 @@ class AlpacaBarStream:
         # from the authoritative desired membership instead of assuming the
         # previous state survived.
         self._rollback_failed = False
+        self._stock_symbols: set[str] = set()
+        self._crypto_symbols: set[str] = set()
 
     @property
     def rollback_failed(self) -> bool:
@@ -120,8 +122,8 @@ class AlpacaBarStream:
         """
         desired_stock = set(stock_symbols)
         desired_crypto = set(crypto_symbols)
-        current_stock = set(getattr(self, "_stock_symbols", set()))
-        current_crypto = set(getattr(self, "_crypto_symbols", set()))
+        current_stock = set(self._stock_symbols)
+        current_crypto = set(self._crypto_symbols)
         added_stock = tuple(sorted(desired_stock - current_stock))
         removed_stock = tuple(sorted(current_stock - desired_stock))
         added_crypto = tuple(sorted(desired_crypto - current_crypto))

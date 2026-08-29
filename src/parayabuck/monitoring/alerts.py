@@ -22,6 +22,7 @@ Configuration precedence (first match wins):
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import queue
@@ -159,7 +160,7 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
         if incident_id:
             return f"{kind}:{category}:{incident_id}"
         msg = str(fields.get("message", "") or fields.get("detail", "") or "")
-        digest = str(hash(msg)) if msg else "empty"
+        digest = hashlib.sha256(msg.encode("utf-8")).hexdigest()[:16] if msg else "empty"
         return f"{kind}:{category}:{digest}"
     # For other kinds, include correlation dimensions if present
     parts: list[str] = [kind]

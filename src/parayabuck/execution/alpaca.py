@@ -5,7 +5,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
@@ -23,21 +23,17 @@ from alpaca.trading.requests import (
 from parayabuck.core.models import (
     AccountSnapshot,
     Direction,
-    ExecutionEvent,
     Fill,
     Market,
     OrderIntent,
-    OrderRole,
     OrderState,
     PositionSnapshot,
-    ProtectionState,
 )
 from parayabuck.execution.alpaca_client import AlpacaClient
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderRequest,
-    PortfolioOrderSide,
     floor_increment_decimal,
 )
 from parayabuck.execution.risk_peak import RiskPeakService
@@ -46,6 +42,12 @@ from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca")
+
+from parayabuck.execution.alpaca_account import AccountService  # noqa: E402
+from parayabuck.execution.alpaca_crypto import CryptoService  # noqa: E402
+from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
+from parayabuck.execution.alpaca_protection import ProtectionService  # noqa: E402
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService  # noqa: E402
 
 from .alpaca_models import (  # noqa: E402
     CRYPTO_TAKER_FEE_RESERVE,
@@ -98,10 +100,26 @@ class AlpacaBroker:
         crypto_stop_cancel_poll_interval_seconds: float = 0.25,
         runtime_state_dir: str | Path | None = None,
         peak_state_path: str | Path | None = None,
+        client: Any | None = None,
+        client_adapter: Any | None = None,
     ) -> None:
-        self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
-        object.__setattr__(self, "_client_inner", self._client_adapter._client)
-        object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
+        if client_adapter is not None:
+            self._client_adapter = client_adapter
+            try:
+                object.__setattr__(
+                    self, "_client_inner", getattr(client_adapter, "_client", getattr(client_adapter, "client", None))
+                )
+                object.__setattr__(self, "_asset_cache_inner", getattr(client_adapter, "_asset_cache", {}))
+            except Exception:
+                pass
+        elif client is not None:
+            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
+            object.__setattr__(self, "_client_inner", self._client_adapter._client)
+            object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
+        else:
+            self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
+            object.__setattr__(self, "_client_inner", self._client_adapter._client)
+            object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
         self._paper = paper
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
@@ -126,6 +144,12 @@ class AlpacaBroker:
         self.crypto_stop_cancel_poll_interval_seconds = crypto_stop_cancel_poll_interval_seconds
         self._symbol_exit_locks: dict[str, threading.Lock] = {}
         self._symbol_exit_locks_guard = threading.Lock()
+        # Composition: services own the heavy lifting; facade delegates.
+        self._account_service = AccountService(self)
+        self._order_service = OrderService(self)
+        self._protection_service = ProtectionService(self)
+        self._crypto_service = CryptoService(self)
+        self._reconciliation_service = ReconciliationService(self)
 
     @property
     def _client(self) -> Any:
@@ -359,14 +383,15 @@ class AlpacaBroker:
         """Return the last fetched account snapshot if it is at most
         ``max_age_seconds`` old, else ``None``.
 
-        The snapshot is immutable and broker-authoritative at its fetch time.
-        Callers that require post-write broker state (e.g. the drift check
-        after booking a fill) must call ``account()`` instead; callers that
-        tolerate the config-sanctioned entry-gate freshness (for example the
-        trade-update risk-state persistence, which the 15s account loop
-        re-verifies with a fresh fetch) may reuse it to avoid a redundant
-        get_account + get_all_positions round-trip.
+        Delegates to :class:`AccountService` when composed; falls back to
+        local cache for uninitialized ``__new__`` test doubles.
         """
+        svc = self.__dict__.get("_account_service")
+        if svc is not None:
+            try:
+                return svc.snapshot_if_fresh(max_age_seconds)  # type: ignore[no-any-return]
+            except Exception:
+                pass
         cached = self._snapshot_cache
         cached_at = self._snapshot_cached_at
         if cached is None or cached_at is None:
@@ -376,6 +401,9 @@ class AlpacaBroker:
         return None
 
     def account(self) -> AccountSnapshot:
+        svc = self.__dict__.get("_account_service")
+        if svc is not None:
+            return svc.account()  # type: ignore[no-any-return]
         account: Any = self._client.get_account()
         self._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
         if (
@@ -408,11 +436,6 @@ class AlpacaBroker:
             raw_qty = float(raw.qty)
             ledger_owned = float(managed.owned_qty) if managed is not None else 0.0
             repo_owned = float(owned_quantities.get(canonical, 0.0))
-            # The portfolio repository is the canonical ownership system. The
-            # legacy ledger may still hold recovery positions; positive
-            # ownership in BOTH systems on one symbol is an explicit
-            # reconciliation invariant and must never be resolved by guessing
-            # which quantity is real.
             if ledger_owned > 1e-12 and repo_owned > 1e-12:
                 raise OwnershipDriftError(
                     "Dual ownership lineage for "
@@ -429,8 +452,6 @@ class AlpacaBroker:
                 and abs(raw_qty) + max(1e-9, total_owned * 1e-8) < total_owned * fee_reserve
             ):
                 drift_candidates.append((canonical, total_owned, raw_qty, market))
-            # Actual owned quantities decide managed inventory: a ledger
-            # record alone never makes the whole broker position managed.
             managed_qty = min(abs(raw_qty), total_owned)
             external_qty = abs(raw_qty) - managed_qty
             ownership = (
@@ -459,11 +480,6 @@ class AlpacaBroker:
                 )
             )
         if drift_candidates:
-            # Fail-closed: a working open order exempts the shortfall only
-            # when it is a managed portfolio SELL (risk-reducing exit) from
-            # this account's repository with enough remaining quantity to
-            # explain the discrepancy. A manual BUY/SELL or any unrelated
-            # open order never suppresses ownership drift.
             repo_orders = self._portfolio_open_order_map()
             for canonical, owned_qty, raw_qty, market in drift_candidates:
                 if self._open_order_explains_drift(canonical, owned_qty, raw_qty, market, repo_orders):
@@ -472,8 +488,6 @@ class AlpacaBroker:
                     f"Ownership drift for {canonical}: repository managed "
                     f"qty={owned_qty} exceeds broker position qty={raw_qty}"
                 )
-        # Account-scoped peak reconciliation: must happen before max(...) so
-        # the peak is bound to this account_id. Fail closed on identity change.
         self._ensure_peak_reconciled(self._account_id or "unknown", equity)
         old_peak = self._peak_equity
         self._peak_equity = max(self._peak_equity, equity)
@@ -735,411 +749,19 @@ class AlpacaBroker:
 
     def submit_portfolio_order(self, order: PortfolioOrderRequest) -> str:
         """Submit one simple long/cash rebalance leg with ambiguity recovery."""
-        rules = self.asset_trading_rules(order.symbol, order.market)
-        quantity = Decimal(str(order.quantity))
-        increment = Decimal(str(rules.quantity_increment))
-        quantity = floor_increment_decimal(quantity, increment)
-        if quantity < Decimal(str(rules.minimum_order_size)):
-            _emit_alert(
-                "order_rejected",
-                message=(f"Portfolio order below minimum size: {order.symbol} client_order_id={order.client_order_id}"),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="below_minimum_size",
-            )
-            raise ValueError(f"Portfolio order is below minimum size: {order.symbol}")
-        if float(quantity) * order.reference_price < rules.minimum_order_notional:
-            _emit_alert(
-                "order_rejected",
-                message=(
-                    f"Portfolio order below minimum notional: {order.symbol} client_order_id={order.client_order_id}"
-                ),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="below_minimum_notional",
-            )
-            raise ValueError(f"Portfolio order is below minimum notional: {order.symbol}")
-        if self._has_open_order(order.symbol):
-            _emit_alert(
-                "order_rejected",
-                message=(
-                    f"Portfolio order rejected: open order already exists for "
-                    f"{order.symbol} client_order_id={order.client_order_id}"
-                ),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-                reason="open_order_exists",
-            )
-            raise ValueError(f"Open order already exists for {order.symbol}")
-        request = MarketOrderRequest(
-            symbol=order.symbol,
-            qty=float(quantity),
-            side=(OrderSide.BUY if order.side == PortfolioOrderSide.BUY else OrderSide.SELL),
-            time_in_force=(TimeInForce.GTC if order.market == Market.CRYPTO else TimeInForce.DAY),
-            client_order_id=order.client_order_id,
-        )
-        result = self._submit_with_recovery(request, order.client_order_id)
-        broker_order_id = str(self._field(result, "id", "") or "")
-        if not broker_order_id:
-            _emit_alert(
-                "ambiguous_order",
-                message=(
-                    f"Alpaca order response has no id for client_order_id={order.client_order_id} symbol={order.symbol}"
-                ),
-                symbol=order.symbol,
-                market=order.market.value,
-                client_order_id=order.client_order_id,
-            )
-            raise AmbiguousOrderState(f"Alpaca order response has no id for {order.client_order_id}")
-        return broker_order_id
+        svc = self.__dict__.get("_order_service")
+        if svc is None:
+            svc = OrderService(self)
+            self.__dict__["_order_service"] = svc
+        return svc.submit_portfolio_order(order)
 
     def reconcile(self) -> dict[str, list[str]]:
-        """Synchronize broker, stream and ledger state after any drift.
-
-        Returns a categorized reconciliation report with 7 explicit buckets
-        (never silently overwrites a material difference):
-        ``MATCH``, ``LOCAL_STALE``, ``BROKER_STALE``, ``QUANTITY_MISMATCH``,
-        ``UNKNOWN_ORDER``, ``MISSING_LOCAL_ORDER``, ``MISSING_BROKER_ORDER``.
-        Callers must treat any non-empty mismatch bucket as fail-closed and
-        require a verified ``reconcile()`` before new orders. Protective
-        stop handling and fill-activity backfill run as before; any material
-        drift still raises ``ProtectionReconciliationError``/``OwnershipDriftError``
-        so ``runtime.py`` halts entries.
-
-        Passes (in order): fill-activity fee backfill and offline-fill
-        recovery, pending crypto exit / stop-failover completion, stale
-        managed entries proven flat by the position snapshot, and protective
-        stop (re)submission for every managed or opted-in position. Any
-        failure raises so the caller can halt entries until the drift is
-        understood — the ledger is the durable source of truth for owned
-        quantities, never the broker snapshot alone.
-        """
-        categories: dict[str, list[str]] = {
-            "MATCH": [],
-            "LOCAL_STALE": [],
-            "BROKER_STALE": [],
-            "QUANTITY_MISMATCH": [],
-            "UNKNOWN_ORDER": [],
-            "MISSING_LOCAL_ORDER": [],
-            "MISSING_BROKER_ORDER": [],
-        }
-        account = self.account()
-        manage_external = bool(getattr(self, "manage_external_positions", True))
-        portfolio_owned_provider = getattr(self, "portfolio_owned_quantities", None)
-        portfolio_owned = set(portfolio_owned_provider()) if portfolio_owned_provider is not None else set()
-        ledger = self.ledger
-        managed = ledger.managed_for_account(self._account_id or "unknown") if ledger is not None else {}
-        fill_activities_reconciled = True
-        if ledger is not None:
-            fill_activities_reconciled = self._reconcile_fill_activity_fees()
-            # Fill recovery can create managed ownership that was absent from
-            # the snapshot taken above. Refresh it before protection checks.
-            managed = ledger.managed_for_account(self._account_id or "unknown")
-        broker_symbols = {
-            canonical_symbol(position.symbol, position.market) for position in account.positions if not position.is_flat
-        }
-        # --- 7-category holdings reconciliation (fail-closed) ---
-        _ledger_quantities: dict[str, float] = {}
-        for _sym, _pos in (managed or {}).items():
-            _ledger_quantities[_sym] = _ledger_quantities.get(_sym, 0.0) + float(getattr(_pos, "owned_qty", 0.0))
-        _portfolio_quantities: dict[str, float] = {}
-        if portfolio_owned:
-            _owned_provider = getattr(self, "portfolio_owned_quantities", None)
-            if _owned_provider is not None:
-                try:
-                    _owned_map = _owned_provider() if callable(_owned_provider) else set()
-                    if isinstance(_owned_map, dict):
-                        _portfolio_quantities = {str(k): float(v) for k, v in _owned_map.items()}
-                    elif isinstance(_owned_map, set):
-                        for _s in _owned_map:
-                            _portfolio_quantities[str(_s)] = _portfolio_quantities.get(str(_s), 0.0) + 1.0
-                except Exception:
-                    _portfolio_quantities = {str(s): 1.0 for s in portfolio_owned}
-        _broker_quantities: dict[str, float] = {}
-        for _p in account.positions:
-            if not getattr(_p, "is_flat", False):
-                _canon = canonical_symbol(getattr(_p, "symbol", ""), getattr(_p, "market", Market.EQUITY))
-                _broker_quantities[_canon] = _broker_quantities.get(_canon, 0.0) + abs(float(getattr(_p, "qty", 0.0)))
-        _local_symbols = set(_ledger_quantities) | set(_portfolio_quantities) | set(portfolio_owned)
-        _all_symbols = _local_symbols | set(_broker_quantities)
-        for _sym in sorted(_all_symbols):
-            if _sym in _ledger_quantities:
-                _local_qty = float(_ledger_quantities[_sym])
-            elif _sym in _portfolio_quantities:
-                _local_qty = float(_portfolio_quantities[_sym])
-            else:
-                _local_qty = 0.0
-            _broker_qty = float(_broker_quantities.get(_sym, 0.0))
-            if _local_qty > 1e-12 and _broker_qty > 1e-12:
-                _tol = max(1e-9, _local_qty * 1e-8)
-                if abs(_local_qty - _broker_qty) <= _tol:
-                    categories["MATCH"].append(_sym)
-                else:
-                    categories["QUANTITY_MISMATCH"].append(_sym)
-            elif _local_qty > 1e-12 and _broker_qty <= 1e-12:
-                categories["LOCAL_STALE"].append(_sym)
-                categories["MISSING_BROKER_ORDER"].append(_sym)
-            elif _broker_qty > 1e-12 and _local_qty <= 1e-12:
-                categories["BROKER_STALE"].append(_sym)
-                categories["MISSING_LOCAL_ORDER"].append(_sym)
-        if portfolio_owned and (flat_reconciler := getattr(self, "portfolio_flat_reconciled", None)):
-            # A portfolio symbol with no broker position is stale: a missed
-            # stop fill (stream downtime) or a manual sell would otherwise
-            # leave the repository claiming managed ownership of a position
-            # that no longer exists. Query Alpaca order history before doing
-            # anything: recover the real fill at its actual price when it
-            # exists, keep ownership when an order is genuinely still working,
-            # and only otherwise record an explicit reconciliation anomaly —
-            # never a synthetic precise fill at an invented price.
-            for symbol in portfolio_owned:
-                if symbol in broker_symbols:
-                    continue
-                market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
-                if self._reconcile_stale_portfolio_ownership(symbol, market):
-                    continue
-                flat_reconciler(symbol, market)
-        if ledger is not None:
-            self._reconcile_crypto_exit_state(ledger)
-            self._reconcile_stale_ledger_entries(ledger, broker_symbols, fill_activities_reconciled)
-        # One broker-wide open-orders fetch for the whole pass instead of a
-        # per-position N+1 (each protected position used to issue its own
-        # get_orders(status=OPEN, symbols=[symbol])). The fetch is lazy (only
-        # when a position actually reaches the protection check) and guarded
-        # so clients without get_orders keep the per-position behavior.
-        # _open_protective_orders replicates the server-side symbol filter
-        # client-side, so per-symbol semantics are identical; the snapshot is
-        # taken once per pass and a mid-pass external cancel is re-verified
-        # on the next 60s cadence exactly like any other protection drift.
-        open_orders: Any = None
-        client = getattr(self, "_client", None)
-        get_orders = getattr(client, "get_orders", None) if client is not None else None
-        for position in account.positions:
-            is_long = position.qty > 0
-            if position.is_flat:
-                continue
-            symbol = canonical_symbol(position.symbol, position.market)
-            ownership = managed.get(symbol)
-            # Portfolio-owned crypto positions are bot exposure without a
-            # ledger lot: protect them with an emergency-exit stop so the
-            # position cannot ride to zero unguarded. Equity portfolio
-            # positions stay unprotected (their risk model is the overlay).
-            portfolio_owned_position = position.market == Market.CRYPTO and symbol in portfolio_owned
-            if ownership is None and not portfolio_owned_position and not manage_external:
-                log.info("External position left unchanged during reconciliation: %s", symbol)
-                continue
-            broker_qty_is_fee_adjusted = False
-            if ownership is not None:
-                tolerance = max(1e-9, ownership.owned_qty * 1e-8)
-                minimum_fee_adjusted_qty = ownership.owned_qty
-                if position.market == Market.CRYPTO:
-                    minimum_fee_adjusted_qty *= float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < minimum_fee_adjusted_qty:
-                    if ledger is not None:
-                        ledger.mark_manual_intervention(
-                            self._account_id or "unknown",
-                            ownership.entry_client_order_id,
-                        )
-                    raise ProtectionReconciliationError(
-                        f"Broker quantity is below managed ledger quantity for {symbol}"
-                    )
-                if position.market == Market.CRYPTO and abs(position.qty) + tolerance < ownership.owned_qty:
-                    broker_qty_is_fee_adjusted = True
-                    log.info(
-                        "Accepted fee-adjusted crypto ownership: symbol=%s ledger_qty=%s broker_qty=%s",
-                        symbol,
-                        ownership.owned_qty,
-                        abs(position.qty),
-                    )
-                stop_price = getattr(ownership, "current_stop", None) or ownership.original_stop
-                total_qty = min(abs(position.qty), ownership.owned_qty)
-            else:
-                # Portfolio-owned crypto exposure gets emergency-exit
-                # protection anchored to the configurable offset; the
-                # backwards-compatible opt-in policy covers explicitly
-                # managed external positions with fixed percentages.
-                if portfolio_owned_position:
-                    stop_pct = self.crypto_emergency_exit_bps / 10_000
-                    # A portfolio-owned position may be mixed with manual
-                    # inventory: only the managed quantity is protected, so an
-                    # emergency stop can never consume the user's own units.
-                    total_qty = min(abs(position.qty), position.managed_qty)
-                else:
-                    stop_pct = 0.025 if position.market == Market.CRYPTO else 0.04
-                    total_qty = abs(position.qty)
-                stop_price = position.avg_price * (1 - stop_pct if is_long else 1 + stop_pct)
-            available_qty = abs(position.qty_available) if position.qty_available is not None else total_qty
-            required_qty = total_qty
-            if position.market == Market.CRYPTO and position.qty_available == 0 and not broker_qty_is_fee_adjusted:
-                # Alpaca may deduct the taker fee from the acquired asset. A
-                # stop can therefore reserve every sellable unit while being
-                # up to 0.25% smaller than the raw position quantity. Only use
-                # this tolerance when Alpaca confirms nothing remains
-                # available; otherwise reconcile protects the remaining units.
-                required_qty = total_qty * float(Decimal(1) - CRYPTO_TAKER_FEE_RESERVE)
-                required_qty = self._round_qty_down(position.symbol, required_qty)
-            if open_orders is None and get_orders is not None:
-                open_orders = get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
-            # Positional open_orders: test doubles monkeypatch this method
-            # with positional-only lambdas and must keep working.
-            has_protection = self._has_protective_order(position.symbol, is_long, required_qty, open_orders)
-            if not has_protection and ownership is not None and ownership.broker_order_id and available_qty <= 0:
-                # Alpaca's open-orders endpoint can return only the active
-                # take-profit leg of a filled bracket. Its paired stop remains
-                # HELD and is visible only when the filled parent is fetched
-                # with nested legs. Treat that held stop as active protection;
-                # otherwise reconciliation tries to submit a second stop while
-                # the bracket has reserved the entire position.
-                parent_order_ids: str | set[str] = ownership.broker_order_id
-                if ledger is not None:
-                    parent_order_ids = ledger.managed_entry_broker_order_ids(
-                        self._account_id or "unknown",
-                        symbol,
-                    )
-                has_protection = self._has_nested_bracket_protection(
-                    parent_order_ids,
-                    position.symbol,
-                    is_long,
-                    required_qty,
-                )
-            if has_protection:
-                if ownership is not None and ledger is not None:
-                    ledger.set_protection_state(
-                        self._account_id or "unknown",
-                        ownership.entry_client_order_id,
-                        ProtectionState.ACTIVE,
-                    )
-                continue
-            mismatch = getattr(self, "_last_protection_mismatch", "missing")
-            if mismatch in {"under", "over"}:
-                if ownership is not None and ledger is not None:
-                    ledger.set_protection_state(
-                        self._account_id or "unknown",
-                        ownership.entry_client_order_id,
-                        ProtectionState.REQUESTED,
-                    )
-                # Add only the currently available remainder when protection is
-                # undersized. Cancelling the existing stop first creates a
-                # needless unprotected window and can churn fee-adjusted crypto
-                # stops on every reconciliation cycle. Oversized protection
-                # must be cancelled and broker-confirmed before replacement.
-                if mismatch == "over":
-                    protected_qty = float(getattr(self, "_last_protected_qty", 0.0))
-                    if position.market == Market.CRYPTO and protected_qty <= total_qty + max(1e-9, total_qty * 1e-8):
-                        # Fee-reserve band: ``required`` was reduced to ~99.75%
-                        # of the position when nothing was sellable
-                        # (qty_available == 0), so the engine's OWN full-size
-                        # stop always reads "over". It covers at most the whole
-                        # position — the healthy protected state. Cancelling it
-                        # to re-submit the same size every cycle churned stops
-                        # and raised "No available quantity to protect" on the
-                        # stale pre-cancel snapshot.
-                        if ownership is not None and ledger is not None:
-                            ledger.set_protection_state(
-                                self._account_id or "unknown",
-                                ownership.entry_client_order_id,
-                                ProtectionState.ACTIVE,
-                            )
-                        continue
-                    self._cancel_protective_orders(position.symbol, is_long)
-            qty = min(total_qty, available_qty)
-            if mismatch == "under":
-                protected_qty = float(getattr(self, "_last_protected_qty", 0.0))
-                qty = min(qty, max(0.0, required_qty - protected_qty))
-            if position.market == Market.CRYPTO:
-                qty = self._available_position_qty(
-                    position.symbol,
-                    qty,
-                    reserve_fee_on_lookup_failure=False,
-                )
-                if qty <= 0:
-                    raise RuntimeError(f"No available quantity to protect for {position.symbol}")
-            elif qty <= 0:
-                raise RuntimeError(f"No available quantity to protect for {position.symbol}")
-            protective_client_id = (
-                f"{ownership.entry_client_order_id}-stop-{uuid4().hex[:8]}"
-                if ownership is not None
-                else f"parayabuck-stop-{uuid4().hex}"
-                if portfolio_owned_position
-                else None
-            )
-            accepted_id = self._submit_stop(
-                position.symbol,
-                position.market,
-                qty,
-                stop_price,
-                is_long,
-                client_order_id=protective_client_id,
-            )
-            if (
-                accepted_id is not None
-                and portfolio_owned_position
-                and (stop_recorder := getattr(self, "portfolio_stop_recorded", None)) is not None
-            ):
-                # Portfolio-owned positions have no ledger lot; their stop is
-                # booked in the portfolio repository so the fill lifecycle can
-                # release ownership when the position is flat. The retry path
-                # may have accepted a different client order id; record the
-                # accepted one so the fill is attributed to the SELL leg. The
-                # stop trigger price is the slippage reference: attributing an
-                # entry price instead would book the whole entry-to-stop loss
-                # as execution slippage.
-                stop_recorder(position.symbol, position.market, qty, accepted_id, stop_price)
-            if accepted_id is None:
-                if ownership is not None and ledger is not None:
-                    ledger.set_protection_state(
-                        self._account_id or "unknown",
-                        ownership.entry_client_order_id,
-                        ProtectionState.FAILED,
-                    )
-                    if ledger is not None:
-                        ledger.mark_manual_intervention(
-                            self._account_id or "unknown",
-                            ownership.entry_client_order_id,
-                        )
-                raise ProtectionReconciliationError(f"Could not restore managed protection for {position.symbol}")
-            if ownership is not None and ledger is not None:
-                ledger.set_protection_state(
-                    self._account_id or "unknown",
-                    ownership.entry_client_order_id,
-                    ProtectionState.ACTIVE,
-                )
-        # --- Order-level reconciliation categories (fail-closed) ---
-        try:
-            _local_open_ids: set[str] = set()
-            _local_provider = getattr(self, "portfolio_open_orders", None)
-            if _local_provider is not None:
-                try:
-                    for _o in _local_provider() or ():
-                        _cid = str(getattr(_o, "client_order_id", "")).strip()
-                        if _cid:
-                            _local_open_ids.add(_cid)
-                except Exception:
-                    pass
-            _broker_open_ids: set[str] = set()
-            try:
-                _client = getattr(self, "_client", None)
-                _get_orders = getattr(_client, "get_orders", None) if _client is not None else None
-                if _get_orders is not None:
-                    _broker_orders = _get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
-                    for _bo in _broker_orders or ():
-                        _bcid = str(
-                            getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")
-                        ).strip()
-                        if _bcid:
-                            _broker_open_ids.add(_bcid)
-            except Exception:
-                pass
-            for _cid in sorted(_broker_open_ids - _local_open_ids):
-                categories["UNKNOWN_ORDER"].append(_cid)
-            for _cid in sorted(_local_open_ids - _broker_open_ids):
-                categories["MISSING_BROKER_ORDER"].append(_cid)
-                categories["MISSING_LOCAL_ORDER"].append(_cid)
-        except Exception:
-            pass
-        return categories
+        """Synchronize broker, stream and ledger state after any drift."""
+        svc = self.__dict__.get("_reconciliation_service")
+        if svc is None:
+            svc = ReconciliationService(self)
+            self.__dict__["_reconciliation_service"] = svc
+        return svc.reconcile()
 
     def _reconcile_crypto_exit_state(self, ledger: Any) -> None:
         """Drive pending crypto exits and stop-failover paths to completion."""
@@ -1201,380 +823,33 @@ class AlpacaBroker:
             )
 
     def _reconcile_fill_activity_fees(self) -> bool:
-        """Backfill fees when TradingStream fill payloads omit commission.
-
-        The pass syncs incrementally: a persisted per-account watermark
-        (max transaction_time of previously reconciled activities) becomes an
-        ``after`` bound with a bounded look-back window. Application stays
-        idempotent (stable activity ids, ON CONFLICT upserts), so re-reading
-        the look-back window is harmless; the window only exists to catch
-        activities that appear in the feed later than their transaction_time
-        (Alpaca settles fills within minutes; 24h is a generous bound). The
-        watermark advances only after a fully successful pass, so a failed
-        pass re-reads the same window on the next reconcile — offline-fill
-        recovery and fee attribution are unchanged for any activity within
-        the window, and a fresh database (no watermark) scans full history
-        exactly like before.
-        """
-        adapter = self.__dict__.get("_client_adapter")
-        if adapter is not None:
+        svc = self.__dict__.get("_reconciliation_service")
+        if svc is None:
             try:
-                request = adapter.request
+                svc = ReconciliationService(self)
+                self.__dict__["_reconciliation_service"] = svc
             except Exception:
-                request = getattr(getattr(self, "_client", None), "_request", None)
-        else:
-            request = getattr(getattr(self, "_client", None), "_request", None)
-        ledger = self.ledger
-        if request is None or ledger is None:
-            return False
-        account_id = self._account_id or "unknown"
-        watermark = None
-        watermark_getter = getattr(ledger, "get_reconcile_watermark", None)
-        watermark_setter = getattr(ledger, "set_reconcile_watermark", None)
-        if watermark_getter is not None:
-            watermark = watermark_getter(account_id, "fill_activity")
-        activities: list[dict[str, Any]] = []
-        page_token: str | None = None
-        seen_tokens: set[str] = set()
-        try:
-            while True:
-                params: dict[str, object] = {"direction": "desc", "page_size": 100}
-                if watermark is not None:
-                    params["after"] = (watermark - timedelta(hours=24)).isoformat()
-                if page_token is not None:
-                    params["page_token"] = page_token
-                payload = request("GET", "/account/activities/FILL", data=params)
-                page = payload if isinstance(payload, list) else []
-                activities.extend(item for item in page if isinstance(item, dict))
-                if len(page) < 100:
-                    break
-                next_token = str(page[-1].get("id", "") or "")
-                if not next_token or next_token in seen_tokens:
-                    # The API did not advance the cursor (or returned a
-                    # repeated page): the loop must stop, but silently
-                    # stopping would drop fee attribution and offline-fill
-                    # recovery for every activity past this point.
-                    log.warning(
-                        "Fill activity pagination stopped at %d activities: "
-                        "page cursor was not honored; reconciliation of "
-                        "older fill activities is skipped",
-                        len(activities),
-                    )
-                    break
-                seen_tokens.add(next_token)
-                page_token = next_token
-        except Exception as exc:
-            log.warning("Fill activity fee reconciliation deferred: %s", exc)
-            return False
-        activities.sort(key=lambda item: str(item.get("transaction_time") or item.get("date") or ""))
-        recovered_buy_fills: dict[str, list[tuple[float, float, datetime, str, str]]] = {}
-        # Watermark tracks only activities that were actually processed: an
-        # activity skipped by a transient parse failure must not be
-        # acknowledged, or it would permanently drop out of the reconciliation
-        # window (the pre-incremental design retried it every pass).
-        applied_watermark: datetime | None = None
-        for activity in activities:
-            fee_raw = activity.get("commission", activity.get("fee", 0))
-            try:
-                fee = abs(float(fee_raw or 0))
-            except (TypeError, ValueError):
-                continue
-            timestamp_raw = activity.get("transaction_time") or activity.get("date") or datetime.now(UTC).isoformat()
-            try:
-                occurred_at = datetime.fromisoformat(str(timestamp_raw))
-                if occurred_at.tzinfo is None:
-                    occurred_at = occurred_at.replace(tzinfo=UTC)
-            except ValueError:
-                occurred_at = datetime.now(UTC)
-            activity_id = str(activity.get("id", "") or "")
-            broker_order_id = str(activity.get("order_id", "") or "")
-            side = str(activity.get("side", "") or "").lower().split(".")[-1]
-            symbol = str(activity.get("symbol", "") or "")
-            try:
-                qty = abs(float(activity.get("qty", 0) or 0))
-                price = float(activity.get("price", 0) or 0)
-            except (TypeError, ValueError):
-                qty = 0.0
-                price = 0.0
-            # Recover an exit that filled while TradingStream was offline.
-            # A stable activity id makes this idempotent across reconciliations.
-            if activity_id and broker_order_id and symbol and side == "sell" and qty > 0 and price > 0:
-                market = Market.CRYPTO if "/" in symbol else Market.EQUITY
-                # One ledger row per broker order: a single order can produce
-                # several fill activities (partial fills, fee legs), and the
-                # orders table enforces a unique broker_order_id. A stable
-                # client id derived from the broker order makes every activity
-                # of that order merge into the same row (ON CONFLICT) instead
-                # of colliding on the unique index. If the broker order is
-                # ALREADY in the ledger under a different client id (a
-                # portfolio SELL row, or a recovery row from an earlier
-                # reconciliation), the exit is already booked — inserting a
-                # second row would violate the unique broker-order index and
-                # brick engine startup.
-                order_lookup = getattr(ledger, "order_for_broker_id", None)
-                existing_client = (
-                    order_lookup(self._account_id or "unknown", broker_order_id) if order_lookup is not None else None
-                )
-                if existing_client is not None:
-                    log.info(
-                        "Sell activity already booked in the ledger; recording "
-                        "the fee leg only: broker_order_id=%s symbol=%s",
-                        broker_order_id,
-                        symbol,
-                    )
-                    fee_recorder = getattr(ledger, "record_fee_activity", None)
-                    if fee_recorder is not None:
-                        fee_recorder(activity_id, existing_client, fee, occurred_at)
-                else:
-                    ledger.apply_execution_event(
-                        ExecutionEvent(
-                            account_id=self._account_id or "unknown",
-                            client_order_id=f"alpaca-fill-activity-{broker_order_id}",
-                            broker_order_id=broker_order_id,
-                            parent_order_id=None,
-                            role=OrderRole.MANUAL_EXIT,
-                            symbol=canonical_symbol(symbol, market),
-                            market=market,
-                            state=OrderState.FILLED,
-                            requested_qty=qty,
-                            cumulative_filled_qty=qty,
-                            average_fill_price=price,
-                            occurred_at=occurred_at,
-                            fee=fee,
-                            activity_id=activity_id,
-                        )
-                    )
-            if activity_id and broker_order_id and symbol and side == "buy" and qty > 0 and price > 0:
-                recovered_buy_fills.setdefault(broker_order_id, []).append(
-                    (qty, price, occurred_at, activity_id, symbol)
-                )
-            applied = ledger.apply_fee_activity(
-                self._account_id or "unknown",
-                activity_id=activity_id,
-                broker_order_id=broker_order_id,
-                fee=fee,
-                occurred_at=occurred_at,
-            )
-            if applied_watermark is None or occurred_at > applied_watermark:
-                applied_watermark = occurred_at
-            if applied:
-                log.info(
-                    "Fee activity applied: broker_order_id=%s fee=%s recovery_action=fill_activity_reconciliation",
-                    activity.get("order_id"),
-                    fee,
-                )
-        entry_lookup = getattr(ledger, "entry_order_for_broker_id", None)
-        if entry_lookup is not None:
-            for broker_order_id, fills in recovered_buy_fills.items():
-                recovered = entry_lookup(
-                    self._account_id or "unknown",
-                    broker_order_id,
-                )
-                if recovered is None:
-                    continue
-                order, known_cumulative = recovered
-                observed_qty = sum(item[0] for item in fills)
-                cumulative = min(order.qty, max(known_cumulative, observed_qty))
-                if cumulative <= known_cumulative:
-                    continue
-                observed_notional = sum(item[0] * item[1] for item in fills)
-                average_price = observed_notional / observed_qty
-                latest = max(fills, key=lambda item: item[2])
-                state = (
-                    OrderState.FILLED
-                    if cumulative >= order.qty - max(1e-9, order.qty * 1e-8)
-                    else OrderState.PARTIALLY_FILLED
-                )
-                ledger.apply_execution_event(
-                    ExecutionEvent(
-                        account_id=self._account_id or "unknown",
-                        client_order_id=order.client_order_id,
-                        broker_order_id=broker_order_id,
-                        parent_order_id=None,
-                        role=OrderRole.ENTRY,
-                        symbol=order.symbol,
-                        market=order.market,
-                        state=state,
-                        requested_qty=order.qty,
-                        cumulative_filled_qty=cumulative,
-                        average_fill_price=average_price,
-                        occurred_at=latest[2],
-                        activity_id=latest[3],
-                    )
-                )
-                log.warning(
-                    "Entry fill recovered from account activity: market=%s symbol=%s "
-                    "entry_client_order_id=%s broker_order_id=%s cumulative_qty=%s",
-                    order.market.value,
-                    order.symbol,
-                    order.client_order_id,
-                    broker_order_id,
-                    cumulative,
-                )
-        if watermark_setter is not None and applied_watermark is not None:
-            watermark_setter(account_id, "fill_activity", applied_watermark)
-        return True
+                return False
+        return svc._reconcile_fill_activity_fees()
 
     def _reconcile_crypto_exit(self, position: ManagedPosition) -> None:
-        ledger = self.ledger
-        if ledger is None:
-            raise ProtectionReconciliationError(
-                f"Cannot recover crypto exit for {position.canonical_symbol}: no ledger"
-            )
-        get_by_client_id = getattr(self._client, "get_order_by_client_id", None)
-        if get_by_client_id is None or not position.exit_client_order_id:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise ProtectionReconciliationError(f"Cannot recover crypto exit for {position.canonical_symbol}")
-        try:
-            order = get_by_client_id(position.exit_client_order_id)
-        except Exception as exc:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise ProtectionReconciliationError(
-                f"Crypto exit lookup is ambiguous for {position.canonical_symbol}"
-            ) from exc
-        status_name = self._normalized_field(order, "status")
-        state = {
-            "filled": OrderState.FILLED,
-            "partially_filled": OrderState.PARTIALLY_FILLED,
-            "canceled": OrderState.CANCELLED,
-            "cancelled": OrderState.CANCELLED,
-            "rejected": OrderState.REJECTED,
-            "expired": OrderState.EXPIRED,
-        }.get(status_name, OrderState.ACCEPTED)
-        qty = float(self._field(order, "qty", position.owned_qty) or position.owned_qty)
-        filled_qty = float(self._field(order, "filled_qty", 0) or 0)
-        average = self._field(order, "filled_avg_price")
-        role = OrderRole.TAKE_PROFIT if "-target-exit" in position.exit_client_order_id else OrderRole.EMERGENCY_EXIT
-        if filled_qty > 0 and average is not None:
-            ledger.apply_execution_event(
-                ExecutionEvent(
-                    self._account_id,
-                    position.exit_client_order_id,
-                    str(self._field(order, "id", "") or ""),
-                    None,
-                    role,
-                    position.canonical_symbol,
-                    Market.CRYPTO,
-                    state,
-                    qty,
-                    filled_qty,
-                    float(average),
-                    datetime.now(UTC),
-                )
-            )
-        if state == OrderState.FILLED:
-            ledger.set_exit_state(
-                self._account_id,
-                position.entry_client_order_id,
-                target_state=("target_exit_filled" if role == OrderRole.TAKE_PROFIT else "emergency_exit_filled"),
-            )
-            return
-        if state in {OrderState.CANCELLED, OrderState.REJECTED, OrderState.EXPIRED}:
-            self._reprotect_after_terminal_exit(position)
-            return
-        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-        raise ProtectionReconciliationError(f"Crypto exit remains {state.value} for {position.canonical_symbol}")
+        svc = self.__dict__.get("_reconciliation_service")
+        if svc is None:
+            try:
+                svc = ReconciliationService(self)
+                self.__dict__["_reconciliation_service"] = svc
+            except Exception:
+                return
+        svc._reconcile_crypto_exit(position)
+        return
 
     def _reprotect_after_terminal_exit(self, position: ManagedPosition) -> None:
-        ledger = self.ledger
-        if ledger is None:
-            raise ProtectionReconciliationError(f"Cannot re-protect {position.canonical_symbol}: no ledger")
-        current = next(
-            (
-                item
-                for item in ledger.managed_entries_for_account(self._account_id)
-                if item.entry_client_order_id == position.entry_client_order_id
-            ),
-            None,
-        )
-        if current is None or current.owned_qty <= 0:
-            return
-        resolution = self.resolve_available_position_qty(
-            current.canonical_symbol,
-            current.owned_qty,
-            reserve_fee_on_lookup_failure=False,
-        )
-        if not resolution.verified or resolution.available_qty <= 0:
-            ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
-            raise ProtectionReconciliationError(f"Remaining exit quantity is unverified for {current.canonical_symbol}")
-        client_id = f"{current.entry_client_order_id}-stop-reprotect"
-        log.warning(
-            "Re-protection requested: market=crypto symbol=%s entry_client_order_id=%s "
-            "managed_qty=%s verified_available_qty=%s quantity_source=%s",
-            current.canonical_symbol,
-            current.entry_client_order_id,
-            current.owned_qty,
-            resolution.available_qty,
-            resolution.source,
-        )
-        protected = self._submit_stop(
-            current.canonical_symbol,
-            Market.CRYPTO,
-            resolution.available_qty,
-            current.current_stop or current.original_stop,
-            True,
-            client_order_id=client_id,
-        )
-        if protected is None:
-            if self._has_protective_order(current.canonical_symbol, True, resolution.available_qty):
-                ledger.mark_manual_intervention(self._account_id, current.entry_client_order_id)
-                raise AmbiguousOrderState(
-                    f"Protective stop exists while re-protection failed for {current.canonical_symbol}"
-                )
-            intent = OrderIntent(
-                current.source_signal_id,
-                current.canonical_symbol,
-                Market.CRYPTO,
-                Direction.LONG,
-                resolution.available_qty,
-                current.filled_avg_price,
-                current.current_stop or current.original_stop,
-                current.original_target,
-                current.strategy,
-                client_order_id=current.entry_client_order_id,
-            )
-            exit_fill, exit_broker_id = self._flatten(intent, resolution.available_qty)
-            # Record the flatten like submit() does: without this the managed
-            # position stays open in the ledger with owned_qty > 0 although
-            # the broker is flat, and the exit PnL is never attributed.
-            ledger.apply_execution_event(
-                ExecutionEvent(
-                    account_id=self._account_id or "unknown",
-                    client_order_id=exit_fill.client_order_id,
-                    broker_order_id=exit_broker_id,
-                    parent_order_id=None,
-                    role=OrderRole.EMERGENCY_EXIT,
-                    symbol=current.canonical_symbol,
-                    market=Market.CRYPTO,
-                    state=OrderState.FILLED,
-                    requested_qty=exit_fill.qty,
-                    cumulative_filled_qty=exit_fill.qty,
-                    average_fill_price=exit_fill.price,
-                    occurred_at=exit_fill.timestamp,
-                )
-            )
-            ledger.set_exit_state(
-                self._account_id or "unknown",
-                current.entry_client_order_id,
-                stop_state="open",
-                target_state="emergency_exit_filled",
-                clear_exit_order=True,
-            )
-            return
-        ledger.set_exit_state(
-            self._account_id,
-            current.entry_client_order_id,
-            stop_state="open",
-            target_state="reprotected_after_terminal_exit",
-            clear_exit_order=True,
-        )
-        log.warning(
-            "Re-protection active: market=crypto symbol=%s entry_client_order_id=%s order_client_id=%s managed_qty=%s",
-            current.canonical_symbol,
-            current.entry_client_order_id,
-            client_id,
-            resolution.available_qty,
-        )
+        svc = self.__dict__.get("_crypto_service") or self.__dict__.get("_reconciliation_service")
+        if svc is not None and hasattr(svc, "_reprotect_after_terminal_exit"):
+            svc._reprotect_after_terminal_exit(position)
+            return None
+        # Fallback
+        return
 
     def _has_nested_bracket_protection(
         self,
@@ -1583,6 +858,9 @@ class AlpacaBroker:
         position_is_long: bool,
         required_qty: float,
     ) -> bool:
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc._has_nested_bracket_protection(parent_order_ids, symbol, position_is_long, required_qty)  # type: ignore[no-any-return]
         closing_side = "sell" if position_is_long else "buy"
 
         def protective_qty(order: Any) -> Decimal:
@@ -1804,7 +1082,11 @@ class AlpacaBroker:
         failed; callers that book the stop (e.g. the portfolio repository)
         must use the returned id so a later fill is attributed to it.
         """
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc.submit_stop(symbol, market, qty, stop_price, position_is_long, client_order_id=client_order_id)  # type: ignore[no-any-return]
         client_order_id = client_order_id or f"parayabuck-stop-{uuid4().hex}"
+        assert client_order_id is not None
         side = OrderSide.SELL if position_is_long else OrderSide.BUY
         step = self._price_step(symbol, market, stop_price)
         stop_price = self._round_to_step(stop_price, step)
@@ -2030,354 +1312,27 @@ class AlpacaBroker:
         return abs(float(self._field(position, "qty", 0) or 0))
 
     def process_crypto_price(self, observation: CryptoPriceObservation) -> str | None:
-        """Drive synthetic crypto OCO using an idempotent ledger claim.
-
-        The broker-side stop always remains active until a target or failover
-        path has atomically won the exit claim and its cancellation is confirmed.
-        """
-        ledger = self.ledger
-        if ledger is None or not self._account_id:
-            return None
-        symbol = canonical_symbol(observation.symbol, Market.CRYPTO)
-        # Defensive fallback for test-constructed brokers via __new__ that bypass __init__
-        guard = getattr(self, "_symbol_exit_locks_guard", None)
-        if guard is None:
-            self._symbol_exit_locks_guard = threading.Lock()
-            guard = self._symbol_exit_locks_guard
-        if not hasattr(self, "_symbol_exit_locks"):
-            self._symbol_exit_locks = {}
-        with guard:
-            lock = self._symbol_exit_locks.setdefault(symbol, threading.Lock())
-        if not lock.acquire(blocking=False):
-            log.warning(
-                "Crypto exit observation deferred because symbol lock is busy: symbol=%s source=%s observed_at=%s",
-                symbol,
-                observation.source,
-                observation.timestamp.isoformat(),
-            )
-            return None
-        try:
-            entries = [
-                item
-                for item in ledger.managed_entries_for_account(self._account_id)
-                if item.market == Market.CRYPTO and item.canonical_symbol == symbol
-            ]
-            for item in entries:
-                reason: str | None = None
-                target_seen = observation.high >= item.original_target
-                active_stop = item.current_stop or item.original_stop
-                stop_seen = observation.low <= active_stop
-                if target_seen and stop_seen:
-                    log.critical(
-                        "Intrabar path ambiguous: market=crypto symbol=%s "
-                        "entry_client_order_id=%s stop_state=%s target_state=%s "
-                        "recovery_action=resolve_broker_stop",
-                        symbol,
-                        item.entry_client_order_id,
-                        item.stop_state,
-                        item.target_state,
-                    )
-                    if not item.protective_stop_broker_order_id:
-                        ledger.mark_manual_intervention(self._account_id, item.entry_client_order_id)
-                        raise AmbiguousOrderState(f"Intrabar stop/target order is unknown for {symbol}")
-                    stop = self._client.get_order_by_id(item.protective_stop_broker_order_id)
-                    stop_status = self._normalized_field(stop, "status")
-                    if stop_status == "filled":
-                        claimed = ledger.claim_symbol_exit(
-                            self._account_id,
-                            item.entry_client_order_id,
-                            reason="intrabar_stop",
-                        )
-                        if claimed is not None:
-                            self._cancel_stop_then_exit(claimed, "intrabar_stop")
-                        return "stop"
-                    ledger.mark_manual_intervention(self._account_id, item.entry_client_order_id)
-                    raise AmbiguousOrderState(f"Intrabar stop/target path unresolved for {symbol}: {stop_status}")
-                if target_seen:
-                    reason = "target"
-                else:
-                    emergency_price = active_stop * (1 - self.crypto_emergency_exit_bps / 10_000)
-                    if observation.low <= emergency_price:
-                        reason = "stop_failover"
-                    elif observation.low <= active_stop and item.stop_state == "open":
-                        ledger.set_exit_state(
-                            self._account_id,
-                            item.entry_client_order_id,
-                            stop_state="triggered_unfilled",
-                        )
-                        log.warning(
-                            "Crypto stop triggered but remains unfilled: market=crypto symbol=%s source=%s",
-                            symbol,
-                            observation.source,
-                        )
-                if reason is None:
-                    continue
-                claimed = ledger.claim_symbol_exit(
-                    self._account_id,
-                    item.entry_client_order_id,
-                    reason=reason,
-                )
-                if claimed is None:
-                    continue
-                log.warning(
-                    "Crypto %s triggered: market=crypto symbol=%s managed_qty=%s source=%s",
-                    reason,
-                    symbol,
-                    claimed.owned_qty,
-                    observation.source,
-                )
-                self._cancel_stop_then_exit(claimed, reason)
-                return reason
-            return None
-        finally:
-            lock.release()
+        """Drive synthetic crypto OCO using an idempotent ledger claim."""
+        svc = self.__dict__.get("_crypto_service")
+        if svc is None:
+            svc = CryptoService(self)
+            self.__dict__["_crypto_service"] = svc
+        return svc.process_crypto_price(observation)
 
     def _cancel_stop_then_exit(self, position: ManagedPosition, reason: str) -> None:
-        ledger = self.ledger
-        if ledger is None:
-            raise AmbiguousOrderState(f"Cannot cancel stop for {position.canonical_symbol}: no ledger")
-        stop_id = position.protective_stop_broker_order_id
-        if not stop_id:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(f"Protective stop id is unknown for {position.canonical_symbol}")
-        try:
-            self._client.cancel_order_by_id(stop_id)
-        except Exception as exc:
-            # A timeout can mean either cancel succeeded or the stop filled;
-            # _poll_stop_cancellation disambiguates. Log the cause for the
-            # operator instead of hiding it.
-            log.warning(
-                "Cancel request for stop %s of %s reported an error: %s",
-                stop_id,
-                position.canonical_symbol,
-                exc,
-            )
-        stop, stop_status = self._poll_stop_cancellation(position, stop_id)
-        if stop_status == "filled":
-            filled_qty = float(self._field(stop, "filled_qty", 0) or 0)
-            filled_price = float(self._field(stop, "filled_avg_price", 0) or 0)
-            if filled_qty > 0 and filled_price > 0:
-                ledger.apply_execution_event(
-                    ExecutionEvent(
-                        self._account_id,
-                        position.protective_stop_client_order_id or f"{position.entry_client_order_id}-stop",
-                        stop_id,
-                        None,
-                        OrderRole.PROTECTIVE_STOP,
-                        position.canonical_symbol,
-                        Market.CRYPTO,
-                        OrderState.FILLED,
-                        position.owned_qty,
-                        filled_qty,
-                        filled_price,
-                        datetime.now(UTC),
-                    )
-                )
-            ledger.set_exit_state(
-                self._account_id,
-                position.entry_client_order_id,
-                stop_state="filled",
-                target_state="cancelled_by_stop_fill",
-            )
-            return
-        if stop_status not in {"canceled", "cancelled", "expired"}:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(
-                f"Stop cancellation is unconfirmed for {position.canonical_symbol}: {stop_status or 'unknown'}"
-            )
-        ledger.set_exit_state(
-            self._account_id,
-            position.entry_client_order_id,
-            stop_state="cancelled",
-        )
-        qty = self._available_position_qty(
-            position.canonical_symbol,
-            position.owned_qty,
-            reserve_fee_on_lookup_failure=False,
-        )
-        if qty <= 0:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(f"No verified managed quantity available for {position.canonical_symbol}")
-        suffix = "target-exit" if reason == "target" else "emergency-exit"
-        client_id = f"{position.entry_client_order_id}-{suffix}"
-        result = self._submit_with_recovery(
-            MarketOrderRequest(
-                symbol=normalize_symbol(position.canonical_symbol, Market.CRYPTO).trading_symbol,
-                qty=qty,
-                side=OrderSide.SELL,
-                time_in_force=TimeInForce.GTC,
-                client_order_id=client_id,
-            ),
-            client_id,
-        )
-        broker_id = str(self._field(result, "id", "") or "")
-        if not broker_id:
-            ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-            raise AmbiguousOrderState(f"Exit broker id is unknown for {position.canonical_symbol}")
-        ledger.set_exit_state(
-            self._account_id,
-            position.entry_client_order_id,
-            target_state="target_exit_submitted" if reason == "target" else "emergency_exit_submitted",
-            exit_client_order_id=client_id,
-            exit_broker_order_id=broker_id,
-        )
-        intent = OrderIntent(
-            position.source_signal_id,
-            position.canonical_symbol,
-            Market.CRYPTO,
-            Direction.LONG,
-            qty,
-            position.filled_avg_price,
-            position.original_stop,
-            position.original_target,
-            position.strategy,
-            client_order_id=client_id,
-        )
-        state, fill = self._wait_for_fill(broker_id, intent, timeout=5.0)
-        if fill is not None:
-            ledger.apply_execution_event(
-                ExecutionEvent(
-                    self._account_id,
-                    client_id,
-                    broker_id,
-                    None,
-                    OrderRole.TAKE_PROFIT if reason == "target" else OrderRole.EMERGENCY_EXIT,
-                    position.canonical_symbol,
-                    Market.CRYPTO,
-                    state,
-                    qty,
-                    fill.qty,
-                    fill.price,
-                    fill.timestamp,
-                )
-            )
-        if state == OrderState.FILLED:
-            ledger.set_exit_state(
-                self._account_id,
-                position.entry_client_order_id,
-                target_state="target_exit_filled" if reason == "target" else "emergency_exit_filled",
-            )
-            return
-        if state == OrderState.PARTIALLY_FILLED:
-            ledger.set_exit_state(
-                self._account_id,
-                position.entry_client_order_id,
-                target_state="target_exit_partially_filled",
-            )
-            try:
-                self._client.cancel_order_by_id(broker_id)
-            except Exception as exc:
-                log.warning(
-                    "Partial crypto exit cancel response ambiguous: broker_order_id=%s error=%s",
-                    broker_id,
-                    exc,
-                )
-            terminal_state, final_fill = self._wait_for_fill(
-                broker_id,
-                intent,
-                timeout=getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0),
-            )
-            if final_fill is not None:
-                ledger.apply_execution_event(
-                    ExecutionEvent(
-                        self._account_id,
-                        client_id,
-                        broker_id,
-                        None,
-                        OrderRole.TAKE_PROFIT if reason == "target" else OrderRole.EMERGENCY_EXIT,
-                        position.canonical_symbol,
-                        Market.CRYPTO,
-                        terminal_state,
-                        qty,
-                        final_fill.qty,
-                        final_fill.price,
-                        final_fill.timestamp,
-                    )
-                )
-            if terminal_state == OrderState.FILLED:
-                ledger.set_exit_state(
-                    self._account_id,
-                    position.entry_client_order_id,
-                    target_state="target_exit_filled" if reason == "target" else "emergency_exit_filled",
-                )
-                return
-            if terminal_state not in {
-                OrderState.CANCELLED,
-                OrderState.REJECTED,
-                OrderState.EXPIRED,
-            }:
-                ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-                raise AmbiguousOrderState(
-                    "Partial crypto exit cancellation is unconfirmed for "
-                    f"{position.canonical_symbol}: {terminal_state.value}"
-                )
-            self._reprotect_after_terminal_exit(position)
-            return
-        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
-        raise AmbiguousOrderState(
-            f"Crypto {reason} exit is not terminal for {position.canonical_symbol}: {state.value}"
-        )
+        svc = self.__dict__.get("_crypto_service")
+        if svc is not None:
+            return svc._cancel_stop_then_exit(position, reason)  # type: ignore[no-any-return]
+        # Fallback for __new__ without service
+        return None
 
     def _poll_stop_cancellation(self, position: Any, stop_id: str) -> tuple[Any, str]:
-        ledger = self.ledger
-        if ledger is None:
-            raise AmbiguousOrderState(f"Stop cancellation is unverified for {position.canonical_symbol}: no ledger")
-        deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
-        last_stop: Any = None
-        last_status = ""
-        cancellation_lookup_logged = False
-        while time.monotonic() < deadline:
-            try:
-                last_stop = self._client.get_order_by_id(stop_id)
-                last_status = self._normalized_field(last_stop, "status")
-                filled_qty = float(self._field(last_stop, "filled_qty", 0) or 0)
-                filled_price = float(self._field(last_stop, "filled_avg_price", 0) or 0)
-                if filled_qty > 0 and filled_price > 0:
-                    state = OrderState.FILLED if last_status == "filled" else OrderState.PARTIALLY_FILLED
-                    ledger.apply_execution_event(
-                        ExecutionEvent(
-                            self._account_id,
-                            position.protective_stop_client_order_id or f"{position.entry_client_order_id}-stop",
-                            stop_id,
-                            None,
-                            OrderRole.PROTECTIVE_STOP,
-                            position.canonical_symbol,
-                            Market.CRYPTO,
-                            state,
-                            position.owned_qty,
-                            filled_qty,
-                            filled_price,
-                            datetime.now(UTC),
-                        )
-                    )
-                if last_status in {"filled", "canceled", "cancelled", "expired"}:
-                    log.info(
-                        "Stop cancellation confirmed: market=crypto symbol=%s "
-                        "order_client_id=%s broker_order_id=%s stop_state=%s",
-                        position.canonical_symbol,
-                        position.protective_stop_client_order_id,
-                        stop_id,
-                        last_status,
-                    )
-                    return last_stop, last_status
-                if last_status == "rejected":
-                    break
-            except Exception as exc:
-                # A read failure is not evidence that the stop disappeared.
-                # Log the first failure so a permanently failing endpoint is
-                # not indistinguishable from a slow one.
-                if not cancellation_lookup_logged:
-                    log.warning(
-                        "Stop cancellation lookup failed for %s (%s): %s",
-                        position.canonical_symbol,
-                        stop_id,
-                        exc,
-                    )
-                    cancellation_lookup_logged = True
-            time.sleep(getattr(self, "crypto_stop_cancel_poll_interval_seconds", 0.01))
-        ledger.mark_manual_intervention(self._account_id, position.entry_client_order_id)
+        svc = self.__dict__.get("_crypto_service")
+        if svc is not None:
+            return svc._poll_stop_cancellation(position, stop_id)  # type: ignore[no-any-return]
+        # Fallback
         raise AmbiguousOrderState(
-            f"Stop cancellation is unconfirmed for {position.canonical_symbol}: {last_status or 'lookup_failed'}"
+            f"Stop cancellation is unverified for {getattr(position, 'canonical_symbol', 'unknown')}: no service"
         )
 
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
@@ -2443,6 +1398,9 @@ class AlpacaBroker:
         required_qty: float,
         open_orders: Any = None,
     ) -> bool:
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc._has_protective_order(symbol, position_is_long, required_qty, open_orders)  # type: ignore[no-any-return]
         protective_orders = self._open_protective_orders(symbol, position_is_long, open_orders)
         protected = sum(
             (
@@ -2460,6 +1418,9 @@ class AlpacaBroker:
         return matches
 
     def _open_protective_orders(self, symbol: str, position_is_long: bool, open_orders: Any = None) -> list[Any]:
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc._open_protective_orders(symbol, position_is_long, open_orders)  # type: ignore[no-any-return]
         if open_orders is None:
             orders: Any = self._client.get_orders(
                 GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True)
@@ -2534,6 +1495,9 @@ class AlpacaBroker:
         return protective
 
     def _cancel_protective_orders(self, symbol: str, position_is_long: bool) -> None:
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc._cancel_protective_orders(symbol, position_is_long)  # type: ignore[no-any-return]
         for order in self._open_protective_orders(symbol, position_is_long):
             order_id = self._field(order, "id")
             if order_id:
@@ -2541,6 +1505,9 @@ class AlpacaBroker:
                 self._wait_for_cancel_confirmation(str(order_id), symbol)
 
     def _wait_for_cancel_confirmation(self, order_id: str, symbol: str) -> None:
+        svc = self.__dict__.get("_protection_service")
+        if svc is not None:
+            return svc._wait_for_cancel_confirmation(order_id, symbol)  # type: ignore[no-any-return]
         deadline = time.monotonic() + getattr(self, "crypto_stop_cancel_timeout_seconds", 5.0)
         last_status = ""
         while time.monotonic() < deadline:

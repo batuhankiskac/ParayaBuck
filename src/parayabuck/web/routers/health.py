@@ -122,7 +122,7 @@ async def readyz() -> JSONResponse:
 
     # engine_state is the single source of truth — tolerate stub managers.
     try:
-        engine_state = manager.current_engine_state()  # type: ignore[union-attr]
+        engine_state = manager.current_engine_state()
     except Exception:
         engine_state = getattr(manager, "engine_state", "stopped")
 
@@ -148,7 +148,7 @@ async def readyz() -> JSONResponse:
     engine_error = engine_state == "error"
     # has_active_runtime may be missing on stub fakes
     try:
-        has_active = manager.has_active_runtime()  # type: ignore[union-attr]
+        has_active = manager.has_active_runtime()
     except Exception:
         has_active = False
 

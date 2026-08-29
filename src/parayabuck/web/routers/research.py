@@ -45,7 +45,7 @@ async def list_runs(
         return result
     if isinstance(result, list):
         return {"runs": result, "count": len(result)}
-    return {"runs": result, "count": 0}  # type: ignore
+    return {"runs": result, "count": 0}
 
 
 @router.get("/runs/{run_id}")
@@ -87,7 +87,7 @@ async def list_trials_legacy(
     tag: str | None = None,
 ) -> dict[str, Any]:
     """Legacy alias: /api/research/trials -> /api/research/runs (bounded, read-only)."""
-    return await list_runs(limit=limit, strategy=strategy, market=market, status=status, tag=tag)
+    return await list_runs(limit=limit, strategy=strategy, market=market, status=status, tag=tag)  # type: ignore[no-any-return]
 
 
 @router.get("/summary")
@@ -99,4 +99,4 @@ async def get_summary_legacy(
     # Normalize to {summary: [...]} for very old JS that expects summary
     if isinstance(result, dict) and "runs" in result:
         return {"summary": result["runs"], "runs": result["runs"], "count": result.get("count", 0)}
-    return {"summary": result, "count": 0}  # type: ignore
+    return {"summary": result, "count": 0}

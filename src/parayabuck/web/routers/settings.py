@@ -58,13 +58,13 @@ def get_settings_service() -> Any:
 
 @router.get("", summary="Get settings")
 async def get_settings(service: Any = Depends(get_settings_service)) -> dict[str, Any]:
-    return await service.get_settings()
+    return await service.get_settings()  # type: ignore[no-any-return]
 
 
 @router.post("", summary="Save settings (POST)")
 async def save_settings(payload: SettingsPayload, service: Any = Depends(get_settings_service)) -> dict[str, Any]:
     try:
-        return await service.save_settings(payload)
+        return await service.save_settings(payload)  # type: ignore[no-any-return]
     except HTTPException:
         raise
     except ValueError as e:
@@ -77,7 +77,7 @@ async def save_settings(payload: SettingsPayload, service: Any = Depends(get_set
 @router.patch("", summary="Save settings (PATCH)")
 async def patch_settings(payload: SettingsPayload, service: Any = Depends(get_settings_service)) -> dict[str, Any]:
     try:
-        return await service.save_settings(payload)
+        return await service.save_settings(payload)  # type: ignore[no-any-return]
     except HTTPException:
         raise
     except ValueError as e:
@@ -90,13 +90,13 @@ async def patch_settings(payload: SettingsPayload, service: Any = Depends(get_se
 # Trailing-slash variants for clients that append slash (FastAPI strict).
 @router.get("/", include_in_schema=False)
 async def get_settings_slash(service: Any = Depends(get_settings_service)) -> dict[str, Any]:
-    return await service.get_settings()
+    return await service.get_settings()  # type: ignore[no-any-return]
 
 
 @router.post("/", include_in_schema=False)
 async def save_settings_slash(payload: SettingsPayload, service: Any = Depends(get_settings_service)) -> dict[str, Any]:
     try:
-        return await service.save_settings(payload)
+        return await service.save_settings(payload)  # type: ignore[no-any-return]
     except HTTPException:
         raise
     except ValueError as e:
@@ -111,7 +111,7 @@ async def patch_settings_slash(
     payload: SettingsPayload, service: Any = Depends(get_settings_service)
 ) -> dict[str, Any]:
     try:
-        return await service.save_settings(payload)
+        return await service.save_settings(payload)  # type: ignore[no-any-return]
     except HTTPException:
         raise
     except ValueError as e:

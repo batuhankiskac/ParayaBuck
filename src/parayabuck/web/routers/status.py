@@ -38,7 +38,7 @@ def _get_manager(request: Request) -> Any:
         pass
     # Fallback for legacy tests / server.py import path
     try:
-        import parayabuck.web.server as server_mod  # type: ignore
+        import parayabuck.web.server as server_mod
 
         return server_mod.manager
     except Exception as exc:  # pragma: no cover

@@ -19,19 +19,19 @@ from parayabuck.logger import get_logger
 log = get_logger("parayabuck.web.services.status")
 
 
-def _load_config(path: str):
+def _load_config(path: str) -> Any:
     import parayabuck.config as _cfg
 
     return _cfg.load_config(path)
 
 
-def _validate_active_universe(cfg: Any):
+def _validate_active_universe(cfg: Any) -> Any:
     import parayabuck.universe as _u
 
     return _u.validate_active_universe(cfg)
 
 
-def _validate_active_crypto_universe(cfg: Any):
+def _validate_active_crypto_universe(cfg: Any) -> Any:
     import parayabuck.universe as _u
 
     return _u.validate_active_crypto_universe(cfg)

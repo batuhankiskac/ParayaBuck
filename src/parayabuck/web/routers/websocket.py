@@ -35,7 +35,7 @@ def _consume_ticket(ticket: str, kind: str) -> bool:
             m = __import__(mod, fromlist=["manager"])
             mgr = getattr(m, "manager", None)
             if mgr is not None and hasattr(mgr, "consume_ws_ticket"):
-                if bool(mgr.consume_ws_ticket(ticket, kind)):  # type: ignore
+                if bool(mgr.consume_ws_ticket(ticket, kind)):
                     return True
         except Exception:
             continue
@@ -78,7 +78,7 @@ async def websocket_stream(websocket: WebSocket) -> None:
         try:
             close = getattr(websocket, "close", None)
             if callable(close):
-                await close(code=1008)  # type: ignore
+                await close(code=1008)
         except Exception:
             pass
         return
@@ -86,9 +86,10 @@ async def websocket_stream(websocket: WebSocket) -> None:
     try:
         from parayabuck.web.managers.engine import manager as engine_manager
     except Exception:
-        engine_manager = None  # type: ignore
+        engine_manager = None
     try:
         while True:
+            account_data: dict[str, Any] = {}
             if engine_manager is not None:
                 account_data = await asyncio.to_thread(engine_manager.fetch_account_snapshot)
                 state, paper = await asyncio.to_thread(
@@ -116,7 +117,7 @@ async def websocket_logs(websocket: WebSocket) -> None:
         try:
             close = getattr(websocket, "close", None)
             if callable(close):
-                await close(code=1008)  # type: ignore
+                await close(code=1008)
         except Exception:
             pass
         return

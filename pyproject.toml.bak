@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parayabuck"
+version = "1.0.0"
+description = "Event-driven Alpaca trading engine for US stocks and crypto with a Web UI"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.2,<3.1",
+    "numpy>=1.26,<2.6",
+    "pyyaml>=6.0,<7",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.31,<3",
+    "alpaca-py>=0.43.5,<0.44",
+    "fastapi>=0.115,<0.140",
+    "uvicorn>=0.30,<0.52",
+    # alpaca-py 0.43 still imports websockets.legacy. websockets 14+ emits a
+    # deprecation on every process import; 13.1 is the supported bridge until
+    # Alpaca migrates its stream implementation.
+    "websockets>=13.1,<14",
+    "jinja2>=3.1,<4",
+    "pandas-market-calendars>=5.4.0,<6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+
+[project.scripts]
+parayabuck = "parayabuck.cli:main"
+parayabuck-backtest = "parayabuck.cli:backtest_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"parayabuck.web" = [
+    "templates/*.html",
+    "static/css/*.css",
+    "static/js/*.js",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501", "E402", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/archive/**" = ["F401", "F821", "E722"]
+[tool.mypy]
+# NumPy 2.5 publishes PEP 695 type aliases in its stubs. Static analysis needs a 3.12+
+# grammar target to parse those third-party stubs.
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+follow_imports = "skip"
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
+exclude = [".venv/", "build/", "tests/"]
+
+[[tool.mypy.overrides]]
+module = "parayabuck.web.*"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "paper_chaos: deterministic paper-trading fault injection and recovery scenario",
+]

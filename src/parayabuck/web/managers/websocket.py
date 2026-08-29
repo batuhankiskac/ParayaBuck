@@ -67,7 +67,7 @@ def enqueue_log(target: asyncio.Queue[dict[str, Any]], entry: dict[str, Any]) ->
 class WebSocketLogHandler(logging.Handler):
     """Fan-out handler that coalesces into each subscriber's bounded queue."""
 
-    def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+    def emit(self, record: logging.LogRecord) -> None:
         log_entry = {
             "level": record.levelname,
             "levelno": record.levelno,

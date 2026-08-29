@@ -83,7 +83,7 @@ class BacktestManager:
 
             state = get_web_state()
             if state is not None and getattr(state, "engine_manager", None) is not None:
-                return state.engine_manager.current_engine_state()  # type: ignore
+                return state.engine_manager.current_engine_state()  # type: ignore[no-any-return]
         except Exception:
             pass
         try:

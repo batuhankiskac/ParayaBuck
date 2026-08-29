@@ -139,7 +139,7 @@ class SettingsService:
 
         def _current_digest() -> str:
             try:
-                return manager._config_digest(paper=manager.is_paper_mode())
+                return manager._config_digest(paper=manager.is_paper_mode())  # type: ignore[no-any-return]
             except Exception:
                 raw_tmp: dict[str, Any] = {}
                 if manager.config_path.exists():
@@ -147,7 +147,7 @@ class SettingsService:
                         raw_tmp = yaml.safe_load(manager.config_path.read_text(encoding="utf-8")) or {}
                     except Exception:
                         pass
-                return manager._digest_config(raw_tmp, paper=manager.is_paper_mode())
+                return manager._digest_config(raw_tmp, paper=manager.is_paper_mode())  # type: ignore[no-any-return]
 
         async with self._lock:
             if payload.expected_config_digest is not None:

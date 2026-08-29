@@ -62,9 +62,6 @@ disallow_untyped_decorators = false
 disallow_subclassing_any = false
 exclude = [".venv/", "build/", "tests/"]
 
-[[tool.mypy.overrides]]
-module = "parayabuck.web.*"
-ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

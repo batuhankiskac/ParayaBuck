@@ -75,7 +75,7 @@ def _is_paper() -> bool:
     mgr = _resolve_manager()
     if mgr is not None:
         try:
-            return bool(mgr.is_paper_mode())  # type: ignore[union-attr]
+            return bool(mgr.is_paper_mode())
         except Exception:
             return True
     return True

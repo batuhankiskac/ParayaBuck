@@ -53,7 +53,7 @@ def get_engine_manager(request: Request | None = None) -> Any:
         if hasattr(ws, "current_engine_state"):
             return ws
     try:
-        import parayabuck.web.server as server_mod  # type: ignore
+        import parayabuck.web.server as server_mod
 
         mgr = getattr(server_mod, "manager", None)
         if mgr is not None:
@@ -77,7 +77,7 @@ def get_backtest_manager(request: Request | None = None) -> Any:
         if bm is not None:
             return bm
     try:
-        import parayabuck.web.server as server_mod  # type: ignore
+        import parayabuck.web.server as server_mod
 
         bm = getattr(server_mod, "backtest_manager", None)
         if bm is not None:

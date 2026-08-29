@@ -42,7 +42,7 @@ async def _auto_start_paper_engine(manager: Any) -> None:
         log.error("Automatic paper engine start failed: %s", exc)
 
 
-def create_lifespan(state_provider: Any):
+def create_lifespan(state_provider: Any) -> Any:
     """Build an ``@asynccontextmanager`` lifespan closing over ``state_provider``.
 
     ``state_provider`` is a zero-arg callable returning the current

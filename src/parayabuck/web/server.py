@@ -22,8 +22,8 @@ from parayabuck.web.state import WebState, set_web_state
 
 
 # Keep config.load_config and universe validators in sync when tests patch server.*
-class _ServerModule(sys.modules[__name__].__class__):
-    def __setattr__(self, name, value):
+class _ServerModule(sys.modules[__name__].__class__):  # type: ignore[misc]
+    def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
         if name == "load_config":
             try:
@@ -410,18 +410,18 @@ try:
     validate_active_universe = _orig_validate_active_universe
     validate_active_crypto_universe = _orig_validate_active_crypto_universe
 except Exception:
-    validate_active_universe = None
-    validate_active_crypto_universe = None
+    validate_active_universe = None  # type: ignore[assignment]
+    validate_active_crypto_universe = None  # type: ignore[assignment]
 
 # Re-export _atomic_update_credentials for hardening tests
 try:
     from parayabuck.web.managers.engine import _atomic_update_credentials  # noqa: F401
 except Exception:
-    _atomic_update_credentials = None
+    _atomic_update_credentials = None  # type: ignore[assignment]
 
 
 # --- Legacy helpers for dashboard tests ---
-def _dashboard_payload(*args, **kwargs):
+def _dashboard_payload(*args: Any, **kwargs: Any) -> Any:
     # Sync wrapper for dashboard tests and services/dashboard delegation.
     # Try legacy sync implementation first, then thin's own.
     try:
@@ -442,7 +442,7 @@ def _dashboard_payload(*args, **kwargs):
         return {"unavailable": True, "error": str(exc)}
 
 
-def _dashboard_market_decisions(*args, **kwargs):
+def _dashboard_market_decisions(*args: Any, **kwargs: Any) -> Any:
     # Patch legacy's manager to current (possibly stub) for test isolation
     try:
         import parayabuck.web.server as srv
@@ -451,21 +451,23 @@ def _dashboard_market_decisions(*args, **kwargs):
         orig = getattr(leg, "manager", None)
         orig_back = getattr(leg, "backtest_manager", None)
         try:
-            leg.manager = srv.manager
+            leg.manager = srv.manager  # type: ignore[assignment]
             try:
-                leg.backtest_manager = srv.backtest_manager
+                leg.backtest_manager = srv.backtest_manager  # type: ignore[assignment]
             except Exception:
                 pass
             return leg._dashboard_market_decisions(*args, **kwargs)
         finally:
             try:
-                leg.manager = orig
-                leg.backtest_manager = orig_back
+                leg.manager = orig  # type: ignore[assignment]
+                leg.backtest_manager = orig_back  # type: ignore[assignment]
             except Exception:
                 pass
     except Exception:
         try:
-            from parayabuck.web.services.status import _dashboard_market_decisions as _orig
+            from parayabuck.web.services.status import (  # type: ignore[attr-defined]
+                _dashboard_market_decisions as _orig,
+            )
 
             return _orig(*args, **kwargs)
         except Exception:
@@ -483,7 +485,7 @@ except Exception:
 try:
     from parayabuck.config import load_config  # noqa: F401
 except Exception:
-    load_config = None
+    load_config = None  # type: ignore[assignment]
 
 try:
     from parayabuck.web.lifespan import create_lifespan as _create_lifespan  # noqa: F401

@@ -40,7 +40,7 @@ def _get_manager(request: Request) -> Any:
     except Exception:
         pass
     try:
-        import parayabuck.web.server as server_mod  # type: ignore
+        import parayabuck.web.server as server_mod
 
         return server_mod.manager
     except Exception as exc:  # pragma: no cover

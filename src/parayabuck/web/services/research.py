@@ -118,7 +118,7 @@ def list_runs(
     """List research runs (read-only, bounded limit 500)."""
     # Handle router positional _root() vs keyword calls
     if isinstance(root, int) and limit is None:
-        limit = root  # type: ignore
+        limit = root
         root = None
     bounded = _clamp_limit(limit)
     try:
@@ -188,13 +188,20 @@ def list_runs(
                 "tags": ",".join(str(t) for t in (manifest.get("tags") or [])),
             }
         )
+
     # sorting
+    def _sharpe_key(r: dict[str, Any]) -> float:
+        v = r.get("best_sharpe")
+        return float(v) if isinstance(v, (int, float)) else float("-inf")
+
+    def _cagr_key(r: dict[str, Any]) -> float:
+        v = r.get("best_cagr")
+        return float(v) if isinstance(v, (int, float)) else float("-inf")
+
     if sort == "best_sharpe":
-        rows.sort(
-            key=lambda r: r.get("best_sharpe") if r.get("best_sharpe") is not None else float("-inf"), reverse=True
-        )  # type: ignore
+        rows.sort(key=_sharpe_key, reverse=True)
     elif sort == "best_cagr":
-        rows.sort(key=lambda r: r.get("best_cagr") if r.get("best_cagr") is not None else float("-inf"), reverse=True)  # type: ignore
+        rows.sort(key=_cagr_key, reverse=True)
     elif sort == "status":
         rows.sort(key=lambda r: str(r.get("status") or ""))
     else:  # created default newest first
@@ -260,7 +267,7 @@ def get_run_detail(run_id: str, root: str | Path | None = None) -> dict[str, Any
     # Load trials (summary contains trials; if missing, try trials.jsonl capped)
     trials: list[dict[str, Any]] = []
     if isinstance(summary, dict) and isinstance(summary.get("trials"), list):
-        trials = summary.get("trials", [])  # type: ignore
+        trials = summary.get("trials", [])
     else:
         tpath = matched / "trials.jsonl"
         if tpath.exists():

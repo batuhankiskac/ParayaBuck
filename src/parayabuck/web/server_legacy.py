@@ -3700,15 +3700,15 @@ async def websocket_logs(websocket: WebSocket) -> None:
 # as the factory's security and lifespan modules.
 # ---------------------------------------------------------------------------
 try:  # pragma: no cover - import-time compatibility, exercised via TestClient
-    from parayabuck.web.application import app as _factory_app  # type: ignore
-    from parayabuck.web.application import create_app as _factory_create_app  # type: ignore  # noqa: F401
+    from parayabuck.web.application import app as _factory_app
+    from parayabuck.web.application import create_app as _factory_create_app  # noqa: F401
 
     # Keep the monolith's routes for direct function-call tests (server.healthz
     # etc.) but expose the factory app as the ASGI entrypoint. The two apps
     # share the same managers via WebState, so their behaviour is identical.
-    _legacy_app = app  # type: ignore[has-type]
+    _legacy_app = app
     if _factory_app is not None:
-        app = _factory_app  # type: ignore[no-redef]
+        app = _factory_app
 except Exception as _factory_shim_error:  # pragma: no cover
     import logging as _shim_logging
 

@@ -43,7 +43,7 @@ try:
 
     backtest_manager = _BacktestManager()
 except Exception:  # pragma: no cover
-    backtest_manager = None  # type: ignore
+    backtest_manager = None  # type: ignore[assignment]
 
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
@@ -93,10 +93,10 @@ class EngineManager:
             from parayabuck.web.managers.websocket import log_queues as _shared_q
             from parayabuck.web.managers.websocket import log_queues_lock as _shared_lock
 
-            self.log_queues = _shared_q  # type: ignore[assignment]
-            self._log_queues_lock = _shared_lock  # type: ignore[assignment]
+            self.log_queues = _shared_q
+            self._log_queues_lock = _shared_lock
         except Exception:
-            self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = set()
+            self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = set()  # type: ignore[no-redef]
             self._log_queues_lock = threading.Lock()
         self._state_lock = threading.RLock()
         self.control_token = secrets.token_urlsafe(32)
@@ -1147,7 +1147,7 @@ class EngineManager:
 
             with self._ws_tickets_lock:
                 # copy store snapshot into legacy dict for visibility
-                self._ws_tickets = dict(_store.tickets)  # type: ignore[attr-defined]
+                self._ws_tickets = dict(_store.tickets)
         except Exception:
             pass
         return ticket
@@ -1159,7 +1159,7 @@ class EngineManager:
         result = _consume(ticket, kind)
         try:
             with self._ws_tickets_lock:
-                self._ws_tickets = dict(_store.tickets)  # type: ignore[attr-defined]
+                self._ws_tickets = dict(_store.tickets)
         except Exception:
             pass
         return result

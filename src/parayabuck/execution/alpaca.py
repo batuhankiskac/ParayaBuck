@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import (
     GetOrderByIdRequest,
@@ -35,6 +32,7 @@ from parayabuck.core.models import (
     PositionSnapshot,
     ProtectionState,
 )
+from parayabuck.execution.alpaca_client import AlpacaClient
 from parayabuck.execution.ledger import ExecutionLedger, ManagedPosition
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -42,26 +40,22 @@ from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     floor_increment_decimal,
 )
+from parayabuck.execution.risk_peak import RiskPeakService
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, normalize_symbol, same_symbol
 from parayabuck.utils import is_crypto
-from parayabuck.utils.http import patch_session_timeout
-from parayabuck.utils.io import atomic_write
-from parayabuck.utils.objects import field_value
 
 log = get_logger("parayabuck.execution.alpaca")
 
-CRYPTO_TAKER_FEE_RESERVE = Decimal("0.0025")
-
-
-class RiskStatePersistenceError(RuntimeError):
-    """Peak equity sidecar is present but unreadable or invalid.
-
-    Raised when ``paper_equity_peak.json`` / ``live_equity_peak.json`` exists
-    but is malformed, truncated, non-finite, negative, or unreadable. The
-    caller must halt entries fail-closed rather than fall back to 0.0 and
-    erase the drawdown watermark. Missing file bootstraps to 0.0.
-    """
+from .alpaca_models import (  # noqa: E402
+    CRYPTO_TAKER_FEE_RESERVE,
+    AmbiguousOrderState,
+    CryptoPriceObservation,
+    OwnershipDriftError,
+    ProtectionReconciliationError,
+    QuantityResolution,
+    RiskStatePersistenceError,
+)
 
 
 def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
@@ -80,36 +74,6 @@ def _emit_alert(kind: str, *, message: str, **fields: object) -> None:
         alerts.emit(kind, message=message, **fields)
     except Exception:
         log.warning("Alert emission failed for kind=%s (order flow unaffected)", kind, exc_info=True)
-
-
-class AmbiguousOrderState(RuntimeError):
-    pass
-
-
-class ProtectionReconciliationError(RuntimeError):
-    pass
-
-
-class OwnershipDriftError(ProtectionReconciliationError):
-    """The broker holds fewer shares than the portfolio repository claims as
-    managed. With mixed inventory the remaining shares cannot be attributed to
-    the bot safely, so entries halt until an operator reconciles manually."""
-
-
-@dataclass(frozen=True)
-class CryptoPriceObservation:
-    symbol: str
-    high: float
-    low: float
-    source: str
-    timestamp: datetime
-
-
-@dataclass(frozen=True)
-class QuantityResolution:
-    verified: bool
-    available_qty: float
-    source: str
 
 
 class AlpacaBroker:
@@ -135,84 +99,15 @@ class AlpacaBroker:
         runtime_state_dir: str | Path | None = None,
         peak_state_path: str | Path | None = None,
     ) -> None:
-        self._client = TradingClient(api_key, secret_key, paper=paper)
-        patch_session_timeout(self._client._session, timeout=15.0)
+        self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper)
+        object.__setattr__(self, "_client_inner", self._client_adapter._client)
+        object.__setattr__(self, "_asset_cache_inner", self._client_adapter._asset_cache)
         self._paper = paper
-        if peak_state_path is not None:
-            self._peak_state_path = Path(peak_state_path)
-        elif runtime_state_dir is not None:
-            self._peak_state_path = Path(runtime_state_dir) / (
-                "paper_equity_peak.json" if paper else "live_equity_peak.json"
-            )
-        else:
-            self._peak_state_path = Path("data/runtime") / (
-                "paper_equity_peak.json" if paper else "live_equity_peak.json"
-            )
-        self._asset_cache: dict[str, Any] = {}
+        self._risk_peak = RiskPeakService(
+            paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
+        )
         self.manage_external_positions = manage_external_positions
         self.ledger = ledger
-        self._peak_epoch = 0
-        self._peak_equity = 0.0
-        self._peak_account_id: str | None = None
-        self._peak_reconciled = False
-        # Validate sidecar fail-closed immediately for corrupt files, but do NOT
-        # decide the peak yet — that is account-scoped and happens on first
-        # account() after account_id is known. For ledger=None (no account
-        # scoping needed) eagerly bootstrap from legacy sidecar so old unit
-        # tests that construct a broker without a ledger keep working.
-        if ledger is None:
-            # Eager bootstrap when there is no ledger to scope against.
-            # No exists() check — try read directly to avoid TOCTOU.
-            try:
-                raw = self._peak_state_path.read_text(encoding="utf-8")
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file unreadable at {self._peak_state_path}: {exc}"
-                ) from exc
-            else:
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError as exc:
-                    raise RiskStatePersistenceError(
-                        f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
-                    ) from exc
-                if not isinstance(data, dict) or "peak_equity" not in data:
-                    raise RiskStatePersistenceError(
-                        f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}"
-                    )
-                try:
-                    peak = float(data["peak_equity"])
-                except (TypeError, ValueError) as exc:
-                    raise RiskStatePersistenceError(
-                        f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
-                    ) from exc
-                if not math.isfinite(peak):
-                    raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
-                if peak < 0:
-                    raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
-                try:
-                    epoch = int(data.get("epoch", 0) or 0)
-                except (TypeError, ValueError) as exc:
-                    raise RiskStatePersistenceError(
-                        f"Peak epoch is not an integer at {self._peak_state_path}: {data.get('epoch')!r}"
-                    ) from exc
-                if epoch < 0:
-                    raise RiskStatePersistenceError(f"Peak epoch is negative at {self._peak_state_path}: {epoch!r}")
-                self._peak_equity = float(peak)
-                self._peak_epoch = int(epoch)
-                # Preserve plaintext account_id if present, else remain None
-                acct = data.get("account_id")
-                if isinstance(acct, str) and acct.strip():
-                    self._peak_account_id = acct.strip()
-                    self._peak_reconciled = True
-                else:
-                    # Legacy file without binding — keep unreconciled so first
-                    # account() will rebind it, but keep the peak visible for
-                    # no-ledger callers (tests).
-                    self._peak_account_id = None
-                    self._peak_reconciled = False
         self.portfolio_owned_quantities = portfolio_owned_quantities
         self.portfolio_open_orders = portfolio_open_orders
         self.portfolio_fill_recovered = portfolio_fill_recovered
@@ -233,11 +128,221 @@ class AlpacaBroker:
         self._symbol_exit_locks_guard = threading.Lock()
 
     @property
+    def _client(self) -> Any:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            return adapter._client
+        return self.__dict__.get("_client_inner")
+
+    @_client.setter
+    def _client(self, value: Any) -> None:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            try:
+                adapter._client = value
+            except Exception:
+                pass
+            sess = getattr(value, "_session", None)
+            if sess is not None:
+                try:
+                    from parayabuck.utils.http import patch_session_timeout
+
+                    patch_session_timeout(sess, timeout=15.0)
+                except Exception:
+                    pass
+        else:
+            try:
+                adapter_obj = AlpacaClient.__new__(AlpacaClient)
+                adapter_obj._client = value
+                existing_cache = self.__dict__.get("_asset_cache_inner") or self.__dict__.get("_asset_cache") or {}
+                if isinstance(existing_cache, dict):
+                    adapter_obj._asset_cache = existing_cache
+                else:
+                    adapter_obj._asset_cache = {}
+                adapter_obj._closed = False
+                sess = getattr(value, "_session", None)
+                if sess is not None:
+                    try:
+                        from parayabuck.utils.http import patch_session_timeout
+
+                        patch_session_timeout(sess, timeout=15.0)
+                    except Exception:
+                        pass
+                self.__dict__["_client_adapter"] = adapter_obj
+            except Exception:
+                pass
+        self.__dict__["_client_inner"] = value
+
+    @property
+    def _asset_cache(self) -> Any:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            return adapter._asset_cache
+        return self.__dict__.get("_asset_cache_inner", {})
+
+    @_asset_cache.setter
+    def _asset_cache(self, value: Any) -> None:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            try:
+                adapter._asset_cache = value
+            except Exception:
+                pass
+        self.__dict__["_asset_cache_inner"] = value
+        if adapter is not None and isinstance(value, dict):
+            try:
+                adapter._asset_cache = value
+            except Exception:
+                pass
+
+    # -- Peak sidecar delegation (risk_peak service, facade API unchanged) --
+    def _get_peak_service(self) -> RiskPeakService:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            try:
+                rp.ledger = self.__dict__.get("ledger", self.__dict__.get("_ledger"))
+            except Exception:
+                pass
+            try:
+                rp._paper = bool(self.__dict__.get("_paper", True))
+            except Exception:
+                pass
+            try:
+                acct = self.__dict__.get("_account_id", "")
+                rp._broker_account_id = acct if acct else None
+            except Exception:
+                pass
+            return rp  # type: ignore[no-any-return]
+        paper = bool(self.__dict__.get("_paper", True))
+        ledger = self.__dict__.get("ledger", self.__dict__.get("_ledger"))
+        peak_path = self.__dict__.get("_peak_state_path")
+        if peak_path is None and "_peak_state_path" in self.__dict__:
+            peak_path = self.__dict__["_peak_state_path"]
+        rp = RiskPeakService(paper=paper, ledger=ledger, peak_state_path=peak_path)
+        # Override eager-loaded state with broker's own attributes (for __new__ test isolation).
+        # Base __new__ brokers start with no peak binding; service eager load would otherwise
+        # retain stale file account_id (e.g. 4edcc...) and cause false fail-closed.
+        for attr, svc_attr in [
+            ("_peak_equity", "_peak_equity"),
+            ("_peak_epoch", "_peak_epoch"),
+            ("_peak_account_id", "_peak_account_id"),
+            ("_peak_reconciled", "_peak_reconciled"),
+        ]:
+            if attr in self.__dict__:
+                try:
+                    setattr(rp, svc_attr, self.__dict__[attr])
+                except Exception:
+                    pass
+            else:
+                # No broker attribute -> reset to clean defaults, discarding eager file load
+                # (matches base __new__ semantics where _peak_account_id is None)
+                try:
+                    if svc_attr == "_peak_equity":
+                        rp._peak_equity = 0.0
+                    elif svc_attr == "_peak_epoch":
+                        rp._peak_epoch = 0
+                    elif svc_attr == "_peak_account_id":
+                        rp._peak_account_id = None
+                    elif svc_attr == "_peak_reconciled":
+                        rp._peak_reconciled = False
+                except Exception:
+                    pass
+        try:
+            acct = self.__dict__.get("_account_id", "")
+            rp._broker_account_id = acct if acct else None
+        except Exception:
+            pass
+        self.__dict__["_risk_peak"] = rp
+        return rp
+
+    @property
+    def _peak_state_path(self) -> Path:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            return rp.peak_state_path  # type: ignore[no-any-return]
+        return self.__dict__.get("_peak_state_path", Path("data/runtime/paper_equity_peak.json"))  # type: ignore[no-any-return]
+
+    @_peak_state_path.setter
+    def _peak_state_path(self, value: Path) -> None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            rp.peak_state_path = Path(value)
+        else:
+            self.__dict__["_peak_state_path"] = Path(value)
+
+    @property
+    def _peak_equity(self) -> float:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            return float(rp.peak_equity)
+        return float(self.__dict__.get("_peak_equity", 0.0))
+
+    @_peak_equity.setter
+    def _peak_equity(self, value: float) -> None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            rp.peak_equity = float(value)
+        else:
+            self.__dict__["_peak_equity"] = float(value)
+
+    @property
+    def _peak_epoch(self) -> int:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            return int(rp.peak_epoch)
+        return int(self.__dict__.get("_peak_epoch", 0))
+
+    @_peak_epoch.setter
+    def _peak_epoch(self, value: int) -> None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            rp.peak_epoch = int(value)
+        else:
+            self.__dict__["_peak_epoch"] = int(value)
+
+    @property
+    def _peak_account_id(self) -> str | None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            return rp.peak_account_id  # type: ignore[no-any-return]
+        return self.__dict__.get("_peak_account_id")
+
+    @_peak_account_id.setter
+    def _peak_account_id(self, value: str | None) -> None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            rp.peak_account_id = value
+        else:
+            self.__dict__["_peak_account_id"] = value
+
+    @property
+    def _peak_reconciled(self) -> bool:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            return bool(rp.peak_reconciled)
+        return bool(self.__dict__.get("_peak_reconciled", False))
+
+    @_peak_reconciled.setter
+    def _peak_reconciled(self, value: bool) -> None:
+        rp = self.__dict__.get("_risk_peak")
+        if rp is not None:
+            rp.peak_reconciled = bool(value)
+        else:
+            self.__dict__["_peak_reconciled"] = bool(value)
+
+    @property
     def account_suffix(self) -> str:
         return self._account_id[-4:] if self._account_id else ""
 
     def close(self) -> None:
         """Close the Alpaca REST session pool (no-op for fake clients)."""
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            try:
+                adapter.close()
+            except Exception as exc:
+                log.warning("Alpaca session close warning: %s", exc)
+            return
         session = getattr(self._client, "_session", None)
         if session is None:
             return
@@ -1111,7 +1216,14 @@ class AlpacaBroker:
         the window, and a fresh database (no watermark) scans full history
         exactly like before.
         """
-        request = getattr(getattr(self, "_client", None), "_request", None)
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            try:
+                request = adapter.request
+            except Exception:
+                request = getattr(getattr(self, "_client", None), "_request", None)
+        else:
+            request = getattr(getattr(self, "_client", None), "_request", None)
         ledger = self.ledger
         if request is None or ledger is None:
             return False
@@ -1509,6 +1621,9 @@ class AlpacaBroker:
         return matches
 
     def _asset(self, symbol: str) -> Any:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            return adapter._asset(symbol)
         identity = normalize_symbol(symbol)
         cache_key = identity.canonical
         asset = (
@@ -1522,18 +1637,23 @@ class AlpacaBroker:
         return asset
 
     def _price_step(self, symbol: str, market: Market, reference_price: float) -> Decimal:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            return adapter._price_step(symbol, market, reference_price)  # type: ignore[no-any-return]
         increment = getattr(self._asset(symbol), "price_increment", None)
         if increment is not None:
             return Decimal(str(increment))
         if market == Market.EQUITY:
-            # Alpaca: stocks >= $1 trade in pennies, sub-dollar stocks in 1/10000.
             return Decimal("0.01") if reference_price >= 1 else Decimal("0.0001")
         return Decimal("0.01") if reference_price >= 1 else Decimal("0.000001")
 
     @staticmethod
     def _round_to_step(value: float, step: Decimal) -> float:
-        rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
-        return float(rounded)
+        try:
+            return AlpacaClient._round_to_step(value, step)
+        except Exception:
+            rounded = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_HALF_UP) * step
+            return float(rounded)
 
     def _wait_for_fill(
         self, order_id: str, intent: OrderIntent, timeout: float = 5.0
@@ -2462,410 +2582,78 @@ class AlpacaBroker:
         return abs(protected - required) <= tolerance, mismatch
 
     def _normalized_field(self, value: Any, name: str) -> str:
+        adapter = self.__dict__.get("_client_adapter")
+        if adapter is not None:
+            return adapter._normalized_field(value, name)  # type: ignore[no-any-return]
         return str(self._field(value, name, "")).lower().split(".")[-1]
 
     @staticmethod
     def _field(value: Any, name: str, default: Any = None) -> Any:
-        return field_value(value, name, default)
+        try:
+            return AlpacaClient._field(value, name, default)
+        except Exception:
+            from parayabuck.utils.objects import field_value as _fv
+
+            return _fv(value, name, default)
 
     def _query_persisted_peak(self, account_id: str) -> tuple[float | None, int | None]:
-        """Return (max_persisted_peak, epoch) for ``account_id``, or (None,None) if none.
-
-        Fail-closed: any unexpected SQLite read failure raises
-        ``RiskStatePersistenceError`` and must prevent peak reconciliation.
-        (None,None) is only returned when the query succeeds and genuinely finds
-        no rows for this account (first run). Malformed individual
-        ``risk_state`` payloads are tolerated per-row, but if *all* rows for the
-        account are unreadable/corrupt, this is a durability failure, not
-        \"no history\".
-        """
-        if not account_id:
-            return None, None
-        if self.ledger is None:
-            return None, None
-        # Do not swallow DB errors — they must fail closed.
-        with self.ledger._lock:
-            # -- portfolio_high_water --
-            hw_peak: float | None = None
-            hw_epoch: int | None = None
-            row = None
-            try:
-                row = self.ledger.connection.execute(
-                    "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
-                    (account_id,),
-                ).fetchone()
-            except Exception as exc:
-                if "no such table" in str(exc):
-                    row = None
-                else:
-                    raise RiskStatePersistenceError(
-                        f"portfolio_high_water read failed for {account_id}: {exc}"
-                    ) from exc
-            if row is not None:
-                try:
-                    hw_peak = float(row[0])
-                    hw_epoch = int(row[1] or 0)
-                except Exception as exc:
-                    raise RiskStatePersistenceError(
-                        f"portfolio_high_water row corrupt for {account_id}: {row!r}: {exc}"
-                    ) from exc
-                if hw_peak is not None and (not math.isfinite(hw_peak) or hw_peak < 0):
-                    raise RiskStatePersistenceError(f"portfolio_high_water peak corrupt for {account_id}: {hw_peak!r}")
-            # -- risk_state --
-            try:
-                rows = self.ledger.connection.execute(
-                    "SELECT payload FROM risk_state WHERE account_id = ?",
-                    (account_id,),
-                ).fetchall()
-            except Exception as exc:
-                if "no such table" in str(exc):
-                    rows = []
-                else:
-                    raise RiskStatePersistenceError(f"risk_state read failed for {account_id}: {exc}") from exc
-            rs_peak: float | None = None
-            rs_epoch: int | None = None
-            if rows:
-                best: dict[int, float] = {}
-                corrupt = 0
-                for (payload_str,) in rows:
-                    try:
-                        p = json.loads(payload_str)
-                        pe = int(p.get("peak_epoch", 0) or 0)
-                        pk = float(p.get("peak_equity", 0))
-                        if not math.isfinite(pk) or pk < 0:
-                            corrupt += 1
-                            continue
-                        if pe not in best or pk > best[pe]:
-                            best[pe] = pk
-                    except Exception:
-                        corrupt += 1
-                        continue
-                if best:
-                    max_epoch = max(best.keys())
-                    rs_peak = best[max_epoch]
-                    rs_epoch = max_epoch
-                elif len(rows) > 0:
-                    # All rows unreadable/corrupt — not \"no history\"
-                    raise RiskStatePersistenceError(
-                        f"risk_state rows for {account_id} all unreadable/corrupt: {len(rows)} rows"
-                    )
-            if hw_peak is None and rs_peak is None:
-                return None, None
-            if hw_peak is None:
-                return rs_peak, rs_epoch
-            if rs_peak is None:
-                return hw_peak, hw_epoch
-            if hw_epoch is None or rs_epoch is None:
-                return max(hw_peak, rs_peak), hw_epoch if hw_epoch is not None else rs_epoch
-            if hw_epoch != rs_epoch:
-                return (hw_peak, hw_epoch) if hw_epoch > rs_epoch else (rs_peak, rs_epoch)
-            return max(hw_peak, rs_peak), hw_epoch
+        return self._get_peak_service().query_persisted_peak(account_id)
 
     def _ensure_peak_reconciled(self, account_id: str, current_equity: float) -> None:
-        """Account-scoped peak reconciliation, called once per account_id.
-
-        Loads the sidecar, filters persisted state WHERE account_id = ?, and
-        decides the peak per rules A-F. Sidecar is ``{"account_id": str,
-        "peak_equity": float, "epoch": int}``. Legacy sidecars without
-        ``account_id`` are handled: if SQLite for this account exists, peak is
-        max(legacy, persisted) then sidecar is rewritten bound; if no SQLite,
-        legacy is used with a warning and rebound. A sidecar whose
-        ``account_id`` (or ``account_fingerprint`` SHA256) does not match
-        ``account_id`` is ignored and replaced by persisted for this account.
-        Epoch comparisons happen only inside one account.
-        """
-        if not account_id:
-            account_id = "unknown"
-        # Defensive defaults for brokers constructed via __new__ in unit tests
-        if not hasattr(self, "_peak_state_path"):
-            self._peak_state_path = Path("data/runtime") / (
-                "paper_equity_peak.json" if getattr(self, "_paper", True) else "live_equity_peak.json"
-            )
-        if not hasattr(self, "_peak_account_id"):
-            self._peak_account_id = None
-        if not hasattr(self, "_peak_epoch"):
-            self._peak_epoch = 0
-        if not hasattr(self, "_peak_equity"):
-            self._peak_equity = 0.0
-        if not hasattr(self, "_peak_reconciled"):
-            self._peak_reconciled = False
-        if not hasattr(self, "ledger"):
-            self.ledger = None
-        # Fail closed on identity change
-        existing = getattr(self, "_peak_account_id", None)
-        if existing is not None and existing != account_id:
-            raise RuntimeError(
-                f"Account identity changed from {existing} to {account_id} — fail closed; peak is account-scoped and must not cross accounts"
-            )
-        if getattr(self, "_peak_reconciled", False) and existing == account_id:
-            return
-        # No ledger -> no account-scoped persistence; just bind and keep current peak (for __new__ test mocks)
-        if getattr(self, "ledger", None) is None:
-            self._peak_account_id = account_id
-            self._peak_reconciled = True
-            return
-        # Load sidecar
-        import hashlib
-
-        sidecar_peak: float | None = None
-        sidecar_epoch = 0
-        sidecar_account_id: str | None = None
-        sidecar_exists = self._peak_state_path.exists()
-        is_legacy = False
-        if sidecar_exists:
-            try:
-                raw = self._peak_state_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file unreadable at {self._peak_state_path}: {exc}"
-                ) from exc
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file is malformed JSON at {self._peak_state_path}: {exc}"
-                ) from exc
-            if not isinstance(data, dict) or "peak_equity" not in data:
-                raise RiskStatePersistenceError(
-                    f"Peak equity file missing 'peak_equity' key at {self._peak_state_path}"
-                )
-            try:
-                peak = float(data["peak_equity"])
-            except (TypeError, ValueError) as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak equity value is not a number at {self._peak_state_path}: {data.get('peak_equity')!r}"
-                ) from exc
-            if not math.isfinite(peak):
-                raise RiskStatePersistenceError(f"Peak equity is non-finite at {self._peak_state_path}: {peak!r}")
-            if peak < 0:
-                raise RiskStatePersistenceError(f"Peak equity is negative at {self._peak_state_path}: {peak!r}")
-            try:
-                epoch_val = int(data.get("epoch", 0) or 0)
-            except (TypeError, ValueError) as exc:
-                raise RiskStatePersistenceError(
-                    f"Peak epoch is not an integer at {self._peak_state_path}: {data.get('epoch')!r}"
-                ) from exc
-            if epoch_val < 0:
-                raise RiskStatePersistenceError(f"Peak epoch is negative at {self._peak_state_path}: {epoch_val!r}")
-            # Determine binding
-            has_account_id = "account_id" in data
-            has_fingerprint = "account_fingerprint" in data
-            if has_account_id:
-                val = data.get("account_id")
-                if val is None:
-                    is_legacy = True
-                    sidecar_peak = peak
-                    sidecar_epoch = epoch_val
-                    sidecar_account_id = None
-                elif isinstance(val, str):
-                    acct = val.strip()
-                    if not acct:
-                        is_legacy = True
-                        sidecar_peak = peak
-                        sidecar_epoch = epoch_val
-                        sidecar_account_id = None
-                    elif acct != account_id:
-                        # Mismatch — ignore sidecar
-                        log.warning(
-                            "Peak sidecar account mismatch: sidecar=%s current=%s — ignoring sidecar",
-                            acct,
-                            account_id,
-                        )
-                        sidecar_peak = None
-                        sidecar_epoch = 0
-                        sidecar_account_id = acct
-                        is_legacy = False
-                    else:
-                        sidecar_peak = peak
-                        sidecar_epoch = epoch_val
-                        sidecar_account_id = acct
-                        is_legacy = False
-                else:
-                    raise RiskStatePersistenceError(
-                        f"Peak account_id is not a string at {self._peak_state_path}: {val!r}"
-                    )
-            elif has_fingerprint:
-                fp_raw = data.get("account_fingerprint")
-                fp = str(fp_raw).strip() if fp_raw is not None else ""
-                if not fp:
-                    is_legacy = True
-                    sidecar_peak = peak
-                    sidecar_epoch = epoch_val
-                    sidecar_account_id = None
-                else:
-                    current_fp = hashlib.sha256(account_id.encode()).hexdigest()
-                    if fp != current_fp:
-                        log.warning(
-                            "Peak sidecar fingerprint mismatch: sidecar=%s current_account=%s — ignoring sidecar",
-                            fp[:8],
-                            account_id[:8],
-                        )
-                        sidecar_peak = None
-                        sidecar_epoch = 0
-                        sidecar_account_id = fp
-                        is_legacy = False
-                    else:
-                        sidecar_peak = peak
-                        sidecar_epoch = epoch_val
-                        sidecar_account_id = account_id
-                        is_legacy = False
-            else:
-                # Legacy without binding
-                is_legacy = True
-                sidecar_peak = peak
-                sidecar_epoch = epoch_val
-                sidecar_account_id = None
-        persisted_peak, persisted_epoch = self._query_persisted_peak(account_id)
-        # Decide peak for this account
-        if sidecar_peak is None and persisted_peak is None:
-            # Case A: genuine first run for this account
-            peak_final = 0.0
-            epoch_final = 0
-        elif sidecar_peak is None and persisted_peak is not None:
-            peak_final = float(persisted_peak)
-            epoch_final = int(persisted_epoch or 0)
-        elif sidecar_peak is not None and persisted_peak is None:
-            if is_legacy:
-                log.warning(
-                    "Legacy peak sidecar without account_id for account=%s — rewriting bound sidecar",
-                    account_id,
-                )
-            peak_final = float(sidecar_peak)
-            epoch_final = int(sidecar_epoch or 0)
-        else:
-            assert sidecar_peak is not None and persisted_peak is not None
-            if is_legacy:
-                # Legacy: max(legacy, persisted) then bind
-                if float(sidecar_peak) >= float(persisted_peak):
-                    peak_final = float(sidecar_peak)
-                    epoch_final = int(sidecar_epoch or 0)
-                else:
-                    peak_final = float(persisted_peak)
-                    epoch_final = int(persisted_epoch or 0)
-                log.warning(
-                    "Legacy sidecar peak=%s persisted=%s for account=%s — resolved to %s (epoch %s)",
-                    sidecar_peak,
-                    persisted_peak,
-                    account_id,
-                    peak_final,
-                    epoch_final,
-                )
-            else:
-                # Both account-bound: epoch mismatch -> newer epoch wins; same epoch -> max
-                s_epoch = int(sidecar_epoch or 0)
-                p_epoch = int(persisted_epoch or 0)
-                if s_epoch != p_epoch:
-                    if p_epoch > s_epoch:
-                        peak_final = float(persisted_peak)
-                        epoch_final = p_epoch
-                    else:
-                        peak_final = float(sidecar_peak)
-                        epoch_final = s_epoch
-                else:
-                    peak_final = max(float(sidecar_peak), float(persisted_peak))
-                    epoch_final = s_epoch
-        self._peak_equity = float(peak_final)
-        self._peak_epoch = int(epoch_final)
-        self._peak_account_id = account_id
-        self._peak_reconciled = True
-        # Rewrite sidecar bound to current if needed
-        needs_rewrite = False
-        if not sidecar_exists:
-            needs_rewrite = True
-        elif is_legacy:
-            needs_rewrite = True
-        elif sidecar_peak is None:
-            # mismatch case where sidecar was ignored
-            needs_rewrite = True
-        elif sidecar_account_id != account_id:
-            needs_rewrite = True
-        elif sidecar_peak is not None and (
-            abs(float(sidecar_peak) - float(peak_final)) > 1e-9 or int(sidecar_epoch or 0) != int(epoch_final)
-        ):
-            needs_rewrite = True
-        # Also ensure file is written with account_id binding even if peak matches but file was legacy/mismatch
-        if needs_rewrite:
-            # Only write if we have a meaningful peak (including 0 for first run)
-            # For first run with no history we still want to avoid creating empty sidecar until equity known?
-            # But spec says after reconciliation, rewrite bound to current if needed (atomic_write).
-            # For genuine first run (both None) keep file absent until next equity save.
-            if sidecar_peak is None and persisted_peak is None:
-                # No history: do not create sidecar yet; it will be created on first equity max save
-                pass
-            else:
-                try:
-                    payload = json.dumps(
-                        {"account_id": account_id, "peak_equity": float(peak_final), "epoch": int(epoch_final)}
-                    )
-                    atomic_write(self._peak_state_path, payload)
-                except Exception:
-                    log.warning("Failed to reconcile peak sidecar to account %s", account_id, exc_info=True)
+        svc = self._get_peak_service()
+        svc.ensure_reconciled(account_id, current_equity)
 
     def _load_peak_equity(self) -> float:
-        """Legacy entry point — now account-scoped.
-
-        When ``_peak_account_id`` is already known, delegates to
-        ``_ensure_peak_reconciled`` for that account. Otherwise preserves the
-        old no-ledger bootstrap path (0.0 or sidecar value) so unit tests that
-        construct a broker without a ledger keep working. Corrupt sidecars
-        still fail closed.
-        """
-        # If we already have an account binding, use it
-        acct = getattr(self, "_peak_account_id", None) or getattr(self, "_account_id", None)
-        if acct:
-            # Account known — do full reconciliation (current_equity not yet known, pass peak)
-            self._ensure_peak_reconciled(str(acct), float(getattr(self, "_peak_equity", 0.0) or 0.0))
-            return float(self._peak_equity)
-        # No account known and no ledger — keep old behavior for backward compat
-        if self.ledger is None:
-            return float(self._peak_equity)
-        # No account yet but ledger present — cannot decide; return current (0)
-        return float(self._peak_equity)
+        svc = self._get_peak_service()
+        try:
+            svc._broker_account_id = self.__dict__.get("_account_id") or None
+        except Exception:
+            pass
+        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
+        return svc.load_peak_equity(str(acct) if acct else None)
 
     def _save_peak_equity(self) -> None:
-        if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
-            raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")
-        epoch = int(getattr(self, "_peak_epoch", 0) or 0)
-        account_id = getattr(self, "_peak_account_id", None) or getattr(self, "_account_id", None) or "unknown"
-        # _peak_account_id must be set after reconciliation; fail closed if caller tries to save before it
-        if getattr(self, "_peak_account_id", None) is None and getattr(self, "_account_id", None):
-            # Ensure account binding before save
-            account_id = str(getattr(self, "_account_id"))
-            self._peak_account_id = account_id
-        payload = json.dumps({"account_id": account_id, "peak_equity": self._peak_equity, "epoch": epoch})
-        atomic_write(self._peak_state_path, payload)
+        svc = self._get_peak_service()
+        try:
+            svc._broker_account_id = self.__dict__.get("_account_id") or None
+        except Exception:
+            pass
+        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
+        svc.save_peak_equity(str(acct) if acct else None)
+        try:
+            self.__dict__["_peak_equity"] = float(svc.peak_equity)
+            self.__dict__["_peak_epoch"] = int(svc.peak_epoch)
+            if svc.peak_account_id is not None:
+                self.__dict__["_peak_account_id"] = svc.peak_account_id
+            self.__dict__["_peak_reconciled"] = bool(svc.peak_reconciled)
+        except Exception:
+            pass
 
     def reset_peak_equity(self, equity: float) -> None:
-        """Start a new risk epoch: rebase the drawdown peak to ``equity``.
-
-        The peak is deliberately monotonic (drawdown is measured against the
-        highest observed equity); only a verified operator action may rebase
-        it. ``equity`` must be positive. Account-scoped: increments epoch
-        only for the current account and queries persisted state only for
-        that account.
-        """
-        if equity <= 0:
-            raise ValueError("Cannot reset the equity peak to a non-positive value")
-        account_id = getattr(self, "_peak_account_id", None) or getattr(self, "_account_id", None)
-        if not account_id:
-            raise RuntimeError("Cannot reset peak before account is known (peak is account-scoped)")
-        account_id = str(account_id)
-        # New epoch is max of sidecar and persisted +1 for THIS account only
-        _, persisted_epoch = self._query_persisted_peak(account_id)
-        current_epoch = int(getattr(self, "_peak_epoch", 0) or 0)
-        if persisted_epoch is not None:
-            current_epoch = max(current_epoch, int(persisted_epoch))
-        self._peak_epoch = current_epoch + 1
-        self._peak_equity = float(equity)
-        self._peak_account_id = account_id
-        self._peak_reconciled = True
-        self._save_peak_equity()
-        log.warning(
-            "Equity peak rebased to %.2f (epoch %d, %s)",
-            self._peak_equity,
-            self._peak_epoch,
-            "paper" if self._paper else "live",
-        )
+        svc = self._get_peak_service()
+        try:
+            svc._broker_account_id = self.__dict__.get("_account_id") or None
+        except Exception:
+            pass
+        acct = getattr(svc, "_peak_account_id", None) or self.__dict__.get("_account_id")
+        svc.reset_peak_equity(equity, str(acct) if acct else None)
+        try:
+            self.__dict__["_peak_equity"] = float(svc.peak_equity)
+            self.__dict__["_peak_epoch"] = int(svc.peak_epoch)
+            if svc.peak_account_id is not None:
+                self.__dict__["_peak_account_id"] = svc.peak_account_id
+            self.__dict__["_peak_reconciled"] = bool(svc.peak_reconciled)
+        except Exception:
+            pass
 
 
-__all__ = ["AlpacaBroker", "CryptoPriceObservation", "RiskStatePersistenceError"]
+__all__ = [
+    "AlpacaBroker",
+    "AmbiguousOrderState",
+    "CRYPTO_TAKER_FEE_RESERVE",
+    "CryptoPriceObservation",
+    "OwnershipDriftError",
+    "ProtectionReconciliationError",
+    "QuantityResolution",
+    "RiskStatePersistenceError",
+]

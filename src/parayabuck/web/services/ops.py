@@ -33,7 +33,7 @@ def _resolve_db_path(cfg: Any | None) -> str:
     except Exception:
         pass
     try:
-        import parayabuck.web.server as srv  # type: ignore
+        import parayabuck.web.server as srv
         from parayabuck.config import load_config
 
         c = load_config(str(srv.manager.config_path))
@@ -61,7 +61,7 @@ def get_ops_status(
                 cfg = None
             if cfg is None:
                 try:
-                    import parayabuck.web.server as srv  # type: ignore
+                    import parayabuck.web.server as srv
 
                     cfg = load_config(str(srv.manager.config_path))
                 except Exception:
@@ -111,7 +111,7 @@ def query_events(limit: int = 100, **filters: Any) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for e in events:
             try:
-                out.append(e.to_dict())  # type: ignore[attr-defined]
+                out.append(e.to_dict())
             except Exception:
                 out.append({"kind": getattr(e, "kind", ""), "message": getattr(e, "message", "")})
         return out

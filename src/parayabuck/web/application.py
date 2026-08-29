@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -41,7 +42,7 @@ def create_app(state: WebState | None = None) -> FastAPI:
 
     def _token_provider() -> str:
         try:
-            return state.engine_manager.control_token  # type: ignore
+            return str(state.engine_manager.control_token)
         except Exception:
             return ""
 
@@ -81,12 +82,12 @@ def create_app(state: WebState | None = None) -> FastAPI:
     # but FastAPI's include_router stores _IncludedRouter wrappers. Flatten
     # for direct inspection while keeping openapi intact (which already handles wrappers).
     try:
-        flattened: list = []
+        flattened: list[Any] = []
         for route in app.router.routes:
             if hasattr(route, "original_router"):
                 # _IncludedRouter — expand its original router's routes
                 try:
-                    for r in route.original_router.routes:  # type: ignore
+                    for r in route.original_router.routes:
                         flattened.append(r)
                 except Exception:
                     flattened.append(route)
@@ -96,12 +97,12 @@ def create_app(state: WebState | None = None) -> FastAPI:
         if len(flattened) > len(app.router.routes):
             # Preserve the original list for openapi but expose flattened via app.routes
             # FastAPI's app.routes is a property to app.router.routes, so replace that
-            app.router.routes = flattened  # type: ignore
+            app.router.routes = flattened
     except Exception:
         pass
 
-    app.state.web = state  # type: ignore
-    app.state.web_state = state  # type: ignore
+    app.state.web = state
+    app.state.web_state = state
     return app
 
 
@@ -114,4 +115,4 @@ try:
 except Exception:  # pragma: no cover
     # Never break import of the package when optional deps are missing in a
     # tooling context.
-    app = FastAPI(title="ParayaBuck Trading Terminal")  # type: ignore[no-redef]
+    app = FastAPI(title="ParayaBuck Trading Terminal")

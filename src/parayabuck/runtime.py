@@ -2538,9 +2538,14 @@ class EngineRuntime:
                 market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
             except TypeError:
                 market_reasons[candidate_market] = gate(candidate_market)
+        def _has_symbol_gap(sym: str, mkt: Market) -> bool:
+            try:
+                return bool(self._engine_has_symbol_gap(sym, mkt))
+            except TypeError:
+                return bool(self._engine_has_symbol_gap(sym))
         if not any(
             symbol not in self._not_ready_symbols
-            and not self._engine_has_symbol_gap(symbol)
+            and not _has_symbol_gap(symbol, bar.market)
             and not market_reasons[bar.market]
             for symbol, bar in bars_by_symbol.items()
         ):
@@ -3047,8 +3052,11 @@ class EngineRuntime:
     def _engine_has_market_gap(self, market: Market) -> bool:
         return bool(self.market_state.has_data_gaps_for_market(market))
 
-    def _engine_has_symbol_gap(self, symbol: str) -> bool:
-        return bool(self.market_state.has_data_gaps_for_symbol(symbol))
+    def _engine_has_symbol_gap(self, symbol: str, market: Market | None = None) -> bool:
+        try:
+            return bool(self.market_state.has_data_gaps_for_symbol(symbol, market))
+        except TypeError:
+            return bool(self.market_state.has_data_gaps_for_symbol(symbol))
 
     def _repair_gap(self, bar: Bar) -> None:
         history = self._historical

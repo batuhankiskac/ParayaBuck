@@ -55,8 +55,8 @@ class RuntimeMarketState:
     def has_data_gaps_for_market(self, market: Market) -> bool:
         return any(("/" in symbol) == (market == Market.CRYPTO) for symbol, _timeframe in self._not_ready)
 
-    def has_data_gaps_for_symbol(self, symbol: str) -> bool:
-        wanted = canonical_symbol(symbol)
+    def has_data_gaps_for_symbol(self, symbol: str, market: Market | None = None) -> bool:
+        wanted = canonical_symbol(symbol, market)
         return any(candidate == wanted for candidate, _timeframe in self._not_ready)
 
     def ingest_closed_bars(self, bars: list[Bar]) -> IngestionResult:

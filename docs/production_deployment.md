@@ -44,7 +44,7 @@ Example `.env` (mode 0600, PAPER only):
 
 ```env
 ALPACA_API_KEY=PK...PAPER...
-ALPACA_SECRET_KEY=...
+ALPACA_SECRET_KEY=your_secret_key_here
 PARAYABUCK_ENABLE_LIVE=NO
 PARAYABUCK_OPERATOR_APPROVAL_KEY=replace_with_at_least_32_random_characters
 LOG_LEVEL=INFO

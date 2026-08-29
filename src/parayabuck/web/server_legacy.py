@@ -2641,7 +2641,7 @@ def _dashboard_shared_connection() -> Iterator[sqlite3.Connection | None]:
                 connection.close()
 
 
-def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+def _dashboard_safe_panel(name: str, builder: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
     """Run one panel builder; a failure becomes an explicit unavailable dict."""
     try:
         payload = builder()

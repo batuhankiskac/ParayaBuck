@@ -143,7 +143,9 @@ strategy:
     name: equity_residual_momentum_v3
     # Existing PAPER equity sleeve; promotion changes only the strategy
     # identity, not the allocation or risk policy.
-    maximum_allocation: 0.60
+    # 2026-08-29 fix (kripto alım arızası): equity 0.60→0.55 so that
+    # equity 0.55 + crypto 0.05 never exceeds max_gross 0.60 and cash stays >=0.40.
+    maximum_allocation: 0.55
     parameters:
       formation_bars: 252
       skip_bars: 21

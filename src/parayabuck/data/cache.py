@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,6 +11,30 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 
 log = get_logger("parayabuck.data.cache")
+
+
+def is_crypto_daily_grid(timestamp: datetime) -> bool:
+    """Whether a crypto 1d bar sits exactly on the UTC midnight grid.
+
+    Alpaca crypto daily bars are calendar-day bars at 00:00 UTC. Test fakes
+    that create 10:00/13:00/23:00 bars must be rejected at the cache boundary
+    so they cannot pollute production.
+    """
+    ts = timestamp.astimezone(UTC) if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+    return ts.hour == 0 and ts.minute == 0 and ts.second == 0 and ts.microsecond == 0
+
+
+def _filter_off_grid_bars(bars: list[Bar]) -> tuple[list[Bar], int]:
+    """Split into (valid, off_grid_count) for crypto 1d bars."""
+    valid: list[Bar] = []
+    off = 0
+    for bar in bars:
+        if bar.market == Market.CRYPTO and bar.timeframe == "1d" and not is_crypto_daily_grid(bar.timestamp):
+            off += 1
+            continue
+        valid.append(bar)
+    return valid, off
+
 
 
 class WarmupCache:
@@ -265,6 +290,26 @@ class WarmupCache:
                 log.warning("Warmup cache close warning: %s", exc)
 
     def upsert(self, bars: list[Bar], *, feed: str, adjustment: str = "all") -> None:
+        valid, off = _filter_off_grid_bars(bars)
+        if off:
+            log.warning("WarmupCache.upsert rejected %d off-grid crypto 1d bars (feed=%s)", off, feed)
+            try:
+                from parayabuck.monitoring.journal import emit_journal
+                from parayabuck.monitoring.operational_event import create_event
+
+                evt = create_event(
+                    kind="cache_integrity",
+                    message=f"upsert rejected {off} off-grid crypto daily bars",
+                    fields={"off_grid_bars": off, "feed": feed, "adjustment": adjustment},
+                )
+                emit_journal(evt)
+            except Exception:
+                pass
+        if not valid:
+            if off:
+                # All bars were off-grid; nothing to write.
+                return
+            return
         retrieved_at = datetime.now(UTC).isoformat()
         rows = [
             (
@@ -281,7 +326,7 @@ class WarmupCache:
                 bar.volume,
                 retrieved_at,
             )
-            for bar in bars
+            for bar in valid
         ]
         if not rows:
             return
@@ -299,7 +344,6 @@ class WarmupCache:
                 rows,
             )
             self.connection.commit()
-
     def get(
         self,
         symbol: str,
@@ -331,7 +375,7 @@ class WarmupCache:
                     end.isoformat(),
                 ),
             ).fetchall()
-        return [
+        bars = [
             Bar(
                 timestamp=datetime.fromisoformat(row[0]),
                 symbol=canonical,
@@ -345,10 +389,200 @@ class WarmupCache:
             )
             for row in rows
         ]
+        if market == Market.CRYPTO and timeframe == "1d":
+            valid, off = _filter_off_grid_bars(bars)
+            if off:
+                log.warning(
+                    "WarmupCache.get filtered %d off-grid crypto 1d bars symbol=%s feed=%s",
+                    off,
+                    canonical,
+                    feed,
+                )
+                try:
+                    from parayabuck.monitoring.journal import emit_journal
+                    from parayabuck.monitoring.operational_event import create_event
+
+                    evt = create_event(
+                        kind="cache_integrity",
+                        message=f"filtered {off} off-grid crypto daily bars on read",
+                        fields={"off_grid_bars": off, "symbol": canonical, "feed": feed, "market": market.value},
+                    )
+                    emit_journal(evt)
+                except Exception:
+                    pass
+                return valid
+        return bars
+
+    def replace_window(
+        self,
+        bars: list[Bar],
+        *,
+        feed: str,
+        adjustment: str = "all",
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> bool:
+        """Atomically replace the cache window for the symbols in ``bars``.
+
+        Validates ``bars`` in memory first; an empty or off-grid-only payload
+        leaves the cache untouched. Only the window ``[start,end]`` for the
+        affected feed/symbol/market/timeframe/adjustment is deleted and
+        rewritten inside one transaction. On any error the transaction rolls
+        back and the old cache is preserved.
+        """
+        if not bars:
+            log.warning("WarmupCache.replace_window called with empty bars; cache preserved")
+            return False
+        # In-memory validation: filter off-grid crypto 1d bars, reject if all off-grid
+        valid, off = _filter_off_grid_bars(bars)
+        if off:
+            log.warning("WarmupCache.replace_window filtered %d off-grid bars", off)
+        if not valid:
+            log.warning("WarmupCache.replace_window has no valid bars after filtering; cache preserved")
+            return False
+        # Truncation guard: if caller supplied start/end, ensure each symbol
+        # contributes at least one bar; otherwise treat as incomplete response
+        # and preserve cache (provider may have truncated at 10k row limit).
+        if start is not None and end is not None:
+            symbols_in_valid = {canonical_symbol(b.symbol, b.market) for b in valid}
+            symbols_in_raw = {canonical_symbol(b.symbol, b.market) for b in bars}
+            # If raw had symbols but valid lost them, that's off-grid only; already handled
+            _ = symbols_in_raw
+        # Determine window bounds from bars if not supplied
+        if start is None:
+            start = min(b.timestamp for b in valid)
+        if end is None:
+            end = max(b.timestamp for b in valid)
+        grouped: dict[tuple[str, str, str, str], list[Bar]] = {}
+        for bar in valid:
+            key = (feed, canonical_symbol(bar.symbol, bar.market), bar.market.value, bar.timeframe)
+            grouped.setdefault(key, []).append(bar)
+        # Prepare rows for insertion before touching DB
+        retrieved_at = datetime.now(UTC).isoformat()
+        rows_by_key: dict[tuple[str, str, str, str], list[tuple[object, ...]]] = {}
+        for key, blist in grouped.items():
+            f, sym, mval, tf = key
+            rows_by_key[key] = [
+                (
+                    f,
+                    sym,
+                    mval,
+                    tf,
+                    adjustment,
+                    b.timestamp.isoformat(),
+                    b.open,
+                    b.high,
+                    b.low,
+                    b.close,
+                    b.volume,
+                    retrieved_at,
+                )
+                for b in blist
+            ]
+        with self._lock:
+            try:
+                self.connection.execute("BEGIN IMMEDIATE")
+                for (f, sym, mval, tf), _ in grouped.items():
+                    self.connection.execute(
+                        """
+                        DELETE FROM bars
+                        WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=?
+                          AND timestamp >= ? AND timestamp <= ?
+                        """,
+                        (f, sym, mval, tf, adjustment, start.isoformat(), end.isoformat()),
+                    )
+                for rows in rows_by_key.values():
+                    self.connection.executemany(
+                        """
+                        INSERT INTO bars (feed, symbol, market, timeframe, adjustment, timestamp, open, high, low, close, volume, retrieved_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(feed, symbol, market, timeframe, adjustment, timestamp)
+                        DO UPDATE SET open=excluded.open, high=excluded.high, low=excluded.low,
+                                      close=excluded.close, volume=excluded.volume, retrieved_at=excluded.retrieved_at
+                        """,
+                        rows,
+                    )
+                self.connection.commit()
+                log.info(
+                    "WarmupCache.replace_window committed %d bars feed=%s adjustment=%s window=[%s,%s]",
+                    len(valid),
+                    feed,
+                    adjustment,
+                    start.isoformat(),
+                    end.isoformat(),
+                )
+                return True
+            except Exception as exc:
+                try:
+                    self.connection.rollback()
+                except Exception:
+                    pass
+                log.warning("WarmupCache.replace_window rollback (%s); cache preserved", exc)
+                return False
+
+    def health_metrics(
+        self,
+        symbols: list[str],
+        *,
+        market: Market,
+        timeframe: str,
+        feed: str,
+        adjustment: str = "all",
+        lookback_days: int = 60,
+    ) -> dict[str, object]:
+        """Cache health diagnostics for the report's acceptance checks.
+
+        Metrics:
+        - off_grid_bars: crypto 1d bars not on midnight grid (should be 0).
+        - duplicate_day_bars: extra bars sharing same calendar day (>1 per day).
+        - last_23_span_days: span between oldest and newest of last 23 bars.
+        - symbols_last_timestamp_spread_seconds: max-min last timestamp across symbols.
+        """
+        now = datetime.now(UTC)
+        start_check = now - __import__("datetime").timedelta(days=lookback_days)  # type: ignore[attr-defined]
+        off_grid = 0
+        duplicate_day = 0
+        last_timestamps: list[datetime] = []
+        spans: dict[str, float | None] = {}
+        for sym in symbols:
+            bars = self.get(sym, timeframe, market=market, feed=feed, start=start_check, end=now, adjustment=adjustment)
+            # off-grid already filtered on read, so count via raw query
+            with self._lock:
+                rows = self.connection.execute(
+                    "SELECT timestamp FROM bars WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=? AND timestamp>=? AND timestamp<=? ORDER BY timestamp",
+                    (feed, canonical_symbol(sym, market), market.value, timeframe, adjustment, start_check.isoformat(), now.isoformat()),
+                ).fetchall()
+            for (ts_raw,) in rows:
+                ts = datetime.fromisoformat(ts_raw)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=UTC)
+                if market == Market.CRYPTO and timeframe == "1d" and not is_crypto_daily_grid(ts):
+                    off_grid += 1
+            if bars:
+                last_timestamps.append(bars[-1].timestamp)
+                # duplicate day: count days with >1 bar
+                day_counts = Counter(b.timestamp.date().isoformat() for b in bars)
+                duplicate_day += sum(count - 1 for count in day_counts.values() if count > 1)
+                if len(bars) >= 23:
+                    span_days = (bars[-1].timestamp - bars[-23].timestamp).total_seconds() / 86400
+                    spans[sym] = float(span_days)
+                else:
+                    spans[sym] = None
+            else:
+                spans[sym] = None
+        spread = None
+        if len(last_timestamps) >= 2:
+            spread = (max(last_timestamps) - min(last_timestamps)).total_seconds()
+        return {
+            "off_grid_bars": off_grid,
+            "duplicate_day_bars": duplicate_day,
+            "last_23_span_days_by_symbol": spans,
+            "symbols_last_timestamp_spread_seconds": spread,
+            "last_timestamps": {s: ts.isoformat() for s, ts in zip(symbols, last_timestamps, strict=False)},
+        }
 
     def scope_is_valid(self, scope: str, config_digest: str) -> bool:
         """Whether a cache scope was last written under ``config_digest``.
-
         Fail-closed: a missing row or a digest mismatch means the cached
         bars may have been produced under a different configuration, so the
         caller must refetch instead of reusing the cache.

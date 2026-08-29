@@ -75,7 +75,7 @@ def test_config_loader_rejects_research_only_equity_identity(tmp_path: Path) -> 
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
-            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.60},
+            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.55},
             "crypto": {"enabled": True, "name": "crypto_tournament_t1_hysteresis", "maximum_allocation": 0.05},
         },
     }

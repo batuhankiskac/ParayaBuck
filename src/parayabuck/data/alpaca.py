@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from alpaca.data.enums import Adjustment, DataFeed
@@ -15,7 +16,7 @@ from alpaca.data.requests import (
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from parayabuck.core.models import Bar, Market
-from parayabuck.data.cache import WarmupCache
+from parayabuck.data.cache import WarmupCache, is_crypto_daily_grid
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
@@ -112,6 +113,7 @@ class AlpacaHistoricalData:
         secret_key: str,
         stock_feed: str = "iex",
         data_delayed: bool = False,
+        cache: WarmupCache | str | Path | None = None,
     ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         self._crypto_client = CryptoHistoricalDataClient(api_key, secret_key)
@@ -130,7 +132,12 @@ class AlpacaHistoricalData:
         # coverage.
         self._sip_fallback_active = False
         self._sip_quote_fallback_active = False
-        self._cache = WarmupCache()
+        if cache is None:
+            self._cache = WarmupCache()
+        elif isinstance(cache, WarmupCache):
+            self._cache = cache
+        else:
+            self._cache = WarmupCache(str(cache))
         # Dedup identical consecutive provider calls (measure/bounded).
         self._last_batch_key: tuple[object, ...] | None = None
         self._last_batch_result: dict[str, list[Bar]] | None = None
@@ -653,6 +660,7 @@ class AlpacaHistoricalData:
                 return fresh_cached
             return {symbol: [] for symbol in symbols}
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
+        off_grid_dropped = 0
         for row in frame.reset_index().sort_values("timestamp").itertuples(index=False):
             timestamp = row.timestamp
             if hasattr(timestamp, "to_pydatetime"):
@@ -661,6 +669,9 @@ class AlpacaHistoricalData:
                 timestamp = timestamp.replace(tzinfo=UTC)
             timestamp = timestamp.astimezone(UTC)
             if market == Market.EQUITY and timeframe != "1d" and not is_regular_equity_time(timestamp):
+                continue
+            if market == Market.CRYPTO and timeframe == "1d" and not is_crypto_daily_grid(timestamp):
+                off_grid_dropped += 1
                 continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             item = Bar(
@@ -675,13 +686,34 @@ class AlpacaHistoricalData:
                 market=market,
             )
             bars.setdefault(row_symbol, []).append(item)
+        if off_grid_dropped:
+            log.warning("Alpaca provider returned %d off-grid crypto 1d bars; dropped", off_grid_dropped)
         total = sum(len(items) for items in bars.values())
         fetched = [bar for items in bars.values() for bar in items]
-        self._cache.upsert(fetched, feed=feed_name, adjustment=adjustment)
+        # Use atomic replace_window for full fetches so stale off-grid rows
+        # already in the cache are removed. Fall back to upsert if replace
+        # reports failure (empty payload or error).
+        replaced = False
+        if fetched:
+            try:
+                replaced = self._cache.replace_window(
+                    fetched, feed=feed_name, adjustment=adjustment, start=start_at, end=end_at
+                )
+            except Exception as exc:
+                log.warning("replace_window failed; falling back to upsert (%s)", exc)
+                replaced = False
+        if not replaced and fetched:
+            self._cache.upsert(fetched, feed=feed_name, adjustment=adjustment)
         for symbol in symbols:
             merged = {bar.timestamp: bar for bar in cached.get(symbol, [])}
             merged.update({bar.timestamp: bar for bar in bars.get(symbol, [])})
-            bars[symbol] = [merged[key] for key in sorted(merged)]
+            # Filter any stale off-grid entries that survived in cached (from pre-fix cache)
+            filtered = {}
+            for ts, bar in merged.items():
+                if bar.market == Market.CRYPTO and bar.timeframe == "1d" and not is_crypto_daily_grid(bar.timestamp):
+                    continue
+                filtered[ts] = bar
+            bars[symbol] = [filtered[key] for key in sorted(filtered)]
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
         # Measured provider-call observability (for signal/universe hardening).
         try:

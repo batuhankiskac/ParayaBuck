@@ -101,6 +101,8 @@ LIFECYCLE_KINDS: tuple[str, ...] = (
     "rebalance_phase_changed",
     # decision summary
     "decision_summary",
+    # portfolio no-trade visibility (kripto alım arızası fix)
+    "portfolio_no_trade",
     # observability self
     "observability_degraded",
     "observability_recovered",

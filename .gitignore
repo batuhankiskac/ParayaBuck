@@ -247,3 +247,9 @@ data/research/archive/**/universe.json
 data/research/archive/**/*.csv
 data/research/archive/**/universe_history.csv
 data/runtime/paper_receipts/
+# Quarantine / local repair artifacts (huge sqlite dumps — never commit)
+data/quarantine/
+**/warmup.sqlite3
+**/warmup.sqlite3-*
+**/*.sqlite3-wal
+**/*.sqlite3-shm

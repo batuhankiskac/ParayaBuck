@@ -28,7 +28,11 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy src
+      - name: Record production file signatures (isolation gate)
+        run: python scripts/check_production_isolation.py --record /tmp/before.json
       - run: pytest
+      - name: Verify production files untouched (isolation gate)
+        run: python scripts/check_production_isolation.py --verify /tmp/before.json
       - run: python -m build
       - name: Smoke test installed wheel
         run: |

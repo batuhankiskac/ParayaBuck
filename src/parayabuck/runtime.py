@@ -2388,7 +2388,10 @@ class EngineRuntime:
                 # Unit-test fixtures that stub _entry_readiness_reasons skip
                 # the build entirely.
                 gate = self._entry_readiness_reasons
-                real_gate = getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons
+                # Avoid referencing the global EngineRuntime class name so a
+                # test that monkeypatches the global to FakeRuntime does not
+                # crash a running PAPER engine's decision worker (P0).
+                real_gate = getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)
                 batch_health: RuntimeHealth | None = None
                 for timestamp in sorted(closable):
                     bars_by_symbol = pending.pop(timestamp)
@@ -2526,12 +2529,15 @@ class EngineRuntime:
             return
         self._refresh_readiness()
         gate = self._entry_readiness_reasons
-        if health is None and (getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons):
+        if health is None and (getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)):
             health = self.health()
         gate_kwargs = {"health": health} if health is not None else {}
         market_reasons: dict[Market, tuple[str, ...]] = {}
         for candidate_market in {bar.market for bar in bars_by_symbol.values()}:
-            market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
+            try:
+                market_reasons[candidate_market] = gate(candidate_market, **gate_kwargs)
+            except TypeError:
+                market_reasons[candidate_market] = gate(candidate_market)  # type: ignore[call-arg]
         if not any(
             symbol not in self._not_ready_symbols
             and not self._engine_has_symbol_gap(symbol)
@@ -2577,10 +2583,14 @@ class EngineRuntime:
             # not even risk-reducing target sells. Broker-native protective
             # exits (resting stops) continue independently at the broker.
             gate = self._entry_readiness_reasons
-            if health is None and (getattr(gate, "__func__", None) is EngineRuntime._entry_readiness_reasons):
+            if health is None and (getattr(gate, "__func__", None) is getattr(type(self), "_entry_readiness_reasons", None)):
                 health = self.health()
             gate_kwargs = {"health": health} if health is not None else {}
-            readiness_reasons = gate(portfolio_runtime.market, **gate_kwargs)
+            # Robust dispatch: overridden stubs may not accept health kwarg
+            try:
+                readiness_reasons = gate(portfolio_runtime.market, **gate_kwargs)
+            except TypeError:
+                readiness_reasons = gate(portfolio_runtime.market)  # type: ignore[call-arg]
             if readiness_reasons:
                 if portfolio_runtime.strategy.name == "equity_residual_momentum_v3":
                     log.info(
@@ -2588,8 +2598,43 @@ class EngineRuntime:
                         portfolio_runtime.strategy.name,
                         ",".join(readiness_reasons),
                     )
+                # Visibility: readiness gate blocked decision — emit no-trade
+                try:
+                    from parayabuck.monitoring.journal import emit_journal
+                    from parayabuck.monitoring.operational_event import create_event
+                    from datetime import datetime as _dt
+
+                    # Build single sentence message
+                    market_name = portfolio_runtime.market.value if hasattr(portfolio_runtime.market, "value") else str(portfolio_runtime.market)
+                    first_reason = readiness_reasons[0] if readiness_reasons else "readiness_blocked"
+                    msg_map = {
+                        "account_snapshot_stale": "hesap görüntüsü eski",
+                        "event_queue_stale": "olay kuyruğu eski",
+                        "runtime_state:halted": "motor durduruldu",
+                    }
+                    tr = msg_map.get(first_reason, first_reason)
+                    market_tr = "Kripto" if market_name.lower() == "crypto" else "Hisse"
+                    msg = f"{market_tr} alınmadı: {tr}."
+                    day = _dt.now(UTC).date().isoformat()
+                    evt = create_event(
+                        kind="portfolio_no_trade",
+                        message=msg,
+                        market=market_name,
+                        strategy=portfolio_runtime.strategy.name,
+                        session_id=getattr(self, "_runtime_session_id", None) or getattr(self, "_session_id", None),
+                        account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
+                        deterministic_extra=f"{market_name}:{portfolio_runtime.strategy.name}:{first_reason}:{day}",
+                        fields={
+                            "reason": first_reason,
+                            "readiness_reasons": list(readiness_reasons),
+                            "relevant_bar_count": len(relevant),
+                            "decision_timestamp": max(bar.timestamp for bar in relevant).isoformat() if relevant else None,
+                        },
+                    )
+                    emit_journal(evt)
+                except Exception:
+                    pass
                 continue
-            # An entry-risk latch (daily loss / drawdown / unverified signal
             # basis) must not freeze the whole decision: risk-reducing SELL
             # exits still run, only entries are blocked. The equity signal
             # basis is verified synchronously here (batched, at most hourly)

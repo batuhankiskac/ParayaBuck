@@ -117,26 +117,26 @@ def test_frozen_strategy_parameters_and_paper_mode() -> None:
 
 
 def test_combined_sleeve_allocations_fit_gross_cap_and_cash_buffer() -> None:
-    """2026-08-21 operator decision (docs/optimization_experiments_2026_08.md
-    B3/A1): equity 0.60 + crypto 0.05 nominally exceeds the 0.60 gross cap by
-    design — the PortfolioRiskOverlay arbitrates: when crypto is deployed the
-    equity sleeve's effective headroom is gross - crypto, and the account
-    always stays inside gross/cash."""
+    """2026-08-29 fix (kripto alım arızası): equity 0.55 + crypto 0.05 == gross 0.60
+
+    Invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer.
+    This guarantees deterministic sizing regardless of market processing order
+    and that a stale snapshot cannot temporarily plan 65% gross.
+    """
     config = load_config()
     equity_allocation = config.strategy.equity.maximum_allocation
     crypto_allocation = config.strategy.crypto.maximum_allocation
     gross_cap = config.risk.max_gross_exposure_pct
     cash_buffer = config.risk.cash_buffer_pct
-    assert equity_allocation == pytest.approx(0.60)
+    assert equity_allocation == pytest.approx(0.55)
     assert crypto_allocation == pytest.approx(0.05)
     assert gross_cap == pytest.approx(0.60)
     assert cash_buffer == pytest.approx(0.40)
-    # The nominal sum may exceed gross; each sleeve individually stays inside
-    # it and the combined-account invariant is enforced by the overlay (see
-    # test_risk_overlay_enforces_combined_limits_on_shared_account).
+    # Invariant from config.__post_init__
+    assert equity_allocation + crypto_allocation <= gross_cap + _EPS
+    assert gross_cap + cash_buffer <= 1.0 + _EPS
     assert equity_allocation <= gross_cap + _EPS
     assert crypto_allocation <= cash_buffer - _EPS
-
 
 def test_crypto_position_caps_match_config() -> None:
     """Crypto: exposure 0.10, single position 0.05, at most 2 positions; the
@@ -206,6 +206,68 @@ def test_risk_overlay_enforces_combined_limits_on_shared_account() -> None:
     assert combined_gross == pytest.approx(0.55)
 
 
+def test_six_equity_positions_blocks_crypto_and_enforces_gross() -> None:
+    """Six 10% equity positions fill gross 60%; crypto must be scaled to 0.
+
+    Reproduces the report's secondary allocation bug: 6×0.10 = 0.60 gross,
+    crypto target 0.05 must be exposure_scaled_to_limit → 0, not 0.05.
+    """
+    config = load_config()
+    limits = portfolio_risk_limits_from_config(config.risk)
+    overlay = PortfolioRiskOverlay(limits)
+    # 6×10% = 60% gross
+    account = _account(
+        equity_positions=(
+            ("S00", 100.0, 100.0),
+            ("S01", 100.0, 100.0),
+            ("S02", 100.0, 100.0),
+            ("S03", 100.0, 100.0),
+            ("S04", 100.0, 100.0),
+            ("S05", 100.0, 100.0),
+        )
+    )
+    crypto_decision = overlay.apply(
+        _target("crypto_low_variance_v1", (("BTC/USD", 0.025), ("ETH/USD", 0.025))),
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=("BTC/USD", "ETH/USD"),
+        maximum_allocation=config.strategy.crypto.maximum_allocation,
+        mode="backtest",
+    )
+    assert crypto_decision.target.invested_weight == pytest.approx(0.0, abs=1e-9)
+    assert "exposure_scaled_to_limit" in crypto_decision.reasons
+
+
+def test_capital_allocation_order_invariant() -> None:
+    """Equity and crypto decisions must be order-invariant: both orders yield same gross."""
+    config = load_config()
+    limits = portfolio_risk_limits_from_config(config.risk)
+    overlay = PortfolioRiskOverlay(limits)
+    account = _account()
+    equity_target = _target("equity_residual_momentum_v1", (("S00", 0.55),))
+    crypto_target = _target("crypto_low_variance_v1", (("BTC/USD", 0.05),))
+    # Order A: equity then crypto
+    eq_a = overlay.apply(
+        equity_target, account, market=Market.EQUITY, approved_symbols=("S00",), maximum_allocation=config.strategy.equity.maximum_allocation, mode="backtest"
+    )
+    cr_a = overlay.apply(
+        crypto_target, account, market=Market.CRYPTO, approved_symbols=("BTC/USD",), maximum_allocation=config.strategy.crypto.maximum_allocation, mode="backtest"
+    )
+    # Order B: crypto then equity (same account snapshot)
+    cr_b = overlay.apply(
+        crypto_target, account, market=Market.CRYPTO, approved_symbols=("BTC/USD",), maximum_allocation=config.strategy.crypto.maximum_allocation, mode="backtest"
+    )
+    eq_b = overlay.apply(
+        equity_target, account, market=Market.EQUITY, approved_symbols=("S00",), maximum_allocation=config.strategy.equity.maximum_allocation, mode="backtest"
+    )
+    gross_a = eq_a.target.invested_weight + cr_a.target.invested_weight
+    gross_b = eq_b.target.invested_weight + cr_b.target.invested_weight
+    assert gross_a == pytest.approx(gross_b)
+    assert gross_a <= config.risk.max_gross_exposure_pct + _EPS
+    assert cr_a.target.invested_weight == pytest.approx(0.05)
+    assert cr_b.target.invested_weight == pytest.approx(0.05)
+
+
 def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
     """One low-variance crypto cannot absorb the sleeve: a 0.5 target is
     capped to 0.05, and a 3-symbol target is cut to at most 2 positions."""
@@ -242,7 +304,7 @@ def test_risk_overlay_caps_single_crypto_asset_and_position_count() -> None:
 
 def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     """8 proposed positions at 10% each are cut to max_positions and the
-    equity sleeve cap (0.60 since the 2026-08-21 operator decision)."""
+    equity sleeve cap (0.55 after 2026-08-29 fix)."""
     config = load_config()
     overlay = PortfolioRiskOverlay(portfolio_risk_limits_from_config(config.risk))
     account = _account()
@@ -256,7 +318,7 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
         mode="backtest",
     )
     assert len(decision.target.weights) <= config.risk.max_positions
-    assert decision.target.invested_weight <= 0.60 + _EPS
+    assert decision.target.invested_weight <= 0.55 + _EPS
     assert all(weight.weight <= config.risk.max_position_pct + _EPS for weight in decision.target.weights)
 
 

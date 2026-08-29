@@ -2462,6 +2462,64 @@ def _dashboard_runtime_health() -> dict[str, Any] | None:
         return None
 
 
+def _dashboard_last_no_trade() -> dict[str, Any] | None:
+    """Latest portfolio_no_trade reason for top-level dashboard banner.
+
+    Reads the most recent portfolio_no_trade operational_event from the
+    observability journal. Returns a single-sentence Turkish reason or None.
+    """
+    try:
+        import sqlite3 as _sql
+        from pathlib import Path as _P
+
+        # Use the journal's actual path (isolated in tests via conftest)
+        try:
+            from parayabuck.monitoring.journal import get_journal
+
+            journal = get_journal()
+            journal_path = str(journal.path)
+        except Exception:
+            # Fallback to config or default
+            cfg = _dashboard_config()
+            journal_path = "data/runtime/observability.sqlite3"
+            try:
+                if cfg is not None and hasattr(cfg, "observability"):
+                    jp = getattr(cfg.observability, "journal_path", None)
+                    if jp:
+                        journal_path = str(jp)
+            except Exception:
+                pass
+        jp = _P(journal_path)
+        if not jp.exists():
+            return None
+        con = _sql.connect(f"file:{jp.resolve()}?mode=ro", uri=True, timeout=2)
+        try:
+            row = con.execute(
+                "SELECT kind, message, market, strategy, occurred_at, fields_json FROM operational_events WHERE kind='portfolio_no_trade' ORDER BY occurred_at DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            con.close()
+        if not row:
+            return None
+        kind, message, market, strategy, occurred_at, fields_json = row
+        import json as _json
+        try:
+            fields = _json.loads(fields_json) if fields_json else {}
+        except Exception:
+            fields = {}
+        reason = fields.get("reason", "")
+        return {
+            "kind": kind,
+            "message": message,
+            "market": market,
+            "strategy": strategy,
+            "occurred_at": occurred_at,
+            "reason": reason,
+            "fields": fields,
+        }
+    except Exception as exc:
+        log.warning("Dashboard last_no_trade probe failed: %s", exc)
+        return None
 def _dashboard_config() -> Any | None:
     """The parsed settings Config, cached per file version.
 
@@ -3473,6 +3531,7 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         "as_of": datetime.now(UTC).isoformat(),
         "engine_state": engine_state,
         "engine_error": getattr(manager, "last_engine_error", None),
+        "last_no_trade": _dashboard_safe_panel("last_no_trade", _dashboard_last_no_trade),
         "mode": _dashboard_safe_panel("mode", lambda: _dashboard_mode(cfg)),
         "account": {
             "equity": account.get("equity"),

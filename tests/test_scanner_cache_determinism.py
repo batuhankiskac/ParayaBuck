@@ -54,7 +54,14 @@ def _rows(symbols: list[str], start: datetime, end: datetime, minutes: int, mark
     if end.tzinfo is None:
         end = end.replace(tzinfo=UTC)
     rows: list[dict[str, Any]] = []
-    bucket = start.replace(minute=0, second=0, microsecond=0)
+    # For crypto 1d, generate bars exactly on UTC midnight grid so they pass
+    # production cache validation (which rejects off-grid daily bars).
+    if minutes == 1440:
+        bucket = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        if bucket < start:
+            bucket += timedelta(days=1)
+    else:
+        bucket = start.replace(minute=0, second=0, microsecond=0)
     while bucket <= end:
         for symbol in symbols:
             rows.append(_row(symbol, bucket, market))
@@ -171,11 +178,26 @@ def _install_fakes(monkeypatch: Any, trading: FakeTrading) -> None:
 
 def _history(config: Config, crypto: FakeCryptoClient, stock: FakeStockClient) -> Any:
     from parayabuck.data.alpaca import AlpacaHistoricalData
+    from parayabuck.data.cache import WarmupCache
 
-    history = AlpacaHistoricalData("k", "s", stock_feed="sip")
+    # Use a temporary cache under tmp_path when available; fall back to
+    # an in-memory temp path derived from config's universe paths so tests
+    # NEVER write to data/cache/warmup.sqlite3.
+    tmp_cache_path: str | None = None
+    # _config stores universe paths under tmp_path; derive cache path from same parent.
+    try:
+        candidate = config.universe.equity.candidate_universe_path
+        if candidate:
+            tmp_cache_path = str(Path(candidate).parent / "warmup_test.sqlite3")
+    except Exception:
+        tmp_cache_path = None
+    if tmp_cache_path is None:
+        tmp_cache_path = ":memory:"
+    history = AlpacaHistoricalData("k", "s", stock_feed="sip", cache=WarmupCache(tmp_cache_path))
     history._crypto_client = crypto
     history._stock_client = stock
     return history
+
 
 
 def _crypto_result_snapshot(result: Any) -> dict[str, Any]:

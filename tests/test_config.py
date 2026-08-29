@@ -19,7 +19,7 @@ def _settings() -> dict[str, object]:
         "engine": {},
         "risk": {"daily_loss_limit_pct": 0.02, "max_drawdown_pct": 0.12},
         "strategy": {
-            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.60},
+            "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.55},
             "crypto": {"enabled": True, "name": "crypto_low_variance_v2", "maximum_allocation": 0.05},
         },
     }

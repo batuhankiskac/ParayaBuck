@@ -683,6 +683,28 @@ class Config:
             raise ValueError("runtime.mode=live requires live.enabled=true")
         if self.runtime.mode != RuntimeMode.LIVE and self.live.enabled:
             raise ValueError("live.enabled=true requires runtime.mode=live")
+        # 2026-08-29 fix: capital invariant — sum of enabled sleeve caps must
+        # stay inside gross limit and cash buffer. This guarantees order
+        # existence is deterministic regardless of market processing order and
+        # that a stale account snapshot cannot temporarily plan 65% gross.
+        # invariant: sum(effective allocations) <= max_gross <= 1 - cash_buffer
+        effective_alloc = 0.0
+        if self.strategy.equity.enabled:
+            effective_alloc += float(self.strategy.equity.maximum_allocation)
+        if self.strategy.crypto.enabled:
+            effective_alloc += float(self.strategy.crypto.maximum_allocation)
+        max_gross = float(self.risk.max_gross_exposure_pct)
+        cash_buf = float(self.risk.cash_buffer_pct)
+        # allow tiny epsilon for floating point
+        eps = 1e-9
+        if effective_alloc - max_gross > eps:
+            raise ValueError(
+                f"Capital invariant violated: sum allocations {effective_alloc:.4f} > max_gross {max_gross:.4f} — lower a sleeve cap"
+            )
+        if max_gross + cash_buf - 1.0 > eps:
+            raise ValueError(
+                f"Capital invariant violated: max_gross {max_gross:.4f} + cash_buffer {cash_buf:.4f} > 1.0"
+            )
 
     @property
     def symbols(self) -> tuple[str, ...]:

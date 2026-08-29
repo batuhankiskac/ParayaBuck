@@ -164,6 +164,97 @@ def _emit_rebalance_phase_safe(
         pass
 
 
+_no_trade_last: dict[str, str] = {}
+
+
+def _emit_no_trade_safe(
+    *,
+    market: str | None,
+    strategy: str | None,
+    reason: str,
+    decision_timestamp: datetime | None = None,
+    data_timestamp: datetime | None = None,
+    warming_symbols: tuple[str, ...] | None = None,
+    missing_symbols: tuple[str, ...] | None = None,
+    last_timestamps: dict[str, str] | None = None,
+    next_boundary_after: str | None = None,
+    target_weights: tuple[Any, ...] | None = None,
+    risk_reasons: tuple[str, ...] | None = None,
+    available_capacity: dict[str, float] | None = None,
+    entry_latch: str | None = None,
+    session_id: str | None = None,
+    account_id: str | None = None,
+) -> None:
+    """Emit persistent portfolio_no_trade event, throttled by reason.
+
+    Fields cover report's acceptance list: market, strategy, karar/veri zamanı,
+    eksik/ısınan semboller, her sembolün son zaman damgası, bir sonraki 96h sınırı,
+    hedef ve risk sonrası ağırlık, kapasite, engelleyen latch.
+    Repeated identical reason for same market/strategy is suppressed (dedup).
+    """
+    try:
+        key = f"{market}:{strategy}:{reason}"
+        # Suppress exact duplicate consecutive emits (same market/strategy/reason)
+        if _no_trade_last.get(key) == reason:
+            # Still emit if more than an hour has passed? For now suppress.
+            return
+        _no_trade_last[key] = reason
+        from parayabuck.monitoring.journal import emit_journal
+        from parayabuck.monitoring.operational_event import create_event
+
+        # Use deterministic id per market/strategy/reason/day so journal dedups
+        day = (decision_timestamp or datetime.now(UTC)).date().isoformat()
+        det_extra = f"{market}:{strategy}:{reason}:{day}"
+        fields: dict[str, Any] = {
+            "reason": reason,
+            "decision_timestamp": decision_timestamp.isoformat() if decision_timestamp else None,
+            "data_timestamp": data_timestamp.isoformat() if data_timestamp else None,
+            "warming_symbols": list(warming_symbols or ()),
+            "missing_symbols": list(missing_symbols or ()),
+            "last_timestamps": last_timestamps or {},
+            "next_boundary_after": next_boundary_after,
+            "target_weights": [str(w) for w in (target_weights or ())],
+            "risk_reasons": list(risk_reasons or ()),
+            "available_capacity": available_capacity or {},
+            "entry_latch": entry_latch,
+        }
+        # Human readable message for dashboard top-level
+        # Example: "Kripto alınmadı: BTC/ETH/SOL günlük veri zamanları diğer sembollerle eşleşmiyor."
+        reason_tr: dict[str, str] = {
+            "warming_up": "veriler ısınıyor (yeterli geçmiş yok)",
+            "incomplete_strategy_batch": "günlük veri zamanları diğer sembollerle eşleşmiyor",
+            "not_scheduled": "rebalance zamanı değil (96 saat döngüsü)",
+            "duplicate_decision": "aynı zaman damgası için zaten karar var",
+            "benchmark_not_ready": "benchmark BTC verisi hazır değil",
+            "incomplete_managed_batch": "yönetilen pozisyonların verisi eksik",
+            "exposure_scaled_to_limit": "sermaye limiti nedeniyle hedef küçültüldü",
+            "rebalance_in_progress": "önceki rebalance henüz tamamlanmadı",
+            "rebalance_blocked": "satış fazı takılı",
+            "account_snapshot_stale": "hesap görüntüsü eski",
+            "circuit_breaker": "devre kesici aktif",
+        }
+        tr = reason_tr.get(reason, reason)
+        market_tr = "Kripto" if (market or "").lower() == "crypto" else "Hisse" if (market or "").lower() == "equity" else (market or "Piyasa")
+        if missing_symbols:
+            detail = "/".join(missing_symbols[:3])
+            msg = f"{market_tr} alınmadı: {detail} {tr}."
+        else:
+            msg = f"{market_tr} alınmadı: {tr}."
+        evt = create_event(
+            kind="portfolio_no_trade",
+            message=msg,
+            market=market,
+            strategy=strategy,
+            session_id=session_id,
+            account_id=account_id,
+            deterministic_extra=det_extra,
+            fields=fields,
+        )
+        emit_journal(evt)
+    except Exception:
+        pass
+
+
 class PortfolioRuntime:
     def __init__(
         self,
@@ -353,14 +444,56 @@ class PortfolioRuntime:
             len(series) < self.strategy.minimum_history_bars for series in series_by_symbol.values()
         ):
             self.startup_catch_up_status = "warming_up"
+            # Visibility: persistent no-trade event
+            warming = tuple(sorted(s for s, ser in self.history.items() if len(ser) < self.strategy.minimum_history_bars))
+            last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
+            try:
+                next_boundary = self.policy.next_boundary_after(max((t for t in timestamps if t is not None), default=self.startup_catch_up_at)).isoformat() if timestamps and any(timestamps) else None
+            except Exception:
+                next_boundary = None
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="warming_up",
+                decision_timestamp=self.startup_catch_up_at,
+                data_timestamp=max((t for t in timestamps if t is not None), default=None),
+                warming_symbols=warming,
+                last_timestamps=last_ts,
+                next_boundary_after=next_boundary,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
         if len(set(timestamps)) != 1:
             self.startup_catch_up_status = "incomplete_strategy_batch"
+            last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="incomplete_strategy_batch",
+                decision_timestamp=self.startup_catch_up_at,
+                data_timestamp=max((t for t in timestamps if t is not None), default=None),
+                missing_symbols=tuple(sorted({s for s, ser in self.history.items() if not ser or ser[-1].timestamp != max(t for t in timestamps if t is not None)})),
+                last_timestamps=last_ts,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
         timestamp = timestamps[0]
         assert timestamp is not None
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
             self.startup_catch_up_status = "duplicate_decision"
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="duplicate_decision",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         if (
             self.repository.latest_decision_timestamp(self.account_id, self.configuration_digest, self.market)
@@ -369,6 +502,15 @@ class PortfolioRuntime:
             # Any prior decision for this deployment means the cadence is
             # already running: a catch-up would be an out-of-cadence re-entry.
             self.startup_catch_up_status = "catch_up_superseded"
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="duplicate_decision",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "catch_up_superseded")
         account = self.broker.account()
         if any(
@@ -378,6 +520,15 @@ class PortfolioRuntime:
             # Already invested in this market: never layer a catch-up entry on
             # top of an existing managed position.
             self.startup_catch_up_status = "already_invested"
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="already_invested",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "already_invested")
         # Let a persisted two-phase rebalance advance first; a still-active
         # rebalance defers the catch-up (submitting fresh BUYs while an older
@@ -386,6 +537,15 @@ class PortfolioRuntime:
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             self.startup_catch_up_status = "rebalance_in_progress"
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="rebalance_in_progress",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_in_progress")
         bars = [series[-1] for series in series_by_symbol.values()]
         result = self.process_closed_bars(
@@ -519,11 +679,51 @@ class PortfolioRuntime:
             sorted(symbol for symbol, series in self.history.items() if not series or series[-1].timestamp != timestamp)
         )
         if warming_symbols:
+            last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
+            try:
+                nb = self.policy.next_boundary_after(timestamp).isoformat() if timestamp else None
+            except Exception:
+                nb = None
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="warming_up",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                warming_symbols=warming_symbols,
+                last_timestamps=last_ts,
+                next_boundary_after=nb,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "warming_up")
         if missing_symbols:
+            last_ts = {s: (ser[-1].timestamp.isoformat() if ser else "none") for s, ser in self.history.items()}
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="incomplete_strategy_batch",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                missing_symbols=missing_symbols,
+                last_timestamps=last_ts,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_strategy_batch")
-        ready_history = dict(self.history)
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="duplicate_decision",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         # A persisted two-phase rebalance may have become ready since the last
         # event (trade update, restart, or reconcile). Advance it first, then
@@ -546,6 +746,15 @@ class PortfolioRuntime:
                     submitted=(),
                     no_trade_reason="SELL_PHASE_PENDING",
                 )
+                _emit_no_trade_safe(
+                    market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                    strategy=getattr(self.strategy, "name", None),
+                    reason="rebalance_blocked",
+                    decision_timestamp=timestamp,
+                    data_timestamp=timestamp,
+                    session_id=self.session_id,
+                    account_id=self.account_id,
+                )
                 return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
             _emit_decision_summary_safe(
                 decision_id=current_rebalance.decision_id,
@@ -558,6 +767,15 @@ class PortfolioRuntime:
                 submitted=(),
                 no_trade_reason="SELL_PHASE_PENDING",
             )
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="rebalance_in_progress",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(
                 current_rebalance.decision_id,
                 None,
@@ -566,11 +784,10 @@ class PortfolioRuntime:
                 (),
                 "rebalance_in_progress",
             )
-        # The engine hands in one immutable snapshot shared across the whole
-        # processing cycle (freshness enforced at the engine level against
         # maximum_account_age_for_entry_seconds). Direct callers (tests,
         # startup catch-up) omit it and get a fresh broker fetch, preserving
         # the historical behavior exactly.
+        ready_history = dict(self.history)
         account = account or self.broker.account()
         managed = {
             canonical_symbol(position.symbol, position.market)
@@ -578,8 +795,30 @@ class PortfolioRuntime:
             if position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
         }
         if not managed.issubset(batch_symbols):
+            missing_managed = managed - batch_symbols
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="incomplete_managed_batch",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                missing_symbols=tuple(sorted(missing_managed)),
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "incomplete_managed_batch")
         if self.market == Market.CRYPTO and "BTC/USD" not in ready_history:
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="benchmark_not_ready",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                missing_symbols=("BTC/USD",),
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "benchmark_not_ready")
         # Non-scheduled batch fast path: when the strategy does not override
         # the intermediate-risk hook (base implementation is constant False),
@@ -593,6 +832,16 @@ class PortfolioRuntime:
             and type(self.strategy).requires_intermediate_risk_rebalance
             is PortfolioStrategy.requires_intermediate_risk_rebalance
         ):
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="not_scheduled",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                next_boundary_after=self.policy.next_boundary_after(timestamp).isoformat() if hasattr(self.policy, "next_boundary_after") else None,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         persisted_high_water = self.repository.high_water(self.account_id)
         account = replace(
@@ -625,10 +874,19 @@ class PortfolioRuntime:
             elif context.universe is not None:
                 require_product_universe(context)
         if not scheduled and not self.strategy.requires_intermediate_risk_rebalance(context):
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="not_scheduled",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                entry_latch=entry_latch,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         raw_target = self.strategy.decide(context)
         if entry_latch is not None:
-            # Entry-risk latch: the strategy may propose anything, but the
             # runtime may only reduce risk. Cap every target at the current
             # weight so the planner emits SELL orders only; entries stay
             # blocked while protective/risk-reducing exits keep flowing.
@@ -699,6 +957,42 @@ class PortfolioRuntime:
             maximum_allocation=maximum_allocation,
             mode=self.mode,
         )
+        # Visibility: if risk overlay scaled to limit and left no managed
+        # exposure, emit persistent no-trade (e.g., 6×10% equity blocks crypto).
+        if "exposure_scaled_to_limit" in risk.reasons and sum(w.weight for w in risk.target.weights) < 1e-9:
+            # Compute capacity for diagnostics
+            try:
+                gross_before = risk.gross_before
+                gross_after = risk.gross_after
+            except Exception:
+                gross_before = gross_after = 0.0
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason="exposure_scaled_to_limit",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                target_weights=tuple(risk.target.weights),
+                risk_reasons=risk.reasons,
+                available_capacity={"gross_before": float(gross_before), "gross_after": float(gross_after)},
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
+        # Entry latch blocking check: if latch present and no buys planned
+        elif entry_latch is not None and not any(w.weight > 1e-9 for w in risk.target.weights):
+            _emit_no_trade_safe(
+                market=self.market.value if hasattr(self.market, "value") else str(self.market),
+                strategy=getattr(self.strategy, "name", None),
+                reason=entry_latch.split("|")[0] if "|" in str(entry_latch) else str(entry_latch),
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                target_weights=tuple(risk.target.weights),
+                risk_reasons=risk.reasons,
+                session_id=self.session_id,
+                account_id=self.account_id,
+                entry_latch=entry_latch,
+            )
         rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
         # The order idempotency key must be scoped to the account-local
         # decision identity (account + configuration digest + timestamp +

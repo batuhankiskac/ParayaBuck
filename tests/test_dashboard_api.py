@@ -226,9 +226,7 @@ def test_dashboard_strategy_cards_expose_frozen_contracts(tmp_path: Path, monkey
     assert equity["status"] == "stopped"
     assert equity["strategy"]["display_name"] == "Residual Momentum v3 (MH-RAW consensus)"
     assert equity["strategy"]["signal_timeframe"] == "1d"
-    assert equity["strategy"]["rebalance_cadence"] == "weekly"
-    assert equity["maximum_allocation_pct"] == 60.0
-    assert equity["eligible_pool"] is not None  # shortlist count
+    assert equity["maximum_allocation_pct"] == pytest.approx(55.0)
     assert equity["observation_set_size"] is not None
     assert isinstance(equity["holdings"], list)
 

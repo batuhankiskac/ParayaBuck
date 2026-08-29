@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import tempfile
 from pathlib import Path
@@ -39,12 +40,22 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
         flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             flags |= os.O_DIRECTORY
+        _best_effort_errnos = {errno.EINVAL, errno.ENOTSUP}
+        _eop = getattr(errno, "EOPNOTSUPP", None)
+        if _eop is not None:
+            _best_effort_errnos.add(_eop)
         try:
             directory_fd = os.open(path.parent, flags)
-        except OSError:
-            return
+        except OSError as exc:
+            if exc.errno in _best_effort_errnos:
+                return
+            raise
         try:
             os.fsync(directory_fd)
+        except OSError as exc:
+            if exc.errno in _best_effort_errnos:
+                return
+            raise
         finally:
             os.close(directory_fd)
     finally:

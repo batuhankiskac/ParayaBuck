@@ -6,30 +6,23 @@ import asyncio
 import hashlib
 import hmac
 import json
-import logging  # noqa: F401
 import math
 import os
 import re
 import secrets
-import sqlite3  # noqa: F401
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Iterator  # noqa: F401
-from contextlib import contextmanager, suppress  # noqa: F401
-from dataclasses import asdict, dataclass, replace  # noqa: F401
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, cast  # noqa: F401
-from urllib.parse import urlparse  # noqa: F401
-from uuid import uuid4  # noqa: F401
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv  # noqa: F401
-from fastapi import HTTPException  # noqa: F401
 
-from parayabuck.config import DEFAULT_DECISION_DB_PATH, load_config  # noqa: F401
-from parayabuck.core.models import Market  # noqa: F401
+from parayabuck.config import load_config
 from parayabuck.live_safety import LiveOperatorApproval  # noqa: F401
 from parayabuck.logger import get_logger  # noqa: F401
 from parayabuck.utils.io import atomic_write  # noqa: F401

@@ -54,11 +54,32 @@ def build_snapshot(
     return snap
 
 
+def _snapshot_json_default(obj: Any) -> str:
+    """JSON fallback for non-serializable types in snapshot (datetime -> ISO 8601)."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    # Fallback for other non-serializables (e.g. Path, Enum) — use str
+    return str(obj)
+
+
+def _make_json_serializable(value: Any) -> Any:
+    """Recursively convert datetime etc. to JSON-safe primitives for snapshot."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _make_json_serializable(v) for k, v in value.items()}  # type: ignore[return-value]
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_make_json_serializable(v) for v in value]  # type: ignore[return-value]
+    return value
+
+
 def write_snapshot_atomic(path: str | Path, snapshot: dict[str, Any]) -> bool:
     """Atomic write via temp+replace. Never raises."""
     try:
         p = Path(path)
-        content = json.dumps(snapshot, indent=2, sort_keys=True)
+        # Ensure snapshot is JSON serializable (handles WorkerHealth datetime fields)
+        safe_snapshot = _make_json_serializable(snapshot)
+        content = json.dumps(safe_snapshot, indent=2, sort_keys=True, default=_snapshot_json_default)
         atomic_write(p, content)
         return True
     except Exception:

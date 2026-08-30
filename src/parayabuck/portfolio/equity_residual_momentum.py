@@ -60,7 +60,14 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     alpha-optimization mission subclasses them):
         ``_transform_cross_sectional_scores`` — once-per-decision re-scoring
             of the eligible pool (blend / multi-horizon consensus);
+        ``_transform_cross_sectional_scores_with_context`` — same hook with
+            completed-bar context available for point-in-time price features;
+        ``_candidate_passes_gate`` — candidate eligibility gate after the
+            shared residual pipeline;
         ``_select_names`` — selection-boundary modification (hysteresis);
+        ``_target_rank_by_symbol`` — preserves the source alpha rank when a
+            selection hook reorders retained names;
+        ``_position_weights_for_ranked`` — ranked-score-aware sizing;
         ``_post_target_weights`` — post-sizing exposure scaling (regime),
             applied BEFORE the engine risk overlay so existing caps stay
             authoritative.
@@ -207,7 +214,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 residual_vol = _volatility(residuals[-vol_window:])
                 if not math.isfinite(score) or not math.isfinite(residual_vol):
                     continue
-                if score <= 0 or residual_vol <= 0:
+                if (
+                    not self._candidate_passes_gate(residuals, score, formation=formation, skip=skip)
+                    or residual_vol <= 0
+                ):
                     continue
                 scored.append((score, symbol))
                 residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
@@ -232,14 +242,17 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 residual_vol = _volatility(residuals[-vol_window:])
                 if not math.isfinite(score) or not math.isfinite(residual_vol):
                     continue
-                if score <= 0 or residual_vol <= 0:
+                if (
+                    not self._candidate_passes_gate(residuals, score, formation=formation, skip=skip)
+                    or residual_vol <= 0
+                ):
                     continue
                 scored.append((score, symbol))
                 residual_vols[symbol] = annualize_period_volatility(residual_vol, 252)
                 residuals_by_symbol[symbol] = residuals
         # pipeline. Default: per-symbol scores pass through unchanged.
-        scored = self._transform_cross_sectional_scores(
-            scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
+        scored = self._transform_cross_sectional_scores_with_context(
+            context, scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
         )
         # Defensive filter: reject the extreme idiosyncratic-volatility names
         # (lottery-like tail) before ranking, not as a second alpha signal.
@@ -347,7 +360,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 residual_vol = vol_fn(vol_slice)
                 if not math.isfinite(score) or not math.isfinite(residual_vol):
                     continue
-                if score <= 0 or residual_vol <= 0:
+                if (
+                    not self._candidate_passes_gate(residuals, score, formation=formation, skip=skip)
+                    or residual_vol <= 0
+                ):
                     continue
                 scored.append((float(score), symbol))
                 residual_vols[symbol] = annualize_period_volatility(float(residual_vol), 252)
@@ -397,13 +413,16 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 residual_vol = vol_fn(vol_slice)
                 if not math.isfinite(score) or not math.isfinite(residual_vol):
                     continue
-                if score <= 0 or residual_vol <= 0:
+                if (
+                    not self._candidate_passes_gate(residuals, score, formation=formation, skip=skip)
+                    or residual_vol <= 0
+                ):
                     continue
                 scored.append((float(score), symbol))
                 residual_vols[symbol] = annualize_period_volatility(float(residual_vol), 252)
                 residuals_by_symbol[symbol] = residuals
-        scored = self._transform_cross_sectional_scores(
-            scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
+        scored = self._transform_cross_sectional_scores_with_context(
+            context, scored, residuals_by_symbol, residual_vols, formation=formation, skip=skip
         )
         scored = self._apply_ivol_filter(scored, residual_vols, ivol_quantile)
         scored.sort(key=lambda item: (-item[0], item[1]))
@@ -421,6 +440,23 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         every variant shares the exact beta/residual/filter pipeline.
         """
         return _compounded_return(residuals[-formation - skip : -skip])
+
+    def _candidate_passes_gate(
+        self,
+        residuals: list[float],
+        score: float,
+        *,
+        formation: int,
+        skip: int,
+    ) -> bool:
+        """Eligibility gate after shared beta/residual math.
+
+        The default is the frozen V1/V2/V3 positive formation-score gate.
+        Research-only variants may replace the gate while retaining the
+        timestamp alignment, beta, residual-volatility, and IVOL pipeline.
+        """
+        del residuals, formation, skip
+        return score > 0
 
     def _apply_ivol_filter(
         self,
@@ -457,6 +493,31 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """
         return scored
 
+    def _transform_cross_sectional_scores_with_context(
+        self,
+        context: PortfolioContext,
+        scored: list[tuple[float, str]],
+        residuals_by_symbol: dict[str, list[float]],
+        residual_vols: dict[str, float],
+        *,
+        formation: int,
+        skip: int,
+    ) -> list[tuple[float, str]]:
+        """Context-aware extension of ``_transform_cross_sectional_scores``.
+
+        The default delegates to the established hook, keeping existing
+        variants and the production V3 score path byte-for-byte equivalent.
+        Research may use completed-bar context for an orthogonal feature.
+        """
+        del context
+        return self._transform_cross_sectional_scores(
+            scored,
+            residuals_by_symbol,
+            residual_vols,
+            formation=formation,
+            skip=skip,
+        )
+
     def _select_names(
         self,
         ranked: tuple[tuple[float, str], ...],
@@ -486,6 +547,15 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """
         return weights
 
+    def _target_rank_by_symbol(
+        self,
+        ranked: tuple[tuple[float, str], ...],
+        selected: tuple[str, ...],
+    ) -> dict[str, int]:
+        """Target rank hook used by the risk overlay's position-limit rule."""
+        del ranked
+        return {symbol: index for index, symbol in enumerate(selected, start=1)}
+
     def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
         """Sizing for the selected names (inverse-vol, capped). Hook."""
         return dict(
@@ -493,6 +563,17 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
                 selected, residual_vols, maximum_weight=self.param_float("max_single_weight", 0.10)
             )
         )
+
+    def _position_weights_for_ranked(
+        self,
+        ranked: tuple[tuple[float, str], ...],
+        selected: tuple[str, ...],
+        residual_vols: dict[str, float],
+        context: PortfolioContext,
+    ) -> dict[str, float]:
+        """Rank-aware sizing extension; default preserves existing sizing."""
+        del ranked, context
+        return self._position_weights(selected, residual_vols)
 
     def decide(self, context: PortfolioContext) -> TargetPortfolio:
         top_n = self.param_int("top_n", 8)
@@ -506,11 +587,16 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         if not ranked:
             return self._cash_portfolio(context, "no_qualified_candidates")
         selected = self._select_names(ranked, residual_vols, context, top_n)
-        weights = dict(self._post_target_weights(self._position_weights(selected, residual_vols), context))
+        weights = dict(
+            self._post_target_weights(
+                self._position_weights_for_ranked(ranked, selected, residual_vols, context),
+                context,
+            )
+        )
         # Alpha rank travels with the target (1 = best): the risk overlay's
         # position-count enforcement retains the strategy's best-ranked
         # names instead of inventing a second ranking from target weights.
-        rank_by_symbol = {symbol: index for index, symbol in enumerate(selected, start=1)}
+        rank_by_symbol = self._target_rank_by_symbol(ranked, selected)
         targets = tuple(
             TargetWeight(
                 symbol,

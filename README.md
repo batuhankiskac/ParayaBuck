@@ -7,6 +7,7 @@
 > - **Historical result (canonical):** `SYMMETRIC_FULL_T1` +113.6% total / 7.44% CAGR / Sharpe 0.639 / maxDD 22.7% (10.5y, $100k, T1 last-close minus costs, 6 terminal events, `docs/v3_historical_validation_final.md`); `OLD_T0` +172% is survivor-biased reference, `T2/T3` are severe-loss bounds
 > - **Research:** historical V3 cycle closed and archived (`docs/archive/research_2026_08/`, `data/research/archive/2026_08/`), single canonical runner `scripts/run_symmetric_v5_validation.py` (`scripts/research/run_v3_canonical_validation.py` shim)
 > - **Operational-parity note (2026-08-31):** the frozen `SYMMETRIC_FULL_T1` result above remains the historical reference. A separate current-policy comparator using runtime-sized observation context (`0.55` allocation, through `2026-07-30`) recorded `+76.4538%` total / Sharpe `0.571342`; it does not rewrite the frozen receipt or imply performance decay.
+> - **Current-parity receipt:** the clean deterministic R1 control and component hashes are tracked in `docs/equity_v3_current_parity_control_2026_08.md`.
 > - **Next:** operational PAPER reliability, execution observability, crypto research, infrastructure/deployment — no V4 or parameter sweep on the frozen lineage
 
 Automated multi-market Alpaca trading bot: dynamic universe discovery,

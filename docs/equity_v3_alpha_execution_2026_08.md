@@ -5,6 +5,10 @@ Status: research-only execution record; no strategy was registered, promoted, or
 
 This report records the local execution of the missions in the GPT Pro equity-return roadmap. A result marked `headline` is a valid same-run screen under the current parity implementation, but is not a promotion receipt until the complete validation contract and a clean committed rerun are available.
 
+The clean deterministic current-parity control generated after this report is
+tracked in `docs/equity_v3_current_parity_control_2026_08.md` (source commit
+`34a9a3f...`).
+
 ## Receipt boundary
 
 - Repository at execution start: `HEAD=97209e759d77ccc38c7225522adb9ac08f07e648`; the worktree was dirty because the parity implementation and research runners were the changes under test.

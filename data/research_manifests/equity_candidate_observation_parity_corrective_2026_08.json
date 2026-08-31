@@ -6,7 +6,7 @@
   "runtime_reads_artifacts": false,
   "automatic_promotion": false,
   "base_commit": "677274a29b882d8b60d63083370d89df0ecd2776",
-  "implementation_commit": "57b7ad20d93fe5fa90348b6509fed8ca5471db3c",
+  "implementation_commit": "cf9d669d4fe383cbc0e4946e8bfde86616a09544",
   "run_commit_parent_required": true,
   "dataset_hash_policy": "sha256 over file bytes with CRLF normalized to LF",
   "receipt_compactor": "scripts/compact_candidate_observation_parity_receipt.py",

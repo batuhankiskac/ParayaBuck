@@ -6,7 +6,7 @@
   "runtime_reads_artifacts": false,
   "automatic_promotion": false,
   "base_commit": "677274a29b882d8b60d63083370d89df0ecd2776",
-  "implementation_commit": "TO_BE_PINNED_BEFORE_RESULTS",
+  "implementation_commit": "584d1cd3b540cfdd9003a835b78b97f9a79393f1",
   "scope": "Corrective OCP-1 identity, provenance and execution-boundary parity only; no candidate economics or promotion verdict",
   "canonical_control": {
     "strategy_name": "equity_residual_momentum_v3",

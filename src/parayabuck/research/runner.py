@@ -503,6 +503,16 @@ class ResearchRunner:
             raise ValueError(
                 "persist_db=True with workers>1 would contend on SQLite; use workers=1 or persist_db=False"
             )
+        if job.fail_fast:
+            # Validate deterministic trial configuration before constructing a
+            # shared smoke universe.  An invalid execution override cannot be
+            # repaired by running the trial, and doing this after the shared
+            # preparation would make fail-fast latency depend on dataset size.
+            for trial in job.trials:
+                try:
+                    _apply_execution_overrides(config, trial.execution_overrides)
+                except Exception as exc:
+                    raise RuntimeError(f"Trial {trial.label} failed: {type(exc).__name__}: {exc}") from exc
         # Prepare invariants
         universe: Any = None
         prepared: Any = None

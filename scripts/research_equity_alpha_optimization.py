@@ -527,7 +527,11 @@ def universe_without(universe: PointInTimeUniverse, banned: frozenset[str]) -> P
                 score_breakdown=snapshot.score_breakdown,
                 eliminated=snapshot.eliminated,
                 sector_metadata_coverage=snapshot.sector_metadata_coverage,
-                observation_set=frozenset(snapshot.observation_set - banned),
+                observation_set=tuple(symbol for symbol in snapshot.observation_set if symbol not in banned),
+                maximum_stream_symbols=snapshot.maximum_stream_symbols,
+                pinned_symbols=tuple(symbol for symbol in snapshot.pinned_symbols if symbol not in banned),
+                observation_strategy_name=snapshot.observation_strategy_name,
+                observation_strategy_version=snapshot.observation_strategy_version,
             )
         )
     return PointInTimeUniverse(market=universe.market, snapshots=tuple(snapshots), methodology=universe.methodology)

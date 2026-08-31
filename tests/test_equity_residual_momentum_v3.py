@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import math
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from parayabuck.backtest.numeric_history import build_numeric_history
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import (
     EquityResidualMomentum1dV3,
@@ -249,6 +251,27 @@ def test_ranking_parity_missing_symbols() -> None:
     assert "SHORT" not in research_ranked
     assert "OUTU" not in research_ranked
     assert _ranked(_production_v3(), context) == research_ranked
+
+
+def test_numeric_history_cannot_widen_scoped_context() -> None:
+    paths = _paths()
+    full_history = {symbol: _bars(symbol, closes) for symbol, closes in paths.items()}
+    visible = {"SPY", "BBB", "CCC", "GATE12", "HYV"}
+    context = _context(paths, set(paths))
+    scoped = replace(
+        context,
+        history={symbol: bars for symbol, bars in full_history.items() if symbol in visible},
+    )
+    numeric = build_numeric_history(
+        [bar for bars in full_history.values() for bar in bars],
+        market=Market.EQUITY,
+        timeframe="1d",
+    )
+    strategy = _production_v3()
+    bar_rank = strategy.rank_candidates(scoped)
+    numeric_rank = strategy.rank_candidates(replace(scoped, numeric_history=numeric))
+    assert numeric_rank == bar_rank
+    assert "AAA" not in numeric_rank
 
 
 # --------------------------------------------------------------------------- #

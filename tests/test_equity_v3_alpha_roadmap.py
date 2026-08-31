@@ -132,6 +132,18 @@ def test_score_risk_uses_symbol_to_score_mapping() -> None:
     assert weights["A"] >= weights["B"] >= weights["C"]
 
 
+def test_deployable_six_keeps_v3_rank_and_targets_equal_ten_percent() -> None:
+    strategy = roadmap.build_strategy("deployable6_equal")
+    assert strategy.name == "equity_residual_momentum_deployable6_equal_v1"
+    assert strategy.param_int("top_n", 8) == 6
+
+    selected = tuple("ABCDEF")
+    weights = strategy._position_weights(selected, dict.fromkeys(selected, 0.2))
+    assert weights == dict.fromkeys(selected, 0.10)
+    assert sum(weights.values()) == pytest.approx(0.60)
+    assert strategy._weight_diagnostics[-1]["method"] == "equal_weight_deployable_six"
+
+
 def test_high_proximity_ignores_future_bar_and_reversal_uses_last_five() -> None:
     context = _context()
     symbol = "AAA"

@@ -240,6 +240,42 @@ def test_strategy_fallback_leaves_capacity_empty_for_young_or_stale_symbols() ->
     assert observation.source == "strategy_alpha"
 
 
+def test_strategy_ranked_stale_symbol_is_excluded_but_stale_pin_is_preserved() -> None:
+    class _Ranker:
+        name = "test_ranker"
+        minimum_history_bars = 3
+
+        @staticmethod
+        def rank_candidates(_context: PortfolioContext) -> tuple[str, ...]:
+            return ("STALE", "READY", "PIN")
+
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+
+    def series(symbol: str, days: tuple[int, ...]) -> tuple[Bar, ...]:
+        return tuple(_bar(symbol, start + timedelta(days=day), 100.0 + day, Market.EQUITY) for day in days)
+
+    observation = build_observation_set(
+        _Ranker(),  # type: ignore[arg-type]
+        {
+            "SPY": series("SPY", (0, 1, 2)),
+            "READY": series("READY", (0, 1, 2)),
+            "STALE": series("STALE", (0, 1, 1)),
+            "PIN": series("PIN", (0, 1, 1)),
+        },
+        ("SPY", "READY", "STALE", "PIN"),
+        market=Market.EQUITY,
+        timeframe="1d",
+        decision_timestamp=start + timedelta(days=2),
+        maximum_stream_symbols=3,
+        pinned_symbols=("SPY", "PIN"),
+    )
+
+    assert observation.observation_set == ("SPY", "PIN", "READY")
+    assert observation.ranked_pool == ("READY",)
+    assert observation.alpha_scored_count == 1
+    assert observation.source == "strategy_alpha"
+
+
 def test_observation_set_respects_capacity_and_rejects_overflow_pins() -> None:
     with pytest.raises(ValueError, match="exceed maximum_stream_symbols"):
         build_observation_set(

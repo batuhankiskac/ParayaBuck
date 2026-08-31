@@ -354,6 +354,26 @@ class RoadmapScoreRisk(RoadmapControl):
         return weights
 
 
+class RoadmapDeployable6Equal(RoadmapControl):
+    """M2 follow-up: exact V3 rank, top six, equal 10% pre-overlay targets.
+
+    The production risk overlay remains authoritative: the six 10% strategy
+    targets are scaled to the current 0.55 equity sleeve by the normal engine
+    path.  Only portfolio construction differs from the frozen V3 control.
+    """
+
+    name = "equity_residual_momentum_deployable6_equal_v1"
+    version = "1.0.0"
+    display_name = "Residual Momentum Deployable-Six Equal v1"
+
+    def _position_weights(self, selected: tuple[str, ...], residual_vols: dict[str, float]) -> dict[str, float]:
+        del residual_vols
+        cap = self.param_float("max_single_weight", 0.10)
+        weights = {symbol: cap for symbol in selected}
+        self._record_weight_diagnostic(selected, weights, method="equal_weight_deployable_six")
+        return weights
+
+
 class Roadmap52WeekHigh(RoadmapControl):
     """M6: completed close divided by its trailing 252-bar high."""
 
@@ -427,6 +447,7 @@ VARIANTS: dict[str, tuple[type[EquityResidualMomentum1dV3], dict[str, object]]] 
     "breadth": (RoadmapBreadth, {}),
     "cap_aware": (RoadmapCapAware, {}),
     "score_risk": (RoadmapScoreRisk, {}),
+    "deployable6_equal": (RoadmapDeployable6Equal, {"top_n": 6}),
     "52week": (Roadmap52WeekHigh, {}),
     "reversal": (RoadmapReversal, {}),
 }
@@ -693,7 +714,11 @@ def universe_without(universe: PointInTimeUniverse, banned: frozenset[str]) -> P
             score_breakdown=snapshot.score_breakdown,
             eliminated=snapshot.eliminated,
             sector_metadata_coverage=snapshot.sector_metadata_coverage,
-            observation_set=frozenset(snapshot.observation_set - banned),
+            observation_set=tuple(symbol for symbol in snapshot.observation_set if symbol not in banned),
+            maximum_stream_symbols=snapshot.maximum_stream_symbols,
+            pinned_symbols=tuple(symbol for symbol in snapshot.pinned_symbols if symbol not in banned),
+            observation_strategy_name=snapshot.observation_strategy_name,
+            observation_strategy_version=snapshot.observation_strategy_version,
         )
         for snapshot in universe.snapshots
     )
@@ -999,7 +1024,7 @@ def candidate_artifact(
         "variant": variant_id,
         "strategy_name": full_strategy.name,
         "strategy_class": type(full_strategy).__name__,
-        "parameters": dict(FROZEN_PARAMETERS),
+        "parameters": dict(full_strategy.parameter_tuple()),
         "full_period": stats,
         "concentration": concentration(full_result),
         "yearly_returns": yearly_returns(full_result),

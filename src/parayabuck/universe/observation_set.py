@@ -72,6 +72,8 @@ def build_observation_set(
     ranked: tuple[str, ...] = ()
     strategy_name = ""
     source = "no_ranker"
+    expected_latest: datetime | None = None
+    minimum_history = 0
     if strategy is not None:
         context = PortfolioContext(
             decision_timestamp=decision_timestamp,
@@ -92,8 +94,20 @@ def build_observation_set(
         require_product_universe(context, allow_static_context=True)
         ranked = tuple(strategy.rank_candidates(context))
         strategy_name = strategy.name
-        # Rankers must only ever return pool members; guard defensively.
-        ranked = tuple(symbol for symbol in ranked if symbol in available)
+        benchmark = "BTC/USD" if market == Market.CRYPTO else "SPY"
+        benchmark_history = history.get(benchmark, ())
+        expected_latest = benchmark_history[-1].timestamp if benchmark_history else None
+        minimum_history = strategy.minimum_history_bars
+        # Rankers must only ever return ready pool members. A stale name may
+        # still have enough history to receive an alpha rank, but streaming it
+        # would wedge every runtime decision at the complete-batch gate.
+        ranked = tuple(
+            symbol
+            for symbol in ranked
+            if symbol in available
+            and len(history.get(symbol, ())) >= minimum_history
+            and (expected_latest is None or history[symbol][-1].timestamp == expected_latest)
+        )
         source = "strategy_alpha" if ranked else "no_ranker"
     if len(ranked) < maximum_stream_symbols - len(reserved) and scanner_fallback:
         fallback_candidates = tuple(
@@ -102,16 +116,11 @@ def build_observation_set(
             if canonical_symbol(symbol, market) not in reserved and canonical_symbol(symbol, market) not in ranked
         )
         if strategy is not None:
-            benchmark = "BTC/USD" if market == Market.CRYPTO else "SPY"
-            benchmark_history = history.get(benchmark, ())
-            expected_latest = benchmark_history[-1].timestamp if benchmark_history else None
-            minimum_history = strategy.minimum_history_bars
             fallback_candidates = tuple(
                 symbol
                 for symbol in fallback_candidates
                 if len(history.get(symbol, ())) >= minimum_history
-                and expected_latest is not None
-                and history[symbol][-1].timestamp == expected_latest
+                and (expected_latest is None or history[symbol][-1].timestamp == expected_latest)
             )
         fill = fallback_candidates
         ranked = (*ranked, *fill)

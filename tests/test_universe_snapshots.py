@@ -84,6 +84,43 @@ def test_universe_hash_differs_for_different_methodology_or_members() -> None:
     assert hash_point_in_time_universe(different) != base_hash
 
 
+def test_universe_hash_commits_observation_order_and_capacity() -> None:
+    effective = datetime(2025, 1, 2, tzinfo=UTC)
+    members = frozenset({"SPY", "AAA", "BBB"})
+    base = UniverseSnapshot(
+        effective,
+        members,
+        observation_set=("SPY", "AAA", "BBB"),
+        maximum_stream_symbols=3,
+        pinned_symbols=("SPY",),
+        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_version="3.0.0",
+    )
+    reordered = UniverseSnapshot(
+        effective,
+        members,
+        observation_set=("SPY", "BBB", "AAA"),
+        maximum_stream_symbols=3,
+        pinned_symbols=("SPY",),
+        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_version="3.0.0",
+    )
+    resized = UniverseSnapshot(
+        effective,
+        members,
+        observation_set=base.observation_set,
+        maximum_stream_symbols=4,
+        pinned_symbols=("SPY",),
+        observation_strategy_name="equity_residual_momentum_v3",
+        observation_strategy_version="3.0.0",
+    )
+    base_universe = PointInTimeUniverse(Market.EQUITY, (base,), "same")
+    reordered_universe = PointInTimeUniverse(Market.EQUITY, (reordered,), "same")
+    resized_universe = PointInTimeUniverse(Market.EQUITY, (resized,), "same")
+    assert hash_point_in_time_universe(base_universe) != hash_point_in_time_universe(reordered_universe)
+    assert hash_point_in_time_universe(base_universe) != hash_point_in_time_universe(resized_universe)
+
+
 def test_verify_persisted_universe_rejects_silent_recompute() -> None:
     history = _crypto_history()
     universe = build_crypto_point_in_time_universe(history, maximum_symbols=3)

@@ -17,6 +17,7 @@ from parayabuck.config import (
 from parayabuck.core.models import Bar, Market
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import timeframe_duration
+from parayabuck.portfolio.base import PortfolioStrategy
 from parayabuck.universe.crypto_scanner import (
     CryptoScannerResult,
     CryptoUniverseScanner,
@@ -44,7 +45,13 @@ class UniverseSnapshot:
     # decision timestamp, exactly like the live runtime requires its stream.
     # Empty means the legacy snapshot carried no observation set and the
     # gate falls back to the full pool.
-    observation_set: frozenset[str] = frozenset()
+    # Order is part of the deployment contract: references/pins lead, then
+    # strategy-alpha rank. Managed pins may later displace the ranked tail.
+    observation_set: tuple[str, ...] = ()
+    maximum_stream_symbols: int = 0
+    pinned_symbols: tuple[str, ...] = ()
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,7 +93,11 @@ class PointInTimeUniverse:
                 {
                     "effective_at": snapshot.effective_at.isoformat(),
                     "symbols": sorted(snapshot.symbols),
-                    "observation_set": sorted(snapshot.observation_set),
+                    "observation_set": list(snapshot.observation_set),
+                    "maximum_stream_symbols": snapshot.maximum_stream_symbols,
+                    "pinned_symbols": list(snapshot.pinned_symbols),
+                    "observation_strategy_name": snapshot.observation_strategy_name,
+                    "observation_strategy_version": snapshot.observation_strategy_version,
                     "scanner_version": snapshot.scanner_version,
                     "config_digest": snapshot.config_digest,
                     "candidate_count": snapshot.candidate_count,
@@ -144,13 +155,16 @@ def build_trailing_point_in_time_universe(
     target_shortlist: int | None = None,
     equity_config: EquityUniverseConfig | None = None,
     crypto_config: CryptoUniverseConfig | None = None,
+    observation_strategy: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
     """Run the production scanner policy on strictly trailing historical metrics.
 
     ``target_shortlist`` mirrors the live equity pipeline's Stage-A gate: the
     trailing median-dollar-volume leaders (up to the target) are the only
     symbols that reach the scanner, so a broad downloaded universe is
-    evaluated exactly like the live market is.
+    evaluated exactly like the live market is. When ``observation_strategy``
+    is supplied, the scanner's broad eligible pool is then ranked through the
+    shared PAPER observation builder using strictly prior bars.
     """
     if maximum_symbols <= 0:
         raise ValueError("maximum_symbols must be positive")
@@ -182,6 +196,12 @@ def build_trailing_point_in_time_universe(
     # the trailing window once and leaves it once, so a multi-year broad
     # universe stays O(bars) instead of O(timestamps * bars).
     window: dict[str, deque[Bar]] = {}
+    # The scanner only needs its short liquidity/quality window. PAPER's
+    # observation-set alpha needs the strategy's full warmup, so retain a
+    # separate PIT history. Bars enter only after their timestamp is strictly
+    # before the snapshot boundary; the current/future bar can never leak.
+    observation_history: dict[str, deque[Bar]] = {}
+    observation_history_bars = observation_strategy.minimum_history_bars if observation_strategy is not None else 0
     add_index = 0
     total = len(selected_bars)
     for timestamp in timestamps:
@@ -190,6 +210,11 @@ def build_trailing_point_in_time_universe(
         while add_index < total and selected_bars[add_index].timestamp < timestamp:
             bar = selected_bars[add_index]
             add_index += 1
+            if observation_history_bars:
+                observation_history.setdefault(
+                    canonical_symbol(bar.symbol, market),
+                    deque(maxlen=observation_history_bars),
+                ).append(bar)
             if bar.timestamp < cutoff:
                 continue
             window.setdefault(canonical_symbol(bar.symbol, market), deque()).append(bar)
@@ -308,19 +333,43 @@ def build_trailing_point_in_time_universe(
         selected = tuple(symbol for symbol in result.selected_symbols if symbol in by_symbol)
         if not selected and not result.candidate_symbols:
             continue
-        raw_observation = getattr(result, "observation_set", ())
-        observation = frozenset(symbol for symbol in raw_observation if symbol in by_symbol)
+        raw_observation = tuple(symbol for symbol in getattr(result, "observation_set", ()) if symbol in by_symbol)
+        observation = raw_observation
+        observation_strategy_name = ""
+        observation_strategy_version = ""
+        if observation_strategy is not None:
+            from parayabuck.universe.observation_set import build_observation_set
+
+            alpha_history = {symbol: tuple(observation_history.get(symbol, ())) for symbol in selected}
+            ranked_observation = build_observation_set(
+                observation_strategy,
+                alpha_history,
+                selected,
+                market=market,
+                timeframe=observation_strategy.timeframe,
+                decision_timestamp=data_timestamp,
+                maximum_stream_symbols=maximum_symbols,
+                pinned_symbols=tuple(symbol for symbol in pinned if symbol in by_symbol),
+                scanner_fallback=raw_observation,
+            )
+            observation = ranked_observation.observation_set
+            observation_strategy_name = observation_strategy.name
+            observation_strategy_version = observation_strategy.version
         snapshots.append(
             UniverseSnapshot(
-                timestamp,
-                frozenset(selected),
-                result.scanner_version,
-                result.config_digest,
-                len(result.candidate_symbols),
-                result.score_breakdown,
-                result.eliminated,
-                getattr(result, "sector_metadata_coverage", 1.0),
-                observation,
+                effective_at=timestamp,
+                symbols=frozenset(selected),
+                scanner_version=result.scanner_version,
+                config_digest=result.config_digest,
+                candidate_count=len(result.candidate_symbols),
+                score_breakdown=result.score_breakdown,
+                eliminated=result.eliminated,
+                sector_metadata_coverage=getattr(result, "sector_metadata_coverage", 1.0),
+                observation_set=observation,
+                maximum_stream_symbols=maximum_symbols,
+                pinned_symbols=tuple(symbol for symbol in pinned if symbol in by_symbol),
+                observation_strategy_name=observation_strategy_name,
+                observation_strategy_version=observation_strategy_version,
             )
         )
     return PointInTimeUniverse(
@@ -371,6 +420,16 @@ def hash_point_in_time_universe(universe: PointInTimeUniverse) -> str:
         digest.update(snapshot.effective_at.isoformat().encode())
         digest.update(b"\n")
         digest.update("|".join(sorted(snapshot.symbols)).encode())
+        digest.update(b"\n")
+        digest.update("|".join(snapshot.observation_set).encode())
+        digest.update(b"\n")
+        digest.update(str(snapshot.maximum_stream_symbols).encode())
+        digest.update(b"\n")
+        digest.update("|".join(snapshot.pinned_symbols).encode())
+        digest.update(b"\n")
+        digest.update(snapshot.observation_strategy_name.encode())
+        digest.update(b"\n")
+        digest.update(snapshot.observation_strategy_version.encode())
         digest.update(b"\n")
         digest.update(snapshot.scanner_version.encode())
         digest.update(snapshot.config_digest.encode())

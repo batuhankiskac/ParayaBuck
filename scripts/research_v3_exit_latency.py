@@ -1227,7 +1227,7 @@ def jackknife_for_candidate(config, candidate_id, universe, bars, actions, contr
             snaps = []
             for snap in univ.snapshots:
                 filtered_symbols = frozenset(s for s in snap.symbols if s not in banned)
-                filtered_obs = frozenset(s for s in snap.observation_set if s not in banned)
+                filtered_obs = tuple(s for s in snap.observation_set if s not in banned)
                 snaps.append(replace(snap, symbols=filtered_symbols, observation_set=filtered_obs))
             return replace(univ, snapshots=tuple(snaps))
 
@@ -1248,7 +1248,7 @@ def jackknife_for_candidate(config, candidate_id, universe, bars, actions, contr
             snaps = []
             for snap in univ.snapshots:
                 fs = frozenset(s for s in snap.symbols if s not in banned)
-                fo = frozenset(s for s in snap.observation_set if s not in banned)
+                fo = tuple(s for s in snap.observation_set if s not in banned)
                 snaps.append(rep2(snap, symbols=fs, observation_set=fo))
             return rep2(univ, snapshots=tuple(snaps))
 

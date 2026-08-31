@@ -122,14 +122,26 @@ def build_product_universe(
 ) -> PointInTimeUniverse:
     """Build the point-in-time scanner universe for a product backtest.
 
-    The universe depends only on the bar set and scanner configuration, never
-    on strategy parameters, so optimizer trials can build it once and reuse
-    it across every parameter combination. ``timeframe`` defaults to the
-    configured strategy's timeframe and must be passed when a run overrides
-    the strategy.
+    Eligible-pool membership depends on the bar set and scanner policy. Its
+    streamed observation membership is ranked by the configured product
+    strategy, matching PAPER preflight. Optimizer trials deliberately reuse
+    that deployed/configured observation basis rather than letting each
+    research parameter arm redefine what PAPER would have streamed.
+
+    ``timeframe`` defaults to the configured strategy's timeframe and must be
+    passed when a run overrides the strategy.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
-    strategy = portfolio_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+    strategy = portfolio_strategy_from(
+        selection.name,
+        selection.parameters,
+        # The configured strategy owns the observation-ranker timeframe. The
+        # explicit ``timeframe`` argument filters the bars for a caller's
+        # prepared run; passing it into the factory would make a synthetic
+        # runtime override fail before the test/runtime can supply its own
+        # validated strategy identity.
+        timeframe=selection.timeframe,
+    )
     available = [
         bar
         for bar in bars
@@ -139,7 +151,7 @@ def build_product_universe(
     ]
     if market == Market.EQUITY:
         equity_universe = config.universe.equity
-        pinned = equity_universe.reference_symbols
+        pinned = (*equity_universe.reference_symbols, *equity_universe.inverse_trade_symbols)
         maximum_symbols = equity_universe.maximum_stream_symbols
         lookback_days = 60
         minimum_price = equity_universe.scanner.minimum_price
@@ -166,6 +178,7 @@ def build_product_universe(
         target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
         equity_config=(config.universe.equity if market == Market.EQUITY else None),
         crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
+        observation_strategy=strategy,
     )
 
 
@@ -384,9 +397,9 @@ def optimize_grid(
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
-    # The historical universe depends only on the bar set and scanner policy,
-    # never on strategy parameters: build it once per window and reuse it for
-    # every combination instead of rebuilding (and re-ranking) it per trial.
+    # The eligible pool and deployed/configured observation basis are
+    # trial-invariant: build them once per window and reuse them so candidate
+    # parameters cannot silently redefine the PAPER stream membership.
     train_universe = build_product_universe(config, bars, market=market, end=train_end)
     # Resolve the signal timeframe exactly like run_product_backtest does
     # (deprecated strategy.timeframe key may be None in production config:

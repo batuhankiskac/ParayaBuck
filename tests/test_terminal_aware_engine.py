@@ -8,6 +8,7 @@ import pytest
 
 from parayabuck.backtest.portfolio_engine import TargetPortfolio, TargetWeight
 from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine, TerminalInfo
+from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 
@@ -132,6 +133,42 @@ def test_t0_stale_no_removal():
     # Position may still be held (stale)
     # Check that if held, it remains
     # No assertion on removal for T0
+
+
+def test_terminal_snapshot_pin_expires_only_after_last_bar():
+    last_bar = datetime(2020, 1, 5, tzinfo=UTC)
+    snapshot = UniverseSnapshot(
+        effective_at=last_bar - timedelta(days=5),
+        symbols=frozenset({"AAA", "BBB", "SPY"}),
+        observation_set=("SPY", "AAA", "BBB"),
+        maximum_stream_symbols=2,
+        pinned_symbols=("SPY", "AAA"),
+    )
+    universe = PointInTimeUniverse(Market.EQUITY, (snapshot,), "test")
+    info = TerminalInfo(
+        entity_id="id_aaa",
+        symbol="AAA",
+        display_symbol="AAA",
+        last_bar=last_bar,
+        terminal_event_class="POSSIBLE_DELISTING",
+        evidence_class="B",
+        should_haircut=True,
+    )
+    engine = TerminalAwareResearchEngine(
+        DummyStrategy(),
+        DummyPolicy(),
+        terminal_map={"AAA": info},
+        policy="T1",
+        universe=universe,
+        universe_version="test",
+    )
+
+    assert engine._effective_observation_symbols(last_bar) == ("SPY", "AAA")
+    assert engine._effective_observation_symbols(last_bar + timedelta(days=1)) == ("SPY", "BBB")
+
+    setattr(engine, "terminal_map", {"AAA": {"last_bar": last_bar}})
+    assert engine._effective_observation_symbols(last_bar) == ("SPY", "AAA")
+    assert engine._effective_observation_symbols(last_bar + timedelta(days=1)) == ("SPY", "BBB")
 
 
 def test_t2_t3_proceeds():

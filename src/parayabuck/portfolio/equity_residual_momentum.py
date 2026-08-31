@@ -318,9 +318,12 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         # residuals_by_symbol may hold ndarrays for V3 consensus
         residuals_by_symbol: dict[str, Any] = {}
         if universe_set is not None:
-            # Numeric view fallback: history symbols may include via view.symbols()
-            # but we iterate universe directly
-            for symbol in sorted(universe_set):
+            # ``PortfolioContext.history`` is the canonical visibility
+            # boundary. NumericHistoryView is only an immutable cache and
+            # must never widen a runtime-sized observation context back to
+            # the broad eligible pool.
+            candidate_symbols = universe_set.intersection(context.history)
+            for symbol in sorted(candidate_symbols):
                 if symbol in excluded:
                     continue
                 stock_series = numeric_view.series(symbol)
@@ -371,9 +374,9 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         else:
             # Static/permissive universe: iterate view symbols and check in_universe
             try:
-                symbols = sorted(numeric_view.series_by_symbol.keys())
+                symbols = sorted(set(numeric_view.series_by_symbol).intersection(context.history))
             except AttributeError:
-                symbols = sorted(numeric_view.symbols())
+                symbols = sorted(set(numeric_view.symbols()).intersection(context.history))
             in_universe = context.in_universe
             for symbol in symbols:
                 if symbol in excluded:

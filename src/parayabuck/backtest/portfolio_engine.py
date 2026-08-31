@@ -962,7 +962,7 @@ class PortfolioBacktestEngine:
         # not for every pool member. A halted/absent pool member must not
         # block the whole market (the strategy skips gapped names internally);
         # snapshots without an observation set fall back to the full pool.
-        expected_symbols = self._universe_observation_symbols(timestamp)
+        expected_symbols = self._effective_observation_symbols(timestamp)
         if expected_symbols is not None and any(
             symbol not in context.history
             or not context.history[symbol]
@@ -1100,10 +1100,14 @@ class PortfolioBacktestEngine:
         # trailing window, so the benchmark dict must stay full to preserve
         # every aligned pair (and therefore the exact scores).
         benchmark_key = "BTC/USD" if self.strategy.market == Market.CRYPTO else "SPY"
+        visible_symbols = self._effective_observation_symbols(timestamp)
+        visible = set(visible_symbols) if visible_symbols is not None else None
         history: dict[str, tuple[Bar, ...]] = {}
         prices: dict[str, float] = {}
         for (symbol, _timeframe), bars in self._history.items():
             if not bars:
+                continue
+            if visible is not None and symbol not in visible:
                 continue
             # FAST PATH: _history lists are maintained timestamp-ascending and,
             # during a backtest, all ingested bars are <= decision timestamp
@@ -1294,20 +1298,68 @@ class PortfolioBacktestEngine:
             return None
         return tuple(sorted(snapshots[index - 1].symbols))
 
-    def _universe_observation_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
-        """The snapshot's STREAMED OBSERVATION SET (live parity for the
-        completeness gate), falling back to the full pool for snapshots that
-        carry no observation set."""
+    def _effective_observation_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
+        """Return the runtime-sized symbol context for this decision.
+
+        Product snapshots carry the ordered pre-session observation set and
+        its stream capacity. References plus managed positions/open orders
+        are reserved first, then the current observation membership fills the
+        remaining slots. Pins affect observability only; PIT eligibility is
+        still owned by ``PointInTimeUniverse.contains`` so a removed holding
+        can be marked and exited without becoming an alpha candidate.
+
+        Legacy snapshots without an explicit capacity retain the historical
+        full-context behavior; their completeness gate still falls back to
+        the snapshot observation/full pool below.
+        """
         snapshots = getattr(self.universe, "snapshots", ())
         if not snapshots:
             return None
         index = bisect_right(snapshots, timestamp, key=lambda item: item.effective_at)
         if index == 0:
             return None
-        observation = getattr(snapshots[index - 1], "observation_set", None)
-        if observation:
-            return tuple(sorted(observation))
-        return tuple(sorted(snapshots[index - 1].symbols))
+        snapshot = snapshots[index - 1]
+        terminal_map = getattr(self, "terminal_map", {}) or {}
+
+        def is_active(symbol: str) -> bool:
+            terminal = terminal_map.get(symbol)
+            if terminal is None:
+                return True
+            last_bar = terminal.get("last_bar") if isinstance(terminal, dict) else getattr(terminal, "last_bar", None)
+            return last_bar is None or last_bar >= timestamp
+
+        observation = tuple(symbol for symbol in (getattr(snapshot, "observation_set", ()) or ()) if is_active(symbol))
+        capacity = int(getattr(snapshot, "maximum_stream_symbols", 0) or 0)
+        if capacity <= 0:
+            if observation:
+                return tuple(sorted(observation))
+            return tuple(sorted(symbol for symbol in snapshot.symbols if is_active(symbol)))
+
+        references = tuple(symbol for symbol in (getattr(snapshot, "pinned_symbols", ()) or ()) if is_active(symbol))
+        managed = tuple(
+            dict.fromkeys(
+                (
+                    *(symbol for symbol, position in self._positions.items() if position.qty > 0 and is_active(symbol)),
+                    *(order.symbol for order in self._pending if is_active(order.symbol)),
+                )
+            )
+        )
+        reserved = tuple(dict.fromkeys((*references, *managed)))
+        if len(reserved) > capacity:
+            raise RuntimeError("Managed pins and references exceed the historical stream capacity")
+        base = observation or tuple(sorted(symbol for symbol in snapshot.symbols if is_active(symbol)))
+        # TerminalAwareResearchEngine supplies a PIT lifecycle map for
+        # inactive entities.  Once an entity has reached its final observed
+        # bar, the live broker would no longer report it as an active
+        # stream member; retaining it in the historical completeness gate
+        # would wedge every later decision on a bar that can never arrive.
+        # Keep the symbol on its terminal bar (the terminal wrapper closes a
+        # held position after that cycle), then remove it for later cycles.
+        # Equity runtime stores active membership as a set and restores it in
+        # deterministic symbol order when managed pins are applied. Crypto's
+        # observation ordering remains configuration/alpha ordered.
+        tail = tuple(sorted(base)) if self.strategy.market == Market.EQUITY and managed else base
+        return tuple(dict.fromkeys((*reserved, *tail)))[:capacity]
 
     def _close_position(self, position: _Position, bar: Bar) -> None:
         if position.qty <= 0:

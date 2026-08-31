@@ -57,6 +57,12 @@
    "base": "RoadmapScoreRisk",
    "overrides": {}
   },
+  "deployable6_equal": {
+   "base": "RoadmapDeployable6Equal",
+   "overrides": {
+    "top_n": 6
+   }
+  },
   "52week": {
    "base": "Roadmap52WeekHigh",
    "overrides": {}
@@ -102,12 +108,13 @@
   "52week.json": "e516fcaff979df1100a9d20fd194017e4f2b3fc6a57a526b8c762a43ca381f2c",
   "breadth.json": "76b009e0ae0cdd451f4be4694199e52a0befa87fc271f3eabe37ccb891cd5b25",
   "cap_aware.json": "7b022e9f5e45346043968303b6ba55745e5fafb878586d30d66aaff73c9d88c2",
-  "control.json": "57663221e7ab72a6d466514a3e7c6472a44ff7b4c11ca6bb067b96e327847414",
-  "fold_deltas.json": "d97d9fd6a4d3bac635aee286cc5686c970cb1dad5a7ca4cd9821a6f788b36aeb",
+  "control.json": "f8800154540b11bddad6a9a44b334517aea0c96d31457d13e3a50b281befb1ba",
+  "deployable6_equal.json": "42aeff170fb11fbdd28abe703a8644603f1c6d3591bafe387616374746c2dd8e",
+  "fold_deltas.json": "405167d0c8ffb1ed8de7276dc97d6b726e1f149e1ffc99665400ed988ba87746",
   "hysteresis.json": "b7cdee4de54d950d1e4ede9f72d342084e03741a32863acbf02359f660661146",
-  "path.json": "148a4d7da89c37dc93c46899e57720b873d457e1d7dc131bbd7d67867d712348",
+  "path.json": "be597954a710f89e3d21df216580ebef44d56277e425d7851e3ea06b00d0eca6",
   "reversal.json": "ee945e0e97080b4467f82e7012ebe96e24a6fb60cc314795051c23d984ae8a35",
   "score_risk.json": "54d78867bbee4c25020c4d572ee416740dd8394bdee0b85c7419f25a6938a5dd",
-  "summary.json": "663e8e497de1c2384b6c4b729cde4f4c4edc649535edd119abaec974c54ac319"
+  "summary.json": "1f688b7bf7fd35b81e039b118f26fa1c3998df85d798b7a6b11a3aafef58f911"
  }
 }

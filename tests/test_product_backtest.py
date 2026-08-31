@@ -9,10 +9,15 @@ from types import SimpleNamespace
 import pytest
 
 import parayabuck.cli as cli_module
-from parayabuck.backtest.product import optimize_grid, ranking_score, run_product_backtest
+from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
+from parayabuck.backtest.product import build_product_universe, optimize_grid, ranking_score, run_product_backtest
+from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
 from parayabuck.config import Config, StrategyConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
+from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+from parayabuck.portfolio.models import PortfolioState
+from parayabuck.universe.observation_set import build_observation_set
 
 
 def _bars(days: int = 420) -> list[Bar]:
@@ -78,6 +83,80 @@ def test_product_backtest_uses_production_strategy_risk_and_next_open_fills(tmp_
     universe = json.loads((tmp_path / "reports" / run.run_id / "universe.json").read_text())
     assert 0.0 <= universe["sector_metadata_coverage"] <= 1.0
     assert universe["sector_metadata_coverage"] == report["summary"]["sector_metadata_coverage"]
+
+
+def test_product_universe_observation_uses_configured_strategy_alpha(tmp_path) -> None:
+    config = _config(tmp_path)
+    bars = _bars()
+    universe = build_product_universe(config, bars, market=Market.EQUITY)
+    snapshot = universe.snapshots[-1]
+    strategy = portfolio_strategy_from(
+        config.strategy.equity.name,
+        config.strategy.equity.parameters,
+        timeframe=config.strategy.equity.timeframe,
+    )
+    history = {
+        symbol: tuple(bar for bar in bars if bar.symbol == symbol and bar.timestamp < snapshot.effective_at)
+        for symbol in snapshot.symbols
+    }
+    data_timestamp = max(bar.timestamp for series in history.values() for bar in series)
+    direct = build_observation_set(
+        strategy,
+        history,
+        tuple(sorted(snapshot.symbols)),
+        market=Market.EQUITY,
+        timeframe=strategy.timeframe,
+        decision_timestamp=data_timestamp,
+        maximum_stream_symbols=snapshot.maximum_stream_symbols,
+        pinned_symbols=snapshot.pinned_symbols,
+    )
+    assert direct.alpha_scored_count > 0
+    assert snapshot.observation_strategy_name == strategy.name
+    assert snapshot.observation_strategy_version == strategy.version
+    assert snapshot.observation_set[: len(direct.observation_set)] == direct.observation_set
+
+
+def test_backtest_context_pins_managed_symbol_within_observation_capacity(tmp_path) -> None:
+    config = _config(tmp_path)
+    strategy = portfolio_strategy_from(
+        config.strategy.equity.name,
+        config.strategy.equity.parameters,
+        timeframe=config.strategy.equity.timeframe,
+    )
+    timestamp = datetime(2025, 1, 2, tzinfo=UTC)
+    snapshot = UniverseSnapshot(
+        timestamp,
+        frozenset({"SPY", "A", "B", "C"}),
+        observation_set=("SPY", "A", "B", "C"),
+        maximum_stream_symbols=4,
+        pinned_symbols=("SPY",),
+    )
+    universe = PointInTimeUniverse(Market.EQUITY, (snapshot,), "test")
+    state = PortfolioState(
+        strategy.name,
+        strategy.version,
+        holdings={"HELD": 1.0},
+        avg_prices={"HELD": 100.0},
+        cash=99_900.0,
+        last_prices={"HELD": 100.0},
+    )
+    engine = PortfolioBacktestEngine(
+        strategy,
+        rebalance_policy_for(strategy),
+        universe=universe,
+        universe_version="test",
+        state=state,
+    )
+    for symbol in ("SPY", "A", "B", "C", "HELD"):
+        bar = Bar(timestamp, symbol, "1d", 100, 101, 99, 100, 1_000_000, Market.EQUITY)
+        engine._history[(symbol, "1d")] = [bar]
+        engine._last_price[symbol] = 100.0
+
+    assert engine._effective_observation_symbols(timestamp) == ("SPY", "HELD", "A", "B")
+    context = engine._build_context(timestamp)
+    assert set(context.history) == {"SPY", "HELD", "A", "B"}
+    assert context.holdings == {"HELD": 1.0}
+    assert not context.in_universe("HELD")
 
 
 def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:

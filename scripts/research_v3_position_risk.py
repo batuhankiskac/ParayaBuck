@@ -1339,7 +1339,7 @@ def jackknife_for_candidate(config, candidate_id, universe, bars, actions) -> di
         snaps = []
         for snap in univ.snapshots:
             filtered = frozenset(s for s in snap.symbols if s not in banned)
-            filtered_obs = frozenset(s for s in snap.observation_set if s not in banned)
+            filtered_obs = tuple(s for s in snap.observation_set if s not in banned)
             snaps.append(replace(snap, symbols=filtered, observation_set=filtered_obs))
         return replace(univ, snapshots=tuple(snaps))
 

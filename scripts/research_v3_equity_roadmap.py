@@ -27,7 +27,7 @@ import random
 import statistics
 import sys
 from bisect import bisect_left, bisect_right
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -43,6 +43,10 @@ from run_symmetric_v5_validation import (  # noqa: E402
 )
 
 from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history  # noqa: E402
+from parayabuck.backtest.observation_parity import (  # noqa: E402
+    assert_strategy_identity,
+    strategy_identity,
+)
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult  # noqa: E402
 from parayabuck.backtest.product import build_product_universe  # noqa: E402
 from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine, TerminalInfo  # noqa: E402
@@ -63,7 +67,7 @@ from parayabuck.portfolio import (  # noqa: E402
     rebalance_policy_for,
     supported_portfolio_strategies,
 )
-from parayabuck.portfolio.base import PortfolioContext  # noqa: E402
+from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy  # noqa: E402
 from parayabuck.portfolio.equity_residual_momentum_v3 import (  # noqa: E402
     _compounded,
     multi_horizon_consensus,
@@ -465,6 +469,11 @@ class PreparedWindow:
     numeric_history: NumericHistoryView
     universe: PointInTimeUniverse
     universe_version: str
+    observation_basis: str = "configured"
+    observation_strategy_name: str = ""
+    observation_strategy_version: str = ""
+    observation_strategy_timeframe: str = ""
+    observation_strategy_parameter_digest: str = ""
 
 
 def fold_windows() -> list[tuple[str, datetime, datetime]]:
@@ -504,6 +513,9 @@ def prepare_window(
     key: str,
     start: datetime | None,
     end: datetime,
+    observation_strategy_factory: Callable[[], PortfolioStrategy] | None = None,
+    execution_strategy_factory: Callable[[], PortfolioStrategy] | None = None,
+    observation_basis: str | None = None,
 ) -> PreparedWindow:
     available_all = _bar_slice(bars, None if start is None else start - timedelta(days=400), end)
     filtered = [bar for bar in available_all if start is None or bar.timestamp >= start]
@@ -512,13 +524,47 @@ def prepare_window(
     warmup = sorted(PortfolioBacktestEngine._deduplicate(warmup), key=lambda bar: (bar.timestamp, bar.symbol))
     prepared = (ordered, ordered)
     numeric = build_numeric_history([*warmup, *ordered], market=Market.EQUITY, timeframe="1d")
-    universe = build_product_universe(
-        config,
-        [*warmup, *ordered],
-        market=Market.EQUITY,
-        end=end,
-        timeframe="1d",
-    )
+    if observation_basis not in {None, "configured", "candidate_owned"}:
+        raise ValueError("observation_basis must be configured or candidate_owned")
+    observation_strategy: PortfolioStrategy | None = None
+    identity: dict[str, object] | None = None
+    if observation_strategy_factory is not None:
+        if execution_strategy_factory is None:
+            raise ValueError("candidate-owned observation preparation requires a separate execution_strategy_factory")
+        observation_strategy = observation_strategy_factory()
+        execution_strategy = execution_strategy_factory()
+        assert_strategy_identity(observation_strategy, execution_strategy)
+        identity = strategy_identity(observation_strategy)
+        effective_basis = observation_basis or "candidate_owned"
+        if effective_basis != "candidate_owned":
+            raise ValueError("an observation_strategy_factory requires observation_basis='candidate_owned'")
+    else:
+        if execution_strategy_factory is not None:
+            # X|C research is intentionally allowed: a caller may keep the
+            # configured observation basis while executing an explicit
+            # candidate. Identity parity is required only for X|X.
+            if not isinstance(execution_strategy_factory(), PortfolioStrategy):
+                raise TypeError("execution_strategy_factory must return a PortfolioStrategy")
+        effective_basis = observation_basis or "configured"
+        if effective_basis != "configured":
+            raise ValueError("candidate_owned observation_basis requires an observation_strategy_factory")
+    if observation_strategy is not None:
+        universe = build_product_universe(
+            config,
+            [*warmup, *ordered],
+            market=Market.EQUITY,
+            end=end,
+            timeframe="1d",
+            observation_strategy_override=observation_strategy,
+        )
+    else:
+        universe = build_product_universe(
+            config,
+            [*warmup, *ordered],
+            market=Market.EQUITY,
+            end=end,
+            timeframe="1d",
+        )
     version = hash_point_in_time_universe(universe)
     if not universe.snapshots:
         raise RuntimeError(f"PIT universe empty for window {key}")
@@ -533,6 +579,13 @@ def prepare_window(
         numeric_history=numeric,
         universe=universe,
         universe_version=version,
+        observation_basis=effective_basis,
+        observation_strategy_name=str(identity["name"]) if identity is not None else "",
+        observation_strategy_version=str(identity["version"]) if identity is not None else "",
+        observation_strategy_timeframe=str(identity["timeframe"]) if identity is not None else "",
+        observation_strategy_parameter_digest=(
+            str(identity["parameter_digest_sha256"]) if identity is not None else ""
+        ),
     )
 
 
@@ -587,8 +640,22 @@ def run_case(
     terminal_map: Mapping[str, TerminalInfo],
     actions: Sequence[CorporateAction],
     cost_multiplier: float = 1.0,
+    execution_strategy_factory: Callable[[], PortfolioStrategy] | None = None,
 ) -> tuple[PortfolioBacktestResult, EquityResidualMomentum1dV3]:
-    strategy = build_strategy(variant_id)
+    strategy = execution_strategy_factory() if execution_strategy_factory is not None else build_strategy(variant_id)
+    if not isinstance(strategy, PortfolioStrategy):
+        raise TypeError("execution_strategy_factory must return a PortfolioStrategy")
+    if window.observation_basis == "candidate_owned":
+        identity = strategy_identity(strategy)
+        expected = {
+            "name": window.observation_strategy_name,
+            "version": window.observation_strategy_version,
+            "timeframe": window.observation_strategy_timeframe,
+            "parameter_digest_sha256": window.observation_strategy_parameter_digest,
+        }
+        for field, value in expected.items():
+            if identity[field] != value:
+                raise ValueError(f"Prepared candidate observation/execution {field} mismatch")
     engine = make_engine(config, strategy, window, terminal_map=terminal_map, cost_multiplier=cost_multiplier)
     result = engine.run(
         window.filtered,

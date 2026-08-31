@@ -27,6 +27,7 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+from parayabuck.portfolio.base import PortfolioStrategy
 
 try:
     from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history
@@ -119,6 +120,7 @@ def build_product_universe(
     market: Market,
     end: datetime | None = None,
     timeframe: str | None = None,
+    observation_strategy_override: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
     """Build the point-in-time scanner universe for a product backtest.
 
@@ -129,7 +131,14 @@ def build_product_universe(
     research parameter arm redefine what PAPER would have streamed.
 
     ``timeframe`` defaults to the configured strategy's timeframe and must be
-    passed when a run overrides the strategy.
+    passed when a run overrides the strategy. ``observation_strategy_override``
+    is an explicit research/testing hook: when supplied, it replaces only the
+    alpha ranker used to build the streamed observation set. Scanner
+    eligibility, pins, capacity, costs, risk and execution remain owned by the
+    configured product policy. The override must be a
+    :class:`PortfolioStrategy` for the requested market and the selected
+    backtest timeframe. ``None`` preserves the configured-product behavior
+    byte-for-byte.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(
@@ -142,12 +151,22 @@ def build_product_universe(
         # validated strategy identity.
         timeframe=selection.timeframe,
     )
+    selected_timeframe = timeframe or strategy.timeframe
+    if observation_strategy_override is not None:
+        if not isinstance(observation_strategy_override, PortfolioStrategy):
+            raise TypeError("observation_strategy_override must be a PortfolioStrategy")
+        if observation_strategy_override.market != market:
+            raise ValueError(f"observation_strategy_override market must match the requested market ({market.value})")
+        if observation_strategy_override.timeframe != selected_timeframe:
+            raise ValueError(
+                "observation_strategy_override timeframe must match the selected backtest timeframe "
+                f"({selected_timeframe})"
+            )
+    observation_strategy = observation_strategy_override or strategy
     available = [
         bar
         for bar in bars
-        if bar.market == market
-        and bar.timeframe == (timeframe or strategy.timeframe)
-        and (end is None or bar.timestamp <= end)
+        if bar.market == market and bar.timeframe == selected_timeframe and (end is None or bar.timestamp <= end)
     ]
     if market == Market.EQUITY:
         equity_universe = config.universe.equity
@@ -178,7 +197,7 @@ def build_product_universe(
         target_shortlist=(equity_universe.target_shortlist if market == Market.EQUITY else None),
         equity_config=(config.universe.equity if market == Market.EQUITY else None),
         crypto_config=(config.universe.crypto if market == Market.CRYPTO else None),
-        observation_strategy=strategy,
+        observation_strategy=observation_strategy,
     )
 
 

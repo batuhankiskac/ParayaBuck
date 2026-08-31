@@ -28,7 +28,7 @@ import statistics
 import sys
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -45,6 +45,7 @@ from run_symmetric_v5_validation import (  # noqa: E402
 from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history  # noqa: E402
 from parayabuck.backtest.observation_parity import (  # noqa: E402
     assert_strategy_identity,
+    canonical_digest,
     strategy_identity,
 )
 from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult  # noqa: E402
@@ -64,6 +65,7 @@ from parayabuck.execution.portfolio import (  # noqa: E402
 )
 from parayabuck.portfolio import (  # noqa: E402
     EquityResidualMomentum1dV3,
+    portfolio_strategy_from,
     rebalance_policy_for,
     supported_portfolio_strategies,
 )
@@ -472,8 +474,13 @@ class PreparedWindow:
     observation_basis: str = "configured"
     observation_strategy_name: str = ""
     observation_strategy_version: str = ""
+    observation_strategy_market: str = ""
     observation_strategy_timeframe: str = ""
     observation_strategy_parameter_digest: str = ""
+    # Candidate-owned observers are stateful by design.  Retain the exact
+    # instance used to build the PIT universe so the later engine boundary can
+    # prove that execution receives a fresh, identity-matching instance.
+    observation_strategy: PortfolioStrategy | None = field(default=None, repr=False, compare=False)
 
 
 def fold_windows() -> list[tuple[str, datetime, datetime]]:
@@ -582,10 +589,12 @@ def prepare_window(
         observation_basis=effective_basis,
         observation_strategy_name=str(identity["name"]) if identity is not None else "",
         observation_strategy_version=str(identity["version"]) if identity is not None else "",
+        observation_strategy_market=str(identity["market"]) if identity is not None else "",
         observation_strategy_timeframe=str(identity["timeframe"]) if identity is not None else "",
         observation_strategy_parameter_digest=(
             str(identity["parameter_digest_sha256"]) if identity is not None else ""
         ),
+        observation_strategy=observation_strategy,
     )
 
 
@@ -646,10 +655,18 @@ def run_case(
     if not isinstance(strategy, PortfolioStrategy):
         raise TypeError("execution_strategy_factory must return a PortfolioStrategy")
     if window.observation_basis == "candidate_owned":
+        if window.observation_strategy is None:
+            raise ValueError("candidate-owned window is missing its observation strategy instance")
+        # Validate the object that is about to enter the engine, not only the
+        # throwaway execution object created during preparation.  This checks
+        # full identity (including market and parameters) and rejects reuse of
+        # the stateful observer instance itself.
+        assert_strategy_identity(window.observation_strategy, strategy)
         identity = strategy_identity(strategy)
         expected = {
             "name": window.observation_strategy_name,
             "version": window.observation_strategy_version,
+            "market": window.observation_strategy_market,
             "timeframe": window.observation_strategy_timeframe,
             "parameter_digest_sha256": window.observation_strategy_parameter_digest,
         }
@@ -1069,6 +1086,71 @@ def load_and_validate_manifest() -> dict[str, object]:
     return manifest
 
 
+def _configured_observation_strategy(config: Config) -> PortfolioStrategy:
+    """Build the configured product observer for artifact provenance only."""
+    selection = config.strategy.equity
+    return portfolio_strategy_from(
+        selection.name,
+        selection.parameters,
+        timeframe=selection.timeframe,
+    )
+
+
+def _artifact_observation_provenance(
+    config: Config,
+    full_window: PreparedWindow,
+    full_strategy: PortfolioStrategy,
+    control_window: PreparedWindow,
+) -> dict[str, object]:
+    """Return auditable observation/execution provenance for a result artifact.
+
+    A candidate-owned run is only serializable when both sides of the
+    preparation/execution boundary are present and complete.  Configured
+    observation runs still record the configured strategy identity so every
+    artifact has the same shape.
+    """
+    observation_strategy = full_window.observation_strategy
+    if observation_strategy is None:
+        if full_window.observation_basis == "candidate_owned":
+            raise ValueError("candidate-owned artifact is missing its observation strategy instance")
+        observation_strategy = _configured_observation_strategy(config)
+    observation_identity = strategy_identity(observation_strategy)
+    execution_identity = strategy_identity(full_strategy)
+    provenance: dict[str, object] = {
+        "observation_basis": full_window.observation_basis,
+        "observation_strategy_name": observation_identity["name"],
+        "observation_strategy_version": observation_identity["version"],
+        "observation_strategy_market": observation_identity["market"],
+        "observation_strategy_timeframe": observation_identity["timeframe"],
+        "observation_strategy_parameter_digest": observation_identity["parameter_digest_sha256"],
+        "observation_universe_hash": full_window.universe_version,
+        "observation_universe_component_sha256": canonical_digest(full_window.universe.to_dict()),
+        "execution_strategy_identity": execution_identity,
+        "control_observation_basis": control_window.observation_basis,
+        "control_observation_strategy_identity": (
+            strategy_identity(control_window.observation_strategy)
+            if control_window.observation_strategy is not None
+            else strategy_identity(_configured_observation_strategy(config))
+        ),
+    }
+    if full_window.observation_basis == "candidate_owned":
+        required = (
+            "observation_basis",
+            "observation_strategy_name",
+            "observation_strategy_version",
+            "observation_strategy_market",
+            "observation_strategy_timeframe",
+            "observation_strategy_parameter_digest",
+            "observation_universe_hash",
+            "execution_strategy_identity",
+            "control_observation_basis",
+        )
+        missing = [key for key in required if not provenance.get(key)]
+        if missing:
+            raise ValueError("candidate-owned artifact provenance is incomplete: " + ", ".join(missing))
+    return provenance
+
+
 def candidate_artifact(
     variant_id: str,
     config: Config,
@@ -1082,10 +1164,22 @@ def candidate_artifact(
     regimes: Mapping[datetime, str],
     *,
     manifest: Mapping[str, object],
+    full_window: PreparedWindow,
+    control_window: PreparedWindow | None = None,
 ) -> dict[str, object]:
     full_result, full_strategy = full
     control_result, control_strategy = control_full
     stats = full_stats(full_result)
+    if control_window is None:
+        if full_window.observation_basis == "candidate_owned":
+            raise ValueError("candidate-owned artifact requires an explicit configured control window")
+        control_window = full_window
+    observation_provenance = _artifact_observation_provenance(
+        config,
+        full_window,
+        full_strategy,
+        control_window,
+    )
     return {
         "schema_version": RESULT_SCHEMA_VERSION,
         "variant": variant_id,
@@ -1112,6 +1206,7 @@ def candidate_artifact(
             if variant_id == "control"
             else block_bootstrap_deltas(control_result.equity_curve, full_result.equity_curve)
         ),
+        "observation_provenance": observation_provenance,
         "identity": {
             "mission": manifest["mission"],
             "research_commit": git_head(),
@@ -1141,21 +1236,56 @@ def evaluate_variant(
     manifest: Mapping[str, object],
     regimes: Mapping[datetime, str],
     scope: str,
+    observation_strategy_factory: Callable[[], PortfolioStrategy] | None = None,
+    execution_strategy_factory: Callable[[], PortfolioStrategy] | None = None,
+    observation_basis: str | None = None,
+    control_window: PreparedWindow | None = None,
 ) -> dict[str, object]:
+    effective_observation_basis = observation_basis
+    if effective_observation_basis is None:
+        effective_observation_basis = "candidate_owned" if observation_strategy_factory is not None else "configured"
+    if full_window.observation_basis != effective_observation_basis:
+        raise ValueError("full_window observation basis does not match the requested evaluate_variant factories")
+
     def window(key: str, start: datetime | None, end: datetime) -> PreparedWindow:
         if key not in all_windows_cache:
-            all_windows_cache[key] = prepare_window(config, bars, key=key, start=start, end=end)
+            all_windows_cache[key] = prepare_window(
+                config,
+                bars,
+                key=key,
+                start=start,
+                end=end,
+                observation_strategy_factory=observation_strategy_factory,
+                execution_strategy_factory=execution_strategy_factory,
+                observation_basis=effective_observation_basis,
+            )
+        elif all_windows_cache[key].observation_basis != effective_observation_basis:
+            raise ValueError(f"window cache basis mismatch for {key}")
         return all_windows_cache[key]
 
     if variant_id == "control":
         full = control_full
     else:
-        full = run_case(config, variant_id, full_window, terminal_map=terminal_map, actions=actions)
+        full = run_case(
+            config,
+            variant_id,
+            full_window,
+            terminal_map=terminal_map,
+            actions=actions,
+            execution_strategy_factory=execution_strategy_factory,
+        )
     fold_rows: list[dict[str, object]] = []
     if scope in {"fold", "contract"}:
         for fold_id, start, end in fold_windows():
             fold_window = window(f"fold:{fold_id}", start, end)
-            result, _strategy = run_case(config, variant_id, fold_window, terminal_map=terminal_map, actions=actions)
+            result, _strategy = run_case(
+                config,
+                variant_id,
+                fold_window,
+                terminal_map=terminal_map,
+                actions=actions,
+                execution_strategy_factory=execution_strategy_factory,
+            )
             fold_rows.append(
                 {
                     "fold_id": fold_id,
@@ -1174,14 +1304,28 @@ def evaluate_variant(
     if scope == "contract":
         for year, start, end in annual_windows():
             annual_window = window(f"annual:{year}", start, end)
-            result, _strategy = run_case(config, variant_id, annual_window, terminal_map=terminal_map, actions=actions)
+            result, _strategy = run_case(
+                config,
+                variant_id,
+                annual_window,
+                terminal_map=terminal_map,
+                actions=actions,
+                execution_strategy_factory=execution_strategy_factory,
+            )
             annual[year] = {
                 key: full_stats(result)[key]
                 for key in ("return", "cagr", "sharpe", "max_drawdown", "turnover", "avg_exposure")
             }
 
         recent_window = window("recent", RECENT_START, EVAL_END)
-        recent = run_case(config, variant_id, recent_window, terminal_map=terminal_map, actions=actions)
+        recent = run_case(
+            config,
+            variant_id,
+            recent_window,
+            terminal_map=terminal_map,
+            actions=actions,
+            execution_strategy_factory=execution_strategy_factory,
+        )
 
     stress: dict[str, object] = {"1x": full_stats(full[0])}
     if scope == "contract":
@@ -1193,6 +1337,7 @@ def evaluate_variant(
                 terminal_map=terminal_map,
                 actions=actions,
                 cost_multiplier=multiplier,
+                execution_strategy_factory=execution_strategy_factory,
             )
             stress[f"{multiplier:g}x"] = {
                 key: full_stats(stressed)[key]
@@ -1208,12 +1353,26 @@ def evaluate_variant(
                 universe=universe_without(full_window.universe, frozenset({symbol})),
             )
             reduced = replace(reduced, universe_version=hash_point_in_time_universe(reduced.universe))
-            result, _strategy = run_case(config, variant_id, reduced, terminal_map=terminal_map, actions=actions)
+            result, _strategy = run_case(
+                config,
+                variant_id,
+                reduced,
+                terminal_map=terminal_map,
+                actions=actions,
+                execution_strategy_factory=execution_strategy_factory,
+            )
             jackknife[f"drop_{symbol}"] = {key: full_stats(result)[key] for key in ("return", "sharpe", "max_drawdown")}
         banned = frozenset(list(control_top)[:3])
         reduced = replace(full_window, universe=universe_without(full_window.universe, banned))
         reduced = replace(reduced, universe_version=hash_point_in_time_universe(reduced.universe))
-        result, _strategy = run_case(config, variant_id, reduced, terminal_map=terminal_map, actions=actions)
+        result, _strategy = run_case(
+            config,
+            variant_id,
+            reduced,
+            terminal_map=terminal_map,
+            actions=actions,
+            execution_strategy_factory=execution_strategy_factory,
+        )
         jackknife["drop_top3_combined"] = {key: full_stats(result)[key] for key in ("return", "sharpe", "max_drawdown")}
 
     artifact = candidate_artifact(
@@ -1228,6 +1387,8 @@ def evaluate_variant(
         control_full,
         regimes,
         manifest=manifest,
+        full_window=full_window,
+        control_window=control_window,
     )
     artifact["validation_scope"] = scope
     return artifact

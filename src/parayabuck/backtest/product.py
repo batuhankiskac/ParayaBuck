@@ -162,7 +162,11 @@ def build_product_universe(
                 "observation_strategy_override timeframe must match the selected backtest timeframe "
                 f"({selected_timeframe})"
             )
-    observation_strategy = observation_strategy_override or strategy
+    # An explicit override is a semantic choice, not a truthiness fallback.
+    # PortfolioStrategy implementations may intentionally define ``__bool__``
+    # (for example, to expose readiness), so ``or`` could silently replace a
+    # valid candidate-owned observer with the configured product strategy.
+    observation_strategy = observation_strategy_override if observation_strategy_override is not None else strategy
     available = [
         bar
         for bar in bars

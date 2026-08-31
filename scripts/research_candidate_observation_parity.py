@@ -19,6 +19,7 @@ import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
@@ -46,7 +47,7 @@ from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy  # noq
 from parayabuck.portfolio.equity_residual_momentum_v3 import EquityResidualMomentum1dV3  # noqa: E402
 from parayabuck.universe.observation_set import build_observation_set  # noqa: E402
 
-MANIFEST_PATH = REPO / "data/research_manifests/equity_candidate_observation_parity_2026_08.json"
+MANIFEST_PATH = REPO / "data/research_manifests/equity_candidate_observation_parity_corrective_2026_08.json"
 DEFAULT_OUTPUT = REPO / "data/research/equity_candidate_observation_parity_2026_08/parity_receipt.json"
 EXPECTED_UNIVERSE_HASH = "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011"
 
@@ -68,10 +69,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _load_manifest() -> dict[str, Any]:
-    if not MANIFEST_PATH.exists():
-        raise SystemExit(f"missing predeclared OCP manifest: {MANIFEST_PATH}")
-    raw = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+def _load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
+    path = path if path.is_absolute() else REPO / path
+    if not path.exists():
+        raise SystemExit(f"missing predeclared OCP manifest: {path}")
+    raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or raw.get("declared_before_results") is not True:
         raise SystemExit("OCP manifest must declare declared_before_results=true")
     if raw.get("research_only") is not True or raw.get("automatic_promotion") is not False:
@@ -79,6 +81,29 @@ def _load_manifest() -> dict[str, Any]:
     if raw.get("canonical_control", {}).get("component_hashes", {}).get("universe") != EXPECTED_UNIVERSE_HASH:
         raise SystemExit("OCP manifest canonical universe hash does not match the frozen R1 value")
     return raw
+
+
+def _git_rev_parse(ref: str) -> str:
+    return subprocess.check_output(["git", "rev-parse", ref], cwd=REPO, text=True).strip()
+
+
+def _assert_source_pin(manifest: dict[str, Any]) -> tuple[str, str]:
+    """Require the clean run to execute from the manifest's exact commit."""
+    expected = manifest.get("implementation_commit")
+    base = manifest.get("base_commit")
+    if not isinstance(expected, str) or len(expected) != 40:
+        raise SystemExit("OCP manifest must declare a full 40-character implementation_commit")
+    if not isinstance(base, str) or len(base) != 40:
+        raise SystemExit("OCP manifest must declare a full 40-character base_commit")
+    source_commit = _git_rev_parse("HEAD")
+    if source_commit != expected:
+        raise SystemExit(
+            f"OCP source pin mismatch: clean run must execute at implementation_commit {expected}, got {source_commit}"
+        )
+    parent_commit = _git_rev_parse("HEAD^")
+    if parent_commit != base:
+        raise SystemExit(f"OCP implementation parent mismatch: expected {base}, got {parent_commit}")
+    return source_commit, parent_commit
 
 
 def _assert_strategy_market_timeframe(strategy: PortfolioStrategy, market: Market, timeframe: str) -> None:
@@ -356,26 +381,127 @@ def _synthetic_changed_ranker_canary(config: Config) -> dict[str, object]:
     }
 
 
-def run(output: Path = DEFAULT_OUTPUT) -> dict[str, object]:
+class _NoEconomicsEngine:
+    """Engine boundary stub for parity wiring; it deliberately has no PnL."""
+
+    def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(equity_curve=(1.0,))
+
+
+def _candidate_execution_boundary(config: Config) -> dict[str, object]:
+    """Exercise C|C, X|C and X|X without running candidate economics."""
+    synthetic_config = _synthetic_config(config)
+    bars = _synthetic_bars()
+    end = bars[-1].timestamp
+    terminal_map: dict[str, Any] = {}
+    actions: list[Any] = []
+    original_make_engine = roadmap.make_engine
+
+    def fake_make_engine(*_args: object, **_kwargs: object) -> _NoEconomicsEngine:
+        return _NoEconomicsEngine()
+
+    try:
+        roadmap.make_engine = fake_make_engine  # type: ignore[assignment]
+        configured_window = roadmap.prepare_window(
+            synthetic_config,
+            bars,
+            key="boundary-configured",
+            start=None,
+            end=end,
+        )
+        _cc_result, cc_strategy = roadmap.run_case(
+            synthetic_config,
+            "control",
+            configured_window,
+            terminal_map=terminal_map,
+            actions=actions,
+        )
+
+        params = dict(synthetic_config.strategy.equity.parameters)
+
+        def xc_factory() -> PortfolioStrategy:
+            return _AlphabeticalCanaryRanker(dict(params))
+
+        def xx_factory() -> PortfolioStrategy:
+            return _AlphabeticalCanaryRanker(dict(params))
+
+        _xc_result, xc_strategy = roadmap.run_case(
+            synthetic_config,
+            "control",
+            configured_window,
+            terminal_map=terminal_map,
+            actions=actions,
+            execution_strategy_factory=xc_factory,
+        )
+
+        def observation_factory() -> PortfolioStrategy:
+            return _AlphabeticalCanaryRanker(dict(params))
+
+        candidate_window = roadmap.prepare_window(
+            synthetic_config,
+            bars,
+            key="boundary-candidate",
+            start=None,
+            end=end,
+            observation_strategy_factory=observation_factory,
+            execution_strategy_factory=xx_factory,
+            observation_basis="candidate_owned",
+        )
+        if candidate_window.observation_strategy is None:
+            raise AssertionError("candidate execution boundary lost its observer instance")
+        observation_strategy = candidate_window.observation_strategy
+        _xx_result, xx_strategy = roadmap.run_case(
+            synthetic_config,
+            "control",
+            candidate_window,
+            terminal_map=terminal_map,
+            actions=actions,
+            execution_strategy_factory=xx_factory,
+        )
+    finally:
+        roadmap.make_engine = original_make_engine
+    return {
+        "candidate_economics_run": False,
+        "C|C": {
+            "observation_basis": configured_window.observation_basis,
+            "execution_strategy_identity": strategy_identity(cc_strategy),
+        },
+        "X|C": {
+            "observation_basis": configured_window.observation_basis,
+            "execution_strategy_identity": strategy_identity(xc_strategy),
+        },
+        "X|X": {
+            "observation_basis": candidate_window.observation_basis,
+            "observation_strategy_identity": strategy_identity(observation_strategy),
+            "execution_strategy_identity": strategy_identity(xx_strategy),
+            "observation_universe_hash": candidate_window.universe_version,
+        },
+    }
+
+
+def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -> dict[str, object]:
     dirty_before = _git_status()
     if dirty_before:
         raise SystemExit(
             "candidate observation parity requires a clean tracked worktree; dirty paths: " + ", ".join(dirty_before)
         )
-    manifest = _load_manifest()
+    manifest = _load_manifest(manifest_path)
+    source_commit, parent_commit = _assert_source_pin(manifest)
     config = load_config(str(REPO / "config/settings.yaml"))
     bars = roadmap.load_bars(roadmap.DATASET_V5)
     e1 = _canonical_v3_self_parity(config, bars, manifest)
     e2 = _synthetic_changed_ranker_canary(config)
+    e3 = _candidate_execution_boundary(config)
     dirty_after = _git_status()
     if dirty_after:
         raise SystemExit("candidate observation parity changed tracked worktree paths: " + ", ".join(dirty_after))
-    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     payload: dict[str, object] = {
         "schema_version": "1.0.0",
         "receipt_name": "EQUITY_CANDIDATE_OBSERVATION_PARITY_OCP1",
         "source_commit": source_commit,
         "base_commit": manifest["base_commit"],
+        "implementation_commit": manifest["implementation_commit"],
+        "implementation_parent_commit": parent_commit,
         "python_version": platform.python_version(),
         "runner_sha256": _sha256(Path(__file__)),
         "config_digest_sha256": roadmap.config_digest(config),
@@ -390,7 +516,11 @@ def run(output: Path = DEFAULT_OUTPUT) -> dict[str, object]:
             "automatic_promotion": False,
             "candidate_economics_run": False,
         },
-        "checks": {"E1_canonical_v3_explicit_self_parity": e1, "E2_synthetic_changed_ranker_canary": e2},
+        "checks": {
+            "E1_canonical_v3_explicit_self_parity": e1,
+            "E2_synthetic_changed_ranker_canary": e2,
+            "E3_candidate_execution_boundary": e3,
+        },
         "dirty_paths_before": dirty_before,
         "dirty_paths_after": dirty_after,
     }
@@ -405,8 +535,9 @@ def run(output: Path = DEFAULT_OUTPUT) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     args = parser.parse_args()
-    payload = run(args.output)
+    payload = run(args.output, manifest_path=args.manifest)
     print(json.dumps(payload, indent=2, sort_keys=True))
     print(f"raw_receipt_sha256={payload['raw_receipt_sha256']}")
     return 0

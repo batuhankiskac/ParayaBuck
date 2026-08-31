@@ -4,6 +4,7 @@ import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -62,6 +63,18 @@ class StatefulRanker(AlphabeticalRanker):
     def rank_candidates(self, context: PortfolioContext) -> tuple[str, ...]:
         self.calls += 1
         return super().rank_candidates(context)
+
+
+class FalsyRanker(AlphabeticalRanker):
+    name = "research_canary_falsy_v1"
+    version = "1.0.0"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+class CryptoMarketRanker(StatefulRanker):
+    market = Market.CRYPTO
 
 
 def _config() -> Config:
@@ -342,3 +355,162 @@ def test_research_prepare_window_uses_fresh_candidate_ranker_and_records_basis()
     assert window.observation_strategy_parameter_digest
     assert len(created) == 2
     assert created[0] is not created[1]
+
+
+def test_falsy_explicit_override_is_used_for_observation() -> None:
+    universe = _universe(FalsyRanker(PARAMETERS))
+    assert all(snapshot.observation_strategy_name == FalsyRanker.name for snapshot in universe.snapshots)
+    assert all(snapshot.observation_strategy_version == FalsyRanker.version for snapshot in universe.snapshots)
+
+
+def _candidate_window_with_factory(roadmap: Any, config: Config, bars: list[Bar], factory: Any) -> Any:
+    return roadmap.prepare_window(
+        config,
+        bars,
+        key="candidate-execution-boundary",
+        start=None,
+        end=bars[-1].timestamp,
+        observation_strategy_factory=factory,
+        execution_strategy_factory=factory,
+        observation_basis="candidate_owned",
+    )
+
+
+def test_candidate_run_case_uses_fresh_full_identity_at_engine_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import research_v3_equity_roadmap as roadmap
+
+    config = _config()
+    bars = _bars(120)
+    created: list[StatefulRanker] = []
+
+    def factory() -> PortfolioStrategy:
+        strategy = StatefulRanker(PARAMETERS)
+        created.append(strategy)
+        return strategy
+
+    window = _candidate_window_with_factory(roadmap, config, bars, factory)
+    captured: list[PortfolioStrategy] = []
+
+    class FakeEngine:
+        def run(self, *_args: object, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(equity_curve=(1.0,))
+
+    def make_fake_engine(*args: object, **_kwargs: object) -> FakeEngine:
+        captured.append(args[1])
+        return FakeEngine()
+
+    monkeypatch.setattr(roadmap, "make_engine", make_fake_engine)
+    result, execution = roadmap.run_case(
+        config, "control", window, terminal_map={}, actions=[], execution_strategy_factory=factory
+    )
+    assert result.equity_curve == (1.0,)
+    assert window.observation_strategy is created[0]
+    assert len(created) == 3
+    assert execution is created[2]
+    assert captured == [created[2]]
+    assert execution is not window.observation_strategy
+    assert strategy_identity(execution)["market"] == Market.EQUITY.value
+
+
+def test_candidate_run_case_rejects_observer_reuse() -> None:
+    from scripts import research_v3_equity_roadmap as roadmap
+
+    config = _config()
+    bars = _bars(120)
+    created: list[StatefulRanker] = []
+    calls = 0
+
+    def factory() -> PortfolioStrategy:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            strategy = StatefulRanker(PARAMETERS)
+            created.append(strategy)
+            return strategy
+        if calls == 2:
+            return StatefulRanker(PARAMETERS)
+        return created[0]
+
+    window = _candidate_window_with_factory(roadmap, config, bars, factory)
+    with pytest.raises(ValueError, match="fresh instances"):
+        roadmap.run_case(config, "control", window, terminal_map={}, actions=[], execution_strategy_factory=factory)
+
+
+def test_candidate_run_case_rejects_actual_market_or_parameter_mismatch() -> None:
+    from scripts import research_v3_equity_roadmap as roadmap
+
+    config = _config()
+    bars = _bars(120)
+
+    for replacement, message in (
+        (CryptoMarketRanker(PARAMETERS), "market"),
+        (StatefulRanker({**PARAMETERS, "top_n": 3}), "parameter"),
+    ):
+        calls = 0
+
+        def factory() -> PortfolioStrategy:
+            nonlocal calls
+            calls += 1
+            if calls < 3:
+                return StatefulRanker(PARAMETERS)
+            return replacement
+
+        window = _candidate_window_with_factory(roadmap, config, bars, factory)
+        with pytest.raises(ValueError, match=message):
+            roadmap.run_case(config, "control", window, terminal_map={}, actions=[], execution_strategy_factory=factory)
+
+
+def test_candidate_run_case_rejects_non_strategy_actual_execution() -> None:
+    from scripts import research_v3_equity_roadmap as roadmap
+
+    config = _config()
+    bars = _bars(120)
+    calls = 0
+
+    def factory() -> PortfolioStrategy:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            return StatefulRanker(PARAMETERS)
+        return object()  # type: ignore[return-value]
+
+    window = _candidate_window_with_factory(roadmap, config, bars, factory)
+    with pytest.raises(TypeError, match="PortfolioStrategy"):
+        roadmap.run_case(config, "control", window, terminal_map={}, actions=[], execution_strategy_factory=factory)
+
+
+def test_candidate_artifact_provenance_is_complete_and_fails_closed() -> None:
+    from scripts import research_v3_equity_roadmap as roadmap
+
+    config = _config()
+    bars = _bars(120)
+    candidate_instances: list[StatefulRanker] = []
+
+    def candidate_factory() -> PortfolioStrategy:
+        strategy = StatefulRanker(PARAMETERS)
+        candidate_instances.append(strategy)
+        return strategy
+
+    candidate_window = _candidate_window_with_factory(roadmap, config, bars, candidate_factory)
+    control_window = roadmap.prepare_window(
+        config,
+        bars,
+        key="configured-control",
+        start=None,
+        end=bars[-1].timestamp,
+    )
+    execution = StatefulRanker(PARAMETERS)
+    provenance = roadmap._artifact_observation_provenance(config, candidate_window, execution, control_window)
+    assert provenance["observation_basis"] == "candidate_owned"
+    assert provenance["observation_strategy_name"] == StatefulRanker.name
+    assert provenance["observation_strategy_market"] == Market.EQUITY.value
+    assert provenance["observation_universe_hash"] == candidate_window.universe_version
+    assert provenance["control_observation_basis"] == "configured"
+    assert provenance["execution_strategy_identity"] == strategy_identity(execution)
+    with pytest.raises(ValueError, match="missing its observation strategy"):
+        roadmap._artifact_observation_provenance(
+            config,
+            replace(candidate_window, observation_strategy=None),
+            execution,
+            control_window,
+        )

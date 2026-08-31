@@ -227,6 +227,7 @@ class ShrinkageERC(roadmap.RoadmapControl):
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         self.erc_log: list[dict[str, float]] = []
+        self.fallback_log: list[dict[str, object]] = []
         super().__init__(*args, **kwargs)
 
     def _select_names(self, ranked, residual_vols, context, top_n):  # type: ignore[no-untyped-def]
@@ -237,7 +238,16 @@ class ShrinkageERC(roadmap.RoadmapControl):
         del ranked
         matrix = residual_matrix(context, selected)
         if matrix is None:
-            return super()._position_weights_for_ranked((), selected, residual_vols, context)
+            self.fallback_log.append(
+                {
+                    "timestamp": context.decision_timestamp,
+                    "reason": "insufficient_or_misaligned_residual_matrix",
+                    "selected_count": len(selected),
+                }
+            )
+            weights = super()._position_weights_for_ranked((), selected, residual_vols, context)
+            self._record_weight_diagnostic(selected, weights, method="inverse_volatility_fallback")
+            return weights
         covariance, intensity = constant_correlation_shrinkage(matrix)
         raw = equal_risk_contribution(covariance)
         cap = self.param_float("max_single_weight", 0.10)
@@ -549,7 +559,26 @@ def run() -> dict[str, object]:
     )
     records["erc"] = {
         **_result_record(erc_result, control_result, erc_integrity),
-        "diagnostics": _mean_log(erc_strategy.erc_log),
+        "diagnostics": {
+            **_mean_log(erc_strategy.erc_log),
+            "decision_count": len(erc_strategy.erc_log) + len(erc_strategy.fallback_log),
+            "erc_decision_count": len(erc_strategy.erc_log),
+            "fallback_decision_count": len(erc_strategy.fallback_log),
+            "fallback_rate": (
+                len(erc_strategy.fallback_log) / (len(erc_strategy.erc_log) + len(erc_strategy.fallback_log))
+                if erc_strategy.erc_log or erc_strategy.fallback_log
+                else 0.0
+            ),
+            "fallback_reasons": dict(
+                sorted(
+                    (
+                        reason,
+                        sum(1 for row in erc_strategy.fallback_log if row.get("reason") == reason),
+                    )
+                    for reason in {str(row.get("reason", "unknown")) for row in erc_strategy.fallback_log}
+                )
+            ),
+        },
     }
 
     cluster_result, cluster_strategy, cluster_integrity = _run_strategy(

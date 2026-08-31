@@ -9,6 +9,8 @@
 
 > This is the single authoritative historical narrative. All prior intermediate numbers (OLD_T0 survivor-biased, FULL_T0/T2/T3 bounds, rejected stop/position-risk tables) are not current results and appear only as sensitivity context below.
 
+> **Additive operational-parity erratum (2026-08-31):** the receipt frozen at `a69cbc3...` remains an immutable historical record of its 0.60-allocation, 2026-07-31 run. The later runtime-sized observation-context implementation produced a separate current-policy comparator (`0.55` allocation, through `2026-07-30`, `+76.4538%` total, Sharpe `0.571342`) during the 2026-08 research cycle. That comparator is recorded in `docs/equity_v3_alpha_execution_2026_08.md`; it is not a replacement or a claim of performance decay for this frozen receipt.
+
 ---
 
 ## 1. V3 Identity (Frozen)

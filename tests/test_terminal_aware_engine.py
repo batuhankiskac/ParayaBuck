@@ -45,6 +45,32 @@ class DummyStrategy(PortfolioStrategy):
         )
 
 
+class FlatFinalBarEntryStrategy(DummyStrategy):
+    """Select AAA only on its final bar so the entry stays flat/pending."""
+
+    name = "flat-final-bar-entry"
+
+    def __init__(self, final_bar: datetime) -> None:
+        self.final_bar = final_bar
+
+    def decide(self, context: PortfolioContext) -> TargetPortfolio:
+        if context.decision_timestamp == self.final_bar and "AAA" in context.history:
+            return TargetPortfolio(
+                strategy_name=self.name,
+                strategy_version=self.version,
+                decision_timestamp=context.decision_timestamp,
+                weights=(TargetWeight(symbol="AAA", weight=0.5, reason="final-bar-entry"),),
+                cash_weight=0.5,
+            )
+        return TargetPortfolio(
+            strategy_name=self.name,
+            strategy_version=self.version,
+            decision_timestamp=context.decision_timestamp,
+            weights=(),
+            cash_weight=1.0,
+        )
+
+
 class DummyPolicy:
     def is_period_start(self, prev, cur):
         return True
@@ -133,6 +159,36 @@ def test_t0_stale_no_removal():
     # Position may still be held (stale)
     # Check that if held, it remains
     # No assertion on removal for T0
+
+
+def test_terminal_cancels_flat_final_bar_pending_entry():
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    bars = [make_bar("AAA", start + timedelta(days=i), 10 + i * 0.1) for i in range(5)]
+    final_bar = bars[-1].timestamp
+    info = TerminalInfo(
+        entity_id="id_aaa",
+        symbol="AAA",
+        display_symbol="AAA",
+        last_bar=final_bar,
+        terminal_event_class="POSSIBLE_DELISTING",
+        evidence_class="B",
+        should_haircut=True,
+    )
+    engine = TerminalAwareResearchEngine(
+        FlatFinalBarEntryStrategy(final_bar),
+        DummyPolicy(),
+        terminal_map={"AAA": info},
+        policy="T1",
+        starting_equity=100_000,
+        slippage_bps=2,
+        spread_bps=2,
+        maximum_allocation=1.0,
+    )
+
+    engine.run(bars, liquidate_at_end=False)
+
+    assert not engine._positions
+    assert not [order for order in engine._pending if order.symbol == "AAA"]
 
 
 def test_terminal_snapshot_pin_expires_only_after_last_bar():

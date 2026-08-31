@@ -345,6 +345,12 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
                     if close_px is None:
                         close_px = self._last_price.get(sym, pos.avg_price)
                     self._execute_terminal(sym, pos, close_px, cycle[0].timestamp)
+                else:
+                    # A terminal symbol selected while flat on its final
+                    # tradable bar can create a same-session pending BUY.
+                    # There is no later bar on which that order could fill;
+                    # retain no economically live entry after expiry.
+                    self._pending = [order for order in self._pending if order.symbol != sym]
             curve.append(self._equity())
             curve_timestamps.append(cycle[0].timestamp)
             self._record_holdings_snapshot(cycle[0].timestamp)

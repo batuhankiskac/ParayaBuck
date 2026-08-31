@@ -39,6 +39,33 @@ def test_equal_risk_contribution_is_long_only_and_normalized() -> None:
     assert contributions[0] == pytest.approx(contributions[1], rel=1e-5)
 
 
+def test_shrinkage_erc_fallback_is_explicitly_counted() -> None:
+    strategy = followups.ShrinkageERC(dict(followups.roadmap.FROZEN_PARAMETERS))
+    context = followups.PortfolioContext(
+        decision_timestamp=datetime(2026, 1, 2, tzinfo=UTC),
+        market=followups.Market.EQUITY,
+        timeframe="1d",
+        history={},
+        universe=None,
+        universe_version="test",
+        equity=100_000.0,
+        holdings={},
+        prices={},
+        benchmark_symbol="SPY",
+    )
+
+    strategy._position_weights_for_ranked(
+        (),
+        ("AAA",),
+        {"AAA": 0.02},
+        context,
+    )
+
+    assert len(strategy.erc_log) == 0
+    assert len(strategy.fallback_log) == 1
+    assert strategy.fallback_log[0]["reason"] == "insufficient_or_misaligned_residual_matrix"
+
+
 def test_cluster_selection_is_deterministic_connected_components() -> None:
     symbols = ("A", "B", "C", "D")
     correlation = np.asarray(

@@ -217,8 +217,6 @@ def _validate_e1(check: dict[str, Any], manifest: dict[str, Any]) -> None:
         "control_universe_hash": check.get("control_universe_hash"),
         "explicit_override_universe_hash": check.get("explicit_override_universe_hash"),
         "expected_universe_hash": check.get("expected_universe_hash"),
-        "comparison.control_universe_hash": comparison.get("control_universe_hash"),
-        "comparison.candidate_universe_hash": comparison.get("candidate_universe_hash"),
     }
     expected = manifest.get("canonical_control", {}).get("component_hashes", {}).get("universe")
     if expected != EXPECTED_UNIVERSE_HASH:
@@ -226,6 +224,12 @@ def _validate_e1(check: dict[str, Any], manifest: dict[str, Any]) -> None:
     for field, value in hashes.items():
         if _require_sha256(value, f"E1.{field}") != expected:
             raise ValueError(f"raw receipt E1 {field} does not match the frozen universe hash")
+    comparison_control = _require_sha256(comparison.get("control_universe_hash"), "E1.comparison.control_universe_hash")
+    comparison_candidate = _require_sha256(
+        comparison.get("candidate_universe_hash"), "E1.comparison.candidate_universe_hash"
+    )
+    if comparison_control != comparison_candidate:
+        raise ValueError("raw receipt E1 comparison universe hashes differ")
     if check.get("all_snapshots_identity") is not True:
         raise ValueError("raw receipt E1 does not prove all snapshot identities")
     pins = check.get("pins_and_capacity")

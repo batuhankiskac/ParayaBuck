@@ -7,6 +7,8 @@ import pytest
 
 from parayabuck.backtest.observation_parity import canonical_digest
 from scripts.compact_candidate_observation_parity_receipt import (
+    EXPECTED_UNIVERSE_HASH,
+    _validate_e1,
     _validate_e3,
     _validate_raw,
 )
@@ -41,6 +43,27 @@ def _valid_e3() -> dict[str, Any]:
 
 def test_compactor_accepts_complete_e3_boundary() -> None:
     _validate_e3(_valid_e3())
+
+
+def test_compactor_accepts_runtime_comparison_hash_distinct_from_canonical_hash() -> None:
+    runtime_hash = "c" * 64
+    check = {
+        "control_universe_hash": EXPECTED_UNIVERSE_HASH,
+        "explicit_override_universe_hash": EXPECTED_UNIVERSE_HASH,
+        "expected_universe_hash": EXPECTED_UNIVERSE_HASH,
+        "all_snapshots_identity": True,
+        "pins_and_capacity": {"mismatch_count": 0},
+        "comparison": {
+            "passed": True,
+            "control_universe_hash": runtime_hash,
+            "candidate_universe_hash": runtime_hash,
+            "snapshot_count": {"aligned": 1, "control": 1, "candidate": 1},
+            "mismatch_counts": {"eligible_symbols": 0},
+            "failure_reasons": [],
+            "observation_set": {"sequence_change_count": 0, "membership_change_count": 0},
+        },
+    }
+    _validate_e1(check, {"canonical_control": {"component_hashes": {"universe": EXPECTED_UNIVERSE_HASH}}})
 
 
 @pytest.mark.parametrize(

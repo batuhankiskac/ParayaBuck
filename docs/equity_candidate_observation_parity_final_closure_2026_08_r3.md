@@ -2,11 +2,12 @@
 
 ## Final status
 
-`OCP_CLOSURE_PENDING_REMOTE_CI`
+`OCP_GATE_PASS — READY_FOR_M3_DATA_GATE`
 
-The new local implementation, pinned retest run, compact receipt, and local
-quality gates pass. Remote acceptance remains pending until the C5 commit is
-pushed and all GitHub-hosted matrix jobs are green.
+The new local implementation, pinned retest run, compact receipt, local
+quality gates, and GitHub-hosted matrix are green. This report-only update
+records the remote acceptance gate; no candidate-economic or promotion verdict
+was made.
 
 ## Starting receipt and CI diagnosis
 
@@ -87,14 +88,24 @@ blobs.
 - Production-file isolation checks pass. Local gitleaks is unavailable, while
   the visible CI gitleaks step is configured and passed in prior runs.
 
-## C5 remote gate
+## C5 remote gate — PASS
 
-The paired C5 commit adds only this report and
+The paired C5 commit added only this report and
 `data/research_receipts/equity_candidate_observation_parity_final_closure_2026_08_r3.json`.
-After C5 is pushed, remote acceptance requires all three Python matrix jobs to
-finish green with full pytest (no deselection), isolation verification, build,
-wheel smoke, pip-audit, and gitleaks. Until that observation is green, this
-mission deliberately remains pending and makes no candidate-economic or
-promotion claim.
+GitHub Actions run `33439399546` on C5
+(`917927a345c9a899e35549edec8dee3cf111d8bb`) completed successfully:
 
-`OCP_CLOSURE_PENDING_REMOTE_CI`
+- `quality (3.12)` job `99643632807`: full pytest passed with no deselection;
+  isolation, build, wheel smoke, pip-audit, and gitleaks passed.
+- `quality (3.13)` job `99643632456`: full pytest passed with no deselection;
+  isolation, build, wheel smoke, pip-audit, and gitleaks passed.
+- `quality (3.14)` job `99643632746`: full pytest passed with no deselection;
+  isolation, build, wheel smoke, pip-audit, and gitleaks passed.
+
+The run is visible at
+`https://github.com/batuhankiskac/ParayaBuck/actions/runs/33439399546`.
+The receipt self-digest is `ca800a18…`; origin/main contains C5 plus this
+report-only verdict update. No candidate economics or promotion interpretation
+ran in this closure.
+
+`OCP_GATE_PASS — READY_FOR_M3_DATA_GATE`

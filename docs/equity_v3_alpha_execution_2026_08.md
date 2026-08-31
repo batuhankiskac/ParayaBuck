@@ -9,6 +9,10 @@ The clean deterministic current-parity control generated after this report is
 tracked in `docs/equity_v3_current_parity_control_2026_08.md` (source commit
 `34a9a3f...`).
 
+The exact M5 shrinkage-ERC arm subsequently received a clean kill check and
+remained below the predeclared Sharpe gate; see
+`docs/equity_v3_m5_clean_kill_2026_08.md`.
+
 ## Receipt boundary
 
 - Repository at execution start: `HEAD=97209e759d77ccc38c7225522adb9ac08f07e648`; the worktree was dirty because the parity implementation and research runners were the changes under test.

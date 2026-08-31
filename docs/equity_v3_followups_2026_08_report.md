@@ -36,6 +36,17 @@ M10 PEAD is blocked. Repository search found no announcement timestamp, actual E
 
 M11 composite was not run. The factor-ETF leg failed the `< 0.60` active-return-correlation gate, and its 3x-cost, jackknife, and multi-fold incrementality gates were not run. Decision: `DO_NOT_RUN_COMPOSITE`.
 
+## Clean M5 kill check (2026-08-31)
+
+The exact predeclared M5 shrinkage-ERC arm was rerun once from a clean tracked
+checkout at commit `16c9426...` using `--missions m5`. It reproduced the
+current control (`76.4538%`, Sharpe `0.571342`) and M5 (`76.6425%`, Sharpe
+`0.602380`) with zero incomplete batches and zero fallback decisions across
+495 decisions. The Sharpe delta `+0.031038` remains below the frozen `+0.04`
+gate (`0.611342` required), so the identity is rejected and no full contract
+was run. Details and the result hash are in
+`docs/equity_v3_m5_clean_kill_2026_08.md`.
+
 ## Files
 
 - Frozen declaration: `data/research_manifests/equity_v3_followups_2026_08.json`

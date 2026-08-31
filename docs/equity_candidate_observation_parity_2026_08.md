@@ -21,8 +21,8 @@ eligibility and policy metadata.
 | Required starting HEAD | `9cfe1bd053aa545a18d81384558edb2f2c78539e` |
 | Implementation / Commit A | `352b6a0bc1568ce840b9c8cf7ccf7eeb9d2975f6` — `research: add candidate observation parity harness` |
 | Receipt / Commit B | The commit containing this file; its authoritative SHA is the final `git rev-parse HEAD` handoff value (a commit cannot embed its own object ID without a self-reference). |
-| Final tracked worktree | Clean: `git status --short` reported no paths after Commit B; final branch is `main` (ahead 2 of `origin/main`). |
-| Remote publication | Not pushed; `origin/main` remains at the pre-mission remote pin. |
+| Final tracked worktree | Clean: `git status --short` reported no paths after Commit B; final branch was `main`. |
+| Remote publication | This historical receipt was written before publication. The connected remote now resolves `origin/main` to Commit B `677274a29b882d8b60d63083370d89df0ecd2776`. |
 
 The starting pin and clean tracked worktree were verified before editing.
 
@@ -221,8 +221,9 @@ the six socket-bind tests listed above:
   sandbox; the exact six-test deselection is recorded above.
 - Full-repo format and strict mypy remain limited by the unrelated baseline
   findings listed above; changed-file Ruff/compile/mypy checks pass.
-- Raw receipts remain ignored by design; this tracked report records their
-  deterministic SHA-256 and the provenance needed to recreate them.
+- The original raw receipts remain ignored by design. A subsequent corrective
+  receipt is tracked at
+  `data/research_receipts/equity_candidate_observation_parity_corrective_2026_08.json`.
 
 ## 10. Decision
 
@@ -236,4 +237,6 @@ the six socket-bind tests listed above:
 - Commit B — this tracked receipt document, to be recorded immediately after
   verification; the final handoff reports its exact `git rev-parse HEAD`.
 
-No remote push was performed.
+At the time of the original Commit B handoff no remote push was observed; the
+connected remote was later updated to Commit B. Corrective commits are kept
+local until explicitly published.

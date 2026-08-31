@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "receipt_name": "EQUITY_CANDIDATE_OBSERVATION_PARITY_OCP1_CORRECTIVE",
+  "source_commit": "584d1cd3b540cfdd9003a835b78b97f9a79393f1",
+  "base_commit": "677274a29b882d8b60d63083370d89df0ecd2776",
+  "implementation_commit": "584d1cd3b540cfdd9003a835b78b97f9a79393f1",
+  "implementation_parent_commit": "677274a29b882d8b60d63083370d89df0ecd2776",
+  "manifest": {
+    "path": "data/research_manifests/equity_candidate_observation_parity_corrective_2026_08.json",
+    "sha256": "bdc7f3d6ee8fcc02412cc1b31569f2ff9ab39b4c714beb2d807f3a4b11b044f4"
+  },
+  "runner_sha256": "f17f1d7b17a2fd6190e8b2c22fc13d4c21dbe001410eadb777dc4fced30ce3bf",
+  "config_digest_sha256": "1833407d7c42fcef45b1f2aef200a3fd14e344d6cdcc9b03c578f8e494152a3e",
+  "dataset": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "lifetimes_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+    "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "policy": {
+    "research_only": true,
+    "runtime_reads_artifacts": false,
+    "automatic_promotion": false,
+    "candidate_economics_run": false
+  },
+  "checks": {
+    "E1_canonical_v3_explicit_self_parity": {
+      "passed": true,
+      "snapshot_count": 2656,
+      "control_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "explicit_override_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "expected_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "mismatch_counts_all_zero": true,
+      "pins_and_capacity_mismatch_count": 0
+    },
+    "E2_synthetic_changed_ranker_canary": {
+      "passed": true,
+      "aligned_snapshot_count": 359,
+      "sequence_change_count": 86,
+      "membership_change_count": 86,
+      "candidate_rank_outside_pool_count": 0,
+      "future_bar_leak_detected": false,
+      "candidate_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8",
+      "repeated_candidate_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8",
+      "jaccard_mean": 0.8083565459610027,
+      "jaccard_min": 0.2,
+      "jaccard_p50": 1.0,
+      "jaccard_p95": 1.0
+    },
+    "E3_candidate_execution_boundary": {
+      "candidate_economics_run": false,
+      "fresh_instance_checks": true,
+      "C|C": {
+        "observation_basis": "configured",
+        "execution_identity": {
+          "name": "equity_residual_momentum_v3",
+          "version": "3.0.0",
+          "market": "equity",
+          "timeframe": "1d",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa"
+        }
+      },
+      "X|C": {
+        "observation_basis": "configured",
+        "execution_identity": {
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "version": "1.0.0",
+          "market": "equity",
+          "timeframe": "1d",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa"
+        }
+      },
+      "X|X": {
+        "observation_basis": "candidate_owned",
+        "observation_strategy_identity": {
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "version": "1.0.0",
+          "market": "equity",
+          "timeframe": "1d",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa"
+        },
+        "execution_strategy_identity": {
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "version": "1.0.0",
+          "market": "equity",
+          "timeframe": "1d",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa"
+        },
+        "observation_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8"
+      }
+    }
+  },
+  "dirty_paths_before": [],
+  "dirty_paths_after": [],
+  "compact_receipt_sha256": "fde017f13487f0a6981ad35550340c0c43f3b3f0c0c61355ea00b4e0ddc327de",
+  "raw_payload_receipt_sha256": "1a45291c2e94cd7b42ec7edb520192752b76ff67c7b97710f2338b8084b39687",
+  "raw_receipt_sha256": "b17f98693144981bfa8eb482c54817292bd052d976486e339a4b2aba6f385665"
+}

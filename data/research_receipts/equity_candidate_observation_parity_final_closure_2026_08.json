@@ -1,0 +1,790 @@
+{
+  "base_commit": "31c3ecee1af1826239f36b9495cf9edfb61e5d39",
+  "checks": {
+    "E1_canonical_v3_explicit_self_parity": {
+      "all_snapshots_identity": true,
+      "comparison": {
+        "allowed_difference_fields": [
+          "observation_set",
+          "observation_strategy_name",
+          "observation_strategy_version",
+          "resulting_universe_hash"
+        ],
+        "candidate_observation_strategy": {
+          "market": "equity",
+          "name": "equity_residual_momentum_v3",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "3.0.0"
+        },
+        "candidate_universe_hash": "78398c81cb783758b6fac9acea1a3ff0aee956558863a293ecd85eb61b07efcc",
+        "control_observation_strategy": {
+          "market": "equity",
+          "name": "equity_residual_momentum_v3",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "3.0.0"
+        },
+        "control_universe_hash": "78398c81cb783758b6fac9acea1a3ff0aee956558863a293ecd85eb61b07efcc",
+        "effective_at_alignment": {
+          "duplicate_candidate": false,
+          "duplicate_control": false,
+          "equal_sequence": true,
+          "extra_in_candidate": [],
+          "missing_from_candidate": [],
+          "reordered": false
+        },
+        "failure_reasons": [],
+        "mismatch_counts": {
+          "candidate_count": 0,
+          "configured_pins": 0,
+          "eligible_symbols": 0,
+          "eliminated_map": 0,
+          "market": 0,
+          "maximum_stream_capacity": 0,
+          "methodology": 0,
+          "scanner_config_digest": 0,
+          "scanner_version": 0,
+          "score_breakdown": 0,
+          "sector_metadata_coverage": 0,
+          "snapshot_boundaries": 0
+        },
+        "observation_contract": {
+          "candidate": {
+            "observation_duplicate_count": 0,
+            "observation_outside_pool_count": 0,
+            "observation_over_capacity_count": 0,
+            "pins_missing_from_observation_count": 0,
+            "pins_not_first_count": 0
+          },
+          "control": {
+            "observation_duplicate_count": 0,
+            "observation_outside_pool_count": 0,
+            "observation_over_capacity_count": 0,
+            "pins_missing_from_observation_count": 0,
+            "pins_not_first_count": 0
+          }
+        },
+        "observation_set": {
+          "jaccard_count": 2656,
+          "jaccard_mean": 1.0,
+          "jaccard_min": 1.0,
+          "jaccard_p50": 1.0,
+          "jaccard_p95": 1.0,
+          "membership_change_count": 0,
+          "sequence_change_count": 0
+        },
+        "passed": true,
+        "schema_version": "1.0.0",
+        "snapshot_count": {
+          "aligned": 2656,
+          "candidate": 2656,
+          "control": 2656
+        }
+      },
+      "control_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "expected_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "explicit_override_universe_hash": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011",
+      "pins_and_capacity": {
+        "mismatch_count": 0
+      }
+    },
+    "E2_synthetic_changed_ranker_canary": {
+      "candidate_latest_observation_set": [
+        "SPY",
+        "AAA",
+        "BBB"
+      ],
+      "candidate_rank_outside_pool_count": 0,
+      "candidate_strategy": {
+        "market": "equity",
+        "name": "equity_candidate_observation_canary_alphabetical_v1",
+        "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+        "parameters": [
+          [
+            "beta_window_bars",
+            273
+          ],
+          [
+            "exclude_symbols",
+            [
+              "SPY"
+            ]
+          ],
+          [
+            "formation_bars",
+            252
+          ],
+          [
+            "ivol_reject_quantile",
+            0.7
+          ],
+          [
+            "max_single_weight",
+            0.1
+          ],
+          [
+            "rebalance_frequency",
+            "weekly"
+          ],
+          [
+            "residual_vol_window",
+            63
+          ],
+          [
+            "skip_bars",
+            21
+          ],
+          [
+            "top_n",
+            8
+          ]
+        ],
+        "timeframe": "1d",
+        "version": "1.0.0"
+      },
+      "candidate_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8",
+      "comparison": {
+        "allowed_difference_fields": [
+          "observation_set",
+          "observation_strategy_name",
+          "observation_strategy_version",
+          "resulting_universe_hash"
+        ],
+        "candidate_observation_strategy": {
+          "market": "equity",
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "1.0.0"
+        },
+        "candidate_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8",
+        "control_observation_strategy": {
+          "market": "equity",
+          "name": "equity_residual_momentum_v3",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "3.0.0"
+        },
+        "control_universe_hash": "9551827042c2a8e06cfd3041a014c2b2d7e282e5074a12da9bda364b9d91c1ee",
+        "effective_at_alignment": {
+          "duplicate_candidate": false,
+          "duplicate_control": false,
+          "equal_sequence": true,
+          "extra_in_candidate": [],
+          "missing_from_candidate": [],
+          "reordered": false
+        },
+        "failure_reasons": [],
+        "mismatch_counts": {
+          "candidate_count": 0,
+          "configured_pins": 0,
+          "eligible_symbols": 0,
+          "eliminated_map": 0,
+          "market": 0,
+          "maximum_stream_capacity": 0,
+          "methodology": 0,
+          "scanner_config_digest": 0,
+          "scanner_version": 0,
+          "score_breakdown": 0,
+          "sector_metadata_coverage": 0,
+          "snapshot_boundaries": 0
+        },
+        "observation_contract": {
+          "candidate": {
+            "observation_duplicate_count": 0,
+            "observation_outside_pool_count": 0,
+            "observation_over_capacity_count": 0,
+            "pins_missing_from_observation_count": 0,
+            "pins_not_first_count": 0
+          },
+          "control": {
+            "observation_duplicate_count": 0,
+            "observation_outside_pool_count": 0,
+            "observation_over_capacity_count": 0,
+            "pins_missing_from_observation_count": 0,
+            "pins_not_first_count": 0
+          }
+        },
+        "observation_set": {
+          "jaccard_count": 359,
+          "jaccard_mean": 0.8083565459610027,
+          "jaccard_min": 0.2,
+          "jaccard_p50": 1.0,
+          "jaccard_p95": 1.0,
+          "membership_change_count": 86,
+          "sequence_change_count": 86
+        },
+        "passed": true,
+        "schema_version": "1.0.0",
+        "snapshot_count": {
+          "aligned": 359,
+          "candidate": 359,
+          "control": 359
+        }
+      },
+      "control_strategy": {
+        "market": "equity",
+        "name": "equity_residual_momentum_v3",
+        "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+        "parameters": [
+          [
+            "beta_window_bars",
+            273
+          ],
+          [
+            "exclude_symbols",
+            [
+              "SPY"
+            ]
+          ],
+          [
+            "formation_bars",
+            252
+          ],
+          [
+            "ivol_reject_quantile",
+            0.7
+          ],
+          [
+            "max_single_weight",
+            0.1
+          ],
+          [
+            "rebalance_frequency",
+            "weekly"
+          ],
+          [
+            "residual_vol_window",
+            63
+          ],
+          [
+            "skip_bars",
+            21
+          ],
+          [
+            "top_n",
+            8
+          ]
+        ],
+        "timeframe": "1d",
+        "version": "3.0.0"
+      },
+      "data_sha256": "f897a07fa97f35e97a0ad9fefac3bab022e198adc779db1c7563262db0f7c744",
+      "direct_observation_set": [
+        "SPY",
+        "AAA",
+        "BBB"
+      ],
+      "fresh_execution_strategy": {
+        "market": "equity",
+        "name": "equity_candidate_observation_canary_alphabetical_v1",
+        "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+        "parameters": [
+          [
+            "beta_window_bars",
+            273
+          ],
+          [
+            "exclude_symbols",
+            [
+              "SPY"
+            ]
+          ],
+          [
+            "formation_bars",
+            252
+          ],
+          [
+            "ivol_reject_quantile",
+            0.7
+          ],
+          [
+            "max_single_weight",
+            0.1
+          ],
+          [
+            "rebalance_frequency",
+            "weekly"
+          ],
+          [
+            "residual_vol_window",
+            63
+          ],
+          [
+            "skip_bars",
+            21
+          ],
+          [
+            "top_n",
+            8
+          ]
+        ],
+        "timeframe": "1d",
+        "version": "1.0.0"
+      },
+      "future_bar_leak_detected": false,
+      "repeated_candidate_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8"
+    },
+    "E3_candidate_execution_boundary": {
+      "C|C": {
+        "execution_strategy_identity": {
+          "market": "equity",
+          "name": "equity_residual_momentum_v3",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "3.0.0"
+        },
+        "observation_basis": "configured"
+      },
+      "X|C": {
+        "execution_strategy_identity": {
+          "market": "equity",
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "1.0.0"
+        },
+        "observation_basis": "configured"
+      },
+      "X|X": {
+        "execution_strategy_identity": {
+          "market": "equity",
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "1.0.0"
+        },
+        "observation_basis": "candidate_owned",
+        "observation_strategy_identity": {
+          "market": "equity",
+          "name": "equity_candidate_observation_canary_alphabetical_v1",
+          "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+          "parameters": [
+            [
+              "beta_window_bars",
+              273
+            ],
+            [
+              "exclude_symbols",
+              [
+                "SPY"
+              ]
+            ],
+            [
+              "formation_bars",
+              252
+            ],
+            [
+              "ivol_reject_quantile",
+              0.7
+            ],
+            [
+              "max_single_weight",
+              0.1
+            ],
+            [
+              "rebalance_frequency",
+              "weekly"
+            ],
+            [
+              "residual_vol_window",
+              63
+            ],
+            [
+              "skip_bars",
+              21
+            ],
+            [
+              "top_n",
+              8
+            ]
+          ],
+          "timeframe": "1d",
+          "version": "1.0.0"
+        },
+        "observation_universe_hash": "8175f591f95e1aa943f314f59242e9642afbd9fa21f7f3d9b91150eb886f7af8"
+      },
+      "candidate_economics_run": false,
+      "fresh_instance_checks": true
+    }
+  },
+  "compact_receipt_sha256": "d634f09f4b9dd84e79d29aeebdd6bfe8c4ac65ef0d7a5b4bc23346be29aa2fc0",
+  "compactor": {
+    "path": "scripts/compact_candidate_observation_parity_receipt.py",
+    "sha256": "92172e5b2a781b2ad24c8310663a892fb51bd1ec13b1fcdc992da00da49fb2e8"
+  },
+  "config": {
+    "commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+    "git_blob_normalized_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "git_blob_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "git_tracked": true,
+    "path": "config/settings.yaml",
+    "provenance": "git_blob",
+    "raw_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "semantic_digest_sha256": "1833407d7c42fcef45b1f2aef200a3fd14e344d6cdcc9b03c578f8e494152a3e",
+    "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "config_digest_sha256": "1833407d7c42fcef45b1f2aef200a3fd14e344d6cdcc9b03c578f8e494152a3e",
+  "dataset": {
+    "artifacts": {
+      "bars": {
+        "commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+        "git_blob_normalized_sha256": null,
+        "git_blob_sha256": null,
+        "git_tracked": false,
+        "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+        "provenance": "external_untracked",
+        "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+        "sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3"
+      },
+      "corporate_actions": {
+        "commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+        "git_blob_normalized_sha256": null,
+        "git_blob_sha256": null,
+        "git_tracked": false,
+        "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+        "provenance": "external_untracked",
+        "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+        "sha256": "5776de7b91a1e0fd32b0070bfefae4f65d6bb6e4a068201f8d1cb7e6552e991d"
+      },
+      "lifetimes": {
+        "commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+        "git_blob_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "git_blob_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "git_tracked": true,
+        "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+        "provenance": "git_blob",
+        "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+        "sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0"
+      }
+    },
+    "bars_path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "bars_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
+    "corporate_actions_path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "corporate_actions_sha256": "5776de7b91a1e0fd32b0070bfefae4f65d6bb6e4a068201f8d1cb7e6552e991d",
+    "lifetimes_path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+    "lifetimes_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0"
+  },
+  "dirty_paths_after": [],
+  "dirty_paths_before": [],
+  "hash_policy": {
+    "algorithm": "sha256",
+    "text_line_endings": "CRLF normalized to LF"
+  },
+  "implementation_commit": "4dc42bd952b31dfc5868951b985be8a4716cd13b",
+  "implementation_parent_commit": "0f1af75dd58a53f0730c940d1b269aaa8290d9a0",
+  "implementation_tree_sha1": "d33821ce6c0a635df7909973982ad10f784f7be5",
+  "invocation": {
+    "argv": [
+      "scripts/research_candidate_observation_parity.py",
+      "--output",
+      "/private/tmp/parayabuck-ocp-final-raw-v3.json",
+      "--manifest",
+      "data/research_manifests/equity_candidate_observation_parity_final_closure_2026_08.json"
+    ],
+    "cwd": "/Users/batuhankiskac/Desktop/ParayaBuck",
+    "python": "/Users/batuhankiskac/Desktop/ParayaBuck/.venv/bin/python"
+  },
+  "manifest": {
+    "blob_sha256": "2ecc5c6df773f807b78a97d37bccb9267a6a43663a1e9808199e7d5c7f57d54d",
+    "commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+    "path": "data/research_manifests/equity_candidate_observation_parity_final_closure_2026_08.json"
+  },
+  "policy": {
+    "automatic_promotion": false,
+    "candidate_economics_run": false,
+    "research_only": true,
+    "runtime_reads_artifacts": false
+  },
+  "python_version": "3.13.12",
+  "raw_payload_receipt_sha256": "b2ab942c3712943ea6ff98e96986c71983b94e7b6870732a80ea455c2f3e581b",
+  "raw_receipt_sha256": "5d2bea79db564f08daf984b3537d38a9dfd8ccedacbeaa4e779c3c7071e05974",
+  "receipt_name": "EQUITY_CANDIDATE_OBSERVATION_PARITY_OCP1",
+  "run_commit": "8bcdba7c67d6b8cbe2a462676d6fb7d65c788fb9",
+  "run_parent_commit": "4dc42bd952b31dfc5868951b985be8a4716cd13b",
+  "runner_sha256": "d65b3e2e65a72620b4bfed0be2dec46c4e7f0732863282c2634bf78822a42b60",
+  "schema_version": "1.0.0",
+  "source_commit": "4dc42bd952b31dfc5868951b985be8a4716cd13b",
+  "source_tree_sha1": "5f65c20191389d6c354895dcb27f87f1eb48bb6f"
+}

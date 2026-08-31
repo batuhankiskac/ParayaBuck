@@ -537,7 +537,15 @@ def dispersion_diagnostic(log: Sequence[Mapping[str, object]], bars: Sequence[Ba
     }
 
 
-def run() -> dict[str, object]:
+def run(
+    missions: Sequence[str] | None = None,
+    *,
+    output_path: Path = OUT_PATH,
+) -> dict[str, object]:
+    selected_missions = set(missions or ("m5", "m6", "m7", "m8", "m9"))
+    unknown = selected_missions - {"m5", "m6", "m7", "m8", "m9"}
+    if unknown:
+        raise ValueError(f"unknown follow-up missions: {sorted(unknown)}")
     manifest = json.loads(MANIFEST.read_text())
     if manifest.get("declared_before_results") is not True:
         raise SystemExit("follow-up manifest must be predeclared")
@@ -554,80 +562,98 @@ def run() -> dict[str, object]:
     control_result, _, control_integrity = _run_strategy(config, control_strategy, full_window, terminal_map, actions)
     records: dict[str, object] = {"control": _result_record(control_result, control_result, control_integrity)}
 
-    erc_result, erc_strategy, erc_integrity = _run_strategy(
-        config, ShrinkageERC(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
-    )
-    records["erc"] = {
-        **_result_record(erc_result, control_result, erc_integrity),
-        "diagnostics": {
-            **_mean_log(erc_strategy.erc_log),
-            "decision_count": len(erc_strategy.erc_log) + len(erc_strategy.fallback_log),
-            "erc_decision_count": len(erc_strategy.erc_log),
-            "fallback_decision_count": len(erc_strategy.fallback_log),
-            "fallback_rate": (
-                len(erc_strategy.fallback_log) / (len(erc_strategy.erc_log) + len(erc_strategy.fallback_log))
-                if erc_strategy.erc_log or erc_strategy.fallback_log
-                else 0.0
-            ),
-            "fallback_reasons": dict(
-                sorted(
-                    (
-                        reason,
-                        sum(1 for row in erc_strategy.fallback_log if row.get("reason") == reason),
-                    )
-                    for reason in {str(row.get("reason", "unknown")) for row in erc_strategy.fallback_log}
-                )
-            ),
-        },
-    }
-
-    cluster_result, cluster_strategy, cluster_integrity = _run_strategy(
-        config, ClusteredV3(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
-    )
-    records["clustered"] = {
-        **_result_record(cluster_result, control_result, cluster_integrity),
-        "diagnostics": _mean_log(cluster_strategy.cluster_log),
-    }
-
-    dispersion = dispersion_diagnostic(control_strategy.tail_gap_log, bars)
-    if dispersion["gate_passed"]:
-        dispersion_result, _, dispersion_integrity = _run_strategy(
-            config, DispersionV3(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
+    if "m5" in selected_missions:
+        erc_result, erc_strategy, erc_integrity = _run_strategy(
+            config, ShrinkageERC(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
         )
-        dispersion["headline"] = _result_record(dispersion_result, control_result, dispersion_integrity)
+        records["erc"] = {
+            **_result_record(erc_result, control_result, erc_integrity),
+            "diagnostics": {
+                **_mean_log(erc_strategy.erc_log),
+                "decision_count": len(erc_strategy.erc_log) + len(erc_strategy.fallback_log),
+                "erc_decision_count": len(erc_strategy.erc_log),
+                "fallback_decision_count": len(erc_strategy.fallback_log),
+                "fallback_rate": (
+                    len(erc_strategy.fallback_log) / (len(erc_strategy.erc_log) + len(erc_strategy.fallback_log))
+                    if erc_strategy.erc_log or erc_strategy.fallback_log
+                    else 0.0
+                ),
+                "fallback_reasons": dict(
+                    sorted(
+                        (
+                            reason,
+                            sum(1 for row in erc_strategy.fallback_log if row.get("reason") == reason),
+                        )
+                        for reason in {str(row.get("reason", "unknown")) for row in erc_strategy.fallback_log}
+                    )
+                ),
+            },
+        }
 
-    etf_window = _fixed_panel_window(full_window)
-    etf_result, _, etf_integrity = _run_strategy(
-        config, FactorETFMomentum(dict(roadmap.FROZEN_PARAMETERS)), etf_window, terminal_map, actions
-    )
-    records["factor_etf"] = {
-        **_result_record(etf_result, control_result, etf_integrity),
-        "universe_version": etf_window.universe_version,
-        "panel": ETF_PANEL,
-    }
+    if "m6" in selected_missions:
+        cluster_result, cluster_strategy, cluster_integrity = _run_strategy(
+            config, ClusteredV3(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
+        )
+        records["clustered"] = {
+            **_result_record(cluster_result, control_result, cluster_integrity),
+            "diagnostics": _mean_log(cluster_strategy.cluster_log),
+        }
 
-    twice_result, _, twice_integrity = _run_strategy(
-        config,
-        # Keep the strategy's persisted/product-compatible parameter tuple at
-        # weekly; this research-only run replaces the engine policy below.
-        TwiceWeeklyV3(dict(roadmap.FROZEN_PARAMETERS)),
-        full_window,
-        terminal_map,
-        actions,
-        policy=TwiceWeeklyPolicy(),
-    )
-    records["twice_weekly"] = _result_record(twice_result, control_result, twice_integrity)
+    if "m7" in selected_missions:
+        dispersion = dispersion_diagnostic(control_strategy.tail_gap_log, bars)
+        if dispersion["gate_passed"]:
+            dispersion_result, _, dispersion_integrity = _run_strategy(
+                config, DispersionV3(dict(roadmap.FROZEN_PARAMETERS)), full_window, terminal_map, actions
+            )
+            dispersion["headline"] = _result_record(dispersion_result, control_result, dispersion_integrity)
+    else:
+        dispersion = {
+            "gate_passed": False,
+            "status": "not_run_selected_scope",
+            "selected_missions": sorted(selected_missions),
+        }
 
-    etf = records["factor_etf"]
-    composite_gate = {
-        "positive_standalone_net_economics": bool(etf["return"] > 0),  # type: ignore[index]
-        "active_return_correlation_below_0_60": bool(etf["active_return_correlation"] < 0.60),  # type: ignore[index]
-        "three_x_costs": "not_run_headline_only",
-        "candidate_jackknife": "not_run_headline_only",
-        "multiple_fold_incrementality": "not_run_headline_only",
-        "passed": False,
-        "decision": "DO_NOT_RUN_COMPOSITE",
-    }
+    if "m8" in selected_missions:
+        etf_window = _fixed_panel_window(full_window)
+        etf_result, _, etf_integrity = _run_strategy(
+            config, FactorETFMomentum(dict(roadmap.FROZEN_PARAMETERS)), etf_window, terminal_map, actions
+        )
+        records["factor_etf"] = {
+            **_result_record(etf_result, control_result, etf_integrity),
+            "universe_version": etf_window.universe_version,
+            "panel": ETF_PANEL,
+        }
+
+    if "m9" in selected_missions:
+        twice_result, _, twice_integrity = _run_strategy(
+            config,
+            # Keep the strategy's persisted/product-compatible parameter tuple at
+            # weekly; this research-only run replaces the engine policy below.
+            TwiceWeeklyV3(dict(roadmap.FROZEN_PARAMETERS)),
+            full_window,
+            terminal_map,
+            actions,
+            policy=TwiceWeeklyPolicy(),
+        )
+        records["twice_weekly"] = _result_record(twice_result, control_result, twice_integrity)
+
+    etf = records.get("factor_etf")
+    if etf is None:
+        composite_gate = {
+            "passed": False,
+            "decision": "DO_NOT_RUN_COMPOSITE",
+            "reason": "factor_etf_m8_not_run_in_selected_scope",
+        }
+    else:
+        composite_gate = {
+            "positive_standalone_net_economics": bool(etf["return"] > 0),  # type: ignore[index]
+            "active_return_correlation_below_0_60": bool(etf["active_return_correlation"] < 0.60),  # type: ignore[index]
+            "three_x_costs": "not_run_headline_only",
+            "candidate_jackknife": "not_run_headline_only",
+            "multiple_fold_incrementality": "not_run_headline_only",
+            "passed": False,
+            "decision": "DO_NOT_RUN_COMPOSITE",
+        }
 
     payload = {
         "schema_version": "1.0.0",
@@ -670,20 +696,23 @@ def run() -> dict[str, object]:
         "composite_gate": composite_gate,
         "promotion": "NONE_RESEARCH_ONLY",
     }
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--print-json", action="store_true")
+    parser.add_argument("--missions", default="m5,m6,m7,m8,m9", help="comma-separated missions to run")
+    parser.add_argument("--output", type=Path, default=OUT_PATH)
     args = parser.parse_args()
-    payload = run()
+    missions = tuple(item.strip().lower() for item in args.missions.split(",") if item.strip())
+    payload = run(missions, output_path=args.output)
     if args.print_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        print(f"wrote {OUT_PATH}")
+        print(f"wrote {args.output}")
         for name, record in payload["headline"].items():
             print(name, record["return"], record["sharpe"], record["max_drawdown"], record["turnover"])
         print("dispersion_gate", payload["dispersion"]["gate_passed"])

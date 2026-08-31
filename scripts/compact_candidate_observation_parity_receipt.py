@@ -121,7 +121,11 @@ def _validate_raw(raw: dict[str, Any], raw_bytes: bytes) -> str:
         if not isinstance(check, dict):
             raise ValueError(f"raw receipt check is malformed: {name}")
         if name in {"E1_canonical_v3_explicit_self_parity", "E2_synthetic_changed_ranker_canary"}:
-            if check.get("passed") is not True:
+            comparison = check.get("comparison")
+            passed = check.get("passed")
+            if passed is None and isinstance(comparison, dict):
+                passed = comparison.get("passed")
+            if passed is not True:
                 raise ValueError(f"raw receipt check did not pass: {name}")
         elif name == "E3_candidate_execution_boundary":
             if check.get("candidate_economics_run") is not False:

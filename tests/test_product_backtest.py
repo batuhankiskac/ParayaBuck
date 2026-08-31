@@ -383,6 +383,11 @@ def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
 
 
 def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(tmp_path, monkeypatch) -> None:
+    # Keep this unit test independent of a developer's private .env file.
+    # _candidate_symbols constructs an Alpaca TradingClient before the
+    # eligibility function is replaced with the deterministic fake below.
+    monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
     config = _config(tmp_path)
     candidate_path = tmp_path / "equity-candidates.json"
     candidate_path.write_text(
@@ -428,6 +433,11 @@ def test_download_candidates_use_broad_eligible_universe_not_todays_shortlist(tm
 
 
 def test_load_bars_downloads_warmup_history_before_requested_start(tmp_path, monkeypatch) -> None:
+    # _load_bars intentionally fails closed without credentials; provide
+    # non-production test values so the provider itself can be replaced below
+    # without relying on a local .env file.
+    monkeypatch.setenv("ALPACA_API_KEY", "unit-test-api-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "unit-test-secret-key")
     config = _config(tmp_path)
     monkeypatch.setattr(cli_module, "ensure_active_universes", lambda *args, **kwargs: None)
     monkeypatch.setattr(

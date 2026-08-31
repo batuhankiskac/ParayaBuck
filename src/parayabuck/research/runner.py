@@ -683,13 +683,19 @@ class ResearchRunner:
                 with tmp_path.open("wb") as f:
                     pickle.dump(invariants, f, protocol=4)
                 payloads: list[tuple[ResearchTrial, int]] = [(trial, idx) for idx, trial in enumerate(job.trials)]
-                # Use ProcessPoolExecutor for completion-order handling
-                with ProcessPoolExecutor(
+                # Use ProcessPoolExecutor for completion-order handling.  Do
+                # not wrap this in a context manager: ``__exit__`` always
+                # calls ``shutdown(wait=True)``, which would make a
+                # fail-fast result wait for already-running trials before the
+                # caller sees the failure.
+                executor = ProcessPoolExecutor(
                     max_workers=workers,
                     mp_context=ctx,
                     initializer=_pool_initializer,
                     initargs=(str(tmp_path),),
-                ) as executor:
+                )
+                fast_shutdown = False
+                try:
                     # Submit all
                     future_to_idx = {executor.submit(_pool_worker, p): p[1] for p in payloads}
                     future_to_payload = {fut: p for fut, p in zip(future_to_idx.keys(), payloads)}
@@ -725,7 +731,15 @@ class ResearchRunner:
                             for fut2 in future_to_idx:
                                 fut2.cancel()
                             executor.shutdown(wait=False, cancel_futures=True)
+                            fast_shutdown = True
                             raise RuntimeError(f"Trial {res.label} failed (fail_fast): {res.error}")
+                finally:
+                    # Normal batches must still join all workers.  On the
+                    # fail-fast path shutdown already returned immediately;
+                    # running workers are allowed to finish independently
+                    # after their futures have been cancelled.
+                    if not fast_shutdown:
+                        executor.shutdown(wait=True)
                 for idx in range(len(job.trials)):
                     if idx not in results_by_idx:
                         trial = job.trials[idx]

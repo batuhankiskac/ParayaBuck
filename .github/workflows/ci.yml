@@ -25,22 +25,39 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.lock .
       - run: python -m pip install build pip-audit
+        if: always()
       - run: ruff check .
+        if: always()
       - run: ruff format --check .
+        if: always()
       - run: mypy src
+        if: always()
       - name: Record production file signatures (isolation gate)
+        if: always()
         run: python scripts/check_production_isolation.py --record /tmp/before.json
-      - run: pytest
+      - name: Focused OCP closure tests
+        if: always()
+        run: pytest -q tests/test_candidate_observation_parity.py tests/test_normalized_hash.py
+      - name: Full pytest suite
+        if: always()
+        run: pytest
       - name: Verify production files untouched (isolation gate)
+        if: always()
         run: python scripts/check_production_isolation.py --verify /tmp/before.json
-      - run: python -m build
+      - name: Build source and wheel distributions
+        if: always()
+        run: python -m build
       - name: Smoke test installed wheel
+        if: always()
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
           cd /tmp
           python -c "import parayabuck.web.server"
-      - run: pip-audit
+      - name: Dependency audit
+        if: always()
+        run: pip-audit
       - name: Secret scan
+        if: always()
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

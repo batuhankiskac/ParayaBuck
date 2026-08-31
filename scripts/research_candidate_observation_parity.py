@@ -10,7 +10,6 @@ or tracked manifests.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import platform
@@ -45,9 +44,10 @@ from parayabuck.core.models import Bar, Market  # noqa: E402
 from parayabuck.portfolio import portfolio_strategy_from  # noqa: E402
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy  # noqa: E402
 from parayabuck.portfolio.equity_residual_momentum_v3 import EquityResidualMomentum1dV3  # noqa: E402
+from parayabuck.research.normalized_hash import sha256_bytes, sha256_file  # noqa: E402
 from parayabuck.universe.observation_set import build_observation_set  # noqa: E402
 
-MANIFEST_PATH = REPO / "data/research_manifests/equity_candidate_observation_parity_corrective_2026_08.json"
+MANIFEST_PATH = REPO / "data/research_manifests/equity_candidate_observation_parity_final_closure_2026_08.json"
 DEFAULT_OUTPUT = REPO / "data/research/equity_candidate_observation_parity_2026_08/parity_receipt.json"
 EXPECTED_UNIVERSE_HASH = "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011"
 
@@ -61,27 +61,72 @@ def _git_status() -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+def _sha256_bytes(data: bytes, *, normalize_newlines: bool = False) -> str:
+    return sha256_bytes(data, normalize_newlines=normalize_newlines)
 
 
-def _sha256(path: Path) -> str:
-    """Hash stable file content, treating CRLF and LF as the same bytes.
-
-    Git normalizes text files to LF in the committed tree while some existing
-    local dataset checkouts retain CRLF.  Research receipts must therefore use
-    the committed-text representation rather than depending on checkout line
-    endings.
-    """
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk.replace(b"\r\n", b"\n"))
-    return digest.hexdigest()
+def _sha256(path: Path, *, normalize_newlines: bool = True) -> str:
+    """Hash a file through the shared boundary-safe streaming helper."""
+    return sha256_file(path, normalize_newlines=normalize_newlines)
 
 
 def _git_rev_parse(ref: str) -> str:
     return subprocess.check_output(["git", "rev-parse", ref], cwd=REPO, text=True).strip()
+
+
+def _git_blob(ref: str) -> bytes:
+    return subprocess.check_output(["git", "cat-file", "blob", ref], cwd=REPO)
+
+
+def _repo_relative(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(REPO.resolve()).as_posix()
+    except ValueError as exc:
+        raise SystemExit(f"OCP artifact must be inside the repository: {path}") from exc
+
+
+def _artifact_provenance(path: Path, run_commit: str, *, require_tracked: bool = False) -> dict[str, object]:
+    """Record a normalized working-file hash and its pinned-tree identity.
+
+    Large historical CSVs are intentionally external to Git in some local
+    checkouts.  Those files are recorded explicitly as ``external_untracked``
+    rather than silently presenting a path without an object identity.
+    """
+    resolved = path.resolve()
+    relative = _repo_relative(resolved)
+    if not resolved.is_file():
+        raise SystemExit(f"OCP artifact is missing: {resolved}")
+    working_sha = _sha256(resolved)
+    raw_sha = _sha256(resolved, normalize_newlines=False)
+    try:
+        blob = _git_blob(f"{run_commit}:{relative}")
+    except subprocess.CalledProcessError:
+        if require_tracked:
+            raise SystemExit(f"OCP artifact is not present in the pinned run tree: {relative}") from None
+        return {
+            "path": relative,
+            "commit": run_commit,
+            "git_tracked": False,
+            "provenance": "external_untracked",
+            "sha256": working_sha,
+            "raw_sha256": raw_sha,
+            "git_blob_sha256": None,
+            "git_blob_normalized_sha256": None,
+        }
+    blob_sha = _sha256_bytes(blob)
+    blob_normalized_sha = _sha256_bytes(blob, normalize_newlines=True)
+    if blob_normalized_sha != working_sha:
+        raise SystemExit(f"OCP artifact differs from the pinned run tree: {relative}")
+    return {
+        "path": relative,
+        "commit": run_commit,
+        "git_tracked": True,
+        "provenance": "git_blob",
+        "sha256": working_sha,
+        "raw_sha256": raw_sha,
+        "git_blob_sha256": blob_sha,
+        "git_blob_normalized_sha256": blob_normalized_sha,
+    }
 
 
 def _manifest_blob(path: Path) -> tuple[str, bytes]:
@@ -515,6 +560,7 @@ def _candidate_execution_boundary(config: Config) -> dict[str, object]:
         roadmap.make_engine = original_make_engine
     return {
         "candidate_economics_run": False,
+        "fresh_instance_checks": True,
         "C|C": {
             "observation_basis": configured_window.observation_basis,
             "execution_strategy_identity": strategy_identity(cc_strategy),
@@ -548,6 +594,13 @@ def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -
     e1 = _canonical_v3_self_parity(config, bars, manifest)
     e2 = _synthetic_changed_ranker_canary(config)
     e3 = _candidate_execution_boundary(config)
+    config_artifact = _artifact_provenance(REPO / "config/settings.yaml", run_commit, require_tracked=True)
+    config_artifact["semantic_digest_sha256"] = roadmap.config_digest(config)
+    dataset_artifacts = {
+        "bars": _artifact_provenance(roadmap.DATASET_V5, run_commit),
+        "lifetimes": _artifact_provenance(roadmap.LIFETIMES_V5, run_commit),
+        "corporate_actions": _artifact_provenance(roadmap.CA_V5, run_commit),
+    }
     dirty_after = _git_status()
     if dirty_after:
         raise SystemExit("candidate observation parity changed tracked worktree paths: " + ", ".join(dirty_after))
@@ -565,6 +618,7 @@ def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -
         "python_version": platform.python_version(),
         "runner_sha256": _sha256(Path(__file__)),
         "config_digest_sha256": roadmap.config_digest(config),
+        "config": config_artifact,
         "manifest": manifest_provenance,
         "invocation": {
             "argv": list(sys.argv),
@@ -577,11 +631,12 @@ def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -
         },
         "dataset": {
             "bars_path": str(roadmap.DATASET_V5.relative_to(REPO)),
-            "bars_sha256": _sha256(roadmap.DATASET_V5),
+            "bars_sha256": dataset_artifacts["bars"]["sha256"],
             "lifetimes_path": str(roadmap.LIFETIMES_V5.relative_to(REPO)),
-            "lifetimes_sha256": _sha256(roadmap.LIFETIMES_V5),
+            "lifetimes_sha256": dataset_artifacts["lifetimes"]["sha256"],
             "corporate_actions_path": str(roadmap.CA_V5.relative_to(REPO)),
-            "corporate_actions_sha256": _sha256(roadmap.CA_V5),
+            "corporate_actions_sha256": dataset_artifacts["corporate_actions"]["sha256"],
+            "artifacts": dataset_artifacts,
         },
         "policy": {
             "research_only": True,

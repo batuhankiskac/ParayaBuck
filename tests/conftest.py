@@ -100,7 +100,9 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     def _patched_journal_init(self, path=DEFAULT_JOURNAL_PATH, queue_size=2048, retention_days=30, max_events=50000):  # type: ignore[no-untyped-def]
         if str(path) == DEFAULT_JOURNAL_PATH or str(path) == "data/runtime/observability.sqlite3":
             path = str(iso_journal)
-        return orig_journal_init(self, path, queue_size=queue_size, retention_days=retention_days, max_events=max_events)
+        return orig_journal_init(
+            self, path, queue_size=queue_size, retention_days=retention_days, max_events=max_events
+        )
 
     monkeypatch.setattr(journal_module.EventJournal, "__init__", _patched_journal_init)
 
@@ -182,13 +184,19 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
                     self._session = MagicMock()
                     self._session.close = lambda: None
                 except Exception:
-                    self._session = SimpleNamespace(close=lambda: None, request=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked")))
+                    self._session = SimpleNamespace(
+                        close=lambda: None, request=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked"))
+                    )
 
             def get_stock_bars(self, *a, **kw):
-                raise RuntimeError("Network blocked in tests: Alpaca StockHistoricalDataClient.get_stock_bars called without fake")
+                raise RuntimeError(
+                    "Network blocked in tests: Alpaca StockHistoricalDataClient.get_stock_bars called without fake"
+                )
 
             def get_stock_latest_quote(self, *a, **kw):
-                raise RuntimeError("Network blocked in tests: Alpaca StockHistoricalDataClient.get_stock_latest_quote called without fake")
+                raise RuntimeError(
+                    "Network blocked in tests: Alpaca StockHistoricalDataClient.get_stock_latest_quote called without fake"
+                )
 
         class _BlockedCrypto:
             def __init__(self, *a, **kw):
@@ -196,13 +204,19 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
                     self._session = MagicMock()
                     self._session.close = lambda: None
                 except Exception:
-                    self._session = SimpleNamespace(close=lambda: None, request=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked")))
+                    self._session = SimpleNamespace(
+                        close=lambda: None, request=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked"))
+                    )
 
             def get_crypto_bars(self, *a, **kw):
-                raise RuntimeError("Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_bars called without fake")
+                raise RuntimeError(
+                    "Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_bars called without fake"
+                )
 
             def get_crypto_latest_quote(self, *a, **kw):
-                raise RuntimeError("Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_latest_quote called without fake")
+                raise RuntimeError(
+                    "Network blocked in tests: Alpaca CryptoHistoricalDataClient.get_crypto_latest_quote called without fake"
+                )
 
         monkeypatch.setattr(alpaca_module, "StockHistoricalDataClient", _BlockedStock)
         monkeypatch.setattr(alpaca_module, "CryptoHistoricalDataClient", _BlockedCrypto)
@@ -248,7 +262,9 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
     # Also ignore daemon threads that are expected to linger briefly
     alive_non_daemon = [t for t in alive if not t.daemon]
     if alive_non_daemon:
-        pytest.fail(f"Engine threads still alive after test: {[t.name for t in alive_non_daemon]} — tests must stop EngineRuntime")
+        pytest.fail(
+            f"Engine threads still alive after test: {[t.name for t in alive_non_daemon]} — tests must stop EngineRuntime"
+        )
     # For remaining daemon pb- threads, give them a moment then warn but not fail
     # (they are isolated per test via tmp journal and will be garbage collected)
 
@@ -282,7 +298,9 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
         # redirects via SQLiteStore but some direct Path writes may still touch
         # production. Skip strict check for those specific tests to avoid false
         # positives while keeping protection for cache/observability.
-        if p == Path("data/runtime/parayabuck.sqlite3") and ("test_sqlite_protection" in request.node.name or "test_research" in request.node.name):
+        if p == Path("data/runtime/parayabuck.sqlite3") and (
+            "test_sqlite_protection" in request.node.name or "test_research" in request.node.name
+        ):
             continue
         sig_after = _file_signature(p)
         if sig_before is None:
@@ -290,4 +308,6 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: py
                 pytest.fail(f"Test created production file {p} that did not exist before — isolation failed")
         else:
             if sig_after != sig_before:
-                pytest.fail(f"Production file {p} was modified during test (before={sig_before}, after={sig_after}) — isolation failed, real cache/runtime polluted")
+                pytest.fail(
+                    f"Production file {p} was modified during test (before={sig_before}, after={sig_after}) — isolation failed, real cache/runtime polluted"
+                )

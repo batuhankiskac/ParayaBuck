@@ -9,6 +9,7 @@ Usage:
 Records mtime_ns and size for protected paths; verifies byte-level identity.
 Fails with exit 1 if any protected file was created or mutated.
 """
+
 from __future__ import annotations
 
 import argparse

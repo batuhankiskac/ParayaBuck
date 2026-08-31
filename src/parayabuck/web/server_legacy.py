@@ -2503,6 +2503,7 @@ def _dashboard_last_no_trade() -> dict[str, Any] | None:
             return None
         kind, message, market, strategy, occurred_at, fields_json = row
         import json as _json
+
         try:
             fields = _json.loads(fields_json) if fields_json else {}
         except Exception:
@@ -2520,6 +2521,8 @@ def _dashboard_last_no_trade() -> dict[str, Any] | None:
     except Exception as exc:
         log.warning("Dashboard last_no_trade probe failed: %s", exc)
         return None
+
+
 def _dashboard_config() -> Any | None:
     """The parsed settings Config, cached per file version.
 

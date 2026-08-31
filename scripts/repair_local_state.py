@@ -20,6 +20,7 @@ network and are attempted if API keys are available, otherwise left for operator
 
 Idempotent: safe to run twice; second run will find already-quarantined files.
 """
+
 from __future__ import annotations
 
 import os
@@ -298,7 +299,9 @@ def repair_runtime_db():
     # Verify
     open_port2 = con.execute("SELECT COUNT(*) FROM portfolio_runtime_sessions WHERE ended_at IS NULL").fetchone()[0]
     open_rt2 = con.execute("SELECT COUNT(*) FROM runtime_sessions WHERE ended_at IS NULL").fetchone()[0]
-    remaining_incidents = con.execute("SELECT COUNT(*) FROM safety_incidents WHERE reason='decision_worker_crashed'").fetchone()[0]
+    remaining_incidents = con.execute(
+        "SELECT COUNT(*) FROM safety_incidents WHERE reason='decision_worker_crashed'"
+    ).fetchone()[0]
     print(f"  After repair: open portfolio {open_port2}, open rt {open_rt2}, incidents {remaining_incidents}")
     con.close()
 
@@ -321,7 +324,20 @@ def attempt_warmup_refresh():
         # Determine symbols: use trade_symbols from config
         crypto_syms = list(cfg.universe.crypto.trade_symbols) if cfg.universe.crypto.enabled else []
         # For verification we need active 12 symbols; use first 12
-        crypto_syms = crypto_syms[:12] or ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD", "LINK/USD", "DOGE/USD", "AVAX/USD", "LTC/USD", "BCH/USD", "DOT/USD", "UNI/USD"]
+        crypto_syms = crypto_syms[:12] or [
+            "BTC/USD",
+            "ETH/USD",
+            "SOL/USD",
+            "XRP/USD",
+            "ADA/USD",
+            "LINK/USD",
+            "DOGE/USD",
+            "AVAX/USD",
+            "LTC/USD",
+            "BCH/USD",
+            "DOT/USD",
+            "UNI/USD",
+        ]
         print(f"  Fetching {len(crypto_syms)} crypto symbols for 60 days...")
         hist = AlpacaHistoricalData(api_key, secret, stock_feed=cfg.alpaca.stock_historical_feed)
         end = datetime.now(UTC)

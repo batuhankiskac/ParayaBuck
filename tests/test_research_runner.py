@@ -853,6 +853,7 @@ def test_actual_workers_capped() -> None:
     res3 = runner.run(job3)
     assert res3.workers == 1
 
+
 def test_tier_exceeds_recommended_logs_warning(caplog) -> None:
     """Exceeding tier max_trials_recommended must emit a warning via logger (not print)."""
     import logging

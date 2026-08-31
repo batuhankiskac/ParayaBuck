@@ -199,7 +199,6 @@ def _history(config: Config, crypto: FakeCryptoClient, stock: FakeStockClient) -
     return history
 
 
-
 def _crypto_result_snapshot(result: Any) -> dict[str, Any]:
     from dataclasses import asdict
 

@@ -491,7 +491,9 @@ class ResearchRunner:
                 raise ValueError(f"Trial {tr.label} has non-positive cost_multiplier")
         spec = tier_spec(job.tier)
         if spec.max_trials_recommended is not None and len(job.trials) > spec.max_trials_recommended:
-            log.warning("Tier %s recommends <= %s trials, got %s", job.tier, spec.max_trials_recommended, len(job.trials))
+            log.warning(
+                "Tier %s recommends <= %s trials, got %s", job.tier, spec.max_trials_recommended, len(job.trials)
+            )
         config = self._config or load_config(job.config_path)
         # Protect SQLite under multiprocessing
         # Resolve persist flags with tier defaults (tri-state)

@@ -138,6 +138,7 @@ def test_combined_sleeve_allocations_fit_gross_cap_and_cash_buffer() -> None:
     assert equity_allocation <= gross_cap + _EPS
     assert crypto_allocation <= cash_buffer - _EPS
 
+
 def test_crypto_position_caps_match_config() -> None:
     """Crypto: exposure 0.10, single position 0.05, at most 2 positions; the
     per-position caps are consistent with the sleeve cap."""
@@ -248,17 +249,37 @@ def test_capital_allocation_order_invariant() -> None:
     crypto_target = _target("crypto_low_variance_v1", (("BTC/USD", 0.05),))
     # Order A: equity then crypto
     eq_a = overlay.apply(
-        equity_target, account, market=Market.EQUITY, approved_symbols=("S00",), maximum_allocation=config.strategy.equity.maximum_allocation, mode="backtest"
+        equity_target,
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("S00",),
+        maximum_allocation=config.strategy.equity.maximum_allocation,
+        mode="backtest",
     )
     cr_a = overlay.apply(
-        crypto_target, account, market=Market.CRYPTO, approved_symbols=("BTC/USD",), maximum_allocation=config.strategy.crypto.maximum_allocation, mode="backtest"
+        crypto_target,
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=("BTC/USD",),
+        maximum_allocation=config.strategy.crypto.maximum_allocation,
+        mode="backtest",
     )
     # Order B: crypto then equity (same account snapshot)
     cr_b = overlay.apply(
-        crypto_target, account, market=Market.CRYPTO, approved_symbols=("BTC/USD",), maximum_allocation=config.strategy.crypto.maximum_allocation, mode="backtest"
+        crypto_target,
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=("BTC/USD",),
+        maximum_allocation=config.strategy.crypto.maximum_allocation,
+        mode="backtest",
     )
     eq_b = overlay.apply(
-        equity_target, account, market=Market.EQUITY, approved_symbols=("S00",), maximum_allocation=config.strategy.equity.maximum_allocation, mode="backtest"
+        equity_target,
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("S00",),
+        maximum_allocation=config.strategy.equity.maximum_allocation,
+        mode="backtest",
     )
     gross_a = eq_a.target.invested_weight + cr_a.target.invested_weight
     gross_b = eq_b.target.invested_weight + cr_b.target.invested_weight

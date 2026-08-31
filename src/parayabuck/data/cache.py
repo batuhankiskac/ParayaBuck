@@ -36,7 +36,6 @@ def _filter_off_grid_bars(bars: list[Bar]) -> tuple[list[Bar], int]:
     return valid, off
 
 
-
 class WarmupCache:
     _SCHEMA = """
         CREATE TABLE IF NOT EXISTS bars (
@@ -344,6 +343,7 @@ class WarmupCache:
                 rows,
             )
             self.connection.commit()
+
     def get(
         self,
         symbol: str,
@@ -542,7 +542,15 @@ class WarmupCache:
             with self._lock:
                 rows = self.connection.execute(
                     "SELECT timestamp FROM bars WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=? AND timestamp>=? AND timestamp<=? ORDER BY timestamp",
-                    (feed, canonical_symbol(sym, market), market.value, timeframe, adjustment, start_check.isoformat(), now.isoformat()),
+                    (
+                        feed,
+                        canonical_symbol(sym, market),
+                        market.value,
+                        timeframe,
+                        adjustment,
+                        start_check.isoformat(),
+                        now.isoformat(),
+                    ),
                 ).fetchall()
             for (ts_raw,) in rows:
                 ts = datetime.fromisoformat(ts_raw)

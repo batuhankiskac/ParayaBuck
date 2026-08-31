@@ -67,9 +67,9 @@ def _make_json_serializable(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, dict):
-        return {k: _make_json_serializable(v) for k, v in value.items()}  # type: ignore[return-value]
+        return {k: _make_json_serializable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):
-        return [_make_json_serializable(v) for v in value]  # type: ignore[return-value]
+        return [_make_json_serializable(v) for v in value]
     return value
 
 

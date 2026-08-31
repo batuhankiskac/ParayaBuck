@@ -61,19 +61,66 @@ def _git_status() -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
 def _sha256(path: Path) -> str:
+    """Hash stable file content, treating CRLF and LF as the same bytes.
+
+    Git normalizes text files to LF in the committed tree while some existing
+    local dataset checkouts retain CRLF.  Research receipts must therefore use
+    the committed-text representation rather than depending on checkout line
+    endings.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+            digest.update(chunk.replace(b"\r\n", b"\n"))
     return digest.hexdigest()
 
 
+def _git_rev_parse(ref: str) -> str:
+    return subprocess.check_output(["git", "rev-parse", ref], cwd=REPO, text=True).strip()
+
+
+def _manifest_blob(path: Path) -> tuple[str, bytes]:
+    """Return a tracked manifest's repo-relative path and HEAD blob bytes."""
+    resolved = path if path.is_absolute() else REPO / path
+    resolved = resolved.resolve()
+    try:
+        relative = resolved.relative_to(REPO.resolve()).as_posix()
+    except ValueError as exc:
+        raise SystemExit("OCP manifest must be a tracked file inside the repository") from exc
+    if not resolved.is_file():
+        raise SystemExit(f"missing predeclared OCP manifest: {resolved}")
+    try:
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "--error-unmatch", "--", relative], cwd=REPO, text=True, stderr=subprocess.STDOUT
+        ).strip()
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"OCP manifest is not tracked: {relative}") from exc
+    if tracked != relative:
+        raise SystemExit(f"OCP manifest path is not canonical: {relative}")
+    try:
+        blob = subprocess.check_output(["git", "cat-file", "blob", f"HEAD:{relative}"], cwd=REPO)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"OCP manifest is unavailable from the committed HEAD tree: {relative}") from exc
+    return relative, blob
+
+
+def _manifest_provenance(path: Path) -> dict[str, str]:
+    relative, blob = _manifest_blob(path)
+    return {
+        "path": relative,
+        "commit": _git_rev_parse("HEAD"),
+        "blob_sha256": _sha256_bytes(blob),
+    }
+
+
 def _load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
-    path = path if path.is_absolute() else REPO / path
-    if not path.exists():
-        raise SystemExit(f"missing predeclared OCP manifest: {path}")
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    _relative, blob = _manifest_blob(path)
+    raw = json.loads(blob.decode("utf-8"))
     if not isinstance(raw, dict) or raw.get("declared_before_results") is not True:
         raise SystemExit("OCP manifest must declare declared_before_results=true")
     if raw.get("research_only") is not True or raw.get("automatic_promotion") is not False:
@@ -83,27 +130,33 @@ def _load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     return raw
 
 
-def _git_rev_parse(ref: str) -> str:
-    return subprocess.check_output(["git", "rev-parse", ref], cwd=REPO, text=True).strip()
+def _assert_source_pin(manifest: dict[str, Any]) -> tuple[str, str, str, str]:
+    """Require the run commit to be the committed manifest's direct child.
 
-
-def _assert_source_pin(manifest: dict[str, Any]) -> tuple[str, str]:
-    """Require the clean run to execute from the manifest's exact commit."""
+    The implementation commit contains the code under test.  A separate run
+    commit may carry only the pre-result manifest and audit harness metadata;
+    requiring ``HEAD^ == implementation_commit`` proves that the manifest was
+    committed before this exact run while retaining the original base pin.
+    """
     expected = manifest.get("implementation_commit")
     base = manifest.get("base_commit")
     if not isinstance(expected, str) or len(expected) != 40:
         raise SystemExit("OCP manifest must declare a full 40-character implementation_commit")
     if not isinstance(base, str) or len(base) != 40:
         raise SystemExit("OCP manifest must declare a full 40-character base_commit")
-    source_commit = _git_rev_parse("HEAD")
-    if source_commit != expected:
-        raise SystemExit(
-            f"OCP source pin mismatch: clean run must execute at implementation_commit {expected}, got {source_commit}"
-        )
+    run_commit = _git_rev_parse("HEAD")
     parent_commit = _git_rev_parse("HEAD^")
-    if parent_commit != base:
-        raise SystemExit(f"OCP implementation parent mismatch: expected {base}, got {parent_commit}")
-    return source_commit, parent_commit
+    if parent_commit != expected:
+        raise SystemExit(
+            f"OCP run pin mismatch: manifest run commit must directly follow implementation_commit {expected}, "
+            f"got parent {parent_commit}"
+        )
+    implementation_parent = _git_rev_parse(f"{expected}^")
+    if _git_rev_parse(f"{base}^{{commit}}") != base:
+        raise SystemExit(f"OCP base_commit does not resolve to the declared commit: {base}")
+    if subprocess.run(["git", "merge-base", "--is-ancestor", base, expected], cwd=REPO, check=False).returncode != 0:
+        raise SystemExit(f"OCP implementation commit {expected} is not descended from base_commit {base}")
+    return run_commit, expected, base, implementation_parent
 
 
 def _assert_strategy_market_timeframe(strategy: PortfolioStrategy, market: Market, timeframe: str) -> None:
@@ -485,8 +538,11 @@ def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -
         raise SystemExit(
             "candidate observation parity requires a clean tracked worktree; dirty paths: " + ", ".join(dirty_before)
         )
+    manifest_provenance = _manifest_provenance(manifest_path)
     manifest = _load_manifest(manifest_path)
-    source_commit, parent_commit = _assert_source_pin(manifest)
+    run_commit, implementation_commit, base_commit, implementation_parent = _assert_source_pin(manifest)
+    if manifest_provenance["commit"] != run_commit:
+        raise SystemExit("OCP manifest provenance commit does not match the clean run HEAD")
     config = load_config(str(REPO / "config/settings.yaml"))
     bars = roadmap.load_bars(roadmap.DATASET_V5)
     e1 = _canonical_v3_self_parity(config, bars, manifest)
@@ -498,16 +554,33 @@ def run(output: Path = DEFAULT_OUTPUT, *, manifest_path: Path = MANIFEST_PATH) -
     payload: dict[str, object] = {
         "schema_version": "1.0.0",
         "receipt_name": "EQUITY_CANDIDATE_OBSERVATION_PARITY_OCP1",
-        "source_commit": source_commit,
-        "base_commit": manifest["base_commit"],
-        "implementation_commit": manifest["implementation_commit"],
-        "implementation_parent_commit": parent_commit,
+        "source_commit": implementation_commit,
+        "run_commit": run_commit,
+        "base_commit": base_commit,
+        "implementation_commit": implementation_commit,
+        "implementation_parent_commit": implementation_parent,
+        "run_parent_commit": _git_rev_parse("HEAD^"),
+        "source_tree_sha1": _git_rev_parse("HEAD^{tree}"),
+        "implementation_tree_sha1": _git_rev_parse(f"{implementation_commit}^{{tree}}"),
         "python_version": platform.python_version(),
         "runner_sha256": _sha256(Path(__file__)),
         "config_digest_sha256": roadmap.config_digest(config),
+        "manifest": manifest_provenance,
+        "invocation": {
+            "argv": list(sys.argv),
+            "cwd": str(REPO),
+            "python": sys.executable,
+        },
+        "hash_policy": {
+            "algorithm": "sha256",
+            "text_line_endings": "CRLF normalized to LF",
+        },
         "dataset": {
+            "bars_path": str(roadmap.DATASET_V5.relative_to(REPO)),
             "bars_sha256": _sha256(roadmap.DATASET_V5),
+            "lifetimes_path": str(roadmap.LIFETIMES_V5.relative_to(REPO)),
             "lifetimes_sha256": _sha256(roadmap.LIFETIMES_V5),
+            "corporate_actions_path": str(roadmap.CA_V5.relative_to(REPO)),
             "corporate_actions_sha256": _sha256(roadmap.CA_V5),
         },
         "policy": {

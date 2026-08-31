@@ -177,6 +177,10 @@ def _validate_source_provenance(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("raw receipt manifest is not valid UTF-8 JSON") from exc
     if not isinstance(manifest_payload, dict):
         raise ValueError("raw receipt manifest must be a JSON object")
+    if manifest_payload.get("implementation_commit") != implementation:
+        raise ValueError("raw receipt manifest implementation_commit does not match source chain")
+    if manifest_payload.get("base_commit") != base:
+        raise ValueError("raw receipt manifest base_commit does not match source chain")
     return manifest_payload
 
 

@@ -201,6 +201,9 @@ def _assert_source_pin(manifest: dict[str, Any]) -> tuple[str, str, str, str]:
         raise SystemExit(f"OCP base_commit does not resolve to the declared commit: {base}")
     if subprocess.run(["git", "merge-base", "--is-ancestor", base, expected], cwd=REPO, check=False).returncode != 0:
         raise SystemExit(f"OCP implementation commit {expected} is not descended from base_commit {base}")
+    declared_parent = manifest.get("implementation_parent_commit")
+    if declared_parent is not None and declared_parent != implementation_parent:
+        raise SystemExit("OCP manifest implementation_parent_commit does not match source history")
     return run_commit, expected, base, implementation_parent
 
 

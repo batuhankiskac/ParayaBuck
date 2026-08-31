@@ -22,7 +22,7 @@ eligibility and policy metadata.
 | Implementation / Commit A | `352b6a0bc1568ce840b9c8cf7ccf7eeb9d2975f6` — `research: add candidate observation parity harness` |
 | Receipt / Commit B | The commit containing this file; its authoritative SHA is the final `git rev-parse HEAD` handoff value (a commit cannot embed its own object ID without a self-reference). |
 | Final tracked worktree | Clean: `git status --short` reported no paths after Commit B; final branch was `main`. |
-| Remote publication | This historical receipt was written before publication. The connected remote now resolves `origin/main` to Commit B `677274a29b882d8b60d63083370d89df0ecd2776`. |
+| Remote publication | This historical receipt was written before publication. The connected remote later resolved `origin/main` to Commit B `677274a29b882d8b60d63083370d89df0ecd2776`, then to the corrective receipt commit `37ed1882f833dd6313f00dd33aa165038f6811b3`. The newer provenance-hardening commits remain local until explicitly published. |
 
 The starting pin and clean tracked worktree were verified before editing.
 

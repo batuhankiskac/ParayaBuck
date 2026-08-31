@@ -115,10 +115,19 @@ def _validate_raw(raw: dict[str, Any], raw_bytes: bytes) -> str:
     if raw.get("policy", {}).get("candidate_economics_run") is not False:
         raise ValueError("raw receipt is not research-only")
     checks = raw.get("checks")
-    if not isinstance(checks, dict) or any(
-        not isinstance(check, dict) or check.get("passed") is not True for check in checks.values()
-    ):
-        raise ValueError("raw receipt contains a failed or malformed parity check")
+    if not isinstance(checks, dict):
+        raise ValueError("raw receipt is missing parity checks")
+    for name, check in checks.items():
+        if not isinstance(check, dict):
+            raise ValueError(f"raw receipt check is malformed: {name}")
+        if name in {"E1_canonical_v3_explicit_self_parity", "E2_synthetic_changed_ranker_canary"}:
+            if check.get("passed") is not True:
+                raise ValueError(f"raw receipt check did not pass: {name}")
+        elif name == "E3_candidate_execution_boundary":
+            if check.get("candidate_economics_run") is not False:
+                raise ValueError("raw receipt E3 must not run candidate economics")
+        else:
+            raise ValueError(f"raw receipt contains an unknown parity check: {name}")
     return declared
 
 

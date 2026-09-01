@@ -17,7 +17,7 @@ fetched, fabricated, substituted, or consumed from normalized-only evidence.
 | --- | --- | --- |
 | A2 | `18a9828486fae4636f28fff10f614d29186a948f` | Direct child of R1 C `69fc1e11606dec5f5e84b2da68a0bb24fae81fbd`; implementation/tests/CI only |
 | B2 | `3425a03899237bf83b3dedecc7b77f16c7c2687c` | Direct child of A2; manifest-only |
-| C2 | recorded by this commit | Receipt and this report only |
+| C2 | `e7693b0787771f8d432f5684d7ab8a280076800a` | Receipt and this report only |
 
 B2 changed exactly:
 
@@ -105,4 +105,9 @@ declared but unexecuted.
   socket-bind failures` in webhook/web tests; remote CI remains authoritative
   for those environment-dependent checks.
 - `ruff check .`, formatting, and Python compilation passed locally.
-- Remote CI has not yet been observed for R2 at C2 creation.
+- Remote CI run `33550567688` is green on Python 3.12, 3.13, and 3.14. Each
+  matrix job passed lint, formatting, type checks, focused OCP tests, focused
+  M3 data-gate tests, the full pytest suite, production isolation, source and
+  wheel builds, wheel smoke import, dependency audit, and Secret scan.
+- GitHub reported only the existing Node.js action deprecation annotation;
+  it did not affect the successful conclusion.

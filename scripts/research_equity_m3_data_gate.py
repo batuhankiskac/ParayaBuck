@@ -146,6 +146,60 @@ def _artifact_receipt(
     return artifact.receipt(logical_id, provenance_class)  # type: ignore[no-any-return, union-attr]
 
 
+def _compact_dates(values: object) -> dict[str, object]:
+    if not isinstance(values, list):
+        return {"count": 0, "sha256": session_dates_digest(())}
+    ordered = [str(value) for value in values]
+    return {
+        "count": len(ordered),
+        "sha256": session_dates_digest(ordered),
+        "first": ordered[0] if ordered else None,
+        "last": ordered[-1] if ordered else None,
+        "boundary_sample": ordered[:3] + (ordered[-3:] if len(ordered) > 3 else []),
+    }
+
+
+def _compact_inventory(inventory: Mapping[str, Mapping[str, object]]) -> dict[str, object]:
+    compact: dict[str, object] = {}
+    for symbol, item in inventory.items():
+        copy = dict(item)
+        for field in ("missing_expected_sessions", "extra_off_calendar_sessions"):
+            copy[field] = _compact_dates(copy.get(field))
+        compact[symbol] = copy
+    return compact
+
+
+def _compact_common(common: Mapping[str, object]) -> dict[str, object]:
+    compact = dict(common)
+    for field in ("missing_by_reference", "extra_by_reference"):
+        values = compact.get(field)
+        if isinstance(values, Mapping):
+            compact[field] = {str(symbol): _compact_dates(dates) for symbol, dates in values.items()}
+    compact.pop("common_sessions", None)
+    return compact
+
+
+def _compact_weekly(weekly: Mapping[str, object]) -> dict[str, object]:
+    compact = {key: value for key, value in weekly.items() if key != "decisions"}
+    decisions = weekly.get("decisions")
+    if isinstance(decisions, list):
+        compact["decision_digest_sha256"] = canonical_digest(decisions)
+        compact["first_decision_session"] = decisions[0].get("decision_session") if decisions else None
+        compact["last_decision_session"] = decisions[-1].get("decision_session") if decisions else None
+    return compact
+
+
+def _compact_iwm_audit(audit: Mapping[str, object]) -> dict[str, object]:
+    compact = dict(audit)
+    pages = compact.pop("pages", None)
+    if isinstance(pages, list):
+        compact["page_count"] = len(pages)
+        compact["page_chain_digest_sha256"] = canonical_digest(pages)
+        compact["first_page"] = pages[0] if pages else None
+        compact["last_page"] = pages[-1] if pages else None
+    return compact
+
+
 def _validate_contract(
     contract: Mapping[str, object],
     *,
@@ -537,6 +591,9 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     dirty_before = _dirty_paths()
     contract_path = Path(args.contract)
     blocked: list[str] = []
+    candidate_symbols = tuple(
+        sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
+    )
     contract: Mapping[str, object] = {}
     try:
         contract = _load_json(contract_path)
@@ -586,6 +643,9 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
             if not canonical_manifest_path.is_file():
                 raise GateError("missing_canonical_manifest", "canonical bars manifest is missing")
             canonical_manifest = _load_json(canonical_manifest_path)
+            for field, expected in (("feed", "sip"), ("adjustment", "split")):
+                if str(canonical_manifest.get(field, "")).lower() != expected:
+                    raise GateError("canonical_source_contract", f"canonical manifest {field} must be {expected}")
             canonical_artifact = stage_file(canonical_path, staging_dir)
             _validate_artifact_against_manifest(
                 canonical_artifact,
@@ -598,7 +658,20 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 logical_id="canonical_equity_v5_bars",
                 provenance_class="external_untracked",
             )
-            canonical_rows, quality = load_csv_reference_rows(canonical_artifact.staged_path)
+            candidate_symbols = tuple(
+                sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
+            )
+            canonical_rows, quality = load_csv_reference_rows(
+                canonical_artifact.staged_path,
+                reference_symbols=tuple(dict.fromkeys((*REFERENCE_SYMBOLS, *candidate_symbols))),
+            )
+            canonical_iwm_count = len(canonical_rows.get("IWM", []))
+            receipt["canonical_iwm_presence"] = {
+                "prior_static_reported_rows": 0,
+                "current_normalized_rows": canonical_iwm_count,
+                "status": "MATCHES_PRIOR_ZERO_REPORT" if canonical_iwm_count == 0 else "DISCREPANCY_AUDITED",
+                "prior_report_evidence": "data/research/equity_m3_m4_2026_08/audit.json:12-25",
+            }
 
             lifetimes_path = Path(args.lifetimes)
             if not lifetimes_path.is_file():
@@ -650,7 +723,7 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                     row.key not in {item.key for item in canonical_iwm} for row in iwm_rows
                 ):  # type: ignore[attr-defined]
                     raise GateError("existing_iwm_merge_error", "canonical IWM comparison was not deterministic")
-            receipt["iwm_raw_source"] = {"status": "VERIFIED", **iwm_audit}
+            receipt["iwm_raw_source"] = {"status": "VERIFIED", **_compact_iwm_audit(iwm_audit)}
         except GateError as exc:
             iwm_audit = {"status": "BLOCKED", "category": exc.category, "reason": str(exc)}
             receipt["iwm_raw_source"] = iwm_audit
@@ -703,16 +776,14 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 start=date(2022, 1, 1),
                 end=EVALUATION_END,
             )
-            receipt["reference_inventory"] = inventory
-            receipt["common_session_coverage"] = {
-                key: value for key, value in common.items() if key != "common_sessions"
-            }
+            receipt["reference_inventory"] = _compact_inventory(inventory)
+            receipt["common_session_coverage"] = _compact_common(common)
             receipt["common_session_coverage"]["common_sessions_sha256"] = session_dates_digest(
                 common["common_sessions"]
             )
             receipt["weekly_decision_coverage"] = {
-                "full": weekly_full,
-                "recent": weekly_recent,
+                "full": _compact_weekly(weekly_full),
+                "recent": _compact_weekly(weekly_recent),
             }
             receipt["reference_panel"] = {
                 "normalized_reference_panel_sha256": reference_panel_digest(
@@ -742,20 +813,27 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
 
         try:
             overlay = build_reference_overlay(config_data)
-            receipt["reference_role_separation"] = overlay.to_dict()
+            declared_candidates = tuple(
+                sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
+            )
+            filtered_candidates = overlay.filter_candidates(declared_candidates)
+            if filtered_candidates != declared_candidates:
+                blocked.append("declared candidate symbols include a reference or an outside-pool symbol")
+            role_receipt = overlay.to_dict()
+            role_receipt["declared_candidate_symbols"] = list(declared_candidates)
+            role_receipt["accepted_candidate_symbols"] = list(filtered_candidates)
+            receipt["reference_role_separation"] = role_receipt
         except GateError as exc:
             blocked.append(str(exc))
             receipt["reference_role_separation"] = {"status": "BLOCKED", "reason": str(exc)}
 
-        if not blocked and args.candidate_symbol:
+        if not blocked and candidate_symbols:
             matrix_rows = dict(canonical_rows)
-            matrix_rows["IWM"] = list(iwm_rows)
+            matrix_rows["IWM"] = list(canonical_rows.get("IWM", [])) or list(iwm_rows)
             threshold_data = contract.get("numerical_thresholds", DEFAULT_NUMERICAL_THRESHOLDS)
             if not isinstance(threshold_data, Mapping):
                 threshold_data = DEFAULT_NUMERICAL_THRESHOLDS
-            matrix_summary = _matrix_audit(
-                matrix_rows, receipt["weekly_decision_coverage"]["full"], args.candidate_symbol, threshold_data
-            )  # type: ignore[index]
+            matrix_summary = _matrix_audit(matrix_rows, weekly_full, candidate_symbols, threshold_data)
             receipt["design_matrix_feasibility"] = _safe(
                 {key: value for key, value in matrix_summary.items() if key != "results"}
             )
@@ -769,7 +847,7 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 "fail_count": 0,
                 "matrix_digest_merkle_root": merkle_root(()),
             }
-            if not args.candidate_symbol:
+            if not candidate_symbols:
                 blocked.append("no frozen candidate-symbol input was supplied for design-matrix audit")
 
         receipt["merge_integrity"] = {

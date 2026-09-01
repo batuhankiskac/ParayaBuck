@@ -1086,6 +1086,10 @@ def validate_iwm_bundle(
                 raise GateError("provider_payload_error", f"IWM page bar is not an object: {relative}")
             page_rows.append(normalize_provider_bar(raw))
         ensure_unique_rows(page_rows, category="identical_duplicate_bar")
+        if page_rows != sorted(page_rows, key=lambda row: row.sort_key):
+            raise GateError("source_order", f"IWM page is not sorted ascending: {relative}")
+        if normalized and page_rows and page_rows[0].sort_key <= normalized[-1].sort_key:
+            raise GateError("source_order", f"IWM page order is not strictly ascending: {relative}")
         normalized.extend(page_rows)
         staged_pages.append(
             {

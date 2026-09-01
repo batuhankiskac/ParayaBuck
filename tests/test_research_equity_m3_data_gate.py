@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import m3_data_gate_helpers as helpers  # noqa: E402
 import research_equity_m3_data_gate as gate  # noqa: E402
+import research_equity_m3_m4 as legacy_m3  # noqa: E402
 
 
 def _session_timestamp(session: date) -> datetime:
@@ -89,7 +90,10 @@ def _make_bundle(
     page_records: list[dict[str, object]] = []
     for index, page_bars in enumerate(pages, start=1):
         relative = f"pages/{index:06d}.json"
-        payload = {"bars": {"IWM": page_bars}}
+        payload = {
+            "bars": {"IWM": page_bars},
+            "next_page_token": None if index == len(pages) else f"token-{index}",
+        }
         page_path = root / relative
         raw = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         page_path.write_bytes(raw)
@@ -106,11 +110,12 @@ def _make_bundle(
         )
     receipt: dict[str, object] = {
         "schema_version": "1.0.0",
-        "provider": "fixture-provider",
-        "provider_api_product_version": "fixture-bars-v1",
+        "provider": helpers.SOURCE_PROVIDER,
+        "api_family_version": helpers.SOURCE_API_FAMILY_VERSION,
+        "provider_api_product_version": "fixture_v1",
         "asset_class": "us_equity",
         "symbol": "IWM",
-        "endpoint_identity": "fixture/stocks/bars",
+        "endpoint_identity": helpers.SOURCE_ENDPOINT,
         "request": {
             "start": "2016-01-01",
             "end": "2026-07-31",
@@ -185,35 +190,75 @@ def _good_inventory(sessions: tuple[date, ...]) -> dict[str, dict[str, object]]:
     return {
         symbol: {
             "normalized_row_count": len(sessions),
+            "raw_reference_rows": len(sessions),
+            "normalized_reference_rows": len(sessions),
+            "post_evaluation_valid_rows": 0,
+            "rejected_row_count": 0,
             "missing_expected_sessions": [],
             "extra_off_calendar_sessions": [],
             "duplicate_count": 0,
             "conflicting_duplicate_count": 0,
             "nonfinite_count": 0,
             "nonpositive_close_count": 0,
+            "nonpositive_ohlc_count": 0,
             "invalid_ohlc_count": 0,
             "negative_volume_count": 0,
+            "zero_volume_count": 0,
+            "timeframe_mismatch_count": 0,
+            "market_mismatch_count": 0,
+            "naive_timestamp_count": 0,
+            "invalid_timestamp_count": 0,
+            "source_range_violation_count": 0,
+            "unexpected_schema_count": 0,
             "timeframe_values": [helpers.CANONICAL_TIMEFRAME],
             "market_values": [helpers.MARKET],
+            "row_accounting": {"identity_holds": True},
         }
         for symbol in helpers.REFERENCE_SYMBOLS
     }
 
 
 def _receipt_for_assertions() -> dict[str, object]:
-    path = ROOT / "data/research_receipts/equity_m3_data_gate_2026_09.json"
+    path = ROOT / "data/research_receipts/equity_m3_data_gate_2026_09_r2.json"
     if path.is_file():
         return json.loads(path.read_text(encoding="utf-8"))
     return {
-        "schema_version": "1.0.0",
-        "verdict": "M3_DATA_GATE_BLOCKED",
+        "schema_version": "2.0.0",
+        "mission": "equity_m3_data_gate_2026_09_r2",
+        "data_gate_verdict": "M3_DATA_GATE_BLOCKED",
+        "corrective_infrastructure_verdict": "PASS",
         "research_only": True,
         "automatic_promotion": False,
         "human_promotion_only": True,
         "candidate_economics_run": False,
         "economic_metrics_present": False,
+        "economic_mission_ready": False,
         "blocked_reasons": ["fixture blocked"],
     }
+
+
+def _fake_pass_receipt(**updates: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": "2.0.0",
+        "mission": "equity_m3_data_gate_2026_09_r2",
+        "data_gate_verdict": "M3_DATA_GATE_PASS",
+        "corrective_infrastructure_verdict": "PASS",
+        "research_only": True,
+        "automatic_promotion": False,
+        "human_promotion_only": True,
+        "candidate_economics_run": False,
+        "economic_metrics_present": False,
+        "economic_mission_ready": False,
+        "next_required_gate": "M3_CANDIDATE_OCP_GATE",
+        "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+        "diagnostic_only": False,
+        "mandatory_gate_results": {name: {"status": "PASS"} for name in gate.MANDATORY_GATES},
+        "design_matrix_summary": {"total_matrix_count": 1, "pass_count": 1, "fail_count": 0},
+        "forbidden_economic_fields": [],
+    }
+    payload.update(updates)
+    payload["self_digest_sha256"] = helpers.canonical_digest(payload)
+    return payload
 
 
 def test_missing_iwm_blocks(tmp_path: Path) -> None:
@@ -592,7 +637,9 @@ def test_qqq_is_not_tradable_in_research_overlay() -> None:
     overlay = helpers.build_reference_overlay(
         {"universe": {"equity": {"maximum_stream_symbols": 10, "fallback_trade_symbols": ["QQQ", "AAA"]}}}
     )
-    assert "QQQ" not in overlay.configured_trade_symbols
+    assert "QQQ" in overlay.original_configured_trade_symbols
+    assert "QQQ" in overlay.removed_reference_symbols
+    assert "QQQ" not in overlay.research_effective_trade_symbols
     assert "QQQ" not in overlay.filter_candidates(["QQQ", "AAA"])
 
 
@@ -661,7 +708,14 @@ def test_blocked_receipt_is_deterministic() -> None:
 def test_pass_requires_every_mandatory_gate() -> None:
     sessions = tuple(date(2024, 1, 2) + timedelta(days=index) for index in range(274))
     inventory = _good_inventory(sessions)
-    weekly = {"failed_after_warmup_count": 0}
+    weekly = {
+        "failed_after_warmup_count": 0,
+        "ever_feasible": True,
+        "post_feasibility_failure_count": 0,
+        "accepted_decision_count": 1,
+        "decision_count": 1,
+        "recent_window_accepted_covers_every_required_weekly_decision": True,
+    }
     common = {"common_session_count": 274}
     assert gate._reference_gate_pass(inventory, common, weekly, weekly)
     inventory["IWM"]["missing_expected_sessions"] = ["2024-01-02"]
@@ -688,4 +742,218 @@ def test_large_external_data_are_not_committed() -> None:
 def test_count_only_m3_ready_cannot_return_ready() -> None:
     source = (ROOT / "scripts/research_equity_m3_m4.py").read_text(encoding="utf-8")
     assert 'coverage[symbol]["count"] >= 274' not in source
-    assert "blocked_unverified_data_gate" in source
+    assert "blocked_data_gate" in source
+    assert "data_gate_pass_m3_ocp_required" in source
+
+
+def test_r1_manifest_commit_with_code_changes_is_rejected() -> None:
+    r1_contract = {
+        "base_commit": "0a8a726b4ce6d1dcf0d8591a860125e2fed875ba",
+        "implementation_commit": "11ffe9ea5650bfbd3bcd1eda0787d50f255f6f9a",
+        "implementation_tree": "unused",
+        "critical_git_blobs": {},
+    }
+    with pytest.raises(helpers.GateError, match="manifest-only"):
+        gate._validate_commit_provenance(
+            r1_contract,
+            manifest_path="data/research_manifests/equity_m3_data_gate_2026_09.json",
+            run_commit="e76bfa0e9f43a0ddac18e38f43e5dd226ea1516d",
+            run_parent="11ffe9ea5650bfbd3bcd1eda0787d50f255f6f9a",
+        )
+
+
+@pytest.mark.parametrize("gate_name", gate.MANDATORY_GATES)
+def test_removing_any_mandatory_gate_blocks(gate_name: str) -> None:
+    gates = {name: {"status": gate.GATE_PASS} for name in gate.MANDATORY_GATES}
+    del gates[gate_name]
+    assert gate.evaluate_mandatory_gates(gates) == "M3_DATA_GATE_BLOCKED"
+
+
+@pytest.mark.parametrize("state", (gate.GATE_FAIL, gate.GATE_UNKNOWN, gate.GATE_NOT_RUN))
+@pytest.mark.parametrize("gate_name", gate.MANDATORY_GATES)
+def test_falsifying_any_mandatory_gate_blocks(gate_name: str, state: str) -> None:
+    gates = {name: {"status": gate.GATE_PASS} for name in gate.MANDATORY_GATES}
+    gates[gate_name] = {"status": state}
+    assert gate.evaluate_mandatory_gates(gates) == "M3_DATA_GATE_BLOCKED"
+
+
+def test_terminal_payload_continuation_token_mismatch_blocks(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path / "bundle", [_raw_bar(date(2024, 7, 1))])
+    page_path = bundle / "pages/000001.json"
+    payload = json.loads(page_path.read_text(encoding="utf-8"))
+    payload["next_page_token"] = "unexpected-token"
+    raw = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    page_path.write_bytes(raw)
+    receipt_path = bundle / "source_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["pages"][0]["raw_byte_size"] = len(raw)
+    receipt["pages"][0]["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+    _write_json(receipt_path, receipt)
+    with pytest.raises(helpers.GateError, match="continuation"):
+        helpers.validate_iwm_bundle(bundle, tmp_path / "stage")
+
+
+def test_symlink_input_is_rejected_by_staging(tmp_path: Path) -> None:
+    target = tmp_path / "target.txt"
+    source = tmp_path / "source.txt"
+    target.write_text("payload\n", encoding="utf-8")
+    source.symlink_to(target)
+    with pytest.raises(helpers.GateError, match="symlink"):
+        helpers.stage_file(source, tmp_path / "stage")
+
+
+def test_path_replacement_before_open_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source = tmp_path / "source.txt"
+    replacement = tmp_path / "replacement.txt"
+    source.write_text("original\n", encoding="utf-8")
+    replacement.write_text("replacement\n", encoding="utf-8")
+    original_open = helpers.os.open
+    replaced = False
+
+    def replacing_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+        nonlocal replaced
+        try:
+            is_source = Path(path) == source
+        except TypeError:
+            is_source = False
+        if is_source and not replaced:
+            replacement.replace(source)
+            replaced = True
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(helpers.os, "open", replacing_open)
+    with pytest.raises(helpers.GateError, match="replaced"):
+        helpers.stage_file(source, tmp_path / "stage")
+
+
+def test_truncation_during_copy_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("payload-before-truncation\n", encoding="utf-8")
+
+    def truncate(path: Path) -> None:
+        path.write_bytes(b"")
+
+    with pytest.raises(helpers.GateError, match="changed"):
+        helpers.stage_file(source, tmp_path / "stage", after_copy_hook=truncate)
+
+
+def test_staged_content_hash_mismatch_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("payload\n", encoding="utf-8")
+    with pytest.raises(helpers.GateError, match="hash mismatch"):
+        helpers.stage_file(source, tmp_path / "stage", expected_sha256="0" * 64)
+
+
+def test_zero_volume_reference_row_is_accounted_and_rejected(tmp_path: Path) -> None:
+    row = _bar("SPY", date(2024, 7, 1))
+    path = tmp_path / "zero-volume.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(helpers.CANONICAL_COLUMNS[1:]))
+        writer.writeheader()
+        values = _csv_row(row)
+        values["volume"] = "0"
+        writer.writerow(values)
+    loaded, quality = helpers.load_csv_reference_rows(path, reference_symbols=("SPY",))
+    assert loaded["SPY"] == []
+    assert quality["SPY"]["rejected_row_count"] == 1
+    assert quality["SPY"]["zero_volume_count"] == 1
+
+
+def test_weekly_coverage_rejects_jointly_stale_references() -> None:
+    expected = tuple(date(2024, 1, 2) + timedelta(days=index) for index in range(300))
+    rows = {symbol: [_bar(symbol, session) for session in expected[:274]] for symbol in helpers.REFERENCE_SYMBOLS}
+    report = helpers.weekly_decision_coverage(rows, expected_sessions=expected, start=expected[0], end=expected[-1])
+    assert report["jointly_stale_count"] > 0
+    assert any(item["state"] == "STALE_REFERENCE" for item in report["decisions"])
+
+
+def test_weekly_coverage_distinguishes_no_feasible_window_from_warmup() -> None:
+    expected = tuple(date(2024, 1, 2) + timedelta(days=index) for index in range(40))
+    rows = {symbol: [_bar(symbol, session) for session in expected] for symbol in helpers.REFERENCE_SYMBOLS}
+    report = helpers.weekly_decision_coverage(rows, expected_sessions=expected, start=expected[0], end=expected[-1])
+    assert report["ever_feasible"] is False
+    assert report["initial_warmup_decision_count"] == 0
+    assert {item["state"] for item in report["decisions"]} == {"NO_FEASIBLE_REFERENCE_WINDOW"}
+
+
+def test_deterministic_pit_population_excludes_references_without_alpha() -> None:
+    population = helpers.deterministic_candidate_population(
+        [
+            {"effective_at": "2024-01-02T00:00:00+00:00", "symbols": ["AAA", "SPY"]},
+            {"effective_at": "2024-02-02T00:00:00+00:00", "symbols": ["BBB", "IWM", "QQQ"]},
+        ]
+    )
+    assert population["candidate_symbols"] == ["AAA", "BBB"]
+    assert helpers.candidate_symbols_for_decision(population, "2024-01-15") == ("AAA",)
+    assert helpers.validate_pit_reference_boundary(population)["status"] == "PIT_UNIVERSE_VERIFIED"
+
+
+def test_alpha_ranked_pit_population_is_rejected() -> None:
+    with pytest.raises(helpers.GateError, match="alpha"):
+        helpers.deterministic_candidate_population(
+            [
+                {
+                    "effective_at": "2024-01-02T00:00:00+00:00",
+                    "symbols": ["AAA"],
+                    "observation_strategy": "ranked_v1",
+                }
+            ]
+        )
+
+
+def test_exact_matrix_panel_uses_candidate_reference_intersection() -> None:
+    sessions, closes = _matrix_fixture()
+    rows = {
+        symbol: [_bar(symbol, session, close) for session, close in zip(sessions, values, strict=True)]
+        for symbol, values in closes.items()
+    }
+    rows["AAA"].pop()
+    selected, panel = helpers.exact_m3_close_panel("AAA", sessions[-1], rows)
+    assert len(selected) == 273
+    result = helpers.audit_design_matrix("AAA", sessions[-1], selected, panel)
+    assert result["passed"] is False
+    assert "common_close_count" in result["failure_categories"]
+
+
+def test_reference_capacity_includes_managed_and_open_order_reservations() -> None:
+    with pytest.raises(helpers.GateError, match="capacity"):
+        helpers.build_reference_overlay(
+            {"universe": {"equity": {"maximum_stream_symbols": 4, "fallback_trade_symbols": ["AAA"]}}},
+            managed_position_reservations=1,
+            open_order_reservations=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("label", "update"),
+    (
+        ("self-consistent fake", {}),
+        ("another dataset", {"input_provenance": {"canonical_bars": {"raw_sha256": "1" * 64}}}),
+        ("another implementation", {"base_lineage": {"implementation_a2_commit": "2" * 40}}),
+        ("zero matrices", {"design_matrix_summary": {"total_matrix_count": 0, "pass_count": 0, "fail_count": 0}}),
+        ("missing composite", {"composite_dataset_identity": {"status": "NOT_RUN_BLOCKED"}}),
+        (
+            "unknown mandatory gate",
+            {"mandatory_gate_results": {"iwm_raw_bundle": {"status": "UNKNOWN"}}},
+        ),
+        (
+            "altered manifest hash",
+            {"manifest_identity": {"path": gate.R2_MANIFEST_PATH, "git_blob_id": "3" * 40}},
+        ),
+        ("wrong reference panel hash", {"reference_panel": {"normalized_reference_panel_sha256": "4" * 64}}),
+    ),
+)
+def test_weak_or_mismatched_pass_receipts_are_rejected(
+    label: str, update: dict[str, object], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    del label
+    receipt_path = tmp_path / "receipt.json"
+    _write_json(receipt_path, _fake_pass_receipt(**update))
+    monkeypatch.setattr(legacy_m3, "M3_DATA_GATE_RECEIPT", receipt_path)
+    assert legacy_m3._valid_m3_data_gate_receipt() is False
+
+
+def test_manual_candidate_argument_is_not_a_pass_input() -> None:
+    source = (ROOT / "scripts/research_equity_m3_data_gate.py").read_text(encoding="utf-8")
+    assert "--candidate-symbol" not in source
+    assert "--diagnostic-candidate-symbol" in source

@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Run the fail-closed, research-only M3 DATA GATE.
 
-This command audits exact local bytes and an explicitly supplied IWM raw page
-bundle.  It never contacts a provider, imports the broker/runtime, runs a
-portfolio engine, calculates economic metrics, or promotes a strategy.
-
-The command intentionally returns ``20`` for a truthful blocked data gate.
-Missing mandatory external data is a result, not permission to substitute a
-different source.
+This verifier consumes only local, explicitly supplied bytes. It never
+contacts a provider, imports the broker/runtime, runs a portfolio engine, or
+calculates economic metrics. Missing data and every unexecuted mandatory
+phase are represented as blockers, never as an implicit pass.
 """
 
 from __future__ import annotations
@@ -34,20 +31,35 @@ if str(Path(__file__).parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent))
 
 from m3_data_gate_helpers import (  # noqa: E402
+    CANONICAL_COLUMNS,
     CANONICAL_TIMEFRAME,
     DEFAULT_NUMERICAL_THRESHOLDS,
     EVALUATION_END,
+    EXCHANGE_TIMEZONE,
+    MATRIX_ENCODING_VERSION,
     NORMALIZER_VERSION,
+    RAW_SOURCE_TIMEFRAME,
     REFERENCE_SYMBOLS,
+    SOURCE_ADJUSTMENT,
+    SOURCE_API_FAMILY_VERSION,
+    SOURCE_END,
+    SOURCE_ENDPOINT,
+    SOURCE_FEED,
+    SOURCE_PROVIDER,
+    SOURCE_SORT,
     SOURCE_START,
     GateError,
     audit_design_matrix,
     build_reference_inventory,
     build_reference_overlay,
     calendar_dependency_identity,
+    candidate_symbols_for_decision,
     canonical_digest,
     common_session_report,
+    composite_dataset_identity,
     config_semantic_digest,
+    deterministic_candidate_population,
+    exact_m3_close_panel,
     expected_exchange_sessions,
     forbidden_receipt_keys,
     load_csv_reference_rows,
@@ -57,13 +69,56 @@ from m3_data_gate_helpers import (  # noqa: E402
     session_dates_digest,
     stage_file,
     validate_iwm_bundle,
+    validate_pit_reference_boundary,
     weekly_decision_coverage,
+    write_normalized_sidecar,
 )
 
 EXIT_BLOCKED = 20
 EXIT_CONTRACT_ERROR = 21
 VERIFIER_PATH = Path(__file__).relative_to(_REPO).as_posix()
 NORMALIZER_PATH = "scripts/m3_data_gate_helpers.py"
+R2_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
+BASE_COMMIT = "69fc1e11606dec5f5e84b2da68a0bb24fae81fbd"
+GATE_PASS = "PASS"
+GATE_FAIL = "FAIL"
+GATE_UNKNOWN = "UNKNOWN"
+GATE_NOT_RUN = "NOT_RUN_BLOCKED"
+GATE_STATES = frozenset({GATE_PASS, GATE_FAIL, GATE_UNKNOWN, GATE_NOT_RUN})
+MANDATORY_GATES = (
+    "commit_topology",
+    "implementation_blob_identity",
+    "clean_worktree",
+    "configuration_identity",
+    "dependency_identity",
+    "canonical_artifact_identity",
+    "lifetime_identity",
+    "corporate_action_identity",
+    "iwm_raw_bundle",
+    "iwm_provider_contract",
+    "iwm_pagination_chain",
+    "iwm_normalization",
+    "reference_calendar",
+    "reference_row_quality",
+    "reference_common_sessions",
+    "weekly_coverage",
+    "composite_dataset_identity",
+    "deterministic_numerical_population",
+    "design_matrix_feasibility",
+    "reference_role_contract",
+    "receipt_forbidden_fields",
+)
+REQUIRED_FOR_DATA_PASS = MANDATORY_GATES
+CRITICAL_GIT_PATHS = (
+    "scripts/m3_data_gate_helpers.py",
+    "scripts/research_equity_m3_data_gate.py",
+    "tests/test_research_equity_m3_data_gate.py",
+    ".github/workflows/ci.yml",
+)
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
 
 def _sha256(path: Path) -> str:
@@ -74,15 +129,35 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _run_git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=_REPO,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+def _run_git(*args: str, repo: Path = _REPO) -> str:
+    result = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
     return result.stdout.strip()
+
+
+def _run_git_bytes(*args: str, repo: Path = _REPO) -> bytes:
+    result = subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+    return result.stdout
+
+
+def _git_blob_id(commit: str, path: str, *, repo: Path = _REPO) -> str:
+    return _run_git("rev-parse", f"{commit}:{path}", repo=repo)
+
+
+def _git_blob_bytes(commit: str, path: str, *, repo: Path = _REPO) -> bytes:
+    return _run_git_bytes("cat-file", "blob", f"{commit}:{path}", repo=repo)
+
+
+def _git_tree_id(commit: str, *, repo: Path = _REPO) -> str:
+    return _run_git("rev-parse", f"{commit}^{{tree}}", repo=repo)
+
+
+def _git_parent(commit: str, *, repo: Path = _REPO) -> str:
+    return _run_git("rev-parse", f"{commit}^", repo=repo)
+
+
+def _git_changed_paths(commit: str, *, repo: Path = _REPO) -> list[str]:
+    output = _run_git("diff-tree", "--no-commit-id", "--name-only", "-r", commit, repo=repo)
+    return [line for line in output.splitlines() if line]
 
 
 def _dirty_paths() -> list[str]:
@@ -101,9 +176,9 @@ def _load_json(path: Path) -> Mapping[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise GateError("invalid_manifest", f"invalid JSON artifact: {path.name}") from exc
+        raise GateError("invalid_json", f"invalid JSON artifact: {path.name}") from exc
     if not isinstance(payload, Mapping):
-        raise GateError("invalid_manifest", f"JSON artifact must be an object: {path.name}")
+        raise GateError("invalid_json", f"JSON artifact must be an object: {path.name}")
     return payload
 
 
@@ -135,15 +210,10 @@ def _manifest_expected_hash(manifest: Mapping[str, object], *keys: str) -> str |
     return None
 
 
-def _artifact_receipt(
-    artifact: object,
-    *,
-    logical_id: str,
-    provenance_class: str,
-) -> dict[str, object]:
+def _artifact_receipt(artifact: object, *, logical_id: str, provenance_class: str) -> dict[str, object]:
     if not hasattr(artifact, "receipt"):
-        return {"logical_artifact_id": logical_id, "status": "UNKNOWN"}
-    return artifact.receipt(logical_id, provenance_class)  # type: ignore[no-any-return, union-attr]
+        return {"logical_artifact_id": logical_id, "status": GATE_UNKNOWN}
+    return artifact.receipt(logical_id, provenance_class)  # type: ignore[no-any-return,union-attr]
 
 
 def _compact_dates(values: object) -> dict[str, object]:
@@ -184,6 +254,18 @@ def _compact_weekly(weekly: Mapping[str, object]) -> dict[str, object]:
     decisions = weekly.get("decisions")
     if isinstance(decisions, list):
         compact["decision_digest_sha256"] = canonical_digest(decisions)
+        compact["state_counts"] = {
+            state: sum(item.get("state") == state for item in decisions if isinstance(item, Mapping))
+            for state in (
+                "INITIAL_WARMUP",
+                "ACCEPTED",
+                "REFERENCE_OUTAGE",
+                "STALE_REFERENCE",
+                "MISALIGNED_REFERENCE",
+                "INSUFFICIENT_COMMON_WINDOW",
+                "NO_FEASIBLE_REFERENCE_WINDOW",
+            )
+        }
         compact["first_decision_session"] = decisions[0].get("decision_session") if decisions else None
         compact["last_decision_session"] = decisions[-1].get("decision_session") if decisions else None
     return compact
@@ -200,14 +282,66 @@ def _compact_iwm_audit(audit: Mapping[str, object]) -> dict[str, object]:
     return compact
 
 
-def _validate_contract(
-    contract: Mapping[str, object],
-    *,
-    run_commit: str,
-    run_parent: str,
+def _gate_map() -> dict[str, dict[str, object]]:
+    return {name: {"status": GATE_UNKNOWN, "reason": "not evaluated"} for name in MANDATORY_GATES}
+
+
+def _set_gate(
+    gates: dict[str, dict[str, object]], name: str, status: str, *, reason: str | None = None, **evidence: object
 ) -> None:
+    if name not in gates:
+        raise KeyError(name)
+    if status not in GATE_STATES:
+        raise ValueError(f"unsupported gate state: {status}")
+    value: dict[str, object] = {"status": status}
+    if reason:
+        value["reason"] = reason
+    value.update(evidence)
+    gates[name] = value
+
+
+def evaluate_mandatory_gates(gates: Mapping[str, Mapping[str, object]]) -> str:
+    """Return PASS only when every frozen mandatory field is exactly PASS."""
+    if any(gates.get(name, {}).get("status") != GATE_PASS for name in REQUIRED_FOR_DATA_PASS):
+        return "M3_DATA_GATE_BLOCKED"
+    return "M3_DATA_GATE_PASS"
+
+
+def _load_committed_contract(path: Path, *, run_commit: str) -> tuple[Mapping[str, object], str, bytes]:
+    logical = _logical_path(path)
+    if logical != R2_MANIFEST_PATH:
+        raise GateError("manifest_path_mismatch", "R2 gate must use the pinned R2 manifest path")
+    try:
+        committed = _git_blob_bytes(run_commit, logical)
+        blob_id = _git_blob_id(run_commit, logical)
+    except subprocess.CalledProcessError as exc:
+        raise GateError("manifest_not_committed", "R2 manifest is not present in the run commit") from exc
+    try:
+        working = path.read_bytes()
+    except OSError as exc:
+        raise GateError("manifest_missing", "R2 manifest working copy is missing") from exc
+    if working != committed:
+        raise GateError("mutable_manifest", "working R2 manifest differs from the committed HEAD blob")
+    try:
+        payload = json.loads(committed.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("invalid_manifest", "committed R2 manifest is not valid UTF-8 JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise GateError("invalid_manifest", "committed R2 manifest must be an object")
+    return payload, blob_id, committed
+
+
+def _validate_contract(contract: Mapping[str, object], *, run_commit: str, run_parent: str) -> None:
+    if contract.get("schema_version") != "2.0.0":
+        raise GateError("manifest_schema_mismatch", "R2 manifest schema is not 2.0.0")
+    if contract.get("mission") != "equity_m3_data_gate_2026_09_r2":
+        raise GateError("manifest_mission_mismatch", "R2 manifest mission is incorrect")
+    if contract.get("repository_url") != "https://github.com/batuhankiskac/ParayaBuck":
+        raise GateError("manifest_repository_mismatch", "R2 manifest repository is incorrect")
+    if contract.get("branch") != "main" or contract.get("snapshot_date") != "2026-09-01":
+        raise GateError("manifest_snapshot_mismatch", "R2 manifest branch or snapshot date drifted")
     if contract.get("declared_before_results") is not True:
-        raise GateError("manifest_not_predeclared", "M3 manifest must be declared_before_results=true")
+        raise GateError("manifest_not_predeclared", "R2 manifest must be predeclared")
     for key, expected in (
         ("research_only", True),
         ("automatic_promotion", False),
@@ -215,22 +349,20 @@ def _validate_contract(
         ("candidate_economics_run", False),
     ):
         if contract.get(key) != expected:
-            raise GateError("manifest_policy_mismatch", f"M3 manifest {key} is not frozen correctly")
-    if contract.get("base_commit") != "0a8a726b4ce6d1dcf0d8591a860125e2fed875ba":
-        raise GateError("base_commit_mismatch", "M3 manifest base commit is not the pinned base")
+            raise GateError("manifest_policy_mismatch", f"R2 manifest {key} drifted")
+    if contract.get("base_commit") != BASE_COMMIT:
+        raise GateError("base_commit_mismatch", "R2 manifest base commit is not the pinned R1 base")
+    if contract.get("manifest_path") != R2_MANIFEST_PATH:
+        raise GateError("manifest_path_mismatch", "R2 manifest path is not frozen")
+    if contract.get("implementation_parent_commit") != BASE_COMMIT:
+        raise GateError("implementation_parent_mismatch", "R2 implementation parent is not the pinned base")
+    if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R2 manifest path":
+        raise GateError("manifest_commit_rule_mismatch", "R2 manifest-only commit rule drifted")
     implementation = contract.get("implementation_commit")
-    implementation_parent = contract.get("implementation_parent_commit")
-    if not isinstance(implementation, str) or not isinstance(implementation_parent, str):
-        raise GateError("implementation_pin_missing", "M3 manifest implementation pin is incomplete")
-    if implementation_parent != contract.get("base_commit"):
-        raise GateError("implementation_parent_mismatch", "implementation commit is not a direct child of base")
-    if run_commit == implementation:
-        raise GateError("pre_result_manifest_not_committed", "gate must run from the direct child manifest commit")
+    if not isinstance(implementation, str) or len(implementation) != 40:
+        raise GateError("implementation_pin_missing", "R2 implementation commit is missing")
     if run_parent != implementation:
-        raise GateError("manifest_commit_topology", "gate run commit must be a direct child of implementation commit")
-    relationship = contract.get("expected_run_commit_relationship")
-    if not isinstance(relationship, str) or "direct child" not in relationship.lower():
-        raise GateError("manifest_topology_missing", "manifest must declare the expected run commit relationship")
+        raise GateError("manifest_commit_topology", "run commit must be the direct child of A2")
     parameters = contract.get("frozen_parameters")
     required_parameters = {
         "formation_bars": 252,
@@ -244,21 +376,195 @@ def _validate_contract(
         "rebalance_frequency": "weekly",
     }
     if parameters != required_parameters:
-        raise GateError("frozen_parameter_mismatch", "M3 manifest parameters drifted")
+        raise GateError("frozen_parameter_mismatch", "R2 frozen parameters drifted")
     thresholds = contract.get("numerical_thresholds")
     if not isinstance(thresholds, Mapping):
-        raise GateError("numerical_thresholds_missing", "M3 manifest numerical thresholds are missing")
+        raise GateError("numerical_thresholds_missing", "R2 numerical thresholds are missing")
     for key, value in DEFAULT_NUMERICAL_THRESHOLDS.items():
         if thresholds.get(key) != value:
-            raise GateError("numerical_threshold_mismatch", f"M3 threshold {key} drifted")
+            raise GateError("numerical_threshold_mismatch", f"R2 threshold {key} drifted")
+    source = contract.get("iwm_raw_source_contract")
+    if not isinstance(source, Mapping):
+        raise GateError("source_contract_missing", "R2 IWM source contract is missing")
+    for key, expected in (
+        ("provider", SOURCE_PROVIDER),
+        ("api_family_version", SOURCE_API_FAMILY_VERSION),
+        ("endpoint_identity", SOURCE_ENDPOINT),
+        ("asset_class", "us_equity"),
+        ("symbol", "IWM"),
+        ("timeframe", RAW_SOURCE_TIMEFRAME),
+        ("feed", SOURCE_FEED),
+        ("adjustment", SOURCE_ADJUSTMENT),
+        ("sort", SOURCE_SORT),
+        ("request_start", "2016-01-01"),
+        ("request_end", "2026-07-31"),
+    ):
+        if source.get(key) != expected:
+            raise GateError("source_contract_mismatch", f"R2 source contract {key} drifted")
+    if source.get("no_fallback_allowed") is not True:
+        raise GateError("source_contract_mismatch", "R2 source contract must forbid fallback")
+    ocp = contract.get("ocp_boundary")
+    expected_ocp = {
+        "observer_execution_strategy_identity_must_match": True,
+        "observer_execution_object_instance_must_differ": True,
+        "candidate_owned_ocp_required_before_economics": True,
+        "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+        "economic_mission_ready": False,
+    }
+    if ocp != expected_ocp:
+        raise GateError("ocp_contract_mismatch", "R2 OCP boundary contract drifted")
+    if contract.get("mandatory_data_pass_gates") != list(MANDATORY_GATES):
+        raise GateError("mandatory_gate_contract_mismatch", "R2 mandatory gate list drifted")
+    if contract.get("canonical_manifest_path") != "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json":
+        raise GateError("canonical_manifest_contract_mismatch", "canonical manifest path is not frozen")
+    if contract.get("normalization_contract") != {
+        "version": NORMALIZER_VERSION,
+        "canonical_columns": list(CANONICAL_COLUMNS),
+        "canonical_timeframe": CANONICAL_TIMEFRAME,
+        "raw_timeframe": RAW_SOURCE_TIMEFRAME,
+        "timezone": EXCHANGE_TIMEZONE,
+        "calendar": "NYSE",
+        "decimal_policy": "finite Decimal parsing; no rounding or synthesis",
+    }:
+        raise GateError("normalization_contract_mismatch", "R2 normalization contract drifted")
+    if contract.get("numerical_contract") != {
+        "design_matrix": ["SPY", "IWM-SPY", "QQQ-SPY"],
+        "fit": "demean X and y; numpy least squares; retain rank and singular diagnostics",
+        "residual": "y - X @ beta using non-demeaned X and no applied intercept",
+        "skip_window": "omit latest 21 residual returns from momentum; retain all 273 returns for beta fit",
+        "economic_scoring_allowed": False,
+    }:
+        raise GateError("numerical_contract_mismatch", "R2 numerical contract drifted")
+    if contract.get("candidate_population_contract") != {
+        "schema_version": "m3-pit-scanner-population-v1",
+        "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+        "observation_strategy": None,
+        "manual_candidate_selection_allowed": False,
+        "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
+    }:
+        raise GateError("candidate_population_contract_mismatch", "R2 candidate population contract drifted")
+    if contract.get("composite_dataset_identity_contract") != {
+        "encoding": "m3-composite-dataset-v1",
+        "required": True,
+        "canonical_parent": "frozen v5 bytes",
+        "iwm_component": "verified normalized sidecar from raw page bundle",
+        "normalizer": NORMALIZER_VERSION,
+        "calendar": "pandas_market_calendars NYSE exact version",
+    }:
+        raise GateError("composite_contract_mismatch", "R2 composite identity contract drifted")
+    if contract.get("same_run_v3_control_contract") != {
+        "required_before_comparison": True,
+        "same_data_vintage": True,
+        "same_evaluation_sessions": True,
+        "same_scanner_policy": True,
+        "same_terminal_inputs": True,
+        "same_reference_reservation_contract": True,
+        "economics_run_in_this_mission": False,
+    }:
+        raise GateError("same_run_contract_mismatch", "R2 same-run V3 control contract drifted")
+    if contract.get("forbidden_economic_fields") != [
+        "return",
+        "net_return",
+        "gross_return",
+        "pnl",
+        "cagr",
+        "sharpe",
+        "sortino",
+        "calmar",
+        "max_drawdown",
+        "turnover",
+        "trade_count",
+        "fill_count",
+        "portfolio_targets",
+        "economic_candidate_scores",
+        "economic_candidate_ranking",
+    ]:
+        raise GateError("forbidden_field_contract_mismatch", "R2 forbidden economic field list drifted")
+    calendar_identity = contract.get("calendar_identity")
+    if not isinstance(calendar_identity, Mapping) or dict(calendar_identity) != calendar_dependency_identity():
+        raise GateError("dependency_identity_mismatch", "R2 calendar dependency identity drifted")
+    if not isinstance(contract.get("config_semantic_digest_sha256"), str):
+        raise GateError("config_digest_missing", "R2 settings semantic digest is missing")
+
+
+def _validate_commit_provenance(
+    contract: Mapping[str, object],
+    *,
+    manifest_path: str,
+    run_commit: str,
+    run_parent: str,
+    repo: Path = _REPO,
+) -> dict[str, object]:
+    implementation = str(contract["implementation_commit"])
+    base = str(contract["base_commit"])
+    if _git_parent(implementation, repo=repo) != base:
+        raise GateError("implementation_parent_mismatch", "A2 is not a direct child of the corrective base")
+    if _git_parent(run_commit, repo=repo) != implementation or run_parent != implementation:
+        raise GateError("manifest_commit_topology", "B2 is not a direct child of A2")
+    if _git_changed_paths(run_commit, repo=repo) != [manifest_path]:
+        raise GateError(
+            "manifest_commit_not_manifest_only", "manifest-only commit changed paths other than the R2 manifest"
+        )
+    try:
+        manifest_blob = _git_blob_id(run_commit, manifest_path, repo=repo)
+    except subprocess.CalledProcessError as exc:
+        raise GateError("manifest_blob_missing", "R2 manifest Git blob is missing") from exc
+    implementation_tree = _git_tree_id(implementation, repo=repo)
+    if contract.get("implementation_tree") != implementation_tree:
+        raise GateError("implementation_tree_mismatch", "A2 tree differs from the R2 manifest")
+    raw_critical = contract.get("critical_git_blobs")
+    if not isinstance(raw_critical, Mapping) or not raw_critical:
+        raise GateError("critical_blob_pin_missing", "R2 critical Git blob pins are missing")
+    if set(raw_critical) != set(CRITICAL_GIT_PATHS):
+        raise GateError("critical_blob_pin_invalid", "R2 critical Git blob set is incomplete or contains extras")
+    critical: dict[str, object] = {}
+    for path, declaration in raw_critical.items():
+        if not isinstance(path, str) or not isinstance(declaration, Mapping):
+            raise GateError("critical_blob_pin_invalid", "R2 critical Git blob declaration is invalid")
+        try:
+            implementation_blob = _git_blob_id(implementation, path, repo=repo)
+            run_blob = _git_blob_id(run_commit, path, repo=repo)
+            blob_bytes = _git_blob_bytes(implementation, path, repo=repo)
+        except subprocess.CalledProcessError as exc:
+            raise GateError("critical_blob_missing", f"critical Git blob missing: {path}") from exc
+        if implementation_blob != run_blob:
+            raise GateError("implementation_blob_mismatch", f"critical blob changed between A2 and B2: {path}")
+        if declaration.get("git_blob_id") != implementation_blob:
+            raise GateError("implementation_blob_mismatch", f"critical blob pin differs: {path}")
+        if declaration.get("raw_sha256") != _sha256_bytes(blob_bytes):
+            raise GateError("implementation_blob_hash_mismatch", f"critical blob raw hash differs: {path}")
+        critical[path] = {"git_blob_id": implementation_blob, "raw_sha256": _sha256_bytes(blob_bytes)}
+    return {
+        "manifest_commit": run_commit,
+        "manifest_git_blob_id": manifest_blob,
+        "implementation_commit": implementation,
+        "implementation_tree": implementation_tree,
+        "base_commit": base,
+        "critical_git_blobs": critical,
+        "changed_paths": [manifest_path],
+    }
+
+
+def _tracked_blob_identity(path: Path, *, commit: str = "HEAD") -> dict[str, object] | None:
+    logical = _logical_path(path)
+    if logical.startswith("<external:"):
+        return None
+    try:
+        blob_id = _git_blob_id(commit, logical)
+        blob_bytes = _git_blob_bytes(commit, logical)
+    except subprocess.CalledProcessError:
+        return None
+    return {
+        "path": logical,
+        "commit": commit,
+        "git_blob_id": blob_id,
+        "git_blob_raw_sha256": _sha256_bytes(blob_bytes),
+        "git_blob_normalized_sha256": _sha256_bytes(blob_bytes.replace(b"\r\n", b"\n")),
+    }
 
 
 def _validate_artifact_against_manifest(
-    artifact: object,
-    manifest: Mapping[str, object],
-    *,
-    expected_sha: str | None,
-    label: str,
+    artifact: object, manifest: Mapping[str, object], *, expected_sha: str | None, label: str
 ) -> None:
     if not hasattr(artifact, "raw_sha256"):
         raise GateError("missing_artifact", f"missing {label} artifact")
@@ -267,7 +573,7 @@ def _validate_artifact_against_manifest(
     if declared is None:
         raise GateError("manifest_hash_missing", f"{label} manifest does not declare a SHA-256")
     if actual != declared:
-        raise GateError("canonical_hash_mismatch", f"{label} SHA-256 differs from its frozen manifest")
+        raise GateError("artifact_hash_mismatch", f"{label} SHA-256 differs from its frozen manifest")
     declared_size = manifest.get("byte_size")
     if isinstance(declared_size, int) and artifact.byte_size != declared_size:  # type: ignore[union-attr]
         raise GateError("artifact_size_mismatch", f"{label} byte size differs from its frozen manifest")
@@ -279,9 +585,24 @@ def _audit_corporate_actions(path: Path, manifest: Mapping[str, object], staged:
         raise GateError("corporate_actions_hash_mismatch", "corporate-actions bytes differ from the frozen manifest")
     total = 0
     counts: dict[str, int] = {}
-    reference_counts: dict[str, int] = {symbol: 0 for symbol in REFERENCE_SYMBOLS}
+    reference_counts = {symbol: 0 for symbol in REFERENCE_SYMBOLS}
     with staged.staged_path.open(newline="", encoding="utf-8") as handle:  # type: ignore[union-attr]
         reader = csv.DictReader(handle)
+        expected_columns = {
+            "action_type",
+            "symbol",
+            "ex_date",
+            "record_date",
+            "payable_date",
+            "rate",
+            "old_rate",
+            "new_rate",
+            "source_symbol",
+            "target_symbol",
+            "raw_id",
+        }
+        if not expected_columns.issubset(reader.fieldnames or ()):
+            raise GateError("corporate_actions_schema_mismatch", "corporate-actions CSV schema is incomplete")
         for row in reader:
             total += 1
             action_type = str(row.get("action_type") or "unknown")
@@ -302,32 +623,77 @@ def _audit_corporate_actions(path: Path, manifest: Mapping[str, object], staged:
     }
 
 
+def _source_completeness(
+    rows_by_symbol: Mapping[str, Sequence[object]], *, start: date, end: date
+) -> dict[str, object]:
+    expected = expected_exchange_sessions(start, end)
+    expected_set = set(expected)
+    references: dict[str, object] = {}
+    for symbol in REFERENCE_SYMBOLS:
+        actual = {row.session_date for row in rows_by_symbol.get(symbol, ()) if row.session_date <= end}  # type: ignore[attr-defined]
+        missing = sorted(expected_set - actual)
+        extra = sorted(actual - expected_set)
+        references[symbol] = {
+            "observed_session_count": len(actual),
+            "missing_sessions": _compact_dates([item.isoformat() for item in missing]),
+            "extra_sessions": _compact_dates([item.isoformat() for item in extra]),
+            "complete": not missing and not extra,
+        }
+    return {
+        "source_start": start.isoformat(),
+        "source_end": end.isoformat(),
+        "expected_session_count": len(expected),
+        "references": references,
+        "complete": all(bool(item["complete"]) for item in references.values()),  # type: ignore[index]
+    }
+
+
 def _reference_gate_pass(
     inventory: Mapping[str, Mapping[str, object]],
     common: Mapping[str, object],
     weekly_full: Mapping[str, object],
     weekly_recent: Mapping[str, object],
 ) -> bool:
+    required_zero = (
+        "rejected_row_count",
+        "nonfinite_count",
+        "nonpositive_close_count",
+        "nonpositive_ohlc_count",
+        "invalid_ohlc_count",
+        "negative_volume_count",
+        "zero_volume_count",
+        "duplicate_count",
+        "conflicting_duplicate_count",
+        "timeframe_mismatch_count",
+        "market_mismatch_count",
+        "naive_timestamp_count",
+        "invalid_timestamp_count",
+        "source_range_violation_count",
+        "unexpected_schema_count",
+    )
     for symbol in REFERENCE_SYMBOLS:
-        item = inventory[symbol]
-        if (
-            int(item["normalized_row_count"]) == 0
-            or item["missing_expected_sessions"]
-            or item["extra_off_calendar_sessions"]
-            or int(item["duplicate_count"]) != 0
-            or int(item["conflicting_duplicate_count"]) != 0
-            or int(item["nonfinite_count"]) != 0
-            or int(item["nonpositive_close_count"]) != 0
-            or int(item["invalid_ohlc_count"]) != 0
-            or int(item["negative_volume_count"]) != 0
-            or item["timeframe_values"] != [CANONICAL_TIMEFRAME]
-            or item["market_values"] != ["EQUITY"]
-        ):
+        item = inventory.get(symbol, {})
+        if int(item.get("normalized_row_count", 0)) == 0:
             return False
-    if int(common["common_session_count"]) < 274:
+        if item.get("missing_expected_sessions") or item.get("extra_off_calendar_sessions"):
+            return False
+        if any(int(item.get(field, 0)) != 0 for field in required_zero):
+            return False
+        if item.get("timeframe_values") != [CANONICAL_TIMEFRAME] or item.get("market_values") != ["EQUITY"]:
+            return False
+        row_accounting = item.get("row_accounting", {})
+        if isinstance(row_accounting, Mapping) and not bool(row_accounting.get("identity_holds", True)):
+            return False
+    if int(common.get("common_session_count", 0)) < int(DEFAULT_NUMERICAL_THRESHOLDS["required_common_closes"]):
         return False
     for weekly in (weekly_full, weekly_recent):
-        if int(weekly["failed_after_warmup_count"]) != 0:
+        if not bool(weekly.get("ever_feasible")):
+            return False
+        if int(weekly.get("post_feasibility_failure_count", 0)) != 0:
+            return False
+        if int(weekly.get("accepted_decision_count", 0)) != int(weekly.get("decision_count", 0)):
+            return False
+        if not bool(weekly.get("recent_window_accepted_covers_every_required_weekly_decision", False)):
             return False
     return True
 
@@ -337,155 +703,86 @@ def _matrix_audit(
     weekly: Mapping[str, object],
     candidate_symbols: Sequence[str],
     thresholds: Mapping[str, int | float],
+    population: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    decisions = [item for item in weekly.get("decisions", []) if item.get("accepted") is True]
+    decisions = [
+        item for item in weekly.get("decisions", ()) if isinstance(item, Mapping) and item.get("accepted") is True
+    ]
+    candidates = tuple(sorted({str(symbol).strip().upper() for symbol in candidate_symbols if str(symbol).strip()}))
     results: list[dict[str, object]] = []
-    for candidate in candidate_symbols:
-        panel = {
-            symbol: {row.session_date: row.close for row in rows_by_symbol.get(symbol, ())}  # type: ignore[attr-defined]
-            for symbol in (candidate, "SPY", "IWM", "QQQ")
-        }
-        for decision in decisions:
-            trailing = [date.fromisoformat(value) for value in decision["trailing_sessions"]]
-            closes = {
-                symbol: [panel[symbol].get(session) for session in trailing]
-                for symbol in (candidate, "SPY", "IWM", "QQQ")
-            }
-            result = audit_design_matrix(
-                candidate,
-                decision["decision_session"],
-                trailing,
-                closes,
-                thresholds=thresholds,
-            )
+    for decision in decisions:
+        decision_date = str(decision["decision_session"])
+        decision_candidates = (
+            candidate_symbols_for_decision(population, decision_date) if population is not None else candidates
+        )
+        for candidate in decision_candidates:
+            if candidate in REFERENCE_SYMBOLS:
+                continue
+            try:
+                selected, closes = exact_m3_close_panel(candidate, decision_date, rows_by_symbol)  # type: ignore[arg-type]
+                result = audit_design_matrix(candidate, decision_date, selected, closes, thresholds=thresholds)
+            except GateError as exc:
+                result = {
+                    "candidate_symbol": candidate,
+                    "decision_session": decision_date,
+                    "session_count": 0,
+                    "return_count": 0,
+                    "matrix_shape": [0, 3],
+                    "matrix_digest_sha256": canonical_digest(
+                        {"encoding": MATRIX_ENCODING_VERSION, "candidate": candidate, "decision": decision_date}
+                    ),
+                    "passed": False,
+                    "failure_categories": [exc.category],
+                }
             results.append(result)
     digests = [str(item["matrix_digest_sha256"]) for item in results]
     category_counts: dict[str, int] = {}
     for result in results:
-        for category in result["failure_categories"]:
-            category_counts[category] = category_counts.get(category, 0) + 1
+        for category in result.get("failure_categories", ()):
+            category_counts[str(category)] = category_counts.get(str(category), 0) + 1
     return {
-        "candidate_symbol_count": len(candidate_symbols),
+        "population_methodology": "deterministic PIT scanner-eligible membership; no alpha ranking",
+        "candidate_symbol_count": len(candidates),
         "total_matrix_count": len(results),
-        "pass_count": sum(item["passed"] is True for item in results),
-        "fail_count": sum(item["passed"] is not True for item in results),
+        "pass_count": sum(item.get("passed") is True for item in results),
+        "fail_count": sum(item.get("passed") is not True for item in results),
         "failure_category_counts": dict(sorted(category_counts.items())),
         "matrix_digest_merkle_root": merkle_root(digests),
         "deterministic_examples": [
             {
-                "candidate_symbol": item["candidate_symbol"],
-                "decision_session": item["decision_session"],
-                "matrix_digest_sha256": item["matrix_digest_sha256"],
-                "passed": item["passed"],
+                "candidate_symbol": item.get("candidate_symbol"),
+                "decision_session": item.get("decision_session"),
+                "matrix_digest_sha256": item.get("matrix_digest_sha256"),
+                "passed": item.get("passed"),
             }
             for item in results[:3]
         ],
         "minimum_singular_value_ratio": min(
-            (float(item["singular_value_ratio"]) for item in results),
-            default=None,
+            (float(item["singular_value_ratio"]) for item in results if "singular_value_ratio" in item), default=None
         ),
         "maximum_condition_number": max(
-            (float(item["condition_number"]) for item in results),
-            default=None,
+            (float(item["condition_number"]) for item in results if "condition_number" in item), default=None
         ),
         "results": results,
     }
 
 
-def _static_blocker_reverification() -> list[dict[str, str]]:
-    """Keep the requested static recheck visible in the compact receipt."""
-    return [
-        {
-            "id": "tracked_reference_counts",
-            "status": "VERIFIED",
-            "evidence": "data/research/equity_m3_m4_2026_08/audit.json:12-25",
-            "consequence": "SPY and QQQ each have 2658 local rows; IWM has zero in the old audit.",
-        },
-        {
-            "id": "canonical_csv_external_ignored",
-            "status": "VERIFIED",
-            "evidence": ".gitignore:247",
-            "consequence": "The canonical CSV requires an operator-supplied external hash.",
-        },
-        {
-            "id": "count_only_m3_readiness",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:397-418",
-            "consequence": "The legacy runner must consume this receipt or remain blocked.",
-        },
-        {
-            "id": "pre_filter_count",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:244-282",
-            "consequence": "The legacy count includes rows before session, timeframe, deduplication, and common-session checks.",
-        },
-        {
-            "id": "timeframe_token_drift",
-            "status": "VERIFIED",
-            "evidence": "scripts/build_symmetric_v5_pipeline.py:103-110,241-252; scripts/research_equity_m3_m4.py:329-336",
-            "consequence": "The new normalizer freezes raw 1Day to canonical 1d and rejects mixed tokens.",
-        },
-        {
-            "id": "utc_midnight_boundary_hazard",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:60,264-266",
-            "consequence": "The gate uses America/New_York session dates and an inclusive session end.",
-        },
-        {
-            "id": "incomplete_reference_role",
-            "status": "VERIFIED",
-            "evidence": "config/settings.yaml:31-41; src/parayabuck/config.py:380-465",
-            "consequence": "The research overlay explicitly pins SPY/IWM/QQQ and filters all three from tradable roles.",
-        },
-        {
-            "id": "legacy_hash_reopen",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:391-395,253-280",
-            "consequence": "The new gate stages bytes once and parses the content-addressed copy.",
-        },
-        {
-            "id": "missing_consumed_panel_digest",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:93-176",
-            "consequence": "The gate records normalized reference and matrix digests.",
-        },
-        {
-            "id": "discarded_lstsq_diagnostics",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:141-148",
-            "consequence": "The data-only audit retains rank, singular values, and condition gates.",
-        },
-        {
-            "id": "candidate_owned_observation_missing",
-            "status": "VERIFIED",
-            "evidence": "scripts/research_equity_m3_m4.py:329-336",
-            "consequence": "Candidate-owned OCP remains blocked until data gates pass and the accepted override path is run.",
-        },
-        {
-            "id": "synthetic_only_legacy_tests",
-            "status": "VERIFIED",
-            "evidence": "tests/test_research_equity_m3_m4.py:67-107",
-            "consequence": "Hermetic tests now cover real-data contract failure modes without fabricating IWM.",
-        },
-        {
-            "id": "no_dedicated_receipt_or_ci_gate",
-            "status": "VERIFIED",
-            "evidence": "data/research_receipts and .github/workflows/ci.yml",
-            "consequence": "This implementation adds a tracked compact receipt contract while keeping large data external.",
-        },
-        {
-            "id": "source_builder_cache_pagination_precision",
-            "status": "VERIFIED",
-            "evidence": "scripts/build_symmetric_v5_pipeline.py:88-145,216-270",
-            "consequence": "The M3 gate never consumes the broad builder or an unpinned v4 cache.",
-        },
-        {
-            "id": "corporate_action_classification",
-            "status": "VERIFIED",
-            "evidence": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json:5-16; scripts/run_symmetric_v5_validation.py:112-145",
-            "consequence": "The receipt distinguishes total action rows from cash-dividend rows.",
-        },
-    ]
+def _load_pit_population(path: Path, staging_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
+    staged = stage_file(path, staging_dir)
+    payload = _load_json(staged.staged_path)
+    snapshots = payload.get("snapshots")
+    if not isinstance(snapshots, list):
+        raise GateError("invalid_pit_universe", "PIT universe must contain a snapshots list")
+    population = deterministic_candidate_population(snapshots)
+    role = validate_pit_reference_boundary(population)
+    population["input_artifact"] = {
+        "path": _logical_path(path),
+        "raw_sha256": staged.raw_sha256,
+        "crlf_normalized_sha256": staged.crlf_normalized_sha256,
+        "byte_size": staged.byte_size,
+    }
+    population["reference_boundary"] = role
+    return population, _artifact_receipt(staged, logical_id="m3_pit_universe", provenance_class="external_untracked")
 
 
 def _base_receipt(
@@ -495,33 +792,39 @@ def _base_receipt(
     run_commit: str,
     run_parent: str,
     dirty_before: Sequence[str],
-    dirty_after: Sequence[str],
     config_digest: str | None,
-    status: str,
-    blocked_reasons: Sequence[str],
+    provenance: Mapping[str, object],
 ) -> dict[str, object]:
-    implementation = str(contract.get("implementation_commit", ""))
+    critical = provenance.get("critical_git_blobs", {})
     return {
-        "schema_version": "1.0.0",
-        "mission": "equity_m3_data_gate_2026_09",
-        "verdict": status,
+        "schema_version": "2.0.0",
+        "mission": "equity_m3_data_gate_2026_09_r2",
+        "data_gate_verdict": "M3_DATA_GATE_BLOCKED",
+        "corrective_infrastructure_verdict": "PASS",
         "research_only": True,
         "automatic_promotion": False,
         "human_promotion_only": True,
         "candidate_economics_run": False,
         "economic_metrics_present": False,
-        "run_commit": run_commit,
-        "run_parent_commit": run_parent,
-        "implementation_commit": implementation,
-        "base_commit": contract.get("base_commit"),
-        "source_tree": {"commit": run_commit, "tree": _run_git("rev-parse", "HEAD^{tree}")},
+        "economic_mission_ready": False,
+        "next_required_gate": "M3_DATA_GATE_COMPLETION",
+        "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+        "base_lineage": {
+            "corrective_base_commit": contract.get("base_commit"),
+            "implementation_a2_commit": contract.get("implementation_commit"),
+            "run_b2_commit": run_commit,
+            "c2_commit": None,
+        },
+        "implementation_tree": provenance.get("implementation_tree"),
+        "critical_git_blobs": critical,
         "manifest_identity": {
             "path": _logical_path(contract_path),
-            "sha256": _sha256(contract_path) if contract_path.is_file() else None,
+            "git_blob_id": provenance.get("manifest_git_blob_id"),
+            "raw_sha256": None,
             "declared_before_results": contract.get("declared_before_results"),
         },
-        "verifier_identity": {"path": VERIFIER_PATH, "sha256": _sha256(_REPO / VERIFIER_PATH)},
-        "normalizer_identity": {"path": NORMALIZER_PATH, "sha256": _sha256(_REPO / NORMALIZER_PATH)},
+        "verifier_identity": {"path": VERIFIER_PATH, "git_blob": critical.get(VERIFIER_PATH)},
+        "normalizer_identity": {"path": NORMALIZER_PATH, "git_blob": critical.get(NORMALIZER_PATH)},
         "config_semantic_digest_sha256": config_digest,
         "environment_identity": {
             "python": platform.python_version(),
@@ -529,60 +832,79 @@ def _base_receipt(
             "numpy": importlib.metadata.version("numpy"),
             "pandas_market_calendars": calendar_dependency_identity()["version"],
         },
+        "remote_ci_status": "NOT_YET_OBSERVED",
         "worktree_cleanliness": {
             "before": list(dirty_before),
-            "after": list(dirty_after),
+            "after": [],
             "clean_before": not dirty_before,
-            "clean_after": not dirty_after,
+            "clean_after": True,
         },
-        "hash_atomicity_evidence": {
-            "strategy": "content-addressed staging",
-            "parse_source": "staged bytes only",
-            "source_identity_rechecked_after_copy": True,
-            "mutation_during_staging_blocks": True,
+        "runtime_cache_isolation": {
+            "runtime_state_read": False,
+            "cache_read": False,
+            "broker_read": False,
+            "credentials_read": False,
+            "network_contacted": False,
+            "parse_source": "content_addressed_staged_files_only",
         },
         "source_provenance": {
-            "raw_source_restriction": "operator-supplied immutable IWM raw bundle only",
-            "network_contacted": False,
-            "broker_contacted": False,
-            "feed": "sip",
-            "adjustment": "split",
+            "provider": SOURCE_PROVIDER,
+            "api_family_version": SOURCE_API_FAMILY_VERSION,
+            "endpoint_identity": SOURCE_ENDPOINT,
+            "feed": SOURCE_FEED,
+            "adjustment": SOURCE_ADJUSTMENT,
+            "raw_source_restriction": "operator-supplied raw IWM page bundle only",
+            "fallback_allowed": False,
         },
         "normalization_contract": {
             "version": NORMALIZER_VERSION,
-            "canonical_columns": [
-                "session_date",
-                "timestamp",
-                "symbol",
-                "timeframe",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "market",
-            ],
             "canonical_timeframe": CANONICAL_TIMEFRAME,
-            "timezone": "America/New_York",
-            "decimal_policy": "exact Decimal source value, exponent expanded, no rounding",
+            "raw_timeframe": RAW_SOURCE_TIMEFRAME,
+            "timezone": EXCHANGE_TIMEZONE,
+            "calendar": calendar_dependency_identity(),
+            "no_rounding_or_synthesis": True,
         },
-        "calendar_identity": calendar_dependency_identity(),
-        "numerical_thresholds": contract.get("numerical_thresholds", dict(DEFAULT_NUMERICAL_THRESHOLDS)),
-        "frozen_candidate": {
-            "identity": "equity_proxy_multifactor_residual_momentum_v1",
-            "formula": "r_stock - beta_spy*r_SPY - beta_size*(r_IWM-r_SPY) - beta_growth*(r_QQQ-r_SPY)",
-            "parameters": contract.get("frozen_parameters"),
-            "residual_convention": "alpha-retaining: demeaned fit, non-demeaned application, no intercept",
+        "numerical_contract": {
+            "design_matrix": ["SPY", "IWM-SPY", "QQQ-SPY"],
+            "matrix_encoding": MATRIX_ENCODING_VERSION,
+            "residual_convention": "alpha_retaining: demeaned fit, non-demeaned application, no intercept",
             "skip_window_convention": "latest 21 residual returns omitted from momentum; beta fit retains all 273 returns",
         },
-        "static_blocker_reverification": _static_blocker_reverification(),
-        "blocked_reasons": list(blocked_reasons),
-        "unknown_external_facts": [],
-        "tests_actually_executed": {
-            "gate_command": "EXECUTED: research_equity_m3_data_gate.py",
-            "focused_tests": "recorded in final documentation; not executed by this verifier",
+        "same_run_v3_control_input_readiness": {
+            "status": "NOT_RUN_OUT_OF_SCOPE",
+            "required_before_comparison": True,
+            "same_data_vintage": False,
+            "same_evaluation_sessions": False,
+            "same_scanner_policy": False,
+            "same_terminal_inputs": False,
+            "same_reference_reservation_contract": False,
+            "economics_run": False,
         },
+        "mandatory_gate_results": _gate_map(),
+        "input_provenance": {},
+        "composite_dataset_identity": {"status": GATE_NOT_RUN},
+        "reference_inventory": {},
+        "row_rejection_inventory": {},
+        "calendar_identity": calendar_dependency_identity(),
+        "common_session_coverage": {},
+        "weekly_coverage": {},
+        "deterministic_numerical_population": {"status": GATE_NOT_RUN},
+        "design_matrix_summary": {"status": GATE_NOT_RUN, "total_matrix_count": 0, "pass_count": 0, "fail_count": 0},
+        "reference_role_evidence_levels": {
+            "contract": "CONTRACT_VERIFIED",
+            "pit_universe": "NOT_RUN",
+            "ocp": "OCP_NOT_RUN",
+            "execution": "EXECUTION_NOT_RUN",
+        },
+        "blocked_reasons": [],
+        "forbidden_economic_fields": [],
+        "tests_actually_executed": {"gate": "EXECUTED"},
     }
+
+
+def _add_reason(reasons: list[str], reason: str) -> None:
+    if reason not in reasons:
+        reasons.append(reason)
 
 
 def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
@@ -590,25 +912,59 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     run_parent = _run_git("rev-parse", "HEAD^")
     dirty_before = _dirty_paths()
     contract_path = Path(args.contract)
-    blocked: list[str] = []
-    candidate_symbols = tuple(
-        sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
-    )
+    reasons: list[str] = []
+    gates = _gate_map()
     contract: Mapping[str, object] = {}
+    provenance: dict[str, object] = {}
+    manifest_blob_bytes = b""
     try:
-        contract = _load_json(contract_path)
+        contract, _manifest_blob_id, manifest_blob_bytes = _load_committed_contract(
+            contract_path, run_commit=run_commit
+        )
         _validate_contract(contract, run_commit=run_commit, run_parent=run_parent)
+        provenance = _validate_commit_provenance(
+            contract,
+            manifest_path=R2_MANIFEST_PATH,
+            run_commit=run_commit,
+            run_parent=run_parent,
+        )
+        _set_gate(gates, "commit_topology", GATE_PASS, evidence=provenance)
+        _set_gate(gates, "implementation_blob_identity", GATE_PASS, evidence=provenance["critical_git_blobs"])
     except (GateError, OSError, subprocess.CalledProcessError) as exc:
-        blocked.append(str(exc))
+        _set_gate(gates, "commit_topology", GATE_FAIL, reason=str(exc))
+        _set_gate(gates, "implementation_blob_identity", GATE_FAIL, reason=str(exc))
+        _add_reason(reasons, str(exc))
+    _set_gate(
+        gates,
+        "clean_worktree",
+        GATE_PASS if not dirty_before else GATE_FAIL,
+        reason=None if not dirty_before else "worktree is dirty before gate execution",
+        paths=list(dirty_before),
+    )
+    if dirty_before:
+        _add_reason(reasons, "worktree is dirty before gate execution")
 
     config_digest_value: str | None = None
-    config_path = _REPO / "config/settings.yaml"
     config_data: Mapping[str, object] = {}
     try:
+        config_path = _REPO / "config/settings.yaml"
         config_data = _load_yaml(config_path)
         config_digest_value = config_semantic_digest(config_data)
+        if contract.get("config_semantic_digest_sha256") != config_digest_value:
+            raise GateError("config_digest_mismatch", "settings semantic digest differs from R2 manifest")
+        _set_gate(gates, "configuration_identity", GATE_PASS, evidence={"semantic_digest_sha256": config_digest_value})
     except GateError as exc:
-        blocked.append(str(exc))
+        _set_gate(gates, "configuration_identity", GATE_FAIL, reason=str(exc))
+        _add_reason(reasons, str(exc))
+    try:
+        declared_calendar = contract.get("calendar_identity")
+        actual_calendar = calendar_dependency_identity()
+        if not isinstance(declared_calendar, Mapping) or dict(declared_calendar) != actual_calendar:
+            raise GateError("dependency_identity_mismatch", "calendar dependency identity differs from R2 manifest")
+        _set_gate(gates, "dependency_identity", GATE_PASS, evidence=actual_calendar)
+    except GateError as exc:
+        _set_gate(gates, "dependency_identity", GATE_FAIL, reason=str(exc))
+        _add_reason(reasons, str(exc))
 
     receipt = _base_receipt(
         contract=contract,
@@ -616,130 +972,189 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         run_commit=run_commit,
         run_parent=run_parent,
         dirty_before=dirty_before,
-        dirty_after=[],
         config_digest=config_digest_value,
-        status="M3_DATA_GATE_BLOCKED",
-        blocked_reasons=blocked,
+        provenance=provenance,
     )
-    if dirty_before:
-        blocked.append("worktree is dirty before gate execution")
+    receipt["manifest_identity"]["raw_sha256"] = _sha256_bytes(manifest_blob_bytes) if manifest_blob_bytes else None  # type: ignore[index]
+    receipt["mandatory_gate_results"] = gates
+    if config_digest_value is None:
+        _add_reason(reasons, "settings semantic digest could not be verified")
 
-    # The staging directory is deliberately outside the repository when the
-    # normal operator invocation uses /tmp; it is cleaned at the end either way.
-    with tempfile.TemporaryDirectory(prefix="m3-data-gate-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="m3-data-gate-r2-") as temporary:
         staging_dir = Path(temporary)
         artifacts: dict[str, object] = {}
-        canonical_manifest: Mapping[str, object] = {}
-        ca_manifest: Mapping[str, object] = {}
         canonical_rows: dict[str, list[object]] = {symbol: [] for symbol in REFERENCE_SYMBOLS}
         quality: dict[str, dict[str, int]] = {symbol: {} for symbol in REFERENCE_SYMBOLS}
         iwm_rows: tuple[object, ...] = ()
-        iwm_audit: dict[str, object] = {"status": "NOT_PROVIDED"}
+        iwm_audit: dict[str, object] = {"status": GATE_NOT_RUN}
+        canonical_artifact: object | None = None
+        population: dict[str, object] | None = None
         try:
             canonical_path = Path(args.canonical_bars)
             canonical_manifest_path = Path(args.canonical_manifest)
-            if not canonical_path.is_file():
-                raise GateError("missing_canonical_dataset", "canonical bars CSV is missing")
-            if not canonical_manifest_path.is_file():
-                raise GateError("missing_canonical_manifest", "canonical bars manifest is missing")
+            if not canonical_path.is_file() or not canonical_manifest_path.is_file():
+                raise GateError("missing_canonical_artifact", "canonical bars CSV and manifest are required")
             canonical_manifest = _load_json(canonical_manifest_path)
-            for field, expected in (("feed", "sip"), ("adjustment", "split")):
-                if str(canonical_manifest.get(field, "")).lower() != expected:
-                    raise GateError("canonical_source_contract", f"canonical manifest {field} must be {expected}")
+            if str(canonical_manifest.get("feed", "")).lower() != SOURCE_FEED:
+                raise GateError("canonical_source_contract", "canonical manifest feed must be sip")
+            if str(canonical_manifest.get("adjustment", "")).lower() != SOURCE_ADJUSTMENT:
+                raise GateError("canonical_source_contract", "canonical manifest adjustment must be split")
+            canonical_manifest_identity = _tracked_blob_identity(canonical_manifest_path)
+            if canonical_manifest_identity is None:
+                raise GateError("canonical_manifest_provenance", "canonical manifest must be Git tracked")
             canonical_artifact = stage_file(canonical_path, staging_dir)
             _validate_artifact_against_manifest(
-                canonical_artifact,
-                canonical_manifest,
-                expected_sha=None,
-                label="canonical bars",
+                canonical_artifact, canonical_manifest, expected_sha=None, label="canonical bars"
             )
-            artifacts["canonical_bars"] = _artifact_receipt(
-                canonical_artifact,
-                logical_id="canonical_equity_v5_bars",
-                provenance_class="external_untracked",
-            )
-            candidate_symbols = tuple(
-                sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
-            )
-            canonical_rows, quality = load_csv_reference_rows(
-                canonical_artifact.staged_path,
-                reference_symbols=tuple(dict.fromkeys((*REFERENCE_SYMBOLS, *candidate_symbols))),
-            )
-            canonical_iwm_count = len(canonical_rows.get("IWM", []))
-            receipt["canonical_iwm_presence"] = {
-                "prior_static_reported_rows": 0,
-                "current_normalized_rows": canonical_iwm_count,
-                "status": "MATCHES_PRIOR_ZERO_REPORT" if canonical_iwm_count == 0 else "DISCREPANCY_AUDITED",
-                "prior_report_evidence": "data/research/equity_m3_m4_2026_08/audit.json:12-25",
+            artifacts["canonical_bars"] = {
+                **_artifact_receipt(
+                    canonical_artifact, logical_id="canonical_equity_v5_bars", provenance_class="external_untracked"
+                ),
+                "manifest_git_blob": canonical_manifest_identity,
             }
+            _set_gate(gates, "canonical_artifact_identity", GATE_PASS, evidence=artifacts["canonical_bars"])
+            canonical_rows, quality = load_csv_reference_rows(
+                canonical_artifact.staged_path, reference_symbols=REFERENCE_SYMBOLS
+            )
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "canonical_artifact_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
 
+        try:
             lifetimes_path = Path(args.lifetimes)
             if not lifetimes_path.is_file():
                 raise GateError("missing_lifetimes", "lifetimes artifact is missing")
             lifetimes_artifact = stage_file(lifetimes_path, staging_dir)
-            lifetimes_manifest = {"sha256": args.lifetimes_expected_sha256}
-            _validate_artifact_against_manifest(
-                lifetimes_artifact,
-                lifetimes_manifest,
-                expected_sha=args.lifetimes_expected_sha256,
-                label="lifetimes",
-            )
-            artifacts["lifetimes"] = _artifact_receipt(
-                lifetimes_artifact,
-                logical_id="equity_entity_lifetimes_v5",
-                provenance_class="external_untracked",
-            )
-
-            ca_path = Path(args.corporate_actions)
-            if not ca_path.is_file():
-                raise GateError("missing_corporate_actions", "corporate-actions artifact is missing")
-            ca_manifest_path = Path(args.corporate_actions_manifest)
-            ca_manifest = _load_json(ca_manifest_path)
-            ca_artifact = stage_file(ca_path, staging_dir)
-            _validate_artifact_against_manifest(
-                ca_artifact,
-                ca_manifest,
-                expected_sha=None,
-                label="corporate actions",
-            )
-            artifacts["corporate_actions"] = _artifact_receipt(
-                ca_artifact,
-                logical_id="equity_corporate_actions_v5",
-                provenance_class="external_untracked",
-            )
-            receipt["corporate_action_inventory"] = _audit_corporate_actions(ca_path, ca_manifest, ca_artifact)
-        except GateError as exc:
-            blocked.append(str(exc))
+            tracked = _tracked_blob_identity(lifetimes_path)
+            if tracked is None:
+                raise GateError("lifetime_provenance", "tracked v5 lifetime table must be proven as a Git blob")
+            if lifetimes_artifact.crlf_normalized_sha256 != tracked["git_blob_raw_sha256"]:
+                raise GateError(
+                    "lifetime_blob_mismatch",
+                    "working lifetime bytes differ from the pinned Git blob under newline normalization",
+                )
+            if args.lifetimes_expected_sha256 and lifetimes_artifact.raw_sha256 != args.lifetimes_expected_sha256:
+                raise GateError("lifetime_hash_mismatch", "lifetime CLI hash differs from the Git blob")
+            artifacts["lifetimes"] = {
+                **_artifact_receipt(
+                    lifetimes_artifact, logical_id="equity_entity_lifetimes_v5", provenance_class="git_blob"
+                ),
+                **tracked,
+                "working_raw_sha256": lifetimes_artifact.raw_sha256,
+                "working_normalized_sha256": lifetimes_artifact.crlf_normalized_sha256,
+            }
+            _set_gate(gates, "lifetime_identity", GATE_PASS, evidence=artifacts["lifetimes"])
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "lifetime_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
 
         try:
-            if args.iwm_bundle is None:
-                raise GateError("missing_iwm_bundle", "no operator-supplied IWM raw bundle was provided")
-            iwm_rows, iwm_audit = validate_iwm_bundle(args.iwm_bundle, staging_dir)
-            canonical_rows.setdefault("IWM", [])
-            canonical_iwm = canonical_rows.get("IWM", [])
-            if canonical_iwm:
-                _merged, _merge_hashes = merge_normalized_rows(canonical_iwm, iwm_rows)
-                if len(_merged) != len(canonical_iwm) + sum(
-                    row.key not in {item.key for item in canonical_iwm} for row in iwm_rows
-                ):  # type: ignore[attr-defined]
-                    raise GateError("existing_iwm_merge_error", "canonical IWM comparison was not deterministic")
-            receipt["iwm_raw_source"] = {"status": "VERIFIED", **_compact_iwm_audit(iwm_audit)}
-        except GateError as exc:
-            iwm_audit = {"status": "BLOCKED", "category": exc.category, "reason": str(exc)}
-            receipt["iwm_raw_source"] = iwm_audit
-            blocked.append(str(exc))
+            ca_path = Path(args.corporate_actions)
+            ca_manifest_path = Path(args.corporate_actions_manifest)
+            if not ca_path.is_file() or not ca_manifest_path.is_file():
+                raise GateError("missing_corporate_actions", "corporate-actions artifact and manifest are required")
+            ca_manifest = _load_json(ca_manifest_path)
+            ca_artifact = stage_file(ca_path, staging_dir)
+            _validate_artifact_against_manifest(ca_artifact, ca_manifest, expected_sha=None, label="corporate actions")
+            artifacts["corporate_actions"] = {
+                **_artifact_receipt(
+                    ca_artifact, logical_id="equity_corporate_actions_v5", provenance_class="external_untracked"
+                ),
+                "manifest_git_blob": _tracked_blob_identity(ca_manifest_path),
+            }
+            receipt["corporate_action_inventory"] = _audit_corporate_actions(ca_path, ca_manifest, ca_artifact)
+            _set_gate(gates, "corporate_action_identity", GATE_PASS, evidence=artifacts["corporate_actions"])
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "corporate_action_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        if args.iwm_bundle is None:
+            reason = "no operator-supplied IWM raw bundle was provided"
+            for name in ("iwm_raw_bundle", "iwm_provider_contract", "iwm_pagination_chain", "iwm_normalization"):
+                _set_gate(gates, name, GATE_NOT_RUN, reason=reason)
+            receipt["iwm_raw_source"] = {"status": GATE_NOT_RUN, "reason": reason}
+            _add_reason(reasons, reason)
+        else:
+            try:
+                iwm_rows, iwm_audit = validate_iwm_bundle(args.iwm_bundle, staging_dir)
+                receipt["iwm_raw_source"] = {"status": GATE_PASS, **_compact_iwm_audit(iwm_audit)}
+                for name in ("iwm_raw_bundle", "iwm_provider_contract", "iwm_pagination_chain", "iwm_normalization"):
+                    _set_gate(gates, name, GATE_PASS, evidence={"source_identity": iwm_audit.get("source_identity")})
+            except (GateError, OSError) as exc:
+                iwm_audit = {
+                    "status": GATE_FAIL,
+                    "category": getattr(exc, "category", "source_error"),
+                    "reason": str(exc),
+                }
+                receipt["iwm_raw_source"] = iwm_audit
+                for name in ("iwm_raw_bundle", "iwm_provider_contract", "iwm_pagination_chain", "iwm_normalization"):
+                    _set_gate(gates, name, GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+
+        if args.pit_universe is None:
+            reason = "no deterministic PIT scanner-universe input was supplied"
+            _set_gate(gates, "deterministic_numerical_population", GATE_NOT_RUN, reason=reason)
+            receipt["deterministic_numerical_population"] = {"status": GATE_NOT_RUN, "methodology": "not executed"}
+            _add_reason(reasons, reason)
+        else:
+            try:
+                population, pit_artifact = _load_pit_population(Path(args.pit_universe), staging_dir)
+                receipt["deterministic_numerical_population"] = {
+                    key: value for key, value in population.items() if key not in {"snapshots", "candidate_symbols"}
+                }
+                receipt["deterministic_numerical_population"]["input_artifact"] = pit_artifact
+                _set_gate(
+                    gates,
+                    "deterministic_numerical_population",
+                    GATE_PASS,
+                    evidence=receipt["deterministic_numerical_population"],
+                )
+                if canonical_artifact is not None:
+                    candidate_symbols = tuple(str(item) for item in population["candidate_symbols"])
+                    canonical_rows, quality = load_csv_reference_rows(
+                        canonical_artifact.staged_path,
+                        reference_symbols=tuple(dict.fromkeys((*REFERENCE_SYMBOLS, *candidate_symbols))),
+                    )
+            except (GateError, OSError) as exc:
+                _set_gate(gates, "deterministic_numerical_population", GATE_FAIL, reason=str(exc))
+                receipt["deterministic_numerical_population"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _add_reason(reasons, str(exc))
+
+        panel_rows: dict[str, list[object]] = {
+            symbol: list(canonical_rows.get(symbol, ())) for symbol in REFERENCE_SYMBOLS
+        }
+        if iwm_rows:
+            canonical_iwm = tuple(canonical_rows.get("IWM", ()))
+            try:
+                merged_iwm, merge_hashes = merge_normalized_rows(canonical_iwm, iwm_rows)  # type: ignore[arg-type]
+                panel_rows["IWM"] = list(merged_iwm)
+                receipt["merge_integrity"] = {
+                    "status": GATE_PASS,
+                    "existing_canonical_iwm_rows": len(canonical_iwm),
+                    "supplied_normalized_iwm_rows": len(iwm_rows),
+                    **merge_hashes,
+                }
+            except GateError as exc:
+                receipt["merge_integrity"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _set_gate(gates, "composite_dataset_identity", GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+        else:
+            receipt["merge_integrity"] = {"status": GATE_NOT_RUN, "reason": "IWM source not available"}
 
         try:
             expected_sessions = expected_exchange_sessions(SOURCE_START, EVALUATION_END)
             source_identity = {
-                "feed": "sip",
-                "adjustment": "split",
+                "provider": SOURCE_PROVIDER,
+                "api_family_version": SOURCE_API_FAMILY_VERSION,
+                "endpoint_identity": SOURCE_ENDPOINT,
+                "feed": SOURCE_FEED,
+                "adjustment": SOURCE_ADJUSTMENT,
                 "source_timeframe": CANONICAL_TIMEFRAME,
+                "sort": SOURCE_SORT,
             }
             inventory = {
                 symbol: build_reference_inventory(
-                    canonical_rows.get(symbol, [])
-                    + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else []),
+                    panel_rows.get(symbol, []),
                     raw_quality=quality.get(symbol),
                     expected_sessions=expected_sessions,
                     evaluation_end=EVALUATION_END,
@@ -748,154 +1163,273 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                 for symbol in REFERENCE_SYMBOLS
             }
             common = common_session_report(
-                {
-                    symbol: canonical_rows.get(symbol, [])
-                    + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else [])
-                    for symbol in REFERENCE_SYMBOLS
-                },
-                expected_sessions=expected_sessions,
-                evaluation_end=EVALUATION_END,
+                panel_rows, expected_sessions=expected_sessions, evaluation_end=EVALUATION_END
             )
             weekly_full = weekly_decision_coverage(
-                {
-                    symbol: canonical_rows.get(symbol, [])
-                    + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else [])
-                    for symbol in REFERENCE_SYMBOLS
-                },
-                expected_sessions=expected_sessions,
-                start=SOURCE_START,
-                end=EVALUATION_END,
+                panel_rows, expected_sessions=expected_sessions, start=SOURCE_START, end=EVALUATION_END
             )
             weekly_recent = weekly_decision_coverage(
-                {
-                    symbol: canonical_rows.get(symbol, [])
-                    + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else [])
-                    for symbol in REFERENCE_SYMBOLS
-                },
-                expected_sessions=expected_sessions,
-                start=date(2022, 1, 1),
-                end=EVALUATION_END,
+                panel_rows, expected_sessions=expected_sessions, start=date(2022, 1, 1), end=EVALUATION_END
             )
             receipt["reference_inventory"] = _compact_inventory(inventory)
-            receipt["common_session_coverage"] = _compact_common(common)
-            receipt["common_session_coverage"]["common_sessions_sha256"] = session_dates_digest(
-                common["common_sessions"]
+            receipt["row_rejection_inventory"] = {
+                symbol: {
+                    "raw_reference_rows": item.get("raw_reference_rows", 0),
+                    "normalized_reference_rows": item.get("normalized_reference_rows", 0),
+                    "post_evaluation_valid_rows": item.get("post_evaluation_valid_rows", 0),
+                    "rejected_row_count": item.get("rejected_row_count", 0),
+                    "rejection_counts": item.get("rejection_counts", {}),
+                }
+                for symbol, item in inventory.items()
+            }
+            receipt["source_completeness_through_2026_07_31"] = _source_completeness(
+                panel_rows, start=SOURCE_START, end=SOURCE_END
             )
-            receipt["weekly_decision_coverage"] = {
+            receipt["evaluation_completeness_through_2026_07_30"] = _compact_common(common)
+            receipt["common_session_coverage"] = {
+                **_compact_common(common),
+                "common_sessions_sha256": session_dates_digest(common["common_sessions"]),
+            }
+            receipt["weekly_coverage"] = {
                 "full": _compact_weekly(weekly_full),
                 "recent": _compact_weekly(weekly_recent),
             }
             receipt["reference_panel"] = {
                 "normalized_reference_panel_sha256": reference_panel_digest(
-                    [
-                        row
-                        for symbol in REFERENCE_SYMBOLS
-                        for row in canonical_rows.get(symbol, [])
-                        + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else [])
-                    ],
+                    [row for symbol in REFERENCE_SYMBOLS for row in panel_rows.get(symbol, ())],
                     source_identity=source_identity,
                 ),
                 "evaluation_reference_panel_sha256": reference_panel_digest(
                     [
                         row
                         for symbol in REFERENCE_SYMBOLS
-                        for row in canonical_rows.get(symbol, [])
-                        + (list(iwm_rows) if symbol == "IWM" and not canonical_rows.get("IWM") else [])
+                        for row in panel_rows.get(symbol, ())
                         if row.session_date <= EVALUATION_END  # type: ignore[attr-defined]
                     ],
                     source_identity=source_identity,
                 ),
             }
-            if not _reference_gate_pass(inventory, common, weekly_full, weekly_recent):
-                blocked.append("reference calendar, quality, common-session, or weekly coverage gate failed")
-        except GateError as exc:
-            blocked.append(str(exc))
+            receipt["calendar_identity"] = calendar_dependency_identity()
+            source_complete = bool(receipt["source_completeness_through_2026_07_31"]["complete"])
+            reference_ok = _reference_gate_pass(inventory, common, weekly_full, weekly_recent) and source_complete
+            _set_gate(
+                gates,
+                "reference_calendar",
+                GATE_PASS if source_complete else GATE_FAIL,
+                reason=None if source_complete else "reference source completeness through 2026-07-31 failed",
+            )
+            _set_gate(
+                gates,
+                "reference_row_quality",
+                GATE_PASS if reference_ok else GATE_FAIL,
+                reason=None if reference_ok else "reference row quality or source completeness failed",
+            )
+            _set_gate(
+                gates,
+                "reference_common_sessions",
+                GATE_PASS if int(common["common_session_count"]) >= 274 else GATE_FAIL,
+                common_session_count=common["common_session_count"],
+            )
+            _set_gate(
+                gates,
+                "weekly_coverage",
+                GATE_PASS if reference_ok else GATE_FAIL,
+                reason=None if reference_ok else "weekly/common/reference coverage failed",
+            )
+        except (GateError, OSError) as exc:
+            for name in ("reference_calendar", "reference_row_quality", "reference_common_sessions", "weekly_coverage"):
+                _set_gate(gates, name, GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+            inventory = {symbol: {} for symbol in REFERENCE_SYMBOLS}
+            common = {"common_session_count": 0, "common_sessions": []}
+            weekly_full = {"decisions": [], "ever_feasible": False}
+            weekly_recent = {"decisions": [], "ever_feasible": False}
 
         try:
             overlay = build_reference_overlay(config_data)
-            declared_candidates = tuple(
-                sorted({str(symbol).strip().upper() for symbol in args.candidate_symbol if str(symbol).strip()})
-            )
-            filtered_candidates = overlay.filter_candidates(declared_candidates)
-            if filtered_candidates != declared_candidates:
-                blocked.append("declared candidate symbols include a reference or an outside-pool symbol")
             role_receipt = overlay.to_dict()
-            role_receipt["declared_candidate_symbols"] = list(declared_candidates)
-            role_receipt["accepted_candidate_symbols"] = list(filtered_candidates)
+            role_receipt["original_configured_trade_symbols"] = sorted(overlay.original_configured_trade_symbols)
+            role_receipt["research_effective_trade_symbols"] = sorted(overlay.research_effective_trade_symbols)
+            role_receipt["removed_reference_symbols"] = sorted(overlay.removed_reference_symbols)
+            if population is not None:
+                role_receipt["pit_universe_evidence"] = validate_pit_reference_boundary(population)
+                receipt["reference_role_evidence_levels"]["pit_universe"] = "PIT_UNIVERSE_VERIFIED"  # type: ignore[index]
             receipt["reference_role_separation"] = role_receipt
+            _set_gate(gates, "reference_role_contract", GATE_PASS, evidence=role_receipt)
         except GateError as exc:
-            blocked.append(str(exc))
-            receipt["reference_role_separation"] = {"status": "BLOCKED", "reason": str(exc)}
+            receipt["reference_role_separation"] = {"status": GATE_FAIL, "reason": str(exc)}
+            _set_gate(gates, "reference_role_contract", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
 
-        if not blocked and candidate_symbols:
-            matrix_rows = dict(canonical_rows)
-            matrix_rows["IWM"] = list(canonical_rows.get("IWM", [])) or list(iwm_rows)
-            threshold_data = contract.get("numerical_thresholds", DEFAULT_NUMERICAL_THRESHOLDS)
-            if not isinstance(threshold_data, Mapping):
-                threshold_data = DEFAULT_NUMERICAL_THRESHOLDS
-            matrix_summary = _matrix_audit(matrix_rows, weekly_full, candidate_symbols, threshold_data)
-            receipt["design_matrix_feasibility"] = _safe(
-                {key: value for key, value in matrix_summary.items() if key != "results"}
-            )
-            if int(matrix_summary["fail_count"]) != 0 or int(matrix_summary["total_matrix_count"]) == 0:
-                blocked.append("design-matrix feasibility gate failed or had no declared candidate matrices")
+        if iwm_rows and gates["iwm_raw_bundle"]["status"] == GATE_PASS and canonical_artifact is not None:
+            try:
+                sidecar_path = Path(args.iwm_normalized_out) if args.iwm_normalized_out else None
+                if sidecar_path is None:
+                    raise GateError("normalized_sidecar_missing", "--iwm-normalized-out is required for a composite")
+                sidecar = write_normalized_sidecar(list(iwm_rows), sidecar_path)  # type: ignore[arg-type]
+                sidecar_logical_path = _logical_path(sidecar_path)
+                if sidecar_logical_path.startswith("<external:"):
+                    raise GateError("sidecar_path_unbound", "normalized sidecar must be under the repository")
+                sidecar["path"] = sidecar_logical_path
+                canonical_manifest_identity = _tracked_blob_identity(Path(args.canonical_manifest))
+                normalizer_blob = (
+                    provenance.get("critical_git_blobs", {}).get(NORMALIZER_PATH)
+                    if isinstance(provenance.get("critical_git_blobs"), Mapping)
+                    else None
+                )
+                if canonical_manifest_identity is None or not isinstance(normalizer_blob, Mapping):
+                    raise GateError("composite_provenance_missing", "composite Git identities are incomplete")
+                identity = composite_dataset_identity(
+                    canonical_parent_raw_sha256=canonical_artifact.raw_sha256,  # type: ignore[union-attr]
+                    canonical_parent_normalized_sha256=canonical_artifact.crlf_normalized_sha256,  # type: ignore[union-attr]
+                    canonical_manifest_git_blob=str(canonical_manifest_identity["git_blob_id"]),
+                    iwm_raw_bundle_sha256=str(iwm_audit["raw_bundle_sha256"]),
+                    iwm_normalized_raw_sha256=str(sidecar["raw_sha256"]),
+                    iwm_normalized_semantic_row_sha256=str(sidecar["normalized_semantic_row_sha256"]),
+                    normalizer_git_blob=str(normalizer_blob["git_blob_id"]),
+                    normalizer_sha256=str(normalizer_blob["raw_sha256"]),
+                    schema_version=NORMALIZER_VERSION,
+                    canonical_timeframe=CANONICAL_TIMEFRAME,
+                    source_feed=SOURCE_FEED,
+                    adjustment_mode=SOURCE_ADJUSTMENT,
+                    exchange_timezone=EXCHANGE_TIMEZONE,
+                    calendar_identity=calendar_dependency_identity(),
+                    source_range={"start": SOURCE_START.isoformat(), "end": SOURCE_END.isoformat()},
+                    evaluation_range={"end_inclusive": EVALUATION_END.isoformat()},
+                )
+                composite_manifest_payload = {
+                    "schema_version": "1.0.0",
+                    "mission": "equity_m3_composite_dataset_2026_09",
+                    "parent_dataset": "canonical_equity_v5_bars",
+                    "iwm_sidecar": sidecar,
+                    "identity": identity,
+                }
+                composite_manifest_out = Path(args.composite_manifest_out) if args.composite_manifest_out else None
+                if composite_manifest_out is None:
+                    raise GateError(
+                        "composite_manifest_missing", "--composite-manifest-out is required for a composite"
+                    )
+                if _logical_path(composite_manifest_out).startswith("<external:"):
+                    raise GateError(
+                        "composite_manifest_path_unbound", "composite manifest must be under the repository"
+                    )
+                if composite_manifest_out.exists() and _load_json(composite_manifest_out) != composite_manifest_payload:
+                    raise GateError(
+                        "composite_manifest_conflict", "composite manifest already contains different identity"
+                    )
+                if not composite_manifest_out.exists():
+                    composite_manifest_out.parent.mkdir(parents=True, exist_ok=True)
+                    composite_manifest_out.write_text(
+                        json.dumps(composite_manifest_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+                    )
+                receipt["composite_dataset_identity"] = {
+                    "status": GATE_PASS,
+                    "manifest_path": _logical_path(composite_manifest_out),
+                    "manifest_sha256": _sha256(composite_manifest_out),
+                    "identity": identity,
+                    "sidecar": sidecar,
+                }
+                _set_gate(gates, "composite_dataset_identity", GATE_PASS, evidence=identity)
+            except (GateError, OSError) as exc:
+                receipt["composite_dataset_identity"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _set_gate(gates, "composite_dataset_identity", GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+        elif gates["composite_dataset_identity"]["status"] == GATE_UNKNOWN:
+            _set_gate(gates, "composite_dataset_identity", GATE_NOT_RUN, reason="valid IWM raw bundle is required")
+            receipt["composite_dataset_identity"] = {"status": GATE_NOT_RUN}
+
+        if population is not None and gates["deterministic_numerical_population"]["status"] == GATE_PASS:
+            candidate_symbols = tuple(str(item) for item in population["candidate_symbols"])
+            prerequisite_names = ("reference_common_sessions", "weekly_coverage", "composite_dataset_identity")
+            if all(gates[name]["status"] == GATE_PASS for name in prerequisite_names):
+                thresholds = contract.get("numerical_thresholds", DEFAULT_NUMERICAL_THRESHOLDS)
+                if not isinstance(thresholds, Mapping):
+                    thresholds = DEFAULT_NUMERICAL_THRESHOLDS
+                matrix_summary = _matrix_audit(panel_rows, weekly_recent, candidate_symbols, thresholds, population)
+                receipt["design_matrix_summary"] = {
+                    key: value for key, value in matrix_summary.items() if key != "results"
+                }
+                matrix_ok = (
+                    int(matrix_summary["total_matrix_count"]) > 0
+                    and int(matrix_summary["pass_count"]) == int(matrix_summary["total_matrix_count"])
+                    and int(matrix_summary["fail_count"]) == 0
+                )
+                _set_gate(
+                    gates,
+                    "design_matrix_feasibility",
+                    GATE_PASS if matrix_ok else GATE_FAIL,
+                    reason=None if matrix_ok else "matrix population is empty or contains failed audits",
+                    total_matrix_count=matrix_summary["total_matrix_count"],
+                    pass_count=matrix_summary["pass_count"],
+                    fail_count=matrix_summary["fail_count"],
+                )
+                if not matrix_ok:
+                    _add_reason(reasons, "design-matrix feasibility gate failed")
+            else:
+                reason = "design matrix phase not run because prerequisite data gates failed"
+                _set_gate(gates, "design_matrix_feasibility", GATE_NOT_RUN, reason=reason)
+                _add_reason(reasons, reason)
         else:
-            receipt["design_matrix_feasibility"] = {
-                "status": "NOT_RUN_BLOCKED_BY_DATA_GATES",
-                "total_matrix_count": 0,
-                "pass_count": 0,
-                "fail_count": 0,
-                "matrix_digest_merkle_root": merkle_root(()),
-            }
-            if not candidate_symbols:
-                blocked.append("no frozen candidate-symbol input was supplied for design-matrix audit")
+            reason = "deterministic numerical population or IWM/reference prerequisites are not ready"
+            _set_gate(gates, "design_matrix_feasibility", GATE_NOT_RUN, reason=reason)
+            _add_reason(reasons, reason)
 
-        receipt["merge_integrity"] = {
-            "status": "NOT_RUN_BLOCKED_BY_DATA_GATES" if blocked else "NOT_RUN_NO_MERGE_REQUESTED",
-            "existing_canonical_untouched": True,
-            "merged_artifact": None,
-        }
-        receipt["input_artifacts"] = artifacts
-        receipt["source_provenance"]["source_bundle_argument"] = (  # type: ignore[index]
-            _logical_path(Path(args.iwm_bundle)) if args.iwm_bundle is not None else None
+        receipt["input_provenance"] = artifacts
+        if args.diagnostic_candidate_symbol:
+            diagnostic = sorted(
+                {str(symbol).strip().upper() for symbol in args.diagnostic_candidate_symbol if str(symbol).strip()}
+            )
+            receipt["diagnostic_only"] = True
+            receipt["diagnostic_candidate_symbols"] = diagnostic
+            _add_reason(reasons, "diagnostic candidate symbols cannot contribute to PASS")
+        else:
+            receipt["diagnostic_only"] = False
+        receipt["mandatory_gate_results"] = gates
+        receipt["data_gate_verdict"] = evaluate_mandatory_gates(gates)
+        receipt["next_required_gate"] = (
+            "M3_CANDIDATE_OCP_GATE"
+            if receipt["data_gate_verdict"] == "M3_DATA_GATE_PASS"
+            else "M3_DATA_GATE_COMPLETION"
         )
-        receipt["ocp_prerequisite_summary"] = {
-            "status": "NOT_RUN_BLOCKED_BY_DATA_GATES",
-            "candidate_economics_run": False,
-            "reason": "Candidate-owned OCP observations are conditional on every raw, coverage, role, and numerical gate passing.",
-        }
-        receipt["runtime_cache_isolation"] = {
-            "runtime_state_read": False,
-            "cache_read": False,
-            "broker_read": False,
-            "credentials_read": False,
-            "mutable_diagnostic_state_shared": False,
-            "production_isolation_check": "run externally before and after quality gates",
-        }
-        receipt["unknown_external_facts"] = [
-            "No operator-supplied IWM raw page bundle was available to this run." if args.iwm_bundle is None else "",
-            "No future M3 economic backtest is authorized or executed.",
-        ]
-        receipt["unknown_external_facts"] = [item for item in receipt["unknown_external_facts"] if item]
+        receipt["m3_candidate_ocp_status"] = "NOT_RUN_OUT_OF_SCOPE"
+        receipt["economic_mission_ready"] = False
 
     dirty_after = _dirty_paths()
     receipt["worktree_cleanliness"]["after"] = dirty_after  # type: ignore[index]
     receipt["worktree_cleanliness"]["clean_after"] = not dirty_after  # type: ignore[index]
-    if dirty_after:
-        blocked.append("worktree is dirty after gate execution")
-    receipt["blocked_reasons"] = sorted(set(blocked))
-    receipt["verdict"] = "M3_DATA_GATE_PASS" if not blocked else "M3_DATA_GATE_BLOCKED"
-    receipt = _safe(receipt)  # type: ignore[assignment]
-    if forbidden_receipt_keys(receipt):
-        receipt["verdict"] = "M3_DATA_GATE_BLOCKED"
-        receipt["blocked_reasons"] = sorted(
-            set(receipt.get("blocked_reasons", [])) | {"receipt contains forbidden economic fields"}
+    receipt["blocked_reasons"] = sorted(set(reasons))
+    if receipt["data_gate_verdict"] != "M3_DATA_GATE_PASS":
+        receipt["corrective_infrastructure_verdict"] = (
+            "PASS"
+            if all(
+                gates[name]["status"] == GATE_PASS
+                for name in (
+                    "commit_topology",
+                    "implementation_blob_identity",
+                    "clean_worktree",
+                    "configuration_identity",
+                    "dependency_identity",
+                )
+            )
+            else "BLOCKED"
         )
+    receipt["forbidden_economic_fields"] = list(forbidden_receipt_keys(receipt))
+    if receipt["forbidden_economic_fields"]:
+        _set_gate(gates, "receipt_forbidden_fields", GATE_FAIL, reason="receipt contains forbidden economic fields")
+        receipt["mandatory_gate_results"] = gates
+        receipt["data_gate_verdict"] = "M3_DATA_GATE_BLOCKED"
+        _add_reason(reasons, "receipt contains forbidden economic fields")
+    else:
+        _set_gate(gates, "receipt_forbidden_fields", GATE_PASS, evidence={"fields": []})
+        receipt["mandatory_gate_results"] = gates
+    receipt["blocked_reasons"] = sorted(set(reasons))
     receipt["self_digest_sha256"] = canonical_digest(receipt)
     output_path = Path(args.receipt_out)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
-    return receipt, 0 if receipt["verdict"] == "M3_DATA_GATE_PASS" else EXIT_BLOCKED
+    output_path.write_text(
+        json.dumps(_safe(receipt), indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    return receipt, 0 if receipt["data_gate_verdict"] == "M3_DATA_GATE_PASS" else EXIT_BLOCKED
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -903,15 +1437,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--canonical-bars", type=Path, required=True)
     parser.add_argument("--canonical-manifest", type=Path, required=True)
     parser.add_argument("--iwm-bundle", type=Path)
+    parser.add_argument("--iwm-normalized-out", type=Path)
+    parser.add_argument("--composite-manifest-out", type=Path)
+    parser.add_argument("--pit-universe", type=Path)
     parser.add_argument("--lifetimes", type=Path, required=True)
-    parser.add_argument("--lifetimes-expected-sha256", required=True)
+    parser.add_argument("--lifetimes-expected-sha256")
     parser.add_argument("--corporate-actions", type=Path, required=True)
     parser.add_argument("--corporate-actions-manifest", type=Path, required=True)
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--receipt-out", type=Path, required=True)
-    parser.add_argument("--merged-out", type=Path)
-    parser.add_argument("--merged-manifest-out", type=Path)
-    parser.add_argument("--candidate-symbol", action="append", default=[])
+    parser.add_argument("--diagnostic-candidate-symbol", action="append", default=[])
     return parser
 
 
@@ -920,12 +1455,9 @@ def main() -> int:
     try:
         receipt, status = run_gate(args)
     except (GateError, OSError, subprocess.CalledProcessError) as exc:
-        # The normal path writes a compact blocked receipt.  A contract/setup
-        # failure before that path remains a nonzero, explicit infrastructure
-        # error rather than a false PASS.
         print(f"M3_DATA_GATE_BLOCKED: {exc}", file=sys.stderr)
         return EXIT_CONTRACT_ERROR
-    print(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False))
+    print(json.dumps(_safe(receipt), indent=2, sort_keys=True))
     return status
 
 

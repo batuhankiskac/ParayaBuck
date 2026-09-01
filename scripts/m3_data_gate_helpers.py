@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import math
 import os
 import re
+import stat
 import struct
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -52,6 +54,12 @@ ROW_ENCODING_VERSION = "m3-normalized-row-v1"
 MATRIX_ENCODING_VERSION = "m3-design-matrix-v1"
 SESSION_ENCODING_VERSION = "m3-session-set-v1"
 REFERENCE_PANEL_ENCODING_VERSION = "m3-reference-panel-v1"
+SOURCE_PROVIDER = "Alpaca Market Data API"
+SOURCE_API_FAMILY_VERSION = "v2 stocks bars"
+SOURCE_ENDPOINT = "/v2/stocks/bars"
+SOURCE_FEED = "sip"
+SOURCE_ADJUSTMENT = "split"
+SOURCE_SORT = "asc"
 
 DEFAULT_NUMERICAL_THRESHOLDS: dict[str, int | float] = {
     "matrix_rows": 273,
@@ -128,6 +136,18 @@ def _stat_identity(path: Path) -> dict[str, int]:
         "inode": int(stat_result.st_ino),
         "size": int(stat_result.st_size),
         "mtime_ns": int(stat_result.st_mtime_ns),
+        "mode": int(stat_result.st_mode),
+    }
+
+
+def _descriptor_identity(descriptor: int) -> dict[str, int]:
+    stat_result = os.fstat(descriptor)
+    return {
+        "device": int(stat_result.st_dev),
+        "inode": int(stat_result.st_ino),
+        "size": int(stat_result.st_size),
+        "mtime_ns": int(stat_result.st_mtime_ns),
+        "mode": int(stat_result.st_mode),
     }
 
 
@@ -141,6 +161,7 @@ class StagedArtifact:
     byte_size: int
     source_identity_before: dict[str, int]
     source_identity_after: dict[str, int]
+    source_descriptor_identity: dict[str, int]
 
     def receipt(self, logical_artifact_id: str, provenance_class: str) -> dict[str, object]:
         return {
@@ -151,6 +172,8 @@ class StagedArtifact:
             "byte_size": self.byte_size,
             "source_identity_before": self.source_identity_before,
             "source_identity_after": self.source_identity_after,
+            "source_descriptor_identity": self.source_descriptor_identity,
+            "source_identity_kind": "opened_file_descriptor",
             "parse_source": "content_addressed_staged_file",
         }
 
@@ -161,30 +184,52 @@ def stage_file(
     *,
     chunk_size: int = 1 << 20,
     after_copy_hook: Callable[[Path], None] | None = None,
+    expected_sha256: str | None = None,
+    expected_crlf_normalized_sha256: str | None = None,
 ) -> StagedArtifact:
-    """Stage, hash, and later parse one exact source byte stream.
+    """Stage one exact byte stream through a single safe source descriptor.
 
-    The source is never reopened for parsing.  A second identity check after
-    the copy rejects replacement, truncation, or timestamp mutation during
-    staging.  ``after_copy_hook`` exists only to make that boundary testable.
+    The source path is never opened through a second path lookup.  ``O_NOFOLLOW``
+    prevents symlink traversal, descriptor ``fstat`` brackets the copy, and the
+    staged file is fsynced before its content-addressed rename.  The hook and
+    expected hashes exist only to exercise adversarial boundaries in tests.
     """
     source_path = Path(source)
-    if not source_path.is_file():
-        raise GateError("missing_artifact", f"missing external artifact: {source_path.name}")
-    if source_path.is_symlink():
-        raise GateError("mutable_symlink_artifact", f"external artifact must not be a symlink: {source_path.name}")
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise GateError("safe_staging_unavailable", "platform does not expose O_NOFOLLOW")
+    try:
+        path_lstat = os.lstat(source_path)
+    except FileNotFoundError as exc:
+        raise GateError("missing_artifact", f"missing external artifact: {source_path.name}") from exc
+    except OSError as exc:
+        raise GateError("source_open_failed", f"cannot inspect external artifact: {source_path.name}") from exc
+    if stat.S_ISLNK(path_lstat.st_mode):
+        raise GateError("mutable_symlink_artifact", f"external artifact must not be a symlink: {source_path.name}")
+    if not stat.S_ISREG(path_lstat.st_mode):
+        raise GateError("non_regular_artifact", f"external artifact must be a regular file: {source_path.name}")
     target_dir = Path(staging_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    before = _stat_identity(source_path)
     raw_digest = hashlib.sha256()
     normalized_digest = hashlib.sha256()
     pending_cr = False
     temp_path: Path | None = None
     total = 0
     try:
-        with source_path.open("rb") as source_handle:
+        descriptor = os.open(source_path, os.O_RDONLY | nofollow)
+    except OSError as exc:
+        if getattr(exc, "errno", None) in {40, 62}:  # ELOOP on Linux/macOS
+            raise GateError("mutable_symlink_artifact", f"external artifact is a symlink: {source_path.name}") from exc
+        raise GateError("source_open_failed", f"cannot open external artifact: {source_path.name}") from exc
+    try:
+        before = _descriptor_identity(descriptor)
+        if not stat.S_ISREG(before["mode"]):
+            raise GateError("non_regular_artifact", f"external artifact must be a regular file: {source_path.name}")
+        if int(path_lstat.st_dev) != before["device"] or int(path_lstat.st_ino) != before["inode"]:
+            raise GateError("input_replaced_before_open", f"external artifact path was replaced: {source_path.name}")
+        with os.fdopen(descriptor, "rb", closefd=False) as source_handle:
             with tempfile.NamedTemporaryFile(dir=target_dir, prefix="stage-", delete=False) as target_handle:
                 temp_path = Path(target_handle.name)
                 while chunk := source_handle.read(chunk_size):
@@ -194,28 +239,48 @@ def stage_file(
                     total += len(chunk)
                 target_handle.flush()
                 os.fsync(target_handle.fileno())
-        if pending_cr:
-            normalized_digest.update(b"\r")
+            after = _descriptor_identity(source_handle.fileno())
+            if pending_cr:
+                normalized_digest.update(b"\r")
         if after_copy_hook is not None:
             after_copy_hook(source_path)
-        after = _stat_identity(source_path)
-        if before != after:
+        after = _descriptor_identity(descriptor)
+        if before != after or total != after["size"]:
             raise GateError(
                 "input_mutated_during_staging", f"external artifact changed while staging: {source_path.name}"
             )
+        path_after = os.lstat(source_path)
+        if (
+            stat.S_ISLNK(path_after.st_mode)
+            or not stat.S_ISREG(path_after.st_mode)
+            or int(path_after.st_dev) != before["device"]
+            or int(path_after.st_ino) != before["inode"]
+        ):
+            raise GateError("input_replaced_during_staging", f"external artifact path was replaced: {source_path.name}")
+        raw_sha256 = raw_digest.hexdigest()
+        crlf_sha256 = normalized_digest.hexdigest()
+        if expected_sha256 is not None and raw_sha256 != expected_sha256:
+            raise GateError("staged_content_hash_mismatch", f"staged content hash mismatch: {source_path.name}")
+        if expected_crlf_normalized_sha256 is not None and crlf_sha256 != expected_crlf_normalized_sha256:
+            raise GateError(
+                "staged_content_hash_mismatch", f"staged normalized content hash mismatch: {source_path.name}"
+            )
         assert temp_path is not None
-        final_path = target_dir / raw_digest.hexdigest()
+        final_path = target_dir / raw_sha256
         os.replace(temp_path, final_path)
         temp_path = None
         return StagedArtifact(
             staged_path=final_path,
-            raw_sha256=raw_digest.hexdigest(),
-            crlf_normalized_sha256=normalized_digest.hexdigest(),
+            raw_sha256=raw_sha256,
+            crlf_normalized_sha256=crlf_sha256,
             byte_size=total,
             source_identity_before=before,
             source_identity_after=after,
+            source_descriptor_identity=before,
         )
     finally:
+        if descriptor >= 0:
+            os.close(descriptor)
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
 
@@ -282,6 +347,8 @@ def _validate_ohlc(open_value: Decimal, high: Decimal, low: Decimal, close: Deci
         raise GateError("nonpositive_ohlc", "OHLC values must be positive")
     if volume < 0:
         raise GateError("negative_volume", "volume must be non-negative")
+    if volume == 0:
+        raise GateError("zero_volume", "reference volume must be positive")
     if not low <= open_value <= high or not low <= close <= high or high < low:
         raise GateError("invalid_ohlc", "OHLC ordering is invalid")
 
@@ -519,24 +586,56 @@ def build_reference_inventory(
     duplicate_count, conflicting_count = _count_duplicate_keys(in_evaluation)
     timeframe_values = sorted({row.timeframe for row in ordered})
     market_values = sorted({row.market for row in ordered})
+    rejected_row_count = int(raw_quality.get("rejected_row_count", 0))
+    normalized_row_count = len(ordered)
+    post_evaluation_row_count = sum(row.session_date > evaluation_end for row in ordered)
     return {
         "raw_row_count": int(raw_quality.get("raw_row_count", len(rows))),
-        "normalized_row_count": len(ordered),
+        "raw_reference_rows": int(raw_quality.get("raw_reference_rows", raw_quality.get("raw_row_count", len(rows)))),
+        "normalized_reference_rows": normalized_row_count,
+        "normalized_row_count": normalized_row_count,
         "unique_session_count": len(sessions),
         "first_raw_timestamp": canonical_timestamp(ordered[0].timestamp) if ordered else None,
         "last_raw_timestamp": canonical_timestamp(ordered[-1].timestamp) if ordered else None,
         "first_session_date": min(sessions).isoformat() if sessions else None,
         "last_session_date": max(sessions).isoformat() if sessions else None,
-        "post_evaluation_row_count": sum(row.session_date > evaluation_end for row in ordered),
+        "post_evaluation_row_count": post_evaluation_row_count,
+        "post_evaluation_valid_rows": post_evaluation_row_count,
+        "rejected_row_count": rejected_row_count,
+        "rejection_counts": dict(
+            sorted(
+                (str(key), int(value))
+                for key, value in raw_quality.items()
+                if key.endswith("_count") and key not in {"raw_row_count", "raw_reference_rows"} and int(value) > 0
+            )
+        ),
+        "row_accounting": {
+            "raw_reference_rows": int(
+                raw_quality.get("raw_reference_rows", raw_quality.get("raw_row_count", len(rows)))
+            ),
+            "normalized_reference_rows": normalized_row_count,
+            "post_evaluation_valid_rows": post_evaluation_row_count,
+            "rejected_row_count": rejected_row_count,
+            "identity_holds": int(raw_quality.get("raw_reference_rows", raw_quality.get("raw_row_count", len(rows))))
+            == normalized_row_count + rejected_row_count,
+        },
         "timeframe_values": timeframe_values,
         "market_values": market_values,
-        "zero_volume_count": sum(row.volume == 0 for row in ordered),
+        "zero_volume_count": int(raw_quality.get("zero_volume_count", 0)) + sum(row.volume == 0 for row in ordered),
         "nonfinite_count": int(raw_quality.get("nonfinite_count", 0)),
         "nonpositive_close_count": int(raw_quality.get("nonpositive_close_count", 0)),
         "invalid_ohlc_count": int(raw_quality.get("invalid_ohlc_count", 0)),
         "negative_volume_count": int(raw_quality.get("negative_volume_count", 0)),
         "duplicate_count": duplicate_count,
         "conflicting_duplicate_count": conflicting_count,
+        "timeframe_mismatch_count": int(raw_quality.get("timeframe_mismatch_count", 0)),
+        "market_mismatch_count": int(raw_quality.get("market_mismatch_count", 0)),
+        "naive_timestamp_count": int(raw_quality.get("naive_timestamp_count", 0)),
+        "invalid_timestamp_count": int(raw_quality.get("invalid_timestamp_count", 0)),
+        "source_range_violation_count": int(raw_quality.get("source_range_violation_count", 0)),
+        "unexpected_schema_count": int(raw_quality.get("unexpected_schema_count", 0)),
+        "missing_timestamp_count": int(raw_quality.get("missing_timestamp_count", 0)),
+        "missing_symbol_count": int(raw_quality.get("missing_symbol_count", 0)),
         "missing_expected_sessions": [item.isoformat() for item in missing],
         "extra_off_calendar_sessions": [item.isoformat() for item in extra],
         "maximum_consecutive_missing_session_gap": _max_consecutive_missing(missing, expected_sessions),
@@ -605,12 +704,11 @@ def weekly_decision_coverage(
     end: date,
     required_common_closes: int = 274,
 ) -> dict[str, object]:
-    common = set.intersection(
-        *(
-            {row.session_date for row in rows_by_symbol.get(symbol, ()) if row.session_date <= end}
-            for symbol in REFERENCE_SYMBOLS
-        )
-    )
+    session_sets = {
+        symbol: {row.session_date for row in rows_by_symbol.get(symbol, ()) if row.session_date <= end}
+        for symbol in REFERENCE_SYMBOLS
+    }
+    common = set.intersection(*(session_sets[symbol] for symbol in REFERENCE_SYMBOLS))
     decisions: list[dict[str, object]] = []
     for decision in weekly_decision_sessions(start, end, expected_sessions):
         visible = sorted(session for session in common if session <= decision)
@@ -622,16 +720,32 @@ def weekly_decision_coverage(
             )
             for symbol in REFERENCE_SYMBOLS
         }
-        aligned = len(set(latest_by_reference.values())) == 1 and None not in latest_by_reference.values()
-        accepted = len(selected) == required_common_closes and aligned
-        if len(visible) < required_common_closes:
-            reason = (
-                "initial_warmup_insufficient" if len(visible) < required_common_closes else "common_coverage_shortfall"
-            )
-        elif not aligned:
-            reason = "stale_or_unaligned_reference"
-        else:
+        latest_values = tuple(latest_by_reference[symbol] for symbol in REFERENCE_SYMBOLS)
+        aligned = latest_values == (decision, decision, decision)
+        common_window_feasible = len(visible) >= required_common_closes
+        accepted = common_window_feasible and aligned and len(selected) == required_common_closes
+        if (
+            common_window_feasible
+            and not any(item is None for item in latest_values)
+            and all(item == decision for item in latest_values)
+        ):
+            state = "ACCEPTED"
             reason = "accepted"
+        elif any(item is None for item in latest_values):
+            state = "REFERENCE_OUTAGE"
+            reason = "reference_missing_before_decision"
+        elif len(set(latest_values)) == 1 and latest_values[0] != decision:
+            state = "STALE_REFERENCE"
+            reason = "jointly_stale_reference"
+        elif len(set(latest_values)) != 1:
+            state = "MISALIGNED_REFERENCE"
+            reason = "reference_latest_sessions_differ"
+        elif not common_window_feasible:
+            state = "INSUFFICIENT_COMMON_WINDOW"
+            reason = "common_window_shortfall"
+        else:
+            state = "REFERENCE_OUTAGE"
+            reason = "reference_coverage_outage"
         decisions.append(
             {
                 "decision_session": decision.isoformat(),
@@ -642,13 +756,50 @@ def weekly_decision_coverage(
                 "stale_reference": not aligned,
                 "aligned": aligned,
                 "accepted": accepted,
+                "state": state,
                 "reason": reason,
+                "latest_by_reference": {
+                    symbol: value.isoformat() if value is not None else None
+                    for symbol, value in latest_by_reference.items()
+                },
                 "trailing_sessions": [item.isoformat() for item in selected],
             }
         )
-    initial_warmup = sum(item["reason"] == "initial_warmup_insufficient" for item in decisions)
-    failures = [item for item in decisions if not item["accepted"] and item["reason"] != "initial_warmup_insufficient"]
+    feasible = [item for item in decisions if int(item["common_closes_available"]) >= required_common_closes]
+    ever_feasible = bool(feasible)
+    first_feasible = feasible[0]["decision_session"] if feasible else None
+    if not ever_feasible:
+        for item in decisions:
+            item["state"] = "NO_FEASIBLE_REFERENCE_WINDOW"
+            item["reason"] = "no_feasible_reference_window"
+    else:
+        first_feasible_index = next(index for index, item in enumerate(decisions) if item in feasible)
+        for item in decisions[:first_feasible_index]:
+            if item["state"] == "INSUFFICIENT_COMMON_WINDOW":
+                item["state"] = "INITIAL_WARMUP"
+                item["reason"] = "initial_warmup_insufficient"
+    initial_warmup = sum(item["state"] == "INITIAL_WARMUP" for item in decisions)
+    failures = [item for item in decisions if not item["accepted"] and item["state"] != "INITIAL_WARMUP"]
     accepted = [item for item in decisions if item["accepted"]]
+    first_accepted = accepted[0]["decision_session"] if accepted else None
+    last_accepted = accepted[-1]["decision_session"] if accepted else None
+    first_feasible_index = next(
+        (index for index, item in enumerate(decisions) if item["decision_session"] == first_feasible), None
+    )
+    post_feasibility_failures = (
+        sum(not item["accepted"] for item in decisions[first_feasible_index:])
+        if first_feasible_index is not None
+        else 0
+    )
+    per_reference_stale_count = {
+        symbol: sum(
+            item["latest_by_reference"].get(symbol) is not None
+            and item["latest_by_reference"].get(symbol) != item["decision_session"]
+            for item in decisions
+        )
+        for symbol in REFERENCE_SYMBOLS
+    }
+    jointly_stale_count = sum(item["state"] == "STALE_REFERENCE" for item in decisions)
     return {
         "requested_start": start.isoformat(),
         "resolved_start": resolve_first_session(start, expected_sessions).isoformat()
@@ -658,6 +809,16 @@ def weekly_decision_coverage(
         "accepted_decision_count": len(accepted),
         "initial_warmup_decision_count": initial_warmup,
         "failed_after_warmup_count": len(failures),
+        "ever_feasible": ever_feasible,
+        "first_feasible_decision": first_feasible,
+        "first_accepted_decision": first_accepted,
+        "last_accepted_decision": last_accepted,
+        "post_feasibility_failure_count": post_feasibility_failures,
+        "jointly_stale_count": jointly_stale_count,
+        "per_reference_stale_count": per_reference_stale_count,
+        "no_feasible_reference_window": not ever_feasible,
+        "recent_window_accepted_covers_every_required_weekly_decision": bool(decisions)
+        and len(accepted) == len(decisions),
         "decisions": decisions,
     }
 
@@ -682,8 +843,10 @@ def design_matrix_digest(
     spy_returns: Sequence[float],
     size_returns: Sequence[float],
     growth_returns: Sequence[float],
+    *,
+    close_panel: Mapping[str, Sequence[object]] | None = None,
 ) -> str:
-    """Digest the exact ordered close-derived vectors using big-endian doubles."""
+    """Digest the exact ordered close-derived vectors and input close panel."""
     digest = hashlib.sha256()
 
     def update_bytes(value: bytes) -> None:
@@ -694,6 +857,13 @@ def design_matrix_digest(
     update_bytes(str(candidate_symbol).encode("utf-8"))
     update_bytes(str(decision_session).encode("utf-8"))
     update_bytes("\n".join(str(item) for item in session_dates).encode("utf-8"))
+    if close_panel is None:
+        update_bytes(b"close-panel-unbound")
+    else:
+        for symbol in sorted(close_panel):
+            update_bytes(str(symbol).encode("utf-8"))
+            values = close_panel[symbol]
+            update_bytes("\n".join(str(value) for value in values).encode("utf-8"))
     for vector in (stock_returns, spy_returns, size_returns, growth_returns):
         digest.update(struct.pack(">Q", len(vector)))
         for value in vector:
@@ -796,6 +966,7 @@ def audit_design_matrix(
         spy_returns,
         size_returns,
         growth_returns,
+        close_panel=closes,
     )
     return {
         "candidate_symbol": candidate_symbol,
@@ -826,6 +997,30 @@ def audit_design_matrix(
     }
 
 
+def exact_m3_close_panel(
+    candidate_symbol: str,
+    decision_session: date | str,
+    rows_by_symbol: Mapping[str, Sequence[NormalizedBar]],
+    *,
+    required_closes: int = 274,
+) -> tuple[tuple[date, ...], dict[str, list[Decimal]]]:
+    """Construct the exact candidate/reference session intersection used by M3."""
+    decision = date.fromisoformat(str(decision_session))
+    symbols = (candidate_symbol, *REFERENCE_SYMBOLS)
+    maps: dict[str, dict[date, Decimal]] = {}
+    for symbol in symbols:
+        values: dict[date, Decimal] = {}
+        for row in rows_by_symbol.get(symbol, ()):
+            if row.session_date <= decision:
+                if row.session_date in values:
+                    raise GateError("candidate_duplicate", f"duplicate matrix input: {symbol} {row.session_date}")
+                values[row.session_date] = row.close
+        maps[symbol] = values
+    common = set.intersection(*(set(values) for values in maps.values()))
+    selected = tuple(sorted(common)[-required_closes:])
+    return selected, {symbol: [maps[symbol][session] for session in selected] for symbol in symbols}
+
+
 def merkle_root(digests: Sequence[str]) -> str:
     """Build a deterministic binary Merkle root over sorted hexadecimal leaves."""
     if not digests:
@@ -844,8 +1039,8 @@ def merkle_root(digests: Sequence[str]) -> str:
 @dataclass(frozen=True)
 class ResearchReferenceOverlay:
     reference_observation_symbols: frozenset[str]
-    configured_trade_symbols: frozenset[str]
-    tradable_candidate_symbols: frozenset[str]
+    original_configured_trade_symbols: frozenset[str]
+    research_effective_trade_symbols: frozenset[str]
     target_symbols: frozenset[str]
     executable_symbols: frozenset[str]
     maximum_observation_capacity: int
@@ -855,7 +1050,7 @@ class ResearchReferenceOverlay:
 
     def __post_init__(self) -> None:
         intersections = {
-            "candidate_reference_overlap": self.tradable_candidate_symbols & self.reference_observation_symbols,
+            "candidate_reference_overlap": self.research_effective_trade_symbols & self.reference_observation_symbols,
             "target_reference_overlap": self.target_symbols & self.reference_observation_symbols,
             "execution_reference_overlap": self.executable_symbols & self.reference_observation_symbols,
         }
@@ -865,8 +1060,25 @@ class ResearchReferenceOverlay:
             raise GateError("reference_pin_count_mismatch", "reference pin count does not match reference symbols")
         if self.maximum_observation_capacity < 0:
             raise GateError("observation_capacity_exceeded", "observation capacity cannot be negative")
+        if self.managed_position_reservations < 0 or self.open_order_reservations < 0:
+            raise GateError("observation_capacity_exceeded", "reservations cannot be negative")
         if self.maximum_observation_capacity < self.reference_pin_count:
             raise GateError("observation_capacity_exceeded", "reference pins exceed observation capacity")
+        if self.effective_tradable_observation_capacity < 0:
+            raise GateError("observation_capacity_exceeded", "reservations exceed observation capacity")
+
+    @property
+    def configured_trade_symbols(self) -> frozenset[str]:
+        """Compatibility alias retaining the original, unfiltered trade set."""
+        return self.original_configured_trade_symbols
+
+    @property
+    def tradable_candidate_symbols(self) -> frozenset[str]:
+        return self.research_effective_trade_symbols
+
+    @property
+    def removed_reference_symbols(self) -> frozenset[str]:
+        return self.original_configured_trade_symbols & self.reference_observation_symbols
 
     @property
     def effective_tradable_observation_capacity(self) -> int:
@@ -879,13 +1091,18 @@ class ResearchReferenceOverlay:
 
     def filter_candidates(self, symbols: Iterable[str]) -> tuple[str, ...]:
         normalized = {str(symbol).strip().upper() for symbol in symbols}
-        return tuple(sorted(normalized & set(self.tradable_candidate_symbols)))
+        return tuple(sorted(normalized & set(self.research_effective_trade_symbols)))
 
     def to_dict(self) -> dict[str, object]:
         return {
             "reference_observation_symbols": sorted(self.reference_observation_symbols),
-            "configured_trade_symbols": sorted(self.configured_trade_symbols),
-            "tradable_candidate_symbols": sorted(self.tradable_candidate_symbols),
+            "original_configured_trade_symbols": sorted(self.original_configured_trade_symbols),
+            "research_effective_trade_symbols": sorted(self.research_effective_trade_symbols),
+            "removed_reference_symbols": sorted(
+                self.original_configured_trade_symbols & self.reference_observation_symbols
+            ),
+            "configured_trade_symbols": sorted(self.original_configured_trade_symbols),
+            "tradable_candidate_symbols": sorted(self.research_effective_trade_symbols),
             "target_symbols": sorted(self.target_symbols),
             "executable_symbols": sorted(self.executable_symbols),
             "maximum_observation_capacity": self.maximum_observation_capacity,
@@ -901,6 +1118,8 @@ def build_reference_overlay(
     config_data: Mapping[str, object],
     *,
     references: Sequence[str] = REFERENCE_SYMBOLS,
+    managed_position_reservations: int = 0,
+    open_order_reservations: int = 0,
 ) -> ResearchReferenceOverlay:
     universe = config_data.get("universe")
     equity = universe.get("equity") if isinstance(universe, Mapping) else None
@@ -912,19 +1131,151 @@ def build_reference_overlay(
         for symbol in (equity.get(field) if isinstance(equity.get(field), (list, tuple)) else ())
     }
     reference_set = frozenset(str(symbol).strip().upper() for symbol in references)
-    tradable = frozenset(configured - set(reference_set))
+    effective = frozenset(configured - set(reference_set))
     capacity = int(equity.get("maximum_stream_symbols", 0))
     return ResearchReferenceOverlay(
         reference_observation_symbols=reference_set,
-        configured_trade_symbols=tradable,
-        tradable_candidate_symbols=tradable,
-        target_symbols=tradable,
-        executable_symbols=tradable,
+        original_configured_trade_symbols=frozenset(configured),
+        research_effective_trade_symbols=effective,
+        target_symbols=effective,
+        executable_symbols=effective,
         maximum_observation_capacity=capacity,
         reference_pin_count=len(reference_set),
-        managed_position_reservations=0,
-        open_order_reservations=0,
+        managed_position_reservations=int(managed_position_reservations),
+        open_order_reservations=int(open_order_reservations),
     )
+
+
+PIT_POPULATION_SCHEMA_VERSION = "m3-pit-scanner-population-v1"
+
+
+def _snapshot_value(snapshot: object, key: str, default: object = None) -> object:
+    if isinstance(snapshot, Mapping):
+        return snapshot.get(key, default)
+    return getattr(snapshot, key, default)
+
+
+def deterministic_candidate_population(
+    snapshots: Sequence[object],
+    *,
+    reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
+) -> dict[str, object]:
+    """Freeze scanner-eligible PIT membership without alpha ranking."""
+    references = {str(symbol).strip().upper() for symbol in reference_symbols}
+    normalized: list[dict[str, object]] = []
+    seen_effective: set[str] = set()
+    exclusion_counts: dict[str, int] = {"reference_observation_symbol": 0}
+    for snapshot in snapshots:
+        effective_at = _snapshot_value(snapshot, "effective_at")
+        if isinstance(effective_at, datetime):
+            effective_text = canonical_timestamp(effective_at)
+        else:
+            effective_text = canonical_timestamp(parse_timestamp(effective_at))
+        if effective_text in seen_effective:
+            raise GateError("duplicate_pit_snapshot", f"duplicate PIT snapshot effective_at: {effective_text}")
+        seen_effective.add(effective_text)
+        strategy_name = str(_snapshot_value(snapshot, "observation_strategy_name", "") or "")
+        strategy_version = str(_snapshot_value(snapshot, "observation_strategy_version", "") or "")
+        if _snapshot_value(snapshot, "observation_strategy") not in (None, "") or strategy_name or strategy_version:
+            raise GateError(
+                "candidate_population_alpha_leak", "candidate population must not use observation alpha ranking"
+            )
+        raw_symbols = _snapshot_value(snapshot, "symbols")
+        if not isinstance(raw_symbols, (list, tuple, set, frozenset)):
+            raise GateError("invalid_pit_snapshot", "PIT snapshot symbols must be a collection")
+        symbols = sorted({str(symbol).strip().upper() for symbol in raw_symbols if str(symbol).strip()})
+        candidates = [symbol for symbol in symbols if symbol not in references]
+        exclusion_counts["reference_observation_symbol"] += len(symbols) - len(candidates)
+        normalized.append(
+            {
+                "effective_at": effective_text,
+                "eligible_symbols": candidates,
+                "eligible_count": len(candidates),
+                "reference_symbols_excluded": sorted(set(symbols) & references),
+            }
+        )
+    normalized.sort(key=lambda item: str(item["effective_at"]))
+    if not normalized:
+        raise GateError("missing_pit_universe", "deterministic PIT scanner population is empty")
+    unique_candidates = sorted(
+        {symbol for snapshot in normalized for symbol in snapshot["eligible_symbols"]}  # type: ignore[union-attr]
+    )
+    universe_digest = canonical_digest(
+        {"encoding": PIT_POPULATION_SCHEMA_VERSION, "snapshots": normalized, "references": sorted(references)}
+    )
+    decision_eligibility = [
+        {
+            "effective_at": snapshot["effective_at"],
+            "eligible_symbols": snapshot["eligible_symbols"],
+        }
+        for snapshot in normalized
+    ]
+    return {
+        "schema_version": PIT_POPULATION_SCHEMA_VERSION,
+        "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+        "observation_strategy": None,
+        "reference_symbols": sorted(references),
+        "snapshot_count": len(normalized),
+        "unique_candidate_count": len(unique_candidates),
+        "per_snapshot_eligible_count": [int(snapshot["eligible_count"]) for snapshot in normalized],
+        "candidate_universe_digest_sha256": universe_digest,
+        "candidate_decision_eligibility_digest_sha256": canonical_digest(decision_eligibility),
+        "exclusion_counts": dict(sorted(exclusion_counts.items())),
+        "snapshots": normalized,
+        "candidate_symbols": unique_candidates,
+        "pit_universe_verified": True,
+    }
+
+
+def candidate_symbols_for_decision(population: Mapping[str, object], decision: date | str) -> tuple[str, ...]:
+    """Return the latest scanner pool effective strictly no later than a decision."""
+    decision_date = date.fromisoformat(str(decision))
+    selected: Sequence[Mapping[str, object]] = tuple(
+        item for item in population.get("snapshots", ()) if isinstance(item, Mapping)
+    )
+    eligible: tuple[str, ...] = ()
+    for snapshot in sorted(selected, key=lambda item: str(item.get("effective_at", ""))):
+        effective = parse_timestamp(snapshot.get("effective_at"))
+        if effective.date() <= decision_date:
+            raw = snapshot.get("eligible_symbols", ())
+            eligible = (
+                tuple(sorted(str(symbol).strip().upper() for symbol in raw)) if isinstance(raw, (list, tuple)) else ()
+            )
+        else:
+            break
+    return eligible
+
+
+def validate_pit_reference_boundary(
+    population: Mapping[str, object],
+    *,
+    reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
+) -> dict[str, object]:
+    """Prove the actual PIT scanner membership excludes observation references."""
+    references = {str(symbol).strip().upper() for symbol in reference_symbols}
+    leaked: dict[str, list[str]] = {}
+    snapshots = population.get("snapshots", ())
+    if isinstance(snapshots, (list, tuple)):
+        for index, snapshot in enumerate(snapshots):
+            if not isinstance(snapshot, Mapping):
+                leaked[str(index)] = ["<invalid-snapshot>"]
+                continue
+            symbols = snapshot.get("eligible_symbols", ())
+            overlap = sorted(set(str(symbol).strip().upper() for symbol in symbols) & references)
+            if overlap:
+                leaked[str(index)] = overlap
+    if leaked:
+        raise GateError(
+            "pit_reference_role_overlap", f"PIT candidate universe contains observation references: {leaked}"
+        )
+    return {
+        "status": "PIT_UNIVERSE_VERIFIED",
+        "reference_symbols": sorted(references),
+        "candidate_reference_overlap": [],
+        "target_reference_overlap": [],
+        "executable_reference_overlap": [],
+        "evidence_level": "PIT_UNIVERSE_VERIFIED",
+    }
 
 
 def _page_path(bundle: Path, relative_path: str) -> Path:
@@ -935,7 +1286,10 @@ def _page_path(bundle: Path, relative_path: str) -> Path:
     resolved_page = (bundle / candidate).resolve()
     if resolved_page != resolved_bundle and resolved_bundle not in resolved_page.parents:
         raise GateError("invalid_page_path", "page path escapes the IWM bundle")
-    return bundle / candidate
+    result = bundle / candidate
+    if result.is_symlink():
+        raise GateError("mutable_symlink_artifact", f"IWM page must not be a symlink: {relative_path}")
+    return result
 
 
 def _require_text(mapping: Mapping[str, object], key: str) -> str:
@@ -952,16 +1306,28 @@ def _nonnegative_int(mapping: Mapping[str, object], key: str, *, category: str) 
     return value
 
 
+def _continuation_token(value: object, *, field: str) -> str | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise GateError("pagination_chain", f"{field} must be a string or null")
+    return value
+
+
 def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, object]]:
     if str(receipt.get("schema_version", "")) != "1.0.0":
         raise GateError("source_contract_mismatch", "unsupported IWM source receipt schema")
-    _require_text(receipt, "provider")
+    if _require_text(receipt, "provider") != SOURCE_PROVIDER:
+        raise GateError("provider_identity_mismatch", "IWM source provider must be Alpaca Market Data API")
+    if str(receipt.get("api_family_version", "")) != SOURCE_API_FAMILY_VERSION:
+        raise GateError("provider_identity_mismatch", "IWM API family/version must be v2 stocks bars")
     _require_text(receipt, "provider_api_product_version")
     if str(receipt.get("asset_class", "")) != "us_equity":
         raise GateError("asset_class_mismatch", "IWM source asset class must be us_equity")
     if str(receipt.get("symbol", "")).strip().upper() != "IWM":
         raise GateError("source_symbol_mismatch", "IWM source receipt symbol must be IWM")
-    _require_text(receipt, "endpoint_identity")
+    if _require_text(receipt, "endpoint_identity") != SOURCE_ENDPOINT:
+        raise GateError("endpoint_identity_mismatch", "IWM endpoint identity must be /v2/stocks/bars")
     acquisition = parse_timestamp(receipt.get("acquisition_timestamp_utc"))
     if acquisition.utcoffset() is None or acquisition.utcoffset().total_seconds() != 0:
         raise GateError("source_contract_mismatch", "acquisition_timestamp_utc must be UTC")
@@ -1011,19 +1377,24 @@ def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, ob
             _nonnegative_int(page, field, category="source_contract_mismatch")
         if "input_page_token" not in page or "output_next_page_token" not in page:
             raise GateError("source_contract_missing", f"page {relative} token chain fields are required")
-        validated.append(dict(page))
+        input_token = _continuation_token(page["input_page_token"], field="input_page_token")
+        output_token = _continuation_token(page["output_next_page_token"], field="output_next_page_token")
+        page_copy = dict(page)
+        page_copy["input_page_token"] = input_token
+        page_copy["output_next_page_token"] = output_token
+        validated.append(page_copy)
     if page_paths != sorted(page_paths):
         raise GateError("page_order", "source receipt pages must be in deterministic lexical order")
     hashes = [str(page["raw_sha256"]) for page in validated]
     if len(set(hashes)) != len(hashes):
         raise GateError("duplicate_page", "source receipt contains duplicate raw page hashes")
     first_token = validated[0]["input_page_token"]
-    if first_token not in (None, ""):
+    if first_token is not None:
         raise GateError("pagination_chain", "first page must have an empty input token")
     for previous, current in zip(validated[:-1], validated[1:], strict=True):
         if current["input_page_token"] != previous["output_next_page_token"]:
             raise GateError("pagination_chain", "page token chain is not contiguous")
-    if validated[-1]["output_next_page_token"] not in (None, ""):
+    if validated[-1]["output_next_page_token"] is not None:
         raise GateError("partial_pagination_chain", "terminal page must not contain a continuation token")
     return validated
 
@@ -1048,6 +1419,24 @@ def validate_iwm_bundle(
     if not isinstance(receipt, Mapping):
         raise GateError("invalid_source_receipt", "IWM source receipt must be an object")
     pages = _validate_source_receipt(receipt)
+    page_directory = bundle_path / "pages"
+    actual_page_paths = (
+        {
+            item.relative_to(bundle_path).as_posix()
+            for item in page_directory.iterdir()
+            if item.is_file() or item.is_symlink()
+        }
+        if page_directory.is_dir()
+        else set()
+    )
+    declared_page_paths = {str(page["relative_path"]) for page in pages}
+    if actual_page_paths != declared_page_paths:
+        missing = sorted(declared_page_paths - actual_page_paths)
+        extra = sorted(actual_page_paths - declared_page_paths)
+        raise GateError(
+            "pagination_page_set",
+            f"source receipt page list has missing or extra pages: missing={missing}, extra={extra}",
+        )
     staged_pages: list[dict[str, object]] = []
     normalized: list[NormalizedBar] = []
     for page in pages:
@@ -1072,6 +1461,12 @@ def validate_iwm_bundle(
             or str(payload.get("status", "")).lower() in {"error", "failed"}
         ):
             raise GateError("provider_payload_error", f"provider error embedded in IWM page: {relative}")
+        if "next_page_token" not in payload:
+            raise GateError("pagination_payload_missing", f"IWM page continuation token is missing: {relative}")
+        actual_next_token = _continuation_token(payload.get("next_page_token"), field="payload.next_page_token")
+        declared_next_token = page["output_next_page_token"]
+        if actual_next_token != declared_next_token:
+            raise GateError("pagination_payload_mismatch", f"payload continuation token differs: {relative}")
         bars = payload.get("bars")
         if not isinstance(bars, Mapping) or set(str(key) for key in bars) != {"IWM"}:
             raise GateError("source_symbol_mismatch", f"IWM page contains a non-IWM or missing symbol: {relative}")
@@ -1088,6 +1483,9 @@ def validate_iwm_bundle(
         ensure_unique_rows(page_rows, category="identical_duplicate_bar")
         if page_rows != sorted(page_rows, key=lambda row: row.sort_key):
             raise GateError("source_order", f"IWM page is not sorted ascending: {relative}")
+        prior_keys = {row.key for row in normalized}
+        if any(row.key in prior_keys for row in page_rows):
+            raise GateError("duplicate_page", f"duplicate IWM page payload row: {relative}")
         if normalized and page_rows and page_rows[0].sort_key <= normalized[-1].sort_key:
             raise GateError("source_order", f"IWM page order is not strictly ascending: {relative}")
         normalized.extend(page_rows)
@@ -1098,6 +1496,8 @@ def validate_iwm_bundle(
                 "crlf_normalized_sha256": artifact.crlf_normalized_sha256,
                 "byte_size": artifact.byte_size,
                 "row_count": len(page_rows),
+                "input_page_token": page["input_page_token"],
+                "output_next_page_token": actual_next_token,
             }
         )
     ensure_unique_rows(normalized, category="identical_duplicate_bar")
@@ -1121,11 +1521,13 @@ def validate_iwm_bundle(
         "normalized_row_count": len(ordered),
         "source_identity": {
             "provider": str(receipt["provider"]),
+            "api_family_version": str(receipt["api_family_version"]),
             "provider_api_product_version": str(receipt["provider_api_product_version"]),
             "endpoint_identity": str(receipt["endpoint_identity"]),
-            "feed": "sip",
-            "adjustment": "split",
+            "feed": SOURCE_FEED,
+            "adjustment": SOURCE_ADJUSTMENT,
             "source_timeframe": RAW_SOURCE_TIMEFRAME,
+            "sort": SOURCE_SORT,
         },
     }
 
@@ -1137,16 +1539,21 @@ def load_csv_reference_rows(
     source_start: date = SOURCE_START,
     source_end: date = SOURCE_END,
 ) -> tuple[dict[str, list[NormalizedBar]], dict[str, dict[str, int]]]:
-    """Read only selected reference rows from a staged canonical CSV."""
+    """Read selected rows and account for every accepted or rejected row."""
     wanted = {symbol.upper() for symbol in reference_symbols}
     rows: dict[str, list[NormalizedBar]] = {symbol: [] for symbol in wanted}
     quality: dict[str, dict[str, int]] = {
         symbol: {
             "raw_row_count": 0,
+            "raw_reference_rows": 0,
+            "normalized_reference_rows": 0,
+            "post_evaluation_valid_rows": 0,
+            "rejected_row_count": 0,
             "nonfinite_count": 0,
             "nonpositive_close_count": 0,
             "invalid_ohlc_count": 0,
             "negative_volume_count": 0,
+            "zero_volume_count": 0,
             "duplicate_count": 0,
             "conflicting_duplicate_count": 0,
         }
@@ -1161,23 +1568,19 @@ def load_csv_reference_rows(
             if symbol not in wanted:
                 continue
             quality[symbol]["raw_row_count"] += 1
+            quality[symbol]["raw_reference_rows"] += 1
             try:
                 row = normalize_csv_row(raw, source_start=source_start, source_end=source_end)
             except GateError as exc:
-                if exc.category == "nonfinite_value":
-                    quality[symbol]["nonfinite_count"] += 1
-                elif exc.category == "nonpositive_ohlc":
-                    quality[symbol]["nonpositive_close_count"] += 1
-                elif exc.category == "invalid_ohlc":
-                    quality[symbol]["invalid_ohlc_count"] += 1
-                elif exc.category == "negative_volume":
-                    quality[symbol]["negative_volume_count"] += 1
-                else:
-                    quality[symbol].setdefault(exc.category, 0)
-                    quality[symbol][exc.category] += 1
+                quality[symbol]["rejected_row_count"] += 1
+                quality[symbol][exc.category] = quality[symbol].get(exc.category, 0) + 1
+                category_key = f"{exc.category}_count"
+                quality[symbol][category_key] = quality[symbol].get(category_key, 0) + 1
                 continue
             rows[symbol].append(row)
     for symbol, values in rows.items():
+        quality[symbol]["normalized_reference_rows"] = len(values)
+        quality[symbol]["post_evaluation_valid_rows"] = sum(row.session_date > EVALUATION_END for row in values)
         duplicate_count, conflicting_count = _count_duplicate_keys(values)
         quality[symbol]["duplicate_count"] = duplicate_count
         quality[symbol]["conflicting_duplicate_count"] = conflicting_count
@@ -1210,6 +1613,90 @@ def merge_normalized_rows(
     if hashes["pre_merge_non_iwm_semantic_sha256"] != hashes["post_merge_non_iwm_semantic_sha256"]:
         raise GateError("non_iwm_merge_drift", "non-IWM semantic rows changed during merge")
     return merged, hashes
+
+
+def normalized_csv_bytes(rows: Iterable[NormalizedBar]) -> bytes:
+    """Encode a deterministic canonical CSV sidecar without changing values."""
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=list(CANONICAL_COLUMNS[1:]), lineterminator="\n")
+    writer.writeheader()
+    for row in sorted(rows, key=lambda item: item.sort_key):
+        writer.writerow({key: value for key, value in row.to_csv_row().items() if key != "session_date"})
+    return output.getvalue().encode("utf-8")
+
+
+def write_normalized_sidecar(rows: Sequence[NormalizedBar], path: str | Path) -> dict[str, object]:
+    """Write an immutable normalized sidecar or reject an existing conflict."""
+    destination = Path(path)
+    payload = normalized_csv_bytes(rows)
+    if destination.exists() or destination.is_symlink():
+        if destination.is_symlink() or not destination.is_file() or destination.read_bytes() != payload:
+            raise GateError(
+                "sidecar_conflict", f"normalized sidecar already exists with different bytes: {destination.name}"
+            )
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=destination.parent, prefix="iwm-sidecar-", delete=False) as handle:
+                temporary = Path(handle.name)
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+    return {
+        "path": destination.as_posix(),
+        "raw_sha256": _sha256_bytes(payload),
+        "byte_size": len(payload),
+        "normalized_semantic_row_sha256": semantic_rows_digest(rows),
+        "normalized_row_count": len(rows),
+    }
+
+
+def composite_dataset_identity(
+    *,
+    canonical_parent_raw_sha256: str,
+    canonical_parent_normalized_sha256: str,
+    canonical_manifest_git_blob: str,
+    iwm_raw_bundle_sha256: str,
+    iwm_normalized_raw_sha256: str,
+    iwm_normalized_semantic_row_sha256: str,
+    normalizer_git_blob: str,
+    normalizer_sha256: str,
+    schema_version: str,
+    canonical_timeframe: str,
+    source_feed: str,
+    adjustment_mode: str,
+    exchange_timezone: str,
+    calendar_identity: Mapping[str, object],
+    source_range: Mapping[str, object],
+    evaluation_range: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the content-addressed composite contract, including its digest."""
+    payload: dict[str, object] = {
+        "encoding": "m3-composite-dataset-v1",
+        "canonical_parent_raw_sha256": canonical_parent_raw_sha256,
+        "canonical_parent_normalized_sha256": canonical_parent_normalized_sha256,
+        "canonical_manifest_git_blob": canonical_manifest_git_blob,
+        "iwm_raw_bundle_sha256": iwm_raw_bundle_sha256,
+        "iwm_normalized_raw_sha256": iwm_normalized_raw_sha256,
+        "iwm_normalized_semantic_row_sha256": iwm_normalized_semantic_row_sha256,
+        "normalizer_git_blob": normalizer_git_blob,
+        "normalizer_sha256": normalizer_sha256,
+        "schema_version": schema_version,
+        "canonical_timeframe": canonical_timeframe,
+        "source_feed": source_feed,
+        "adjustment_mode": adjustment_mode,
+        "exchange_timezone": exchange_timezone,
+        "calendar_identity": dict(calendar_identity),
+        "source_range": dict(source_range),
+        "evaluation_range": dict(evaluation_range),
+    }
+    return {**payload, "semantic_digest_sha256": canonical_digest(payload)}
 
 
 def config_semantic_digest(config_data: Mapping[str, object]) -> str:
@@ -1277,8 +1764,15 @@ __all__ = [
     "REFERENCE_SYMBOLS",
     "REFERENCE_PANEL_ENCODING_VERSION",
     "ResearchReferenceOverlay",
+    "PIT_POPULATION_SCHEMA_VERSION",
     "SESSION_ENCODING_VERSION",
     "SOURCE_END",
+    "SOURCE_ADJUSTMENT",
+    "SOURCE_API_FAMILY_VERSION",
+    "SOURCE_ENDPOINT",
+    "SOURCE_FEED",
+    "SOURCE_PROVIDER",
+    "SOURCE_SORT",
     "SOURCE_START",
     "StagedArtifact",
     "audit_design_matrix",
@@ -1288,16 +1782,21 @@ __all__ = [
     "canonical_digest",
     "canonical_json_bytes",
     "canonical_timestamp",
+    "candidate_symbols_for_decision",
     "common_session_report",
+    "composite_dataset_identity",
     "config_semantic_digest",
+    "deterministic_candidate_population",
     "design_matrix_digest",
     "expected_exchange_sessions",
+    "exact_m3_close_panel",
     "forbidden_receipt_keys",
     "load_csv_reference_rows",
     "merge_normalized_rows",
     "merkle_root",
     "normalize_csv_row",
     "normalize_provider_bar",
+    "normalized_csv_bytes",
     "normalized_rows_digest",
     "resolve_first_session",
     "reference_panel_digest",
@@ -1306,6 +1805,8 @@ __all__ = [
     "session_date_for_timestamp",
     "stage_file",
     "validate_iwm_bundle",
+    "validate_pit_reference_boundary",
     "weekly_decision_coverage",
     "weekly_decision_sessions",
+    "write_normalized_sidecar",
 ]

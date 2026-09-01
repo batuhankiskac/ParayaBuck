@@ -17,22 +17,45 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import statistics
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 _REPO_BOOTSTRAP = Path(__file__).resolve().parents[1]
 for _path in (_REPO_BOOTSTRAP / "src", Path(__file__).parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from m3_data_gate_helpers import canonical_digest  # noqa: E402
+from m3_data_gate_helpers import (  # noqa: E402
+    CANONICAL_TIMEFRAME,
+    EXCHANGE_TIMEZONE,
+    NORMALIZER_VERSION,
+    SOURCE_ADJUSTMENT,
+    SOURCE_API_FAMILY_VERSION,
+    SOURCE_ENDPOINT,
+    SOURCE_FEED,
+    SOURCE_PROVIDER,
+    SOURCE_SORT,
+    GateError,
+    calendar_dependency_identity,
+    canonical_digest,
+    composite_dataset_identity,
+    config_semantic_digest,
+    forbidden_receipt_keys,
+    load_csv_reference_rows,
+    merge_normalized_rows,
+    reference_panel_digest,
+    semantic_rows_digest,
+)
 from research_helpers import git_head, sha256_of_file  # noqa: E402
 from run_symmetric_v5_validation import load_corporate_actions_all, load_lifetimes  # noqa: E402
 
@@ -57,7 +80,18 @@ DATASET_MANIFEST = DATASET.with_suffix(".manifest.json")
 CA_PATH = REPO / "data/historical/equity_survivorship_full_corporate_actions_v5.csv"
 MANIFEST_PATH = REPO / "data/research_manifests/equity_m3_m4_2026_08.json"
 OUT_DIR = REPO / "data/research/equity_m3_m4_2026_08"
-M3_DATA_GATE_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09.json"
+M3_DATA_GATE_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09_r2.json"
+M3_DATA_GATE_R2_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09_r2.json"
+M3_DATA_GATE_R2_MANIFEST = REPO / "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
+M3_DATA_GATE_R2_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
+M3_DATA_GATE_R2_VERIFIER_PATH = "scripts/research_equity_m3_data_gate.py"
+M3_DATA_GATE_R2_NORMALIZER_PATH = "scripts/m3_data_gate_helpers.py"
+M3_DATA_GATE_R2_CRITICAL_PATHS = (
+    M3_DATA_GATE_R2_NORMALIZER_PATH,
+    M3_DATA_GATE_R2_VERIFIER_PATH,
+    "tests/test_research_equity_m3_data_gate.py",
+    ".github/workflows/ci.yml",
+)
 
 EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
 RECENT_START = datetime(2022, 1, 1, tzinfo=UTC)
@@ -383,30 +417,350 @@ def _feed_evidence(config: Config, coverage: Mapping[str, Mapping[str, object]])
     }
 
 
+def _r2_git_blob(commit: str, path: str) -> tuple[str, str, bytes]:
+    """Read one Git blob and return its object and content identities."""
+    blob = subprocess.run(
+        ["git", "cat-file", "blob", f"{commit}:{path}"],
+        cwd=REPO,
+        check=True,
+        capture_output=True,
+    ).stdout
+    object_id = subprocess.run(
+        ["git", "rev-parse", f"{commit}:{path}"],
+        cwd=REPO,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return object_id, hashlib.sha256(blob).hexdigest(), blob
+
+
+def _r2_git_text(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=REPO, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _r2_relative_path(value: object) -> Path | None:
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        return None
+    candidate = (REPO / value).resolve()
+    try:
+        candidate.relative_to(REPO.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
 def _valid_m3_data_gate_receipt() -> bool:
-    """Return true only for a self-consistent research-only PASS receipt."""
+    """Accept only a Git-, data-, and composite-bound R2 data PASS."""
+    required_gate_order = (
+        "commit_topology",
+        "implementation_blob_identity",
+        "clean_worktree",
+        "configuration_identity",
+        "dependency_identity",
+        "canonical_artifact_identity",
+        "lifetime_identity",
+        "corporate_action_identity",
+        "iwm_raw_bundle",
+        "iwm_provider_contract",
+        "iwm_pagination_chain",
+        "iwm_normalization",
+        "reference_calendar",
+        "reference_row_quality",
+        "reference_common_sessions",
+        "weekly_coverage",
+        "composite_dataset_identity",
+        "deterministic_numerical_population",
+        "design_matrix_feasibility",
+        "reference_role_contract",
+        "receipt_forbidden_fields",
+    )
+    required_gates = set(required_gate_order)
+    source_identity = {
+        "provider": SOURCE_PROVIDER,
+        "api_family_version": SOURCE_API_FAMILY_VERSION,
+        "endpoint_identity": SOURCE_ENDPOINT,
+        "feed": SOURCE_FEED,
+        "adjustment": SOURCE_ADJUSTMENT,
+        "source_timeframe": CANONICAL_TIMEFRAME,
+        "sort": SOURCE_SORT,
+    }
     try:
         payload = json.loads(M3_DATA_GATE_RECEIPT.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        if not isinstance(payload, dict):
+            return False
+        if forbidden_receipt_keys(payload):
+            return False
+        required = {
+            "schema_version": "2.0.0",
+            "mission": "equity_m3_data_gate_2026_09_r2",
+            "data_gate_verdict": "M3_DATA_GATE_PASS",
+            "corrective_infrastructure_verdict": "PASS",
+            "research_only": True,
+            "automatic_promotion": False,
+            "human_promotion_only": True,
+            "candidate_economics_run": False,
+            "economic_metrics_present": False,
+            "economic_mission_ready": False,
+            "next_required_gate": "M3_CANDIDATE_OCP_GATE",
+            "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+            "diagnostic_only": False,
+        }
+        if any(payload.get(key) != expected for key, expected in required.items()):
+            return False
+        recorded_digest = payload.get("self_digest_sha256")
+        if not isinstance(recorded_digest, str):
+            return False
+        without_digest = dict(payload)
+        without_digest.pop("self_digest_sha256", None)
+        if recorded_digest != canonical_digest(without_digest):
+            return False
+
+        gate_results = payload.get("mandatory_gate_results")
+        if not isinstance(gate_results, Mapping) or set(gate_results) != required_gates:
+            return False
+        if any(
+            not isinstance(gate_results[name], Mapping) or gate_results[name].get("status") != "PASS"
+            for name in required_gates
+        ):
+            return False
+
+        lineage = payload.get("base_lineage")
+        if not isinstance(lineage, Mapping):
+            return False
+        base = str(lineage.get("corrective_base_commit", ""))
+        implementation = str(lineage.get("implementation_a2_commit", ""))
+        run_commit = str(lineage.get("run_b2_commit", ""))
+        if not all(len(value) == 40 for value in (base, implementation, run_commit)):
+            return False
+        if _r2_git_text("rev-parse", f"{implementation}^") != base:
+            return False
+        if _r2_git_text("rev-parse", f"{run_commit}^") != implementation:
+            return False
+        changed_paths = _r2_git_text("diff-tree", "--no-commit-id", "--name-only", "-r", run_commit).splitlines()
+        if changed_paths != [M3_DATA_GATE_R2_MANIFEST_PATH]:
+            return False
+
+        manifest_identity = payload.get("manifest_identity")
+        if not isinstance(manifest_identity, Mapping):
+            return False
+        if manifest_identity.get("path") != M3_DATA_GATE_R2_MANIFEST_PATH:
+            return False
+        manifest_blob, manifest_sha, manifest_bytes = _r2_git_blob(run_commit, M3_DATA_GATE_R2_MANIFEST_PATH)
+        if manifest_identity.get("git_blob_id") != manifest_blob:
+            return False
+        if manifest_identity.get("raw_sha256") != manifest_sha:
+            return False
+        if M3_DATA_GATE_R2_MANIFEST.read_bytes() != manifest_bytes:
+            return False
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, Mapping):
+            return False
+        if manifest.get("schema_version") != "2.0.0" or manifest.get("mission") != "equity_m3_data_gate_2026_09_r2":
+            return False
+        if manifest.get("mandatory_data_pass_gates") != list(required_gate_order):
+            return False
+        manifest_ocp = manifest.get("ocp_boundary")
+        if not isinstance(manifest_ocp, Mapping):
+            return False
+        if manifest_ocp.get("observer_execution_strategy_identity_must_match") is not True:
+            return False
+        if manifest_ocp.get("observer_execution_object_instance_must_differ") is not True:
+            return False
+        if manifest.get("implementation_commit") != implementation:
+            return False
+        implementation_tree = _r2_git_text("rev-parse", f"{implementation}^{{tree}}")
+        if manifest.get("implementation_tree") != implementation_tree:
+            return False
+        if payload.get("implementation_tree") != implementation_tree:
+            return False
+
+        critical = payload.get("critical_git_blobs")
+        manifest_critical = manifest.get("critical_git_blobs")
+        if not isinstance(critical, Mapping) or not isinstance(manifest_critical, Mapping):
+            return False
+        if set(critical) != set(M3_DATA_GATE_R2_CRITICAL_PATHS):
+            return False
+        if set(manifest_critical) != set(critical):
+            return False
+        current_head = _r2_git_text("rev-parse", "HEAD")
+        for path in M3_DATA_GATE_R2_CRITICAL_PATHS:
+            declaration = critical.get(path)
+            manifest_declaration = manifest_critical.get(path)
+            if not isinstance(declaration, Mapping) or declaration != manifest_declaration:
+                return False
+            for commit in (implementation, run_commit, current_head):
+                blob_id, raw_sha, _blob = _r2_git_blob(commit, path)
+                if declaration.get("git_blob_id") != blob_id or declaration.get("raw_sha256") != raw_sha:
+                    return False
+        for identity_key, path in (
+            ("verifier_identity", M3_DATA_GATE_R2_VERIFIER_PATH),
+            ("normalizer_identity", M3_DATA_GATE_R2_NORMALIZER_PATH),
+        ):
+            identity = payload.get(identity_key)
+            if not isinstance(identity, Mapping) or identity.get("path") != path:
+                return False
+            if identity.get("git_blob") != critical.get(path):
+                return False
+
+        config_digest = payload.get("config_semantic_digest_sha256")
+        if not isinstance(config_digest, str):
+            return False
+        if manifest.get("config_semantic_digest_sha256") != config_digest:
+            return False
+        config_data = yaml.safe_load((REPO / "config/settings.yaml").read_text(encoding="utf-8"))
+        if not isinstance(config_data, Mapping) or config_semantic_digest(config_data) != config_digest:
+            return False
+        calendar_identity = payload.get("calendar_identity")
+        if not isinstance(calendar_identity, Mapping) or dict(calendar_identity) != calendar_dependency_identity():
+            return False
+        if manifest.get("calendar_identity") != calendar_identity:
+            return False
+
+        input_provenance = payload.get("input_provenance")
+        canonical_provenance = input_provenance.get("canonical_bars") if isinstance(input_provenance, Mapping) else None
+        if not isinstance(canonical_provenance, Mapping):
+            return False
+        canonical_raw_sha = canonical_provenance.get("raw_sha256")
+        if not isinstance(canonical_raw_sha, str) or sha256_of_file(DATASET) != canonical_raw_sha:
+            return False
+        canonical_manifest_blob = canonical_provenance.get("manifest_git_blob")
+        if not isinstance(canonical_manifest_blob, Mapping):
+            return False
+        canonical_manifest_path = DATASET_MANIFEST.relative_to(REPO).as_posix()
+        actual_manifest_blob, actual_manifest_sha, actual_manifest_bytes = _r2_git_blob(
+            current_head, canonical_manifest_path
+        )
+        if canonical_manifest_blob.get("git_blob_id") != actual_manifest_blob:
+            return False
+        if canonical_manifest_blob.get("git_blob_raw_sha256") != actual_manifest_sha:
+            return False
+        canonical_manifest = json.loads(actual_manifest_bytes.decode("utf-8"))
+        if not isinstance(canonical_manifest, Mapping) or canonical_manifest.get("dataset_sha256") != canonical_raw_sha:
+            return False
+
+        composite = payload.get("composite_dataset_identity")
+        if not isinstance(composite, Mapping) or composite.get("status") != "PASS":
+            return False
+        identity = composite.get("identity")
+        sidecar = composite.get("sidecar")
+        if not isinstance(identity, Mapping) or not isinstance(sidecar, Mapping):
+            return False
+        sidecar_path = _r2_relative_path(sidecar.get("path"))
+        if sidecar_path is None or sidecar_path.is_symlink() or not sidecar_path.is_file():
+            return False
+        sidecar_raw_sha = sha256_of_file(sidecar_path)
+        if sidecar.get("raw_sha256") != sidecar_raw_sha:
+            return False
+        if identity.get("iwm_normalized_raw_sha256") != sidecar_raw_sha:
+            return False
+        sidecar_rows, sidecar_quality = load_csv_reference_rows(sidecar_path, reference_symbols=("IWM",))
+        if sidecar_quality.get("IWM", {}).get("rejected_row_count", 0) != 0:
+            return False
+        if sidecar.get("normalized_semantic_row_sha256") != semantic_rows_digest(sidecar_rows["IWM"]):
+            return False
+        if identity.get("iwm_normalized_semantic_row_sha256") != sidecar.get("normalized_semantic_row_sha256"):
+            return False
+        if identity.get("canonical_parent_raw_sha256") != canonical_raw_sha:
+            return False
+        if identity.get("canonical_parent_normalized_sha256") != canonical_provenance.get("crlf_normalized_sha256"):
+            return False
+        if identity.get("canonical_manifest_git_blob") != actual_manifest_blob:
+            return False
+        normalizer = critical[M3_DATA_GATE_R2_NORMALIZER_PATH]
+        if not isinstance(normalizer, Mapping):
+            return False
+        if identity.get("normalizer_git_blob") != normalizer.get("git_blob_id"):
+            return False
+        if identity.get("normalizer_sha256") != normalizer.get("raw_sha256"):
+            return False
+        if identity.get("schema_version") != NORMALIZER_VERSION:
+            return False
+        if identity.get("canonical_timeframe") != CANONICAL_TIMEFRAME:
+            return False
+        if identity.get("source_feed") != SOURCE_FEED or identity.get("adjustment_mode") != SOURCE_ADJUSTMENT:
+            return False
+        if identity.get("exchange_timezone") != EXCHANGE_TIMEZONE:
+            return False
+        if identity.get("calendar_identity") != calendar_identity:
+            return False
+        if identity.get("source_range") != {"start": "2016-01-01", "end": "2026-07-31"}:
+            return False
+        if identity.get("evaluation_range") != {"end_inclusive": "2026-07-30"}:
+            return False
+        recomputed_identity = composite_dataset_identity(
+            canonical_parent_raw_sha256=str(identity["canonical_parent_raw_sha256"]),
+            canonical_parent_normalized_sha256=str(identity["canonical_parent_normalized_sha256"]),
+            canonical_manifest_git_blob=str(identity["canonical_manifest_git_blob"]),
+            iwm_raw_bundle_sha256=str(identity["iwm_raw_bundle_sha256"]),
+            iwm_normalized_raw_sha256=str(identity["iwm_normalized_raw_sha256"]),
+            iwm_normalized_semantic_row_sha256=str(identity["iwm_normalized_semantic_row_sha256"]),
+            normalizer_git_blob=str(identity["normalizer_git_blob"]),
+            normalizer_sha256=str(identity["normalizer_sha256"]),
+            schema_version=str(identity["schema_version"]),
+            canonical_timeframe=str(identity["canonical_timeframe"]),
+            source_feed=str(identity["source_feed"]),
+            adjustment_mode=str(identity["adjustment_mode"]),
+            exchange_timezone=str(identity["exchange_timezone"]),
+            calendar_identity=identity["calendar_identity"],  # type: ignore[arg-type]
+            source_range=identity["source_range"],  # type: ignore[arg-type]
+            evaluation_range=identity["evaluation_range"],  # type: ignore[arg-type]
+        )
+        if dict(recomputed_identity) != dict(identity):
+            return False
+        iwm_source = payload.get("iwm_raw_source")
+        if not isinstance(iwm_source, Mapping) or iwm_source.get("status") != "PASS":
+            return False
+        if iwm_source.get("raw_bundle_sha256") != identity.get("iwm_raw_bundle_sha256"):
+            return False
+
+        canonical_rows, canonical_quality = load_csv_reference_rows(DATASET, reference_symbols=REFERENCE_SYMBOLS)
+        if any(item.get("rejected_row_count", 0) != 0 for item in canonical_quality.values()):
+            return False
+        merged_iwm, _merge_hashes = merge_normalized_rows(canonical_rows["IWM"], sidecar_rows["IWM"])
+        panel_rows = {
+            "SPY": canonical_rows["SPY"],
+            "IWM": merged_iwm,
+            "QQQ": canonical_rows["QQQ"],
+        }
+        panel = payload.get("reference_panel")
+        if not isinstance(panel, Mapping):
+            return False
+        actual_panel_digest = reference_panel_digest(
+            [row for symbol in REFERENCE_SYMBOLS for row in panel_rows[symbol]],
+            source_identity=source_identity,
+        )
+        actual_evaluation_digest = reference_panel_digest(
+            [row for symbol in REFERENCE_SYMBOLS for row in panel_rows[symbol] if row.session_date <= EVAL_END.date()],
+            source_identity=source_identity,
+        )
+        if panel.get("normalized_reference_panel_sha256") != actual_panel_digest:
+            return False
+        if panel.get("evaluation_reference_panel_sha256") != actual_evaluation_digest:
+            return False
+
+        matrix = payload.get("design_matrix_summary")
+        if not isinstance(matrix, Mapping):
+            return False
+        total = matrix.get("total_matrix_count")
+        passed = matrix.get("pass_count")
+        failed = matrix.get("fail_count")
+        if not isinstance(total, int) or total <= 0 or passed != total or failed != 0:
+            return False
+        if payload.get("forbidden_economic_fields") != []:
+            return False
+        return True
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        GateError,
+        KeyError,
+        TypeError,
+        ValueError,
+        subprocess.CalledProcessError,
+    ):
         return False
-    if not isinstance(payload, dict):
-        return False
-    required = {
-        "verdict": "M3_DATA_GATE_PASS",
-        "research_only": True,
-        "automatic_promotion": False,
-        "human_promotion_only": True,
-        "candidate_economics_run": False,
-        "economic_metrics_present": False,
-    }
-    if any(payload.get(key) != expected for key, expected in required.items()):
-        return False
-    recorded_digest = payload.get("self_digest_sha256")
-    if not isinstance(recorded_digest, str):
-        return False
-    without_digest = dict(payload)
-    without_digest.pop("self_digest_sha256", None)
-    return recorded_digest == canonical_digest(without_digest)
 
 
 def main() -> int:
@@ -437,7 +791,7 @@ def main() -> int:
         },
         "m3": {
             "strategy_name": ProxyMultifactorResidualMomentum.name,
-            "status": "ready" if m3_ready else "blocked_unverified_data_gate",
+            "status": "data_gate_pass_m3_ocp_required" if m3_ready else "blocked_data_gate",
             "required_references": list(REFERENCE_SYMBOLS),
             "missing_references": [symbol for symbol in REFERENCE_SYMBOLS if int(coverage[symbol]["count"]) < 274],
             "configured_reference_symbols": list(config.universe.equity.reference_symbols),

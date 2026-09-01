@@ -197,7 +197,7 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
     runtime.broker = SimpleNamespace(  # type: ignore[attr-defined]
         account_id="acct",
         account=lambda: SimpleNamespace(positions=()),
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
     )
     runtime.ledger = SimpleNamespace(  # type: ignore[attr-defined]
         managed_entries_for_account=lambda account_id: (),
@@ -289,7 +289,7 @@ def _tail_capable_runtime(**overrides: Any) -> EngineRuntime:
     }
     runtime.broker = SimpleNamespace(  # type: ignore[attr-defined]
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
         account=lambda: SimpleNamespace(
             equity=100_000.0,
             daily_pnl=0.0,
@@ -342,9 +342,9 @@ def test_verified_startup_reconcile_clears_persisted_incidents() -> None:
         total_fees_for_account=lambda account_id: 0.0,
     )
     runtime.start()
-    # The verified startup reconcile cleared ALL persisted incidents; the
+    # Startup clears only its reconciliation incident; the
     # account-poll latch mirror may add a no-breach drawdown clear after.
-    assert cleared and cleared[0] == ("acct", None)
+    assert cleared and cleared[0] == ("acct", "reconciliation_failed")
 
 
 def test_restart_rebalance_resume_deferred_while_breaker_active() -> None:

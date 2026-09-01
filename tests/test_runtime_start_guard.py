@@ -52,6 +52,23 @@ def test_live_runtime_start_requires_live_enabled() -> None:
         runtime.start()
 
 
+@pytest.mark.parametrize("category", ["QUANTITY_MISMATCH", "UNKNOWN_ORDER"])
+def test_startup_rejects_unsafe_reconciliation_category(category: str) -> None:
+    class Broker:
+        account_id = "acct"
+
+        def reconcile(self) -> dict[str, list[str]]:
+            return {category: ["AAPL"]}
+
+    runtime = _runtime(broker=Broker(), ledger=object(), app_config=Config())
+
+    with pytest.raises(RuntimeError, match=category):
+        runtime.start()
+
+    assert runtime._state == "halted"
+    assert runtime._running is False
+
+
 def test_disabled_runtime_is_rejected_before_universe_or_broker(monkeypatch) -> None:
     called = False
 

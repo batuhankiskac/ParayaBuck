@@ -535,8 +535,10 @@ class WarmupCache:
         off_grid = 0
         duplicate_day = 0
         last_timestamps: list[datetime] = []
+        last_timestamp_by_symbol: dict[str, datetime | None] = {}
         spans: dict[str, float | None] = {}
         for sym in symbols:
+            canonical = canonical_symbol(sym, market)
             bars = self.get(sym, timeframe, market=market, feed=feed, start=start_check, end=now, adjustment=adjustment)
             # off-grid already filtered on read, so count via raw query
             with self._lock:
@@ -560,6 +562,7 @@ class WarmupCache:
                     off_grid += 1
             if bars:
                 last_timestamps.append(bars[-1].timestamp)
+                last_timestamp_by_symbol[canonical] = bars[-1].timestamp
                 # duplicate day: count days with >1 bar
                 day_counts = Counter(b.timestamp.date().isoformat() for b in bars)
                 duplicate_day += sum(count - 1 for count in day_counts.values() if count > 1)
@@ -569,6 +572,7 @@ class WarmupCache:
                 else:
                     spans[sym] = None
             else:
+                last_timestamp_by_symbol[canonical] = None
                 spans[sym] = None
         spread = None
         if len(last_timestamps) >= 2:
@@ -578,6 +582,7 @@ class WarmupCache:
             "duplicate_day_bars": duplicate_day,
             "last_23_span_days_by_symbol": spans,
             "symbols_last_timestamp_spread_seconds": spread,
+            "last_timestamp_by_symbol": last_timestamp_by_symbol,
             "last_timestamps": {s: ts.isoformat() for s, ts in zip(symbols, last_timestamps, strict=False)},
         }
 

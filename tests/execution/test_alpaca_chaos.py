@@ -12,6 +12,7 @@ def test_chaos_no_duplicate_fills_or_stops(tmp_path: Path):
     fake = FakeTradingClient()
     broker = AlpacaBroker("k", "s", paper=True, ledger=ledger, peak_state_path=tmp_path / "peak.json")
     broker._client = fake  # type: ignore[assignment]
+    broker.portfolio_open_orders = lambda: ()  # type: ignore[method-assign]
     fake.set_account(equity="10000")
     fake.set_position("IWM", qty=10)
     # Initial reconcile bootstraps

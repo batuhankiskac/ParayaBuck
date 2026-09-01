@@ -584,6 +584,8 @@ def test_external_position_is_not_modified_by_default() -> None:
         apply_fee_activity=lambda *args: True,
     )
     broker._account_id = "acct"
+    broker.portfolio_open_orders = lambda: ()
+    broker._client = SimpleNamespace(get_orders=lambda *_args, **_kwargs: ())
     broker.account = lambda: AccountSnapshot(
         1_000,
         10_000,
@@ -611,7 +613,8 @@ def test_reconcile_closes_stale_managed_entry_missing_from_broker_snapshot() -> 
     )
     closed: list[str] = []
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get_orders=lambda *_args, **_kwargs: ())
+    broker.portfolio_open_orders = lambda: ()
     broker.ledger = None
     broker._account_id = "acct"
     broker.ledger = SimpleNamespace(
@@ -653,7 +656,8 @@ def test_reconcile_protects_only_owned_quantity_when_external_quantity_coexists(
         "open",
     )
     broker = AlpacaBroker.__new__(AlpacaBroker)
-    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [])
+    broker._client = SimpleNamespace(_request=lambda *_args, **_kwargs: [], get_orders=lambda *_args, **_kwargs: ())
+    broker.portfolio_open_orders = lambda: ()
     broker.ledger = None
     broker.manage_external_positions = False
     broker.ledger = SimpleNamespace(
@@ -934,7 +938,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: reconciled.append(True),
+        reconcile=lambda: reconciled.append(True) or {"MATCH": []},
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -974,7 +978,7 @@ def test_safety_lock_reset_is_granular_per_market_halt() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,  # ownership reconciliation succeeds
+        reconcile=lambda: {"MATCH": []},  # ownership reconciliation succeeds
         account=lambda: account,
     )
     # A crypto managed exit is still in flight (not provably terminal).
@@ -1034,7 +1038,7 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1068,7 +1072,7 @@ def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1125,7 +1129,7 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1168,7 +1172,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
     runtime.market_state = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {"MATCH": []})
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (SimpleNamespace(status="manual_intervention_required"),),
         clear_safety_incident=lambda _account, _reason=None: None,

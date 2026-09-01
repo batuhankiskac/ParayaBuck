@@ -91,8 +91,8 @@ def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> No
     runtime._pin_managed_symbols = lambda: None
     runtime._restore_persistent_state = lambda: (_ for _ in ()).throw(RuntimeError("after composition"))
     runtime._circuit_breaker_reason = None
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
-    runtime.ledger = SimpleNamespace(clear_safety_incident=lambda _account: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {"MATCH": []})
+    runtime.ledger = SimpleNamespace(clear_safety_incident=lambda _account, _reason=None: None)
     runtime.app_config = config
 
     captured: list[dict[str, object]] = []

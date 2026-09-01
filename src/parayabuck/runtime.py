@@ -85,6 +85,31 @@ from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
 
+_UNSAFE_RECONCILIATION_CATEGORIES = (
+    "LOCAL_STALE",
+    "BROKER_STALE",
+    "QUANTITY_MISMATCH",
+    "UNKNOWN_ORDER",
+    "MISSING_LOCAL_ORDER",
+    "MISSING_BROKER_ORDER",
+)
+
+
+def _reconciliation_mismatches(result: object) -> tuple[str, ...]:
+    """Return unsafe categories, rejecting unknown result shapes fail closed."""
+    if not isinstance(result, dict):
+        raise RuntimeError("Reconciliation safety gate returned an unavailable or malformed result")
+    for key, value in result.items():
+        if not isinstance(key, str) or not isinstance(value, (list, tuple, set)):
+            raise RuntimeError("Reconciliation safety gate returned a malformed category result")
+    return tuple(key for key in _UNSAFE_RECONCILIATION_CATEGORIES if result.get(key))
+
+
+def _require_clean_reconciliation(result: object, gate: str) -> None:
+    mismatches = _reconciliation_mismatches(result)
+    if mismatches:
+        raise RuntimeError(f"{gate} reconciliation safety gate rejected categories: {', '.join(mismatches)}")
+
 
 class TransientStartupError(RuntimeError):
     """A network-class failure during engine startup.
@@ -777,20 +802,6 @@ class EngineRuntime:
         }
 
     def start(self) -> None:
-        try:
-            if _observe is not None:
-                _observe.on_runtime_started(
-                    session_id=getattr(self, "_session_id", None),
-                    mode=getattr(self, "mode", None).value if hasattr(self, "mode") else None,  # type: ignore[union-attr]
-                    pid=None,
-                )
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_snapshot_writer", None) is not None:
-                self._snapshot_writer.start()  # type: ignore[union-attr]
-        except Exception:
-            pass
         if self._running:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
@@ -807,14 +818,15 @@ class EngineRuntime:
         self._stop_event.clear()
         self._state = "starting"
         try:
-            self.broker.reconcile()
+            result = self.broker.reconcile()
+            _require_clean_reconciliation(result, "Startup")
             self._last_reconciliation_at = datetime.now(UTC)
             # A verified startup reconciliation is the same recovery
             # condition the periodic path uses: reconcile() raises on
             # ownership drift / protection / ambiguous state, so success
             # means every persisted PERSISTENT_INCIDENT is resolved and a
             # restart must not resurrect it.
-            self.ledger.clear_safety_incident(self.broker.account_id or "unknown")
+            self.ledger.clear_safety_incident(self.broker.account_id or "unknown", "reconciliation_failed")
         except Exception as exc:
             if _is_transient_network_error(exc):
                 # G2/G3 boundary: a transient broker API failure is NOT a
@@ -1044,6 +1056,14 @@ class EngineRuntime:
             # Observability-only; fake ledgers in unit tests may omit it.
             self._runtime_session_id = record_session(self.broker.account_id or "unknown", self.mode.value)
         runtime_metrics_store.record_event("runtime_started")
+        if getattr(self, "_snapshot_writer", None) is not None:
+            self._snapshot_writer.start()  # type: ignore[union-attr]
+        if _observe is not None:
+            _observe.on_runtime_started(
+                session_id=getattr(self, "_session_id", None),
+                mode=self.mode.value,
+                pid=None,
+            )
         alerts.emit(
             "runtime_started",
             message=f"Engine runtime started in {self.mode.value} mode",
@@ -2033,6 +2053,11 @@ class EngineRuntime:
             "post_fill_risk_violation",
             "final_market_event_queue_overflow",
             "ownership_drift",
+            "trade_update_callback_failure",
+            "decision_worker_crashed",
+            "portfolio_runtime_failure",
+            "reconciliation_failed",
+            "reconciliation_bug_suspected",
         }
         incidents = self.ledger.load_safety_incidents(account_id)
         for incident in incidents:
@@ -2096,6 +2121,7 @@ class EngineRuntime:
             with getattr(self, "_state_lock", threading.RLock()):
                 self._state = "halted"
                 self._circuit_breaker_reason = "trade_update_callback_failure"
+            self._persist_safety_state("trade_update_callback_failure")
             log.exception(
                 "Trade update handling failed for order %s: %s",
                 update.client_order_id,
@@ -2597,6 +2623,7 @@ class EngineRuntime:
                 self._circuit_breaker_reason = "ownership_drift"
             else:
                 self._circuit_breaker_reason = "decision_worker_crashed"
+            self._persist_safety_state(self._circuit_breaker_reason)
             log.exception("Decision worker failed")
             runtime_metrics_store.record_event("circuit_breaker")
             alerts.emit(
@@ -2818,6 +2845,7 @@ class EngineRuntime:
             except Exception as exc:
                 self._circuit_breaker_reason = "portfolio_runtime_failure"
                 self._state = "halted"
+                self._persist_safety_state("portfolio_runtime_failure")
                 # DB integrity: fail closed immediately, never retry
                 err_lower = str(exc).lower()
                 if "database" in err_lower or "locked" in err_lower or "sqlite" in err_lower:
@@ -3697,8 +3725,9 @@ class EngineRuntime:
         with reconcile_lock:
             try:
                 result = self.broker.reconcile()
+                mismatched_categories = _reconciliation_mismatches(result)
                 # --- 7-category fail-closed handling (ALPACA-7) ---
-                if isinstance(result, dict):
+                if mismatched_categories:
                     mismatched = []
                     for key in (
                         "LOCAL_STALE",
@@ -3745,7 +3774,7 @@ class EngineRuntime:
                         message="Periodic reconciliation recovered",
                         account_id=account_id,
                     )
-                self.ledger.clear_safety_incident(account_id)
+                self.ledger.clear_safety_incident(account_id, "reconciliation_failed")
                 if self._circuit_breaker_reason == "reconciliation_failed":
                     self._circuit_breaker_reason = None
             except RequestException as exc:
@@ -3845,7 +3874,8 @@ class EngineRuntime:
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
-        self.broker.reconcile()  # verified recovery before rebasing
+        result = self.broker.reconcile()  # verified recovery before rebasing
+        _require_clean_reconciliation(result, "Risk-epoch reset")
         account = self.broker.account()  # fresh authoritative snapshot
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
@@ -3923,7 +3953,8 @@ class EngineRuntime:
             except Exception as exc:
                 raise ValueError(f"Stream membership cannot be reconnected: {exc}") from exc
         with self._reconcile_lock:
-            self.broker.reconcile()
+            result = self.broker.reconcile()
+            _require_clean_reconciliation(result, "Safety-lock reset")
             self._last_reconciliation_at = datetime.now(UTC)
             account_id = self.broker.account_id or "unknown"
             entries = self.ledger.managed_entries_for_account(account_id)

@@ -27,6 +27,10 @@ class ProtectionReconciliationError(RuntimeError):
     pass
 
 
+class ReconciliationObservationError(RuntimeError):
+    """Authoritative local or broker order state could not be observed."""
+
+
 class OwnershipDriftError(ProtectionReconciliationError):
     """The broker holds fewer shares than the portfolio repository claims as
     managed. With mixed inventory the remaining shares cannot be attributed to

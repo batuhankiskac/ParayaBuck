@@ -401,7 +401,7 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: {"MATCH": []},
         account=lambda: account,
     )
     runtime.ledger = ledger
@@ -415,15 +415,14 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     ledger.close()
 
 
-def test_verified_reconcile_success_clears_persisted_incidents(tmp_path: Path) -> None:
-    """A successful reconcile proves every persisted halt resolved (reconcile
-    raises on drift/protection issues), so all incidents are cleared."""
+def test_verified_reconcile_success_preserves_unrelated_incidents(tmp_path: Path) -> None:
+    """A clean periodic reconcile clears only its own recovery incident."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     ledger.save_safety_incident("acct", "ownership_drift")
     ledger.save_safety_incident("acct", "protection_failure")
 
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {"MATCH": []})
     runtime.ledger = ledger
     runtime._reconcile_lock = threading.Lock()
     runtime._last_reconciliation_at = None
@@ -434,7 +433,7 @@ def test_verified_reconcile_success_clears_persisted_incidents(tmp_path: Path) -
     runtime._reconcile_safely()
 
     assert runtime._circuit_breaker_reason is None
-    assert ledger.load_safety_incidents("acct") == ()
+    assert {item.reason for item in ledger.load_safety_incidents("acct")} == {"ownership_drift", "protection_failure"}
     ledger.close()
 
 
@@ -481,8 +480,9 @@ class _EpochBroker:
         self.reconcile_calls = 0
         self.reset_calls: list[float] = []
 
-    def reconcile(self) -> None:
+    def reconcile(self) -> dict[str, list[str]]:
         self.reconcile_calls += 1
+        return {"MATCH": []}
 
     def account(self) -> AccountSnapshot:
         return AccountSnapshot(
@@ -582,6 +582,82 @@ def test_risk_epoch_reset_refused_when_not_running(tmp_path: Path) -> None:
         runtime.start_new_risk_epoch()
 
     assert broker.reset_calls == []
+    ledger.close()
+
+
+def test_risk_epoch_reset_rejects_mismatch_without_changing_peak(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "portfolio_drawdown_halt")
+    broker = _EpochBroker(equity=94_000, peak=100_000)
+    broker.reconcile = lambda: {"QUANTITY_MISMATCH": ["AAPL"]}  # type: ignore[method-assign]
+    runtime = _epoch_runtime(ledger, broker)
+
+    with pytest.raises(RuntimeError, match="QUANTITY_MISMATCH"):
+        runtime.start_new_risk_epoch()
+
+    assert broker.reset_calls == []
+    assert broker.peak == 100_000
+    assert runtime._portfolio_repository.resets == []  # type: ignore[attr-defined]
+    assert [item.reason for item in ledger.load_safety_incidents("acct")] == ["portfolio_drawdown_halt"]
+    ledger.close()
+
+
+def test_operator_reset_rejects_mismatch_and_preserves_incident(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "ownership_drift")
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "ownership_drift"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime._running = True
+    runtime._state = "halted"
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {"UNKNOWN_ORDER": ["unknown-client-order"]})
+    runtime.ledger = ledger
+
+    with pytest.raises(RuntimeError, match="UNKNOWN_ORDER"):
+        runtime.reset_safety_lock()
+
+    assert runtime._circuit_breaker_reason == "ownership_drift"
+    assert [item.reason for item in ledger.load_safety_incidents("acct")] == ["ownership_drift"]
+    ledger.close()
+
+
+@pytest.mark.parametrize("result", [None, [], {"MATCH": None}, {"MATCH": "AAPL"}])
+def test_operator_reset_rejects_malformed_reconciliation_result(tmp_path: Path, result: object) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime._events = SimpleNamespace(empty=lambda: True)
+    runtime._not_ready_symbols = set()
+    runtime._reconcile_lock = threading.Lock()
+    runtime.market_state = SimpleNamespace(has_data_gaps=False)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: result)
+    runtime.ledger = ledger
+
+    with pytest.raises(RuntimeError, match="malformed|unavailable"):
+        runtime.reset_safety_lock()
+
+
+def test_clean_periodic_reconcile_clears_only_reconciliation_incident(tmp_path: Path) -> None:
+    ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    for reason in ("reconciliation_failed", "portfolio_drawdown_halt", "decision_worker_crashed"):
+        ledger.save_safety_incident("acct", reason)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: {"MATCH": ["AAPL"]})
+    runtime.ledger = ledger
+    runtime._reconcile_lock = threading.Lock()
+    runtime._generic_reconcile_failures = 0
+    runtime._circuit_breaker_reason = "reconciliation_failed"
+    runtime._reconcile_failed = True
+
+    runtime._reconcile_safely()
+
+    assert {item.reason for item in ledger.load_safety_incidents("acct")} == {
+        "portfolio_drawdown_halt",
+        "decision_worker_crashed",
+    }
     ledger.close()
 
 

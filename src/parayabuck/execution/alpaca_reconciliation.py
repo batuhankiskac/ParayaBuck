@@ -31,7 +31,7 @@ from parayabuck.core.models import (
     OrderState,
     ProtectionState,
 )
-from parayabuck.execution.alpaca_models import ProtectionReconciliationError
+from parayabuck.execution.alpaca_models import ProtectionReconciliationError, ReconciliationObservationError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils import is_crypto
@@ -529,36 +529,33 @@ class ReconciliationService:
                 ledger.set_protection_state(
                     broker._account_id or "unknown", ownership.entry_client_order_id, ProtectionState.ACTIVE
                 )
+        _local_provider = getattr(broker, "portfolio_open_orders", None)
+        _client = getattr(broker, "_client", None)
+        _get_orders = getattr(_client, "get_orders", None) if _client is not None else None
+        if _local_provider is None or _get_orders is None:
+            raise ReconciliationObservationError("Open-order reconciliation capability is unavailable")
         try:
-            _local_open_ids: set[str] = set()
-            _local_provider = getattr(broker, "portfolio_open_orders", None)
-            if _local_provider is not None:
-                try:
-                    for _o in _local_provider() or ():
-                        _cid = str(getattr(_o, "client_order_id", "")).strip()
-                        if _cid:
-                            _local_open_ids.add(_cid)
-                except Exception:
-                    pass
-            _broker_open_ids: set[str] = set()
-            try:
-                _client = getattr(broker, "_client", None)
-                _get_orders = getattr(_client, "get_orders", None) if _client is not None else None
-                if _get_orders is not None:
-                    _broker_orders = _get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
-                    for _bo in _broker_orders or ():
-                        _bcid = str(
-                            getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")
-                        ).strip()
-                        if _bcid:
-                            _broker_open_ids.add(_bcid)
-            except Exception:
-                pass
-            for _cid in sorted(_broker_open_ids - _local_open_ids):
-                categories["UNKNOWN_ORDER"].append(_cid)
-            for _cid in sorted(_local_open_ids - _broker_open_ids):
-                categories["MISSING_BROKER_ORDER"].append(_cid)
-                categories["MISSING_LOCAL_ORDER"].append(_cid)
-        except Exception:
-            pass
+            _local_orders = _local_provider()
+            _broker_orders = _get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
+        except Exception as exc:
+            raise ReconciliationObservationError("Open-order truth observation failed") from exc
+        if _local_orders is None or _broker_orders is None:
+            raise ReconciliationObservationError("Open-order truth observation returned no result")
+        _local_open_ids: set[str] = set()
+        for _o in _local_orders:
+            _cid = str(getattr(_o, "client_order_id", "") or self._field(_o, "client_order_id", "")).strip()
+            if not _cid:
+                raise ReconciliationObservationError("Malformed local open-order payload")
+            _local_open_ids.add(_cid)
+        _broker_open_ids: set[str] = set()
+        for _bo in _broker_orders:
+            _bcid = str(getattr(_bo, "client_order_id", "") or self._field(_bo, "client_order_id", "")).strip()
+            if not _bcid:
+                raise ReconciliationObservationError("Malformed broker open-order payload")
+            _broker_open_ids.add(_bcid)
+        for _cid in sorted(_broker_open_ids - _local_open_ids):
+            categories["UNKNOWN_ORDER"].append(_cid)
+        for _cid in sorted(_local_open_ids - _broker_open_ids):
+            categories["MISSING_BROKER_ORDER"].append(_cid)
+            categories["MISSING_LOCAL_ORDER"].append(_cid)
         return categories

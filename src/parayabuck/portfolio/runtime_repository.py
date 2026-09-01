@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from parayabuck.core.models import Market
-from parayabuck.execution.alpaca import CRYPTO_TAKER_FEE_RESERVE
+from parayabuck.execution.alpaca_models import CRYPTO_TAKER_FEE_RESERVE
 from parayabuck.execution.portfolio import PortfolioOrderRequest, RiskOverlayDecision
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio

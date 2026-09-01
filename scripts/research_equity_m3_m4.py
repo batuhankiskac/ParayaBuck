@@ -32,6 +32,7 @@ for _path in (_REPO_BOOTSTRAP / "src", Path(__file__).parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+from m3_data_gate_helpers import canonical_digest  # noqa: E402
 from research_helpers import git_head, sha256_of_file  # noqa: E402
 from run_symmetric_v5_validation import load_corporate_actions_all, load_lifetimes  # noqa: E402
 
@@ -56,6 +57,7 @@ DATASET_MANIFEST = DATASET.with_suffix(".manifest.json")
 CA_PATH = REPO / "data/historical/equity_survivorship_full_corporate_actions_v5.csv"
 MANIFEST_PATH = REPO / "data/research_manifests/equity_m3_m4_2026_08.json"
 OUT_DIR = REPO / "data/research/equity_m3_m4_2026_08"
+M3_DATA_GATE_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09.json"
 
 EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
 RECENT_START = datetime(2022, 1, 1, tzinfo=UTC)
@@ -381,6 +383,32 @@ def _feed_evidence(config: Config, coverage: Mapping[str, Mapping[str, object]])
     }
 
 
+def _valid_m3_data_gate_receipt() -> bool:
+    """Return true only for a self-consistent research-only PASS receipt."""
+    try:
+        payload = json.loads(M3_DATA_GATE_RECEIPT.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    required = {
+        "verdict": "M3_DATA_GATE_PASS",
+        "research_only": True,
+        "automatic_promotion": False,
+        "human_promotion_only": True,
+        "candidate_economics_run": False,
+        "economic_metrics_present": False,
+    }
+    if any(payload.get(key) != expected for key, expected in required.items()):
+        return False
+    recorded_digest = payload.get("self_digest_sha256")
+    if not isinstance(recorded_digest, str):
+        return False
+    without_digest = dict(payload)
+    without_digest.pop("self_digest_sha256", None)
+    return recorded_digest == canonical_digest(without_digest)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=("audit", "recent", "full"), default="audit")
@@ -394,7 +422,7 @@ def main() -> int:
     start = None if args.scope == "full" else RECENT_START
     bars, coverage = _load_window(start, EVAL_END, collect_bars=args.scope != "audit")
     feed = _feed_evidence(config, coverage)
-    m3_ready = all(int(coverage[symbol]["count"]) >= 274 for symbol in REFERENCE_SYMBOLS)
+    m3_ready = _valid_m3_data_gate_receipt()
     output: dict[str, object] = {
         "mission": "equity_m3_m4_2026_08",
         "research_only": True,
@@ -409,7 +437,7 @@ def main() -> int:
         },
         "m3": {
             "strategy_name": ProxyMultifactorResidualMomentum.name,
-            "status": "ready" if m3_ready else "blocked_missing_reference_history",
+            "status": "ready" if m3_ready else "blocked_unverified_data_gate",
             "required_references": list(REFERENCE_SYMBOLS),
             "missing_references": [symbol for symbol in REFERENCE_SYMBOLS if int(coverage[symbol]["count"]) < 274],
             "configured_reference_symbols": list(config.universe.equity.reference_symbols),

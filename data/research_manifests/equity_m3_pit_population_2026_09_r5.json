@@ -2713,18 +2713,18 @@
   "normalized_iwm_sidecar_semantic_digest_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837",
   "projection_digest_sha256": "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240",
   "r5_contract": {
-    "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
-    "git_blob_id": "e909a26d364c99471b97b28c2ac3333f26506887",
+    "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+    "git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d",
     "path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
-    "raw_sha256": "0fbaf2da208ccbd378a8fa9274ed17185489e4eb3ba74cba369729d9674a9d17"
+    "raw_sha256": "83a2b7b796939423eff9c3c0a2d16000594cbbbed26e9de2df61206c5ecdb51e"
   },
   "r5_projection_implementation": {
-    "git_blob_id": "7ee05548a85d46a172a1c66702fd0a19820d7a4f",
-    "raw_sha256": "0a59406dd012eb93bfd40e1e6e066feb1345d8a89e68d6fccf8d56fe9c41c39b"
+    "git_blob_id": "54bed91913012a2cfc939eae2a285e71941e7c3d",
+    "raw_sha256": "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
   },
   "raw_pit_byte_size": 25518170,
-  "raw_pit_path": "<external:m3-r5-b17-pit_universe.json>",
-  "raw_pit_sha256": "5e9225231696fee07b4d2f5d16052e512bb216c091464d5e9ed67c8515740b92",
+  "raw_pit_path": "<external:m3-r5-b18-pit.json>",
+  "raw_pit_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac",
   "scanner_config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
   "scanner_version": "equity-scanner-v3",
   "schema_version": "1.0.0",
@@ -2734,7 +2734,7 @@
     "path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
     "raw_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae",
     "source_compact_manifest": {
-      "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+      "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
       "git_blob_id": "415e33e74d4bd6cb3c7bc7eb5c577e08e453a4fa",
       "git_blob_normalized_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",
       "git_blob_raw_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",

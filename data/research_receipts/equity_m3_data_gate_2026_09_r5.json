@@ -12,14 +12,34 @@
     "scripts/research_equity_m3_data_gate_r5.py",
     "--contract",
     "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
+    "--canonical-bars",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "--canonical-manifest",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "--lifetimes",
+    "data/historical/equity_entity_lifetimes_full_v5.csv",
+    "--corporate-actions",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "--corporate-actions-manifest",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
+    "--iwm-bundle",
+    "data/research/external/m3_iwm_raw_2026_09_r4",
+    "--iwm-sidecar",
+    "data/research/generated/m3_data_gate_r4/iwm_normalized.csv",
+    "--composite-manifest",
+    "data/research_manifests/equity_m3_composite_dataset_2026_09_r4.json",
+    "--r4-pit-universe",
+    "data/research/generated/m3_data_gate_r4/pit_universe.json",
+    "--r5-pit-manifest-source",
+    "data/research_manifests/equity_m3_pit_population_2026_09_r4.json",
     "--projection-out",
-    "/tmp/m3-r5-b17-pit_universe.json",
+    "/tmp/m3-r5-b18-pit.json",
     "--pit-manifest-out",
-    "/tmp/m3-r5-b17-pit_population_manifest.json",
+    "/tmp/m3-r5-b18-pit.manifest.json",
     "--receipt-out",
-    "/tmp/m3-r5-b17-final-receipt.json",
+    "/tmp/m3-r5-b18-receipt.json",
     "--report-out",
-    "/tmp/m3-r5-b17-final-report.md"
+    "/tmp/m3-r5-b18-report.md"
   ],
   "commits": {
     "d6_base": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
@@ -37,21 +57,23 @@
       "a16_implementation_tree": "2c5845bf52efee0734cbc61da95b17ed6fa2aed6",
       "a17_implementation_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
       "a17_implementation_tree": "1fae3b62eb14cd089c940d927ded86dd3484cd8b",
+      "a18_implementation_commit": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
+      "a18_implementation_tree": "bd310b37ac3ed946be4a3c8aa94d8daf37c48909",
       "d6_base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
       "r4_c6_commit": "4f1ddd970207406f4a70d278651796bccd5b8f7a"
     },
-    "implementation": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
-    "implementation_parent": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
-    "manifest": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+    "implementation": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
+    "implementation_parent": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
+    "manifest": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
     "recovery_lineage": {
-      "abandoned_implementation_commit": "79ffcb178845f64f3f2cc036b9e1919cc15891e7",
-      "abandoned_manifest_commit": "5aeb2058b0027432de45d9db8fdeba20120d4d2c",
+      "abandoned_implementation_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
+      "abandoned_manifest_commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
       "automatic_refetch_allowed": false,
-      "corrective_base_commit": "5aeb2058b0027432de45d9db8fdeba20120d4d2c",
-      "reason": "B16 R5 manifest failed because A16 lacked the B15 recovery branch before replay",
-      "reason_category": "lineage_validator_missing",
+      "corrective_base_commit": "459cf782754bc15d137fcaa4cdd081402b837f96",
+      "reason": "C10 R5 result lacked explicit clean-run and complete synthetic-fixture regression coverage before test hardening",
+      "reason_category": "pre_result_test_coverage_gap",
       "replay_exact_captured_bytes": true,
-      "status": "ABANDONED_A16_B16"
+      "status": "SUPERSEDED_A17_B17"
     }
   },
   "corrective_infrastructure_verdict": "PASS",
@@ -80,7 +102,7 @@
         "crlf_normalized_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
         "logical_artifact_id": "canonical_equity_v5_bars",
         "manifest_git_blob": {
-          "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+          "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
           "git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
           "git_blob_normalized_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
           "git_blob_raw_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
@@ -138,8 +160,8 @@
             "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
           },
           "scripts/research_equity_m3_data_gate_r5.py": {
-            "git_blob_id": "7ee05548a85d46a172a1c66702fd0a19820d7a4f",
-            "raw_sha256": "0a59406dd012eb93bfd40e1e6e066feb1345d8a89e68d6fccf8d56fe9c41c39b"
+            "git_blob_id": "54bed91913012a2cfc939eae2a285e71941e7c3d",
+            "raw_sha256": "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
           },
           "scripts/research_equity_m3_m4.py": {
             "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
@@ -154,14 +176,14 @@
             "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
           },
           "tests/test_research_equity_m3_r5.py": {
-            "git_blob_id": "f04d21b070fc74b8117cc0de1021fdca07db6eee",
-            "raw_sha256": "670c270a29f0c788a0ba96c8dc0194cab74d068cb7b37dc2cf8afac68d837a99"
+            "git_blob_id": "900a921e123cab3f3a81bddd0c874f7109134be8",
+            "raw_sha256": "216a809d317b39d7350a787da7e71fdc58a17c03b44a0cb790c2fa12f5462709"
           }
         },
-        "implementation_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
-        "implementation_tree": "1fae3b62eb14cd089c940d927ded86dd3484cd8b",
-        "manifest_commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
-        "manifest_git_blob_id": "e909a26d364c99471b97b28c2ac3333f26506887"
+        "implementation_commit": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
+        "implementation_tree": "bd310b37ac3ed946be4a3c8aa94d8daf37c48909",
+        "manifest_commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+        "manifest_git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d"
       },
       "status": "PASS"
     },
@@ -146406,8 +146428,8 @@
           "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
         },
         "scripts/research_equity_m3_data_gate_r5.py": {
-          "git_blob_id": "7ee05548a85d46a172a1c66702fd0a19820d7a4f",
-          "raw_sha256": "0a59406dd012eb93bfd40e1e6e066feb1345d8a89e68d6fccf8d56fe9c41c39b"
+          "git_blob_id": "54bed91913012a2cfc939eae2a285e71941e7c3d",
+          "raw_sha256": "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
         },
         "scripts/research_equity_m3_m4.py": {
           "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
@@ -146422,8 +146444,8 @@
           "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
         },
         "tests/test_research_equity_m3_r5.py": {
-          "git_blob_id": "f04d21b070fc74b8117cc0de1021fdca07db6eee",
-          "raw_sha256": "670c270a29f0c788a0ba96c8dc0194cab74d068cb7b37dc2cf8afac68d837a99"
+          "git_blob_id": "900a921e123cab3f3a81bddd0c874f7109134be8",
+          "raw_sha256": "216a809d317b39d7350a787da7e71fdc58a17c03b44a0cb790c2fa12f5462709"
         }
       },
       "status": "PASS"
@@ -146454,7 +146476,7 @@
     },
     "lifetime_identity": {
       "evidence": {
-        "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+        "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
         "git_blob_id": "7ea3d564470b0509d98760c4306bb6973137d481",
         "git_blob_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
         "git_blob_raw_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
@@ -146477,7 +146499,7 @@
       "status": "PASS"
     },
     "pit_manifest_identity": {
-      "raw_sha256": "5f07ec850d6d9f728ff82ef68bec03d3a52073a382d6487062968f09a55dde13",
+      "raw_sha256": "2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4",
       "status": "PASS"
     },
     "pit_reference_boundary": {
@@ -146506,7 +146528,7 @@
         "path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
         "raw_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae",
         "source_compact_manifest": {
-          "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+          "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
           "git_blob_id": "415e33e74d4bd6cb3c7bc7eb5c577e08e453a4fa",
           "git_blob_normalized_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",
           "git_blob_raw_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",
@@ -235686,11 +235708,11 @@
       "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
     ],
     "exactly_manifest_only": true,
-    "manifest_commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
-    "manifest_git_blob_id": "e909a26d364c99471b97b28c2ac3333f26506887",
+    "manifest_commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+    "manifest_git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d",
     "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
-    "manifest_raw_sha256": "0fbaf2da208ccbd378a8fa9274ed17185489e4eb3ba74cba369729d9674a9d17",
-    "parent_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6"
+    "manifest_raw_sha256": "83a2b7b796939423eff9c3c0a2d16000594cbbbed26e9de2df61206c5ecdb51e",
+    "parent_commit": "e22421c2486a20e883286345dbb509bbcd5d2fc9"
   },
   "mission": "equity_m3_data_gate_2026_09_r5",
   "next_required_gate": "M3_CANDIDATE_OCP_GATE",
@@ -235853,7 +235875,7 @@
       "raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2"
     },
     "r4_manifest": {
-      "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+      "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
       "git_blob_id": "0cc789dba475242014856b60d4913b9b3e25cc4b",
       "git_blob_normalized_sha256": "7cf31eef48a7a9352d689475ebc392dab336b8fc84fc62f7ac6374950fe0e55e",
       "git_blob_raw_sha256": "7cf31eef48a7a9352d689475ebc392dab336b8fc84fc62f7ac6374950fe0e55e",
@@ -235880,7 +235902,7 @@
     "path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
     "raw_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae",
     "source_compact_manifest": {
-      "commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
+      "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
       "git_blob_id": "415e33e74d4bd6cb3c7bc7eb5c577e08e453a4fa",
       "git_blob_normalized_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",
       "git_blob_raw_sha256": "d7de144b06439738e08ca1c39e29c6743d74d352c5f31395bfeb9259685d4b86",
@@ -252039,10 +252061,10 @@
     }
   },
   "research_only": true,
-  "run_commit": "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4",
-  "run_parent": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
+  "run_commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+  "run_parent": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
   "schema_version": "5.0.0",
-  "self_digest_sha256": "b10ae1b23e68272577d407010738fd857dbc2650119435bca3b324a1ec44b2f7",
+  "self_digest_sha256": "41afb58aca2fb38f4f0d301fc169938809b1cb9afcfa5c9855d97e292916abeb",
   "terminal_snapshot_decision": {
     "evaluation_snapshot_count": 2658,
     "excluded_post_evaluation_snapshot_count": 1,

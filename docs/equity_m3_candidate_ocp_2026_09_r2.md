@@ -134,3 +134,14 @@ gate replay, economic backtest, P&L, optimization, promotion, PAPER/LIVE
 change, strategy/risk/execution/config change, or production behavior change
 occurred. All commits are append-only fast-forward commits; no prior history
 or superseded artifact was rewritten.
+
+## E24 final remote closure
+
+- D24 full SHA: `f05056198f2519cfd396b1b05d3779bd7e7c2ace`
+- D24 CI run: `33680287825`
+- D24 CI head: `f05056198f2519cfd396b1b05d3779bd7e7c2ace`
+- Python 3.12: `PASS`
+- Python 3.13: `PASS`
+- Python 3.14: `PASS`
+- D24 required stages: all `PASS`
+- Final candidate-OCP remote closure: complete

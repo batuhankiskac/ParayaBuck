@@ -278,8 +278,13 @@ def _parse_page(
     for entry in entries:
         if not isinstance(entry, Mapping):
             raise AcquisitionError("response_schema_mismatch")
+        # Alpaca v2 identifies a bar by the surrounding ``bars`` map key; the
+        # provider bar object itself does not carry an in-row symbol field.
+        # Preserve the exact response bytes and add only that envelope identity
+        # to the verifier input.
+        normalizer_input = entry if "S" in entry or "symbol" in entry else {**entry, "S": ALLOWED_SYMBOL}
         try:
-            normalized.append(normalize_provider_bar(entry))
+            normalized.append(normalize_provider_bar(normalizer_input))
         except GateError as exc:
             raise AcquisitionError("response_schema_mismatch") from exc
     if tuple(normalized) != tuple(sorted(normalized, key=lambda row: row.sort_key)):

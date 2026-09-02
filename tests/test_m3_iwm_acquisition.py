@@ -109,6 +109,15 @@ def test_multipage_transport_preserves_exact_raw_bytes_and_frozen_request(
     assert "page-2" in (output / "source_receipt.json").read_text(encoding="utf-8")
 
 
+def test_provider_bar_symbol_is_taken_from_bars_map_key() -> None:
+    provider_bar = _bar(date(2024, 7, 1))
+    provider_bar.pop("S")
+    _payload, rows, token = acquisition._parse_page(_page([provider_bar], None), input_page_token=None)
+    assert token is None
+    assert len(rows) == 1
+    assert rows[0].symbol == "IWM"
+
+
 @pytest.mark.parametrize("status", [401, 403])
 def test_authentication_or_sip_entitlement_failure_has_no_fallback(
     monkeypatch: pytest.MonkeyPatch, status: int

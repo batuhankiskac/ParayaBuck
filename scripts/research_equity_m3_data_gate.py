@@ -87,7 +87,10 @@ R2_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
 R3_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
 BASE_COMMIT = "69fc1e11606dec5f5e84b2da68a0bb24fae81fbd"
 R3_BASE_COMMIT = "99fa950a3223a8b6cc78c8a92f8fa20aff52b350"
+R3_B3_COMMIT = "c4022ae94aa4069893052f63c1700d9d73d2c399"
+R3_A3_COMMIT = "f56062b532b15891b6a88eeb4136ddb55ded1be3"
 R3_MISSION = "equity_m3_data_gate_2026_09_r3"
+R3_RECOVERY_MODE = "A4_B4_CORRECTIVE_AFTER_ABANDONED_A3_B3"
 GATE_PASS = "PASS"
 GATE_FAIL = "FAIL"
 GATE_UNKNOWN = "UNKNOWN"
@@ -405,10 +408,29 @@ def _validate_r3_contract(contract: Mapping[str, object], *, run_parent: str) ->
     ):
         if contract.get(key) != expected:
             raise GateError("manifest_policy_mismatch", f"R3 manifest {key} drifted")
-    if contract.get("base_commit") != R3_BASE_COMMIT:
-        raise GateError("base_commit_mismatch", "R3 manifest base commit is not D2")
-    if contract.get("implementation_parent_commit") != R3_BASE_COMMIT:
-        raise GateError("implementation_parent_mismatch", "R3 implementation parent is not D2")
+    recovery = contract.get("recovery_lineage")
+    if recovery is None:
+        expected_base = R3_BASE_COMMIT
+        expected_implementation_parent = R3_BASE_COMMIT
+    else:
+        expected_recovery = {
+            "status": "ABANDONED_A3_B3",
+            "abandoned_implementation_commit": R3_A3_COMMIT,
+            "abandoned_manifest_commit": R3_B3_COMMIT,
+            "reason_category": "response_schema_mismatch",
+            "reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
+            "corrective_base_commit": R3_B3_COMMIT,
+        }
+        if contract.get("lineage_mode") != R3_RECOVERY_MODE or recovery != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R3 corrective recovery lineage is not declared exactly")
+        expected_base = R3_B3_COMMIT
+        expected_implementation_parent = R3_B3_COMMIT
+    if contract.get("base_commit") != expected_base:
+        raise GateError("base_commit_mismatch", "R3 manifest base commit is not the declared corrective base")
+    if contract.get("implementation_parent_commit") != expected_implementation_parent:
+        raise GateError(
+            "implementation_parent_mismatch", "R3 implementation parent is not the declared corrective base"
+        )
     if contract.get("manifest_path") != R3_MANIFEST_PATH:
         raise GateError("manifest_path_mismatch", "R3 manifest path is not frozen")
     if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R3 manifest path":
@@ -417,7 +439,9 @@ def _validate_r3_contract(contract: Mapping[str, object], *, run_parent: str) ->
     if not isinstance(implementation, str) or len(implementation) != 40:
         raise GateError("implementation_pin_missing", "R3 implementation commit is missing")
     if run_parent != implementation:
-        raise GateError("manifest_commit_topology", "run commit must be the direct child of A3")
+        raise GateError(
+            "manifest_commit_topology", "run commit must be the direct child of the declared implementation"
+        )
     implementation_tree = contract.get("implementation_tree")
     if not isinstance(implementation_tree, str) or len(implementation_tree) != 40:
         raise GateError("implementation_tree_missing", "R3 implementation tree is missing")
@@ -764,6 +788,23 @@ def _validate_r3_commit_provenance(
         if declaration.get("raw_sha256") != _sha256_bytes(blob_bytes):
             raise GateError("implementation_blob_hash_mismatch", f"R3 critical blob raw hash differs: {path}")
         critical[path] = {"git_blob_id": implementation_blob, "raw_sha256": _sha256_bytes(blob_bytes)}
+    recovery = contract.get("recovery_lineage")
+    if recovery is not None:
+        if not isinstance(recovery, Mapping):
+            raise GateError("recovery_lineage_mismatch", "R3 corrective recovery lineage is not an object")
+        abandoned_implementation = str(recovery.get("abandoned_implementation_commit", ""))
+        abandoned_manifest = str(recovery.get("abandoned_manifest_commit", ""))
+        try:
+            if _git_parent(abandoned_implementation, repo=repo) != R3_BASE_COMMIT:
+                raise GateError("recovery_lineage_mismatch", "abandoned A3 does not descend from D2")
+            if _git_parent(abandoned_manifest, repo=repo) != abandoned_implementation:
+                raise GateError("recovery_lineage_mismatch", "abandoned B3 is not a direct child of A3")
+            if _git_changed_paths(abandoned_manifest, repo=repo) != [manifest_path]:
+                raise GateError("recovery_lineage_mismatch", "abandoned B3 was not manifest-only")
+        except subprocess.CalledProcessError as exc:
+            raise GateError("recovery_lineage_mismatch", "abandoned A3/B3 commits are unavailable") from exc
+        if base != abandoned_manifest:
+            raise GateError("recovery_lineage_mismatch", "A4 corrective base is not the abandoned B3 commit")
     return {
         "manifest_commit": run_commit,
         "manifest_git_blob_id": manifest_blob,
@@ -1222,21 +1263,29 @@ def _base_receipt(
 ) -> dict[str, object]:
     r3 = contract.get("mission") == R3_MISSION
     critical = provenance.get("critical_git_blobs", {})
-    lineage = (
-        {
+    if r3 and contract.get("recovery_lineage") is not None:
+        lineage = {
+            "lineage_mode": R3_RECOVERY_MODE,
+            "corrective_base_commit": contract.get("base_commit"),
+            "implementation_a4_commit": contract.get("implementation_commit"),
+            "run_b4_commit": run_commit,
+            "c4_commit": None,
+            "abandoned_a3_b3": contract.get("recovery_lineage"),
+        }
+    elif r3:
+        lineage = {
             "corrective_base_commit": contract.get("base_commit"),
             "implementation_a3_commit": contract.get("implementation_commit"),
             "run_b3_commit": run_commit,
             "c3_commit": None,
         }
-        if r3
-        else {
+    else:
+        lineage = {
             "corrective_base_commit": contract.get("base_commit"),
             "implementation_a2_commit": contract.get("implementation_commit"),
             "run_b2_commit": run_commit,
             "c2_commit": None,
         }
-    )
     return {
         "schema_version": "3.0.0" if r3 else "2.0.0",
         "mission": R3_MISSION if r3 else "equity_m3_data_gate_2026_09_r2",

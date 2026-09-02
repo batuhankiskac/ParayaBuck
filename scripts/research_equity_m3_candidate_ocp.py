@@ -1643,7 +1643,7 @@ def run_gate(
     historical_ocp: dict[str, object] = {}
     isolation_path: Path | None = None
     try:
-        _require(run_commit != BASE_COMMIT, "commit_topology", "gate must run from the clean B19 manifest commit")
+        _require(run_commit != BASE_COMMIT, "commit_topology", "gate must run from a post-D10 manifest commit")
         manifest = _load_json(manifest_path)
         _require(manifest.get("schema_version") == "1.0.0", "manifest_contract", "OCP manifest schema drifted")
         _require(manifest.get("mission") == MISSION, "manifest_contract", "OCP manifest mission drifted")
@@ -1691,21 +1691,23 @@ def run_gate(
             "frozen capacity contract drifted",
         )
         implementation = str(manifest.get("implementation_commit", ""))
+        implementation_parent = str(manifest.get("implementation_parent_commit", ""))
         _require(
             _git("rev-parse", "HEAD^") == implementation,
             "commit_topology",
-            "current commit is not direct child of A19 implementation",
+            "current commit is not direct child of declared implementation",
         )
         _require(
-            _git("rev-parse", f"{implementation}^") == BASE_COMMIT,
+            implementation_parent
+            and _git("rev-parse", f"{implementation}^") == implementation_parent,
             "commit_topology",
-            "A19 parent differs from required D10",
+            "implementation parent differs from manifest declaration",
         )
         changed = _git("diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD^", "HEAD").splitlines()
         _require(
             changed == ["data/research_manifests/equity_m3_candidate_ocp_2026_09.json"],
             "manifest_only_commit",
-            "B19 is not manifest-only",
+            "manifest commit is not manifest-only",
         )
         _require(
             _git("rev-parse", f"{implementation}^{{tree}}") == manifest.get("implementation_tree"),
@@ -1747,7 +1749,11 @@ def run_gate(
             gates,
             "commit_topology",
             "PASS",
-            {"run_commit": run_commit, "implementation_commit": implementation, "implementation_parent": BASE_COMMIT},
+            {
+                "run_commit": run_commit,
+                "implementation_commit": implementation,
+                "implementation_parent": implementation_parent,
+            },
         )
         _set_gate(gates, "implementation_blob_identity", "PASS", manifest.get("critical_git_blobs"))
         _set_gate(gates, "manifest_only_commit", "PASS", changed)

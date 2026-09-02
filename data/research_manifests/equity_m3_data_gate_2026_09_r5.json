@@ -12,9 +12,9 @@
   "economic_metrics_present": false,
   "economic_mission_ready": false,
   "base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
-  "implementation_parent_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
-  "implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
-  "implementation_tree": "220790dac897adb9b48c153e1f00e4b36b78f1c5",
+  "implementation_parent_commit": "ad65703453f56737a097bb043dec6646d902bcfb",
+  "implementation_commit": "787e78bcf6070278c071a6ca9f18f6ee4dc0db6b",
+  "implementation_tree": "fcc139b784323fabd7605ed20b63cebb1bf2c88d",
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R5 manifest path",
   "critical_git_blobs": {
@@ -27,8 +27,8 @@
       "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
     },
     "scripts/research_equity_m3_data_gate_r5.py": {
-      "git_blob_id": "88d345f9aa3e14750627a4ee8d0fa55926c543c4",
-      "raw_sha256": "7258e599c3b0bcc89af6c826a69b55d5e2649330c99da9d3baa19418dfe62573"
+      "git_blob_id": "182cf2f6ca1f7386ffc3091ad1078525dec7fafe",
+      "raw_sha256": "7f717d10d2d68f1d5aa4c8a82b659c4760285d309a3923b4f15d87c69a55e0ad"
     },
     "scripts/research_equity_m3_m4.py": {
       "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
@@ -230,7 +230,7 @@
     "economic_candidate_ranking"
   ],
   "clean_run_procedure": {
-    "required_start_commit": "manifest-only B10 direct child of A10",
+    "required_start_commit": "manifest-only B11 direct child of A11",
     "capture_cleanliness_before_outputs": true,
     "external_inputs_ignored_or_tmp_only": true,
     "compact_result_copy_after_gate_only": true,
@@ -240,8 +240,19 @@
   "immutable_provenance": {
     "d6_base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
     "r4_c6_commit": "4f1ddd970207406f4a70d278651796bccd5b8f7a",
-    "a10_implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
-    "a10_implementation_tree": "220790dac897adb9b48c153e1f00e4b36b78f1c5"
+    "a10_abandoned_implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
+    "a11_implementation_commit": "787e78bcf6070278c071a6ca9f18f6ee4dc0db6b",
+    "a11_implementation_tree": "fcc139b784323fabd7605ed20b63cebb1bf2c88d"
+  },
+  "recovery_lineage": {
+    "status": "ABANDONED_A10_B10",
+    "abandoned_implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
+    "abandoned_manifest_commit": "ad65703453f56737a097bb043dec6646d902bcfb",
+    "reason_category": "runtime_helper_missing",
+    "reason": "A10 R5 gate called a non-existent R4 config helper before replay",
+    "corrective_base_commit": "ad65703453f56737a097bb043dec6646d902bcfb",
+    "replay_exact_captured_bytes": true,
+    "automatic_refetch_allowed": false
   },
   "mandatory_data_pass_gates": [
     "commit_topology",

@@ -1596,10 +1596,27 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
 
         canonical_staged: Path | None = None
         try:
-            r4_contract = _load_json(_REPO / R4_MANIFEST_PATH)
-            canonical_staged, canonical_identity, _canonical_manifest = r4_gate._verify_canonical_inputs(
-                Path(args.canonical_bars), Path(args.canonical_manifest), r4_contract, staging_dir
+            canonical_path = Path(args.canonical_bars)
+            canonical_manifest_path = Path(args.canonical_manifest)
+            if not canonical_path.is_file() or not canonical_manifest_path.is_file():
+                raise GateError("missing_canonical_artifact", "canonical bars CSV and manifest are required")
+            canonical_manifest = _load_json(canonical_manifest_path)
+            if str(canonical_manifest.get("feed", "")).lower() != SOURCE_FEED:
+                raise GateError("canonical_source_contract", "canonical manifest feed must be sip")
+            if str(canonical_manifest.get("adjustment", "")).lower() != SOURCE_ADJUSTMENT:
+                raise GateError("canonical_source_contract", "canonical manifest adjustment must be split")
+            canonical_manifest_identity = r4_gate._tracked_blob_identity(canonical_manifest_path, commit=run_commit)
+            if canonical_manifest_identity is None:
+                raise GateError("canonical_manifest_provenance", "canonical manifest must be Git tracked")
+            canonical_artifact = stage_file(canonical_path, staging_dir)
+            r4_gate._validate_artifact_against_manifest(
+                canonical_artifact, canonical_manifest, expected_sha=None, label="canonical bars"
             )
+            canonical_staged = canonical_artifact.staged_path
+            canonical_identity = {
+                **canonical_artifact.receipt("canonical_equity_v5_bars", "external_untracked"),
+                "manifest_git_blob": canonical_manifest_identity,
+            }
             if canonical_identity.get("raw_sha256") != contract.get("accepted_r4_inputs", {}).get(
                 "canonical_raw_sha256"
             ):

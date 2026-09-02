@@ -109,11 +109,17 @@ No network calls or credential reads occurred; only exact accepted R4 bytes were
 
 ## 16. Local and remote CI
 
-`{}`
+- Final corrective compact result commit (C11): `3c2f67d31772f2fba118137ad262bd8ffdb737d8`
+- Superseded initial compact result commit (C10): `459cf782754bc15d137fcaa4cdd081402b837f96`
+- GitHub Actions run: [`33630745082`](https://github.com/batuhankiskac/ParayaBuck/actions/runs/33630745082)
+  - Python 3.12: `PASS`
+  - Python 3.13: `PASS`
+  - Python 3.14: `PASS`
+- Required CI stages passed: lint, formatting, mypy, focused OCP tests, focused M3 tests, acquisition/PIT tests, full pytest, production isolation, build, wheel smoke, dependency audit, and secret scan.
 
 ## 17. Tracked versus ignored artifacts
 
-Compact C10 artifacts are tracked; raw R4 pages, the R4 sidecar, the R4 full PIT artifact, and the R5 full projection remain ignored external/derived inputs.
+Compact C11 artifacts are tracked; raw R4 pages, the R4 sidecar, the R4 full PIT artifact, and the R5 full projection remain ignored external/derived inputs.
 
 ## 18. Remaining blockers
 

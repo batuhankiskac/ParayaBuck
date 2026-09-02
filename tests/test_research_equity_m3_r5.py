@@ -250,6 +250,32 @@ def test_close_matrix_ignores_valid_post_evaluation_rows(tmp_path: Path) -> None
     assert timestamp_arrays["AAA"].tolist() == [1785297600000000, 1785384000000000]
 
 
+def test_report_contains_provenance_and_pit_population_sections() -> None:
+    report = r5._render_report(
+        {
+            "data_gate_verdict": "M3_DATA_GATE_PASS",
+            "boundary": {
+                "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+                "economic_mission_ready": False,
+                "next_required_gate": "M3_CANDIDATE_OCP_GATE",
+            },
+            "corrective_infrastructure_verdict": "PASS",
+            "commits": {"implementation": "A", "manifest": "B"},
+            "manifest_only_proof": {"exactly_manifest_only": True},
+            "r4_immutable_inputs": {"raw_bundle": {"raw_bundle_sha256": "R4"}},
+            "pit_population": {
+                "scanner_identity": {"scanner_version": "equity-scanner-v3"},
+                "snapshot_count": 2658,
+            },
+            "mandatory_gate_results": {},
+        }
+    )
+    assert '"implementation": "A"' in report
+    assert '"exactly_manifest_only": true' in report
+    assert '"raw_bundle_sha256": "R4"' in report
+    assert '"snapshot_count": 2658' in report
+
+
 def test_symbolic_head_is_rejected_for_immutable_provenance() -> None:
     sessions = r5.expected_exchange_sessions(date(2016, 1, 4), date(2026, 7, 30))
     timestamps = list(r5.expected_evaluation_timestamps(sessions))

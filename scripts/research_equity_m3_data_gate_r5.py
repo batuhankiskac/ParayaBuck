@@ -1621,6 +1621,7 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
 
     with tempfile.TemporaryDirectory(prefix="m3-data-gate-r5-") as temporary:
         staging_dir = Path(temporary)
+        r4_contract_identity: dict[str, object] = {}
         canonical_identity: dict[str, object] = {}
         sidecar_identity: dict[str, object] = {}
         composite_identity: dict[str, object] = {}
@@ -1892,6 +1893,25 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                     composite_identity=composite_identity,
                     contract_identity=contract_identity,
                 )
+                population_summary = dict(projection["population"])  # type: ignore[arg-type]
+                population_summary.update(
+                    {
+                        "scanner_identity": {
+                            "scanner_version": R5_SCANNER_VERSION,
+                            "scanner_config_digest": R5_SCANNER_CONFIG_DIGEST,
+                        },
+                        "strict_prior_result": projection["strict_prior_proof"],
+                        "full_timestamp_snapshot_selection": {
+                            "status": R5_GATE_PASS,
+                            "comparison": "effective_at <= cutoff_timestamp",
+                            "evaluation_decision_cutoff_timestamp": projection["r5_projection"][
+                                "evaluation_decision_cutoff_timestamp"
+                            ],  # type: ignore[index]
+                        },
+                        "reference_exclusion": projection["r5_projection"]["reference_boundary"],  # type: ignore[index]
+                    }
+                )
+                receipt["pit_population"] = population_summary
                 projection_bytes = _write_json(Path(args.projection_out), projection)
                 pit_manifest = {
                     "schema_version": "1.0.0",
@@ -2157,6 +2177,45 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
         "projection_digest_sha256": projection.get("r5_projection", {}).get("projection_digest_sha256")
         if projection
         else None,
+    }
+    receipt["commits"] = {
+        "d6_base": R5_BASE_COMMIT,
+        "implementation_parent": run_parent,
+        "implementation": contract.get("implementation_commit"),
+        "manifest": run_commit,
+        "recovery_lineage": contract.get("recovery_lineage"),
+        "immutable_provenance": contract.get("immutable_provenance", {}),
+    }
+    receipt["manifest_only_proof"] = {
+        "manifest_path": R5_MANIFEST_PATH,
+        "manifest_commit": run_commit,
+        "parent_commit": run_parent,
+        "changed_paths": provenance.get("changed_paths", []),
+        "exactly_manifest_only": provenance.get("changed_paths") == [R5_MANIFEST_PATH],
+        "manifest_git_blob_id": provenance.get("manifest_git_blob_id"),
+        "manifest_raw_sha256": contract_identity.get("raw_sha256"),
+    }
+    receipt["r4_immutable_inputs"] = {
+        "r4_manifest": r4_contract_identity,
+        "raw_bundle": {
+            "path": R4_BUNDLE_PATH,
+            "raw_bundle_sha256": iwm_audit.get("raw_bundle_sha256"),
+            "aggregate_page_hash_digest": R4_PAGE_DIGEST,
+            "page_chain_digest_sha256": R4_PAGE_CHAIN_DIGEST,
+        },
+        "source_receipt": {
+            "path": R4_SOURCE_RECEIPT_PATH,
+            "raw_sha256": iwm_audit.get("source_receipt", {}).get("raw_sha256")
+            if isinstance(iwm_audit.get("source_receipt"), Mapping)
+            else None,
+        },
+        "normalized_sidecar": sidecar_identity,
+        "composite": composite_identity,
+        "raw_pit": {
+            "path": source_identity.get("path") if isinstance(source_identity, Mapping) else None,
+            "raw_sha256": source_identity.get("raw_sha256") if isinstance(source_identity, Mapping) else None,
+            "byte_size": source_identity.get("byte_size") if isinstance(source_identity, Mapping) else None,
+        },
     }
     receipt["boundary"] = {
         "corrective_infrastructure_verdict": "PASS"

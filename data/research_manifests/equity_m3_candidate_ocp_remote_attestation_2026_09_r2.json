@@ -1,0 +1,165 @@
+{
+  "branch": "main",
+  "corrective_topology": {
+    "ci_head_binding": "local_result_commit",
+    "critical_paths": [
+      ".github/workflows/ci.yml",
+      "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
+      "scripts/research_equity_m3_m4.py"
+    ],
+    "implementation_commit": "039591492d823997b48651986e2f9690e02087d7",
+    "implementation_parent": "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2",
+    "manifest_changed_paths": [
+      "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json"
+    ],
+    "manifest_parent": "implementation_commit",
+    "result_changed_paths": [
+      "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json",
+      "docs/equity_m3_candidate_ocp_2026_09_r2.md"
+    ],
+    "result_parent": "manifest_commit",
+    "starting_head": "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2"
+  },
+  "critical_git_blobs": {
+    ".github/workflows/ci.yml": {
+      "commit": "039591492d823997b48651986e2f9690e02087d7",
+      "git_blob_id": "1e55f29ae1797513121039e8e19c18ac8fedfaf5",
+      "path": ".github/workflows/ci.yml",
+      "raw_sha256": "b7ae8ea1651dceae3f016d24ed24d2634c38d837f7e01ac5e98a622b6b436992"
+    },
+    "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py": {
+      "commit": "039591492d823997b48651986e2f9690e02087d7",
+      "git_blob_id": "d31ecaf27dd20e29c8ee71a20a7b07410ab018a7",
+      "path": "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
+      "raw_sha256": "e78bf0ab243eeccd5169da24c4caa6455a5c3efe7f634a982ffd62ae49c086f2"
+    },
+    "scripts/research_equity_m3_m4.py": {
+      "commit": "039591492d823997b48651986e2f9690e02087d7",
+      "git_blob_id": "b796e2ce37d496d839eeb2a3fd27b4efffdcb08f",
+      "path": "scripts/research_equity_m3_m4.py",
+      "raw_sha256": "dc012e79903a6ccb7e1d7603dea7944216c5ce366c65c1a4a3a3b161e2e5c839"
+    }
+  },
+  "declared_before_results": true,
+  "forbidden_economic_fields": [
+    "cagr",
+    "calmar",
+    "candidate_scores",
+    "economic_candidate_ranking",
+    "economic_candidate_scores",
+    "economic_scores",
+    "fill_count",
+    "gross_return",
+    "max_drawdown",
+    "net_return",
+    "pnl",
+    "portfolio_targets",
+    "ranked_scores",
+    "raw_scores",
+    "return",
+    "score",
+    "scores",
+    "sharpe",
+    "sortino",
+    "trade_count",
+    "turnover"
+  ],
+  "mandatory_corrective_gates": [
+    "starting_head",
+    "clean_worktree",
+    "historical_d23_e23_topology",
+    "defect_reproduction",
+    "old_receipt_superseded",
+    "c23_raw_artifact_identity",
+    "c23_raw_payload_digest",
+    "c23_local_receipt_identity",
+    "c23_implementation_identity",
+    "c23_manifest_identity",
+    "c23_result_topology",
+    "c23_ci_run_identity",
+    "c23_ci_head_binding",
+    "c23_ci_matrix_success",
+    "corrective_implementation_identity",
+    "corrective_manifest_only_commit",
+    "corrective_result_topology",
+    "corrective_ci_head_binding",
+    "critical_blob_identity",
+    "all_42_substantive_ocp_gates",
+    "substantive_hash_parity",
+    "no_economic_execution",
+    "no_network_market_data",
+    "no_credentials",
+    "receipt_forbidden_fields",
+    "receipt_self_digest",
+    "economic_consumer_r2_only"
+  ],
+  "mismatch_category": "remote_ci_raw_provenance_cross_binding",
+  "mission": "M3_CANDIDATE_OCP_ATTESTATION_R2",
+  "no_economic_execution": true,
+  "no_network_market_data_or_credentials": true,
+  "post_pass_boundary": {
+    "automatic_promotion": false,
+    "candidate_economics_run": false,
+    "economic_metrics_present": false,
+    "economic_mission_authorized": false,
+    "next_required_mission": "M3_ECONOMIC_MISSION_PREDECLARATION"
+  },
+  "python_matrix": {
+    "3.12": "PASS",
+    "3.13": "PASS",
+    "3.14": "PASS"
+  },
+  "repository_url": "https://github.com/batuhankiskac/ParayaBuck",
+  "required_ci_stages": {
+    "build": "PASS",
+    "dependency_audit": "PASS",
+    "focused_acquisition_pit_tests": "PASS",
+    "focused_m3_data_gate_tests": "PASS",
+    "focused_ocp_tests": "PASS",
+    "full_pytest": "PASS",
+    "mypy": "PASS",
+    "production_isolation": "PASS",
+    "ruff_format": "PASS",
+    "ruff_lint": "PASS",
+    "secret_scan": "PASS",
+    "wheel_smoke": "PASS"
+  },
+  "schema_version": "2.0.0",
+  "substantive_replay": {
+    "c23_ci_head_sha": "cd812af9c958c4934ca3da1a23bae00ae58278a4",
+    "c23_ci_run": "33665025444",
+    "hash_parity": {
+      "C_ordered_observation_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
+      "C_semantic_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
+      "X_ordered_observation_merkle_root": "cee257f5053570c2b5957adf5b6b4b8b2c0943273790b20135a24ed5ffbe568f",
+      "X_semantic_universe_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f",
+      "direct_builder_mismatch_count": 0,
+      "direct_builder_sample_count": 9,
+      "future_bar_failure_count": 0,
+      "future_bar_sample_count": 4,
+      "membership_change_count": 2381,
+      "scanner_metadata_mismatch_count": 0,
+      "sequence_change_count": 2384,
+      "snapshot_count": 2658
+    },
+    "implementation_commit": "32357c110c09f92b438ee188fac289da966bcd24",
+    "local_receipt_self_digest": "bc061438a7a3212c31e601e7f07c5f95d01887460d11473b09394602fd2098b4",
+    "local_result_commit": "cd812af9c958c4934ca3da1a23bae00ae58278a4",
+    "mandatory_gate_count": 42,
+    "mandatory_gate_status": "PASS",
+    "manifest_commit": "fe52e30e7cca36030621152f6f1bdbcc247f8e9c",
+    "raw_artifact_path": "data/research/generated/equity_m3_candidate_ocp_2026_09_r2/ocp_run.json",
+    "raw_artifact_sha256": "609fba66a8e909036b92e20f62dfbb68cfb2308d79e64100198fd2b6be61a05e",
+    "raw_payload_digest": "e23b09537693f1bec8b0e54339821a687ab8bd533a5cee1e6c6aa37ddd43f486",
+    "raw_verdict": "M3_CANDIDATE_OCP_GATE_PASS"
+  },
+  "superseded_artifacts": {
+    "d23_ci_run": "33671110579",
+    "d23_commit": "3436c288fe7052cb98c73fe7713aef2daeb78af2",
+    "e23_ci_run": "33672017181",
+    "e23_commit": "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2",
+    "receipt_path": "data/research_receipts/equity_m3_candidate_ocp_2026_09.json",
+    "report_path": "docs/equity_m3_candidate_ocp_2026_09.md",
+    "status": "SUPERSEDED_INVALID_REMOTE_ATTESTATION_BINDING"
+  }
+}

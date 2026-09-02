@@ -62,6 +62,7 @@ from m3_data_gate_helpers import (  # noqa: E402
     forbidden_receipt_keys,
     merkle_root,
     parse_timestamp,
+    semantic_rows_digest,
     session_date_for_timestamp,
     session_dates_digest,
     stage_file,
@@ -78,6 +79,8 @@ R5_INITIAL_MANIFEST_COMMIT = "ad65703453f56737a097bb043dec6646d902bcfb"
 R5_SECOND_IMPLEMENTATION_COMMIT = "787e78bcf6070278c071a6ca9f18f6ee4dc0db6b"
 R5_SECOND_MANIFEST_COMMIT = "d6106a785c5fc324f0d25e555ebed1599f7cef29"
 R5_CANONICAL_FIX_COMMIT = "d52b578c21176dd72ff4d01b51b39c6f4d15267f"
+R5_THIRD_IMPLEMENTATION_COMMIT = "136cb93b35e46ba356a88727aaf0c12574f4ba74"
+R5_THIRD_MANIFEST_COMMIT = "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -1140,6 +1143,19 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
         }
         if contract.get("recovery_lineage") != expected_recovery:
             raise GateError("recovery_lineage_mismatch", "R5 A13/B13 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_THIRD_MANIFEST_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A13_B13",
+            "abandoned_implementation_commit": R5_THIRD_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_THIRD_MANIFEST_COMMIT,
+            "reason_category": "sidecar_helper_missing",
+            "reason": "B13 R5 gate called a non-existent R4 sidecar semantic helper before replay",
+            "corrective_base_commit": R5_THIRD_MANIFEST_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A14/B14 recovery lineage is not declared exactly")
     else:
         raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
     if contract.get("manifest_path") != R5_MANIFEST_PATH:
@@ -1734,7 +1750,7 @@ def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
                     "rejected_row_count", 0
                 ):
                     raise GateError("sidecar_identity", "R4 normalized sidecar identity or quality differs")
-                if r4_gate.semantic_rows_digest(sidecar_rows) != R4_SIDECAR_SEMANTIC_SHA256:
+                if semantic_rows_digest(sidecar_rows) != R4_SIDECAR_SEMANTIC_SHA256:
                     raise GateError("sidecar_identity", "R4 normalized sidecar semantic digest differs")
                 if tuple(sidecar_rows) != tuple(iwm_rows):
                     raise GateError(

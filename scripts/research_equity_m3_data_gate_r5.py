@@ -73,6 +73,8 @@ from m3_data_gate_helpers import (  # noqa: E402
 R5_MISSION = "equity_m3_data_gate_2026_09_r5"
 R5_PIT_MISSION = "equity_m3_pit_scanner_population_2026_09_r5"
 R5_BASE_COMMIT = "b0cd5546f93f63d162de1ded3871b4431b08b89e"
+R5_INITIAL_IMPLEMENTATION_COMMIT = "193182fa9ebf297fe623395476a7cdcd9c14c12f"
+R5_INITIAL_MANIFEST_COMMIT = "ad65703453f56737a097bb043dec6646d902bcfb"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -1090,8 +1092,27 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
     ):
         if contract.get(key) != expected:
             raise GateError("manifest_policy_mismatch", f"R5 policy field drifted: {key}")
-    if contract.get("base_commit") != R5_BASE_COMMIT or contract.get("implementation_parent_commit") != R5_BASE_COMMIT:
+    if contract.get("base_commit") != R5_BASE_COMMIT:
         raise GateError("base_commit_mismatch", "R5 implementation must descend directly from D6")
+    implementation_parent = contract.get("implementation_parent_commit")
+    if implementation_parent == R5_BASE_COMMIT:
+        if contract.get("recovery_lineage") is not None:
+            raise GateError("recovery_lineage_mismatch", "initial R5 contract cannot declare recovery lineage")
+    elif implementation_parent == R5_INITIAL_MANIFEST_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A10_B10",
+            "abandoned_implementation_commit": R5_INITIAL_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_INITIAL_MANIFEST_COMMIT,
+            "reason_category": "runtime_helper_missing",
+            "reason": "A10 R5 gate called a non-existent R4 config helper before replay",
+            "corrective_base_commit": R5_INITIAL_MANIFEST_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A11/B11 recovery lineage is not declared exactly")
+    else:
+        raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
     if contract.get("manifest_path") != R5_MANIFEST_PATH:
         raise GateError("manifest_path_mismatch", "R5 contract path drifted")
     if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R5 manifest path":
@@ -1169,8 +1190,9 @@ def _contains_symbolic_head(value: object) -> bool:
 
 def _validate_r5_provenance(contract: Mapping[str, object], run_commit: str, run_parent: str) -> dict[str, object]:
     implementation = str(contract["implementation_commit"])
-    if _git("rev-parse", f"{implementation}^") != R5_BASE_COMMIT:
-        raise GateError("implementation_parent_mismatch", "R5 implementation is not a direct D6 child")
+    implementation_parent = _git("rev-parse", f"{implementation}^")
+    if implementation_parent != contract["implementation_parent_commit"]:
+        raise GateError("implementation_parent_mismatch", "R5 implementation parent differs from the contract")
     if run_parent != implementation:
         raise GateError("manifest_commit_topology", "B10 must be a direct child of A10")
     changed = _git("diff-tree", "--no-commit-id", "--name-only", "-r", run_commit).splitlines()
@@ -1273,7 +1295,17 @@ def _validate_contract_r4_values(contract: Mapping[str, object], r4_contract_ide
 
 
 def _config_equity(config_data: Mapping[str, object]) -> Any:
-    return r4_gate._equity_config(config_data)
+    universe = config_data.get("universe")
+    equity_raw = universe.get("equity") if isinstance(universe, Mapping) else None
+    if not isinstance(equity_raw, Mapping):
+        raise GateError("equity_config_missing", "settings universe.equity is missing")
+    equity_values = dict(equity_raw)
+    scanner_raw = equity_values.pop("scanner", {})
+    if not isinstance(scanner_raw, Mapping):
+        raise GateError("equity_scanner_config_missing", "settings universe.equity.scanner is missing")
+    from parayabuck.config import EquityScannerConfig, EquityUniverseConfig  # noqa: PLC0415
+
+    return EquityUniverseConfig(scanner=EquityScannerConfig(**dict(scanner_raw)), **equity_values)
 
 
 def _reference_inputs(

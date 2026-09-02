@@ -1698,8 +1698,7 @@ def run_gate(
             "current commit is not direct child of declared implementation",
         )
         _require(
-            implementation_parent
-            and _git("rev-parse", f"{implementation}^") == implementation_parent,
+            implementation_parent and _git("rev-parse", f"{implementation}^") == implementation_parent,
             "commit_topology",
             "implementation parent differs from manifest declaration",
         )

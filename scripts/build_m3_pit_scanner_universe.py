@@ -360,27 +360,30 @@ def _parse_bar(raw: Mapping[str, str], row_number: int) -> Bar:
 
 def _iter_canonical_groups(path: Path) -> Iterator[tuple[datetime, list[Bar]]]:
     required = set(CANONICAL_COLUMNS[1:])
-    previous_key: tuple[datetime, str] | None = None
+    previous_timestamp: datetime | None = None
     current_timestamp: datetime | None = None
     current: list[Bar] = []
+    current_symbols: set[str] = set()
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         if not required.issubset(reader.fieldnames or ()):
             raise GateError("canonical_schema_mismatch", "canonical CSV is missing required columns")
         for row_number, raw in enumerate(reader, start=2):
             bar = _parse_bar(raw, row_number)
-            key = (bar.timestamp, bar.symbol)
-            if previous_key is not None and key <= previous_key:
-                category = "canonical_duplicate" if key == previous_key else "canonical_order"
-                raise GateError(category, "canonical CSV must be strictly ordered by timestamp and symbol")
-            previous_key = key
+            if previous_timestamp is not None and bar.timestamp < previous_timestamp:
+                raise GateError("canonical_order", "canonical CSV must be ordered by timestamp")
             if current_timestamp is not None and bar.timestamp != current_timestamp:
-                yield current_timestamp, current
+                yield current_timestamp, sorted(current, key=lambda item: item.symbol)
                 current = []
+                current_symbols = set()
             current_timestamp = bar.timestamp
+            if bar.symbol in current_symbols:
+                raise GateError("canonical_duplicate", "canonical CSV contains a duplicate symbol in a session")
+            current_symbols.add(bar.symbol)
             current.append(bar)
+            previous_timestamp = bar.timestamp
     if current_timestamp is not None:
-        yield current_timestamp, current
+        yield current_timestamp, sorted(current, key=lambda item: item.symbol)
 
 
 def _bar_from_normalized(row: object) -> Bar:

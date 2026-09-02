@@ -196,6 +196,9 @@ R4_A7_COMMIT = "f58fe1916224756f1ef770c55990a82fccf86e7d"
 R4_B7_COMMIT = "9a6b81a8c78471850cd58c09253562d73ba1a8e1"
 R4_RECOVERY_LINEAGE = "D5_A6_B6_A7_B7"
 R4_RECOVERY_LINEAGE_A8 = "D5_A6_B6_A7_B7_A8_B8"
+R4_A8_COMMIT = "c7729bb7aadca8b3cd8bf91dac5eb8895395c987"
+R4_B8_COMMIT = "b8ca990a641f38f43a9b272be598d725c27e53a1"
+R4_RECOVERY_LINEAGE_A9 = "D5_A6_B6_A7_B7_A8_B8_A9_B9"
 R4_CRITICAL_GIT_PATHS = (
     ".github/workflows/ci.yml",
     "scripts/m3_data_gate_helpers.py",
@@ -768,7 +771,7 @@ def _validate_r4_contract(contract: Mapping[str, object], *, run_parent: str) ->
         if contract.get(key) != expected:
             raise GateError("manifest_policy_mismatch", f"R4 manifest {key} drifted")
     lineage_mode = contract.get("lineage_mode")
-    if lineage_mode not in {"D5_A6_B6", R4_RECOVERY_LINEAGE, R4_RECOVERY_LINEAGE_A8}:
+    if lineage_mode not in {"D5_A6_B6", R4_RECOVERY_LINEAGE, R4_RECOVERY_LINEAGE_A8, R4_RECOVERY_LINEAGE_A9}:
         raise GateError(
             "lineage_mismatch",
             "R4 lineage must be D5 -> A6 -> B6 or a declared append-only recovery",
@@ -779,6 +782,7 @@ def _validate_r4_contract(contract: Mapping[str, object], *, run_parent: str) ->
         "D5_A6_B6": R4_BASE_COMMIT,
         R4_RECOVERY_LINEAGE: R4_B6_COMMIT,
         R4_RECOVERY_LINEAGE_A8: R4_B7_COMMIT,
+        R4_RECOVERY_LINEAGE_A9: R4_B8_COMMIT,
     }[lineage_mode]
     if contract.get("implementation_parent_commit") != expected_implementation_parent:
         raise GateError("implementation_parent_mismatch", "R4 implementation parent does not match its lineage")
@@ -800,6 +804,15 @@ def _validate_r4_contract(contract: Mapping[str, object], *, run_parent: str) ->
             "automatic_refetch_allowed": False,
         }:
             raise GateError("recovery_lineage_mismatch", "R4 A8/B8 recovery lineage or replay policy drifted")
+    elif lineage_mode == R4_RECOVERY_LINEAGE_A9:
+        if contract.get("recovery_lineage") != {
+            "prior_implementation_commit": R4_A8_COMMIT,
+            "prior_manifest_commit": R4_B8_COMMIT,
+            "recovery_reason": "R4 PIT builder rejected frozen v5 intra-session symbol ordering",
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }:
+            raise GateError("recovery_lineage_mismatch", "R4 A9/B9 recovery lineage or replay policy drifted")
     if contract.get("manifest_path") != R4_MANIFEST_PATH:
         raise GateError("manifest_path_mismatch", "R4 manifest path is not frozen")
     if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R4 manifest path":
@@ -1289,7 +1302,7 @@ def _validate_r4_commit_provenance(
     implementation = str(contract["implementation_commit"])
     base = str(contract["base_commit"])
     lineage_mode = contract.get("lineage_mode")
-    recovery = lineage_mode in {R4_RECOVERY_LINEAGE, R4_RECOVERY_LINEAGE_A8}
+    recovery = lineage_mode in {R4_RECOVERY_LINEAGE, R4_RECOVERY_LINEAGE_A8, R4_RECOVERY_LINEAGE_A9}
     expected_parent = str(contract.get("implementation_parent_commit")) if recovery else base
     if _git_parent(implementation, repo=repo) != expected_parent:
         raise GateError(
@@ -1311,11 +1324,11 @@ def _validate_r4_commit_provenance(
             raise GateError("recovery_lineage_mismatch", "R4 recovery lineage is not an object")
         prior_implementation = recovery_lineage.get("prior_implementation_commit")
         prior_manifest = recovery_lineage.get("prior_manifest_commit")
-        expected_pair = (
-            (R4_A6_COMMIT, R4_B6_COMMIT, R4_BASE_COMMIT)
-            if lineage_mode == R4_RECOVERY_LINEAGE
-            else (R4_A7_COMMIT, R4_B7_COMMIT, R4_B6_COMMIT)
-        )
+        expected_pair = {
+            R4_RECOVERY_LINEAGE: (R4_A6_COMMIT, R4_B6_COMMIT, R4_BASE_COMMIT),
+            R4_RECOVERY_LINEAGE_A8: (R4_A7_COMMIT, R4_B7_COMMIT, R4_B6_COMMIT),
+            R4_RECOVERY_LINEAGE_A9: (R4_A8_COMMIT, R4_B8_COMMIT, R4_B7_COMMIT),
+        }[lineage_mode]
         if (prior_implementation, prior_manifest) != expected_pair[:2]:
             raise GateError("recovery_lineage_mismatch", "R4 recovery does not name its immutable prior pair")
         try:
@@ -1327,13 +1340,20 @@ def _validate_r4_commit_provenance(
                 )
             if _git_changed_paths(str(prior_manifest), repo=repo) != [manifest_path]:
                 raise GateError("recovery_lineage_mismatch", "R4 prior manifest was not manifest-only")
-            if lineage_mode == R4_RECOVERY_LINEAGE_A8:
+            if lineage_mode in {R4_RECOVERY_LINEAGE_A8, R4_RECOVERY_LINEAGE_A9}:
                 if _git_parent(R4_A6_COMMIT, repo=repo) != R4_BASE_COMMIT:
                     raise GateError("recovery_lineage_mismatch", "R4 A6 parent is not D5")
                 if _git_parent(R4_B6_COMMIT, repo=repo) != R4_A6_COMMIT:
                     raise GateError("recovery_lineage_mismatch", "R4 B6 is not a direct child of A6")
                 if _git_changed_paths(R4_B6_COMMIT, repo=repo) != [manifest_path]:
                     raise GateError("recovery_lineage_mismatch", "R4 B6 was not manifest-only")
+            if lineage_mode == R4_RECOVERY_LINEAGE_A9:
+                if _git_parent(R4_A7_COMMIT, repo=repo) != R4_B6_COMMIT:
+                    raise GateError("recovery_lineage_mismatch", "R4 A7 is not a direct child of B6")
+                if _git_parent(R4_B7_COMMIT, repo=repo) != R4_A7_COMMIT:
+                    raise GateError("recovery_lineage_mismatch", "R4 B7 is not a direct child of A7")
+                if _git_changed_paths(R4_B7_COMMIT, repo=repo) != [manifest_path]:
+                    raise GateError("recovery_lineage_mismatch", "R4 B7 was not manifest-only")
         except subprocess.CalledProcessError as exc:
             raise GateError("recovery_lineage_mismatch", "R4 prior recovery commits are unavailable") from exc
     try:
@@ -1831,7 +1851,27 @@ def _base_receipt(
     r3 = contract.get("mission") == R3_MISSION
     critical = provenance.get("critical_git_blobs", {})
     if r4:
-        if contract.get("lineage_mode") == R4_RECOVERY_LINEAGE_A8:
+        if contract.get("lineage_mode") == R4_RECOVERY_LINEAGE_A9:
+            recovery_lineage = contract.get("recovery_lineage")
+            lineage = {
+                "lineage_mode": R4_RECOVERY_LINEAGE_A9,
+                "base_commit": contract.get("base_commit"),
+                "prior_implementation_a6_commit": R4_A6_COMMIT,
+                "prior_manifest_b6_commit": R4_B6_COMMIT,
+                "prior_implementation_a7_commit": R4_A7_COMMIT,
+                "prior_manifest_b7_commit": R4_B7_COMMIT,
+                "prior_implementation_a8_commit": recovery_lineage.get("prior_implementation_commit")
+                if isinstance(recovery_lineage, Mapping)
+                else None,
+                "prior_manifest_b8_commit": recovery_lineage.get("prior_manifest_commit")
+                if isinstance(recovery_lineage, Mapping)
+                else None,
+                "implementation_a9_commit": contract.get("implementation_commit"),
+                "run_b9_commit": run_commit,
+                "c6_commit": None,
+                "d6_commit": None,
+            }
+        elif contract.get("lineage_mode") == R4_RECOVERY_LINEAGE_A8:
             recovery_lineage = contract.get("recovery_lineage")
             lineage = {
                 "lineage_mode": R4_RECOVERY_LINEAGE_A8,

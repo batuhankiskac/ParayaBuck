@@ -785,6 +785,29 @@ def test_r4_a8_recovery_contract_shape_is_supported() -> None:
     gate._validate_r4_contract(contract, run_parent="a" * 40)
 
 
+def test_r4_a9_recovery_contract_shape_is_supported() -> None:
+    contract = json.loads(
+        (ROOT / "data/research_manifests/equity_m3_data_gate_2026_09_r4.json").read_text(encoding="utf-8")
+    )
+    contract.update(
+        {
+            "lineage_mode": gate.R4_RECOVERY_LINEAGE_A9,
+            "implementation_parent_commit": gate.R4_B8_COMMIT,
+            "implementation_commit": "a" * 40,
+            "implementation_tree": "b" * 40,
+            "recovery_lineage": {
+                "prior_implementation_commit": gate.R4_A8_COMMIT,
+                "prior_manifest_commit": gate.R4_B8_COMMIT,
+                "recovery_reason": "R4 PIT builder rejected frozen v5 intra-session symbol ordering",
+                "replay_exact_captured_bytes": True,
+                "automatic_refetch_allowed": False,
+            },
+        }
+    )
+
+    gate._validate_r4_contract(contract, run_parent="a" * 40)
+
+
 @pytest.mark.parametrize("gate_name", gate.MANDATORY_GATES)
 def test_removing_any_mandatory_gate_blocks(gate_name: str) -> None:
     gates = {name: {"status": gate.GATE_PASS} for name in gate.MANDATORY_GATES}

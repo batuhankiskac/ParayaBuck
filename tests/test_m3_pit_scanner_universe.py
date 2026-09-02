@@ -214,6 +214,22 @@ def test_frozen_canonical_provider_timeframe_alias_is_normalized() -> None:
     assert bar.market is Market.EQUITY
 
 
+def test_canonical_stream_sorts_symbols_within_timestamp_group(tmp_path: Path) -> None:
+    canonical = tmp_path / "canonical.csv"
+    canonical.write_text(
+        "timestamp,symbol,timeframe,open,high,low,close,volume,market\n"
+        "2024-01-02T05:00:00Z,ZNGA,1d,10,11,9,10,1000,equity\n"
+        "2024-01-02T05:00:00Z,BCV,1Day,20,21,19,20,2000,EQUITY\n"
+        "2024-01-03T05:00:00Z,AAA,1d,30,31,29,30,3000,equity\n",
+        encoding="utf-8",
+    )
+
+    groups = list(pit._iter_canonical_groups(canonical))
+
+    assert [bar.symbol for bar in groups[0][1]] == ["BCV", "ZNGA"]
+    assert groups[1][0] > groups[0][0]
+
+
 def test_builder_has_no_network_or_broker_imports() -> None:
     tree = ast.parse((ROOT / "scripts/build_m3_pit_scanner_universe.py").read_text(encoding="utf-8"))
     imported = {

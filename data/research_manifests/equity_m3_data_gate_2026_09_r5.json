@@ -1,0 +1,306 @@
+{
+  "schema_version": "5.0.0",
+  "mission": "equity_m3_data_gate_2026_09_r5",
+  "repository_url": "https://github.com/batuhankiskac/ParayaBuck",
+  "branch": "main",
+  "snapshot_date": "2026-09-02",
+  "declared_before_results": true,
+  "research_only": true,
+  "automatic_promotion": false,
+  "human_promotion_only": true,
+  "candidate_economics_run": false,
+  "economic_metrics_present": false,
+  "economic_mission_ready": false,
+  "base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
+  "implementation_parent_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
+  "implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
+  "implementation_tree": "220790dac897adb9b48c153e1f00e4b36b78f1c5",
+  "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
+  "manifest_commit_rule": "manifest-only: exactly the declared R5 manifest path",
+  "critical_git_blobs": {
+    ".github/workflows/ci.yml": {
+      "git_blob_id": "3c0afcdac67b8a121096e6c0b9558cade78d0c32",
+      "raw_sha256": "59b4edcbeece54e03e101c5fb2a197edbe55f9e6b3c760a6f4a5ee21243f4b46"
+    },
+    "scripts/m3_data_gate_helpers.py": {
+      "git_blob_id": "6184018564204020f05123371b2ee2ed8e91c599",
+      "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
+    },
+    "scripts/research_equity_m3_data_gate_r5.py": {
+      "git_blob_id": "88d345f9aa3e14750627a4ee8d0fa55926c543c4",
+      "raw_sha256": "7258e599c3b0bcc89af6c826a69b55d5e2649330c99da9d3baa19418dfe62573"
+    },
+    "scripts/research_equity_m3_m4.py": {
+      "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
+      "raw_sha256": "ede29e87cdf3fc4551e67bdbe67003b5cfab95e0a2a0e5c3e5f4143733de97d6"
+    },
+    "scripts/build_m3_pit_scanner_universe.py": {
+      "git_blob_id": "8ff884c508b3e48dd040c295528d8b75f0af4a5a",
+      "raw_sha256": "6321b9d06a43d54836d08810d57f97a42b6d2214a5166fd2e85edc308f06bc3b"
+    },
+    "src/parayabuck/backtest/universe.py": {
+      "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
+      "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
+    },
+    "src/parayabuck/backtest/portfolio_engine.py": {
+      "git_blob_id": "f05402fcd03ff03c59f76fe6202fa6771a331508",
+      "raw_sha256": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141"
+    },
+    "tests/test_research_equity_m3_r5.py": {
+      "git_blob_id": "c7764a692f5a74424392e298a185801a71b68c19",
+      "raw_sha256": "e7ed09797de0c904c518dca86079ad7305123cd107ffc3237dbd0b1d09b370cd"
+    }
+  },
+  "config_semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d",
+  "scanner_identity": {
+    "scanner": "EquityUniverseScanner",
+    "version": "equity-scanner-v3",
+    "config_digest_sha256": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+    "rebalance_cadence": "daily",
+    "candidate_population": "scanner-eligible only; no alpha ranking"
+  },
+  "scanner_config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+  "accepted_r4_inputs": {
+    "r4_manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r4.json",
+    "r4_manifest_git_blob_id": "0cc789dba475242014856b60d4913b9b3e25cc4b",
+    "r4_c6_commit": "4f1ddd970207406f4a70d278651796bccd5b8f7a",
+    "raw_bundle_path": "data/research/external/m3_iwm_raw_2026_09_r4",
+    "raw_bundle_sha256": "9590e35d2f5b80a4cd7f5c2c755acfcc088a6f7696d6eb86039d702ee6832258",
+    "aggregate_page_hash_digest": "39a87290b4ebafbba3c29663f5577c05c7548252e6699e5f39589849211c93eb",
+    "page_chain_digest_sha256": "a5b5e400bb97aff3f6342bbe0b969f5d0ae5600406d5cd186ec62e0360480e1b",
+    "source_receipt_path": "data/research/external/m3_iwm_raw_2026_09_r4/source_receipt.json",
+    "source_receipt_sha256": "2dbeeebc688dab111013a114e9c08b44c116e23c48a42968099f6c8671ea4003",
+    "normalized_sidecar_path": "data/research/generated/m3_data_gate_r4/iwm_normalized.csv",
+    "normalized_sidecar_raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2",
+    "normalized_sidecar_semantic_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837",
+    "composite_manifest_path": "data/research_manifests/equity_m3_composite_dataset_2026_09_r4.json",
+    "composite_manifest_git_blob_id": "b001da54c220ae717bc61731ebf6c6f05057bca2",
+    "composite_semantic_digest_sha256": "5bb66b7ff15d1f9ef3e9ce7caa4ef2314fcc670cf80b9696ee576e1b9cac4eda",
+    "raw_pit_path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
+    "raw_pit_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae",
+    "raw_pit_byte_size": 24774560,
+    "canonical_bars_path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "canonical_raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "canonical_manifest_path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "canonical_manifest_git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+    "lifetime_path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+    "lifetime_raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "corporate_actions_path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "corporate_actions_raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "corporate_actions_manifest_path": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
+    "corporate_actions_manifest_git_blob_id": "70f62784fd804ed0f70543bc420d7575c0d39c42"
+  },
+  "pit_source_projection_contract": {
+    "source_mission": "equity_m3_pit_scanner_population_2026_09_r4",
+    "source_is_immutable": true,
+    "projection_mission": "equity_m3_pit_scanner_population_2026_09_r5",
+    "projection_is_new_identity": true,
+    "source_snapshot_after_evaluation_may_remain": true,
+    "post_evaluation_source_is_never_consumed": true,
+    "raw_source_is_not_trimmed_or_rewritten": true,
+    "explicit_empty_snapshots_required": true
+  },
+  "evaluation_snapshot_contract": {
+    "evaluation_decision_session": "2026-07-30",
+    "evaluation_decision_cutoff_timestamp": "2026-07-30T04:00:00.000000Z",
+    "terminal_observation_boundary_required": false,
+    "selection_rule": "latest snapshot with timezone-aware effective_at <= exact decision cutoff timestamp",
+    "expected_effective_at_set": {
+      "encoding": "NYSE sessions 2016-01-04 through 2026-07-30 inclusive mapped at America/New_York midnight",
+      "count": 2658,
+      "first": "2016-01-04T05:00:00.000000Z",
+      "last": "2026-07-30T04:00:00.000000Z",
+      "digest_sha256": "8b082542d48419cc8ba04b717b21190a7dd2dfbefad37eb184e2703eea24bd08"
+    },
+    "expected_effective_at_digest_sha256": "8b082542d48419cc8ba04b717b21190a7dd2dfbefad37eb184e2703eea24bd08",
+    "timestamp_comparison_is_full_precision": true,
+    "date_only_selection_forbidden": true,
+    "strict_prior_rule": "latest_input_timestamp < snapshot.effective_at",
+    "terminal_interpretation": "July 31 source snapshot is post-evaluation and excluded; no July 31 observation enters the R5 projection, matrix, or decision"
+  },
+  "frozen_parameters": {
+    "formation_bars": 252,
+    "skip_bars": 21,
+    "beta_window_bars": 273,
+    "beta_window_plus_one_closes": 274,
+    "residual_vol_window": 63,
+    "top_n": 8,
+    "max_single_weight": 0.1,
+    "ivol_reject_quantile": 0.7,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "rebalance_frequency": "weekly"
+  },
+  "history_eligibility_contract": {
+    "minimum_history_bars_source": "fresh ProxyMultifactorResidualMomentum frozen instance",
+    "minimum_history_bars": 274,
+    "reference_symbols": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ],
+    "scanner_eligible_state": "SCANNER_ELIGIBLE_M3_NOT_WARM",
+    "matrix_eligible_state": "M3_MATRIX_ELIGIBLE",
+    "numerical_pass_state": "M3_MATRIX_NUMERICAL_PASS",
+    "numerical_fail_state": "M3_MATRIX_NUMERICAL_FAIL",
+    "required_common_closes": 274,
+    "required_returns": 273,
+    "exact_timestamp_intersection": true,
+    "scanner_only_not_warm_is_not_numerical_failure": true
+  },
+  "candidate_depth_contract": {
+    "top_n": 8,
+    "full_window": {
+      "initial_history_warmup_allowed": true,
+      "first_decision_with_at_least_top_n_is_required": true,
+      "post_warmup_depth_required_at_every_decision": true,
+      "post_warmup_numerical_failures_allowed": false
+    },
+    "recent_window": {
+      "start": "2022-01-01",
+      "history_warmup_allowed": false,
+      "depth_required_at_every_decision": true,
+      "numerical_failures_allowed": false
+    },
+    "candidate_ranking_or_selection": false
+  },
+  "numerical_thresholds": {
+    "matrix_rows": 273,
+    "matrix_columns": 3,
+    "required_rank": 3,
+    "minimum_singular_value_ratio": 0.000001,
+    "maximum_condition_number": 1000000.0,
+    "minimum_residual_std": 1e-12,
+    "required_common_closes": 274,
+    "required_returns": 273
+  },
+  "numerical_contract": {
+    "factors": [
+      "SPY",
+      "IWM-SPY",
+      "QQQ-SPY"
+    ],
+    "fit": "demean X and y; numpy least squares; retain rank and singular diagnostics",
+    "residual": "y - X @ beta using non-demeaned X and no applied intercept",
+    "eligible_matrix_scope_only": true,
+    "record_merkle_root_over_exact_matrix_digests": true,
+    "economic_score_or_alpha_score": false
+  },
+  "reference_role_contract": {
+    "reference_observation_symbols": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ],
+    "candidate_membership_allowed": false,
+    "target_membership_allowed": false,
+    "execution_membership_allowed": false,
+    "runtime_execution_evidence_status": "EXECUTION_NOT_RUN"
+  },
+  "no_network_policy": {
+    "network_allowed": false,
+    "credential_reads_allowed": false,
+    "accepted_source": "exact accepted R4 captured bytes only",
+    "refetch_allowed": false
+  },
+  "economic_boundary": {
+    "candidate_economics_run": false,
+    "economic_metrics_present": false,
+    "alpha_ranking_allowed": false,
+    "optimization_allowed": false,
+    "candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+    "next_required_gate": "M3_CANDIDATE_OCP_GATE"
+  },
+  "forbidden_economic_fields": [
+    "return",
+    "net_return",
+    "gross_return",
+    "pnl",
+    "cagr",
+    "sharpe",
+    "sortino",
+    "calmar",
+    "max_drawdown",
+    "turnover",
+    "trade_count",
+    "fill_count",
+    "portfolio_targets",
+    "economic_candidate_scores",
+    "economic_candidate_ranking"
+  ],
+  "clean_run_procedure": {
+    "required_start_commit": "manifest-only B10 direct child of A10",
+    "capture_cleanliness_before_outputs": true,
+    "external_inputs_ignored_or_tmp_only": true,
+    "compact_result_copy_after_gate_only": true,
+    "preexisting_compact_result_blocks": true,
+    "generated_temporary_output_does_not_retroactively_fail_start": true
+  },
+  "immutable_provenance": {
+    "d6_base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
+    "r4_c6_commit": "4f1ddd970207406f4a70d278651796bccd5b8f7a",
+    "a10_implementation_commit": "193182fa9ebf297fe623395476a7cdcd9c14c12f",
+    "a10_implementation_tree": "220790dac897adb9b48c153e1f00e4b36b78f1c5"
+  },
+  "mandatory_data_pass_gates": [
+    "commit_topology",
+    "implementation_blob_identity",
+    "manifest_only_commit",
+    "clean_worktree_at_start",
+    "configuration_identity",
+    "dependency_identity",
+    "r4_acquisition_identity",
+    "r4_raw_bundle_replay_identity",
+    "canonical_artifact_identity",
+    "lifetime_identity",
+    "corporate_action_identity",
+    "iwm_raw_bundle",
+    "iwm_provider_contract",
+    "iwm_pagination_chain",
+    "iwm_normalization",
+    "request_boundary_conformance",
+    "required_reference_session_completeness",
+    "reference_calendar",
+    "reference_row_quality",
+    "reference_common_sessions",
+    "full_weekly_post_warmup_coverage",
+    "recent_weekly_coverage",
+    "composite_dataset_identity",
+    "pit_source_artifact_identity",
+    "pit_evaluation_projection_identity",
+    "pit_manifest_identity",
+    "pit_reference_boundary",
+    "pit_snapshot_cadence",
+    "pit_terminal_boundary",
+    "strict_prior_population",
+    "full_timestamp_snapshot_selection",
+    "deterministic_numerical_population",
+    "m3_history_eligibility_parity",
+    "full_candidate_depth_feasibility",
+    "recent_candidate_depth_feasibility",
+    "design_matrix_feasibility",
+    "reference_role_contract",
+    "receipt_forbidden_fields"
+  ],
+  "stop_conditions": [
+    "starting commit differs",
+    "dirty worktree at gate start",
+    "R4 artifact missing or hash mismatched",
+    "network or credential access",
+    "R4 data changed",
+    "ambiguous PIT timing",
+    "date-only snapshot selection",
+    "post-evaluation snapshot consumed",
+    "missing required evaluation snapshot",
+    "scanner-only not-warm counted as numerical failure",
+    "recent candidate depth below 8",
+    "full post-warmup candidate depth below 8",
+    "empty matrix population",
+    "eligible matrix numerical failure",
+    "symbolic immutable provenance",
+    "economic or OCP action",
+    "CI failure"
+  ],
+  "next_required_gate": "M3_CANDIDATE_OCP_GATE"
+}

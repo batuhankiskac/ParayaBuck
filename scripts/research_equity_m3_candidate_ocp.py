@@ -1887,7 +1887,9 @@ def run_gate(
                 "artifact_identity",
                 "R4 PIT byte size mismatch",
             )
-            input_artifacts["r5_pit_manifest"] = _tracked_identity(R5_MANIFEST_COMMIT, R5_PIT_MANIFEST_PATH)
+            # C11 records the final compact PIT manifest; B18's implementation
+            # tree still contains the superseded pre-result blob.
+            input_artifacts["r5_pit_manifest"] = _tracked_identity(R5_RESULT_COMMIT, R5_PIT_MANIFEST_PATH)
             _require(
                 input_artifacts["r5_pit_manifest"]["git_blob_id"] == R5_PIT_MANIFEST_BLOB,
                 "r5_projection",

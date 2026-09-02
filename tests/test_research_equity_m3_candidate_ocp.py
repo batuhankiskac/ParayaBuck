@@ -211,6 +211,11 @@ def test_r5_receipt_for_another_manifest_is_rejected(tmp_path: Path) -> None:
         ocp._validate_r5_upstream(other_manifest)
 
 
+def test_r5_compact_pit_manifest_is_bound_to_c11_result_tree() -> None:
+    identity = ocp._tracked_identity(ocp.R5_RESULT_COMMIT, ocp.R5_PIT_MANIFEST_PATH)
+    assert identity["git_blob_id"] == ocp.R5_PIT_MANIFEST_BLOB
+
+
 def test_r5_receipt_self_digest_and_all_mandatory_gates_are_pass() -> None:
     upstream = ocp._validate_r5_upstream()
     receipt = upstream["receipt"]

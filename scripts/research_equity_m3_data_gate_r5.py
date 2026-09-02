@@ -85,6 +85,9 @@ R5_FOURTH_IMPLEMENTATION_COMMIT = "773966f3cfdb33bf584e98343dc4839c59deb224"
 R5_FOURTH_MANIFEST_COMMIT = "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1"
 R5_SIXTH_IMPLEMENTATION_COMMIT = "79ffcb178845f64f3f2cc036b9e1919cc15891e7"
 R5_SIXTH_MANIFEST_COMMIT = "5aeb2058b0027432de45d9db8fdeba20120d4d2c"
+R5_SEVENTH_IMPLEMENTATION_COMMIT = "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6"
+R5_SEVENTH_MANIFEST_COMMIT = "a6ceda31f95f3b50f8a5bfcf1f0e04efa36d90d4"
+R5_C10_RESULT_COMMIT = "459cf782754bc15d137fcaa4cdd081402b837f96"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -1191,8 +1194,25 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
         }
         if contract.get("recovery_lineage") != expected_recovery:
             raise GateError("recovery_lineage_mismatch", "R5 A17/B17 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_C10_RESULT_COMMIT:
+        expected_recovery = {
+            "status": "SUPERSEDED_A17_B17",
+            "abandoned_implementation_commit": R5_SEVENTH_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_SEVENTH_MANIFEST_COMMIT,
+            "reason_category": "pre_result_test_coverage_gap",
+            "reason": "C10 R5 result lacked explicit clean-run and complete synthetic-fixture regression coverage before test hardening",
+            "corrective_base_commit": R5_C10_RESULT_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError(
+                "recovery_lineage_mismatch", "R5 A18/B18 test-hardening recovery lineage is not declared exactly"
+            )
     else:
-        raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
+        raise GateError(
+            "implementation_parent_mismatch", "R5 implementation parent is not D6 or an accepted recovery result"
+        )
     if contract.get("manifest_path") != R5_MANIFEST_PATH:
         raise GateError("manifest_path_mismatch", "R5 contract path drifted")
     if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R5 manifest path":

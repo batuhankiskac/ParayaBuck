@@ -6,6 +6,7 @@ import inspect
 import subprocess
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -126,6 +127,235 @@ def _matrix_panel(mode: str = "pass", count: int = 274) -> tuple[list[date], dic
     return sessions, {"AAA": closes(stock), "SPY": spy_close, "IWM": iwm_close, "QQQ": qqq_close}
 
 
+def _synthetic_gate_args(tmp_path: Path) -> SimpleNamespace:
+    canonical = tmp_path / "canonical.csv"
+    canonical_manifest = tmp_path / "canonical.manifest.json"
+    corporate_actions = tmp_path / "corporate_actions.csv"
+    corporate_actions_manifest = tmp_path / "corporate_actions.manifest.json"
+    for path in (canonical, canonical_manifest, corporate_actions, corporate_actions_manifest):
+        path.write_text("{}", encoding="utf-8")
+    composite_manifest = tmp_path / "composite.manifest.json"
+    composite_manifest.write_text('{"identity": {"semantic_digest_sha256": "composite"}}', encoding="utf-8")
+    return SimpleNamespace(
+        contract=tmp_path / "contract.json",
+        canonical_bars=canonical,
+        canonical_manifest=canonical_manifest,
+        lifetimes=tmp_path / "lifetimes.csv",
+        corporate_actions=corporate_actions,
+        corporate_actions_manifest=corporate_actions_manifest,
+        iwm_bundle=tmp_path / "iwm-bundle",
+        iwm_sidecar=tmp_path / "iwm-sidecar.csv",
+        composite_manifest=composite_manifest,
+        r4_pit_universe=tmp_path / "r4-pit.json",
+        r5_pit_manifest_source=tmp_path / "r4-pit.manifest.json",
+        projection_out=tmp_path / "r5-pit.json",
+        pit_manifest_out=tmp_path / "r5-pit.manifest.json",
+        receipt_out=tmp_path / "receipt.json",
+        report_out=tmp_path / "report.md",
+    )
+
+
+def _install_synthetic_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    dirty_before: str = "",
+) -> SimpleNamespace:
+    args = _synthetic_gate_args(tmp_path)
+    contract = {
+        "config_semantic_digest_sha256": "config",
+        "scanner_config_digest": r5.R5_SCANNER_CONFIG_DIGEST,
+        "frozen_parameters": r5.R5_FROZEN_PARAMETERS,
+        "accepted_r4_inputs": {"canonical_raw_sha256": "canonical"},
+        "critical_git_blobs": {
+            "scripts/research_equity_m3_data_gate_r5.py": {"git_blob_id": "source", "raw_sha256": "source"}
+        },
+        "immutable_provenance": {},
+        "recovery_lineage": None,
+    }
+    contract_identity = {"path": r5.R5_MANIFEST_PATH, "git_blob_id": "manifest", "raw_sha256": "manifest"}
+    provenance = {"changed_paths": [r5.R5_MANIFEST_PATH], "manifest_git_blob_id": "manifest", "critical_git_blobs": {}}
+    row = SimpleNamespace(
+        session_date=date(2026, 7, 30),
+        timestamp=datetime(2026, 7, 30, 4, tzinfo=UTC),
+        close=100.0,
+    )
+    reference_boundary = {
+        "status": "PIT_UNIVERSE_VERIFIED",
+        "evidence_level": "PIT_UNIVERSE_VERIFIED",
+        "reference_symbols": list(r5.REFERENCE_SYMBOLS),
+        "candidate_reference_overlap": [],
+        "executable_reference_overlap": [],
+        "target_reference_overlap": [],
+    }
+    projection = {
+        "snapshots": [{"eligible_symbols": ["AAA"]}],
+        "population": {
+            "candidate_universe_digest_sha256": "universe",
+            "candidate_decision_eligibility_digest_sha256": "eligibility",
+            "snapshot_count": 1,
+            "unique_candidate_count": 1,
+            "minimum_eligible_count": 1,
+            "maximum_eligible_count": 1,
+            "median_eligible_count": 1,
+            "explicit_empty_snapshot_count": 0,
+            "reference_boundary": reference_boundary,
+        },
+        "strict_prior_proof": {
+            "status": "PASS",
+            "effective_at_is_strictly_after_latest_input": True,
+            "violating_snapshots": [],
+        },
+        "r5_projection": {
+            "projection_digest_sha256": "projection",
+            "evaluation_decision_session": "2026-07-30",
+            "evaluation_decision_cutoff_timestamp": "2026-07-30T04:00:00.000000Z",
+            "source_snapshot_count": 1,
+            "evaluation_snapshot_count": 1,
+            "excluded_post_evaluation_snapshot_count": 0,
+            "excluded_post_evaluation_snapshot_digest_sha256": "excluded",
+            "consumed_decision_count": 1,
+            "full_timestamp_ordering": True,
+            "reference_boundary": reference_boundary,
+        },
+    }
+    matrices = {
+        "scanner_candidate_pair_count": 1,
+        "m3_not_warm_pair_count": 0,
+        "total_eligible_matrix_count": 1,
+        "first_full_candidate_feasible_decision": "2024-01-01",
+        "minimum_recent_eligible_depth": 8,
+        "full_post_feasibility_failure_count": 0,
+        "recent_candidate_depth_failure_count": 0,
+        "numerical_fail_count": 0,
+        "numerical_pass_count": 1,
+        "weekly_eligibility_by_session": {},
+    }
+
+    class Artifact:
+        def __init__(self, path: Path) -> None:
+            self.staged_path = path
+            self.byte_size = 1
+            if path.name == "canonical.csv":
+                self.raw_sha256 = "canonical"
+                self.crlf_normalized_sha256 = "canonical"
+            elif path.name == "lifetimes.csv":
+                self.raw_sha256 = r5.R4_LIFETIME_RAW_SHA256
+                self.crlf_normalized_sha256 = r5.R4_LIFETIME_RAW_SHA256
+            elif path.name == "iwm-sidecar.csv":
+                self.raw_sha256 = r5.R4_SIDECAR_RAW_SHA256
+                self.crlf_normalized_sha256 = r5.R4_SIDECAR_RAW_SHA256
+            else:
+                self.raw_sha256 = "artifact"
+                self.crlf_normalized_sha256 = "artifact"
+
+        def receipt(self, logical_id: str, provenance_class: str) -> dict[str, object]:
+            return {
+                "path": str(self.staged_path),
+                "logical_artifact_id": logical_id,
+                "raw_sha256": self.raw_sha256,
+                "crlf_normalized_sha256": self.crlf_normalized_sha256,
+                "byte_size": self.byte_size,
+                "provenance_class": provenance_class,
+            }
+
+    def fake_stage_file(path: Path, *_args: object, **_kwargs: object) -> Artifact:
+        return Artifact(Path(path))
+
+    def fake_load_json(path: Path) -> dict[str, object]:
+        if Path(path).name == "canonical.manifest.json":
+            return {"feed": "sip", "adjustment": "split"}
+        if Path(path).name == "composite.manifest.json":
+            return {"identity": {"semantic_digest_sha256": r5.R4_COMPOSITE_SEMANTIC_SHA256}}
+        return {}
+
+    def fake_git(*git_args: str) -> str:
+        if git_args and git_args[0] == "status":
+            return dirty_before
+        if git_args == ("rev-parse", "HEAD"):
+            return "synthetic-run"
+        if git_args == ("rev-parse", "HEAD^"):
+            return "synthetic-parent"
+        return ""
+
+    monkeypatch.setattr(r5, "_git", fake_git)
+    monkeypatch.setattr(r5, "_load_r5_contract", lambda *_args: (contract, contract_identity))
+    monkeypatch.setattr(r5, "_validate_r5_provenance", lambda *_args: provenance)
+    monkeypatch.setattr(r5, "_load_yaml", lambda _path: {})
+    monkeypatch.setattr(r5, "config_semantic_digest", lambda _data: "config")
+    monkeypatch.setattr(r5, "_config_equity", lambda _data: object())
+    from parayabuck.universe import scanner
+
+    monkeypatch.setattr(scanner, "scanner_config_digest", lambda _config: r5.R5_SCANNER_CONFIG_DIGEST)
+    monkeypatch.setattr(r5, "calendar_dependency_identity", lambda: {"calendar": "NYSE", "version": "synthetic"})
+    monkeypatch.setattr(r5, "_validate_r4_contract_identity", lambda *_args: {"git_blob_id": "r4"})
+    monkeypatch.setattr(r5, "_validate_contract_r4_values", lambda *_args: None)
+    monkeypatch.setattr(r5, "_load_json", fake_load_json)
+    monkeypatch.setattr(r5, "stage_file", fake_stage_file)
+    monkeypatch.setattr(
+        r5.r4_gate,
+        "_tracked_blob_identity",
+        lambda *_args, **_kwargs: {"git_blob_raw_sha256": r5.R4_LIFETIME_RAW_SHA256},
+    )
+    monkeypatch.setattr(r5.r4_gate, "_validate_artifact_against_manifest", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(r5.r4_gate, "_audit_corporate_actions", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        r5,
+        "validate_iwm_bundle",
+        lambda *_args, **_kwargs: (
+            (row,),
+            {
+                "raw_bundle_sha256": r5.R4_RAW_BUNDLE_SHA256,
+                "normalized_row_count": 2658,
+                "normalized_semantic_row_sha256": r5.R4_SIDECAR_SEMANTIC_SHA256,
+                "source_receipt": {"raw_sha256": r5.R4_SOURCE_RECEIPT_SHA256},
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        r5.r4_gate,
+        "load_csv_reference_rows",
+        lambda *_args, **_kwargs: ({"IWM": [row]}, {"IWM": {"rejected_row_count": 0}}),
+    )
+    monkeypatch.setattr(r5, "semantic_rows_digest", lambda _rows: r5.R4_SIDECAR_SEMANTIC_SHA256)
+    weekly = {
+        "full": {"decisions": [{"decision_session": "2024-01-01"}]},
+        "recent": {"decisions": [{"decision_session": "2024-01-01"}]},
+    }
+    monkeypatch.setattr(
+        r5,
+        "_reference_inputs",
+        lambda *_args, **_kwargs: ({"SPY": [row], "IWM": [row], "QQQ": [row]}, {}, {}, {}, weekly),
+    )
+    monkeypatch.setattr(r5, "_validate_references", lambda *_args: (True, True, True, True, True))
+    monkeypatch.setattr(r5.r4_gate, "_compact_weekly", lambda _weekly: {})
+    source_identity = {
+        "path": r5.R4_PIT_PATH,
+        "raw_sha256": r5.R4_RAW_PIT_SHA256,
+        "byte_size": r5.R4_RAW_PIT_BYTES,
+        "source_compact_manifest": {"git_blob_id": "r4-pit-manifest"},
+    }
+    monkeypatch.setattr(r5, "_validate_r4_source_pit", lambda *_args, **_kwargs: ({"snapshots": [{}]}, source_identity))
+    monkeypatch.setattr(r5, "_r4_source_timing_table", lambda _source: [])
+    monkeypatch.setattr(r5, "project_evaluation_pit", lambda *_args, **_kwargs: projection)
+    monkeypatch.setattr(
+        r5,
+        "_load_close_matrix",
+        lambda *_args, **_kwargs: (
+            {symbol: np.ones(1) for symbol in ("AAA", *r5.REFERENCE_SYMBOLS)},
+            {symbol: np.ones(1, dtype=np.int64) for symbol in ("AAA", *r5.REFERENCE_SYMBOLS)},
+            {"invalid_selected_row_count": 0, "duplicate_selected_row_count": 0},
+        ),
+    )
+    monkeypatch.setattr(r5, "frozen_m3_minimum_history_bars", lambda _parameters: 274)
+    monkeypatch.setattr(r5, "audit_matrix_population", lambda **_kwargs: matrices)
+    monkeypatch.setattr(r5, "build_reference_overlay", lambda _data: SimpleNamespace(to_dict=lambda: {}))
+    monkeypatch.setattr(r5, "deterministic_candidate_population", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(r5, "validate_pit_reference_boundary", lambda _population: reference_boundary)
+    monkeypatch.setattr(r5, "_timing_table", lambda **_kwargs: [])
+    return args
+
+
 def test_d6_c6_lineage_and_prior_artifacts_are_unchanged() -> None:
     parent = subprocess.run(
         ["git", "show", "-s", "--format=%P", r5.R5_BASE_COMMIT], capture_output=True, text=True, check=True
@@ -140,6 +370,21 @@ def test_d6_c6_lineage_and_prior_artifacts_are_unchanged() -> None:
         and path != "docs/equity_m3_data_gate_2026_09_r4.md"
         for path in changed
     )
+
+
+def test_r1_r4_artifacts_have_no_diff_from_d6() -> None:
+    protected = (
+        r5.R4_MANIFEST_PATH,
+        r5.R4_PIT_MANIFEST_PATH,
+        r5.R4_COMPOSITE_PATH,
+        "data/research_receipts/equity_m3_data_gate_2026_09_r4.json",
+        "docs/equity_m3_data_gate_2026_09_r4.md",
+    )
+    for path in protected:
+        result = subprocess.run(
+            ["git", "diff", "--quiet", f"{r5.R5_BASE_COMMIT}..HEAD", "--", path], capture_output=True
+        )
+        assert result.returncode == 0, path
 
 
 def test_r4_accepted_bundle_identity_is_frozen() -> None:
@@ -276,6 +521,48 @@ def test_report_contains_provenance_and_pit_population_sections() -> None:
     assert '"snapshot_count": 2658' in report
 
 
+def test_clean_b10_run_passes_clean_worktree_at_start(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    args = _install_synthetic_gate(monkeypatch, tmp_path)
+    receipt, status = r5.run_gate(args)
+    assert status == 0
+    assert receipt["worktree_cleanliness"]["clean_worktree_at_start"] is True
+
+
+def test_preexisting_compact_result_file_blocks_clean_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    dirty = f" M {r5.R5_RECEIPT_PATH}"
+    args = _install_synthetic_gate(monkeypatch, tmp_path, dirty_before=dirty)
+    receipt, status = r5.run_gate(args)
+    assert status == 20
+    assert receipt["data_gate_verdict"] == "M3_DATA_GATE_BLOCKED"
+    assert receipt["worktree_cleanliness"]["clean_worktree_at_start"] is False
+    assert receipt["worktree_cleanliness"]["before"] == [dirty]
+
+
+def test_gate_generated_temporary_output_does_not_fail_start_cleanliness(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    args = _install_synthetic_gate(monkeypatch, tmp_path)
+    receipt, status = r5.run_gate(args)
+    assert status == 0
+    assert args.receipt_out.is_file()
+    assert receipt["worktree_cleanliness"] == {
+        "before": [],
+        "clean_worktree_at_start": True,
+        "after": [],
+        "clean_after_external_outputs": True,
+    }
+
+
+def test_complete_synthetic_r5_fixture_reaches_pass_boundary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    args = _install_synthetic_gate(monkeypatch, tmp_path)
+    receipt, status = r5.run_gate(args)
+    assert status == 0
+    assert receipt["data_gate_verdict"] == "M3_DATA_GATE_PASS"
+    assert receipt["m3_candidate_ocp_status"] == "NOT_RUN_OUT_OF_SCOPE"
+    assert receipt["economic_mission_ready"] is False
+    assert receipt["next_required_gate"] == "M3_CANDIDATE_OCP_GATE"
+
+
 def test_symbolic_head_is_rejected_for_immutable_provenance() -> None:
     sessions = r5.expected_exchange_sessions(date(2016, 1, 4), date(2026, 7, 30))
     timestamps = list(r5.expected_evaluation_timestamps(sessions))
@@ -333,6 +620,11 @@ def test_symbolic_head_is_rejected_for_immutable_provenance() -> None:
     with pytest.raises(r5.GateError, match="exact SHA"):
         r5.validate_r5_contract(validate)
     r5.validate_r5_contract(contract)
+
+    required_boundary = copy.deepcopy(contract)
+    required_boundary["evaluation_snapshot_contract"]["terminal_observation_boundary_required"] = True
+    with pytest.raises(r5.GateError, match="non-post-evaluation terminal interpretation"):
+        r5.validate_r5_contract(required_boundary)
 
 
 def test_frozen_minimum_history_comes_from_fresh_m3_strategy() -> None:

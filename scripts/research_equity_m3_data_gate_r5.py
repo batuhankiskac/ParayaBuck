@@ -83,6 +83,8 @@ R5_THIRD_IMPLEMENTATION_COMMIT = "136cb93b35e46ba356a88727aaf0c12574f4ba74"
 R5_THIRD_MANIFEST_COMMIT = "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f"
 R5_FOURTH_IMPLEMENTATION_COMMIT = "773966f3cfdb33bf584e98343dc4839c59deb224"
 R5_FOURTH_MANIFEST_COMMIT = "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1"
+R5_SIXTH_IMPLEMENTATION_COMMIT = "79ffcb178845f64f3f2cc036b9e1919cc15891e7"
+R5_SIXTH_MANIFEST_COMMIT = "5aeb2058b0027432de45d9db8fdeba20120d4d2c"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -1176,6 +1178,19 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
         }
         if contract.get("recovery_lineage") != expected_recovery:
             raise GateError("recovery_lineage_mismatch", "R5 A15/B15 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_SIXTH_MANIFEST_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A16_B16",
+            "abandoned_implementation_commit": R5_SIXTH_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_SIXTH_MANIFEST_COMMIT,
+            "reason_category": "lineage_validator_missing",
+            "reason": "B16 R5 manifest failed because A16 lacked the B15 recovery branch before replay",
+            "corrective_base_commit": R5_SIXTH_MANIFEST_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A17/B17 recovery lineage is not declared exactly")
     else:
         raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
     if contract.get("manifest_path") != R5_MANIFEST_PATH:

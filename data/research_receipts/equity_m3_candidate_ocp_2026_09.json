@@ -1,0 +1,1729 @@
+{
+  "C_control": {
+    "execution_identity": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "fallback_snapshot_count": 0,
+    "full_capacity_snapshot_count": 2384,
+    "observer_identity": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "ordered_observation_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
+    "repeat_observation_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
+    "repeat_semantic_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
+    "semantic_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
+    "snapshot_count": 2658,
+    "warmup_snapshot_count": 274
+  },
+  "C|C": {
+    "economics_not_run": true,
+    "execution_identity": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "identities_equal": true,
+    "objects_different": true,
+    "observation_basis": "same-run V3 control",
+    "observer_identity": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    }
+  },
+  "X_candidate": {
+    "execution_identity": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "fallback_snapshot_count": 0,
+    "full_capacity_snapshot_count": 2384,
+    "observer_identity": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "ordered_observation_merkle_root": "cee257f5053570c2b5957adf5b6b4b8b2c0943273790b20135a24ed5ffbe568f",
+    "repeat_observation_merkle_root": "cee257f5053570c2b5957adf5b6b4b8b2c0943273790b20135a24ed5ffbe568f",
+    "repeat_semantic_universe_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f",
+    "semantic_universe_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f",
+    "snapshot_count": 2658,
+    "warmup_snapshot_count": 274
+  },
+  "X|C": {
+    "diagnostic_only": true,
+    "economics_not_run": true,
+    "execution_identity": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "identities_intentionally_different": true,
+    "observation_basis": "same-run V3 control",
+    "observer_identity": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    }
+  },
+  "X|X": {
+    "economics_not_run": true,
+    "execution_identity": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "identities_equal": true,
+    "objects_different": true,
+    "observation_basis": "candidate-owned M3",
+    "observer_identity": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    }
+  },
+  "accepted_upstream_errata": {
+    "authoritative_value": "459cf782754bc15d137fcaa4cdd081402b837f96",
+    "field": "receipt.commits.implementation_parent",
+    "load_bearing_sources": [
+      "R5 manifest implementation_parent_commit",
+      "git parent of e22421c2486a20e883286345dbb509bbcd5d2fc9",
+      "R5 mandatory commit_topology evidence"
+    ],
+    "non_load_bearing": true,
+    "recorded_value": "e22421c2486a20e883286345dbb509bbcd5d2fc9"
+  },
+  "automatic_promotion": false,
+  "blocked_reasons": [
+    "remote_ci:NOT_RUN_BLOCKED"
+  ],
+  "candidate_economics_run": false,
+  "capacity_contract": {
+    "additional_reserved_pin_count": 3,
+    "effective_candidate_observation_capacity": 24,
+    "maximum_stream_symbols": 30,
+    "pin_order": [
+      "SPY",
+      "IWM",
+      "QQQ",
+      "SH",
+      "PSQ",
+      "DOG"
+    ],
+    "reference_pin_count": 3,
+    "total_reserved_pin_count": 6
+  },
+  "commit_topology": {
+    "manifest_identity": {
+      "commit": "4d612d9f8fc50a5d4911f2c37d74979c61af93be",
+      "git_blob_id": "0f525d6cf53f08c2d118fb209b65d9c7359396b4",
+      "path": "data/research_manifests/equity_m3_candidate_ocp_2026_09.json",
+      "raw_sha256": "66f9c4ac69488bcae8b7cf861242c4a89d47f2621f4998bcdc01e22373059fb9"
+    },
+    "run_commit": "4d612d9f8fc50a5d4911f2c37d74979c61af93be"
+  },
+  "determinism": {
+    "C_match": true,
+    "X_match": true
+  },
+  "direct_builder_parity": {
+    "mismatch_count": 0,
+    "sample_count": 9,
+    "samples": {
+      "dst_transition_boundary": {
+        "direct_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2016-03-14T04:00:00+00:00",
+        "fallback_digest_sha256": "1706d93f5264e216b6885920f501ceffb03a1cb47371bf7875e03496c5c60a0e",
+        "full_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "index": 48,
+        "match": true,
+        "observation_count": 6
+      },
+      "first_full_candidate_depth_weekly_period": {
+        "direct_observation_digest_sha256": "c6877927d3a114221823e5ffed64555f05c89e01551bbf835eb8c3d6d0d33508",
+        "effective_at": "2017-02-06T05:00:00+00:00",
+        "fallback_digest_sha256": "7bb236906dd39380d1201366fd6acdc0f57ee9d11c6f172295d6985ee6fb78a6",
+        "full_observation_digest_sha256": "c6877927d3a114221823e5ffed64555f05c89e01551bbf835eb8c3d6d0d33508",
+        "index": 275,
+        "match": true,
+        "observation_count": 30
+      },
+      "first_m3_history_ready_snapshot": {
+        "direct_observation_digest_sha256": "8c93e7a1d005745adcc484ae8ea94afb9588406e26980e45c77f8618c3c98dfa",
+        "effective_at": "2017-02-03T05:00:00+00:00",
+        "fallback_digest_sha256": "0b3eafcd1189b22f1e4957ef06ae76f17d7b054cbc153c80ddb72a482b7c1fac",
+        "full_observation_digest_sha256": "8c93e7a1d005745adcc484ae8ea94afb9588406e26980e45c77f8618c3c98dfa",
+        "index": 274,
+        "match": true,
+        "observation_count": 30
+      },
+      "first_recent_window_snapshot": {
+        "direct_observation_digest_sha256": "e2e1ffc8a51e8f8711fa6855d48388f0853b35fae5322373538c0bad1a1fce75",
+        "effective_at": "2022-01-03T05:00:00+00:00",
+        "fallback_digest_sha256": "6d80e3935ab7eee5a7b8f0806d8b247718396bd45a9c809477ec8a180c5f4d58",
+        "full_observation_digest_sha256": "e2e1ffc8a51e8f8711fa6855d48388f0853b35fae5322373538c0bad1a1fce75",
+        "index": 1511,
+        "match": true,
+        "observation_count": 30
+      },
+      "first_source_snapshot": {
+        "direct_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2016-01-04T05:00:00+00:00",
+        "fallback_digest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "full_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "index": 0,
+        "match": true,
+        "observation_count": 6
+      },
+      "full_candidate_capacity": {
+        "direct_observation_digest_sha256": "8c93e7a1d005745adcc484ae8ea94afb9588406e26980e45c77f8618c3c98dfa",
+        "effective_at": "2017-02-03T05:00:00+00:00",
+        "fallback_digest_sha256": "0b3eafcd1189b22f1e4957ef06ae76f17d7b054cbc153c80ddb72a482b7c1fac",
+        "full_observation_digest_sha256": "8c93e7a1d005745adcc484ae8ea94afb9588406e26980e45c77f8618c3c98dfa",
+        "index": 274,
+        "match": true,
+        "observation_count": 30
+      },
+      "last_pre_m3_history_warm_snapshot": {
+        "direct_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2017-02-02T05:00:00+00:00",
+        "fallback_digest_sha256": "3b86ecd1e0da0948378fcaf13d0dc7d3b6c855a51c697b70ea4c09ff7815a5e1",
+        "full_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "index": 273,
+        "match": true,
+        "observation_count": 6
+      },
+      "scanner_fallback_use": {
+        "direct_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2016-01-04T05:00:00+00:00",
+        "fallback_digest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "full_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "index": 0,
+        "match": true,
+        "observation_count": 6
+      },
+      "terminal_evaluation_snapshot": {
+        "direct_observation_digest_sha256": "9ff680f682613324cbf40c4d52801dd439ae3966b7fe94196e9364d04bcf298c",
+        "effective_at": "2026-07-30T04:00:00+00:00",
+        "fallback_digest_sha256": "4a22f3f406f7958b2703aaa28175215bb304485fa75f93fe2ad79be6bd74a1f8",
+        "full_observation_digest_sha256": "9ff680f682613324cbf40c4d52801dd439ae3966b7fe94196e9364d04bcf298c",
+        "index": 2657,
+        "match": true,
+        "observation_count": 30
+      }
+    }
+  },
+  "economic_metrics_present": false,
+  "economic_mission_authorized": false,
+  "forbidden_economic_fields": [
+    "cagr",
+    "calmar",
+    "candidate_scores",
+    "economic_candidate_ranking",
+    "economic_candidate_scores",
+    "economic_scores",
+    "fill_count",
+    "gross_return",
+    "max_drawdown",
+    "net_return",
+    "pnl",
+    "portfolio_targets",
+    "ranked_scores",
+    "raw_scores",
+    "return",
+    "score",
+    "scores",
+    "sharpe",
+    "sortino",
+    "trade_count",
+    "turnover"
+  ],
+  "future_bar_tests": {
+    "checks": {
+      "dst_transition_boundary": {
+        "baseline_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2016-03-14T04:00:00+00:00",
+        "match": true,
+        "mutated_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea"
+      },
+      "first_recent_window_snapshot": {
+        "baseline_observation_digest_sha256": "e2e1ffc8a51e8f8711fa6855d48388f0853b35fae5322373538c0bad1a1fce75",
+        "effective_at": "2022-01-03T05:00:00+00:00",
+        "match": true,
+        "mutated_observation_digest_sha256": "e2e1ffc8a51e8f8711fa6855d48388f0853b35fae5322373538c0bad1a1fce75"
+      },
+      "first_source_snapshot": {
+        "baseline_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea",
+        "effective_at": "2016-01-04T05:00:00+00:00",
+        "match": true,
+        "mutated_observation_digest_sha256": "61c43cb981442ae7e6ad7c002622f1ebded4e81c598bdc4aae554c3f5b280fea"
+      },
+      "terminal_evaluation_snapshot": {
+        "baseline_observation_digest_sha256": "9ff680f682613324cbf40c4d52801dd439ae3966b7fe94196e9364d04bcf298c",
+        "effective_at": "2026-07-30T04:00:00+00:00",
+        "match": true,
+        "mutated_observation_digest_sha256": "9ff680f682613324cbf40c4d52801dd439ae3966b7fe94196e9364d04bcf298c"
+      }
+    },
+    "failure_count": 0,
+    "sample_count": 4
+  },
+  "human_promotion_only": true,
+  "implementation_identity": {
+    "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+    "critical_git_blobs": {
+      ".github/workflows/ci.yml": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "0fe30bb95d6661e764bb755f1adbd283255dbcd0",
+        "path": ".github/workflows/ci.yml",
+        "raw_sha256": "8b90b9a57705dbc1d9a96dd57d72cf8f82a41af108b354d10be7765892c13fd9"
+      },
+      "scripts/compact_equity_m3_candidate_ocp_receipt.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "848fb9639b0185a27b34a232cc40322bb325751a",
+        "path": "scripts/compact_equity_m3_candidate_ocp_receipt.py",
+        "raw_sha256": "7843b1471eda346af65d6e29e547c9bb4d30b0ac70b1bda7d3d2361d18cdc858"
+      },
+      "scripts/research_equity_m3_candidate_ocp.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "239ea53d17ad64853ef6caded4b5cc86ee06b93d",
+        "path": "scripts/research_equity_m3_candidate_ocp.py",
+        "raw_sha256": "9f625e42e87dc979c2298fdb18a636766259dc9456b8229e3decaf6fc1da994b"
+      },
+      "scripts/research_equity_m3_m4.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "e7212acec4fed61413fdd7c231001a65f3d4a554",
+        "path": "scripts/research_equity_m3_m4.py",
+        "raw_sha256": "543e9858e87ba0b312e2b9d522e7e8d669fad64fcd2d57079c811139be0355f9"
+      },
+      "src/parayabuck/backtest/observation_parity.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "54a1825875ebeb0fc29f56b51bd91bf00eb30ea2",
+        "path": "src/parayabuck/backtest/observation_parity.py",
+        "raw_sha256": "b2bed6eb9dfe539b846f227627f4583c67702574d246c569b435b410913db287"
+      },
+      "src/parayabuck/backtest/universe.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
+        "path": "src/parayabuck/backtest/universe.py",
+        "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
+      },
+      "src/parayabuck/universe/observation_set.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "7c8c537df2b9cf9032d60230a988472b687d1dc3",
+        "path": "src/parayabuck/universe/observation_set.py",
+        "raw_sha256": "157439ec02346ab2bfa7daf1a7b4f48b1e8d717fae8de6643c7266e5e1db466d"
+      },
+      "tests/fixtures/equity_m3_candidate_ocp/README.md": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "d51173015fbf049f8f6ecf5c6278bc71f3008981",
+        "path": "tests/fixtures/equity_m3_candidate_ocp/README.md",
+        "raw_sha256": "5ab1e291bbd13496f17da4a11cb5ef5c68cf1380eccb6951f0118c66247ac376"
+      },
+      "tests/test_research_equity_m3_candidate_ocp.py": {
+        "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "git_blob_id": "073af87ae0fd03c2b81b60d5baca1c6fe4fd9925",
+        "path": "tests/test_research_equity_m3_candidate_ocp.py",
+        "raw_sha256": "2beb238d17bc18af9de7be241b4ba6adc8760b238760fdfb9910cded3365dad8"
+      }
+    },
+    "parent": "f15ba8ffa2c752ba184cbc6eb655792d5387ee54",
+    "tree": "e2d547d876cfb0d7c2b84fce16a6bf77ad7fd9c6"
+  },
+  "input_artifacts": {
+    "canonical": {
+      "byte_size": 882354549,
+      "crlf_normalized_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "canonical_manifest": {
+      "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+      "git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+      "raw_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f"
+    },
+    "composite": {
+      "path": "data/research_manifests/equity_m3_composite_dataset_2026_09_r4.json",
+      "semantic_sha256": "5bb66b7ff15d1f9ef3e9ce7caa4ef2314fcc670cf80b9696ee576e1b9cac4eda"
+    },
+    "corporate_actions": {
+      "byte_size": 14713370,
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "iwm_bundle": {
+      "aggregate_page_hash_digest": "39a87290b4ebafbba3c29663f5577c05c7548252e6699e5f39589849211c93eb",
+      "normalized_row_count": 2658,
+      "page_chain_digest_sha256": "a5b5e400bb97aff3f6342bbe0b969f5d0ae5600406d5cd186ec62e0360480e1b",
+      "path": "data/research/external/m3_iwm_raw_2026_09_r4",
+      "raw_bundle_sha256": "9590e35d2f5b80a4cd7f5c2c755acfcc088a6f7696d6eb86039d702ee6832258",
+      "source_receipt_sha256": "2dbeeebc688dab111013a114e9c08b44c116e23c48a42968099f6c8671ea4003"
+    },
+    "lifetimes": {
+      "byte_size": 2329186,
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "r4_source_pit": {
+      "byte_size": 24774560,
+      "path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
+      "raw_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae"
+    },
+    "r5_pit_manifest": {
+      "commit": "3c2f67d31772f2fba118137ad262bd8ffdb737d8",
+      "git_blob_id": "1290869c1d665254eb1981d648c2ef6d44edc9e5",
+      "path": "data/research_manifests/equity_m3_pit_population_2026_09_r5.json",
+      "raw_sha256": "2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4"
+    },
+    "r5_projection": {
+      "byte_size": 25518170,
+      "candidate_decision_eligibility_digest_sha256": "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32",
+      "candidate_universe_digest_sha256": "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e",
+      "matrix_merkle_root": "99187e5e0d94348b87e6c89aae3612d4bbd40e3795e6844289daf740d18073d9",
+      "path": "/tmp/m3-r5-b18-pit.json",
+      "projection_digest_sha256": "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240",
+      "raw_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac",
+      "regenerated": false
+    },
+    "raw_outputs": {
+      "candidate": {
+        "byte_size": 28724256,
+        "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe.json",
+        "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+        "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+      },
+      "candidate_repeat": {
+        "byte_size": 28724256,
+        "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe_repeat.json",
+        "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+        "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+      },
+      "comparison": {
+        "byte_size": 2131,
+        "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/comparison.json",
+        "raw_sha256": "5ab07714ac62c1166a88c93d859281bef2271f85ddee6aeb7c2d7377884db1ff",
+        "semantic_digest_sha256": "4d1327008083bfc79d94027e9561222fd29bbc88bfc1fb341d85ecd6dc23faaf"
+      },
+      "control": {
+        "byte_size": 28677005,
+        "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/control_universe.json",
+        "raw_sha256": "2bdedc4f495960bac839c98e5fdd54c12d7935c8070684645619361cf7131509",
+        "semantic_digest_sha256": "0af255b3bed22aa7f754e3e90accea6253dc6d453331168ab7bd0a67f7c29c77"
+      },
+      "snapshot_digests": {
+        "byte_size": 382781,
+        "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/snapshot_digests.json",
+        "raw_sha256": "d6b270792bab01471354c346df3638a3da6d7dae3f37bc7043a6d21e273f0025",
+        "semantic_digest_sha256": "010db5d34005231479213f7cf06f7f4e28f42a3dd2ccd36ffd6eac17718122cb"
+      }
+    },
+    "sidecar": {
+      "path": "data/research/generated/m3_data_gate_r4/iwm_normalized.csv",
+      "raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2",
+      "semantic_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837"
+    }
+  },
+  "mandatory_gate_results": {
+    "C_X_boundary_contract": {
+      "evidence": {
+        "C|C": {
+          "economics_not_run": true,
+          "identities_equal": true
+        },
+        "X|C": {
+          "diagnostic_only": true,
+          "identities_intentionally_different": true
+        },
+        "X|X": {
+          "economics_not_run": true,
+          "identities_equal": true,
+          "objects_different": true
+        }
+      },
+      "status": "PASS"
+    },
+    "C_control_repeat_determinism": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "C_control_self_parity": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "C_control_strategy_identity": {
+      "evidence": {
+        "market": "equity",
+        "name": "equity_residual_momentum_v3",
+        "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+        "parameters": [
+          [
+            "beta_window_bars",
+            273
+          ],
+          [
+            "exclude_symbols",
+            [
+              "SPY"
+            ]
+          ],
+          [
+            "formation_bars",
+            252
+          ],
+          [
+            "ivol_reject_quantile",
+            0.7
+          ],
+          [
+            "max_single_weight",
+            0.1
+          ],
+          [
+            "rebalance_frequency",
+            "weekly"
+          ],
+          [
+            "residual_vol_window",
+            63
+          ],
+          [
+            "skip_bars",
+            21
+          ],
+          [
+            "top_n",
+            8
+          ]
+        ],
+        "timeframe": "1d",
+        "version": "3.0.0"
+      },
+      "status": "PASS"
+    },
+    "X_candidate_owned_basis": {
+      "evidence": {
+        "semantic_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f"
+      },
+      "status": "PASS"
+    },
+    "X_candidate_strategy_identity": {
+      "evidence": {
+        "market": "equity",
+        "name": "equity_proxy_multifactor_residual_momentum_v1",
+        "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+        "parameters": [
+          [
+            "beta_window_bars",
+            273
+          ],
+          [
+            "exclude_symbols",
+            [
+              "SPY"
+            ]
+          ],
+          [
+            "formation_bars",
+            252
+          ],
+          [
+            "ivol_reject_quantile",
+            0.7
+          ],
+          [
+            "max_single_weight",
+            0.1
+          ],
+          [
+            "rebalance_frequency",
+            "weekly"
+          ],
+          [
+            "residual_vol_window",
+            63
+          ],
+          [
+            "skip_bars",
+            21
+          ],
+          [
+            "top_n",
+            8
+          ]
+        ],
+        "timeframe": "1d",
+        "version": "1.0.0"
+      },
+      "status": "PASS"
+    },
+    "X_direct_builder_parity": {
+      "evidence": {
+        "mismatch_count": 0
+      },
+      "status": "PASS"
+    },
+    "X_fresh_instance_separation": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "X_observer_execution_identity": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "X_repeat_determinism": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "X_vs_C_nonzero_observation_change": {
+      "evidence": {
+        "jaccard_count": 2658,
+        "jaccard_mean": 0.6991547456906374,
+        "jaccard_min": 0.25,
+        "jaccard_p50": 0.7142857142857143,
+        "jaccard_p95": 1.0,
+        "membership_change_count": 2381,
+        "sequence_change_count": 2384
+      },
+      "status": "PASS"
+    },
+    "X_vs_C_scanner_metadata_parity": {
+      "evidence": {
+        "candidate_count": 0,
+        "configured_pins": 0,
+        "eligible_symbols": 0,
+        "eliminated_map": 0,
+        "market": 0,
+        "maximum_stream_capacity": 0,
+        "methodology": 0,
+        "scanner_config_digest": 0,
+        "scanner_version": 0,
+        "score_breakdown": 0,
+        "sector_metadata_coverage": 0,
+        "snapshot_boundaries": 0
+      },
+      "status": "PASS"
+    },
+    "clean_worktree_at_start": {
+      "evidence": [],
+      "status": "PASS"
+    },
+    "commit_topology": {
+      "evidence": {
+        "implementation_commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+        "implementation_parent": "8fca202e19cae605caeaeddcba9ae98d7824a570",
+        "run_commit": "4d612d9f8fc50a5d4911f2c37d74979c61af93be"
+      },
+      "status": "PASS"
+    },
+    "compact_receipt_integrity": {
+      "evidence": {
+        "compactor": "scripts/compact_equity_m3_candidate_ocp_receipt.py"
+      },
+      "status": "PASS"
+    },
+    "exact_snapshot_alignment": {
+      "evidence": {
+        "count": 2658
+      },
+      "status": "PASS"
+    },
+    "forbidden_economic_fields": {
+      "evidence": [],
+      "status": "PASS"
+    },
+    "implementation_blob_identity": {
+      "evidence": {
+        ".github/workflows/ci.yml": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "0fe30bb95d6661e764bb755f1adbd283255dbcd0",
+          "path": ".github/workflows/ci.yml",
+          "raw_sha256": "8b90b9a57705dbc1d9a96dd57d72cf8f82a41af108b354d10be7765892c13fd9"
+        },
+        "scripts/compact_equity_m3_candidate_ocp_receipt.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "848fb9639b0185a27b34a232cc40322bb325751a",
+          "path": "scripts/compact_equity_m3_candidate_ocp_receipt.py",
+          "raw_sha256": "7843b1471eda346af65d6e29e547c9bb4d30b0ac70b1bda7d3d2361d18cdc858"
+        },
+        "scripts/research_equity_m3_candidate_ocp.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "239ea53d17ad64853ef6caded4b5cc86ee06b93d",
+          "path": "scripts/research_equity_m3_candidate_ocp.py",
+          "raw_sha256": "9f625e42e87dc979c2298fdb18a636766259dc9456b8229e3decaf6fc1da994b"
+        },
+        "scripts/research_equity_m3_m4.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "e7212acec4fed61413fdd7c231001a65f3d4a554",
+          "path": "scripts/research_equity_m3_m4.py",
+          "raw_sha256": "543e9858e87ba0b312e2b9d522e7e8d669fad64fcd2d57079c811139be0355f9"
+        },
+        "src/parayabuck/backtest/observation_parity.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "54a1825875ebeb0fc29f56b51bd91bf00eb30ea2",
+          "path": "src/parayabuck/backtest/observation_parity.py",
+          "raw_sha256": "b2bed6eb9dfe539b846f227627f4583c67702574d246c569b435b410913db287"
+        },
+        "src/parayabuck/backtest/universe.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
+          "path": "src/parayabuck/backtest/universe.py",
+          "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
+        },
+        "src/parayabuck/universe/observation_set.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "7c8c537df2b9cf9032d60230a988472b687d1dc3",
+          "path": "src/parayabuck/universe/observation_set.py",
+          "raw_sha256": "157439ec02346ab2bfa7daf1a7b4f48b1e8d717fae8de6643c7266e5e1db466d"
+        },
+        "tests/fixtures/equity_m3_candidate_ocp/README.md": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "d51173015fbf049f8f6ecf5c6278bc71f3008981",
+          "path": "tests/fixtures/equity_m3_candidate_ocp/README.md",
+          "raw_sha256": "5ab1e291bbd13496f17da4a11cb5ef5c68cf1380eccb6951f0118c66247ac376"
+        },
+        "tests/test_research_equity_m3_candidate_ocp.py": {
+          "commit": "cae97cf9e059c5c03d79469b29e84d47533119d6",
+          "git_blob_id": "073af87ae0fd03c2b81b60d5baca1c6fe4fd9925",
+          "path": "tests/test_research_equity_m3_candidate_ocp.py",
+          "raw_sha256": "2beb238d17bc18af9de7be241b4ba6adc8760b238760fdfb9910cded3365dad8"
+        }
+      },
+      "status": "PASS"
+    },
+    "manifest_only_commit": {
+      "evidence": [
+        "data/research_manifests/equity_m3_candidate_ocp_2026_09.json"
+      ],
+      "status": "PASS"
+    },
+    "no_duplicate_observation": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "no_economic_execution": {
+      "evidence": {
+        "candidate_economics_run": false,
+        "engine_calls": 0
+      },
+      "status": "PASS"
+    },
+    "no_future_bar_leak": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "no_network_or_credentials": {
+      "evidence": {
+        "credential_access": false,
+        "network_calls": 0
+      },
+      "status": "PASS"
+    },
+    "no_outside_pool_observation": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "no_stale_observation": {
+      "evidence": true,
+      "status": "PASS"
+    },
+    "observation_capacity": {
+      "evidence": {
+        "candidate_capacity": 24,
+        "maximum": 30,
+        "reserved": 6
+      },
+      "status": "PASS"
+    },
+    "production_isolation": {
+      "evidence": {
+        "record": "/tmp/m3-ocp-isolation-905j_bjp.json",
+        "verified": true
+      },
+      "status": "PASS"
+    },
+    "r4_composite_identity": {
+      "evidence": {
+        "semantic_digest_sha256": "5bb66b7ff15d1f9ef3e9ce7caa4ef2314fcc670cf80b9696ee576e1b9cac4eda"
+      },
+      "status": "PASS"
+    },
+    "r4_raw_bundle_identity": {
+      "evidence": {
+        "raw_bundle_sha256": "9590e35d2f5b80a4cd7f5c2c755acfcc088a6f7696d6eb86039d702ee6832258"
+      },
+      "status": "PASS"
+    },
+    "r4_sidecar_identity": {
+      "evidence": {
+        "byte_size": 209664,
+        "path": "data/research/generated/m3_data_gate_r4/iwm_normalized.csv",
+        "raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2"
+      },
+      "status": "PASS"
+    },
+    "r5_all_mandatory_gates": {
+      "evidence": "all accepted R5 gates PASS",
+      "status": "PASS"
+    },
+    "r5_data_gate_receipt_identity": {
+      "evidence": {
+        "commit": "3c2f67d31772f2fba118137ad262bd8ffdb737d8",
+        "git_blob_id": "7096ce9bccd99edda2e1e8d7d150d4fffb578070",
+        "path": "data/research_receipts/equity_m3_data_gate_2026_09_r5.json",
+        "raw_sha256": "841d5640352ee01c5d284b66a4fb186d6e8f62d5cdb8dadfbe185e2330b2aa36"
+      },
+      "status": "PASS"
+    },
+    "r5_data_gate_verdict": {
+      "evidence": {
+        "data_gate_verdict": "M3_DATA_GATE_PASS"
+      },
+      "status": "PASS"
+    },
+    "r5_projection_identity": {
+      "evidence": {
+        "byte_size": 25518170,
+        "candidate_decision_eligibility_digest_sha256": "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32",
+        "candidate_universe_digest_sha256": "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e",
+        "matrix_merkle_root": "99187e5e0d94348b87e6c89aae3612d4bbd40e3795e6844289daf740d18073d9",
+        "path": "/tmp/m3-r5-b18-pit.json",
+        "projection_digest_sha256": "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240",
+        "raw_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac"
+      },
+      "status": "PASS"
+    },
+    "r5_upstream_erratum_acknowledged": {
+      "evidence": {
+        "authoritative_value": "459cf782754bc15d137fcaa4cdd081402b837f96",
+        "field": "receipt.commits.implementation_parent",
+        "load_bearing_sources": [
+          "R5 manifest implementation_parent_commit",
+          "git parent of e22421c2486a20e883286345dbb509bbcd5d2fc9",
+          "R5 mandatory commit_topology evidence"
+        ],
+        "non_load_bearing": true,
+        "recorded_value": "e22421c2486a20e883286345dbb509bbcd5d2fc9"
+      },
+      "status": "PASS"
+    },
+    "raw_artifact_identity": {
+      "evidence": {
+        "candidate": {
+          "byte_size": 28724256,
+          "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe.json",
+          "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+          "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+        },
+        "candidate_repeat": {
+          "byte_size": 28724256,
+          "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe_repeat.json",
+          "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+          "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+        },
+        "comparison": {
+          "byte_size": 2131,
+          "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/comparison.json",
+          "raw_sha256": "5ab07714ac62c1166a88c93d859281bef2271f85ddee6aeb7c2d7377884db1ff",
+          "semantic_digest_sha256": "4d1327008083bfc79d94027e9561222fd29bbc88bfc1fb341d85ecd6dc23faaf"
+        },
+        "control": {
+          "byte_size": 28677005,
+          "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/control_universe.json",
+          "raw_sha256": "2bdedc4f495960bac839c98e5fdd54c12d7935c8070684645619361cf7131509",
+          "semantic_digest_sha256": "0af255b3bed22aa7f754e3e90accea6253dc6d453331168ab7bd0a67f7c29c77"
+        },
+        "snapshot_digests": {
+          "byte_size": 382781,
+          "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/snapshot_digests.json",
+          "raw_sha256": "d6b270792bab01471354c346df3638a3da6d7dae3f37bc7043a6d21e273f0025",
+          "semantic_digest_sha256": "010db5d34005231479213f7cf06f7f4e28f42a3dd2ccd36ffd6eac17718122cb"
+        }
+      },
+      "status": "PASS"
+    },
+    "reference_pin_order": {
+      "evidence": [
+        "SPY",
+        "IWM",
+        "QQQ",
+        "SH",
+        "PSQ",
+        "DOG"
+      ],
+      "status": "PASS"
+    },
+    "reference_role_contract": {
+      "evidence": {
+        "candidate_membership_intersection": [],
+        "references": [
+          "SPY",
+          "IWM",
+          "QQQ"
+        ]
+      },
+      "status": "PASS"
+    },
+    "scanner_fallback_identity": {
+      "evidence": {
+        "reconstructed": true,
+        "source": "exact composite bars"
+      },
+      "status": "PASS"
+    },
+    "scanner_identity": {
+      "evidence": {
+        "cadence": "daily",
+        "config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+        "version": "equity-scanner-v3"
+      },
+      "status": "PASS"
+    },
+    "scanner_pool_identity": {
+      "evidence": {
+        "candidate_eligibility_digest": "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32",
+        "candidate_universe_digest": "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e"
+      },
+      "status": "PASS"
+    },
+    "strictly_prior_history": {
+      "evidence": true,
+      "status": "PASS"
+    }
+  },
+  "manifest_identity": {
+    "commit": "4d612d9f8fc50a5d4911f2c37d74979c61af93be",
+    "git_blob_id": "0f525d6cf53f08c2d118fb209b65d9c7359396b4",
+    "path": "data/research_manifests/equity_m3_candidate_ocp_2026_09.json",
+    "raw_sha256": "66f9c4ac69488bcae8b7cf861242c4a89d47f2621f4998bcdc01e22373059fb9"
+  },
+  "mission": "M3_CANDIDATE_OCP_GATE",
+  "next_required_mission": "M3_CANDIDATE_OCP_GATE_REMOTE_CLOSURE",
+  "observation_change_summary": {
+    "C_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
+    "C_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
+    "X_merkle_root": "cee257f5053570c2b5957adf5b6b4b8b2c0943273790b20135a24ed5ffbe568f",
+    "X_universe_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f",
+    "jaccard_summary": {
+      "jaccard_mean": 0.6991547456906374,
+      "jaccard_min": 0.25,
+      "jaccard_p50": 0.7142857142857143,
+      "jaccard_p95": 1.0
+    },
+    "membership_change_count": 2381,
+    "scanner_metadata_mismatch_counts": {
+      "candidate_count": 0,
+      "configured_pins": 0,
+      "eligible_symbols": 0,
+      "eliminated_map": 0,
+      "market": 0,
+      "maximum_stream_capacity": 0,
+      "methodology": 0,
+      "scanner_config_digest": 0,
+      "scanner_version": 0,
+      "score_breakdown": 0,
+      "sector_metadata_coverage": 0,
+      "snapshot_boundaries": 0
+    },
+    "sequence_change_count": 2384
+  },
+  "raw_artifact_hashes": {
+    "candidate": {
+      "byte_size": 28724256,
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe.json",
+      "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+      "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+    },
+    "candidate_repeat": {
+      "byte_size": 28724256,
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/m3_universe_repeat.json",
+      "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2",
+      "semantic_digest_sha256": "acd4b67f06b049565501caa92af9f7cb0b6eb8b01d3e1c4733149816999aa375"
+    },
+    "comparison": {
+      "byte_size": 2131,
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/comparison.json",
+      "raw_sha256": "5ab07714ac62c1166a88c93d859281bef2271f85ddee6aeb7c2d7377884db1ff",
+      "semantic_digest_sha256": "4d1327008083bfc79d94027e9561222fd29bbc88bfc1fb341d85ecd6dc23faaf"
+    },
+    "control": {
+      "byte_size": 28677005,
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/control_universe.json",
+      "raw_sha256": "2bdedc4f495960bac839c98e5fdd54c12d7935c8070684645619361cf7131509",
+      "semantic_digest_sha256": "0af255b3bed22aa7f754e3e90accea6253dc6d453331168ab7bd0a67f7c29c77"
+    },
+    "snapshot_digests": {
+      "byte_size": 382781,
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09/snapshot_digests.json",
+      "raw_sha256": "d6b270792bab01471354c346df3638a3da6d7dae3f37bc7043a6d21e273f0025",
+      "semantic_digest_sha256": "010db5d34005231479213f7cf06f7f4e28f42a3dd2ccd36ffd6eac17718122cb"
+    }
+  },
+  "reference_contract": {
+    "candidate_membership_intersection": [],
+    "observation_only": true,
+    "reference_symbols": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ]
+  },
+  "remote_ci": {
+    "run_id": null,
+    "status": "NOT_RUN_BLOCKED"
+  },
+  "research_only": true,
+  "scanner_basis": {
+    "candidate_decision_eligibility_digest": "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32",
+    "candidate_pool_digest": "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e",
+    "config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+    "fallback_reconstructed": true,
+    "scanner": "EquityUniverseScanner",
+    "version": "equity-scanner-v3"
+  },
+  "schema_version": "1.0.0",
+  "self_digest_sha256": "e144ffed778d887ecf414ad02073affc2078aae8bd763e9cca9c430c23edb153",
+  "snapshot_coverage": {
+    "count": 2658,
+    "first": "2016-01-04T05:00:00+00:00",
+    "last": "2026-07-30T04:00:00+00:00"
+  },
+  "strategy_identities": {
+    "C_execution": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "C_observer_1": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "C_observer_2": {
+      "market": "equity",
+      "name": "equity_residual_momentum_v3",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "3.0.0"
+    },
+    "X_execution": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "X_observer_1": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "X_observer_2": {
+      "market": "equity",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "parameters": [
+        [
+          "beta_window_bars",
+          273
+        ],
+        [
+          "exclude_symbols",
+          [
+            "SPY"
+          ]
+        ],
+        [
+          "formation_bars",
+          252
+        ],
+        [
+          "ivol_reject_quantile",
+          0.7
+        ],
+        [
+          "max_single_weight",
+          0.1
+        ],
+        [
+          "rebalance_frequency",
+          "weekly"
+        ],
+        [
+          "residual_vol_window",
+          63
+        ],
+        [
+          "skip_bars",
+          21
+        ],
+        [
+          "top_n",
+          8
+        ]
+      ],
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "object_instance_separation": {
+      "C_observer_1_is_C_execution": false,
+      "C_observer_1_is_C_observer_2": false,
+      "X_observer_1_is_X_execution": false,
+      "X_observer_1_is_X_observer_2": false
+    }
+  },
+  "upstream_r5": {
+    "data_gate_status": "M3_DATA_GATE_PASS",
+    "implementation_commit": "e22421c2486a20e883286345dbb509bbcd5d2fc9",
+    "implementation_parent_commit": "459cf782754bc15d137fcaa4cdd081402b837f96",
+    "manifest_identity": {
+      "commit": "2f6ce2aaf347b9e0257d4ae31e9fdcc90cdcafe4",
+      "git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d",
+      "path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
+      "raw_sha256": "83a2b7b796939423eff9c3c0a2d16000594cbbbed26e9de2df61206c5ecdb51e"
+    },
+    "matrix_merkle_root": "99187e5e0d94348b87e6c89aae3612d4bbd40e3795e6844289daf740d18073d9",
+    "projection_digest_sha256": "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240",
+    "projection_path": "/tmp/m3-r5-b18-pit.json",
+    "projection_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac",
+    "receipt_identity": {
+      "commit": "3c2f67d31772f2fba118137ad262bd8ffdb737d8",
+      "git_blob_id": "7096ce9bccd99edda2e1e8d7d150d4fffb578070",
+      "path": "data/research_receipts/equity_m3_data_gate_2026_09_r5.json",
+      "raw_sha256": "841d5640352ee01c5d284b66a4fb186d6e8f62d5cdb8dadfbe185e2330b2aa36"
+    },
+    "receipt_self_digest_sha256": "41afb58aca2fb38f4f0d301fc169938809b1cb9afcfa5c9855d97e292916abeb"
+  },
+  "verdict": "M3_CANDIDATE_OCP_GATE_BLOCKED"
+}

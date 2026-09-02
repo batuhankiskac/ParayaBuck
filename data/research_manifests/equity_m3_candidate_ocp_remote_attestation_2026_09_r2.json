@@ -7,8 +7,8 @@
       "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
       "scripts/research_equity_m3_m4.py"
     ],
-    "implementation_commit": "039591492d823997b48651986e2f9690e02087d7",
-    "implementation_parent": "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2",
+    "implementation_commit": "6e8067dfa816d2de138004babf5d5f47ab327642",
+    "implementation_parent": "863dc020197ce895004063c0e26de52295e54643",
     "manifest_changed_paths": [
       "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json"
     ],
@@ -22,19 +22,19 @@
   },
   "critical_git_blobs": {
     ".github/workflows/ci.yml": {
-      "commit": "039591492d823997b48651986e2f9690e02087d7",
+      "commit": "6e8067dfa816d2de138004babf5d5f47ab327642",
       "git_blob_id": "1e55f29ae1797513121039e8e19c18ac8fedfaf5",
       "path": ".github/workflows/ci.yml",
       "raw_sha256": "b7ae8ea1651dceae3f016d24ed24d2634c38d837f7e01ac5e98a622b6b436992"
     },
     "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py": {
-      "commit": "039591492d823997b48651986e2f9690e02087d7",
-      "git_blob_id": "d31ecaf27dd20e29c8ee71a20a7b07410ab018a7",
+      "commit": "6e8067dfa816d2de138004babf5d5f47ab327642",
+      "git_blob_id": "8dc012dce2bdf708dd731a3fd0d2ba1e66ccc7bc",
       "path": "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
-      "raw_sha256": "e78bf0ab243eeccd5169da24c4caa6455a5c3efe7f634a982ffd62ae49c086f2"
+      "raw_sha256": "38c1d230f4d19595d409f61c8f1580a5c4df8fa5d6541deeb5c8522ad9f8b281"
     },
     "scripts/research_equity_m3_m4.py": {
-      "commit": "039591492d823997b48651986e2f9690e02087d7",
+      "commit": "6e8067dfa816d2de138004babf5d5f47ab327642",
       "git_blob_id": "b796e2ce37d496d839eeb2a3fd27b4efffdcb08f",
       "path": "scripts/research_equity_m3_m4.py",
       "raw_sha256": "dc012e79903a6ccb7e1d7603dea7944216c5ce366c65c1a4a3a3b161e2e5c839"

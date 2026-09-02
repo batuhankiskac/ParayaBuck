@@ -25,7 +25,8 @@ The append-only chain is:
 ` -> A8 c7729bb7aadca8b3cd8bf91dac5eb8895395c987`
 ` -> B8 b8ca990a641f38f43a9b272be598d725c27e53a1`
 ` -> A9 b0d8ef807dfcfb0a96bac9cf7d60c94f768f587c`
-` -> B9 b86ff7f5c75258ccabac98c2a1bcf4e4a1513384`.
+` -> B9 b86ff7f5c75258ccabac98c2a1bcf4e4a1513384`
+` -> C6 4f1ddd970207406f4a70d278651796bccd5b8f7a`.
 
 D5 is documentation-only and records C5 plus successful GitHub Actions run
 `33605283021`. B6, B7, B8, and B9 are manifest-only commits. Each recovery
@@ -117,6 +118,9 @@ receipt, composite manifest, compact PIT manifest, and this report. Raw JSON
 pages, credentials, normalized sidecar, and full PIT JSON are ignored and not
 tracked.
 
-Remote CI status at C6 creation: `NOT_YET_OBSERVED`.
+Remote CI for C6 completed successfully in GitHub Actions run
+`33615339965`. The required matrix jobs all passed: Python `3.12` (`quality
+(3.12)`), Python `3.13` (`quality (3.13)`), and Python `3.14` (`quality
+(3.14)`).
 
 FINAL VERDICT: M3_DATA_GATE_BLOCKED

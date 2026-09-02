@@ -1,8 +1,6 @@
 {
   "automatic_promotion": false,
-  "blocked_reasons": [
-    "corrective_remote_ci:NOT_RUN_BLOCKED"
-  ],
+  "blocked_reasons": [],
   "candidate_economics_run": false,
   "corrective_closure": {
     "critical_git_blobs": {
@@ -26,7 +24,7 @@
       }
     },
     "implementation_commit": "6e8067dfa816d2de138004babf5d5f47ab327642",
-    "local_result_commit": null,
+    "local_result_commit": "154ffd6925327ea6283903f3f1c1098992efef3e",
     "manifest_changed_paths": [
       "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json"
     ],
@@ -36,11 +34,33 @@
       "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json",
       "docs/equity_m3_candidate_ocp_2026_09_r2.md"
     ],
-    "result_parent": null,
+    "result_parent": "4ebb5fa2353eba437f94b48fc5b00a6cfe0cd902",
     "result_receipt_path": "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json"
   },
   "corrective_remote_ci": {
-    "status": "NOT_RUN_BLOCKED"
+    "conclusion": "success",
+    "head_sha": "154ffd6925327ea6283903f3f1c1098992efef3e",
+    "python_matrix": {
+      "3.12": "PASS",
+      "3.13": "PASS",
+      "3.14": "PASS"
+    },
+    "required_stages": {
+      "build": "PASS",
+      "dependency_audit": "PASS",
+      "focused_acquisition_pit_tests": "PASS",
+      "focused_m3_data_gate_tests": "PASS",
+      "focused_ocp_tests": "PASS",
+      "full_pytest": "PASS",
+      "mypy": "PASS",
+      "production_isolation": "PASS",
+      "ruff_format": "PASS",
+      "ruff_lint": "PASS",
+      "secret_scan": "PASS",
+      "wheel_smoke": "PASS"
+    },
+    "run_id": "33678608824",
+    "status": "PASS"
   },
   "economic_metrics_present": false,
   "economic_mission_authorized": false,
@@ -103,7 +123,7 @@
       "status": "PASS"
     },
     "corrective_ci_head_binding": {
-      "status": "NOT_RUN_BLOCKED"
+      "status": "PASS"
     },
     "corrective_implementation_identity": {
       "status": "PASS"
@@ -112,10 +132,10 @@
       "status": "PASS"
     },
     "corrective_result_topology": {
-      "status": "NOT_RUN_BLOCKED"
+      "status": "PASS"
     },
     "critical_blob_identity": {
-      "status": "NOT_RUN_BLOCKED"
+      "status": "PASS"
     },
     "defect_reproduction": {
       "status": "PASS"
@@ -152,10 +172,10 @@
     }
   },
   "mission": "M3_CANDIDATE_OCP_ATTESTATION_R2",
-  "next_required_mission": "M3_CANDIDATE_OCP_ATTESTATION_R2_REMOTE_CLOSURE",
+  "next_required_mission": "M3_ECONOMIC_MISSION_PREDECLARATION",
   "research_only": true,
   "schema_version": "2.0.0",
-  "self_digest_sha256": "2d23bfecf0358df26c6f265cb734586e0204e358fa372b06782ff2fb515da7f2",
+  "self_digest_sha256": "8a576e650060c27e7f4a0c6f0fd8a532bc2509df26fd58c0587656ad47f766b6",
   "substantive_hash_parity": {
     "C_ordered_observation_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
     "C_semantic_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
@@ -707,5 +727,5 @@
     "report_path": "docs/equity_m3_candidate_ocp_2026_09.md",
     "status": "SUPERSEDED_INVALID_REMOTE_ATTESTATION_BINDING"
   },
-  "verdict": "M3_CANDIDATE_OCP_ATTESTATION_R2_BLOCKED"
+  "verdict": "M3_CANDIDATE_OCP_ATTESTATION_R2_PASS"
 }

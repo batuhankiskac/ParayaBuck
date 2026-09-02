@@ -75,6 +75,9 @@ R5_PIT_MISSION = "equity_m3_pit_scanner_population_2026_09_r5"
 R5_BASE_COMMIT = "b0cd5546f93f63d162de1ded3871b4431b08b89e"
 R5_INITIAL_IMPLEMENTATION_COMMIT = "193182fa9ebf297fe623395476a7cdcd9c14c12f"
 R5_INITIAL_MANIFEST_COMMIT = "ad65703453f56737a097bb043dec6646d902bcfb"
+R5_SECOND_IMPLEMENTATION_COMMIT = "787e78bcf6070278c071a6ca9f18f6ee4dc0db6b"
+R5_SECOND_MANIFEST_COMMIT = "d6106a785c5fc324f0d25e555ebed1599f7cef29"
+R5_CANONICAL_FIX_COMMIT = "d52b578c21176dd72ff4d01b51b39c6f4d15267f"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -1111,6 +1114,32 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
         }
         if contract.get("recovery_lineage") != expected_recovery:
             raise GateError("recovery_lineage_mismatch", "R5 A11/B11 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_SECOND_MANIFEST_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A11_B11",
+            "abandoned_implementation_commit": R5_SECOND_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_SECOND_MANIFEST_COMMIT,
+            "reason_category": "canonical_helper_missing",
+            "reason": "B11 R5 gate called a non-existent R4 canonical-input helper before replay",
+            "corrective_base_commit": R5_SECOND_MANIFEST_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A12/B12 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_CANONICAL_FIX_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A11_B11",
+            "abandoned_implementation_commit": R5_SECOND_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_SECOND_MANIFEST_COMMIT,
+            "reason_category": "canonical_helper_missing",
+            "reason": "B11 R5 gate called a non-existent R4 canonical-input helper before replay",
+            "corrective_base_commit": R5_CANONICAL_FIX_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A13/B13 recovery lineage is not declared exactly")
     else:
         raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
     if contract.get("manifest_path") != R5_MANIFEST_PATH:

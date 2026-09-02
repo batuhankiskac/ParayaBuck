@@ -11,15 +11,15 @@
   "candidate_economics_run": false,
   "economic_metrics_present": false,
   "economic_mission_ready": false,
-  "lineage_mode": "D5_A6_B6_A7_B7_A8_B8",
+  "lineage_mode": "D5_A6_B6_A7_B7_A8_B8_A9_B9",
   "base_commit": "890d7633559e2982c3894aae15f28b901e5874a4",
-  "implementation_parent_commit": "9a6b81a8c78471850cd58c09253562d73ba1a8e1",
-  "implementation_commit": "c7729bb7aadca8b3cd8bf91dac5eb8895395c987",
-  "implementation_tree": "be54d48e6cca1260a431e5c32c3e0e7cb351f593",
+  "implementation_parent_commit": "b8ca990a641f38f43a9b272be598d725c27e53a1",
+  "implementation_commit": "b0d8ef807dfcfb0a96bac9cf7d60c94f768f587c",
+  "implementation_tree": "746969a929ecb809af36401c9b06c66572706562",
   "recovery_lineage": {
-    "prior_implementation_commit": "f58fe1916224756f1ef770c55990a82fccf86e7d",
-    "prior_manifest_commit": "9a6b81a8c78471850cd58c09253562d73ba1a8e1",
-    "recovery_reason": "R4 PIT builder rejected frozen v5 provider daily timeframe aliases",
+    "prior_implementation_commit": "c7729bb7aadca8b3cd8bf91dac5eb8895395c987",
+    "prior_manifest_commit": "b8ca990a641f38f43a9b272be598d725c27e53a1",
+    "recovery_reason": "R4 PIT builder rejected frozen v5 intra-session symbol ordering",
     "replay_exact_captured_bytes": true,
     "automatic_refetch_allowed": false
   },
@@ -323,28 +323,28 @@
       "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
     },
     "scripts/research_equity_m3_data_gate.py": {
-      "git_blob_id": "15451bb72c30348171b09bd521b82372d91b46be",
-      "raw_sha256": "ff2fc11c6a31d2e77cd5337812494927d24580171a536c6a53a31c4996aac70c"
+      "git_blob_id": "9def6b406d823d88b03548549b77e4eb4c5ea3f1",
+      "raw_sha256": "58021d1f22aa8c074f08e3d0e1fad798fc94ecbbb8e871862d41c6ca0f3cd43e"
     },
     "scripts/acquire_m3_iwm_raw_bundle.py": {
       "git_blob_id": "27d899f91e5e5776d9da51d7549ff6fd3121972c",
       "raw_sha256": "8663cba6c654c14fb5efd4539fc037e90869134f33de5250d03609326d521c51"
     },
     "scripts/build_m3_pit_scanner_universe.py": {
-      "git_blob_id": "04ec16586ebc56d185dbb6dd1c6b39c69fe644f6",
-      "raw_sha256": "de8a37802efdc41ab6719217a57a2425ceeaa19766a5e71c9298fd5ead7d0cb1"
+      "git_blob_id": "8ff884c508b3e48dd040c295528d8b75f0af4a5a",
+      "raw_sha256": "6321b9d06a43d54836d08810d57f97a42b6d2214a5166fd2e85edc308f06bc3b"
     },
     "tests/test_research_equity_m3_data_gate.py": {
-      "git_blob_id": "4f9305d8225791222600fb8e56b9e176c3a4618d",
-      "raw_sha256": "6338aa82b40e309c1d002a099e81485c3863cd857ece82685b6a00f5157538a7"
+      "git_blob_id": "cf35634604e611bc09f9ee5874b9f20601f236d5",
+      "raw_sha256": "35971cc09e2f6b9f274040dc414afef067bc7e642a6c2ec340b6035334763628"
     },
     "tests/test_m3_iwm_acquisition.py": {
       "git_blob_id": "36c08647806f7420f9edd4ed76e0c9646bdcdeb1",
       "raw_sha256": "41fd2c965ff6c16ea9a10fb355f40412b388afd4978d006d6371871710057e10"
     },
     "tests/test_m3_pit_scanner_universe.py": {
-      "git_blob_id": "93776d8ea7831644fdf8e285741a0f2428124300",
-      "raw_sha256": "0fc184c2d6c4f5b838f69d05f36c5fed67cde8a4c6b3533eadfa3f7dff7f863b"
+      "git_blob_id": "d0a0b8cadde69304cb93972a5625e6be57e34604",
+      "raw_sha256": "8dd572b5698fbc75022fecb3ecd1a1a018dbc91a96c5553840cbd95f04572b6d"
     }
   }
 }

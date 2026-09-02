@@ -199,7 +199,7 @@ def _verify_contract(contract_path: Path, staging_dir: Path) -> tuple[Mapping[st
     contract_artifact = stage_file(contract_path, staging_dir)
     identity = _tracked_file_identity(contract_path)
     if contract_artifact.raw_sha256 != str(identity["raw_sha256"]):
-        raise GateError("contract_hash_mismatch", "working R3 contract bytes changed during staging")
+        raise GateError("contract_hash_mismatch", "working data-gate contract bytes changed during staging")
     contract = _load_json(contract_artifact.staged_path)
     mission = contract.get("mission")
     expected_contract_path = R4_CONTRACT_PATH if mission == R4_DATA_GATE_MISSION else R3_CONTRACT_PATH
@@ -208,17 +208,27 @@ def _verify_contract(contract_path: Path, staging_dir: Path) -> tuple[Mapping[st
     if contract.get("manifest_path") != expected_contract_path:
         raise GateError("contract_path_mismatch", "data-gate contract path is not frozen")
     population_contract = contract.get("candidate_population_contract")
-    expected_population_contract = {
-        "schema_version": PIT_POPULATION_SCHEMA_VERSION,
-        "methodology": (
-            "strictly_prior_data_frozen_scanner_eligible_universe"
-            if mission == R3_DATA_GATE_MISSION
-            else "strictly_prior_data_production_scanner_eligible_universe"
-        ),
-        "observation_strategy": None,
-        "manual_candidate_selection_allowed": False,
-        "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
-    }
+    expected_population_contract = (
+        {
+            "schema_version": PIT_POPULATION_SCHEMA_VERSION,
+            "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+            "observation_strategy": None,
+            "manual_candidate_selection_allowed": False,
+            "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
+        }
+        if mission == R3_DATA_GATE_MISSION
+        else {
+            "schema_version": PIT_POPULATION_SCHEMA_VERSION,
+            "methodology": "strictly_prior_data_production_scanner_eligible_universe",
+            "observation_strategy": None,
+            "manual_candidate_selection_allowed": False,
+            "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
+            "pre_shortlist_reference_exclusion": True,
+            "explicit_empty_snapshot_required": True,
+            "scanner_identity": "EquityUniverseScanner/equity-scanner-v3",
+            "scanner_rebalance_cadence": "config-backed exact cadence",
+        }
+    )
     if population_contract != expected_population_contract:
         raise GateError("population_contract_mismatch", "candidate-population contract is not frozen")
     return contract, identity

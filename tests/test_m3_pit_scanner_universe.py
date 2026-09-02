@@ -230,6 +230,15 @@ def test_r4_excludes_high_volume_references_before_stage_a_shortlist() -> None:
     }
 
 
+def test_r4_builder_accepts_extended_predeclared_population_contract(tmp_path: Path) -> None:
+    contract, identity = pit._verify_contract(
+        ROOT / "data/research_manifests/equity_m3_data_gate_2026_09_r4.json",
+        tmp_path,
+    )
+    assert contract["mission"] == "equity_m3_data_gate_2026_09_r4"
+    assert identity["path"] == "data/research_manifests/equity_m3_data_gate_2026_09_r4.json"
+
+
 def test_r4_records_empty_rebalance_snapshot_without_inheriting_membership() -> None:
     config = _config()
     bars = _bars(symbols=("AAA", "SPY", "IWM", "QQQ"), days=122)

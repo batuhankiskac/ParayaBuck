@@ -876,6 +876,33 @@ def test_weekly_coverage_distinguishes_no_feasible_window_from_warmup() -> None:
     assert {item["state"] for item in report["decisions"]} == {"NO_FEASIBLE_REFERENCE_WINDOW"}
 
 
+def test_full_window_initial_warmup_is_allowed_before_feasibility() -> None:
+    expected = tuple(date(2019, 1, 2) + timedelta(days=index) for index in range(1200))
+    rows = {symbol: [_bar(symbol, session) for session in expected] for symbol in helpers.REFERENCE_SYMBOLS}
+    full = helpers.weekly_decision_coverage(
+        rows,
+        expected_sessions=expected,
+        start=expected[0],
+        end=expected[-1],
+    )
+    recent = helpers.weekly_decision_coverage(
+        rows,
+        expected_sessions=expected,
+        start=date(2022, 1, 1),
+        end=expected[-1],
+    )
+
+    assert full["initial_warmup_decision_count"] > 0
+    assert full["ever_feasible"] is True
+    assert full["first_accepted_decision"] == full["first_feasible_decision"]
+    assert full["accepted_plus_initial_warmup_count"] == full["decision_count"]
+    assert full["post_feasibility_failure_count"] == 0
+    assert recent["initial_warmup_decision_count"] == 0
+    assert recent["accepted_decision_count"] == recent["decision_count"]
+    assert recent["post_feasibility_failure_count"] == 0
+    assert gate._reference_gate_pass(_good_inventory(expected), {"common_session_count": len(expected)}, full, recent)
+
+
 def test_deterministic_pit_population_excludes_references_without_alpha() -> None:
     population = helpers.deterministic_candidate_population(
         [
@@ -915,6 +942,41 @@ def test_exact_matrix_panel_uses_candidate_reference_intersection() -> None:
     assert "common_close_count" in result["failure_categories"]
 
 
+def test_streaming_matrix_audit_matches_exact_panel(tmp_path: Path) -> None:
+    sessions, closes = _matrix_fixture()
+    reference_rows = {
+        symbol: [_bar(symbol, session, close) for session, close in zip(sessions, values, strict=True)]
+        for symbol, values in closes.items()
+        if symbol != "AAA"
+    }
+    candidate_rows = [_bar("AAA", session, close) for session, close in zip(sessions, closes["AAA"], strict=True)]
+    canonical = tmp_path / "candidate.csv"
+    _write_reference_csv(canonical, candidate_rows)
+    population = helpers.deterministic_candidate_population(
+        [{"effective_at": "2024-01-02T00:00:00Z", "symbols": ["AAA"]}]
+    )
+    weekly = {"decisions": [{"decision_session": sessions[-1].isoformat(), "accepted": True}]}
+    thresholds = helpers.DEFAULT_NUMERICAL_THRESHOLDS
+    streamed = gate._r3_matrix_audit_stream(
+        canonical,
+        reference_rows,
+        weekly,
+        population,
+        thresholds,
+    )
+    loaded_candidates, _quality = helpers.load_csv_reference_rows(canonical, reference_symbols=("AAA",))
+    exact = gate._matrix_audit(
+        {**reference_rows, "AAA": loaded_candidates["AAA"]},
+        weekly,
+        population["candidate_symbols"],
+        thresholds,
+        population,
+    )
+    assert streamed["total_matrix_count"] == exact["total_matrix_count"] == 1
+    assert streamed["pass_count"] == exact["pass_count"]
+    assert streamed["matrix_digest_merkle_root"] == exact["matrix_digest_merkle_root"]
+
+
 def test_reference_capacity_includes_managed_and_open_order_reservations() -> None:
     with pytest.raises(helpers.GateError, match="capacity"):
         helpers.build_reference_overlay(
@@ -950,6 +1012,12 @@ def test_weak_or_mismatched_pass_receipts_are_rejected(
     receipt_path = tmp_path / "receipt.json"
     _write_json(receipt_path, _fake_pass_receipt(**update))
     monkeypatch.setattr(legacy_m3, "M3_DATA_GATE_RECEIPT", receipt_path)
+    assert legacy_m3._valid_m3_data_gate_receipt() is False
+
+
+def test_m3_m4_consumer_requires_r3_receipt(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert legacy_m3.M3_DATA_GATE_RECEIPT == legacy_m3.M3_DATA_GATE_R3_RECEIPT
+    monkeypatch.setattr(legacy_m3, "M3_DATA_GATE_RECEIPT", legacy_m3.M3_DATA_GATE_R2_RECEIPT)
     assert legacy_m3._valid_m3_data_gate_receipt() is False
 
 

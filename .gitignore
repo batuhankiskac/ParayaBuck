@@ -250,6 +250,11 @@ data/research/archive/**/universe.json
 data/research/archive/**/*.csv
 data/research/archive/**/universe_history.csv
 data/runtime/paper_receipts/
+# M3 R3 local-only source and derived data (receipts/manifests/docs remain tracked)
+data/research/external/m3_iwm_raw_*/
+data/research/external/m3_iwm_raw_*.blocked.json
+data/research/generated/m3_data_gate_r3/
+data/historical/equity_m3_iwm_*.csv
 # Quarantine / local repair artifacts (huge sqlite dumps — never commit)
 data/quarantine/
 **/warmup.sqlite3

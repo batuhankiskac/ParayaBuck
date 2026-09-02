@@ -786,10 +786,9 @@ def weekly_decision_coverage(
     first_feasible_index = next(
         (index for index, item in enumerate(decisions) if item["decision_session"] == first_feasible), None
     )
+    post_feasibility_decisions = decisions[first_feasible_index:] if first_feasible_index is not None else []
     post_feasibility_failures = (
-        sum(not item["accepted"] for item in decisions[first_feasible_index:])
-        if first_feasible_index is not None
-        else 0
+        sum(not item["accepted"] for item in post_feasibility_decisions) if first_feasible_index is not None else 0
     )
     per_reference_stale_count = {
         symbol: sum(
@@ -800,6 +799,15 @@ def weekly_decision_coverage(
         for symbol in REFERENCE_SYMBOLS
     }
     jointly_stale_count = sum(item["state"] == "STALE_REFERENCE" for item in decisions)
+    post_feasibility_jointly_stale_count = sum(
+        item["state"] == "STALE_REFERENCE" for item in post_feasibility_decisions
+    )
+    post_feasibility_misaligned_count = sum(
+        item["state"] == "MISALIGNED_REFERENCE" for item in post_feasibility_decisions
+    )
+    post_feasibility_reference_outage_count = sum(
+        item["state"] == "REFERENCE_OUTAGE" for item in post_feasibility_decisions
+    )
     return {
         "requested_start": start.isoformat(),
         "resolved_start": resolve_first_session(start, expected_sessions).isoformat()
@@ -814,9 +822,14 @@ def weekly_decision_coverage(
         "first_accepted_decision": first_accepted,
         "last_accepted_decision": last_accepted,
         "post_feasibility_failure_count": post_feasibility_failures,
+        "post_feasibility_decision_count": len(post_feasibility_decisions),
+        "post_feasibility_jointly_stale_count": post_feasibility_jointly_stale_count,
+        "post_feasibility_misaligned_count": post_feasibility_misaligned_count,
+        "post_feasibility_reference_outage_count": post_feasibility_reference_outage_count,
         "jointly_stale_count": jointly_stale_count,
         "per_reference_stale_count": per_reference_stale_count,
         "no_feasible_reference_window": not ever_feasible,
+        "accepted_plus_initial_warmup_count": len(accepted) + initial_warmup,
         "recent_window_accepted_covers_every_required_weekly_decision": bool(decisions)
         and len(accepted) == len(decisions),
         "decisions": decisions,

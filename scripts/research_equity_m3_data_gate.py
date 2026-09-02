@@ -14,12 +14,16 @@ import csv
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
 import tempfile
+from collections import deque
 from collections.abc import Mapping, Sequence
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
@@ -65,6 +69,7 @@ from m3_data_gate_helpers import (  # noqa: E402
     load_csv_reference_rows,
     merge_normalized_rows,
     merkle_root,
+    normalize_csv_row,
     reference_panel_digest,
     session_dates_digest,
     stage_file,
@@ -79,7 +84,10 @@ EXIT_CONTRACT_ERROR = 21
 VERIFIER_PATH = Path(__file__).relative_to(_REPO).as_posix()
 NORMALIZER_PATH = "scripts/m3_data_gate_helpers.py"
 R2_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
+R3_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
 BASE_COMMIT = "69fc1e11606dec5f5e84b2da68a0bb24fae81fbd"
+R3_BASE_COMMIT = "99fa950a3223a8b6cc78c8a92f8fa20aff52b350"
+R3_MISSION = "equity_m3_data_gate_2026_09_r3"
 GATE_PASS = "PASS"
 GATE_FAIL = "FAIL"
 GATE_UNKNOWN = "UNKNOWN"
@@ -115,6 +123,47 @@ CRITICAL_GIT_PATHS = (
     "tests/test_research_equity_m3_data_gate.py",
     ".github/workflows/ci.yml",
 )
+R3_CRITICAL_GIT_PATHS = (
+    ".github/workflows/ci.yml",
+    "scripts/m3_data_gate_helpers.py",
+    "scripts/research_equity_m3_data_gate.py",
+    "scripts/research_equity_m3_m4.py",
+    "scripts/acquire_m3_iwm_raw_bundle.py",
+    "scripts/build_m3_pit_scanner_universe.py",
+    "tests/test_research_equity_m3_data_gate.py",
+    "tests/test_m3_iwm_acquisition.py",
+    "tests/test_m3_pit_scanner_universe.py",
+)
+R3_MANDATORY_GATES = (
+    "commit_topology",
+    "implementation_blob_identity",
+    "manifest_only_commit",
+    "clean_worktree_at_start",
+    "configuration_identity",
+    "dependency_identity",
+    "acquisition_script_identity",
+    "canonical_artifact_identity",
+    "lifetime_identity",
+    "corporate_action_identity",
+    "iwm_raw_bundle",
+    "iwm_provider_contract",
+    "iwm_pagination_chain",
+    "iwm_normalization",
+    "iwm_source_completeness",
+    "reference_calendar",
+    "reference_row_quality",
+    "reference_common_sessions",
+    "full_weekly_post_warmup_coverage",
+    "recent_weekly_coverage",
+    "composite_dataset_identity",
+    "deterministic_numerical_population",
+    "pit_reference_boundary",
+    "design_matrix_feasibility",
+    "reference_role_contract",
+    "receipt_forbidden_fields",
+)
+R3_REQUIRED_FOR_DATA_PASS = R3_MANDATORY_GATES
+R3_PIT_MANIFEST_PATH = "data/research/generated/m3_data_gate_r3/pit_population_manifest.json"
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -282,8 +331,8 @@ def _compact_iwm_audit(audit: Mapping[str, object]) -> dict[str, object]:
     return compact
 
 
-def _gate_map() -> dict[str, dict[str, object]]:
-    return {name: {"status": GATE_UNKNOWN, "reason": "not evaluated"} for name in MANDATORY_GATES}
+def _gate_map(gate_names: Sequence[str] = MANDATORY_GATES) -> dict[str, dict[str, object]]:
+    return {name: {"status": GATE_UNKNOWN, "reason": "not evaluated"} for name in gate_names}
 
 
 def _set_gate(
@@ -300,38 +349,219 @@ def _set_gate(
     gates[name] = value
 
 
-def evaluate_mandatory_gates(gates: Mapping[str, Mapping[str, object]]) -> str:
+def evaluate_mandatory_gates(
+    gates: Mapping[str, Mapping[str, object]], required_gates: Sequence[str] | None = None
+) -> str:
     """Return PASS only when every frozen mandatory field is exactly PASS."""
-    if any(gates.get(name, {}).get("status") != GATE_PASS for name in REQUIRED_FOR_DATA_PASS):
+    required = tuple(required_gates or REQUIRED_FOR_DATA_PASS)
+    if any(gates.get(name, {}).get("status") != GATE_PASS for name in required):
         return "M3_DATA_GATE_BLOCKED"
     return "M3_DATA_GATE_PASS"
 
 
 def _load_committed_contract(path: Path, *, run_commit: str) -> tuple[Mapping[str, object], str, bytes]:
     logical = _logical_path(path)
-    if logical != R2_MANIFEST_PATH:
-        raise GateError("manifest_path_mismatch", "R2 gate must use the pinned R2 manifest path")
+    if logical not in {R2_MANIFEST_PATH, R3_MANIFEST_PATH}:
+        raise GateError("manifest_path_mismatch", "gate must use the pinned R2 or R3 manifest path")
     try:
         committed = _git_blob_bytes(run_commit, logical)
         blob_id = _git_blob_id(run_commit, logical)
     except subprocess.CalledProcessError as exc:
-        raise GateError("manifest_not_committed", "R2 manifest is not present in the run commit") from exc
+        raise GateError("manifest_not_committed", "data-gate manifest is not present in the run commit") from exc
     try:
         working = path.read_bytes()
     except OSError as exc:
-        raise GateError("manifest_missing", "R2 manifest working copy is missing") from exc
+        raise GateError("manifest_missing", "data-gate manifest working copy is missing") from exc
     if working != committed:
-        raise GateError("mutable_manifest", "working R2 manifest differs from the committed HEAD blob")
+        raise GateError("mutable_manifest", "working data-gate manifest differs from the committed HEAD blob")
     try:
         payload = json.loads(committed.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise GateError("invalid_manifest", "committed R2 manifest is not valid UTF-8 JSON") from exc
+        raise GateError("invalid_manifest", "committed data-gate manifest is not valid UTF-8 JSON") from exc
     if not isinstance(payload, Mapping):
-        raise GateError("invalid_manifest", "committed R2 manifest must be an object")
+        raise GateError("invalid_manifest", "committed data-gate manifest must be an object")
     return payload, blob_id, committed
 
 
+def _validate_r3_contract(contract: Mapping[str, object], *, run_parent: str) -> None:
+    """Validate only the predeclared R3 contract; results are never trusted here."""
+    if contract.get("schema_version") != "3.0.0":
+        raise GateError("manifest_schema_mismatch", "R3 manifest schema is not 3.0.0")
+    if contract.get("mission") != R3_MISSION:
+        raise GateError("manifest_mission_mismatch", "R3 manifest mission is incorrect")
+    if contract.get("repository_url") != "https://github.com/batuhankiskac/ParayaBuck":
+        raise GateError("manifest_repository_mismatch", "R3 manifest repository is incorrect")
+    if contract.get("branch") != "main" or contract.get("snapshot_date") != "2026-09-01":
+        raise GateError("manifest_snapshot_mismatch", "R3 manifest branch or snapshot date drifted")
+    if contract.get("declared_before_results") is not True:
+        raise GateError("manifest_not_predeclared", "R3 manifest must be predeclared")
+    for key, expected in (
+        ("research_only", True),
+        ("automatic_promotion", False),
+        ("human_promotion_only", True),
+        ("candidate_economics_run", False),
+        ("economic_metrics_present", False),
+        ("economic_mission_ready", False),
+    ):
+        if contract.get(key) != expected:
+            raise GateError("manifest_policy_mismatch", f"R3 manifest {key} drifted")
+    if contract.get("base_commit") != R3_BASE_COMMIT:
+        raise GateError("base_commit_mismatch", "R3 manifest base commit is not D2")
+    if contract.get("implementation_parent_commit") != R3_BASE_COMMIT:
+        raise GateError("implementation_parent_mismatch", "R3 implementation parent is not D2")
+    if contract.get("manifest_path") != R3_MANIFEST_PATH:
+        raise GateError("manifest_path_mismatch", "R3 manifest path is not frozen")
+    if contract.get("manifest_commit_rule") != "manifest-only: exactly the declared R3 manifest path":
+        raise GateError("manifest_commit_rule_mismatch", "R3 manifest-only commit rule drifted")
+    implementation = contract.get("implementation_commit")
+    if not isinstance(implementation, str) or len(implementation) != 40:
+        raise GateError("implementation_pin_missing", "R3 implementation commit is missing")
+    if run_parent != implementation:
+        raise GateError("manifest_commit_topology", "run commit must be the direct child of A3")
+    implementation_tree = contract.get("implementation_tree")
+    if not isinstance(implementation_tree, str) or len(implementation_tree) != 40:
+        raise GateError("implementation_tree_missing", "R3 implementation tree is missing")
+    parameters = {
+        "formation_bars": 252,
+        "skip_bars": 21,
+        "beta_window_bars": 273,
+        "beta_window_plus_one_closes": 274,
+        "residual_vol_window": 63,
+        "top_n": 8,
+        "max_single_weight": 0.10,
+        "ivol_reject_quantile": 0.70,
+        "rebalance_frequency": "weekly",
+    }
+    if contract.get("frozen_parameters") != parameters:
+        raise GateError("frozen_parameter_mismatch", "R3 frozen parameters drifted")
+    thresholds = contract.get("numerical_thresholds")
+    if not isinstance(thresholds, Mapping):
+        raise GateError("numerical_thresholds_missing", "R3 numerical thresholds are missing")
+    for key, value in DEFAULT_NUMERICAL_THRESHOLDS.items():
+        if thresholds.get(key) != value:
+            raise GateError("numerical_threshold_mismatch", f"R3 threshold {key} drifted")
+    source = contract.get("iwm_raw_source_contract")
+    expected_source = {
+        "provider": SOURCE_PROVIDER,
+        "api_family_version": SOURCE_API_FAMILY_VERSION,
+        "endpoint_identity": SOURCE_ENDPOINT,
+        "asset_class": "us_equity",
+        "symbol": "IWM",
+        "timeframe": RAW_SOURCE_TIMEFRAME,
+        "feed": SOURCE_FEED,
+        "adjustment": SOURCE_ADJUSTMENT,
+        "sort": SOURCE_SORT,
+        "request_start": "2016-01-01",
+        "request_end": "2026-07-31",
+        "network_host": "data.alpaca.markets",
+        "acquisition_script_path": "scripts/acquire_m3_iwm_raw_bundle.py",
+        "no_fallback_allowed": True,
+        "verifier_network_free": True,
+        "raw_pages_untracked": True,
+        "acquisition_is_read_only": True,
+    }
+    if source != expected_source:
+        raise GateError("source_contract_mismatch", "R3 IWM source contract drifted")
+    if contract.get("pit_builder_path") != "scripts/build_m3_pit_scanner_universe.py":
+        raise GateError("pit_builder_contract_mismatch", "R3 PIT builder path is not frozen")
+    expected_ocp = {
+        "observer_execution_strategy_identity_must_match": True,
+        "observer_execution_object_instance_must_differ": True,
+        "candidate_owned_ocp_required_before_economics": True,
+        "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+        "economic_mission_ready": False,
+    }
+    if contract.get("ocp_boundary") != expected_ocp:
+        raise GateError("ocp_contract_mismatch", "R3 OCP boundary contract drifted")
+    if contract.get("mandatory_data_pass_gates") != list(R3_MANDATORY_GATES):
+        raise GateError("mandatory_gate_contract_mismatch", "R3 mandatory gate list drifted")
+    if contract.get("canonical_manifest_path") != "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json":
+        raise GateError("canonical_manifest_contract_mismatch", "R3 canonical manifest path is not frozen")
+    if contract.get("normalization_contract") != {
+        "version": NORMALIZER_VERSION,
+        "canonical_columns": list(CANONICAL_COLUMNS),
+        "canonical_timeframe": CANONICAL_TIMEFRAME,
+        "raw_timeframe": RAW_SOURCE_TIMEFRAME,
+        "timezone": EXCHANGE_TIMEZONE,
+        "calendar": "NYSE",
+        "decimal_policy": "finite Decimal parsing; no rounding or synthesis",
+    }:
+        raise GateError("normalization_contract_mismatch", "R3 normalization contract drifted")
+    if contract.get("numerical_contract") != {
+        "design_matrix": ["SPY", "IWM-SPY", "QQQ-SPY"],
+        "fit": "demean X and y; numpy least squares; retain rank and singular diagnostics",
+        "residual": "y - X @ beta using non-demeaned X and no applied intercept",
+        "skip_window": "omit latest 21 residual returns from momentum; retain all 273 returns for beta fit",
+        "economic_scoring_allowed": False,
+    }:
+        raise GateError("numerical_contract_mismatch", "R3 numerical contract drifted")
+    if contract.get("candidate_population_contract") != {
+        "schema_version": "m3-pit-scanner-population-v1",
+        "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+        "observation_strategy": None,
+        "manual_candidate_selection_allowed": False,
+        "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
+    }:
+        raise GateError("candidate_population_contract_mismatch", "R3 candidate population contract drifted")
+    if contract.get("composite_dataset_identity_contract") != {
+        "encoding": "m3-composite-dataset-v1",
+        "required": True,
+        "canonical_parent": "frozen v5 bytes",
+        "iwm_component": "verified normalized sidecar from raw page bundle",
+        "normalizer": NORMALIZER_VERSION,
+        "calendar": "pandas_market_calendars NYSE exact version",
+    }:
+        raise GateError("composite_contract_mismatch", "R3 composite identity contract drifted")
+    if contract.get("reference_role_contract") != {
+        "reference_observation_symbols": list(REFERENCE_SYMBOLS),
+        "candidate_membership_allowed": False,
+        "target_membership_allowed": False,
+        "execution_membership_allowed": False,
+        "original_configured_trade_set_recorded_separately": True,
+        "effective_research_overlay_recorded_separately": True,
+        "runtime_execution_evidence_status": "EXECUTION_NOT_RUN",
+    }:
+        raise GateError("reference_role_contract_mismatch", "R3 reference-role contract drifted")
+    if contract.get("same_run_v3_control_contract") != {
+        "required_before_comparison": True,
+        "same_data_vintage": True,
+        "same_evaluation_sessions": True,
+        "same_scanner_policy": True,
+        "same_terminal_inputs": True,
+        "same_reference_reservation_contract": True,
+        "economics_run_in_this_mission": False,
+    }:
+        raise GateError("same_run_contract_mismatch", "R3 same-run contract drifted")
+    forbidden = [
+        "return",
+        "net_return",
+        "gross_return",
+        "pnl",
+        "cagr",
+        "sharpe",
+        "sortino",
+        "calmar",
+        "max_drawdown",
+        "turnover",
+        "trade_count",
+        "fill_count",
+        "portfolio_targets",
+        "economic_candidate_scores",
+        "economic_candidate_ranking",
+    ]
+    if contract.get("forbidden_economic_fields") != forbidden:
+        raise GateError("forbidden_field_contract_mismatch", "R3 forbidden economic field list drifted")
+    calendar_identity = contract.get("calendar_identity")
+    if not isinstance(calendar_identity, Mapping) or dict(calendar_identity) != calendar_dependency_identity():
+        raise GateError("dependency_identity_mismatch", "R3 calendar dependency identity drifted")
+    if not isinstance(contract.get("config_semantic_digest_sha256"), str):
+        raise GateError("config_digest_missing", "R3 settings semantic digest is missing")
+
+
 def _validate_contract(contract: Mapping[str, object], *, run_commit: str, run_parent: str) -> None:
+    if contract.get("mission") == R3_MISSION:
+        _validate_r3_contract(contract, run_parent=run_parent)
+        return
     if contract.get("schema_version") != "2.0.0":
         raise GateError("manifest_schema_mismatch", "R2 manifest schema is not 2.0.0")
     if contract.get("mission") != "equity_m3_data_gate_2026_09_r2":
@@ -487,6 +717,64 @@ def _validate_contract(contract: Mapping[str, object], *, run_commit: str, run_p
         raise GateError("config_digest_missing", "R2 settings semantic digest is missing")
 
 
+def _validate_r3_commit_provenance(
+    contract: Mapping[str, object],
+    *,
+    manifest_path: str,
+    run_commit: str,
+    run_parent: str,
+    repo: Path = _REPO,
+) -> dict[str, object]:
+    implementation = str(contract["implementation_commit"])
+    base = str(contract["base_commit"])
+    if _git_parent(implementation, repo=repo) != base:
+        raise GateError("implementation_parent_mismatch", "A3 is not a direct child of D2")
+    if _git_parent(run_commit, repo=repo) != implementation or run_parent != implementation:
+        raise GateError("manifest_commit_topology", "B3 is not a direct child of A3")
+    if manifest_path != R3_MANIFEST_PATH:
+        raise GateError("manifest_path_mismatch", "R3 provenance must use the pinned R3 manifest path")
+    if _git_changed_paths(run_commit, repo=repo) != [manifest_path]:
+        raise GateError(
+            "manifest_commit_not_manifest_only", "manifest-only commit changed paths other than the R3 manifest"
+        )
+    try:
+        manifest_blob = _git_blob_id(run_commit, manifest_path, repo=repo)
+    except subprocess.CalledProcessError as exc:
+        raise GateError("manifest_blob_missing", "R3 manifest Git blob is missing") from exc
+    implementation_tree = _git_tree_id(implementation, repo=repo)
+    if contract.get("implementation_tree") != implementation_tree:
+        raise GateError("implementation_tree_mismatch", "A3 tree differs from the R3 manifest")
+    raw_critical = contract.get("critical_git_blobs")
+    if not isinstance(raw_critical, Mapping) or set(raw_critical) != set(R3_CRITICAL_GIT_PATHS):
+        raise GateError("critical_blob_pin_invalid", "R3 critical Git blob set is incomplete or contains extras")
+    critical: dict[str, object] = {}
+    for path, declaration in raw_critical.items():
+        if not isinstance(path, str) or not isinstance(declaration, Mapping):
+            raise GateError("critical_blob_pin_invalid", "R3 critical Git blob declaration is invalid")
+        try:
+            implementation_blob = _git_blob_id(implementation, path, repo=repo)
+            run_blob = _git_blob_id(run_commit, path, repo=repo)
+            blob_bytes = _git_blob_bytes(implementation, path, repo=repo)
+        except subprocess.CalledProcessError as exc:
+            raise GateError("critical_blob_missing", f"R3 critical Git blob missing: {path}") from exc
+        if implementation_blob != run_blob:
+            raise GateError("implementation_blob_mismatch", f"critical blob changed between A3 and B3: {path}")
+        if declaration.get("git_blob_id") != implementation_blob:
+            raise GateError("implementation_blob_mismatch", f"R3 critical blob pin differs: {path}")
+        if declaration.get("raw_sha256") != _sha256_bytes(blob_bytes):
+            raise GateError("implementation_blob_hash_mismatch", f"R3 critical blob raw hash differs: {path}")
+        critical[path] = {"git_blob_id": implementation_blob, "raw_sha256": _sha256_bytes(blob_bytes)}
+    return {
+        "manifest_commit": run_commit,
+        "manifest_git_blob_id": manifest_blob,
+        "implementation_commit": implementation,
+        "implementation_tree": implementation_tree,
+        "base_commit": base,
+        "critical_git_blobs": critical,
+        "changed_paths": [manifest_path],
+    }
+
+
 def _validate_commit_provenance(
     contract: Mapping[str, object],
     *,
@@ -495,6 +783,14 @@ def _validate_commit_provenance(
     run_parent: str,
     repo: Path = _REPO,
 ) -> dict[str, object]:
+    if contract.get("mission") == R3_MISSION:
+        return _validate_r3_commit_provenance(
+            contract,
+            manifest_path=manifest_path,
+            run_commit=run_commit,
+            run_parent=run_parent,
+            repo=repo,
+        )
     implementation = str(contract["implementation_commit"])
     base = str(contract["base_commit"])
     if _git_parent(implementation, repo=repo) != base:
@@ -686,16 +982,48 @@ def _reference_gate_pass(
             return False
     if int(common.get("common_session_count", 0)) < int(DEFAULT_NUMERICAL_THRESHOLDS["required_common_closes"]):
         return False
-    for weekly in (weekly_full, weekly_recent):
+
+    def full_window_passes(weekly: Mapping[str, object]) -> bool:
+        if not bool(weekly.get("ever_feasible")):
+            return False
+        if int(weekly.get("initial_warmup_decision_count", 0)) < 0:
+            return False
+        if (
+            "first_accepted_decision" in weekly
+            and "first_feasible_decision" in weekly
+            and weekly.get("first_accepted_decision") != weekly.get("first_feasible_decision")
+        ):
+            return False
+        if int(weekly.get("post_feasibility_failure_count", 0)) != 0:
+            return False
+        if int(weekly.get("post_feasibility_jointly_stale_count", 0)) != 0:
+            return False
+        if int(weekly.get("post_feasibility_misaligned_count", 0)) != 0:
+            return False
+        if int(weekly.get("post_feasibility_reference_outage_count", 0)) != 0:
+            return False
+        accepted_plus_warmup = int(
+            weekly.get(
+                "accepted_plus_initial_warmup_count",
+                int(weekly.get("accepted_decision_count", 0)) + int(weekly.get("initial_warmup_decision_count", 0)),
+            )
+        )
+        if accepted_plus_warmup != int(weekly.get("decision_count", 0)):
+            return False
+        return int(weekly.get("failed_after_warmup_count", 0)) == 0
+
+    def recent_window_passes(weekly: Mapping[str, object]) -> bool:
+        if int(weekly.get("initial_warmup_decision_count", 0)) != 0:
+            return False
         if not bool(weekly.get("ever_feasible")):
             return False
         if int(weekly.get("post_feasibility_failure_count", 0)) != 0:
             return False
         if int(weekly.get("accepted_decision_count", 0)) != int(weekly.get("decision_count", 0)):
             return False
-        if not bool(weekly.get("recent_window_accepted_covers_every_required_weekly_decision", False)):
-            return False
-    return True
+        return bool(weekly.get("recent_window_accepted_covers_every_required_weekly_decision", False))
+
+    return full_window_passes(weekly_full) and recent_window_passes(weekly_recent)
 
 
 def _matrix_audit(
@@ -735,6 +1063,11 @@ def _matrix_audit(
                     "failure_categories": [exc.category],
                 }
             results.append(result)
+    return _matrix_summary(candidates, results)
+
+
+def _matrix_summary(candidates: Sequence[str], results: Sequence[Mapping[str, object]]) -> dict[str, object]:
+    """Summarize matrix audits without retaining source-bar history."""
     digests = [str(item["matrix_digest_sha256"]) for item in results]
     category_counts: dict[str, int] = {}
     for result in results:
@@ -763,8 +1096,100 @@ def _matrix_audit(
         "maximum_condition_number": max(
             (float(item["condition_number"]) for item in results if "condition_number" in item), default=None
         ),
-        "results": results,
+        "results": list(results),
     }
+
+
+@dataclass(frozen=True)
+class _CloseOnlyBar:
+    """Small matrix-only view of a canonical bar."""
+
+    session_date: date
+    close: Decimal
+
+
+def _r3_matrix_audit_stream(
+    canonical_path: Path,
+    panel_rows: Mapping[str, Sequence[object]],
+    weekly: Mapping[str, object],
+    population: Mapping[str, object],
+    thresholds: Mapping[str, int | float],
+) -> dict[str, object]:
+    """Audit every accepted PIT decision while retaining only 274 closes/symbol.
+
+    The canonical CSV is already content-addressed and the PIT builder has
+    validated its complete order.  This pass parses only candidate symbols and
+    keeps the exact candidate/reference intersection window needed by M3,
+    avoiding a second in-memory copy of the full canonical dataset.
+    """
+    decisions = [
+        item for item in weekly.get("decisions", ()) if isinstance(item, Mapping) and item.get("accepted") is True
+    ]
+    candidates = tuple(sorted({str(symbol).strip().upper() for symbol in population["candidate_symbols"]}))
+    required_closes = int(thresholds["required_common_closes"])
+    accepted_candidates = {
+        decision["decision_session"]: candidate_symbols_for_decision(population, decision["decision_session"])
+        for decision in decisions
+    }
+    wanted = set().union(*(set(symbols) for symbols in accepted_candidates.values())) - set(REFERENCE_SYMBOLS)
+    reference_sessions = set.intersection(
+        *(set(row.session_date for row in panel_rows.get(symbol, ())) for symbol in REFERENCE_SYMBOLS)
+    )
+    histories: dict[str, deque[tuple[date, Decimal]]] = {symbol: deque(maxlen=required_closes) for symbol in wanted}
+    last_seen: dict[str, date] = {}
+    results: list[Mapping[str, object]] = []
+    decision_index = 0
+
+    def flush_through(session: date) -> None:
+        nonlocal decision_index
+        while decision_index < len(decisions):
+            decision = decisions[decision_index]
+            decision_date = date.fromisoformat(str(decision["decision_session"]))
+            if decision_date >= session:
+                break
+            results.extend(_audit_stream_decision(decision))
+            decision_index += 1
+
+    def _audit_stream_decision(decision: Mapping[str, object]) -> Sequence[Mapping[str, object]]:
+        decision_date = str(decision["decision_session"])
+        decision_candidates = accepted_candidates[decision_date]
+        rows: dict[str, Sequence[object]] = {symbol: panel_rows.get(symbol, ()) for symbol in REFERENCE_SYMBOLS}
+        rows.update(
+            {
+                candidate: tuple(
+                    _CloseOnlyBar(session_date=session_date, close=close)
+                    for session_date, close in histories.get(candidate, ())
+                )
+                for candidate in decision_candidates
+                if candidate not in REFERENCE_SYMBOLS
+            }
+        )
+        summary = _matrix_audit(rows, {"decisions": [decision]}, candidates, thresholds, population)
+        return tuple(item for item in summary["results"] if isinstance(item, Mapping))
+
+    with canonical_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not set(CANONICAL_COLUMNS[1:]).issubset(reader.fieldnames or ()):
+            raise GateError("canonical_schema_mismatch", "canonical CSV is missing required columns")
+        for raw in reader:
+            symbol = str(raw.get("symbol") or "").strip().upper()
+            if symbol not in wanted:
+                continue
+            row = normalize_csv_row(raw)
+            flush_through(row.session_date)
+            prior_session = last_seen.get(symbol)
+            if prior_session is not None and row.session_date <= prior_session:
+                category = "candidate_duplicate" if row.session_date == prior_session else "candidate_order"
+                raise GateError(category, f"candidate canonical rows are not strictly ordered: {symbol}")
+            last_seen[symbol] = row.session_date
+            if row.session_date in reference_sessions and decision_index < len(decisions):
+                histories[symbol].append((row.session_date, row.close))
+            if decision_index >= len(decisions):
+                break
+    if decisions:
+        for decision in decisions[decision_index:]:
+            results.extend(_audit_stream_decision(decision))
+    return _matrix_summary(candidates, results)
 
 
 def _load_pit_population(path: Path, staging_dir: Path) -> tuple[dict[str, object], dict[str, object]]:
@@ -795,10 +1220,26 @@ def _base_receipt(
     config_digest: str | None,
     provenance: Mapping[str, object],
 ) -> dict[str, object]:
+    r3 = contract.get("mission") == R3_MISSION
     critical = provenance.get("critical_git_blobs", {})
+    lineage = (
+        {
+            "corrective_base_commit": contract.get("base_commit"),
+            "implementation_a3_commit": contract.get("implementation_commit"),
+            "run_b3_commit": run_commit,
+            "c3_commit": None,
+        }
+        if r3
+        else {
+            "corrective_base_commit": contract.get("base_commit"),
+            "implementation_a2_commit": contract.get("implementation_commit"),
+            "run_b2_commit": run_commit,
+            "c2_commit": None,
+        }
+    )
     return {
-        "schema_version": "2.0.0",
-        "mission": "equity_m3_data_gate_2026_09_r2",
+        "schema_version": "3.0.0" if r3 else "2.0.0",
+        "mission": R3_MISSION if r3 else "equity_m3_data_gate_2026_09_r2",
         "data_gate_verdict": "M3_DATA_GATE_BLOCKED",
         "corrective_infrastructure_verdict": "PASS",
         "research_only": True,
@@ -809,12 +1250,7 @@ def _base_receipt(
         "economic_mission_ready": False,
         "next_required_gate": "M3_DATA_GATE_COMPLETION",
         "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
-        "base_lineage": {
-            "corrective_base_commit": contract.get("base_commit"),
-            "implementation_a2_commit": contract.get("implementation_commit"),
-            "run_b2_commit": run_commit,
-            "c2_commit": None,
-        },
+        "base_lineage": lineage,
         "implementation_tree": provenance.get("implementation_tree"),
         "critical_git_blobs": critical,
         "manifest_identity": {
@@ -880,7 +1316,7 @@ def _base_receipt(
             "same_reference_reservation_contract": False,
             "economics_run": False,
         },
-        "mandatory_gate_results": _gate_map(),
+        "mandatory_gate_results": _gate_map(R3_MANDATORY_GATES if r3 else MANDATORY_GATES),
         "input_provenance": {},
         "composite_dataset_identity": {"status": GATE_NOT_RUN},
         "reference_inventory": {},
@@ -907,11 +1343,833 @@ def _add_reason(reasons: list[str], reason: str) -> None:
         reasons.append(reason)
 
 
+def _r3_load_pit_population(
+    path: Path,
+    staging_dir: Path,
+    *,
+    pit_manifest_path: Path | None,
+    expected_scanner_config_digest: str | None,
+) -> tuple[dict[str, object], dict[str, object], Mapping[str, object]]:
+    staged = stage_file(path, staging_dir)
+    payload = _load_json(staged.staged_path)
+    if payload.get("schema_version") != "m3-pit-scanner-population-v1":
+        raise GateError("pit_schema_mismatch", "R3 PIT population schema is not frozen")
+    if payload.get("mission") != "equity_m3_pit_scanner_population_2026_09_r3":
+        raise GateError("pit_mission_mismatch", "R3 PIT population mission is incorrect")
+    if payload.get("market") != "EQUITY" or payload.get("timeframe") != CANONICAL_TIMEFRAME:
+        raise GateError("pit_market_timeframe_mismatch", "R3 PIT population must be EQUITY 1d")
+    if payload.get("observation_strategy") is not None or payload.get("alpha_ranking_used") is not False:
+        raise GateError("candidate_population_alpha_leak", "R3 PIT population is alpha-ranked")
+    no_alpha = payload.get("no_alpha_assertion")
+    if not isinstance(no_alpha, Mapping) or any(
+        no_alpha.get(key) is not expected
+        for key, expected in (
+            ("observation_strategy_is_none", True),
+            ("candidate_rankings_present", False),
+            ("economic_ranking_present", False),
+        )
+    ):
+        raise GateError("candidate_population_alpha_leak", "R3 PIT no-alpha assertion is incomplete")
+    snapshots = payload.get("snapshots")
+    if not isinstance(snapshots, list):
+        raise GateError("invalid_pit_universe", "R3 PIT universe must contain a snapshots list")
+    for snapshot in snapshots:
+        if not isinstance(snapshot, Mapping):
+            raise GateError("invalid_pit_snapshot", "R3 PIT snapshot must be an object")
+        if snapshot.get("strictly_prior_data") is not True:
+            raise GateError("pit_future_leak", "R3 PIT snapshot lacks strict-prior evidence")
+        effective = snapshot.get("effective_at")
+        latest = snapshot.get("latest_input_timestamp")
+        if effective is None or latest is None:
+            raise GateError("pit_future_leak", "R3 PIT snapshot lacks timestamp boundary evidence")
+        try:
+            effective_at = datetime.fromisoformat(str(effective).replace("Z", "+00:00"))
+            latest_input = datetime.fromisoformat(str(latest).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise GateError("invalid_pit_snapshot", "R3 PIT timestamp evidence is invalid") from exc
+        if effective_at.tzinfo is None or latest_input.tzinfo is None or latest_input >= effective_at:
+            raise GateError("pit_future_leak", "R3 PIT snapshot contains data at or after effective_at")
+        if not isinstance(snapshot.get("symbols"), list):
+            raise GateError("invalid_pit_snapshot", "R3 PIT snapshot symbols must be a list")
+        if snapshot.get("scanner_version") != "equity-scanner-v3":
+            raise GateError("pit_scanner_identity_mismatch", "R3 PIT snapshot scanner version is not production v3")
+        if expected_scanner_config_digest and snapshot.get("config_digest") != expected_scanner_config_digest:
+            raise GateError("pit_scanner_identity_mismatch", "R3 PIT snapshot scanner config digest drifted")
+    population = deterministic_candidate_population(snapshots)
+    if int(population.get("unique_candidate_count", 0)) <= 0:
+        raise GateError("empty_candidate_population", "R3 PIT population contains no non-reference candidates")
+    role = validate_pit_reference_boundary(population)
+    population["reference_boundary"] = role
+    population["input_artifact"] = {
+        "path": _logical_path(path),
+        "raw_sha256": staged.raw_sha256,
+        "crlf_normalized_sha256": staged.crlf_normalized_sha256,
+        "byte_size": staged.byte_size,
+    }
+    summary = payload.get("population")
+    if not isinstance(summary, Mapping):
+        raise GateError("pit_summary_missing", "R3 PIT population summary is missing")
+    for key in (
+        "candidate_universe_digest_sha256",
+        "candidate_decision_eligibility_digest_sha256",
+        "snapshot_count",
+        "unique_candidate_count",
+    ):
+        if summary.get(key) != population.get(key):
+            raise GateError("pit_digest_mismatch", f"R3 PIT population summary field differs: {key}")
+    strict_prior = payload.get("strict_prior_proof")
+    if not isinstance(strict_prior, Mapping) or strict_prior.get("status") != "PASS":
+        raise GateError("pit_future_leak", "R3 PIT strict-prior proof is not PASS")
+    if pit_manifest_path is not None:
+        pit_manifest = _load_json(stage_file(pit_manifest_path, staging_dir).staged_path)
+        if pit_manifest.get("mission") != "equity_m3_pit_scanner_population_2026_09_r3":
+            raise GateError("pit_manifest_mission_mismatch", "compact PIT manifest mission is incorrect")
+        if pit_manifest.get("raw_pit_sha256") != staged.raw_sha256:
+            raise GateError("pit_manifest_digest_mismatch", "compact PIT manifest raw hash differs")
+        for key in (
+            "semantic_population_digest_sha256",
+            "candidate_decision_eligibility_digest_sha256",
+            "snapshot_count",
+            "unique_candidate_count",
+        ):
+            if pit_manifest.get(key) != population.get(
+                "candidate_universe_digest_sha256" if key == "semantic_population_digest_sha256" else key
+            ):
+                raise GateError("pit_manifest_digest_mismatch", f"compact PIT manifest field differs: {key}")
+        if (
+            pit_manifest.get("no_alpha_ranking") is not True
+            or pit_manifest.get("candidate_rankings_present") is not False
+        ):
+            raise GateError("candidate_population_alpha_leak", "compact PIT manifest permits alpha ranking")
+        population["compact_manifest"] = {
+            "path": _logical_path(pit_manifest_path),
+            "raw_sha256": _sha256(pit_manifest_path),
+            "byte_size": pit_manifest_path.stat().st_size,
+        }
+    else:
+        population["compact_manifest"] = {"status": GATE_NOT_RUN}
+    return (
+        population,
+        _artifact_receipt(staged, logical_id="m3_pit_universe", provenance_class="external_untracked"),
+        payload,
+    )
+
+
+def _r3_write_json_immutable(path: Path, payload: Mapping[str, object]) -> None:
+    data = (json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or not path.is_file() or path.read_bytes() != data:
+            raise GateError("result_artifact_conflict", f"result artifact already differs: {path.name}")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _r3_weekly_full_pass(weekly: Mapping[str, object]) -> bool:
+    if not bool(weekly.get("ever_feasible")):
+        return False
+    if "first_accepted_decision" in weekly and "first_feasible_decision" in weekly:
+        if weekly.get("first_accepted_decision") != weekly.get("first_feasible_decision"):
+            return False
+    if int(weekly.get("post_feasibility_failure_count", 0)) != 0:
+        return False
+    if int(weekly.get("post_feasibility_jointly_stale_count", 0)) != 0:
+        return False
+    if int(weekly.get("post_feasibility_misaligned_count", 0)) != 0:
+        return False
+    if int(weekly.get("post_feasibility_reference_outage_count", 0)) != 0:
+        return False
+    if int(
+        weekly.get(
+            "accepted_plus_initial_warmup_count",
+            int(weekly.get("accepted_decision_count", 0)) + int(weekly.get("initial_warmup_decision_count", 0)),
+        )
+    ) != int(weekly.get("decision_count", 0)):
+        return False
+    return int(weekly.get("failed_after_warmup_count", 0)) == 0
+
+
+def _r3_weekly_recent_pass(weekly: Mapping[str, object]) -> bool:
+    return (
+        int(weekly.get("initial_warmup_decision_count", 0)) == 0
+        and bool(weekly.get("ever_feasible"))
+        and int(weekly.get("post_feasibility_failure_count", 0)) == 0
+        and int(weekly.get("accepted_decision_count", 0)) == int(weekly.get("decision_count", 0))
+        and bool(weekly.get("recent_window_accepted_covers_every_required_weekly_decision", False))
+    )
+
+
+def _r3_inventory_quality_pass(inventory: Mapping[str, Mapping[str, object]]) -> bool:
+    required_zero = (
+        "rejected_row_count",
+        "nonfinite_count",
+        "nonpositive_close_count",
+        "nonpositive_ohlc_count",
+        "invalid_ohlc_count",
+        "negative_volume_count",
+        "zero_volume_count",
+        "duplicate_count",
+        "conflicting_duplicate_count",
+        "timeframe_mismatch_count",
+        "market_mismatch_count",
+        "naive_timestamp_count",
+        "invalid_timestamp_count",
+        "source_range_violation_count",
+        "unexpected_schema_count",
+    )
+    for symbol in REFERENCE_SYMBOLS:
+        item = inventory.get(symbol, {})
+        if int(item.get("normalized_row_count", 0)) == 0:
+            return False
+        if item.get("missing_expected_sessions") or item.get("extra_off_calendar_sessions"):
+            return False
+        if any(int(item.get(field, 0)) != 0 for field in required_zero):
+            return False
+        if item.get("timeframe_values") != [CANONICAL_TIMEFRAME] or item.get("market_values") != ["EQUITY"]:
+            return False
+        accounting = item.get("row_accounting", {})
+        if isinstance(accounting, Mapping) and accounting.get("identity_holds") is False:
+            return False
+    return True
+
+
+def _run_r3_gate(
+    args: argparse.Namespace,
+    *,
+    contract: Mapping[str, object],
+    provenance: Mapping[str, object],
+    manifest_blob_bytes: bytes,
+    run_commit: str,
+    run_parent: str,
+    dirty_before: Sequence[str],
+    contract_path: Path,
+) -> tuple[dict[str, object], int]:
+    gates = _gate_map(R3_MANDATORY_GATES)
+    reasons: list[str] = []
+    _set_gate(gates, "commit_topology", GATE_PASS, evidence=provenance)
+    _set_gate(gates, "implementation_blob_identity", GATE_PASS, evidence=provenance["critical_git_blobs"])
+    _set_gate(gates, "manifest_only_commit", GATE_PASS, evidence={"changed_paths": provenance["changed_paths"]})
+    _set_gate(
+        gates,
+        "clean_worktree_at_start",
+        GATE_PASS if not dirty_before else GATE_FAIL,
+        reason=None if not dirty_before else "worktree is dirty before the R3 gate",
+        paths=list(dirty_before),
+    )
+    if dirty_before:
+        _add_reason(reasons, "worktree is dirty before the R3 gate")
+    receipt = _base_receipt(
+        contract=contract,
+        contract_path=contract_path,
+        run_commit=run_commit,
+        run_parent=run_parent,
+        dirty_before=dirty_before,
+        config_digest=None,
+        provenance=provenance,
+    )
+    receipt["manifest_identity"]["raw_sha256"] = _sha256_bytes(manifest_blob_bytes)  # type: ignore[index]
+    critical = provenance.get("critical_git_blobs", {})
+    receipt["acquisition_script_identity"] = (
+        critical.get("scripts/acquire_m3_iwm_raw_bundle.py") if isinstance(critical, Mapping) else {}
+    )
+    receipt["pit_builder_identity"] = (
+        critical.get("scripts/build_m3_pit_scanner_universe.py") if isinstance(critical, Mapping) else {}
+    )
+    receipt["mandatory_gate_results"] = gates
+
+    config_data: Mapping[str, object] = {}
+    config_digest_value: str | None = None
+    try:
+        config_data = _load_yaml(_REPO / "config/settings.yaml")
+        config_digest_value = config_semantic_digest(config_data)
+        if contract.get("config_semantic_digest_sha256") != config_digest_value:
+            raise GateError("config_digest_mismatch", "settings semantic digest differs from the R3 manifest")
+        _set_gate(gates, "configuration_identity", GATE_PASS, evidence={"semantic_digest_sha256": config_digest_value})
+    except GateError as exc:
+        _set_gate(gates, "configuration_identity", GATE_FAIL, reason=str(exc))
+        _add_reason(reasons, str(exc))
+    try:
+        actual_calendar = calendar_dependency_identity()
+        if contract.get("calendar_identity") != actual_calendar:
+            raise GateError("dependency_identity_mismatch", "calendar dependency identity differs from R3 manifest")
+        _set_gate(gates, "dependency_identity", GATE_PASS, evidence=actual_calendar)
+    except GateError as exc:
+        _set_gate(gates, "dependency_identity", GATE_FAIL, reason=str(exc))
+        _add_reason(reasons, str(exc))
+    acquisition_identity = (
+        critical.get("scripts/acquire_m3_iwm_raw_bundle.py") if isinstance(critical, Mapping) else None
+    )
+    pit_identity = critical.get("scripts/build_m3_pit_scanner_universe.py") if isinstance(critical, Mapping) else None
+    if isinstance(acquisition_identity, Mapping) and isinstance(pit_identity, Mapping):
+        _set_gate(gates, "acquisition_script_identity", GATE_PASS, evidence=acquisition_identity)
+    else:
+        _set_gate(
+            gates,
+            "acquisition_script_identity",
+            GATE_FAIL,
+            reason="R3 acquisition/PIT implementation blob pins are missing",
+        )
+        _add_reason(reasons, "R3 acquisition/PIT implementation blob pins are missing")
+
+    receipt["config_semantic_digest_sha256"] = config_digest_value
+    with tempfile.TemporaryDirectory(prefix="m3-data-gate-r3-") as temporary:
+        staging_dir = Path(temporary)
+        artifacts: dict[str, object] = {}
+        canonical_rows: dict[str, list[object]] = {symbol: [] for symbol in REFERENCE_SYMBOLS}
+        quality: dict[str, dict[str, int]] = {symbol: {} for symbol in REFERENCE_SYMBOLS}
+        canonical_artifact: object | None = None
+        iwm_rows: tuple[object, ...] = ()
+        iwm_audit: dict[str, object] = {"status": GATE_NOT_RUN}
+        population: dict[str, object] | None = None
+        pit_artifact: dict[str, object] = {}
+        pit_payload: Mapping[str, object] | None = None
+
+        try:
+            canonical_path = Path(args.canonical_bars)
+            canonical_manifest_path = Path(args.canonical_manifest)
+            if not canonical_path.is_file() or not canonical_manifest_path.is_file():
+                raise GateError("missing_canonical_artifact", "canonical bars CSV and manifest are required")
+            canonical_manifest = _load_json(canonical_manifest_path)
+            if str(canonical_manifest.get("feed", "")).lower() != SOURCE_FEED:
+                raise GateError("canonical_source_contract", "canonical manifest feed must be sip")
+            if str(canonical_manifest.get("adjustment", "")).lower() != SOURCE_ADJUSTMENT:
+                raise GateError("canonical_source_contract", "canonical manifest adjustment must be split")
+            canonical_manifest_identity = _tracked_blob_identity(canonical_manifest_path)
+            if canonical_manifest_identity is None:
+                raise GateError("canonical_manifest_provenance", "canonical manifest must be Git tracked")
+            canonical_artifact = stage_file(canonical_path, staging_dir)
+            _validate_artifact_against_manifest(
+                canonical_artifact, canonical_manifest, expected_sha=None, label="canonical bars"
+            )
+            artifacts["canonical_bars"] = {
+                **_artifact_receipt(
+                    canonical_artifact, logical_id="canonical_equity_v5_bars", provenance_class="external_untracked"
+                ),
+                "manifest_git_blob": canonical_manifest_identity,
+            }
+            canonical_rows, quality = load_csv_reference_rows(
+                canonical_artifact.staged_path, reference_symbols=REFERENCE_SYMBOLS
+            )
+            _set_gate(gates, "canonical_artifact_identity", GATE_PASS, evidence=artifacts["canonical_bars"])
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "canonical_artifact_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        try:
+            lifetimes_path = Path(args.lifetimes)
+            if not lifetimes_path.is_file():
+                raise GateError("missing_lifetimes", "lifetimes artifact is missing")
+            lifetimes_artifact = stage_file(lifetimes_path, staging_dir)
+            tracked = _tracked_blob_identity(lifetimes_path)
+            if tracked is None:
+                raise GateError("lifetime_provenance", "tracked v5 lifetime table must be proven as a Git blob")
+            if lifetimes_artifact.crlf_normalized_sha256 != tracked["git_blob_raw_sha256"]:
+                raise GateError("lifetime_blob_mismatch", "working lifetime bytes differ from the pinned Git blob")
+            if args.lifetimes_expected_sha256 and lifetimes_artifact.raw_sha256 != args.lifetimes_expected_sha256:
+                raise GateError("lifetime_hash_mismatch", "lifetime CLI hash differs from the Git blob")
+            artifacts["lifetimes"] = {
+                **_artifact_receipt(
+                    lifetimes_artifact, logical_id="equity_entity_lifetimes_v5", provenance_class="git_blob"
+                ),
+                **tracked,
+                "working_raw_sha256": lifetimes_artifact.raw_sha256,
+                "working_normalized_sha256": lifetimes_artifact.crlf_normalized_sha256,
+            }
+            _set_gate(gates, "lifetime_identity", GATE_PASS, evidence=artifacts["lifetimes"])
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "lifetime_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        try:
+            ca_path = Path(args.corporate_actions)
+            ca_manifest_path = Path(args.corporate_actions_manifest)
+            if not ca_path.is_file() or not ca_manifest_path.is_file():
+                raise GateError("missing_corporate_actions", "corporate-actions artifact and manifest are required")
+            ca_manifest = _load_json(ca_manifest_path)
+            ca_artifact = stage_file(ca_path, staging_dir)
+            _validate_artifact_against_manifest(ca_artifact, ca_manifest, expected_sha=None, label="corporate actions")
+            artifacts["corporate_actions"] = {
+                **_artifact_receipt(
+                    ca_artifact, logical_id="equity_corporate_actions_v5", provenance_class="external_untracked"
+                ),
+                "manifest_git_blob": _tracked_blob_identity(ca_manifest_path),
+            }
+            receipt["corporate_action_inventory"] = _audit_corporate_actions(ca_path, ca_manifest, ca_artifact)
+            _set_gate(gates, "corporate_action_identity", GATE_PASS, evidence=artifacts["corporate_actions"])
+        except (GateError, OSError) as exc:
+            _set_gate(gates, "corporate_action_identity", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        if args.iwm_bundle is None:
+            reason = "no operator-supplied IWM raw bundle was provided"
+            for name in (
+                "iwm_raw_bundle",
+                "iwm_provider_contract",
+                "iwm_pagination_chain",
+                "iwm_normalization",
+                "iwm_source_completeness",
+            ):
+                _set_gate(gates, name, GATE_NOT_RUN, reason=reason)
+            receipt["iwm_raw_source"] = {"status": GATE_NOT_RUN, "reason": reason}
+            _add_reason(reasons, reason)
+        else:
+            try:
+                iwm_rows, iwm_audit = validate_iwm_bundle(args.iwm_bundle, staging_dir)
+                receipt["iwm_raw_source"] = {"status": GATE_PASS, **_compact_iwm_audit(iwm_audit)}
+                for name in ("iwm_raw_bundle", "iwm_provider_contract", "iwm_pagination_chain", "iwm_normalization"):
+                    _set_gate(gates, name, GATE_PASS, evidence={"source_identity": iwm_audit.get("source_identity")})
+            except (GateError, OSError) as exc:
+                iwm_audit = {
+                    "status": GATE_FAIL,
+                    "category": getattr(exc, "category", "source_error"),
+                    "reason": str(exc),
+                }
+                receipt["iwm_raw_source"] = iwm_audit
+                for name in (
+                    "iwm_raw_bundle",
+                    "iwm_provider_contract",
+                    "iwm_pagination_chain",
+                    "iwm_normalization",
+                    "iwm_source_completeness",
+                ):
+                    _set_gate(gates, name, GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+
+        scanner_digest_value: str | None = None
+        if config_data:
+            try:
+                from parayabuck.config import EquityScannerConfig, EquityUniverseConfig  # noqa: PLC0415
+                from parayabuck.universe.scanner import scanner_config_digest  # noqa: PLC0415
+
+                universe = config_data.get("universe")
+                equity_raw = universe.get("equity") if isinstance(universe, Mapping) else None
+                if not isinstance(equity_raw, Mapping):
+                    raise GateError("equity_config_missing", "settings universe.equity is missing")
+                equity_values = dict(equity_raw)
+                scanner_raw = equity_values.pop("scanner", {})
+                if not isinstance(scanner_raw, Mapping):
+                    raise GateError("equity_scanner_config_missing", "settings universe.equity.scanner is missing")
+                equity_config = EquityUniverseConfig(scanner=EquityScannerConfig(**dict(scanner_raw)), **equity_values)
+                scanner_digest_value = scanner_config_digest(equity_config)
+            except (GateError, TypeError, ValueError) as exc:
+                _add_reason(reasons, str(exc))
+
+        if args.pit_universe is None:
+            reason = "no deterministic PIT scanner-universe input was supplied"
+            _set_gate(gates, "deterministic_numerical_population", GATE_NOT_RUN, reason=reason)
+            _set_gate(gates, "pit_reference_boundary", GATE_NOT_RUN, reason=reason)
+            receipt["deterministic_numerical_population"] = {"status": GATE_NOT_RUN, "methodology": "not executed"}
+            _add_reason(reasons, reason)
+        else:
+            try:
+                default_pit_manifest = _REPO / R3_PIT_MANIFEST_PATH
+                pit_manifest_path = (
+                    Path(args.pit_manifest) if getattr(args, "pit_manifest", None) else default_pit_manifest
+                )
+                if not pit_manifest_path.is_file():
+                    raise GateError("missing_pit_manifest", "compact R3 PIT population manifest is required")
+                population, pit_artifact, pit_payload = _r3_load_pit_population(
+                    Path(args.pit_universe),
+                    staging_dir,
+                    pit_manifest_path=pit_manifest_path,
+                    expected_scanner_config_digest=scanner_digest_value,
+                )
+                receipt["deterministic_numerical_population"] = {
+                    key: value for key, value in population.items() if key not in {"snapshots", "candidate_symbols"}
+                }
+                receipt["deterministic_numerical_population"]["input_artifact"] = pit_artifact
+                _set_gate(
+                    gates,
+                    "deterministic_numerical_population",
+                    GATE_PASS,
+                    evidence=receipt["deterministic_numerical_population"],
+                )
+                _set_gate(gates, "pit_reference_boundary", GATE_PASS, evidence=population["reference_boundary"])
+            except (GateError, OSError) as exc:
+                _set_gate(gates, "deterministic_numerical_population", GATE_FAIL, reason=str(exc))
+                _set_gate(gates, "pit_reference_boundary", GATE_FAIL, reason=str(exc))
+                receipt["deterministic_numerical_population"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _add_reason(reasons, str(exc))
+
+        panel_rows: dict[str, list[object]] = {
+            symbol: list(canonical_rows.get(symbol, ())) for symbol in REFERENCE_SYMBOLS
+        }
+        if iwm_rows and gates["iwm_raw_bundle"]["status"] == GATE_PASS and canonical_artifact is not None:
+            try:
+                canonical_iwm = tuple(canonical_rows.get("IWM", ()))
+                merged_iwm, merge_hashes = merge_normalized_rows(canonical_iwm, iwm_rows)  # type: ignore[arg-type]
+                panel_rows["IWM"] = list(merged_iwm)
+                receipt["merge_integrity"] = {
+                    "status": GATE_PASS,
+                    "existing_canonical_iwm_rows": len(canonical_iwm),
+                    "supplied_normalized_iwm_rows": len(iwm_rows),
+                    **merge_hashes,
+                }
+                quality["IWM"] = {
+                    "raw_row_count": len(merged_iwm),
+                    "raw_reference_rows": len(merged_iwm),
+                    "normalized_reference_rows": len(merged_iwm),
+                    "post_evaluation_valid_rows": sum(row.session_date > EVALUATION_END for row in merged_iwm),  # type: ignore[attr-defined]
+                    "rejected_row_count": 0,
+                }
+            except GateError as exc:
+                receipt["merge_integrity"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _set_gate(gates, "composite_dataset_identity", GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+        else:
+            receipt["merge_integrity"] = {"status": GATE_NOT_RUN, "reason": "IWM source not available"}
+
+        inventory: dict[str, dict[str, object]] = {symbol: {} for symbol in REFERENCE_SYMBOLS}
+        common: dict[str, object] = {"common_session_count": 0, "common_sessions": []}
+        weekly_full: dict[str, object] = {"decisions": [], "ever_feasible": False}
+        weekly_recent: dict[str, object] = {"decisions": [], "ever_feasible": False}
+        source_complete = False
+        try:
+            expected_sessions = expected_exchange_sessions(SOURCE_START, EVALUATION_END)
+            source_identity = {
+                "provider": SOURCE_PROVIDER,
+                "api_family_version": SOURCE_API_FAMILY_VERSION,
+                "endpoint_identity": SOURCE_ENDPOINT,
+                "feed": SOURCE_FEED,
+                "adjustment": SOURCE_ADJUSTMENT,
+                "source_timeframe": CANONICAL_TIMEFRAME,
+                "sort": SOURCE_SORT,
+            }
+            inventory = {
+                symbol: build_reference_inventory(
+                    panel_rows.get(symbol, ()),
+                    raw_quality=quality.get(symbol),
+                    expected_sessions=expected_sessions,
+                    evaluation_end=EVALUATION_END,
+                    source_identity=source_identity,
+                )
+                for symbol in REFERENCE_SYMBOLS
+            }
+            common = common_session_report(
+                panel_rows, expected_sessions=expected_sessions, evaluation_end=EVALUATION_END
+            )
+            weekly_full = weekly_decision_coverage(
+                panel_rows, expected_sessions=expected_sessions, start=SOURCE_START, end=EVALUATION_END
+            )
+            weekly_recent = weekly_decision_coverage(
+                panel_rows, expected_sessions=expected_sessions, start=date(2022, 1, 1), end=EVALUATION_END
+            )
+            source_completeness = _source_completeness(panel_rows, start=SOURCE_START, end=SOURCE_END)
+            source_complete = bool(source_completeness.get("complete"))
+            row_quality_ok = _r3_inventory_quality_pass(inventory)
+            full_weekly_ok = _r3_weekly_full_pass(weekly_full)
+            recent_weekly_ok = _r3_weekly_recent_pass(weekly_recent)
+            receipt["reference_inventory"] = _compact_inventory(inventory)
+            receipt["row_rejection_inventory"] = {
+                symbol: {
+                    "raw_reference_rows": item.get("raw_reference_rows", 0),
+                    "normalized_reference_rows": item.get("normalized_reference_rows", 0),
+                    "post_evaluation_valid_rows": item.get("post_evaluation_valid_rows", 0),
+                    "rejected_row_count": item.get("rejected_row_count", 0),
+                    "rejection_counts": item.get("rejection_counts", {}),
+                }
+                for symbol, item in inventory.items()
+            }
+            receipt["source_completeness_through_2026_07_31"] = source_completeness
+            receipt["evaluation_completeness_through_2026_07_30"] = _compact_common(common)
+            receipt["common_session_coverage"] = {
+                **_compact_common(common),
+                "common_sessions_sha256": session_dates_digest(common["common_sessions"]),
+            }
+            receipt["weekly_coverage"] = {
+                "full": _compact_weekly(weekly_full),
+                "recent": _compact_weekly(weekly_recent),
+            }
+            receipt["reference_panel"] = {
+                "normalized_reference_panel_sha256": reference_panel_digest(
+                    [row for symbol in REFERENCE_SYMBOLS for row in panel_rows.get(symbol, ())],
+                    source_identity=source_identity,
+                ),
+                "evaluation_reference_panel_sha256": reference_panel_digest(
+                    [
+                        row
+                        for symbol in REFERENCE_SYMBOLS
+                        for row in panel_rows.get(symbol, ())
+                        if row.session_date <= EVALUATION_END
+                    ],  # type: ignore[attr-defined]
+                    source_identity=source_identity,
+                ),
+            }
+            receipt["calendar_identity"] = calendar_dependency_identity()
+            receipt["iwm_source_completeness"] = source_completeness
+            _set_gate(
+                gates,
+                "iwm_source_completeness",
+                GATE_PASS if source_complete else GATE_FAIL,
+                reason=None if source_complete else "SPY/IWM/QQQ source completeness through 2026-07-31 failed",
+                evidence=source_completeness,
+            )
+            _set_gate(
+                gates,
+                "reference_calendar",
+                GATE_PASS if source_complete else GATE_FAIL,
+                reason=None if source_complete else "reference source completeness or calendar failed",
+                evidence={"calendar": receipt["calendar_identity"]},
+            )
+            _set_gate(
+                gates,
+                "reference_row_quality",
+                GATE_PASS if row_quality_ok else GATE_FAIL,
+                reason=None if row_quality_ok else "reference row quality failed",
+            )
+            _set_gate(
+                gates,
+                "reference_common_sessions",
+                GATE_PASS if int(common["common_session_count"]) >= 274 else GATE_FAIL,
+                common_session_count=common["common_session_count"],
+            )
+            _set_gate(
+                gates,
+                "full_weekly_post_warmup_coverage",
+                GATE_PASS if full_weekly_ok else GATE_FAIL,
+                reason=None if full_weekly_ok else "full-window post-warmup weekly coverage failed",
+            )
+            _set_gate(
+                gates,
+                "recent_weekly_coverage",
+                GATE_PASS if recent_weekly_ok else GATE_FAIL,
+                reason=None if recent_weekly_ok else "recent weekly coverage failed",
+            )
+            for failed, label in (
+                (not source_complete, "source completeness failed"),
+                (not row_quality_ok, "reference row quality failed"),
+                (not full_weekly_ok, "full weekly coverage failed"),
+                (not recent_weekly_ok, "recent weekly coverage failed"),
+            ):
+                if failed:
+                    _add_reason(reasons, label)
+        except (GateError, OSError) as exc:
+            for name in (
+                "iwm_source_completeness",
+                "reference_calendar",
+                "reference_row_quality",
+                "reference_common_sessions",
+                "full_weekly_post_warmup_coverage",
+                "recent_weekly_coverage",
+            ):
+                _set_gate(gates, name, GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        if iwm_rows and canonical_artifact is not None and gates["iwm_raw_bundle"]["status"] == GATE_PASS:
+            try:
+                sidecar_path = Path(args.iwm_normalized_out) if args.iwm_normalized_out else None
+                composite_manifest_out = Path(args.composite_manifest_out) if args.composite_manifest_out else None
+                if sidecar_path is None or composite_manifest_out is None:
+                    raise GateError(
+                        "composite_artifact_missing", "R3 composite requires sidecar and manifest output paths"
+                    )
+                sidecar = write_normalized_sidecar(list(iwm_rows), sidecar_path)  # type: ignore[arg-type]
+                sidecar_logical = _logical_path(sidecar_path)
+                if sidecar_logical.startswith("<external:"):
+                    raise GateError("sidecar_path_unbound", "normalized sidecar must be under the repository")
+                sidecar["path"] = sidecar_logical
+                canonical_manifest_identity = _tracked_blob_identity(Path(args.canonical_manifest))
+                normalizer_blob = critical.get(NORMALIZER_PATH) if isinstance(critical, Mapping) else None
+                if canonical_manifest_identity is None or not isinstance(normalizer_blob, Mapping):
+                    raise GateError("composite_provenance_missing", "R3 composite Git identities are incomplete")
+                identity = composite_dataset_identity(
+                    canonical_parent_raw_sha256=canonical_artifact.raw_sha256,  # type: ignore[union-attr]
+                    canonical_parent_normalized_sha256=canonical_artifact.crlf_normalized_sha256,  # type: ignore[union-attr]
+                    canonical_manifest_git_blob=str(canonical_manifest_identity["git_blob_id"]),
+                    iwm_raw_bundle_sha256=str(iwm_audit["raw_bundle_sha256"]),
+                    iwm_normalized_raw_sha256=str(sidecar["raw_sha256"]),
+                    iwm_normalized_semantic_row_sha256=str(sidecar["normalized_semantic_row_sha256"]),
+                    normalizer_git_blob=str(normalizer_blob["git_blob_id"]),
+                    normalizer_sha256=str(normalizer_blob["raw_sha256"]),
+                    schema_version=NORMALIZER_VERSION,
+                    canonical_timeframe=CANONICAL_TIMEFRAME,
+                    source_feed=SOURCE_FEED,
+                    adjustment_mode=SOURCE_ADJUSTMENT,
+                    exchange_timezone=EXCHANGE_TIMEZONE,
+                    calendar_identity=calendar_dependency_identity(),
+                    source_range={"start": SOURCE_START.isoformat(), "end": SOURCE_END.isoformat()},
+                    evaluation_range={"end_inclusive": EVALUATION_END.isoformat()},
+                )
+                composite_payload = {
+                    "schema_version": "1.0.0",
+                    "mission": "equity_m3_composite_dataset_2026_09",
+                    "parent_dataset": "canonical_equity_v5_bars",
+                    "iwm_sidecar": sidecar,
+                    "identity": identity,
+                }
+                _r3_write_json_immutable(composite_manifest_out, composite_payload)
+                receipt["composite_dataset_identity"] = {
+                    "status": GATE_PASS,
+                    "manifest_path": _logical_path(composite_manifest_out),
+                    "manifest_sha256": _sha256(composite_manifest_out),
+                    "identity": identity,
+                    "sidecar": sidecar,
+                }
+                _set_gate(gates, "composite_dataset_identity", GATE_PASS, evidence=identity)
+            except (GateError, OSError) as exc:
+                receipt["composite_dataset_identity"] = {"status": GATE_FAIL, "reason": str(exc)}
+                _set_gate(gates, "composite_dataset_identity", GATE_FAIL, reason=str(exc))
+                _add_reason(reasons, str(exc))
+        elif gates["composite_dataset_identity"]["status"] == GATE_UNKNOWN:
+            _set_gate(
+                gates,
+                "composite_dataset_identity",
+                GATE_NOT_RUN,
+                reason="valid IWM raw bundle and canonical artifact are required",
+            )
+            receipt["composite_dataset_identity"] = {"status": GATE_NOT_RUN}
+
+        if population is not None and gates["deterministic_numerical_population"]["status"] == GATE_PASS:
+            prerequisites = (
+                "reference_common_sessions",
+                "full_weekly_post_warmup_coverage",
+                "recent_weekly_coverage",
+                "composite_dataset_identity",
+                "pit_reference_boundary",
+            )
+            if all(gates[name]["status"] == GATE_PASS for name in prerequisites) and canonical_artifact is not None:
+                thresholds = contract.get("numerical_thresholds", DEFAULT_NUMERICAL_THRESHOLDS)
+                if not isinstance(thresholds, Mapping):
+                    thresholds = DEFAULT_NUMERICAL_THRESHOLDS
+                matrix_summary = _r3_matrix_audit_stream(
+                    canonical_artifact.staged_path,
+                    panel_rows,
+                    weekly_recent,
+                    population,
+                    thresholds,
+                )
+                receipt["design_matrix_summary"] = {
+                    key: value for key, value in matrix_summary.items() if key != "results"
+                }
+                matrix_ok = (
+                    int(matrix_summary["total_matrix_count"]) > 0
+                    and int(matrix_summary["pass_count"]) == int(matrix_summary["total_matrix_count"])
+                    and int(matrix_summary["fail_count"]) == 0
+                )
+                _set_gate(
+                    gates,
+                    "design_matrix_feasibility",
+                    GATE_PASS if matrix_ok else GATE_FAIL,
+                    reason=None if matrix_ok else "matrix population is empty or contains failed audits",
+                    total_matrix_count=matrix_summary["total_matrix_count"],
+                    pass_count=matrix_summary["pass_count"],
+                    fail_count=matrix_summary["fail_count"],
+                )
+                if not matrix_ok:
+                    _add_reason(reasons, "design-matrix feasibility gate failed")
+            elif gates["design_matrix_feasibility"]["status"] == GATE_UNKNOWN:
+                reason = "design matrix phase not run because prerequisite data gates failed"
+                _set_gate(gates, "design_matrix_feasibility", GATE_NOT_RUN, reason=reason)
+                _add_reason(reasons, reason)
+        else:
+            if gates["design_matrix_feasibility"]["status"] == GATE_UNKNOWN:
+                reason = "deterministic numerical population or PIT prerequisites are not ready"
+                _set_gate(gates, "design_matrix_feasibility", GATE_NOT_RUN, reason=reason)
+                _add_reason(reasons, reason)
+
+        try:
+            overlay = build_reference_overlay(config_data)
+            role_receipt = overlay.to_dict()
+            if population is not None:
+                role_receipt["pit_universe_evidence"] = validate_pit_reference_boundary(population)
+                receipt["reference_role_evidence_levels"]["pit_universe"] = "PIT_UNIVERSE_VERIFIED"  # type: ignore[index]
+            receipt["reference_role_separation"] = role_receipt
+            _set_gate(gates, "reference_role_contract", GATE_PASS, evidence=role_receipt)
+        except GateError as exc:
+            receipt["reference_role_separation"] = {"status": GATE_FAIL, "reason": str(exc)}
+            _set_gate(gates, "reference_role_contract", GATE_FAIL, reason=str(exc))
+            _add_reason(reasons, str(exc))
+
+        receipt["input_provenance"] = artifacts
+        receipt["diagnostic_only"] = bool(args.diagnostic_candidate_symbol)
+        if args.diagnostic_candidate_symbol:
+            receipt["diagnostic_candidate_symbols"] = sorted(
+                {str(item).strip().upper() for item in args.diagnostic_candidate_symbol if str(item).strip()}
+            )
+            _add_reason(reasons, "diagnostic candidate symbols cannot contribute to PASS")
+        receipt["mandatory_gate_results"] = gates
+        receipt["data_gate_verdict"] = evaluate_mandatory_gates(gates, R3_REQUIRED_FOR_DATA_PASS)
+        receipt["next_required_gate"] = (
+            "M3_CANDIDATE_OCP_GATE"
+            if receipt["data_gate_verdict"] == "M3_DATA_GATE_PASS"
+            else "M3_DATA_GATE_COMPLETION"
+        )
+        receipt["m3_candidate_ocp_status"] = "NOT_RUN_OUT_OF_SCOPE"
+        receipt["economic_mission_ready"] = False
+
+    dirty_after = _dirty_paths()
+    receipt["worktree_cleanliness"]["after"] = dirty_after  # type: ignore[index]
+    receipt["worktree_cleanliness"]["clean_after"] = not dirty_after  # type: ignore[index]
+    receipt["blocked_reasons"] = sorted(set(reasons))
+    if receipt["data_gate_verdict"] != "M3_DATA_GATE_PASS":
+        receipt["corrective_infrastructure_verdict"] = (
+            "PASS"
+            if all(
+                gates[name]["status"] == GATE_PASS
+                for name in (
+                    "commit_topology",
+                    "implementation_blob_identity",
+                    "manifest_only_commit",
+                    "clean_worktree_at_start",
+                    "configuration_identity",
+                    "dependency_identity",
+                    "acquisition_script_identity",
+                )
+            )
+            else "BLOCKED"
+        )
+    receipt["forbidden_economic_fields"] = list(forbidden_receipt_keys(receipt))
+    if receipt["forbidden_economic_fields"]:
+        _set_gate(gates, "receipt_forbidden_fields", GATE_FAIL, reason="receipt contains forbidden economic fields")
+        receipt["data_gate_verdict"] = "M3_DATA_GATE_BLOCKED"
+        _add_reason(reasons, "receipt contains forbidden economic fields")
+    else:
+        _set_gate(gates, "receipt_forbidden_fields", GATE_PASS, evidence={"fields": []})
+    receipt["mandatory_gate_results"] = gates
+    receipt["blocked_reasons"] = sorted(set(reasons))
+    receipt["self_digest_sha256"] = canonical_digest(receipt)
+    output_path = Path(args.receipt_out)
+    _r3_write_json_immutable(output_path, _safe(receipt))
+    return receipt, 0 if receipt["data_gate_verdict"] == "M3_DATA_GATE_PASS" else EXIT_BLOCKED
+
+
 def run_gate(args: argparse.Namespace) -> tuple[dict[str, object], int]:
     run_commit = _run_git("rev-parse", "HEAD")
     run_parent = _run_git("rev-parse", "HEAD^")
     dirty_before = _dirty_paths()
     contract_path = Path(args.contract)
+    if _logical_path(contract_path) == R3_MANIFEST_PATH:
+        contract, _manifest_blob_id, manifest_blob_bytes = _load_committed_contract(
+            contract_path, run_commit=run_commit
+        )
+        _validate_contract(contract, run_commit=run_commit, run_parent=run_parent)
+        provenance = _validate_commit_provenance(
+            contract,
+            manifest_path=R3_MANIFEST_PATH,
+            run_commit=run_commit,
+            run_parent=run_parent,
+        )
+        return _run_r3_gate(
+            args,
+            contract=contract,
+            provenance=provenance,
+            manifest_blob_bytes=manifest_blob_bytes,
+            run_commit=run_commit,
+            run_parent=run_parent,
+            dirty_before=dirty_before,
+            contract_path=contract_path,
+        )
     reasons: list[str] = []
     gates = _gate_map()
     contract: Mapping[str, object] = {}
@@ -1440,6 +2698,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--iwm-normalized-out", type=Path)
     parser.add_argument("--composite-manifest-out", type=Path)
     parser.add_argument("--pit-universe", type=Path)
+    parser.add_argument("--pit-manifest", type=Path)
     parser.add_argument("--lifetimes", type=Path, required=True)
     parser.add_argument("--lifetimes-expected-sha256")
     parser.add_argument("--corporate-actions", type=Path, required=True)

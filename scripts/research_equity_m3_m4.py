@@ -39,6 +39,7 @@ from m3_data_gate_helpers import (  # noqa: E402
     CANONICAL_TIMEFRAME,
     EXCHANGE_TIMEZONE,
     NORMALIZER_VERSION,
+    RAW_SOURCE_TIMEFRAME,
     SOURCE_ADJUSTMENT,
     SOURCE_API_FAMILY_VERSION,
     SOURCE_ENDPOINT,
@@ -50,11 +51,13 @@ from m3_data_gate_helpers import (  # noqa: E402
     canonical_digest,
     composite_dataset_identity,
     config_semantic_digest,
+    deterministic_candidate_population,
     forbidden_receipt_keys,
     load_csv_reference_rows,
     merge_normalized_rows,
     reference_panel_digest,
     semantic_rows_digest,
+    validate_pit_reference_boundary,
 )
 from research_helpers import git_head, sha256_of_file  # noqa: E402
 from run_symmetric_v5_validation import load_corporate_actions_all, load_lifetimes  # noqa: E402
@@ -80,7 +83,6 @@ DATASET_MANIFEST = DATASET.with_suffix(".manifest.json")
 CA_PATH = REPO / "data/historical/equity_survivorship_full_corporate_actions_v5.csv"
 MANIFEST_PATH = REPO / "data/research_manifests/equity_m3_m4_2026_08.json"
 OUT_DIR = REPO / "data/research/equity_m3_m4_2026_08"
-M3_DATA_GATE_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09_r2.json"
 M3_DATA_GATE_R2_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09_r2.json"
 M3_DATA_GATE_R2_MANIFEST = REPO / "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
 M3_DATA_GATE_R2_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r2.json"
@@ -92,6 +94,54 @@ M3_DATA_GATE_R2_CRITICAL_PATHS = (
     "tests/test_research_equity_m3_data_gate.py",
     ".github/workflows/ci.yml",
 )
+M3_DATA_GATE_R3_RECEIPT = REPO / "data/research_receipts/equity_m3_data_gate_2026_09_r3.json"
+M3_DATA_GATE_R3_MANIFEST = REPO / "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
+M3_DATA_GATE_R3_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
+M3_DATA_GATE_R3_VERIFIER_PATH = "scripts/research_equity_m3_data_gate.py"
+M3_DATA_GATE_R3_NORMALIZER_PATH = "scripts/m3_data_gate_helpers.py"
+M3_DATA_GATE_R3_BASE_COMMIT = "99fa950a3223a8b6cc78c8a92f8fa20aff52b350"
+M3_DATA_GATE_R3_CRITICAL_PATHS = (
+    ".github/workflows/ci.yml",
+    M3_DATA_GATE_R3_NORMALIZER_PATH,
+    M3_DATA_GATE_R3_VERIFIER_PATH,
+    "scripts/research_equity_m3_m4.py",
+    "scripts/acquire_m3_iwm_raw_bundle.py",
+    "scripts/build_m3_pit_scanner_universe.py",
+    "tests/test_research_equity_m3_data_gate.py",
+    "tests/test_m3_iwm_acquisition.py",
+    "tests/test_m3_pit_scanner_universe.py",
+)
+M3_DATA_GATE_R3_MANDATORY_GATES = (
+    "commit_topology",
+    "implementation_blob_identity",
+    "manifest_only_commit",
+    "clean_worktree_at_start",
+    "configuration_identity",
+    "dependency_identity",
+    "acquisition_script_identity",
+    "canonical_artifact_identity",
+    "lifetime_identity",
+    "corporate_action_identity",
+    "iwm_raw_bundle",
+    "iwm_provider_contract",
+    "iwm_pagination_chain",
+    "iwm_normalization",
+    "iwm_source_completeness",
+    "reference_calendar",
+    "reference_row_quality",
+    "reference_common_sessions",
+    "full_weekly_post_warmup_coverage",
+    "recent_weekly_coverage",
+    "composite_dataset_identity",
+    "deterministic_numerical_population",
+    "pit_reference_boundary",
+    "design_matrix_feasibility",
+    "reference_role_contract",
+    "receipt_forbidden_fields",
+)
+# The production research consumer is deliberately R3-only.  R2 remains named
+# separately so its immutable historical artifacts can still be audited.
+M3_DATA_GATE_RECEIPT = M3_DATA_GATE_R3_RECEIPT
 
 EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
 RECENT_START = datetime(2022, 1, 1, tzinfo=UTC)
@@ -450,8 +500,8 @@ def _r2_relative_path(value: object) -> Path | None:
     return candidate
 
 
-def _valid_m3_data_gate_receipt() -> bool:
-    """Accept only a Git-, data-, and composite-bound R2 data PASS."""
+def _valid_m3_data_gate_r2_receipt() -> bool:
+    """Legacy audit helper for the immutable R2 receipt."""
     required_gate_order = (
         "commit_topology",
         "implementation_blob_identity",
@@ -486,7 +536,7 @@ def _valid_m3_data_gate_receipt() -> bool:
         "sort": SOURCE_SORT,
     }
     try:
-        payload = json.loads(M3_DATA_GATE_RECEIPT.read_text(encoding="utf-8"))
+        payload = json.loads(M3_DATA_GATE_R2_RECEIPT.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             return False
         if forbidden_receipt_keys(payload):
@@ -760,6 +810,412 @@ def _valid_m3_data_gate_receipt() -> bool:
         ValueError,
         subprocess.CalledProcessError,
     ):
+        return False
+
+
+def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
+    """Accept only a Git-, data-, PIT-, and matrix-bound R3 data PASS."""
+    required_gate_order = M3_DATA_GATE_R3_MANDATORY_GATES
+    source_identity = {
+        "provider": SOURCE_PROVIDER,
+        "api_family_version": SOURCE_API_FAMILY_VERSION,
+        "endpoint_identity": SOURCE_ENDPOINT,
+        "feed": SOURCE_FEED,
+        "adjustment": SOURCE_ADJUSTMENT,
+        "source_timeframe": CANONICAL_TIMEFRAME,
+        "sort": SOURCE_SORT,
+    }
+    try:
+        if forbidden_receipt_keys(payload):
+            return False
+        required = {
+            "schema_version": "3.0.0",
+            "mission": "equity_m3_data_gate_2026_09_r3",
+            "data_gate_verdict": "M3_DATA_GATE_PASS",
+            "corrective_infrastructure_verdict": "PASS",
+            "research_only": True,
+            "automatic_promotion": False,
+            "human_promotion_only": True,
+            "candidate_economics_run": False,
+            "economic_metrics_present": False,
+            "economic_mission_ready": False,
+            "next_required_gate": "M3_CANDIDATE_OCP_GATE",
+            "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+            "diagnostic_only": False,
+        }
+        if any(payload.get(key) != expected for key, expected in required.items()):
+            return False
+        recorded_digest = payload.get("self_digest_sha256")
+        if not isinstance(recorded_digest, str):
+            return False
+        without_digest = dict(payload)
+        without_digest.pop("self_digest_sha256", None)
+        if recorded_digest != canonical_digest(without_digest):
+            return False
+
+        gate_results = payload.get("mandatory_gate_results")
+        if not isinstance(gate_results, Mapping) or set(gate_results) != set(required_gate_order):
+            return False
+        if any(
+            not isinstance(gate_results[name], Mapping) or gate_results[name].get("status") != "PASS"
+            for name in required_gate_order
+        ):
+            return False
+
+        lineage = payload.get("base_lineage")
+        if not isinstance(lineage, Mapping):
+            return False
+        base = str(lineage.get("corrective_base_commit", ""))
+        implementation = str(lineage.get("implementation_a3_commit", ""))
+        run_commit = str(lineage.get("run_b3_commit", ""))
+        if lineage.get("c3_commit") is not None or not all(
+            len(value) == 40 for value in (base, implementation, run_commit)
+        ):
+            return False
+        if base != M3_DATA_GATE_R3_BASE_COMMIT:
+            return False
+        if _r2_git_text("rev-parse", f"{implementation}^") != base:
+            return False
+        if _r2_git_text("rev-parse", f"{run_commit}^") != implementation:
+            return False
+        if _r2_git_text("diff-tree", "--no-commit-id", "--name-only", "-r", run_commit).splitlines() != [
+            M3_DATA_GATE_R3_MANIFEST_PATH
+        ]:
+            return False
+
+        manifest_identity = payload.get("manifest_identity")
+        if not isinstance(manifest_identity, Mapping) or manifest_identity.get("path") != M3_DATA_GATE_R3_MANIFEST_PATH:
+            return False
+        manifest_blob, manifest_sha, manifest_bytes = _r2_git_blob(run_commit, M3_DATA_GATE_R3_MANIFEST_PATH)
+        if manifest_identity.get("git_blob_id") != manifest_blob or manifest_identity.get("raw_sha256") != manifest_sha:
+            return False
+        if not M3_DATA_GATE_R3_MANIFEST.is_file() or M3_DATA_GATE_R3_MANIFEST.read_bytes() != manifest_bytes:
+            return False
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        if not isinstance(manifest, Mapping):
+            return False
+        if (
+            manifest.get("schema_version") != "3.0.0"
+            or manifest.get("mission") != "equity_m3_data_gate_2026_09_r3"
+            or manifest.get("declared_before_results") is not True
+            or manifest.get("mandatory_data_pass_gates") != list(required_gate_order)
+            or manifest.get("implementation_commit") != implementation
+        ):
+            return False
+        implementation_tree = _r2_git_text("rev-parse", f"{implementation}^{{tree}}")
+        if (
+            manifest.get("implementation_tree") != implementation_tree
+            or payload.get("implementation_tree") != implementation_tree
+        ):
+            return False
+
+        critical = payload.get("critical_git_blobs")
+        manifest_critical = manifest.get("critical_git_blobs")
+        if (
+            not isinstance(critical, Mapping)
+            or not isinstance(manifest_critical, Mapping)
+            or set(critical) != set(M3_DATA_GATE_R3_CRITICAL_PATHS)
+            or dict(manifest_critical) != dict(critical)
+        ):
+            return False
+        current_head = _r2_git_text("rev-parse", "HEAD")
+        for path in M3_DATA_GATE_R3_CRITICAL_PATHS:
+            declaration = critical.get(path)
+            if not isinstance(declaration, Mapping):
+                return False
+            for commit in (implementation, run_commit, current_head):
+                blob_id, raw_sha, _blob = _r2_git_blob(commit, path)
+                if declaration.get("git_blob_id") != blob_id or declaration.get("raw_sha256") != raw_sha:
+                    return False
+        for identity_key, path in (
+            ("verifier_identity", M3_DATA_GATE_R3_VERIFIER_PATH),
+            ("normalizer_identity", M3_DATA_GATE_R3_NORMALIZER_PATH),
+            ("acquisition_script_identity", "scripts/acquire_m3_iwm_raw_bundle.py"),
+            ("pit_builder_identity", "scripts/build_m3_pit_scanner_universe.py"),
+        ):
+            identity = payload.get(identity_key)
+            if not isinstance(identity, Mapping) or dict(identity) != dict(critical[path]):
+                return False
+
+        config_digest = payload.get("config_semantic_digest_sha256")
+        if not isinstance(config_digest, str) or manifest.get("config_semantic_digest_sha256") != config_digest:
+            return False
+        config_data = yaml.safe_load((REPO / "config/settings.yaml").read_text(encoding="utf-8"))
+        if not isinstance(config_data, Mapping) or config_semantic_digest(config_data) != config_digest:
+            return False
+        calendar_identity = payload.get("calendar_identity")
+        if not isinstance(calendar_identity, Mapping) or dict(calendar_identity) != calendar_dependency_identity():
+            return False
+        if manifest.get("calendar_identity") != calendar_identity:
+            return False
+
+        input_provenance = payload.get("input_provenance")
+        canonical_provenance = input_provenance.get("canonical_bars") if isinstance(input_provenance, Mapping) else None
+        if not isinstance(canonical_provenance, Mapping):
+            return False
+        canonical_raw_sha = canonical_provenance.get("raw_sha256")
+        if not isinstance(canonical_raw_sha, str) or sha256_of_file(DATASET) != canonical_raw_sha:
+            return False
+        canonical_manifest_path = DATASET_MANIFEST.relative_to(REPO).as_posix()
+        actual_manifest_blob, actual_manifest_sha, actual_manifest_bytes = _r2_git_blob(
+            current_head, canonical_manifest_path
+        )
+        declared_manifest = canonical_provenance.get("manifest_git_blob")
+        if (
+            not isinstance(declared_manifest, Mapping)
+            or declared_manifest.get("git_blob_id") != actual_manifest_blob
+            or declared_manifest.get("git_blob_raw_sha256") != actual_manifest_sha
+        ):
+            return False
+        canonical_manifest = json.loads(actual_manifest_bytes.decode("utf-8"))
+        if not isinstance(canonical_manifest, Mapping) or canonical_manifest.get("dataset_sha256") != canonical_raw_sha:
+            return False
+
+        iwm_source = payload.get("iwm_raw_source")
+        if not isinstance(iwm_source, Mapping) or iwm_source.get("status") != "PASS":
+            return False
+        source = iwm_source.get("source_identity")
+        if not isinstance(source, Mapping):
+            return False
+        for key, expected in (
+            ("provider", SOURCE_PROVIDER),
+            ("api_family_version", SOURCE_API_FAMILY_VERSION),
+            ("endpoint_identity", SOURCE_ENDPOINT),
+            ("feed", SOURCE_FEED),
+            ("adjustment", SOURCE_ADJUSTMENT),
+            ("source_timeframe", RAW_SOURCE_TIMEFRAME),
+            ("sort", SOURCE_SORT),
+        ):
+            if source.get(key) != expected:
+                return False
+
+        composite = payload.get("composite_dataset_identity")
+        if not isinstance(composite, Mapping) or composite.get("status") != "PASS":
+            return False
+        identity = composite.get("identity")
+        sidecar = composite.get("sidecar")
+        if not isinstance(identity, Mapping) or not isinstance(sidecar, Mapping):
+            return False
+        composite_path = _r2_relative_path(composite.get("manifest_path"))
+        if composite_path is None or composite_path.is_symlink() or not composite_path.is_file():
+            return False
+        if composite.get("manifest_sha256") != sha256_of_file(composite_path):
+            return False
+        sidecar_path = _r2_relative_path(sidecar.get("path"))
+        if sidecar_path is None or sidecar_path.is_symlink() or not sidecar_path.is_file():
+            return False
+        sidecar_raw_sha = sha256_of_file(sidecar_path)
+        if sidecar.get("raw_sha256") != sidecar_raw_sha:
+            return False
+        sidecar_rows, sidecar_quality = load_csv_reference_rows(sidecar_path, reference_symbols=("IWM",))
+        iwm_sidecar_rows = sidecar_rows.get("IWM", [])
+        if sidecar_quality.get("IWM", {}).get("rejected_row_count", 0) != 0:
+            return False
+        sidecar_semantic = semantic_rows_digest(iwm_sidecar_rows)
+        if sidecar.get("normalized_semantic_row_sha256") != sidecar_semantic:
+            return False
+        if iwm_source.get("normalized_semantic_row_sha256") != sidecar_semantic:
+            return False
+        if iwm_source.get("normalized_row_count") != len(iwm_sidecar_rows):
+            return False
+        if identity.get("iwm_raw_bundle_sha256") != iwm_source.get("raw_bundle_sha256"):
+            return False
+        normalizer = critical[M3_DATA_GATE_R3_NORMALIZER_PATH]
+        if not isinstance(normalizer, Mapping):
+            return False
+        recomputed_identity = composite_dataset_identity(
+            canonical_parent_raw_sha256=str(identity["canonical_parent_raw_sha256"]),
+            canonical_parent_normalized_sha256=str(identity["canonical_parent_normalized_sha256"]),
+            canonical_manifest_git_blob=str(identity["canonical_manifest_git_blob"]),
+            iwm_raw_bundle_sha256=str(identity["iwm_raw_bundle_sha256"]),
+            iwm_normalized_raw_sha256=str(identity["iwm_normalized_raw_sha256"]),
+            iwm_normalized_semantic_row_sha256=str(identity["iwm_normalized_semantic_row_sha256"]),
+            normalizer_git_blob=str(identity["normalizer_git_blob"]),
+            normalizer_sha256=str(identity["normalizer_sha256"]),
+            schema_version=str(identity["schema_version"]),
+            canonical_timeframe=str(identity["canonical_timeframe"]),
+            source_feed=str(identity["source_feed"]),
+            adjustment_mode=str(identity["adjustment_mode"]),
+            exchange_timezone=str(identity["exchange_timezone"]),
+            calendar_identity=identity["calendar_identity"],  # type: ignore[arg-type]
+            source_range=identity["source_range"],  # type: ignore[arg-type]
+            evaluation_range=identity["evaluation_range"],  # type: ignore[arg-type]
+        )
+        if dict(recomputed_identity) != dict(identity):
+            return False
+        if (
+            identity.get("canonical_parent_raw_sha256") != canonical_raw_sha
+            or identity.get("canonical_parent_normalized_sha256") != canonical_provenance.get("crlf_normalized_sha256")
+            or identity.get("canonical_manifest_git_blob") != actual_manifest_blob
+            or identity.get("normalizer_git_blob") != normalizer.get("git_blob_id")
+            or identity.get("normalizer_sha256") != normalizer.get("raw_sha256")
+            or identity.get("schema_version") != NORMALIZER_VERSION
+            or identity.get("canonical_timeframe") != CANONICAL_TIMEFRAME
+            or identity.get("source_feed") != SOURCE_FEED
+            or identity.get("adjustment_mode") != SOURCE_ADJUSTMENT
+            or identity.get("exchange_timezone") != EXCHANGE_TIMEZONE
+            or identity.get("calendar_identity") != calendar_identity
+            or identity.get("source_range") != {"start": "2016-01-01", "end": "2026-07-31"}
+            or identity.get("evaluation_range") != {"end_inclusive": "2026-07-30"}
+        ):
+            return False
+        composite_payload = json.loads(composite_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(composite_payload, Mapping)
+            or composite_payload.get("mission") != "equity_m3_composite_dataset_2026_09"
+            or composite_payload.get("identity") != dict(identity)
+            or composite_payload.get("iwm_sidecar") != dict(sidecar)
+        ):
+            return False
+
+        pit_info = payload.get("deterministic_numerical_population")
+        if not isinstance(pit_info, Mapping):
+            return False
+        pit_artifact = pit_info.get("input_artifact")
+        pit_manifest_info = pit_info.get("compact_manifest")
+        if not isinstance(pit_artifact, Mapping) or not isinstance(pit_manifest_info, Mapping):
+            return False
+        pit_path = _r2_relative_path(pit_artifact.get("path"))
+        pit_manifest_path = _r2_relative_path(pit_manifest_info.get("path"))
+        if (
+            pit_path is None
+            or pit_manifest_path is None
+            or pit_path.is_symlink()
+            or pit_manifest_path.is_symlink()
+            or not pit_path.is_file()
+            or not pit_manifest_path.is_file()
+        ):
+            return False
+        pit_raw_sha = sha256_of_file(pit_path)
+        pit_manifest_raw_sha = sha256_of_file(pit_manifest_path)
+        if pit_artifact.get("raw_sha256") != pit_raw_sha or pit_manifest_info.get("raw_sha256") != pit_manifest_raw_sha:
+            return False
+        pit_payload = json.loads(pit_path.read_text(encoding="utf-8"))
+        if not isinstance(pit_payload, Mapping):
+            return False
+        if (
+            pit_payload.get("schema_version") != "m3-pit-scanner-population-v1"
+            or pit_payload.get("mission") != "equity_m3_pit_scanner_population_2026_09_r3"
+            or pit_payload.get("market") != "EQUITY"
+            or pit_payload.get("timeframe") != CANONICAL_TIMEFRAME
+            or pit_payload.get("observation_strategy") is not None
+            or pit_payload.get("alpha_ranking_used") is not False
+            or pit_payload.get("reference_symbols") != sorted(REFERENCE_SYMBOLS)
+            or pit_payload.get("scanner_rebalance") != "daily"
+        ):
+            return False
+        no_alpha = pit_payload.get("no_alpha_assertion")
+        if not isinstance(no_alpha, Mapping) or any(
+            no_alpha.get(key) is not expected
+            for key, expected in (
+                ("observation_strategy_is_none", True),
+                ("candidate_rankings_present", False),
+                ("economic_ranking_present", False),
+            )
+        ):
+            return False
+        snapshots = pit_payload.get("snapshots")
+        if not isinstance(snapshots, list) or not snapshots:
+            return False
+        for snapshot in snapshots:
+            if not isinstance(snapshot, Mapping) or snapshot.get("strictly_prior_data") is not True:
+                return False
+            try:
+                effective = datetime.fromisoformat(str(snapshot["effective_at"]).replace("Z", "+00:00"))
+                latest = datetime.fromisoformat(str(snapshot["latest_input_timestamp"]).replace("Z", "+00:00"))
+            except (KeyError, TypeError, ValueError):
+                return False
+            if effective.tzinfo is None or latest.tzinfo is None or latest >= effective:
+                return False
+            if snapshot.get("scanner_version") != "equity-scanner-v3" or not isinstance(snapshot.get("symbols"), list):
+                return False
+        pit_population = deterministic_candidate_population(snapshots)
+        if validate_pit_reference_boundary(pit_population) != pit_payload["population"]["reference_boundary"]:
+            return False
+        for key in (
+            "candidate_universe_digest_sha256",
+            "candidate_decision_eligibility_digest_sha256",
+            "snapshot_count",
+            "unique_candidate_count",
+        ):
+            if pit_info.get(key) != pit_population.get(key) or pit_payload["population"].get(key) != pit_population.get(
+                key
+            ):
+                return False
+        if int(pit_population["unique_candidate_count"]) <= 0:
+            return False
+        pit_manifest = json.loads(pit_manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(pit_manifest, Mapping):
+            return False
+        if (
+            pit_manifest.get("mission") != "equity_m3_pit_scanner_population_2026_09_r3"
+            or pit_manifest.get("raw_pit_sha256") != pit_raw_sha
+            or pit_manifest.get("raw_pit_path") != pit_artifact.get("path")
+            or pit_manifest.get("semantic_population_digest_sha256")
+            != pit_population.get("candidate_universe_digest_sha256")
+            or pit_manifest.get("candidate_decision_eligibility_digest_sha256")
+            != pit_population.get("candidate_decision_eligibility_digest_sha256")
+            or pit_manifest.get("snapshot_count") != pit_population.get("snapshot_count")
+            or pit_manifest.get("unique_candidate_count") != pit_population.get("unique_candidate_count")
+            or pit_manifest.get("no_alpha_ranking") is not True
+            or pit_manifest.get("candidate_rankings_present") is not False
+        ):
+            return False
+
+        canonical_rows, canonical_quality = load_csv_reference_rows(DATASET, reference_symbols=REFERENCE_SYMBOLS)
+        if any(item.get("rejected_row_count", 0) != 0 for item in canonical_quality.values()):
+            return False
+        merged_iwm, _merge_hashes = merge_normalized_rows(canonical_rows["IWM"], iwm_sidecar_rows)
+        panel_rows = {"SPY": canonical_rows["SPY"], "IWM": merged_iwm, "QQQ": canonical_rows["QQQ"]}
+        panel = payload.get("reference_panel")
+        if not isinstance(panel, Mapping):
+            return False
+        if panel.get("normalized_reference_panel_sha256") != reference_panel_digest(
+            [row for symbol in REFERENCE_SYMBOLS for row in panel_rows[symbol]], source_identity=source_identity
+        ):
+            return False
+        if panel.get("evaluation_reference_panel_sha256") != reference_panel_digest(
+            [row for symbol in REFERENCE_SYMBOLS for row in panel_rows[symbol] if row.session_date <= EVAL_END.date()],
+            source_identity=source_identity,
+        ):
+            return False
+
+        matrix = payload.get("design_matrix_summary")
+        if not isinstance(matrix, Mapping):
+            return False
+        total = matrix.get("total_matrix_count")
+        if (
+            not isinstance(total, int)
+            or total <= 0
+            or matrix.get("pass_count") != total
+            or matrix.get("fail_count") != 0
+        ):
+            return False
+        role = payload.get("reference_role_separation")
+        if not isinstance(role, Mapping) or role.get("reference_observation_symbols") != sorted(REFERENCE_SYMBOLS):
+            return False
+        return payload.get("forbidden_economic_fields") == []
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        GateError,
+        KeyError,
+        TypeError,
+        ValueError,
+        subprocess.CalledProcessError,
+    ):
+        return False
+
+
+def _valid_m3_data_gate_receipt() -> bool:
+    """Accept only the immutable R3 data-gate PASS; R2 is not a valid input."""
+    try:
+        payload = json.loads(M3_DATA_GATE_RECEIPT.read_text(encoding="utf-8"))
+        if not isinstance(payload, Mapping) or payload.get("mission") != "equity_m3_data_gate_2026_09_r3":
+            return False
+        return _valid_m3_data_gate_r3_receipt(payload)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
 
 

@@ -174,9 +174,8 @@ economic metric was calculated.
 
 ## 16. CI outcomes
 
-Local focused proof is green as listed above. R3 remote CI closure was not
-observed: the corrective result was blocked and no remote push/closure was
-performed. Therefore no Python 3.12/3.13/3.14 remote PASS is claimed.
+C5 commit: `5d2b5347ccb1595a2c836fdcf2d6c11088784145`.
+GitHub Actions run `33605283021` concluded `success`.
 
 ## 17. Tracked and external artifacts
 

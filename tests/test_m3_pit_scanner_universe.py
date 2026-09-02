@@ -204,3 +204,54 @@ def test_builder_has_no_network_or_broker_imports() -> None:
         for alias in node.names
     }
     assert imported.isdisjoint({"alpaca", "requests", "urllib", "httpx", "yfinance"})
+
+
+def test_r4_excludes_high_volume_references_before_stage_a_shortlist() -> None:
+    population = pit.build_population_from_bars(
+        _bars(days=75),
+        equity_config=_config(),
+        mission=pit.R4_MISSION,
+    )
+
+    assert population["methodology"] == "strictly_prior_data_production_scanner_eligible_universe"
+    snapshots = population["snapshots"]
+    assert snapshots
+    assert all(
+        not set(snapshot["eligible_symbols"]) & set(helpers.REFERENCE_SYMBOLS)  # type: ignore[index]
+        for snapshot in snapshots  # type: ignore[union-attr]
+    )
+    assert all(
+        set(snapshot["reference_symbols_excluded"]) <= set(helpers.REFERENCE_SYMBOLS)  # type: ignore[index]
+        for snapshot in snapshots  # type: ignore[union-attr]
+    )
+    assert set(population["population"]["reference_exclusion_counts"]) == {  # type: ignore[index]
+        "pre_shortlist_reference_symbols",
+        "candidate_membership_reference_symbols",
+    }
+
+
+def test_r4_records_empty_rebalance_snapshot_without_inheriting_membership() -> None:
+    config = _config()
+    bars = _bars(symbols=("AAA", "SPY", "IWM", "QQQ"), days=122)
+    start = min(bar.timestamp for bar in bars)
+    groups: list[tuple[datetime, list[Bar]]] = []
+    for index in range(122):
+        timestamp = start + timedelta(days=index)
+        current = [bar for bar in bars if bar.timestamp == timestamp and (index <= 60 or bar.symbol != "AAA")]
+        groups.append((timestamp, current))
+
+    snapshots = pit._scan_groups(
+        groups,
+        equity_config=config,
+        rebalance_frequency="daily",
+        explicit_empty_snapshots=True,
+    )
+
+    assert snapshots[0]["scanner_result_empty"] is True
+    assert snapshots[0]["eligible_symbols"] == []
+    populated = [snapshot for snapshot in snapshots if "AAA" in snapshot["eligible_symbols"]]  # type: ignore[index]
+    assert populated
+    final = snapshots[-1]
+    assert final["scanner_result_empty"] is True
+    assert final["eligible_symbols"] == []
+    assert final["effective_at"] > populated[-1]["effective_at"]

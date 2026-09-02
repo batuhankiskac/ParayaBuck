@@ -36,6 +36,7 @@ from m3_data_gate_helpers import (  # noqa: E402
     EXCHANGE_TIMEZONE,
     NORMALIZER_VERSION,
     PIT_POPULATION_SCHEMA_VERSION,
+    R4_CAPTURE_ENCODING,
     REFERENCE_SYMBOLS,
     SOURCE_ADJUSTMENT,
     SOURCE_FEED,
@@ -63,9 +64,12 @@ from parayabuck.universe.scanner import (  # noqa: E402
 R3_MISSION = "equity_m3_pit_scanner_population_2026_09_r3"
 R3_DATA_GATE_MISSION = "equity_m3_data_gate_2026_09_r3"
 R3_CONTRACT_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
+R4_MISSION = "equity_m3_pit_scanner_population_2026_09_r4"
+R4_DATA_GATE_MISSION = "equity_m3_data_gate_2026_09_r4"
+R4_CONTRACT_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r4.json"
 DEFAULT_CONFIG_PATH = _REPO / "config/settings.yaml"
-DEFAULT_OUTPUT_PATH = _REPO / "data/research/generated/m3_data_gate_r3/pit_universe.json"
-DEFAULT_MANIFEST_PATH = _REPO / "data/research/generated/m3_data_gate_r3/pit_population_manifest.json"
+DEFAULT_OUTPUT_PATH = _REPO / "data/research/generated/m3_data_gate_r4/pit_universe.json"
+DEFAULT_MANIFEST_PATH = _REPO / "data/research/generated/m3_data_gate_r4/pit_population_manifest.json"
 LOOKBACK_DAYS = 60
 
 
@@ -197,20 +201,26 @@ def _verify_contract(contract_path: Path, staging_dir: Path) -> tuple[Mapping[st
     if contract_artifact.raw_sha256 != str(identity["raw_sha256"]):
         raise GateError("contract_hash_mismatch", "working R3 contract bytes changed during staging")
     contract = _load_json(contract_artifact.staged_path)
-    if contract.get("mission") != R3_DATA_GATE_MISSION:
-        raise GateError("contract_mission_mismatch", "PIT builder requires the R3 data-gate contract")
-    if contract.get("manifest_path") != R3_CONTRACT_PATH:
-        raise GateError("contract_path_mismatch", "R3 contract path is not frozen")
+    mission = contract.get("mission")
+    expected_contract_path = R4_CONTRACT_PATH if mission == R4_DATA_GATE_MISSION else R3_CONTRACT_PATH
+    if mission not in {R3_DATA_GATE_MISSION, R4_DATA_GATE_MISSION}:
+        raise GateError("contract_mission_mismatch", "PIT builder requires the frozen R3 or R4 data-gate contract")
+    if contract.get("manifest_path") != expected_contract_path:
+        raise GateError("contract_path_mismatch", "data-gate contract path is not frozen")
     population_contract = contract.get("candidate_population_contract")
     expected_population_contract = {
         "schema_version": PIT_POPULATION_SCHEMA_VERSION,
-        "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+        "methodology": (
+            "strictly_prior_data_frozen_scanner_eligible_universe"
+            if mission == R3_DATA_GATE_MISSION
+            else "strictly_prior_data_production_scanner_eligible_universe"
+        ),
         "observation_strategy": None,
         "manual_candidate_selection_allowed": False,
         "reference_symbols_excluded": list(REFERENCE_SYMBOLS),
     }
     if population_contract != expected_population_contract:
-        raise GateError("population_contract_mismatch", "R3 candidate-population contract is not frozen")
+        raise GateError("population_contract_mismatch", "candidate-population contract is not frozen")
     return contract, identity
 
 
@@ -416,11 +426,19 @@ def _scan_groups(
     *,
     equity_config: EquityUniverseConfig,
     rebalance_frequency: str,
+    reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
+    explicit_empty_snapshots: bool = False,
 ) -> list[dict[str, object]]:
     if rebalance_frequency not in {"daily", "weekly", "monthly"}:
         raise GateError("scanner_rebalance_invalid", "backtest.scanner_rebalance must be daily, weekly, or monthly")
     scanner = EquityUniverseScanner(equity_config)
-    pinned = (*equity_config.reference_symbols, *equity_config.inverse_trade_symbols)
+    references = tuple(dict.fromkeys(canonical_symbol(symbol, Market.EQUITY) for symbol in reference_symbols))
+    legacy_references = tuple(equity_config.reference_symbols)
+    pinned = (
+        (*references, *equity_config.inverse_trade_symbols)
+        if explicit_empty_snapshots
+        else (*legacy_references, *equity_config.inverse_trade_symbols)
+    )
     expected_history_bars = LOOKBACK_DAYS
     duration = timedelta(days=1)
     window: dict[str, list[Bar]] = {}
@@ -438,13 +456,15 @@ def _scan_groups(
         if period != previous_period:
             previous_period = period
             by_symbol = {symbol: list(history) for symbol, history in window.items() if history}
+            candidate_history = {symbol: history for symbol, history in by_symbol.items() if symbol not in references}
             data_timestamp = max(
                 (history[-1].timestamp for history in by_symbol.values()),
                 default=timestamp - duration,
             )
-            if by_symbol:
+            shortlist_source = candidate_history if explicit_empty_snapshots else by_symbol
+            if shortlist_source:
                 shortlisted = sorted(
-                    by_symbol.items(),
+                    shortlist_source.items(),
                     key=lambda item: (-_median_dollar_volume(item[1]), item[0]),
                 )[: equity_config.target_shortlist]
                 candidates = [
@@ -457,20 +477,56 @@ def _scan_groups(
                     selection_timestamp=timestamp,
                     pinned_symbols=pinned,
                 )
-                selected = sorted(symbol for symbol in result.selected_symbols if symbol in by_symbol)
-                if selected or result.candidate_symbols:
-                    snapshots.append(
-                        {
-                            "effective_at": canonical_timestamp(timestamp),
-                            "symbols": selected,
-                            "scanner_version": result.scanner_version,
-                            "config_digest": result.config_digest,
-                            "candidate_count": len(result.candidate_symbols),
-                            "strictly_prior_data": True,
-                            "latest_input_timestamp": canonical_timestamp(data_timestamp),
-                            "prior_bar_count": sum(len(history) for history in by_symbol.values()),
-                        }
-                    )
+                selected = sorted(
+                    symbol
+                    for symbol in result.selected_symbols
+                    if symbol in shortlist_source and (not explicit_empty_snapshots or symbol not in references)
+                )
+                if explicit_empty_snapshots or selected or result.candidate_symbols:
+                    snapshot = {
+                        "effective_at": canonical_timestamp(timestamp),
+                        "latest_input_timestamp": canonical_timestamp(data_timestamp),
+                        "scanner_version": result.scanner_version,
+                        "config_digest": result.config_digest,
+                        # ``symbols`` remains as a compatibility alias for the
+                        # immutable R3 fixture contract; R4 authenticates the
+                        # explicit eligible_symbols field.
+                        "symbols": selected,
+                        "candidate_count": len(result.candidate_symbols),
+                        "strictly_prior_data": True,
+                        "prior_bar_count": sum(len(history) for history in by_symbol.values()),
+                    }
+                    if explicit_empty_snapshots:
+                        snapshot.update(
+                            {
+                                "eligible_symbols": selected,
+                                "eligible_count": len(selected),
+                                "reference_symbols_excluded": sorted(
+                                    symbol for symbol in by_symbol if symbol in references
+                                ),
+                                "scanner_result_empty": not bool(selected),
+                            }
+                        )
+                    snapshots.append(snapshot)
+            elif explicit_empty_snapshots:
+                # A scheduled rebalance with no history is still an observed
+                # empty result; do not silently inherit an older population.
+                snapshots.append(
+                    {
+                        "effective_at": canonical_timestamp(timestamp),
+                        "latest_input_timestamp": canonical_timestamp(data_timestamp),
+                        "scanner_version": scanner.version,
+                        "config_digest": scanner_config_digest(equity_config),
+                        "eligible_symbols": [],
+                        "eligible_count": 0,
+                        "symbols": [],
+                        "candidate_count": 0,
+                        "reference_symbols_excluded": [],
+                        "scanner_result_empty": True,
+                        "strictly_prior_data": True,
+                        "prior_bar_count": 0,
+                    }
+                )
         for bar in current_bars:
             symbol = canonical_symbol(str(bar.symbol), Market.EQUITY)
             window.setdefault(symbol, []).append(bar)
@@ -483,6 +539,8 @@ def build_population_from_bars(
     equity_config: EquityUniverseConfig,
     rebalance_frequency: str = "daily",
     reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
+    explicit_empty_snapshots: bool = False,
+    mission: str = R3_MISSION,
 ) -> dict[str, object]:
     """Build a population from fixtures while preserving the production path.
 
@@ -504,13 +562,20 @@ def build_population_from_bars(
             groups[-1][1].append(bar)
         else:
             groups.append((bar.timestamp, [bar]))
-    snapshots = _scan_groups(groups, equity_config=equity_config, rebalance_frequency=rebalance_frequency)
+    snapshots = _scan_groups(
+        groups,
+        equity_config=equity_config,
+        rebalance_frequency=rebalance_frequency,
+        reference_symbols=reference_symbols,
+        explicit_empty_snapshots=explicit_empty_snapshots or mission == R4_MISSION,
+    )
     return _population_payload(
         snapshots,
         config_digest=scanner_config_digest(equity_config),
         rebalance_frequency=rebalance_frequency,
         reference_symbols=reference_symbols,
         input_identity={"source": "fixture_bars", "row_order_normalized": True},
+        mission=mission,
     )
 
 
@@ -521,9 +586,18 @@ def _population_payload(
     rebalance_frequency: str,
     reference_symbols: Sequence[str],
     input_identity: Mapping[str, object],
+    mission: str = R3_MISSION,
 ) -> dict[str, object]:
     normalized_snapshots = [dict(snapshot) for snapshot in snapshots]
-    population = deterministic_candidate_population(normalized_snapshots, reference_symbols=reference_symbols)
+    population = deterministic_candidate_population(
+        normalized_snapshots,
+        reference_symbols=reference_symbols,
+        methodology=(
+            "strictly_prior_data_production_scanner_eligible_universe"
+            if mission == R4_MISSION
+            else "strictly_prior_data_frozen_scanner_eligible_universe"
+        ),
+    )
     role = validate_pit_reference_boundary(population, reference_symbols=reference_symbols)
     if not population.get("candidate_symbols"):
         raise GateError("empty_candidate_population", "PIT scanner population contains no non-reference candidates")
@@ -546,9 +620,29 @@ def _population_payload(
             strict_prior_failures.append(str(effective))
     if strict_prior_failures:
         raise GateError("pit_future_leak", "PIT snapshot contains data at or after its effective timestamp")
+    reference_exclusion_counts: Mapping[str, object]
+    if mission == R4_MISSION:
+        pre_shortlist_count = sum(
+            len(
+                {
+                    str(symbol).strip().upper()
+                    for symbol in snapshot.get("reference_symbols_excluded", ())
+                    if str(symbol).strip().upper() in set(reference_symbols)
+                }
+            )
+            for snapshot in normalized_snapshots
+        )
+        reference_exclusion_counts = {
+            "pre_shortlist_reference_symbols": pre_shortlist_count,
+            "candidate_membership_reference_symbols": int(
+                population["exclusion_counts"].get("reference_observation_symbol", 0)  # type: ignore[union-attr]
+            ),
+        }
+    else:
+        reference_exclusion_counts = population["exclusion_counts"]  # type: ignore[assignment]
     return {
         "schema_version": PIT_POPULATION_SCHEMA_VERSION,
-        "mission": R3_MISSION,
+        "mission": mission,
         "market": Market.EQUITY.value.upper(),
         "timeframe": CANONICAL_TIMEFRAME,
         "methodology": "strictly_prior_data_production_scanner_eligible_universe",
@@ -556,6 +650,7 @@ def _population_payload(
         "alpha_ranking_used": False,
         "reference_symbols": sorted({str(symbol).strip().upper() for symbol in reference_symbols}),
         "scanner_rebalance": rebalance_frequency,
+        "scanner_rebalance_cadence": rebalance_frequency,
         "scanner_versions": scanner_versions,
         "scanner_config_digests": scanner_digests,
         "input_identity": dict(input_identity),
@@ -579,7 +674,11 @@ def _population_payload(
             "minimum_eligible_count": min(counts),
             "maximum_eligible_count": max(counts),
             "median_eligible_count": statistics.median(counts),
-            "reference_exclusion_counts": population["exclusion_counts"],
+            "reference_exclusion_counts": dict(reference_exclusion_counts),
+            "reference_exclusion_count": sum(int(value) for value in reference_exclusion_counts.values()),
+            "explicit_empty_snapshot_count": sum(
+                int(snapshot.get("scanner_result_empty") is True) for snapshot in normalized_snapshots
+            ),
             "reference_boundary": role,
         },
     }
@@ -619,6 +718,7 @@ def build_population(
     with tempfile.TemporaryDirectory(prefix="m3-pit-builder-") as temporary:
         staging_dir = Path(temporary)
         contract, contract_identity = _verify_contract(contract_path, staging_dir)
+        r4 = contract.get("mission") == R4_DATA_GATE_MISSION
         config_artifact = stage_file(config_path, staging_dir)
         config_data = _load_yaml_bytes(config_artifact.staged_path)
         config_digest = config_semantic_digest(config_data)
@@ -641,6 +741,13 @@ def build_population(
                 if isinstance(config_data.get("backtest"), Mapping)
                 else "daily"
             ),
+            reference_symbols=REFERENCE_SYMBOLS,
+            explicit_empty_snapshots=r4,
+        )
+        rebalance_frequency = str(
+            (config_data.get("backtest") or {}).get("scanner_rebalance", "daily")
+            if isinstance(config_data.get("backtest"), Mapping)
+            else "daily"
         )
         input_identity = {
             "canonical_bars": canonical_identity,
@@ -648,47 +755,95 @@ def build_population(
             "iwm_sidecar": sidecar_identity,
             "composite_identity": composite.get("identity"),
             "config_semantic_digest_sha256": config_digest,
-            "r3_contract": contract_identity,
+            "r4_contract" if r4 else "r3_contract": contract_identity,
         }
         payload = _population_payload(
             snapshots,
             config_digest=scanner_config_digest(equity_config),
-            rebalance_frequency=str(
-                (config_data.get("backtest") or {}).get("scanner_rebalance", "daily")
-                if isinstance(config_data.get("backtest"), Mapping)
-                else "daily"
-            ),
+            rebalance_frequency=rebalance_frequency,
             reference_symbols=REFERENCE_SYMBOLS,
             input_identity=input_identity,
+            mission=R4_MISSION if r4 else R3_MISSION,
         )
         _write_json_immutable(output_path, payload)
         raw_bytes = output_path.read_bytes()
         population = payload["population"]
         if not isinstance(population, Mapping):
             raise GateError("population_summary_missing", "PIT payload population summary is missing")
-        manifest = {
-            "schema_version": "1.0.0",
-            "mission": R3_MISSION,
-            "raw_pit_path": _logical_path(output_path),
-            "raw_pit_sha256": _sha256_bytes(raw_bytes),
-            "raw_pit_byte_size": len(raw_bytes),
-            "semantic_population_digest_sha256": population["candidate_universe_digest_sha256"],
-            "candidate_universe_digest_sha256": population["candidate_universe_digest_sha256"],
-            "candidate_decision_eligibility_digest_sha256": population["candidate_decision_eligibility_digest_sha256"],
-            "snapshot_count": population["snapshot_count"],
-            "unique_candidate_count": population["unique_candidate_count"],
-            "minimum_eligible_count": population["minimum_eligible_count"],
-            "maximum_eligible_count": population["maximum_eligible_count"],
-            "median_eligible_count": population["median_eligible_count"],
-            "reference_exclusion_counts": population["reference_exclusion_counts"],
-            "no_alpha_ranking": True,
-            "candidate_rankings_present": False,
-            "observation_strategy": None,
-            "scanner_config_digest": scanner_config_digest(equity_config),
-            "scanner_versions": payload["scanner_versions"],
-            "strict_prior_proof": payload["strict_prior_proof"],
-            "input_identities": input_identity,
-        }
+        builder_identity = _tracked_file_identity(Path(__file__))
+        composite_identity = composite.get("identity")
+        if not isinstance(composite_identity, Mapping):
+            raise GateError("composite_schema_mismatch", "composite identity is missing from PIT inputs")
+        exclusion_counts = population.get("reference_exclusion_counts")
+        if not isinstance(exclusion_counts, Mapping):
+            raise GateError("pit_manifest_identity", "PIT reference exclusion counts are missing")
+        if r4:
+            manifest = {
+                "schema_version": "1.0.0",
+                "mission": R4_MISSION,
+                "pit_builder": builder_identity,
+                "r4_contract": contract_identity,
+                "raw_pit_path": _logical_path(output_path),
+                "raw_pit_sha256": _sha256_bytes(raw_bytes),
+                "raw_pit_byte_size": len(raw_bytes),
+                "canonical_bars_raw_sha256": canonical_identity["raw_sha256"],
+                "canonical_manifest_git_blob": canonical_identity["manifest_git_blob"],
+                "capture_encoding": R4_CAPTURE_ENCODING,
+                "normalized_iwm_sidecar_raw_sha256": sidecar_identity["raw_sha256"],
+                "normalized_iwm_sidecar_semantic_digest_sha256": sidecar_identity["normalized_semantic_row_sha256"],
+                "composite_semantic_digest_sha256": composite_identity.get("semantic_digest_sha256"),
+                "config_semantic_digest_sha256": config_digest,
+                "semantic_population_digest_sha256": population["candidate_universe_digest_sha256"],
+                "candidate_universe_digest_sha256": population["candidate_universe_digest_sha256"],
+                "candidate_decision_eligibility_digest_sha256": population[
+                    "candidate_decision_eligibility_digest_sha256"
+                ],
+                "snapshot_count": population["snapshot_count"],
+                "scheduled_snapshot_count": population["snapshot_count"],
+                "explicit_empty_snapshot_count": population["explicit_empty_snapshot_count"],
+                "unique_candidate_count": population["unique_candidate_count"],
+                "minimum_eligible_count": population["minimum_eligible_count"],
+                "maximum_eligible_count": population["maximum_eligible_count"],
+                "median_eligible_count": population["median_eligible_count"],
+                "reference_exclusion_counts": population["reference_exclusion_counts"],
+                "reference_exclusion_count": population["reference_exclusion_count"],
+                "no_alpha_ranking": True,
+                "candidate_rankings_present": False,
+                "observation_strategy": None,
+                "scanner_config_digest": scanner_config_digest(equity_config),
+                "scanner_versions": payload["scanner_versions"],
+                "scanner_config_digests": payload["scanner_config_digests"],
+                "scanner_rebalance_cadence": payload["scanner_rebalance_cadence"],
+                "strict_prior_proof": payload["strict_prior_proof"],
+                "semantic_candidate_population_digest_sha256": population["candidate_universe_digest_sha256"],
+                "strictly_prior_data": True,
+            }
+        else:
+            manifest = {
+                "schema_version": "1.0.0",
+                "mission": R3_MISSION,
+                "raw_pit_path": _logical_path(output_path),
+                "raw_pit_sha256": _sha256_bytes(raw_bytes),
+                "raw_pit_byte_size": len(raw_bytes),
+                "semantic_population_digest_sha256": population["candidate_universe_digest_sha256"],
+                "candidate_universe_digest_sha256": population["candidate_universe_digest_sha256"],
+                "candidate_decision_eligibility_digest_sha256": population[
+                    "candidate_decision_eligibility_digest_sha256"
+                ],
+                "snapshot_count": population["snapshot_count"],
+                "unique_candidate_count": population["unique_candidate_count"],
+                "minimum_eligible_count": population["minimum_eligible_count"],
+                "maximum_eligible_count": population["maximum_eligible_count"],
+                "median_eligible_count": population["median_eligible_count"],
+                "reference_exclusion_counts": population["reference_exclusion_counts"],
+                "no_alpha_ranking": True,
+                "candidate_rankings_present": False,
+                "observation_strategy": None,
+                "scanner_config_digest": scanner_config_digest(equity_config),
+                "scanner_versions": payload["scanner_versions"],
+                "strict_prior_proof": payload["strict_prior_proof"],
+                "input_identities": input_identity,
+            }
         _write_json_immutable(manifest_path, manifest)
         return manifest
 

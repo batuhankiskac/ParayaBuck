@@ -1025,3 +1025,85 @@ def test_manual_candidate_argument_is_not_a_pass_input() -> None:
     source = (ROOT / "scripts/research_equity_m3_data_gate.py").read_text(encoding="utf-8")
     assert "--candidate-symbol" not in source
     assert "--diagnostic-candidate-symbol" in source
+
+
+def test_r4_source_completeness_requires_exact_2658_session_set() -> None:
+    expected = tuple(
+        helpers.expected_exchange_sessions(
+            helpers.REQUIRED_FIRST_REFERENCE_SESSION,
+            helpers.REQUIRED_LAST_REFERENCE_SESSION,
+        )
+    )
+    assert len(expected) == 2658
+    rows = {symbol: [_bar(symbol, session) for session in expected] for symbol in helpers.REFERENCE_SYMBOLS}
+    complete = gate._r4_source_completeness(rows)
+    assert complete["complete"] is True
+    assert complete["expected_session_count"] == 2658
+    assert all(item["complete"] for item in complete["references"].values())  # type: ignore[union-attr]
+
+    rows["IWM"].pop()
+    missing = gate._r4_source_completeness(rows)
+    assert missing["complete"] is False
+    assert missing["references"]["IWM"]["last_session"] == "2026-07-29"  # type: ignore[index]
+
+    rows["IWM"].append(_bar("IWM", date(2026, 7, 31)))
+    extra = gate._r4_source_completeness(rows)
+    assert extra["complete"] is False
+    assert extra["references"]["IWM"]["extra_sessions"]["first"] == "2026-07-31"  # type: ignore[index]
+
+
+def test_r4_inventory_quality_rejects_boundary_or_row_accounting_defects() -> None:
+    item: dict[str, object] = {
+        "normalized_row_count": gate.EXPECTED_REQUIRED_REFERENCE_SESSIONS,
+        "unique_session_count": gate.EXPECTED_REQUIRED_REFERENCE_SESSIONS,
+        "first_session_date": gate.REQUIRED_FIRST_REFERENCE_SESSION.isoformat(),
+        "last_session_date": gate.REQUIRED_LAST_REFERENCE_SESSION.isoformat(),
+        "missing_expected_sessions": [],
+        "extra_off_calendar_sessions": [],
+        "timeframe_values": [gate.CANONICAL_TIMEFRAME],
+        "market_values": ["EQUITY"],
+        "feed": gate.SOURCE_FEED,
+        "adjustment": gate.SOURCE_ADJUSTMENT,
+        "row_accounting": {
+            "identity_holds": True,
+            "raw_reference_rows": gate.EXPECTED_REQUIRED_REFERENCE_SESSIONS,
+        },
+    }
+    item.update({field: 0 for field in gate.R4_REQUIRED_ZERO_QUALITY_FIELDS})
+    inventory = {symbol: dict(item) for symbol in gate.REFERENCE_SYMBOLS}
+    assert gate._r4_inventory_quality_pass(inventory) is True
+
+    inventory["IWM"]["request_boundary_violation_count"] = 1
+    assert gate._r4_inventory_quality_pass(inventory) is False
+    inventory["IWM"]["request_boundary_violation_count"] = 0
+    inventory["IWM"]["row_accounting"] = {"identity_holds": False, "raw_reference_rows": 2658}
+    assert gate._r4_inventory_quality_pass(inventory) is False
+
+
+def test_r4_gate_verdict_requires_every_frozen_mandatory_gate() -> None:
+    gates = {name: {"status": gate.GATE_PASS} for name in gate.R4_MANDATORY_GATES}
+    assert gate.evaluate_mandatory_gates(gates, gate.R4_MANDATORY_GATES) == "M3_DATA_GATE_PASS"
+    for name in gate.R4_MANDATORY_GATES:
+        falsified = {key: dict(value) for key, value in gates.items()}
+        falsified[name] = {"status": gate.GATE_UNKNOWN}
+        assert gate.evaluate_mandatory_gates(falsified, gate.R4_MANDATORY_GATES) == "M3_DATA_GATE_BLOCKED"
+
+
+def test_r4_compact_audit_redacts_pagination_tokens() -> None:
+    compact = gate._compact_iwm_audit(
+        {
+            "pages": [
+                {
+                    "relative_path": "pages/000001.json",
+                    "raw_sha256": "a" * 64,
+                    "input_page_token": "secret-input-token",
+                    "output_next_page_token": "secret-output-token",
+                }
+            ]
+        },
+        redact_tokens=True,
+    )
+    serialized = json.dumps(compact)
+    assert "secret-input-token" not in serialized
+    assert "secret-output-token" not in serialized
+    assert compact["page_count"] == 1

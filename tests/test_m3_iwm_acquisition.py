@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import shutil
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -107,6 +108,185 @@ def test_multipage_transport_preserves_exact_raw_bytes_and_frozen_request(
     assert second_params["feed"] == "sip"  # type: ignore[index]
     assert second_params["timeframe"] == "1Day"  # type: ignore[index]
     assert "page-2" in (output / "source_receipt.json").read_text(encoding="utf-8")
+
+
+def test_r4_request_is_exact_and_result_receipt_is_compact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _credentials(monkeypatch)
+    body = _page([_bar(date(2024, 7, 1))], "secret-page-token", compact=True)
+    second = _page([_bar(date(2024, 7, 2), "101.00")], None, compact=True)
+    transport = FakeTransport(
+        [
+            acquisition.HttpResponse(200, body, {"content-type": "application/json"}),
+            acquisition.HttpResponse(200, second, {"content-type": "application/json"}),
+        ]
+    )
+    output = tmp_path / "bundle"
+    result_receipt = tmp_path / "receipts" / "acquisition.json"
+    result = acquisition.acquire_bundle(
+        output,
+        transport=transport,
+        result_receipt_out=result_receipt,
+        timestamp_utc=lambda: datetime(2026, 9, 1, tzinfo=UTC),
+    )
+
+    assert transport.calls[0]["url"] == "https://data.alpaca.markets/v2/stocks/bars"
+    assert transport.calls[0]["params"] == {
+        "symbols": "IWM",
+        "timeframe": "1Day",
+        "start": "2016-01-01T00:00:00Z",
+        "end": "2026-07-31T00:00:00Z",
+        "feed": "sip",
+        "adjustment": "split",
+        "sort": "asc",
+        "limit": 10000,
+    }
+    result_text = result_receipt.read_text(encoding="utf-8")
+    assert json.loads(result_text) == result
+    assert "secret-page-token" not in result_text
+    assert "APCA-API" not in result_text
+    assert result["request_interval_utc"] == {
+        "start": "2016-01-01T00:00:00Z",
+        "end_boundary": "2026-07-31T00:00:00Z",
+        "semantics": "[start,end)",
+    }
+
+
+@pytest.mark.parametrize("session", [date(2015, 12, 31), date(2026, 7, 31)])
+def test_r4_provider_bar_outside_request_interval_is_blocked(session: date) -> None:
+    with pytest.raises(acquisition.AcquisitionError, match="request_boundary_violation"):
+        acquisition._parse_page(_page([_bar(session)], None), input_page_token=None, r4=True)
+
+
+def test_r4_conflicting_row_symbol_is_blocked() -> None:
+    with pytest.raises(acquisition.AcquisitionError, match="response_schema_mismatch"):
+        acquisition._parse_page(_page([_bar(date(2024, 7, 1), symbol="SPY")], None), input_page_token=None, r4=True)
+
+
+def test_capture_happens_before_envelope_parse(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _credentials(monkeypatch)
+    attempts = tmp_path / "attempts"
+    body = _page([_bar(date(2024, 7, 1))], None, compact=True)
+    transport = FakeTransport([acquisition.HttpResponse(200, body, {})])
+    original = acquisition._parse_page_envelope
+    observed: list[bool] = []
+
+    def wrapped(raw: bytes, *, input_page_token: str | None) -> tuple[object, str | None]:
+        page = attempts / "r4_ordering" / "pages" / "000001.json"
+        observed.append(page.is_file() and page.read_bytes() == raw)
+        return original(raw, input_page_token=input_page_token)
+
+    monkeypatch.setattr(acquisition, "_parse_page_envelope", wrapped)
+    acquisition.acquire_bundle(
+        tmp_path / "bundle",
+        transport=transport,
+        quarantine_root=attempts,
+        attempt_id="ordering",
+    )
+    assert observed and all(observed)
+
+
+def test_semantic_parse_failure_preserves_captured_quarantine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _credentials(monkeypatch)
+    attempts = tmp_path / "attempts"
+    body = _page([_bar(date(2024, 7, 1))], None, compact=True)
+    transport = FakeTransport([acquisition.HttpResponse(200, body, {})])
+
+    def fail(*_args: object, **_kwargs: object) -> object:
+        raise acquisition.AcquisitionError("synthetic_parse_failure")
+
+    monkeypatch.setattr(acquisition, "_parse_page", fail)
+    with pytest.raises(acquisition.AcquisitionError, match="synthetic_parse_failure"):
+        acquisition.acquire_bundle(
+            tmp_path / "bundle",
+            transport=transport,
+            quarantine_root=attempts,
+            attempt_id="parse-failure",
+        )
+    quarantine = attempts / "r4_parse-failure"
+    assert not (tmp_path / "bundle").exists()
+    assert (quarantine / "pages/000001.json").read_bytes() == body
+    assert json.loads((quarantine / "attempt_journal.json").read_text(encoding="utf-8"))["capture_complete"] is True
+    assert "synthetic_parse_failure" in (tmp_path / "bundle.blocked.json").read_text(encoding="utf-8")
+
+
+def test_validator_failure_preserves_quarantine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _credentials(monkeypatch)
+    attempts = tmp_path / "attempts"
+    body = _page([_bar(date(2024, 7, 1))], None)
+    transport = FakeTransport([acquisition.HttpResponse(200, body, {})])
+
+    def fail(*_args: object, **_kwargs: object) -> object:
+        raise helpers.GateError("synthetic_validator_failure", "synthetic")
+
+    monkeypatch.setattr(acquisition, "validate_iwm_bundle", fail)
+    with pytest.raises(acquisition.AcquisitionError, match="bundle_validation_failure"):
+        acquisition.acquire_bundle(
+            tmp_path / "bundle",
+            transport=transport,
+            quarantine_root=attempts,
+            attempt_id="validator-failure",
+        )
+    assert (attempts / "r4_validator-failure/pages/000001.json").is_file()
+    assert not (tmp_path / "bundle").exists()
+
+
+def test_replay_uses_exact_captured_bytes_without_network_or_credentials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _credentials(monkeypatch)
+    body = _page([_bar(date(2024, 7, 1))], None, compact=True)
+    captured = tmp_path / "captured"
+    acquisition.acquire_bundle(captured, transport=FakeTransport([acquisition.HttpResponse(200, body, {})]))
+    quarantine = tmp_path / "quarantine"
+    shutil.copytree(captured, quarantine)
+    replayed = tmp_path / "replayed"
+    original_get = requests.Session.get
+
+    def fail_network(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("replay attempted network access")
+
+    monkeypatch.setattr(requests.Session, "get", fail_network)
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)
+    acquisition.revalidate_quarantine(quarantine, replayed)
+    assert (replayed / "pages/000001.json").read_bytes() == body
+    assert (replayed / "pages/000001.json").read_bytes() == (captured / "pages/000001.json").read_bytes()
+    assert requests.Session.get is not original_get
+
+
+def test_replay_detects_mutated_captured_page_and_keeps_quarantine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _credentials(monkeypatch)
+    captured = tmp_path / "captured"
+    acquisition.acquire_bundle(
+        captured,
+        transport=FakeTransport([acquisition.HttpResponse(200, _page([_bar(date(2024, 7, 1))], None), {})]),
+    )
+    quarantine = tmp_path / "quarantine"
+    shutil.copytree(captured, quarantine)
+    page = quarantine / "pages/000001.json"
+    page.write_bytes(page.read_bytes() + b"\n")
+    with pytest.raises(acquisition.AcquisitionError, match="page_hash_mismatch"):
+        acquisition.revalidate_quarantine(quarantine, tmp_path / "replayed")
+    assert quarantine.is_dir()
+    assert not (tmp_path / "replayed").exists()
+
+
+def test_blocked_receipt_never_contains_pagination_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _credentials(monkeypatch)
+    token = "secret-token-must-not-escape"
+    transport = FakeTransport(
+        [
+            acquisition.HttpResponse(200, _page([_bar(date(2024, 7, 1))], token), {}),
+            *[acquisition.HttpResponse(503, b"", {}) for _ in range(acquisition.MAX_RETRIES + 1)],
+        ]
+    )
+    with pytest.raises(acquisition.AcquisitionError, match="transient_retry_exhaustion"):
+        acquisition.acquire_bundle(tmp_path / "blocked", transport=transport, sleeper=lambda _seconds: None)
+    blocked = (tmp_path / "blocked.blocked.json").read_text(encoding="utf-8")
+    assert token not in blocked
+    assert "raw_tokens_in_tracked_receipt" in blocked
 
 
 def test_provider_bar_symbol_is_taken_from_bars_map_key() -> None:

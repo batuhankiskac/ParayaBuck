@@ -49,6 +49,18 @@ SOURCE_START = date(2016, 1, 1)
 SOURCE_END = date(2026, 7, 31)
 EVALUATION_END = date(2026, 7, 30)
 RECENT_START = date(2022, 1, 1)
+# R4 separates the wire-request interval from the frozen exchange-session
+# panel.  The legacy SOURCE_* dates remain available for immutable R1-R3
+# fixtures; R4 callers must use these explicit UTC boundaries and session
+# constants.
+REQUEST_START_UTC = datetime(2016, 1, 1, tzinfo=UTC)
+REQUEST_END_BOUNDARY_UTC = datetime(2026, 7, 31, tzinfo=UTC)
+REQUIRED_FIRST_REFERENCE_SESSION = date(2016, 1, 4)
+REQUIRED_LAST_REFERENCE_SESSION = date(2026, 7, 30)
+EVALUATION_END_SESSION = date(2026, 7, 30)
+EXPECTED_REQUIRED_REFERENCE_SESSIONS = 2658
+REQUEST_START_UTC_TEXT = "2016-01-01T00:00:00Z"
+REQUEST_END_BOUNDARY_UTC_TEXT = "2026-07-31T00:00:00Z"
 NORMALIZER_VERSION = "m3-iwm-normalizer-v1"
 ROW_ENCODING_VERSION = "m3-normalized-row-v1"
 MATRIX_ENCODING_VERSION = "m3-design-matrix-v1"
@@ -60,6 +72,8 @@ SOURCE_ENDPOINT = "/v2/stocks/bars"
 SOURCE_FEED = "sip"
 SOURCE_ADJUSTMENT = "split"
 SOURCE_SORT = "asc"
+R4_ACQUISITION_MISSION = "equity_m3_iwm_acquisition_2026_09_r4"
+R4_CAPTURE_ENCODING = "m3-iwm-capture-first-v1"
 
 DEFAULT_NUMERICAL_THRESHOLDS: dict[str, int | float] = {
     "matrix_rows": 273,
@@ -398,14 +412,20 @@ def normalize_provider_bar(
     *,
     source_start: date = SOURCE_START,
     source_end: date = SOURCE_END,
+    request_start_utc: datetime | None = None,
+    request_end_boundary_utc: datetime | None = None,
 ) -> NormalizedBar:
-    source_symbol = raw.get("S", raw.get("symbol"))
-    if str(source_symbol or "").strip().upper() != "IWM":
+    row_symbols = [str(raw[key]).strip().upper() for key in ("S", "symbol") if key in raw and str(raw[key]).strip()]
+    if not row_symbols or any(symbol != "IWM" for symbol in row_symbols) or len(set(row_symbols)) != 1:
         raise GateError("source_symbol_mismatch", "raw source bar symbol must be exactly IWM")
     if "timeframe" in raw or "tf" in raw:
         token = raw.get("timeframe", raw.get("tf"))
         normalise_timeframe(token, raw_source=True)
     timestamp = parse_timestamp(raw.get("t", raw.get("timestamp")))
+    if request_start_utc is not None and timestamp.astimezone(UTC) < request_start_utc:
+        raise GateError("request_boundary_violation", "row timestamp is before the frozen request interval")
+    if request_end_boundary_utc is not None and timestamp.astimezone(UTC) >= request_end_boundary_utc:
+        raise GateError("request_boundary_violation", "row timestamp is at or after the frozen request boundary")
     session = session_date_for_timestamp(timestamp)
     if not source_start <= session <= source_end:
         raise GateError("source_range_violation", f"row session {session} is outside the frozen source range")
@@ -433,11 +453,17 @@ def normalize_csv_row(
     *,
     source_start: date = SOURCE_START,
     source_end: date = SOURCE_END,
+    request_start_utc: datetime | None = None,
+    request_end_boundary_utc: datetime | None = None,
 ) -> NormalizedBar:
     symbol = str(raw.get("symbol") or "").strip().upper()
     if not symbol:
         raise GateError("missing_symbol", "CSV row symbol is empty")
     timestamp = parse_timestamp(raw.get("timestamp"))
+    if request_start_utc is not None and timestamp.astimezone(UTC) < request_start_utc:
+        raise GateError("request_boundary_violation", "row timestamp is before the frozen request interval")
+    if request_end_boundary_utc is not None and timestamp.astimezone(UTC) >= request_end_boundary_utc:
+        raise GateError("request_boundary_violation", "row timestamp is at or after the frozen request boundary")
     session = session_date_for_timestamp(timestamp)
     if not source_start <= session <= source_end:
         raise GateError("source_range_violation", f"row session {session} is outside the frozen source range")
@@ -1172,6 +1198,7 @@ def deterministic_candidate_population(
     snapshots: Sequence[object],
     *,
     reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
+    methodology: str = "strictly_prior_data_frozen_scanner_eligible_universe",
 ) -> dict[str, object]:
     """Freeze scanner-eligible PIT membership without alpha ranking."""
     references = {str(symbol).strip().upper() for symbol in reference_symbols}
@@ -1193,11 +1220,31 @@ def deterministic_candidate_population(
             raise GateError(
                 "candidate_population_alpha_leak", "candidate population must not use observation alpha ranking"
             )
-        raw_symbols = _snapshot_value(snapshot, "symbols")
+        raw_symbols = _snapshot_value(snapshot, "eligible_symbols", None)
+        legacy_symbols = _snapshot_value(snapshot, "symbols", None)
+        if raw_symbols is not None and not isinstance(raw_symbols, (list, tuple, set, frozenset)):
+            raise GateError("invalid_pit_snapshot", "PIT snapshot eligible_symbols must be a collection")
+        if raw_symbols is None:
+            raw_symbols = legacy_symbols
+        elif legacy_symbols is not None:
+            if not isinstance(legacy_symbols, (list, tuple, set, frozenset)):
+                raise GateError("invalid_pit_snapshot", "PIT snapshot symbols must be a collection")
+            if {str(symbol).strip().upper() for symbol in legacy_symbols if str(symbol).strip()} != {
+                str(symbol).strip().upper() for symbol in raw_symbols if str(symbol).strip()
+            }:
+                raise GateError("pit_membership_mismatch", "PIT eligible_symbols and symbols disagree")
         if not isinstance(raw_symbols, (list, tuple, set, frozenset)):
             raise GateError("invalid_pit_snapshot", "PIT snapshot symbols must be a collection")
         symbols = sorted({str(symbol).strip().upper() for symbol in raw_symbols if str(symbol).strip()})
         candidates = [symbol for symbol in symbols if symbol not in references]
+        declared_count = _snapshot_value(snapshot, "eligible_count", None)
+        if declared_count is not None and (
+            isinstance(declared_count, bool) or not isinstance(declared_count, int) or declared_count != len(candidates)
+        ):
+            raise GateError("pit_membership_mismatch", "PIT eligible_count differs from eligible symbols")
+        empty = _snapshot_value(snapshot, "scanner_result_empty", None)
+        if empty is not None and (not isinstance(empty, bool) or empty != (len(candidates) == 0)):
+            raise GateError("pit_membership_mismatch", "PIT empty-snapshot flag differs from membership")
         exclusion_counts["reference_observation_symbol"] += len(symbols) - len(candidates)
         normalized.append(
             {
@@ -1225,7 +1272,7 @@ def deterministic_candidate_population(
     ]
     return {
         "schema_version": PIT_POPULATION_SCHEMA_VERSION,
-        "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+        "methodology": methodology,
         "observation_strategy": None,
         "reference_symbols": sorted(references),
         "snapshot_count": len(normalized),
@@ -1327,7 +1374,129 @@ def _continuation_token(value: object, *, field: str) -> str | None:
     return value
 
 
-def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, object]]:
+def capture_page_hash_digest(pages: Sequence[Mapping[str, object]]) -> str:
+    """Digest capture identities without exposing continuation tokens."""
+    identities = [
+        {
+            "relative_path": str(page.get("relative_path", "")),
+            "raw_sha256": str(page.get("raw_sha256", "")),
+            "raw_byte_size": page.get("raw_byte_size", page.get("byte_size")),
+        }
+        for page in pages
+    ]
+    return canonical_digest({"encoding": "m3-captured-page-hashes-v1", "pages": identities})
+
+
+def _validate_capture_journal(
+    bundle_path: Path,
+    staging_dir: Path,
+    *,
+    require_promoted: bool,
+) -> dict[str, object]:
+    journal_path = bundle_path / "attempt_journal.json"
+    if not journal_path.is_file():
+        raise GateError("missing_capture_journal", "R4 accepted bundle attempt_journal.json is missing")
+    journal_artifact = stage_file(journal_path, staging_dir)
+    try:
+        journal = json.loads(journal_artifact.staged_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("invalid_capture_journal", "R4 attempt journal is not valid UTF-8 JSON") from exc
+    if not isinstance(journal, Mapping):
+        raise GateError("invalid_capture_journal", "R4 attempt journal must be an object")
+    if journal.get("schema_version") != "1.0.0" or journal.get("mission") != R4_ACQUISITION_MISSION:
+        raise GateError("capture_journal_identity", "R4 attempt journal mission or schema is incorrect")
+    if journal.get("capture_encoding") != R4_CAPTURE_ENCODING:
+        raise GateError("capture_journal_identity", "R4 capture encoding is not frozen")
+    if (
+        journal.get("network_allowed") is not True
+        or journal.get("allowed_host") != "data.alpaca.markets"
+        or journal.get("allowed_endpoint") != SOURCE_ENDPOINT
+        or journal.get("allowed_symbol") != "IWM"
+        or journal.get("allowed_feed") != SOURCE_FEED
+        or journal.get("request_params")
+        != {
+            "symbols": "IWM",
+            "timeframe": "1Day",
+            "start": REQUEST_START_UTC_TEXT,
+            "end": REQUEST_END_BOUNDARY_UTC_TEXT,
+            "feed": SOURCE_FEED,
+            "adjustment": SOURCE_ADJUSTMENT,
+            "sort": SOURCE_SORT,
+            "limit": 10000,
+        }
+    ):
+        raise GateError("capture_journal_identity", "R4 attempt journal request identity is incorrect")
+    allowed_states = {"CAPTURED_UNVERIFIED", "VALIDATED", "PROMOTED_ACCEPTED_BUNDLE"}
+    state = journal.get("capture_state")
+    if state not in allowed_states or (require_promoted and state != "PROMOTED_ACCEPTED_BUNDLE"):
+        raise GateError("capture_journal_state", "R4 attempt journal state is not valid for this validation")
+    if journal.get("capture_complete") is not True:
+        raise GateError("capture_journal_state", "R4 accepted bundle journal is incomplete")
+    attempt_id = journal.get("attempt_id")
+    if not isinstance(attempt_id, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", attempt_id):
+        raise GateError("capture_journal_identity", "R4 attempt ID is missing or unsafe")
+    request = journal.get("request_interval_utc")
+    if request != {
+        "start": REQUEST_START_UTC_TEXT,
+        "end_boundary": REQUEST_END_BOUNDARY_UTC_TEXT,
+        "semantics": "[start,end)",
+    }:
+        raise GateError("capture_journal_identity", "R4 request interval is not exact RFC3339 UTC")
+    pages = journal.get("pages")
+    if not isinstance(pages, list) or not pages:
+        raise GateError("capture_journal_identity", "R4 attempt journal must list captured pages")
+    page_count = journal.get("page_count")
+    if isinstance(page_count, bool) or not isinstance(page_count, int) or page_count != len(pages):
+        raise GateError("capture_journal_identity", "R4 attempt journal page count is inconsistent")
+    if journal.get("aggregate_page_hash_digest") != capture_page_hash_digest(
+        [page for page in pages if isinstance(page, Mapping)]
+    ):
+        raise GateError("capture_journal_identity", "R4 aggregate page hash digest is inconsistent")
+    identities: list[dict[str, object]] = []
+    prior_hashes: set[str] = set()
+    prior_paths: set[str] = set()
+    for page in pages:
+        if not isinstance(page, Mapping):
+            raise GateError("capture_journal_identity", "R4 journal page entry must be an object")
+        relative = str(page.get("relative_path", ""))
+        raw_sha = str(page.get("raw_sha256", ""))
+        size = page.get("raw_byte_size")
+        if not re.fullmatch(r"pages/[0-9]{6}\.json", relative):
+            raise GateError("capture_journal_identity", "R4 journal page path is not canonical")
+        if relative in prior_paths or not re.fullmatch(r"[0-9a-f]{64}", raw_sha):
+            raise GateError("capture_journal_identity", "R4 journal page identity is duplicated or malformed")
+        if raw_sha in prior_hashes or isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise GateError("capture_journal_identity", "R4 journal page hash or size is duplicated or malformed")
+        status = page.get("http_status")
+        retry_count = page.get("retry_count")
+        if isinstance(status, bool) or not isinstance(status, int) or status != 200:
+            raise GateError("capture_journal_identity", "R4 journal page does not record HTTP 200")
+        if isinstance(retry_count, bool) or not isinstance(retry_count, int) or retry_count < 0:
+            raise GateError("capture_journal_identity", "R4 journal retry count is invalid")
+        for field in ("content_type", "response_date"):
+            if page.get(field) is not None and not isinstance(page.get(field), str):
+                raise GateError("capture_journal_identity", f"R4 journal {field} is not safe text")
+        page_path = _page_path(bundle_path, relative)
+        artifact = stage_file(page_path, staging_dir)
+        if artifact.raw_sha256 != raw_sha or artifact.byte_size != size:
+            raise GateError("page_hash_mismatch", f"R4 captured page bytes differ: {relative}")
+        prior_paths.add(relative)
+        prior_hashes.add(raw_sha)
+        identities.append({"relative_path": relative, "raw_sha256": raw_sha, "raw_byte_size": size})
+    if [str(page["relative_path"]) for page in pages] != sorted(prior_paths):
+        raise GateError("capture_journal_identity", "R4 journal pages are not in canonical order")
+    return {
+        "attempt_id": attempt_id,
+        "capture_state": state,
+        "capture_complete": True,
+        "page_count": len(pages),
+        "aggregate_page_hash_digest": str(journal["aggregate_page_hash_digest"]),
+        "journal_raw_sha256": journal_artifact.raw_sha256,
+        "pages": pages,
+    }
+
+
+def _validate_source_receipt(receipt: Mapping[str, object], *, r4: bool = False) -> list[dict[str, object]]:
     if str(receipt.get("schema_version", "")) != "1.0.0":
         raise GateError("source_contract_mismatch", "unsupported IWM source receipt schema")
     if _require_text(receipt, "provider") != SOURCE_PROVIDER:
@@ -1347,17 +1516,53 @@ def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, ob
     request = receipt.get("request")
     if not isinstance(request, Mapping):
         raise GateError("source_contract_missing", "source receipt request contract is missing")
-    expected_request = {
-        "start": "2016-01-01",
-        "end": "2026-07-31",
-        "timeframe": RAW_SOURCE_TIMEFRAME,
-        "feed": "sip",
-        "adjustment": "split",
-        "sort": "asc",
-    }
+    expected_request = (
+        {
+            "start": REQUEST_START_UTC_TEXT,
+            "end": REQUEST_END_BOUNDARY_UTC_TEXT,
+            "timeframe": RAW_SOURCE_TIMEFRAME,
+            "feed": "sip",
+            "adjustment": "split",
+            "sort": "asc",
+            "limit": 10000,
+        }
+        if r4
+        else {
+            "start": "2016-01-01",
+            "end": "2026-07-31",
+            "timeframe": RAW_SOURCE_TIMEFRAME,
+            "feed": "sip",
+            "adjustment": "split",
+            "sort": "asc",
+        }
+    )
     for key, expected in expected_request.items():
-        if str(request.get(key, "")) != expected:
+        actual = request.get(key, "")
+        matches = actual == expected if key == "limit" else str(actual) == expected
+        if not matches:
             raise GateError("source_contract_mismatch", f"source request {key} must be {expected}")
+    if r4 and dict(request) != expected_request:
+        raise GateError("source_contract_mismatch", "R4 source request contains unexpected fields")
+    if r4 and request.get("limit") != 10000:
+        raise GateError("source_contract_mismatch", "source request limit must be 10000")
+    if r4:
+        if receipt.get("mission") != R4_ACQUISITION_MISSION:
+            raise GateError("source_contract_mismatch", "R4 source receipt mission is incorrect")
+        if receipt.get("capture_encoding") != R4_CAPTURE_ENCODING:
+            raise GateError("source_contract_mismatch", "R4 source receipt capture encoding is incorrect")
+        if receipt.get("capture_state") not in {"VALIDATED", "PROMOTED_ACCEPTED_BUNDLE"}:
+            raise GateError("source_contract_mismatch", "R4 source receipt has an invalid capture state")
+        if receipt.get("capture_state") == "PROMOTED_ACCEPTED_BUNDLE" and receipt.get("capture_complete") is not True:
+            raise GateError("source_contract_mismatch", "R4 promoted source receipt capture is incomplete")
+        if receipt.get("request_interval_utc") != {
+            "start": REQUEST_START_UTC_TEXT,
+            "end_boundary": REQUEST_END_BOUNDARY_UTC_TEXT,
+            "semantics": "[start,end)",
+        }:
+            raise GateError("source_contract_mismatch", "R4 source receipt request interval is not exact")
+        attempt_id = receipt.get("attempt_id")
+        if not isinstance(attempt_id, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", attempt_id):
+            raise GateError("source_contract_mismatch", "R4 source receipt attempt ID is invalid")
     if not str(receipt.get("entitlement_feed_assertion", "")).strip():
         raise GateError("missing_entitlement_assertion", "entitlement/feed assertion is required")
     if receipt.get("no_fallback_assertion") is not True:
@@ -1388,6 +1593,16 @@ def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, ob
             raise GateError("source_contract_mismatch", f"page {relative} has no valid raw hash")
         for field in ("raw_byte_size", "row_count"):
             _nonnegative_int(page, field, category="source_contract_mismatch")
+        if r4:
+            status = page.get("http_status")
+            if isinstance(status, bool) or not isinstance(status, int) or status != 200:
+                raise GateError("source_contract_mismatch", f"page {relative} does not record HTTP 200")
+            for field in ("retry_count",):
+                _nonnegative_int(page, field, category="source_contract_mismatch")
+            for field in ("content_type", "response_date"):
+                value = page.get(field)
+                if value is not None and not isinstance(value, str):
+                    raise GateError("source_contract_mismatch", f"page {relative} {field} is not safe text")
         if "input_page_token" not in page or "output_next_page_token" not in page:
             raise GateError("source_contract_missing", f"page {relative} token chain fields are required")
         input_token = _continuation_token(page["input_page_token"], field="input_page_token")
@@ -1413,7 +1628,11 @@ def _validate_source_receipt(receipt: Mapping[str, object]) -> list[dict[str, ob
 
 
 def validate_iwm_bundle(
-    bundle: str | Path, staging_dir: str | Path
+    bundle: str | Path,
+    staging_dir: str | Path,
+    *,
+    r4: bool = False,
+    require_promoted: bool = True,
 ) -> tuple[tuple[NormalizedBar, ...], dict[str, object]]:
     """Validate a complete raw provider page bundle and normalize its rows."""
     bundle_path = Path(bundle)
@@ -1431,7 +1650,29 @@ def validate_iwm_bundle(
         raise GateError("invalid_source_receipt", "IWM source receipt is not valid UTF-8 JSON") from exc
     if not isinstance(receipt, Mapping):
         raise GateError("invalid_source_receipt", "IWM source receipt must be an object")
-    pages = _validate_source_receipt(receipt)
+    journal_audit: dict[str, object] | None = (
+        _validate_capture_journal(bundle_path, Path(staging_dir), require_promoted=require_promoted) if r4 else None
+    )
+    pages = _validate_source_receipt(receipt, r4=r4)
+    if journal_audit is not None:
+        if receipt.get("attempt_id") != journal_audit.get("attempt_id"):
+            raise GateError("capture_journal_identity", "R4 source receipt and journal attempt IDs differ")
+        journal_pages = journal_audit.get("pages")
+        if not isinstance(journal_pages, list) or len(journal_pages) != len(pages):
+            raise GateError("capture_journal_identity", "R4 journal and source receipt page counts differ")
+        for journal_page, receipt_page in zip(journal_pages, pages, strict=True):
+            if not isinstance(journal_page, Mapping):
+                raise GateError("capture_journal_identity", "R4 journal page entry is invalid")
+            for field in (
+                "relative_path",
+                "raw_sha256",
+                "raw_byte_size",
+                "input_page_token",
+                "output_next_page_token",
+                "row_count",
+            ):
+                if journal_page.get(field) != receipt_page.get(field):
+                    raise GateError("capture_journal_identity", f"R4 journal differs from source receipt: {field}")
     page_directory = bundle_path / "pages"
     actual_page_paths = (
         {
@@ -1496,7 +1737,15 @@ def validate_iwm_bundle(
             # retain the raw page bytes and supply that envelope identity only
             # to the normalizer.
             normalizer_input = raw if "S" in raw or "symbol" in raw else {**raw, "S": "IWM"}
-            page_rows.append(normalize_provider_bar(normalizer_input))
+            page_rows.append(
+                normalize_provider_bar(
+                    normalizer_input,
+                    source_start=REQUIRED_FIRST_REFERENCE_SESSION if r4 else SOURCE_START,
+                    source_end=REQUIRED_LAST_REFERENCE_SESSION if r4 else SOURCE_END,
+                    request_start_utc=REQUEST_START_UTC if r4 else None,
+                    request_end_boundary_utc=REQUEST_END_BOUNDARY_UTC if r4 else None,
+                )
+            )
         ensure_unique_rows(page_rows, category="identical_duplicate_bar")
         if page_rows != sorted(page_rows, key=lambda row: row.sort_key):
             raise GateError("source_order", f"IWM page is not sorted ascending: {relative}")
@@ -1525,7 +1774,7 @@ def validate_iwm_bundle(
         "source_receipt_crlf_normalized_sha256": receipt_artifact.crlf_normalized_sha256,
         "pages": staged_pages,
     }
-    return ordered, {
+    audit: dict[str, object] = {
         "source_receipt": {
             "raw_sha256": receipt_artifact.raw_sha256,
             "crlf_normalized_sha256": receipt_artifact.crlf_normalized_sha256,
@@ -1547,6 +1796,9 @@ def validate_iwm_bundle(
             "sort": SOURCE_SORT,
         },
     }
+    if journal_audit is not None:
+        audit["capture_journal"] = {key: value for key, value in journal_audit.items() if key != "pages"}
+    return ordered, audit
 
 
 def load_csv_reference_rows(
@@ -1555,6 +1807,8 @@ def load_csv_reference_rows(
     reference_symbols: Sequence[str] = REFERENCE_SYMBOLS,
     source_start: date = SOURCE_START,
     source_end: date = SOURCE_END,
+    request_start_utc: datetime | None = None,
+    request_end_boundary_utc: datetime | None = None,
 ) -> tuple[dict[str, list[NormalizedBar]], dict[str, dict[str, int]]]:
     """Read selected rows and account for every accepted or rejected row."""
     wanted = {symbol.upper() for symbol in reference_symbols}
@@ -1587,7 +1841,13 @@ def load_csv_reference_rows(
             quality[symbol]["raw_row_count"] += 1
             quality[symbol]["raw_reference_rows"] += 1
             try:
-                row = normalize_csv_row(raw, source_start=source_start, source_end=source_end)
+                row = normalize_csv_row(
+                    raw,
+                    source_start=source_start,
+                    source_end=source_end,
+                    request_start_utc=request_start_utc,
+                    request_end_boundary_utc=request_end_boundary_utc,
+                )
             except GateError as exc:
                 quality[symbol]["rejected_row_count"] += 1
                 quality[symbol][exc.category] = quality[symbol].get(exc.category, 0) + 1
@@ -1770,7 +2030,9 @@ __all__ = [
     "CANONICAL_TIMEFRAME",
     "DEFAULT_NUMERICAL_THRESHOLDS",
     "EVALUATION_END",
+    "EVALUATION_END_SESSION",
     "EXCHANGE_TIMEZONE",
+    "EXPECTED_REQUIRED_REFERENCE_SESSIONS",
     "GateError",
     "MARKET",
     "MATRIX_ENCODING_VERSION",
@@ -1780,8 +2042,16 @@ __all__ = [
     "RECENT_START",
     "REFERENCE_SYMBOLS",
     "REFERENCE_PANEL_ENCODING_VERSION",
+    "REQUIRED_FIRST_REFERENCE_SESSION",
+    "REQUIRED_LAST_REFERENCE_SESSION",
     "ResearchReferenceOverlay",
     "PIT_POPULATION_SCHEMA_VERSION",
+    "R4_ACQUISITION_MISSION",
+    "R4_CAPTURE_ENCODING",
+    "REQUEST_END_BOUNDARY_UTC",
+    "REQUEST_END_BOUNDARY_UTC_TEXT",
+    "REQUEST_START_UTC",
+    "REQUEST_START_UTC_TEXT",
     "SESSION_ENCODING_VERSION",
     "SOURCE_END",
     "SOURCE_ADJUSTMENT",
@@ -1796,6 +2066,7 @@ __all__ = [
     "build_reference_inventory",
     "build_reference_overlay",
     "calendar_dependency_identity",
+    "capture_page_hash_digest",
     "canonical_digest",
     "canonical_json_bytes",
     "canonical_timestamp",

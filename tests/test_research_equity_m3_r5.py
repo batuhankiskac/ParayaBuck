@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import csv
 import inspect
 import subprocess
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -223,6 +225,29 @@ def test_timing_contract_is_deterministic_and_terminal_is_not_post_eval() -> Non
     assert timestamps[-1] == "2026-07-30T04:00:00.000000Z"
     assert r5.effective_timestamp_digest(timestamps) == r5.effective_timestamp_digest(tuple(timestamps))
     assert r5.timestamp_for_session(date(2026, 7, 30)) == datetime(2026, 7, 30, 4, tzinfo=UTC)
+
+
+def test_close_matrix_ignores_valid_post_evaluation_rows(tmp_path: Path) -> None:
+    path = tmp_path / "canonical.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["timestamp", "symbol", "timeframe", "open", "high", "low", "close", "volume", "market"])
+        writer.writerow(["2026-07-29T04:00:00Z", "AAA", "1d", "1", "2", "0.5", "1.5", "100", "equity"])
+        writer.writerow(["2026-07-30T04:00:00Z", "AAA", "1d", "2", "3", "1.5", "2.5", "100", "equity"])
+        writer.writerow(["2026-07-31T04:00:00Z", "AAA", "1Day", "3", "4", "2.5", "3.5", "100", "EQUITY"])
+
+    close_arrays, timestamp_arrays, stats = r5._load_close_matrix(
+        path,
+        symbols=("AAA",),
+        sessions=[date(2026, 7, 29), date(2026, 7, 30)],
+        sidecar_rows=(),
+    )
+
+    assert stats["invalid_selected_row_count"] == 0
+    assert stats["duplicate_selected_row_count"] == 0
+    assert stats["selected_canonical_out_of_range_row_count"] == 1
+    assert close_arrays["AAA"].tolist() == [1.5, 2.5]
+    assert timestamp_arrays["AAA"].tolist() == [1785297600000000, 1785384000000000]
 
 
 def test_symbolic_head_is_rejected_for_immutable_provenance() -> None:

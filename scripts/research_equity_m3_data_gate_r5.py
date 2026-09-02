@@ -81,6 +81,8 @@ R5_SECOND_MANIFEST_COMMIT = "d6106a785c5fc324f0d25e555ebed1599f7cef29"
 R5_CANONICAL_FIX_COMMIT = "d52b578c21176dd72ff4d01b51b39c6f4d15267f"
 R5_THIRD_IMPLEMENTATION_COMMIT = "136cb93b35e46ba356a88727aaf0c12574f4ba74"
 R5_THIRD_MANIFEST_COMMIT = "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f"
+R5_FOURTH_IMPLEMENTATION_COMMIT = "773966f3cfdb33bf584e98343dc4839c59deb224"
+R5_FOURTH_MANIFEST_COMMIT = "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1"
 R5_MANIFEST_PATH = "data/research_manifests/equity_m3_data_gate_2026_09_r5.json"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
@@ -742,6 +744,7 @@ def _load_close_matrix(
     timestamp_arrays = {symbol: np.zeros(len(sessions), dtype=np.int64) for symbol in unique_symbols}
     duplicate_count = 0
     invalid_count = 0
+    out_of_range_count = 0
     row_count = 0
     selected = set(unique_symbols) - {"IWM"}
     with path.open(newline="", encoding="utf-8") as handle:
@@ -761,7 +764,10 @@ def _load_close_matrix(
                 timestamp = parse_timestamp(raw[0])
                 session = session_date_for_timestamp(timestamp)
                 index = session_index.get(session)
-                if index is None or raw[2].strip().lower() not in {"1d", "1day"} or raw[8].strip().lower() != "equity":
+                if index is None:
+                    out_of_range_count += 1
+                    continue
+                if raw[2].strip().lower() not in {"1d", "1day"} or raw[8].strip().lower() != "equity":
                     invalid_count += 1
                     continue
                 close = float(raw[6])
@@ -797,6 +803,7 @@ def _load_close_matrix(
             "selected_canonical_row_count": row_count,
             "invalid_selected_row_count": invalid_count,
             "duplicate_selected_row_count": duplicate_count,
+            "selected_canonical_out_of_range_row_count": out_of_range_count,
             "missing_timestamp_cells": int(sum(np.count_nonzero(values == 0) for values in timestamp_arrays.values())),
         },
     )
@@ -1156,6 +1163,19 @@ def validate_r5_contract(contract: Mapping[str, object]) -> None:
         }
         if contract.get("recovery_lineage") != expected_recovery:
             raise GateError("recovery_lineage_mismatch", "R5 A14/B14 recovery lineage is not declared exactly")
+    elif implementation_parent == R5_FOURTH_MANIFEST_COMMIT:
+        expected_recovery = {
+            "status": "ABANDONED_A14_B14",
+            "abandoned_implementation_commit": R5_FOURTH_IMPLEMENTATION_COMMIT,
+            "abandoned_manifest_commit": R5_FOURTH_MANIFEST_COMMIT,
+            "reason_category": "post_cutoff_candidate_rows",
+            "reason": "B14 R5 gate counted valid post-cutoff canonical rows as invalid candidate rows before replay",
+            "corrective_base_commit": R5_FOURTH_MANIFEST_COMMIT,
+            "replay_exact_captured_bytes": True,
+            "automatic_refetch_allowed": False,
+        }
+        if contract.get("recovery_lineage") != expected_recovery:
+            raise GateError("recovery_lineage_mismatch", "R5 A15/B15 recovery lineage is not declared exactly")
     else:
         raise GateError("implementation_parent_mismatch", "R5 implementation parent is not D6 or B10")
     if contract.get("manifest_path") != R5_MANIFEST_PATH:

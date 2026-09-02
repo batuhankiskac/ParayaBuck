@@ -256,8 +256,12 @@ def test_correct_a23_b23_c23_chain_is_accepted() -> None:
     r2._validate_historical_topology()
 
 
-def test_old_unversioned_receipt_is_rejected_by_economic_consumer() -> None:
+def test_old_unversioned_receipt_is_rejected_by_economic_consumer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert economic_consumer.M3_CANDIDATE_OCP_RECEIPT.name == "equity_m3_candidate_ocp_2026_09_r2.json"
+    old_receipt = r2.REPO / "data/research_receipts/equity_m3_candidate_ocp_2026_09.json"
+    monkeypatch.setattr(economic_consumer, "M3_CANDIDATE_OCP_RECEIPT", old_receipt)
     assert not economic_consumer._valid_m3_candidate_ocp_receipt()
 
 

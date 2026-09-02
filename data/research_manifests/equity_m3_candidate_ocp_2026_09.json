@@ -68,58 +68,58 @@
   },
   "critical_git_blobs": {
     ".github/workflows/ci.yml": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "0fe30bb95d6661e764bb755f1adbd283255dbcd0",
       "path": ".github/workflows/ci.yml",
       "raw_sha256": "8b90b9a57705dbc1d9a96dd57d72cf8f82a41af108b354d10be7765892c13fd9"
     },
     "scripts/compact_equity_m3_candidate_ocp_receipt.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "848fb9639b0185a27b34a232cc40322bb325751a",
       "path": "scripts/compact_equity_m3_candidate_ocp_receipt.py",
       "raw_sha256": "7843b1471eda346af65d6e29e547c9bb4d30b0ac70b1bda7d3d2361d18cdc858"
     },
     "scripts/research_equity_m3_candidate_ocp.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
-      "git_blob_id": "6135948c6a90ad81527f25b08ecd49a8daf1f57c",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
+      "git_blob_id": "1aafb3bfcc6c350fe3b07193fbe9a904f4af7e93",
       "path": "scripts/research_equity_m3_candidate_ocp.py",
-      "raw_sha256": "cf75f05bb77880c33a5e2cd7a1f869c1b451027273ba5000c34892fa78766893"
+      "raw_sha256": "015200983bf459d45f4c9b13737c984e647bbd6725d8c54c5384644ccc099dd4"
     },
     "scripts/research_equity_m3_m4.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "e7212acec4fed61413fdd7c231001a65f3d4a554",
       "path": "scripts/research_equity_m3_m4.py",
       "raw_sha256": "543e9858e87ba0b312e2b9d522e7e8d669fad64fcd2d57079c811139be0355f9"
     },
     "src/parayabuck/backtest/observation_parity.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "54a1825875ebeb0fc29f56b51bd91bf00eb30ea2",
       "path": "src/parayabuck/backtest/observation_parity.py",
       "raw_sha256": "b2bed6eb9dfe539b846f227627f4583c67702574d246c569b435b410913db287"
     },
     "src/parayabuck/backtest/universe.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
       "path": "src/parayabuck/backtest/universe.py",
       "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
     },
     "src/parayabuck/universe/observation_set.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "7c8c537df2b9cf9032d60230a988472b687d1dc3",
       "path": "src/parayabuck/universe/observation_set.py",
       "raw_sha256": "157439ec02346ab2bfa7daf1a7b4f48b1e8d717fae8de6643c7266e5e1db466d"
     },
     "tests/fixtures/equity_m3_candidate_ocp/README.md": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
       "git_blob_id": "d51173015fbf049f8f6ecf5c6278bc71f3008981",
       "path": "tests/fixtures/equity_m3_candidate_ocp/README.md",
       "raw_sha256": "5ab1e291bbd13496f17da4a11cb5ef5c68cf1380eccb6951f0118c66247ac376"
     },
     "tests/test_research_equity_m3_candidate_ocp.py": {
-      "commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
-      "git_blob_id": "75860d3a9d1590ae09ee49aade311063ad9a9df2",
+      "commit": "d20ba6a637015340263b8b453a721cc70453086f",
+      "git_blob_id": "073af87ae0fd03c2b81b60d5baca1c6fe4fd9925",
       "path": "tests/test_research_equity_m3_candidate_ocp.py",
-      "raw_sha256": "dd9b12302d5c1975711cba6f4d4f6e4a889de21f9189804df40a35fca66ede8b"
+      "raw_sha256": "2beb238d17bc18af9de7be241b4ba6adc8760b238760fdfb9910cded3365dad8"
     }
   },
   "declared_before_results": true,
@@ -2844,9 +2844,9 @@
     "first_recent_window_snapshot",
     "terminal_evaluation_snapshot"
   ],
-  "implementation_commit": "bb1eff793aab9324b65e41ac1c072748267e2371",
-  "implementation_parent_commit": "f15ba8ffa2c752ba184cbc6eb655792d5387ee54",
-  "implementation_tree": "28104b92fb951050e2c952cd5c5be8fd883703cb",
+  "implementation_commit": "d20ba6a637015340263b8b453a721cc70453086f",
+  "implementation_parent_commit": "d0868ed43d32e7e05c0ad7d82fdebb66404dd835",
+  "implementation_tree": "965289edd64625bac99515218dbf65a1e0be1b37",
   "mandatory_gates": [
     "commit_topology",
     "implementation_blob_identity",
@@ -2895,7 +2895,7 @@
     "changed_paths": [
       "data/research_manifests/equity_m3_candidate_ocp_2026_09.json"
     ],
-    "parent": "bb1eff793aab9324b65e41ac1c072748267e2371"
+    "parent": "d20ba6a637015340263b8b453a721cc70453086f"
   },
   "mission": "M3_CANDIDATE_OCP_GATE",
   "no_network_or_credentials": true,

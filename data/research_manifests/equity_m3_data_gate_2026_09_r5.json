@@ -12,9 +12,9 @@
   "economic_metrics_present": false,
   "economic_mission_ready": false,
   "base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
-  "implementation_parent_commit": "ae91515cdbf53a628aa86d253cbd4805f396b9b7",
-  "implementation_commit": "79ffcb178845f64f3f2cc036b9e1919cc15891e7",
-  "implementation_tree": "2c5845bf52efee0734cbc61da95b17ed6fa2aed6",
+  "implementation_parent_commit": "5aeb2058b0027432de45d9db8fdeba20120d4d2c",
+  "implementation_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
+  "implementation_tree": "1fae3b62eb14cd089c940d927ded86dd3484cd8b",
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R5 manifest path",
   "critical_git_blobs": {
@@ -27,8 +27,8 @@
       "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
     },
     "scripts/research_equity_m3_data_gate_r5.py": {
-      "git_blob_id": "ef8b8488868674a1e6365b92e6b4e80b420a9abf",
-      "raw_sha256": "4739dde29041ba0d4dceea8d353babd836511c1c1d3fb6d60dcbd31f62291139"
+      "git_blob_id": "7ee05548a85d46a172a1c66702fd0a19820d7a4f",
+      "raw_sha256": "0a59406dd012eb93bfd40e1e6e066feb1345d8a89e68d6fccf8d56fe9c41c39b"
     },
     "scripts/research_equity_m3_m4.py": {
       "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
@@ -230,7 +230,7 @@
     "economic_candidate_ranking"
   ],
   "clean_run_procedure": {
-    "required_start_commit": "manifest-only B16 direct child of A16",
+    "required_start_commit": "manifest-only B17 direct child of A17",
     "capture_cleanliness_before_outputs": true,
     "external_inputs_ignored_or_tmp_only": true,
     "compact_result_copy_after_gate_only": true,
@@ -250,15 +250,17 @@
     "a15_implementation_commit": "067c44b24906c86421143d65aa9f2558ff23cf2c",
     "a15_implementation_tree": "f37094973921eb3290896910a9c117890b5d4be9",
     "a16_implementation_commit": "79ffcb178845f64f3f2cc036b9e1919cc15891e7",
-    "a16_implementation_tree": "2c5845bf52efee0734cbc61da95b17ed6fa2aed6"
+    "a16_implementation_tree": "2c5845bf52efee0734cbc61da95b17ed6fa2aed6",
+    "a17_implementation_commit": "2f49c2bc6e6f8cec295ed0f0abd13f934a7059a6",
+    "a17_implementation_tree": "1fae3b62eb14cd089c940d927ded86dd3484cd8b"
   },
   "recovery_lineage": {
-    "status": "ABANDONED_A15_B15",
-    "abandoned_implementation_commit": "067c44b24906c86421143d65aa9f2558ff23cf2c",
-    "abandoned_manifest_commit": "ae91515cdbf53a628aa86d253cbd4805f396b9b7",
-    "reason_category": "report_provenance_missing",
-    "reason": "B15 R5 report omitted verified commit, R4-input, and PIT-population summaries before replay",
-    "corrective_base_commit": "ae91515cdbf53a628aa86d253cbd4805f396b9b7",
+    "status": "ABANDONED_A16_B16",
+    "abandoned_implementation_commit": "79ffcb178845f64f3f2cc036b9e1919cc15891e7",
+    "abandoned_manifest_commit": "5aeb2058b0027432de45d9db8fdeba20120d4d2c",
+    "reason_category": "lineage_validator_missing",
+    "reason": "B16 R5 manifest failed because A16 lacked the B15 recovery branch before replay",
+    "corrective_base_commit": "5aeb2058b0027432de45d9db8fdeba20120d4d2c",
     "replay_exact_captured_bytes": true,
     "automatic_refetch_allowed": false
   },

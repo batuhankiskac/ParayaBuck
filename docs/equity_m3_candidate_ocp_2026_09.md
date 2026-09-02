@@ -4,10 +4,12 @@
 
 M3_CANDIDATE_OCP_GATE_BLOCKED
 
-The clean B22 real-data replay passed all 42 local OCP gates. The compact
-receipt is blocked only because remote CI/closure was not run under the
-mission's no-network constraint. The broad local suite and isolated build
-also could not be green in this sandbox; details are in sections 19 and 21.
+The clean B23 real-data replay passed all 42 local OCP gates with the same C/X
+observation hashes and counts as C22. A23 makes pre-result manifest creation
+hermetic by authenticating the accepted R5 compact PIT manifest from Git. The
+compact receipt is blocked only because remote CI/closure was not run under the
+mission's no-network and unpublished-state constraints. The broad local suite
+and build remain sandbox-blocked; details are in sections 19 and 21.
 
 ## 2. Boundary
 
@@ -38,8 +40,12 @@ Required D10/base: `f15ba8ffa2c752ba184cbc6eb655792d5387ee54`.
 | B21 | `8fca202e19cae605caeaeddcba9ae98d7824a570` | A21 | Manifest-only redeclaration; superseded after local formatting validation found one unformatted source file |
 | A22 | `cae97cf9e059c5c03d79469b29e84d47533119d6` | B21 | Formatter-only source correction |
 | B22 | `4d612d9f8fc50a5d4911f2c37d74979c61af93be` | A22 | Final manifest-only pre-result boundary used for the clean replay |
-| C22 | child of B22 | B22 | Local compact receipt and this report; the full commit SHA is recorded in the final handoff |
-| D22 | not created | C22 | Remote closure not run because network access is prohibited |
+| C22 | `0f6d483eecf33cef863942c38fb8f6847e646b29` | B22 | Prior local compact receipt/report; retained immutable |
+| A23 | `32357c110c09f92b438ee188fac289da966bcd24` | C22 | Hermetic manifest implementation and regression tests |
+| B23 | `fe52e30e7cca36030621152f6f1bdbcc247f8e9c` | A23 | New manifest-only pre-result boundary |
+| C23 | child of B23 (this commit) | B23 | New real-data raw PASS and compact BLOCKED receipt/report |
+| D23 | not created | C23 | Remote closure not run; publication was not authorized and network is prohibited |
+| E23 | not created | D23 | Documentation-only remote audit record awaits D23 |
 
 No A19/B19 commit was amended or reused with changed implementation bytes.
 Each defect recovery was appended and replayed against the same accepted
@@ -57,11 +63,11 @@ Each pre-result manifest commit changed exactly:
 | B20 `ec017e2cfa5ebcf937f38a4294a60ffba36e51ba` | A20 | exactly the manifest path |
 | B21 `8fca202e19cae605caeaeddcba9ae98d7824a570` | A21 | exactly the manifest path |
 | B22 `4d612d9f8fc50a5d4911f2c37d74979c61af93be` | A22 | exactly the manifest path |
+| B23 `fe52e30e7cca36030621152f6f1bdbcc247f8e9c` | A23 | exactly the manifest path |
 
-B22's declared implementation is A22, its declared implementation parent is
-B21, and its implementation tree is
-`e2d547d876cfb0d7c2b84fce16a6bf77ad7fd9c6`. The committed B22 manifest
-matches the current `build_manifest()` output.
+B23 changed exactly the manifest path. Its declared implementation SHA is
+`32357c110c09f92b438ee188fac289da966bcd24`, its parent is C22, and its
+implementation tree is `bcb48dc035eafc9f89bebd8d94b3430abbab87fc`.
 
 ## 5. R5 upstream validation
 
@@ -103,7 +109,29 @@ blob was not used.
 The field is non-load-bearing because it is a redundant display alias. The
 load-bearing sources are the R5 pre-result manifest, the actual Git parent of
 A18, and the R5 mandatory `commit_topology` gate. The erratum is explicitly
-present in the B22 manifest, raw artifact, and compact receipt.
+present in the B23 manifest, raw artifact, and compact receipt.
+
+## 6A. Hermetic manifest correction
+
+C22 remote run `33654462773` failed in Python 3.12, 3.13, and 3.14 at
+`test_manifest_build_has_frozen_contract_and_no_result_fields`. The failure
+path was `build_manifest()` -> `resolve_r5_projection()` ->
+`regenerate_r5_projection()` -> R4 PIT staging, which required the ignored
+`data/research/generated/m3_data_gate_r4/pit_universe.json`.
+
+A23 removes that Phase-A dependency. `build_manifest()` now reads the exact
+R5 compact PIT manifest from
+`git cat-file blob 3c2f67d31772f2fba118137ad262bd8ffdb737d8:` at
+`data/research_manifests/equity_m3_pit_population_2026_09_r5.json`, verifies
+Git blob `1290869c1d665254eb1981d648c2ef6d44edc9e5` and raw SHA
+`2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4`, then
+extracts the frozen 2,658 timestamp sequence and its digest
+`64eee673b7a0ca639b5a898d1f7a329c8b264336fd1e824271f170e24e5f45b7`.
+
+The hermetic tests make projection resolution, regeneration, staging, IWM
+validation, socket transport, and all working-copy external paths fail loudly
+if called. The real Phase-B `run_gate()` still resolves and validates the exact
+external R4/R5 bytes; its C23 replay passed all 42 gates.
 
 ## 7. Exact input identities
 
@@ -186,6 +214,8 @@ economic-ranking members. Config/settings were not changed.
 | Evaluation snapshot count | `2658` |
 | First effective_at | `2016-01-04T05:00:00+00:00` |
 | Last effective_at | `2026-07-30T04:00:00+00:00` |
+| Effective_at sequence digest | `64eee673b7a0ca639b5a898d1f7a329c8b264336fd1e824271f170e24e5f45b7` |
+| Timestamp contract source | C11 R5 compact PIT Git blob `1290869c1d665254eb1981d648c2ef6d44edc9e5` |
 | Explicit empty snapshots | `1` |
 | Unique scanner candidates | `889` |
 | Scanner candidate-universe digest | `2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e` |
@@ -293,14 +323,14 @@ and order; it has no economic interpretation.
 
 ## 17. Mandatory gate table
 
-All 42 mandatory OCP gates were `PASS` in the raw B22 replay. A FAIL, UNKNOWN,
+All 42 mandatory OCP gates were `PASS` in the raw C23 replay. A FAIL, UNKNOWN,
 or NOT_RUN_BLOCKED gate was not accepted by the local OCP runner.
 
 | Gate | Status | Evidence | Consequence |
 |---|---|---|---|
-| commit_topology | PASS | B22 -> A22 -> B21; declared parent bound | no local topology blocker |
-| implementation_blob_identity | PASS | A22 tree and critical blobs match B22 | no implementation drift |
-| manifest_only_commit | PASS | B22 changed only the manifest | pre-result contract preserved |
+| commit_topology | PASS | B23 -> A23 -> C22; declared parent bound | no local topology blocker |
+| implementation_blob_identity | PASS | A23 tree and critical blobs match B23 | no implementation drift |
+| manifest_only_commit | PASS | B23 changed only the manifest | pre-result contract preserved |
 | clean_worktree_at_start | PASS | `[]` | clean start proven |
 | production_isolation | PASS | 10 protected paths; record/verify OK | protected production files unchanged |
 | r5_data_gate_receipt_identity | PASS | C11 receipt blob and raw SHA match | accepted R5 retained |
@@ -353,21 +383,36 @@ economic scope was invoked:
 ```text
 git rev-parse HEAD
 git status --short --untracked-files=all
-git log --oneline --decorate -40
-.venv/bin/python scripts/check_production_isolation.py --record /tmp/m3-ocp-before-b22.json
-.venv/bin/python -u scripts/research_equity_m3_candidate_ocp.py --manifest data/research_manifests/equity_m3_candidate_ocp_2026_09.json --r5-projection /tmp/m3-r5-b18-pit.json --raw-dir data/research/generated/equity_m3_candidate_ocp_2026_09
-.venv/bin/python scripts/compact_equity_m3_candidate_ocp_receipt.py --raw data/research/generated/equity_m3_candidate_ocp_2026_09/ocp_run.json --output data/research_receipts/equity_m3_candidate_ocp_2026_09.json --remote-ci-status NOT_RUN_BLOCKED
-.venv/bin/python scripts/check_production_isolation.py --verify /tmp/m3-ocp-before-b22.json
-.venv/bin/python -m py_compile scripts/research_equity_m3_candidate_ocp.py scripts/compact_equity_m3_candidate_ocp_receipt.py
-.venv/bin/pytest -q tests/test_research_equity_m3_candidate_ocp.py tests/test_candidate_observation_parity.py tests/test_candidate_observation_parity_receipts.py tests/test_research_equity_m3_r5.py tests/test_research_equity_m3_m4.py
-.venv/bin/ruff check .
+git log --oneline --decorate -20
+codegraph explore "build_manifest ..."
+.venv/bin/python -m py_compile scripts/research_equity_m3_candidate_ocp.py
+.venv/bin/python -m pytest -q tests/test_research_equity_m3_candidate_ocp.py
+.venv/bin/python -m pytest -q tests/test_candidate_observation_parity.py tests/test_research_equity_m3_candidate_ocp.py tests/test_normalized_hash.py
+.venv/bin/python -m pytest -q tests/test_research_equity_m3_data_gate.py tests/test_research_equity_m3_r5.py
+.venv/bin/python -m pytest -q tests/test_m3_iwm_acquisition.py tests/test_m3_pit_scanner_universe.py
+.venv/bin/ruff check scripts/research_equity_m3_candidate_ocp.py tests/test_research_equity_m3_candidate_ocp.py
 .venv/bin/ruff format --check .
 .venv/bin/mypy src
-.venv/bin/pytest
+.venv/bin/python scripts/check_production_isolation.py --record /tmp/m3-ocp-r2-before.json
+.venv/bin/python -m pytest
 .venv/bin/python -m build
 .venv/bin/python -m build --no-isolation
+.venv/bin/python scripts/check_production_isolation.py --verify /tmp/m3-ocp-r2-before.json
 gitleaks detect --no-banner --redact (unavailable; command not installed)
-git check-ignore -v <each generated raw path>
+.venv/bin/python scripts/research_equity_m3_candidate_ocp.py --write-manifest --manifest /private/tmp/m3-b23-manifest.json
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+from scripts.research_equity_m3_candidate_ocp import _validate_declared_snapshot_contract
+manifest = json.loads(Path('data/research_manifests/equity_m3_candidate_ocp_2026_09.json').read_text())
+_validate_declared_snapshot_contract(manifest)
+print('declared snapshot contract PASS')
+PY
+.venv/bin/python scripts/research_equity_m3_candidate_ocp.py --manifest data/research_manifests/equity_m3_candidate_ocp_2026_09.json --r5-projection /tmp/m3-r5-b18-pit.json --raw-dir data/research/generated/equity_m3_candidate_ocp_2026_09_r2
+.venv/bin/python scripts/compact_equity_m3_candidate_ocp_receipt.py --raw data/research/generated/equity_m3_candidate_ocp_2026_09_r2/ocp_run.json --output data/research_receipts/equity_m3_candidate_ocp_2026_09.json --remote-ci-status NOT_RUN_BLOCKED
+git check-ignore -v data/research/generated/equity_m3_candidate_ocp_2026_09_r2/control_universe.json data/research/generated/equity_m3_candidate_ocp_2026_09_r2/m3_universe.json data/research/generated/equity_m3_candidate_ocp_2026_09_r2/m3_universe_repeat.json data/research/generated/equity_m3_candidate_ocp_2026_09_r2/comparison.json data/research/generated/equity_m3_candidate_ocp_2026_09_r2/snapshot_digests.json data/research/generated/equity_m3_candidate_ocp_2026_09_r2/ocp_run.json
+.venv/bin/python -m py_compile scripts/research_equity_m3_candidate_ocp.py scripts/compact_equity_m3_candidate_ocp_receipt.py
+git diff --check
 ```
 
 The R5 verifier and all local identity checks were read-only. No GitHub API,
@@ -378,22 +423,27 @@ push, broker, runtime, cache, position, or order path was used.
 | Check | Result |
 |---|---|
 | py_compile | PASS |
-| focused OCP/data/parity suite | PASS: `68 passed in 7.08s` |
+| candidate OCP test module | PASS: `38 passed in 4.15s` |
+| focused OCP/data/parity suite | PASS: `61 passed in 6.13s` |
+| focused M3 data-gate suite | PASS: `200 passed in 13.90s` |
+| focused M3 acquisition/PIT suite | PASS: `42 passed in 3.76s` |
 | Ruff lint | PASS |
 | Ruff format | PASS: `327 files already formatted` |
 | mypy | PASS: `147 source files` |
-| full pytest | BLOCKED: `1439 passed, 11 skipped, 6 failed` |
-| source/wheel build, isolated | BLOCKED: temporary build env could not resolve `wheel` from PyPI |
+| full pytest | BLOCKED: `1459 passed, 11 skipped, 6 failed` |
+| source/wheel build, isolated | BLOCKED: temporary build env could not resolve `setuptools>=68.0` from PyPI |
 | source/wheel build, no-isolation | BLOCKED: local `setuptools.build_meta` unavailable |
 | gitleaks | NOT AVAILABLE: executable not installed |
-| new remote GitHub Actions | NOT RUN: no-network mission constraint |
+| C23 remote GitHub Actions | NOT RUN: publication not authorized; no-network mission constraint |
+| D23 remote GitHub Actions | NOT CREATED |
 
 The six full-suite failures are pre-existing socket-bound tests: three webhook
 tests and three web-bind tests failed with `PermissionError: [Errno 1]
 Operation not permitted` on loopback bind. The broad suite teardown also
 attempted an external Alpaca name resolution and failed closed; it was not
 escalated or retried. The isolated build similarly attempted PyPI resolution
-and failed closed. Therefore no local/remote green closure is claimed.
+for its temporary build environment and failed closed. Therefore no
+local/remote green closure is claimed.
 
 ## 20. Tracked versus ignored artifacts
 
@@ -402,8 +452,8 @@ Tracked result artifacts are:
 - `data/research_receipts/equity_m3_candidate_ocp_2026_09.json`;
 - `docs/equity_m3_candidate_ocp_2026_09.md`.
 
-The full raw artifacts remain untracked under
-`data/research/generated/equity_m3_candidate_ocp_2026_09/`:
+The full C23 raw artifacts remain untracked under
+`data/research/generated/equity_m3_candidate_ocp_2026_09_r2/`:
 
 - `control_universe.json`;
 - `m3_universe.json`;
@@ -412,16 +462,23 @@ The full raw artifacts remain untracked under
 - `snapshot_digests.json`;
 - `ocp_run.json`.
 
+C23 raw `ocp_run.json`: SHA-256
+`609fba66a8e909036b92e20f62dfbb68cfb2308d79e64100198fd2b6be61a05e`,
+71,550,403 bytes; its canonical raw-payload digest is
+`e23b09537693f1bec8b0e54339821a687ab8bd533a5cee1e6c6aa37ddd43f486`.
+The compact C23 receipt self-digest is
+`bc061438a7a3212c31e601e7f07c5f95d01887460d11473b09394602fd2098b4` and
+its sole blocked reason is `remote_ci:NOT_RUN_BLOCKED`.
+
 Each raw path was verified by `git check-ignore -v` against the repository's
-`data/research/` ignore rule. The superseded B21 compact receipt was moved
-recoverably to `/tmp/m3-ocp-superseded-b21-receipt.json` before the clean B22
-replay. R1-R5 artifacts, including the R5 manifest, receipt, report, R4
+`data/research/` ignore rule. R1-R5 artifacts, including the R5 manifest,
+receipt, report, R4
 bundle, sidecar, composite, and PIT files, were not modified.
 
 ## 21. Remaining blockers
 
-1. `remote_ci:NOT_RUN_BLOCKED`: no D22 remote closure can be created without
-   violating the no-network rule.
+1. `remote_ci:NOT_RUN_BLOCKED`: C23–E23 remote closure cannot be created
+   without explicit publication authorization and network access.
 2. The broad local pytest suite is not green in this sandbox because six
    pre-existing loopback-bind tests cannot bind sockets; its teardown also
    attempted external resolution.
@@ -429,13 +486,13 @@ bundle, sidecar, composite, and PIT files, were not modified.
    without PyPI access, and the local no-isolation backend is unavailable.
 4. `gitleaks` is unavailable locally.
 
-These blockers prevent the executive PASS even though the real local B22 OCP
+These blockers prevent the executive PASS even though the real local C23 OCP
 observation replay is complete and all 42 OCP gates are PASS. No economic
 mission is authorized or launched.
 
 ## 22. Explicit confirmations
 
-- The OCP implementation and B22 replay made no network or credential calls;
+- The A23 manifest build and C23 replay made no network or credential calls;
   the broad pytest/build quality probes attempted external resolution in
   pre-existing/tool paths, failed closed in the sandbox, and were not retried
   or escalated.

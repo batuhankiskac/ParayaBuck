@@ -37,7 +37,7 @@ jobs:
         run: python scripts/check_production_isolation.py --record /tmp/before.json
       - name: Focused OCP closure tests
         if: always()
-        run: pytest -q tests/test_candidate_observation_parity.py tests/test_normalized_hash.py
+        run: pytest -q tests/test_candidate_observation_parity.py tests/test_research_equity_m3_candidate_ocp.py tests/test_normalized_hash.py
       - name: Focused M3 data-gate tests
         if: always()
         run: pytest -q tests/test_research_equity_m3_data_gate.py tests/test_research_equity_m3_r5.py

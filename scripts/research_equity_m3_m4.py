@@ -148,6 +148,9 @@ M3_DATA_GATE_R3_MANDATORY_GATES = (
 # The production research consumer is deliberately R3-only.  R2 remains named
 # separately so its immutable historical artifacts can still be audited.
 M3_DATA_GATE_RECEIPT = M3_DATA_GATE_R3_RECEIPT
+M3_CANDIDATE_OCP_RECEIPT = REPO / "data/research_receipts/equity_m3_candidate_ocp_2026_09.json"
+M3_ECONOMIC_MISSION_MANIFEST_PATH = "data/research_manifests/equity_m3_economic_2026_09.json"
+M3_ECONOMIC_MISSION_MANIFEST = REPO / M3_ECONOMIC_MISSION_MANIFEST_PATH
 
 EVAL_END = datetime(2026, 7, 30, tzinfo=UTC)
 RECENT_START = datetime(2022, 1, 1, tzinfo=UTC)
@@ -1304,10 +1307,92 @@ def _valid_m3_data_gate_receipt() -> bool:
         return False
 
 
+def _valid_m3_candidate_ocp_receipt() -> bool:
+    """Accept only a completed, research-only candidate OCP receipt."""
+    try:
+        payload = json.loads(M3_CANDIDATE_OCP_RECEIPT.read_text(encoding="utf-8"))
+        if not isinstance(payload, Mapping):
+            return False
+        required = {
+            "mission": "M3_CANDIDATE_OCP_GATE",
+            "verdict": "M3_CANDIDATE_OCP_GATE_PASS",
+            "research_only": True,
+            "automatic_promotion": False,
+            "human_promotion_only": True,
+            "candidate_economics_run": False,
+            "economic_metrics_present": False,
+            "economic_mission_authorized": False,
+        }
+        if any(payload.get(key) != expected for key, expected in required.items()):
+            return False
+        if forbidden_receipt_keys(payload):
+            return False
+        recorded_digest = payload.get("self_digest_sha256")
+        if not isinstance(recorded_digest, str):
+            return False
+        without_digest = dict(payload)
+        without_digest.pop("self_digest_sha256", None)
+        if recorded_digest != canonical_digest(without_digest):
+            return False
+        gates = payload.get("mandatory_gate_results")
+        if not isinstance(gates, Mapping) or len(gates) != 42:
+            return False
+        return all(isinstance(value, Mapping) and value.get("status") == "PASS" for value in gates.values())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return False
+
+
+def _valid_separate_economic_mission_manifest() -> bool:
+    """Require a tracked, clean, explicit future economic-mission declaration."""
+    try:
+        if not M3_ECONOMIC_MISSION_MANIFEST.is_file():
+            return False
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", M3_ECONOMIC_MISSION_MANIFEST_PATH],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        if tracked.returncode != 0:
+            return False
+        for diff_args in (("diff", "--quiet", "HEAD", "--"), ("diff", "--cached", "--quiet", "--")):
+            if subprocess.run(["git", *diff_args, M3_ECONOMIC_MISSION_MANIFEST_PATH], cwd=REPO).returncode != 0:
+                return False
+        payload = json.loads(M3_ECONOMIC_MISSION_MANIFEST.read_text(encoding="utf-8"))
+        if not isinstance(payload, Mapping):
+            return False
+        return (
+            payload.get("mission") == "M3_ECONOMIC_MISSION_PREDECLARATION"
+            and payload.get("economic_mission_authorized") is True
+            and payload.get("candidate_ocp_gate_verdict") == "M3_CANDIDATE_OCP_GATE_PASS"
+            and payload.get("candidate_ocp_receipt_path")
+            == "data/research_receipts/equity_m3_candidate_ocp_2026_09.json"
+            and payload.get("research_only") is True
+            and payload.get("automatic_promotion") is False
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return False
+
+
+def _m3_economic_mission_status() -> str:
+    """Return the narrow fail-closed status used by non-audit scopes."""
+    if not _valid_m3_data_gate_receipt():
+        return "data_gate_missing_or_invalid"
+    if not _valid_m3_candidate_ocp_receipt():
+        return "data_gate_pass_ocp_required"
+    if not _valid_separate_economic_mission_manifest():
+        return "ocp_gate_pass_separate_economic_mission_not_authorized"
+    return "economic_mission_manifest_authorized"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=("audit", "recent", "full"), default="audit")
     args = parser.parse_args()
+    if args.scope != "audit":
+        status = _m3_economic_mission_status()
+        if status != "economic_mission_manifest_authorized":
+            raise SystemExit(f"M3 economic scope blocked: {status}")
     manifest = json.loads(MANIFEST_PATH.read_text())
     if manifest["frozen_parameters"] != FROZEN_PARAMETERS:
         raise SystemExit("M3/M4 frozen parameter manifest drifted")

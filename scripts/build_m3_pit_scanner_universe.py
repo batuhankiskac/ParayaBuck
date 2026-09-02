@@ -335,7 +335,11 @@ def _parse_bar(raw: Mapping[str, str], row_number: int) -> Bar:
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("naive timestamp")
         symbol = canonical_symbol(str(raw["symbol"]), Market.EQUITY)
-        if str(raw["timeframe"]) != CANONICAL_TIMEFRAME:
+        # The frozen v5 export contains both its canonical internal spelling
+        # (``1d``) and the provider spelling (``1Day``). Both represent the
+        # same daily bar; normalize them before constructing the production
+        # ``Bar`` rather than rejecting valid frozen input.
+        if str(raw["timeframe"]).strip().lower() not in {CANONICAL_TIMEFRAME, "1day"}:
             raise ValueError("timeframe mismatch")
         if str(raw["market"]).lower() != Market.EQUITY.value:
             raise ValueError("market mismatch")

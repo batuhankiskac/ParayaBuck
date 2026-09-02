@@ -195,6 +195,25 @@ def test_wrong_timeframe_blocks() -> None:
         pit.build_population_from_bars([wrong], equity_config=_config())
 
 
+def test_frozen_canonical_provider_timeframe_alias_is_normalized() -> None:
+    raw = {
+        "timestamp": "2024-01-02T05:00:00Z",
+        "symbol": "AAA",
+        "timeframe": "1Day",
+        "market": "EQUITY",
+        "open": "100.0",
+        "high": "101.0",
+        "low": "99.0",
+        "close": "100.5",
+        "volume": "1000000",
+    }
+
+    bar = pit._parse_bar(raw, 2)
+
+    assert bar.timeframe == "1d"
+    assert bar.market is Market.EQUITY
+
+
 def test_builder_has_no_network_or_broker_imports() -> None:
     tree = ast.parse((ROOT / "scripts/build_m3_pit_scanner_universe.py").read_text(encoding="utf-8"))
     imported = {

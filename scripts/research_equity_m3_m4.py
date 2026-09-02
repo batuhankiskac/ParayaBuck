@@ -35,6 +35,11 @@ for _path in (_REPO_BOOTSTRAP / "src", Path(__file__).parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+from compact_equity_m3_candidate_ocp_attestation_r2 import (  # noqa: E402
+    R2_RECEIPT_PATH,
+    AttestationError,
+    validate_r2_receipt,
+)
 from m3_data_gate_helpers import (  # noqa: E402
     CANONICAL_TIMEFRAME,
     EXCHANGE_TIMEZONE,
@@ -145,10 +150,11 @@ M3_DATA_GATE_R3_MANDATORY_GATES = (
     "reference_role_contract",
     "receipt_forbidden_fields",
 )
-# The production research consumer is deliberately R3-only.  R2 remains named
-# separately so its immutable historical artifacts can still be audited.
+# The production research consumer accepts only the corrected R2 attestation.
+# The old unversioned receipt remains immutable historical evidence and is
+# deliberately not an input to economic predeclaration.
 M3_DATA_GATE_RECEIPT = M3_DATA_GATE_R3_RECEIPT
-M3_CANDIDATE_OCP_RECEIPT = REPO / "data/research_receipts/equity_m3_candidate_ocp_2026_09.json"
+M3_CANDIDATE_OCP_RECEIPT = REPO / R2_RECEIPT_PATH
 M3_ECONOMIC_MISSION_MANIFEST_PATH = "data/research_manifests/equity_m3_economic_2026_09.json"
 M3_ECONOMIC_MISSION_MANIFEST = REPO / M3_ECONOMIC_MISSION_MANIFEST_PATH
 
@@ -1308,37 +1314,14 @@ def _valid_m3_data_gate_receipt() -> bool:
 
 
 def _valid_m3_candidate_ocp_receipt() -> bool:
-    """Accept only a completed, research-only candidate OCP receipt."""
+    """Accept only the completed, provenance-bound R2 candidate OCP receipt."""
     try:
         payload = json.loads(M3_CANDIDATE_OCP_RECEIPT.read_text(encoding="utf-8"))
         if not isinstance(payload, Mapping):
             return False
-        required = {
-            "mission": "M3_CANDIDATE_OCP_GATE",
-            "verdict": "M3_CANDIDATE_OCP_GATE_PASS",
-            "research_only": True,
-            "automatic_promotion": False,
-            "human_promotion_only": True,
-            "candidate_economics_run": False,
-            "economic_metrics_present": False,
-            "economic_mission_authorized": False,
-        }
-        if any(payload.get(key) != expected for key, expected in required.items()):
-            return False
-        if forbidden_receipt_keys(payload):
-            return False
-        recorded_digest = payload.get("self_digest_sha256")
-        if not isinstance(recorded_digest, str):
-            return False
-        without_digest = dict(payload)
-        without_digest.pop("self_digest_sha256", None)
-        if recorded_digest != canonical_digest(without_digest):
-            return False
-        gates = payload.get("mandatory_gate_results")
-        if not isinstance(gates, Mapping) or len(gates) != 42:
-            return False
-        return all(isinstance(value, Mapping) and value.get("status") == "PASS" for value in gates.values())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        validate_r2_receipt(payload, receipt_path=M3_CANDIDATE_OCP_RECEIPT)
+        return True
+    except (AttestationError, OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
         return False
 
 
@@ -1365,8 +1348,7 @@ def _valid_separate_economic_mission_manifest() -> bool:
             payload.get("mission") == "M3_ECONOMIC_MISSION_PREDECLARATION"
             and payload.get("economic_mission_authorized") is True
             and payload.get("candidate_ocp_gate_verdict") == "M3_CANDIDATE_OCP_GATE_PASS"
-            and payload.get("candidate_ocp_receipt_path")
-            == "data/research_receipts/equity_m3_candidate_ocp_2026_09.json"
+            and payload.get("candidate_ocp_receipt_path") == R2_RECEIPT_PATH
             and payload.get("research_only") is True
             and payload.get("automatic_promotion") is False
         )

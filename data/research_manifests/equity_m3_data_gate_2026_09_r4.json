@@ -11,11 +11,18 @@
   "candidate_economics_run": false,
   "economic_metrics_present": false,
   "economic_mission_ready": false,
-  "lineage_mode": "D5_A6_B6",
+  "lineage_mode": "D5_A6_B6_A7_B7",
   "base_commit": "890d7633559e2982c3894aae15f28b901e5874a4",
-  "implementation_parent_commit": "890d7633559e2982c3894aae15f28b901e5874a4",
-  "implementation_commit": "d3b9db8006371f11411050638364a7a8e88e4fcb",
-  "implementation_tree": "ae3ca8c529d0ed6c27ce5a1efee90857f2547298",
+  "implementation_parent_commit": "cdc3d5c4cf886208435a33ac100673f6ab0247ee",
+  "implementation_commit": "f58fe1916224756f1ef770c55990a82fccf86e7d",
+  "implementation_tree": "d42ea0bcfc59404af7cb32f5b6f70126e86214ec",
+  "recovery_lineage": {
+    "prior_implementation_commit": "d3b9db8006371f11411050638364a7a8e88e4fcb",
+    "prior_manifest_commit": "cdc3d5c4cf886208435a33ac100673f6ab0247ee",
+    "recovery_reason": "R4 PIT builder rejected the extended R4 candidate-population contract",
+    "replay_exact_captured_bytes": true,
+    "automatic_refetch_allowed": false
+  },
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r4.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R4 manifest path",
   "source_window_contract": {
@@ -316,16 +323,16 @@
       "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
     },
     "scripts/research_equity_m3_data_gate.py": {
-      "git_blob_id": "2be57a6ce4d74608f4d01516a86914fffee4a909",
-      "raw_sha256": "30f3006883e5dc81012e1e98d468a13b69d756061e24de4cdda75c59d0f7aa2c"
+      "git_blob_id": "d205f2c450215be45d34c26203e48f08ae7aec62",
+      "raw_sha256": "3e288f07891a897fd1bc36fc959829b8b09cdc080deea2c93132185fb8c73085"
     },
     "scripts/acquire_m3_iwm_raw_bundle.py": {
       "git_blob_id": "27d899f91e5e5776d9da51d7549ff6fd3121972c",
       "raw_sha256": "8663cba6c654c14fb5efd4539fc037e90869134f33de5250d03609326d521c51"
     },
     "scripts/build_m3_pit_scanner_universe.py": {
-      "git_blob_id": "6913189f62567288b4db9c1491bcb403d2b65a39",
-      "raw_sha256": "fad438f249abc74f7030d67bbd0f441f54fbec8621f417ec986d8aaa6af6ad00"
+      "git_blob_id": "843e8e23c3da708d1cf4eca579011d8c9f693468",
+      "raw_sha256": "6bf4467469c1d1574b1df3d3eaa484098086134a1b3ca060f6fb9487649c7fca"
     },
     "tests/test_research_equity_m3_data_gate.py": {
       "git_blob_id": "0bb55b4c9d62f8a0b7d5a6095833be663d77aa32",
@@ -336,8 +343,8 @@
       "raw_sha256": "41fd2c965ff6c16ea9a10fb355f40412b388afd4978d006d6371871710057e10"
     },
     "tests/test_m3_pit_scanner_universe.py": {
-      "git_blob_id": "45cb710d6e14abc18178d0ef97cbfb675362edbb",
-      "raw_sha256": "e7dc852c285ef8124814baa8b1c6cd7a90b0a0e037fadc4f181c5c5c576050f4"
+      "git_blob_id": "7cd6961d72105de327ff2d1d45002e8e5f7c05c9",
+      "raw_sha256": "e2864eeb4fd0588e717fb1ca22f7824cde3bfd04edba70b0dcb7ae61dcd0427a"
     }
   }
 }

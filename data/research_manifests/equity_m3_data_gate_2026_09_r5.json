@@ -12,9 +12,9 @@
   "economic_metrics_present": false,
   "economic_mission_ready": false,
   "base_commit": "b0cd5546f93f63d162de1ded3871b4431b08b89e",
-  "implementation_parent_commit": "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f",
-  "implementation_commit": "773966f3cfdb33bf584e98343dc4839c59deb224",
-  "implementation_tree": "8e01de4e9013f3b7f0e9fae388a28609eee12586",
+  "implementation_parent_commit": "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1",
+  "implementation_commit": "067c44b24906c86421143d65aa9f2558ff23cf2c",
+  "implementation_tree": "f37094973921eb3290896910a9c117890b5d4be9",
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R5 manifest path",
   "critical_git_blobs": {
@@ -27,8 +27,8 @@
       "raw_sha256": "aaa521c3cbee4fe9bfd28adbdb2eff2b890bbf3e0806e81530f5427ea383f183"
     },
     "scripts/research_equity_m3_data_gate_r5.py": {
-      "git_blob_id": "ec702344ee043e0eaa77656e10225aedabbe328f",
-      "raw_sha256": "4acfa8f1ae0f7ad4543b011d1c7b8b360a68eae57cf9f8c14b8cd777517da35e"
+      "git_blob_id": "fefd6835572d53ebb2c4e8924f993c9cc6cea473",
+      "raw_sha256": "4edf06d202a9f205f72b6c773dff561ef4407869af8c16b6523783fbbe29370c"
     },
     "scripts/research_equity_m3_m4.py": {
       "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
@@ -47,8 +47,8 @@
       "raw_sha256": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141"
     },
     "tests/test_research_equity_m3_r5.py": {
-      "git_blob_id": "c7764a692f5a74424392e298a185801a71b68c19",
-      "raw_sha256": "e7ed09797de0c904c518dca86079ad7305123cd107ffc3237dbd0b1d09b370cd"
+      "git_blob_id": "afa200e05314a58b5d8abe96e50072b9cabbcc13",
+      "raw_sha256": "fb0749c9541b3c9e3c692c5dcb3cb27fbba2048ac258d9bdd5f60061182d4318"
     }
   },
   "config_semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d",
@@ -230,7 +230,7 @@
     "economic_candidate_ranking"
   ],
   "clean_run_procedure": {
-    "required_start_commit": "manifest-only B14 direct child of A14",
+    "required_start_commit": "manifest-only B15 direct child of A15",
     "capture_cleanliness_before_outputs": true,
     "external_inputs_ignored_or_tmp_only": true,
     "compact_result_copy_after_gate_only": true,
@@ -246,15 +246,17 @@
     "a13_implementation_commit": "136cb93b35e46ba356a88727aaf0c12574f4ba74",
     "a13_abandoned_implementation_commit": "136cb93b35e46ba356a88727aaf0c12574f4ba74",
     "a14_implementation_commit": "773966f3cfdb33bf584e98343dc4839c59deb224",
-    "a14_implementation_tree": "8e01de4e9013f3b7f0e9fae388a28609eee12586"
+    "a14_implementation_tree": "8e01de4e9013f3b7f0e9fae388a28609eee12586",
+    "a15_implementation_commit": "067c44b24906c86421143d65aa9f2558ff23cf2c",
+    "a15_implementation_tree": "f37094973921eb3290896910a9c117890b5d4be9"
   },
   "recovery_lineage": {
-    "status": "ABANDONED_A13_B13",
-    "abandoned_implementation_commit": "136cb93b35e46ba356a88727aaf0c12574f4ba74",
-    "abandoned_manifest_commit": "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f",
-    "reason_category": "sidecar_helper_missing",
-    "reason": "B13 R5 gate called a non-existent R4 sidecar semantic helper before replay",
-    "corrective_base_commit": "6c20ddfc5bdd98df6d4a5fad5cf3dc841ac3b85f",
+    "status": "ABANDONED_A14_B14",
+    "abandoned_implementation_commit": "773966f3cfdb33bf584e98343dc4839c59deb224",
+    "abandoned_manifest_commit": "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1",
+    "reason_category": "post_cutoff_candidate_rows",
+    "reason": "B14 R5 gate counted valid post-cutoff canonical rows as invalid candidate rows before replay",
+    "corrective_base_commit": "76393dc775a48ec8e89b5118ddfb5dba7b0b8da1",
     "replay_exact_captured_bytes": true,
     "automatic_refetch_allowed": false
   },

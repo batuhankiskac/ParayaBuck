@@ -118,6 +118,18 @@ def test_provider_bar_symbol_is_taken_from_bars_map_key() -> None:
     assert rows[0].symbol == "IWM"
 
 
+def test_bundle_self_validation_accepts_provider_map_key_symbol(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _credentials(monkeypatch)
+    provider_bar = _bar(date(2024, 7, 1))
+    provider_bar.pop("S")
+    transport = FakeTransport([acquisition.HttpResponse(200, _page([provider_bar], None), {})])
+    result = acquisition.acquire_bundle(tmp_path / "map-key-bundle", transport=transport)
+    assert result["status"] == "ACQUIRED"
+    assert result["row_count"] == 1
+
+
 @pytest.mark.parametrize("status", [401, 403])
 def test_authentication_or_sip_entitlement_failure_has_no_fallback(
     monkeypatch: pytest.MonkeyPatch, status: int

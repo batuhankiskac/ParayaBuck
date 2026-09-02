@@ -103,6 +103,9 @@ M3_DATA_GATE_R3_BASE_COMMIT = "99fa950a3223a8b6cc78c8a92f8fa20aff52b350"
 M3_DATA_GATE_R3_B3_COMMIT = "c4022ae94aa4069893052f63c1700d9d73d2c399"
 M3_DATA_GATE_R3_A3_COMMIT = "f56062b532b15891b6a88eeb4136ddb55ded1be3"
 M3_DATA_GATE_R3_RECOVERY_MODE = "A4_B4_CORRECTIVE_AFTER_ABANDONED_A3_B3"
+M3_DATA_GATE_R3_B4_COMMIT = "f2d89c0a434e2ec7133d91f158271e9c6bc510c1"
+M3_DATA_GATE_R3_A4_COMMIT = "782dcb573504ef3fcfb9ac2c65254615eb4ce50a"
+M3_DATA_GATE_R3_RECOVERY_MODE_2 = "A5_B5_CORRECTIVE_AFTER_ABANDONED_A3_B3_A4_B4"
 M3_DATA_GATE_R3_CRITICAL_PATHS = (
     ".github/workflows/ci.yml",
     M3_DATA_GATE_R3_NORMALIZER_PATH,
@@ -869,6 +872,7 @@ def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
         if not isinstance(lineage, Mapping):
             return False
         recovery = lineage.get("abandoned_a3_b3")
+        recovery_v2 = lineage.get("abandoned_a3_b3_a4_b4")
         expected_recovery = {
             "status": "ABANDONED_A3_B3",
             "abandoned_implementation_commit": M3_DATA_GATE_R3_A3_COMMIT,
@@ -877,13 +881,25 @@ def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
             "reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
             "corrective_base_commit": M3_DATA_GATE_R3_B3_COMMIT,
         }
-        if recovery is None:
+        expected_recovery_v2 = {
+            "status": "ABANDONED_A3_B3_AND_A4_B4",
+            "abandoned_implementation_commit": M3_DATA_GATE_R3_A3_COMMIT,
+            "abandoned_manifest_commit": M3_DATA_GATE_R3_B3_COMMIT,
+            "reason_category": "bundle_validation_failure",
+            "reason": "A4 fixed acquisition parsing but bundle validation still passed Alpaca map-key bars without the envelope symbol",
+            "abandoned_corrective_implementation_commit": M3_DATA_GATE_R3_A4_COMMIT,
+            "abandoned_corrective_manifest_commit": M3_DATA_GATE_R3_B4_COMMIT,
+            "previous_reason_category": "response_schema_mismatch",
+            "previous_reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
+            "corrective_base_commit": M3_DATA_GATE_R3_B4_COMMIT,
+        }
+        if recovery is None and recovery_v2 is None:
             base = str(lineage.get("corrective_base_commit", ""))
             implementation = str(lineage.get("implementation_a3_commit", ""))
             run_commit = str(lineage.get("run_b3_commit", ""))
             terminal_commit_key = "c3_commit"
             expected_base = M3_DATA_GATE_R3_BASE_COMMIT
-        else:
+        elif recovery is not None and recovery_v2 is None:
             if lineage.get("lineage_mode") != M3_DATA_GATE_R3_RECOVERY_MODE or recovery != expected_recovery:
                 return False
             base = str(lineage.get("corrective_base_commit", ""))
@@ -891,6 +907,16 @@ def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
             run_commit = str(lineage.get("run_b4_commit", ""))
             terminal_commit_key = "c4_commit"
             expected_base = M3_DATA_GATE_R3_B3_COMMIT
+        elif recovery is None and recovery_v2 is not None:
+            if lineage.get("lineage_mode") != M3_DATA_GATE_R3_RECOVERY_MODE_2 or recovery_v2 != expected_recovery_v2:
+                return False
+            base = str(lineage.get("corrective_base_commit", ""))
+            implementation = str(lineage.get("implementation_a5_commit", ""))
+            run_commit = str(lineage.get("run_b5_commit", ""))
+            terminal_commit_key = "c5_commit"
+            expected_base = M3_DATA_GATE_R3_B4_COMMIT
+        else:
+            return False
         if lineage.get(terminal_commit_key) is not None or not all(
             len(value) == 40 for value in (base, implementation, run_commit)
         ):
@@ -901,10 +927,32 @@ def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
             return False
         if _r2_git_text("rev-parse", f"{run_commit}^") != implementation:
             return False
+        abandoned_pairs = []
         if recovery is not None:
-            abandoned_implementation = str(recovery["abandoned_implementation_commit"])
-            abandoned_manifest = str(recovery["abandoned_manifest_commit"])
-            if _r2_git_text("rev-parse", f"{abandoned_implementation}^") != M3_DATA_GATE_R3_BASE_COMMIT:
+            abandoned_pairs.append(
+                (
+                    str(recovery["abandoned_implementation_commit"]),
+                    str(recovery["abandoned_manifest_commit"]),
+                    M3_DATA_GATE_R3_BASE_COMMIT,
+                )
+            )
+        if recovery_v2 is not None:
+            abandoned_pairs.extend(
+                [
+                    (
+                        str(recovery_v2["abandoned_implementation_commit"]),
+                        str(recovery_v2["abandoned_manifest_commit"]),
+                        M3_DATA_GATE_R3_BASE_COMMIT,
+                    ),
+                    (
+                        str(recovery_v2["abandoned_corrective_implementation_commit"]),
+                        str(recovery_v2["abandoned_corrective_manifest_commit"]),
+                        M3_DATA_GATE_R3_B3_COMMIT,
+                    ),
+                ]
+            )
+        for abandoned_implementation, abandoned_manifest, expected_parent in abandoned_pairs:
+            if _r2_git_text("rev-parse", f"{abandoned_implementation}^") != expected_parent:
                 return False
             if _r2_git_text("rev-parse", f"{abandoned_manifest}^") != abandoned_implementation:
                 return False
@@ -936,7 +984,8 @@ def _valid_m3_data_gate_r3_receipt(payload: Mapping[str, object]) -> bool:
             or manifest.get("implementation_commit") != implementation
         ):
             return False
-        if recovery is not None and manifest.get("recovery_lineage") != dict(expected_recovery):
+        declared_recovery = recovery if recovery is not None else recovery_v2
+        if declared_recovery is not None and manifest.get("recovery_lineage") != dict(declared_recovery):
             return False
         implementation_tree = _r2_git_text("rev-parse", f"{implementation}^{{tree}}")
         if (

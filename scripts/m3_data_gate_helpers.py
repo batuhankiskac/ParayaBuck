@@ -1492,7 +1492,11 @@ def validate_iwm_bundle(
         for raw in entries:
             if not isinstance(raw, Mapping):
                 raise GateError("provider_payload_error", f"IWM page bar is not an object: {relative}")
-            page_rows.append(normalize_provider_bar(raw))
+            # Alpaca v2 carries the symbol in the surrounding ``bars`` map;
+            # retain the raw page bytes and supply that envelope identity only
+            # to the normalizer.
+            normalizer_input = raw if "S" in raw or "symbol" in raw else {**raw, "S": "IWM"}
+            page_rows.append(normalize_provider_bar(normalizer_input))
         ensure_unique_rows(page_rows, category="identical_duplicate_bar")
         if page_rows != sorted(page_rows, key=lambda row: row.sort_key):
             raise GateError("source_order", f"IWM page is not sorted ascending: {relative}")

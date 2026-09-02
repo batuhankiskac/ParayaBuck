@@ -11,12 +11,21 @@
   "candidate_economics_run": false,
   "economic_metrics_present": false,
   "economic_mission_ready": false,
-  "base_commit": "99fa950a3223a8b6cc78c8a92f8fa20aff52b350",
-  "implementation_parent_commit": "99fa950a3223a8b6cc78c8a92f8fa20aff52b350",
-  "implementation_commit": "f56062b532b15891b6a88eeb4136ddb55ded1be3",
-  "implementation_tree": "c0c4fbe30f5d6fbea9957159df4193c9922865a6",
+  "base_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
+  "implementation_parent_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
+  "implementation_commit": "782dcb573504ef3fcfb9ac2c65254615eb4ce50a",
+  "implementation_tree": "451ab93ce7c9653a7940949b8850c8d7639c95c0",
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r3.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R3 manifest path",
+  "lineage_mode": "A4_B4_CORRECTIVE_AFTER_ABANDONED_A3_B3",
+  "recovery_lineage": {
+    "status": "ABANDONED_A3_B3",
+    "abandoned_implementation_commit": "f56062b532b15891b6a88eeb4136ddb55ded1be3",
+    "abandoned_manifest_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
+    "reason_category": "response_schema_mismatch",
+    "reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
+    "corrective_base_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399"
+  },
   "frozen_parameters": {
     "formation_bars": 252,
     "skip_bars": 21,
@@ -199,16 +208,16 @@
       "raw_sha256": "7c0641089b7cd27c47c97d5e3ff02909a628fd22f604d6b4ffb15cb3a2710a50"
     },
     "scripts/research_equity_m3_data_gate.py": {
-      "git_blob_id": "2645a705e5869c492ccb63235865b0e7487d8c02",
-      "raw_sha256": "195fc2667ad7a226e21a52a000b02dde68900e0b7ff77da98f89dfda3a64c719"
+      "git_blob_id": "386ac2d6e715983be875f71e7fed51fea91553e3",
+      "raw_sha256": "9a470016a990cea8812805278a3bfd05d4c9a34062e285f7cd07d5538ab46677"
     },
     "scripts/research_equity_m3_m4.py": {
-      "git_blob_id": "9331a70b120e912f5fb24b7cbd121d2bf2ac7dd7",
-      "raw_sha256": "e23042251bcd0e23c16a91726ce49e8c8249f4919b6a6a673f75b51f23612933"
+      "git_blob_id": "3ee4c47860d01ed570b3faf86ca595b14d2d8125",
+      "raw_sha256": "22b4b54c1d8d1b684e85f8fa25423cb191154c2953ea1a2627ceee4ccaabeaad"
     },
     "scripts/acquire_m3_iwm_raw_bundle.py": {
-      "git_blob_id": "338ed0216308c0a441ffe83f596dc065c343773d",
-      "raw_sha256": "9c6459b2f04dbbf2b94351e6094a3304d2e025937c40fd9af7cf49a22585c619"
+      "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+      "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
     },
     "scripts/build_m3_pit_scanner_universe.py": {
       "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
@@ -219,8 +228,8 @@
       "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
     },
     "tests/test_m3_iwm_acquisition.py": {
-      "git_blob_id": "d4467f2d048bd9d82ba9873cb4b548fc8071bbed",
-      "raw_sha256": "99faf3e2ed6a3a798b0e0c46de580d312cf05cee274dc80d269bbb4304167d9a"
+      "git_blob_id": "b9989b29bbc9b81caa1d67e7456106571beac52e",
+      "raw_sha256": "cbc0f039d5629892790fbdd2f3381b8556e967fd45beb39c28a89e72f8100ae8"
     },
     "tests/test_m3_pit_scanner_universe.py": {
       "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",

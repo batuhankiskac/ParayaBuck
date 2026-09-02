@@ -1,0 +1,230 @@
+{
+  "schema_version": "3.0.0",
+  "mission": "equity_m3_data_gate_2026_09_r3",
+  "repository_url": "https://github.com/batuhankiskac/ParayaBuck",
+  "branch": "main",
+  "snapshot_date": "2026-09-01",
+  "declared_before_results": true,
+  "research_only": true,
+  "automatic_promotion": false,
+  "human_promotion_only": true,
+  "candidate_economics_run": false,
+  "economic_metrics_present": false,
+  "economic_mission_ready": false,
+  "base_commit": "99fa950a3223a8b6cc78c8a92f8fa20aff52b350",
+  "implementation_parent_commit": "99fa950a3223a8b6cc78c8a92f8fa20aff52b350",
+  "implementation_commit": "f56062b532b15891b6a88eeb4136ddb55ded1be3",
+  "implementation_tree": "c0c4fbe30f5d6fbea9957159df4193c9922865a6",
+  "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r3.json",
+  "manifest_commit_rule": "manifest-only: exactly the declared R3 manifest path",
+  "frozen_parameters": {
+    "formation_bars": 252,
+    "skip_bars": 21,
+    "beta_window_bars": 273,
+    "beta_window_plus_one_closes": 274,
+    "residual_vol_window": 63,
+    "top_n": 8,
+    "max_single_weight": 0.1,
+    "ivol_reject_quantile": 0.7,
+    "rebalance_frequency": "weekly"
+  },
+  "numerical_thresholds": {
+    "matrix_rows": 273,
+    "matrix_columns": 3,
+    "required_rank": 3,
+    "minimum_singular_value_ratio": 1e-06,
+    "maximum_condition_number": 1000000.0,
+    "minimum_residual_std": 1e-12,
+    "required_common_closes": 274,
+    "required_returns": 273
+  },
+  "iwm_raw_source_contract": {
+    "provider": "Alpaca Market Data API",
+    "api_family_version": "v2 stocks bars",
+    "endpoint_identity": "/v2/stocks/bars",
+    "asset_class": "us_equity",
+    "symbol": "IWM",
+    "timeframe": "1Day",
+    "feed": "sip",
+    "adjustment": "split",
+    "sort": "asc",
+    "request_start": "2016-01-01",
+    "request_end": "2026-07-31",
+    "network_host": "data.alpaca.markets",
+    "acquisition_script_path": "scripts/acquire_m3_iwm_raw_bundle.py",
+    "no_fallback_allowed": true,
+    "verifier_network_free": true,
+    "raw_pages_untracked": true,
+    "acquisition_is_read_only": true
+  },
+  "pit_builder_path": "scripts/build_m3_pit_scanner_universe.py",
+  "ocp_boundary": {
+    "observer_execution_strategy_identity_must_match": true,
+    "observer_execution_object_instance_must_differ": true,
+    "candidate_owned_ocp_required_before_economics": true,
+    "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+    "economic_mission_ready": false
+  },
+  "mandatory_data_pass_gates": [
+    "commit_topology",
+    "implementation_blob_identity",
+    "manifest_only_commit",
+    "clean_worktree_at_start",
+    "configuration_identity",
+    "dependency_identity",
+    "acquisition_script_identity",
+    "canonical_artifact_identity",
+    "lifetime_identity",
+    "corporate_action_identity",
+    "iwm_raw_bundle",
+    "iwm_provider_contract",
+    "iwm_pagination_chain",
+    "iwm_normalization",
+    "iwm_source_completeness",
+    "reference_calendar",
+    "reference_row_quality",
+    "reference_common_sessions",
+    "full_weekly_post_warmup_coverage",
+    "recent_weekly_coverage",
+    "composite_dataset_identity",
+    "deterministic_numerical_population",
+    "pit_reference_boundary",
+    "design_matrix_feasibility",
+    "reference_role_contract",
+    "receipt_forbidden_fields"
+  ],
+  "canonical_manifest_path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+  "normalization_contract": {
+    "version": "m3-iwm-normalizer-v1",
+    "canonical_columns": [
+      "session_date",
+      "timestamp",
+      "symbol",
+      "timeframe",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "market"
+    ],
+    "canonical_timeframe": "1d",
+    "raw_timeframe": "1Day",
+    "timezone": "America/New_York",
+    "calendar": "NYSE",
+    "decimal_policy": "finite Decimal parsing; no rounding or synthesis"
+  },
+  "numerical_contract": {
+    "design_matrix": [
+      "SPY",
+      "IWM-SPY",
+      "QQQ-SPY"
+    ],
+    "fit": "demean X and y; numpy least squares; retain rank and singular diagnostics",
+    "residual": "y - X @ beta using non-demeaned X and no applied intercept",
+    "skip_window": "omit latest 21 residual returns from momentum; retain all 273 returns for beta fit",
+    "economic_scoring_allowed": false
+  },
+  "candidate_population_contract": {
+    "schema_version": "m3-pit-scanner-population-v1",
+    "methodology": "strictly_prior_data_frozen_scanner_eligible_universe",
+    "observation_strategy": null,
+    "manual_candidate_selection_allowed": false,
+    "reference_symbols_excluded": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ]
+  },
+  "composite_dataset_identity_contract": {
+    "encoding": "m3-composite-dataset-v1",
+    "required": true,
+    "canonical_parent": "frozen v5 bytes",
+    "iwm_component": "verified normalized sidecar from raw page bundle",
+    "normalizer": "m3-iwm-normalizer-v1",
+    "calendar": "pandas_market_calendars NYSE exact version"
+  },
+  "reference_role_contract": {
+    "reference_observation_symbols": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ],
+    "candidate_membership_allowed": false,
+    "target_membership_allowed": false,
+    "execution_membership_allowed": false,
+    "original_configured_trade_set_recorded_separately": true,
+    "effective_research_overlay_recorded_separately": true,
+    "runtime_execution_evidence_status": "EXECUTION_NOT_RUN"
+  },
+  "same_run_v3_control_contract": {
+    "required_before_comparison": true,
+    "same_data_vintage": true,
+    "same_evaluation_sessions": true,
+    "same_scanner_policy": true,
+    "same_terminal_inputs": true,
+    "same_reference_reservation_contract": true,
+    "economics_run_in_this_mission": false
+  },
+  "forbidden_economic_fields": [
+    "return",
+    "net_return",
+    "gross_return",
+    "pnl",
+    "cagr",
+    "sharpe",
+    "sortino",
+    "calmar",
+    "max_drawdown",
+    "turnover",
+    "trade_count",
+    "fill_count",
+    "portfolio_targets",
+    "economic_candidate_scores",
+    "economic_candidate_ranking"
+  ],
+  "calendar_identity": {
+    "name": "pandas_market_calendars",
+    "version": "5.4.0",
+    "calendar": "NYSE"
+  },
+  "config_semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d",
+  "critical_git_blobs": {
+    ".github/workflows/ci.yml": {
+      "git_blob_id": "1afa14e11543d1e4e3108446907dc901156c6b82",
+      "raw_sha256": "da0474f88f0e2c182c836e46fb58557a6603bbad91f56e56c0239262f63c2b6a"
+    },
+    "scripts/m3_data_gate_helpers.py": {
+      "git_blob_id": "453c27d6dc5e17938493f07a3c627045f118fd8d",
+      "raw_sha256": "7c0641089b7cd27c47c97d5e3ff02909a628fd22f604d6b4ffb15cb3a2710a50"
+    },
+    "scripts/research_equity_m3_data_gate.py": {
+      "git_blob_id": "2645a705e5869c492ccb63235865b0e7487d8c02",
+      "raw_sha256": "195fc2667ad7a226e21a52a000b02dde68900e0b7ff77da98f89dfda3a64c719"
+    },
+    "scripts/research_equity_m3_m4.py": {
+      "git_blob_id": "9331a70b120e912f5fb24b7cbd121d2bf2ac7dd7",
+      "raw_sha256": "e23042251bcd0e23c16a91726ce49e8c8249f4919b6a6a673f75b51f23612933"
+    },
+    "scripts/acquire_m3_iwm_raw_bundle.py": {
+      "git_blob_id": "338ed0216308c0a441ffe83f596dc065c343773d",
+      "raw_sha256": "9c6459b2f04dbbf2b94351e6094a3304d2e025937c40fd9af7cf49a22585c619"
+    },
+    "scripts/build_m3_pit_scanner_universe.py": {
+      "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
+      "raw_sha256": "8df70f0ecb85588cfe9122f4ffa5e89d75eed701cf5038c0cb33feb79d78eac6"
+    },
+    "tests/test_research_equity_m3_data_gate.py": {
+      "git_blob_id": "a3c1e918ca4848cc6ee3b6fd3047af26ad0417d5",
+      "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
+    },
+    "tests/test_m3_iwm_acquisition.py": {
+      "git_blob_id": "d4467f2d048bd9d82ba9873cb4b548fc8071bbed",
+      "raw_sha256": "99faf3e2ed6a3a798b0e0c46de580d312cf05cee274dc80d269bbb4304167d9a"
+    },
+    "tests/test_m3_pit_scanner_universe.py": {
+      "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",
+      "raw_sha256": "b243aa84f7e31b5059fe2dacb94b4a4d84d385a386a26600554513658c52842a"
+    }
+  }
+}

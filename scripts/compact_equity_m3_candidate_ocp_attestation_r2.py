@@ -38,6 +38,7 @@ R2_BLOCKED = "M3_CANDIDATE_OCP_ATTESTATION_R2_BLOCKED"
 CORRECTIVE_STARTING_HEAD = "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2"
 A22_IMPLEMENTATION_COMMIT = "cae97cf9e059c5c03d79469b29e84d47533119d6"
 B22_MANIFEST_COMMIT = "4d612d9f8fc50a5d4911f2c37d74979c61af93be"
+B24_MANIFEST_COMMIT = "863dc020197ce895004063c0e26de52295e54643"
 D23_COMMIT = "3436c288fe7052cb98c73fe7713aef2daeb78af2"
 D23_CI_RUN = "33671110579"
 E23_COMMIT = "ac442c9f0232711a9eef7ade7a076ed0cc8e5fb2"
@@ -79,6 +80,10 @@ R2_IMPLEMENTATION_PATHS = frozenset(
         "tests/test_research_equity_m3_candidate_ocp_attestation_r2.py",
     }
 )
+CORRECTIVE_IMPLEMENTATION_PATHS_BY_PARENT = {
+    CORRECTIVE_STARTING_HEAD: R2_IMPLEMENTATION_PATHS,
+    B24_MANIFEST_COMMIT: frozenset({"scripts/compact_equity_m3_candidate_ocp_attestation_r2.py"}),
+}
 
 PYTHON_MATRIX = {"3.12": "PASS", "3.13": "PASS", "3.14": "PASS"}
 CI_STAGES = {
@@ -474,8 +479,8 @@ def build_manifest(implementation_commit: str) -> dict[str, object]:
 
     _full_commit(implementation_commit, "corrective implementation commit")
     parent = _parents(implementation_commit)
-    if parent != [CORRECTIVE_STARTING_HEAD]:
-        _fail("corrective implementation must be a direct child of E23")
+    if len(parent) != 1 or parent[0] not in CORRECTIVE_IMPLEMENTATION_PATHS_BY_PARENT:
+        _fail("corrective implementation is not on the append-only R2 repair chain")
     critical = _build_critical_blobs(implementation_commit)
     return {
         "schema_version": "2.0.0",
@@ -511,7 +516,7 @@ def build_manifest(implementation_commit: str) -> dict[str, object]:
         "corrective_topology": {
             "starting_head": CORRECTIVE_STARTING_HEAD,
             "implementation_commit": implementation_commit,
-            "implementation_parent": CORRECTIVE_STARTING_HEAD,
+            "implementation_parent": parent[0],
             "manifest_parent": "implementation_commit",
             "result_parent": "manifest_commit",
             "manifest_changed_paths": [R2_MANIFEST_PATH],
@@ -548,6 +553,9 @@ def _validate_manifest_payload(manifest: Mapping[str, object], implementation_co
     topology = _require_mapping(manifest.get("corrective_topology"), "R2 corrective_topology")
     _require_equal(topology.get("starting_head"), CORRECTIVE_STARTING_HEAD, "R2 starting head")
     _require_equal(topology.get("implementation_commit"), implementation_commit, "R2 implementation commit")
+    _require_equal(
+        topology.get("implementation_parent"), _parents(implementation_commit)[0], "R2 implementation parent"
+    )
     _require_equal(topology.get("manifest_parent"), "implementation_commit", "R2 manifest parent rule")
     _require_equal(topology.get("result_parent"), "manifest_commit", "R2 result parent rule")
     _require_equal(topology.get("manifest_changed_paths"), [R2_MANIFEST_PATH], "R2 manifest changed paths")
@@ -619,10 +627,13 @@ def _validate_corrective_chain(
     remote_ci_head_sha: str | None,
 ) -> Mapping[str, object]:
     _full_commit(implementation_commit, "corrective implementation commit")
-    if _parents(implementation_commit) != [CORRECTIVE_STARTING_HEAD]:
-        _fail("corrective implementation commit must be a direct child of E23")
-    if set(_changed_paths(CORRECTIVE_STARTING_HEAD, implementation_commit)) != set(R2_IMPLEMENTATION_PATHS):
-        _fail("A24 changed paths exceed the corrective implementation/test/CI scope")
+    implementation_parents = _parents(implementation_commit)
+    if len(implementation_parents) != 1 or implementation_parents[0] not in CORRECTIVE_IMPLEMENTATION_PATHS_BY_PARENT:
+        _fail("corrective implementation commit is not on the append-only R2 repair chain")
+    if set(_changed_paths(implementation_parents[0], implementation_commit)) != set(
+        CORRECTIVE_IMPLEMENTATION_PATHS_BY_PARENT[implementation_parents[0]]
+    ):
+        _fail("corrective implementation changed paths exceed its declared scope")
     critical = _validate_manifest_commit(manifest_commit, implementation_commit)
     if remote_ci_status == "NOT_RUN_BLOCKED":
         return critical
@@ -690,7 +701,7 @@ def _validate_consumer_source() -> None:
         source = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise AttestationError("economic consumer source is missing") from exc
-    if "validate_r2_receipt" not in source or R2_RECEIPT_PATH not in source:
+    if "validate_r2_receipt" not in source or "R2_RECEIPT_PATH" not in source:
         _fail("economic consumer is not R2-only")
 
 

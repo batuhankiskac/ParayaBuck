@@ -2,14 +2,13 @@
 
 ## 1. Executive verdict
 
-M3_CANDIDATE_OCP_GATE_BLOCKED
+M3_CANDIDATE_OCP_GATE_PASS
 
-The clean B23 real-data replay passed all 42 local OCP gates with the same C/X
-observation hashes and counts as C22. A23 makes pre-result manifest creation
-hermetic by authenticating the accepted R5 compact PIT manifest from Git. The
-compact receipt is blocked only because remote CI/closure was not run under the
-mission's no-network and unpublished-state constraints. The broad local suite
-and build remain sandbox-blocked; details are in sections 19 and 21.
+The clean C23 real-data replay passed all 42 local OCP gates with the same C/X
+observation hashes and counts as C22. D23 compacted the accepted receipt after
+the C23 remote CI attestation and recorded `M3_CANDIDATE_OCP_GATE_PASS` with no
+blocked reasons. E23 is the documentation-only final remote audit closure.
+Candidate economics remains unauthorized and was not run.
 
 ## 2. Boundary
 
@@ -17,14 +16,20 @@ and build remain sandbox-blocked; details are in sections 19 and 21.
 |---|---|
 | R5 data-gate status | `M3_DATA_GATE_PASS` |
 | OCP raw replay verdict | `M3_CANDIDATE_OCP_GATE_PASS` |
-| Compact receipt verdict | `M3_CANDIDATE_OCP_GATE_BLOCKED` |
+| Compact receipt verdict | `M3_CANDIDATE_OCP_GATE_PASS` |
 | Candidate economics run | `false` |
 | Economic metrics present | `false` |
 | Economic mission authorized | `false` |
 | Economic mission run | `false` in raw OCP artifact; no economic path was invoked |
-| Next required mission | `M3_CANDIDATE_OCP_GATE_REMOTE_CLOSURE` |
+| Next required mission | `M3_ECONOMIC_MISSION_PREDECLARATION` |
 
-The compact receipt's sole blocked reason is `remote_ci:NOT_RUN_BLOCKED`.
+The C23 remote GitHub Actions run was accepted as `33665025444` with Python
+3.12/3.13/3.14 PASS. The D23 compact receipt has
+`blocked_reasons = []`, `remote_ci.status = PASS`, and
+`remote_ci.run_id = 33665025444`; its candidate economics and economic
+authorization fields remain `false`. The earlier
+`remote_ci:NOT_RUN_BLOCKED` value is retained only as historical C23-local
+context and is superseded by D23.
 
 ## 3. Append-only recovery chain
 
@@ -43,9 +48,9 @@ Required D10/base: `f15ba8ffa2c752ba184cbc6eb655792d5387ee54`.
 | C22 | `0f6d483eecf33cef863942c38fb8f6847e646b29` | B22 | Prior local compact receipt/report; retained immutable |
 | A23 | `32357c110c09f92b438ee188fac289da966bcd24` | C22 | Hermetic manifest implementation and regression tests |
 | B23 | `fe52e30e7cca36030621152f6f1bdbcc247f8e9c` | A23 | New manifest-only pre-result boundary |
-| C23 | child of B23 (this commit) | B23 | New real-data raw PASS and compact BLOCKED receipt/report |
-| D23 | not created | C23 | Remote closure not run; publication was not authorized and network is prohibited |
-| E23 | not created | D23 | Documentation-only remote audit record awaits D23 |
+| C23 | `cd812af9c958c4934ca3da1a23bae00ae58278a4` | B23 | New real-data raw PASS and compact C23-local receipt/report |
+| D23 | `3436c288fe7052cb98c73fe7713aef2daeb78af2` | C23 | Final compact receipt after C23 remote CI; receipt verdict PASS |
+| E23 | this commit | D23 | Documentation-only final remote audit closure |
 
 No A19/B19 commit was amended or reused with changed implementation bytes.
 Each defect recovery was appended and replayed against the same accepted
@@ -371,9 +376,10 @@ or NOT_RUN_BLOCKED gate was not accepted by the local OCP runner.
 | no_economic_execution | PASS | engine calls 0; economics false | no P&L path |
 | no_network_or_credentials | PASS | OCP replay reported network calls 0 and credential access false | OCP run stayed local |
 
-The final compact receipt separately records `remote_ci.status` as
-`NOT_RUN_BLOCKED`; this is why the receipt verdict is BLOCKED despite the raw
-OCP gate map being all PASS.
+The historical C23-local compact receipt separately recorded
+`remote_ci.status = NOT_RUN_BLOCKED`; that was why its receipt verdict was
+BLOCKED despite the raw OCP gate map being all PASS. D23 superseded that local
+state after the accepted remote CI attestation.
 
 ## 18. Commands actually executed
 
@@ -430,12 +436,12 @@ push, broker, runtime, cache, position, or order path was used.
 | Ruff lint | PASS |
 | Ruff format | PASS: `327 files already formatted` |
 | mypy | PASS: `147 source files` |
-| full pytest | BLOCKED: `1459 passed, 11 skipped, 6 failed` |
-| source/wheel build, isolated | BLOCKED: temporary build env could not resolve `setuptools>=68.0` from PyPI |
-| source/wheel build, no-isolation | BLOCKED: local `setuptools.build_meta` unavailable |
-| gitleaks | NOT AVAILABLE: executable not installed |
-| C23 remote GitHub Actions | NOT RUN: publication not authorized; no-network mission constraint |
-| D23 remote GitHub Actions | NOT CREATED |
+| local C23 full pytest | BLOCKED: `1459 passed, 11 skipped, 6 failed` in the sandbox |
+| local C23 source/wheel build, isolated | BLOCKED: temporary build env could not resolve `setuptools>=68.0` from PyPI |
+| local C23 source/wheel build, no-isolation | BLOCKED: local `setuptools.build_meta` unavailable |
+| local C23 gitleaks | NOT AVAILABLE: executable not installed |
+| C23 remote GitHub Actions | PASS: accepted run `33665025444`; Python 3.12/3.13/3.14 passed |
+| D23 remote GitHub Actions | PASS: run `33671110579`; Python 3.12/3.13/3.14 and every required stage passed |
 
 The six full-suite failures are pre-existing socket-bound tests: three webhook
 tests and three web-bind tests failed with `PermissionError: [Errno 1]
@@ -466,29 +472,27 @@ C23 raw `ocp_run.json`: SHA-256
 `609fba66a8e909036b92e20f62dfbb68cfb2308d79e64100198fd2b6be61a05e`,
 71,550,403 bytes; its canonical raw-payload digest is
 `e23b09537693f1bec8b0e54339821a687ab8bd533a5cee1e6c6aa37ddd43f486`.
-The compact C23 receipt self-digest is
-`bc061438a7a3212c31e601e7f07c5f95d01887460d11473b09394602fd2098b4` and
-its sole blocked reason is `remote_ci:NOT_RUN_BLOCKED`.
+The C23-local compact receipt self-digest was
+`bc061438a7a3212c31e601e7f07c5f95d01887460d11473b09394602fd2098b4` with
+the historical sole blocked reason `remote_ci:NOT_RUN_BLOCKED`.
+D23's compact receipt self-digest is
+`ffe3c33cdf936023a5f50b6a4834ba8a9ca6b348a1b7c3f168556633be3f3635`;
+the D23 receipt has `blocked_reasons = []` and remote CI `PASS`.
 
 Each raw path was verified by `git check-ignore -v` against the repository's
 `data/research/` ignore rule. R1-R5 artifacts, including the R5 manifest,
 receipt, report, R4
 bundle, sidecar, composite, and PIT files, were not modified.
 
-## 21. Remaining blockers
+## 21. Closure status
 
-1. `remote_ci:NOT_RUN_BLOCKED`: C23–E23 remote closure cannot be created
-   without explicit publication authorization and network access.
-2. The broad local pytest suite is not green in this sandbox because six
-   pre-existing loopback-bind tests cannot bind sockets; its teardown also
-   attempted external resolution.
-3. The requested isolated build cannot install its missing build dependency
-   without PyPI access, and the local no-isolation backend is unavailable.
-4. `gitleaks` is unavailable locally.
+The D23 remote closure has no remaining integrity or CI blocker. The local
+C23-only limitations recorded in section 19 remain historical sandbox context:
+six loopback-bind tests could not bind sockets, the isolated build could not
+resolve its missing build dependency, and `gitleaks` was unavailable locally.
+They do not override the completed D23 remote CI result.
 
-These blockers prevent the executive PASS even though the real local C23 OCP
-observation replay is complete and all 42 OCP gates are PASS. No economic
-mission is authorized or launched.
+No economic mission is authorized or launched.
 
 ## 22. Explicit confirmations
 
@@ -507,5 +511,7 @@ mission is authorized or launched.
 - No V3 re-freeze occurred.
 - No prior-history rewrite occurred; strict prior cutoffs were preserved.
 - No automatic economic mission was launched.
+- D23 remote CI run `33671110579` completed successfully on Python 3.12,
+  3.13, and 3.14; E23 records the final candidate-OCP remote closure.
 
-M3_CANDIDATE_OCP_GATE_BLOCKED
+M3_CANDIDATE_OCP_GATE_PASS

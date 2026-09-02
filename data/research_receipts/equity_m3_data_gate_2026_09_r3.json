@@ -1,0 +1,1687 @@
+{
+  "acquisition_script_identity": {
+    "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+    "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
+  },
+  "automatic_promotion": false,
+  "base_lineage": {
+    "abandoned_a3_b3_a4_b4": {
+      "abandoned_corrective_implementation_commit": "782dcb573504ef3fcfb9ac2c65254615eb4ce50a",
+      "abandoned_corrective_manifest_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+      "abandoned_implementation_commit": "f56062b532b15891b6a88eeb4136ddb55ded1be3",
+      "abandoned_manifest_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
+      "corrective_base_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+      "previous_reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
+      "previous_reason_category": "response_schema_mismatch",
+      "reason": "A4 fixed acquisition parsing but bundle validation still passed Alpaca map-key bars without the envelope symbol",
+      "reason_category": "bundle_validation_failure",
+      "status": "ABANDONED_A3_B3_AND_A4_B4"
+    },
+    "c5_commit": null,
+    "corrective_base_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+    "implementation_a5_commit": "2f27ad3cd849a248e012c7f3dfb274db77a54493",
+    "lineage_mode": "A5_B5_CORRECTIVE_AFTER_ABANDONED_A3_B3_A4_B4",
+    "run_b5_commit": "832fa015f4e59aa009d2a1079b9a0bab1866cbaa"
+  },
+  "blocked_reasons": [
+    "IWM raw source bundle is missing",
+    "deterministic numerical population or PIT prerequisites are not ready",
+    "full weekly coverage failed",
+    "no deterministic PIT scanner-universe input was supplied",
+    "recent weekly coverage failed",
+    "reference row quality failed",
+    "source completeness failed"
+  ],
+  "calendar_identity": {
+    "calendar": "NYSE",
+    "name": "pandas_market_calendars",
+    "version": "5.4.0"
+  },
+  "candidate_economics_run": false,
+  "common_session_coverage": {
+    "common_session_count": 0,
+    "common_sessions_sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834",
+    "expected_common_sessions": 2658,
+    "extra_by_reference": {
+      "IWM": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "QQQ": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "SPY": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      }
+    },
+    "first_common_session": null,
+    "last_common_session": null,
+    "missing_by_reference": {
+      "IWM": {
+        "boundary_sample": [
+          "2016-01-04",
+          "2016-01-05",
+          "2016-01-06",
+          "2026-07-28",
+          "2026-07-29",
+          "2026-07-30"
+        ],
+        "count": 2658,
+        "first": "2016-01-04",
+        "last": "2026-07-30",
+        "sha256": "7b6ab6f9d85e2f284d82ee4afd8a565f1951132e2571a540009145349c6c8460"
+      },
+      "QQQ": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "SPY": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      }
+    },
+    "pairwise_overlap_counts": {
+      "IWM_QQQ": 0,
+      "SPY_IWM": 0,
+      "SPY_QQQ": 2658
+    },
+    "triple_overlap_count": 0
+  },
+  "composite_dataset_identity": {
+    "status": "NOT_RUN_BLOCKED"
+  },
+  "config_semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d",
+  "corporate_action_inventory": {
+    "counts_by_action_type": {
+      "cash_dividends": 141908,
+      "forward_splits": 270,
+      "reverse_splits": 1207,
+      "stock_dividends": 61
+    },
+    "logical_path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "reference_rows": {
+      "IWM": 0,
+      "QQQ": 44,
+      "SPY": 40
+    },
+    "semantic_note": "cash_dividends is one action class; it is not the total corporate-action row count",
+    "source_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "total_rows": 143446
+  },
+  "corrective_infrastructure_verdict": "PASS",
+  "critical_git_blobs": {
+    ".github/workflows/ci.yml": {
+      "git_blob_id": "1afa14e11543d1e4e3108446907dc901156c6b82",
+      "raw_sha256": "da0474f88f0e2c182c836e46fb58557a6603bbad91f56e56c0239262f63c2b6a"
+    },
+    "scripts/acquire_m3_iwm_raw_bundle.py": {
+      "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+      "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
+    },
+    "scripts/build_m3_pit_scanner_universe.py": {
+      "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
+      "raw_sha256": "8df70f0ecb85588cfe9122f4ffa5e89d75eed701cf5038c0cb33feb79d78eac6"
+    },
+    "scripts/m3_data_gate_helpers.py": {
+      "git_blob_id": "78b9088cb1661a7f6452c9a9e1f26079c9c8aed1",
+      "raw_sha256": "a1ab4f9be73319bfd62a38c0fde3ec451a5edf138bf25fd3e21a4ca0d2b00d84"
+    },
+    "scripts/research_equity_m3_data_gate.py": {
+      "git_blob_id": "f282e826830ef58d41d37cbf1b2024254adeef96",
+      "raw_sha256": "60d2e35910317931c5b3e71b2673aeea8d3e166a50d43d9773637434836180ea"
+    },
+    "scripts/research_equity_m3_m4.py": {
+      "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
+      "raw_sha256": "ede29e87cdf3fc4551e67bdbe67003b5cfab95e0a2a0e5c3e5f4143733de97d6"
+    },
+    "tests/test_m3_iwm_acquisition.py": {
+      "git_blob_id": "6cb16c7d73c264cc749d2b453ec0e4fa788cc822",
+      "raw_sha256": "e26e79691f6bdf3c927d791689ce26500774e77ceb8e43efe416f574cf0e7ec8"
+    },
+    "tests/test_m3_pit_scanner_universe.py": {
+      "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",
+      "raw_sha256": "b243aa84f7e31b5059fe2dacb94b4a4d84d385a386a26600554513658c52842a"
+    },
+    "tests/test_research_equity_m3_data_gate.py": {
+      "git_blob_id": "a3c1e918ca4848cc6ee3b6fd3047af26ad0417d5",
+      "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
+    }
+  },
+  "data_gate_verdict": "M3_DATA_GATE_BLOCKED",
+  "design_matrix_summary": {
+    "fail_count": 0,
+    "pass_count": 0,
+    "status": "NOT_RUN_BLOCKED",
+    "total_matrix_count": 0
+  },
+  "deterministic_numerical_population": {
+    "methodology": "not executed",
+    "status": "NOT_RUN_BLOCKED"
+  },
+  "diagnostic_only": false,
+  "economic_metrics_present": false,
+  "economic_mission_ready": false,
+  "environment_identity": {
+    "numpy": "2.5.1",
+    "pandas_market_calendars": "5.4.0",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "evaluation_completeness_through_2026_07_30": {
+    "common_session_count": 0,
+    "expected_common_sessions": 2658,
+    "extra_by_reference": {
+      "IWM": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "QQQ": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "SPY": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      }
+    },
+    "first_common_session": null,
+    "last_common_session": null,
+    "missing_by_reference": {
+      "IWM": {
+        "boundary_sample": [
+          "2016-01-04",
+          "2016-01-05",
+          "2016-01-06",
+          "2026-07-28",
+          "2026-07-29",
+          "2026-07-30"
+        ],
+        "count": 2658,
+        "first": "2016-01-04",
+        "last": "2026-07-30",
+        "sha256": "7b6ab6f9d85e2f284d82ee4afd8a565f1951132e2571a540009145349c6c8460"
+      },
+      "QQQ": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "SPY": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      }
+    },
+    "pairwise_overlap_counts": {
+      "IWM_QQQ": 0,
+      "SPY_IWM": 0,
+      "SPY_QQQ": 2658
+    },
+    "triple_overlap_count": 0
+  },
+  "forbidden_economic_fields": [],
+  "human_promotion_only": true,
+  "implementation_tree": "12d4b2f8f22c81e0e74cad1e673a0d3a43466f17",
+  "input_provenance": {
+    "canonical_bars": {
+      "byte_size": 882354549,
+      "crlf_normalized_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
+      "logical_artifact_id": "canonical_equity_v5_bars",
+      "manifest_git_blob": {
+        "commit": "HEAD",
+        "git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+        "git_blob_normalized_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+        "git_blob_raw_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+        "path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json"
+      },
+      "parse_source": "content_addressed_staged_file",
+      "provenance_class": "external_untracked",
+      "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "source_descriptor_identity": {
+        "device": 16777232,
+        "inode": 28252445,
+        "mode": 33188,
+        "mtime_ns": 1787686649570774918,
+        "size": 882354549
+      },
+      "source_identity_after": {
+        "device": 16777232,
+        "inode": 28252445,
+        "mode": 33188,
+        "mtime_ns": 1787686649570774918,
+        "size": 882354549
+      },
+      "source_identity_before": {
+        "device": 16777232,
+        "inode": 28252445,
+        "mode": 33188,
+        "mtime_ns": 1787686649570774918,
+        "size": 882354549
+      },
+      "source_identity_kind": "opened_file_descriptor"
+    },
+    "corporate_actions": {
+      "byte_size": 14713370,
+      "crlf_normalized_sha256": "5776de7b91a1e0fd32b0070bfefae4f65d6bb6e4a068201f8d1cb7e6552e991d",
+      "logical_artifact_id": "equity_corporate_actions_v5",
+      "manifest_git_blob": {
+        "commit": "HEAD",
+        "git_blob_id": "70f62784fd804ed0f70543bc420d7575c0d39c42",
+        "git_blob_normalized_sha256": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953",
+        "git_blob_raw_sha256": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953",
+        "path": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json"
+      },
+      "parse_source": "content_addressed_staged_file",
+      "provenance_class": "external_untracked",
+      "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "source_descriptor_identity": {
+        "device": 16777232,
+        "inode": 28252996,
+        "mode": 33188,
+        "mtime_ns": 1787686968265669697,
+        "size": 14713370
+      },
+      "source_identity_after": {
+        "device": 16777232,
+        "inode": 28252996,
+        "mode": 33188,
+        "mtime_ns": 1787686968265669697,
+        "size": 14713370
+      },
+      "source_identity_before": {
+        "device": 16777232,
+        "inode": 28252996,
+        "mode": 33188,
+        "mtime_ns": 1787686968265669697,
+        "size": 14713370
+      },
+      "source_identity_kind": "opened_file_descriptor"
+    },
+    "lifetimes": {
+      "byte_size": 2329186,
+      "commit": "HEAD",
+      "crlf_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "git_blob_id": "7ea3d564470b0509d98760c4306bb6973137d481",
+      "git_blob_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "git_blob_raw_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "logical_artifact_id": "equity_entity_lifetimes_v5",
+      "parse_source": "content_addressed_staged_file",
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "provenance_class": "git_blob",
+      "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "source_descriptor_identity": {
+        "device": 16777232,
+        "inode": 28252439,
+        "mode": 33188,
+        "mtime_ns": 1787686624929046962,
+        "size": 2329186
+      },
+      "source_identity_after": {
+        "device": 16777232,
+        "inode": 28252439,
+        "mode": 33188,
+        "mtime_ns": 1787686624929046962,
+        "size": 2329186
+      },
+      "source_identity_before": {
+        "device": 16777232,
+        "inode": 28252439,
+        "mode": 33188,
+        "mtime_ns": 1787686624929046962,
+        "size": 2329186
+      },
+      "source_identity_kind": "opened_file_descriptor",
+      "working_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+      "working_raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "iwm_raw_source": {
+    "category": "missing_iwm_bundle",
+    "reason": "IWM raw source bundle is missing",
+    "status": "FAIL"
+  },
+  "iwm_source_completeness": {
+    "complete": false,
+    "expected_session_count": 2659,
+    "references": {
+      "IWM": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2016-01-04",
+            "2016-01-05",
+            "2016-01-06",
+            "2026-07-29",
+            "2026-07-30",
+            "2026-07-31"
+          ],
+          "count": 2659,
+          "first": "2016-01-04",
+          "last": "2026-07-31",
+          "sha256": "4fe69cdcb402e54ca3a8bdcc3c7f6b71a76fd228e3790dbe1c0cdfccf3a096da"
+        },
+        "observed_session_count": 0
+      },
+      "QQQ": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2026-07-31"
+          ],
+          "count": 1,
+          "first": "2026-07-31",
+          "last": "2026-07-31",
+          "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+        },
+        "observed_session_count": 2658
+      },
+      "SPY": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2026-07-31"
+          ],
+          "count": 1,
+          "first": "2026-07-31",
+          "last": "2026-07-31",
+          "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+        },
+        "observed_session_count": 2658
+      }
+    },
+    "source_end": "2026-07-31",
+    "source_start": "2016-01-01"
+  },
+  "m3_candidate_ocp_status": "NOT_RUN_OUT_OF_SCOPE",
+  "mandatory_gate_results": {
+    "acquisition_script_identity": {
+      "evidence": {
+        "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+        "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
+      },
+      "status": "PASS"
+    },
+    "canonical_artifact_identity": {
+      "evidence": {
+        "byte_size": 882354549,
+        "crlf_normalized_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
+        "logical_artifact_id": "canonical_equity_v5_bars",
+        "manifest_git_blob": {
+          "commit": "HEAD",
+          "git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+          "git_blob_normalized_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+          "git_blob_raw_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+          "path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json"
+        },
+        "parse_source": "content_addressed_staged_file",
+        "provenance_class": "external_untracked",
+        "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+        "source_descriptor_identity": {
+          "device": 16777232,
+          "inode": 28252445,
+          "mode": 33188,
+          "mtime_ns": 1787686649570774918,
+          "size": 882354549
+        },
+        "source_identity_after": {
+          "device": 16777232,
+          "inode": 28252445,
+          "mode": 33188,
+          "mtime_ns": 1787686649570774918,
+          "size": 882354549
+        },
+        "source_identity_before": {
+          "device": 16777232,
+          "inode": 28252445,
+          "mode": 33188,
+          "mtime_ns": 1787686649570774918,
+          "size": 882354549
+        },
+        "source_identity_kind": "opened_file_descriptor"
+      },
+      "status": "PASS"
+    },
+    "clean_worktree_at_start": {
+      "paths": [],
+      "status": "PASS"
+    },
+    "commit_topology": {
+      "evidence": {
+        "base_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+        "changed_paths": [
+          "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
+        ],
+        "critical_git_blobs": {
+          ".github/workflows/ci.yml": {
+            "git_blob_id": "1afa14e11543d1e4e3108446907dc901156c6b82",
+            "raw_sha256": "da0474f88f0e2c182c836e46fb58557a6603bbad91f56e56c0239262f63c2b6a"
+          },
+          "scripts/acquire_m3_iwm_raw_bundle.py": {
+            "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+            "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
+          },
+          "scripts/build_m3_pit_scanner_universe.py": {
+            "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
+            "raw_sha256": "8df70f0ecb85588cfe9122f4ffa5e89d75eed701cf5038c0cb33feb79d78eac6"
+          },
+          "scripts/m3_data_gate_helpers.py": {
+            "git_blob_id": "78b9088cb1661a7f6452c9a9e1f26079c9c8aed1",
+            "raw_sha256": "a1ab4f9be73319bfd62a38c0fde3ec451a5edf138bf25fd3e21a4ca0d2b00d84"
+          },
+          "scripts/research_equity_m3_data_gate.py": {
+            "git_blob_id": "f282e826830ef58d41d37cbf1b2024254adeef96",
+            "raw_sha256": "60d2e35910317931c5b3e71b2673aeea8d3e166a50d43d9773637434836180ea"
+          },
+          "scripts/research_equity_m3_m4.py": {
+            "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
+            "raw_sha256": "ede29e87cdf3fc4551e67bdbe67003b5cfab95e0a2a0e5c3e5f4143733de97d6"
+          },
+          "tests/test_m3_iwm_acquisition.py": {
+            "git_blob_id": "6cb16c7d73c264cc749d2b453ec0e4fa788cc822",
+            "raw_sha256": "e26e79691f6bdf3c927d791689ce26500774e77ceb8e43efe416f574cf0e7ec8"
+          },
+          "tests/test_m3_pit_scanner_universe.py": {
+            "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",
+            "raw_sha256": "b243aa84f7e31b5059fe2dacb94b4a4d84d385a386a26600554513658c52842a"
+          },
+          "tests/test_research_equity_m3_data_gate.py": {
+            "git_blob_id": "a3c1e918ca4848cc6ee3b6fd3047af26ad0417d5",
+            "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
+          }
+        },
+        "implementation_commit": "2f27ad3cd849a248e012c7f3dfb274db77a54493",
+        "implementation_tree": "12d4b2f8f22c81e0e74cad1e673a0d3a43466f17",
+        "manifest_commit": "832fa015f4e59aa009d2a1079b9a0bab1866cbaa",
+        "manifest_git_blob_id": "bafd42e162fde2835614bc686c3277cf830dfc2a"
+      },
+      "status": "PASS"
+    },
+    "composite_dataset_identity": {
+      "reason": "valid IWM raw bundle and canonical artifact are required",
+      "status": "NOT_RUN_BLOCKED"
+    },
+    "configuration_identity": {
+      "evidence": {
+        "semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d"
+      },
+      "status": "PASS"
+    },
+    "corporate_action_identity": {
+      "evidence": {
+        "byte_size": 14713370,
+        "crlf_normalized_sha256": "5776de7b91a1e0fd32b0070bfefae4f65d6bb6e4a068201f8d1cb7e6552e991d",
+        "logical_artifact_id": "equity_corporate_actions_v5",
+        "manifest_git_blob": {
+          "commit": "HEAD",
+          "git_blob_id": "70f62784fd804ed0f70543bc420d7575c0d39c42",
+          "git_blob_normalized_sha256": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953",
+          "git_blob_raw_sha256": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953",
+          "path": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json"
+        },
+        "parse_source": "content_addressed_staged_file",
+        "provenance_class": "external_untracked",
+        "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+        "source_descriptor_identity": {
+          "device": 16777232,
+          "inode": 28252996,
+          "mode": 33188,
+          "mtime_ns": 1787686968265669697,
+          "size": 14713370
+        },
+        "source_identity_after": {
+          "device": 16777232,
+          "inode": 28252996,
+          "mode": 33188,
+          "mtime_ns": 1787686968265669697,
+          "size": 14713370
+        },
+        "source_identity_before": {
+          "device": 16777232,
+          "inode": 28252996,
+          "mode": 33188,
+          "mtime_ns": 1787686968265669697,
+          "size": 14713370
+        },
+        "source_identity_kind": "opened_file_descriptor"
+      },
+      "status": "PASS"
+    },
+    "dependency_identity": {
+      "evidence": {
+        "calendar": "NYSE",
+        "name": "pandas_market_calendars",
+        "version": "5.4.0"
+      },
+      "status": "PASS"
+    },
+    "design_matrix_feasibility": {
+      "reason": "deterministic numerical population or PIT prerequisites are not ready",
+      "status": "NOT_RUN_BLOCKED"
+    },
+    "deterministic_numerical_population": {
+      "reason": "no deterministic PIT scanner-universe input was supplied",
+      "status": "NOT_RUN_BLOCKED"
+    },
+    "full_weekly_post_warmup_coverage": {
+      "reason": "full-window post-warmup weekly coverage failed",
+      "status": "FAIL"
+    },
+    "implementation_blob_identity": {
+      "evidence": {
+        ".github/workflows/ci.yml": {
+          "git_blob_id": "1afa14e11543d1e4e3108446907dc901156c6b82",
+          "raw_sha256": "da0474f88f0e2c182c836e46fb58557a6603bbad91f56e56c0239262f63c2b6a"
+        },
+        "scripts/acquire_m3_iwm_raw_bundle.py": {
+          "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
+          "raw_sha256": "663afaa7af159412599364bdd4559c868d3c0dc39f3c6da5817a336f0d08be0e"
+        },
+        "scripts/build_m3_pit_scanner_universe.py": {
+          "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
+          "raw_sha256": "8df70f0ecb85588cfe9122f4ffa5e89d75eed701cf5038c0cb33feb79d78eac6"
+        },
+        "scripts/m3_data_gate_helpers.py": {
+          "git_blob_id": "78b9088cb1661a7f6452c9a9e1f26079c9c8aed1",
+          "raw_sha256": "a1ab4f9be73319bfd62a38c0fde3ec451a5edf138bf25fd3e21a4ca0d2b00d84"
+        },
+        "scripts/research_equity_m3_data_gate.py": {
+          "git_blob_id": "f282e826830ef58d41d37cbf1b2024254adeef96",
+          "raw_sha256": "60d2e35910317931c5b3e71b2673aeea8d3e166a50d43d9773637434836180ea"
+        },
+        "scripts/research_equity_m3_m4.py": {
+          "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
+          "raw_sha256": "ede29e87cdf3fc4551e67bdbe67003b5cfab95e0a2a0e5c3e5f4143733de97d6"
+        },
+        "tests/test_m3_iwm_acquisition.py": {
+          "git_blob_id": "6cb16c7d73c264cc749d2b453ec0e4fa788cc822",
+          "raw_sha256": "e26e79691f6bdf3c927d791689ce26500774e77ceb8e43efe416f574cf0e7ec8"
+        },
+        "tests/test_m3_pit_scanner_universe.py": {
+          "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",
+          "raw_sha256": "b243aa84f7e31b5059fe2dacb94b4a4d84d385a386a26600554513658c52842a"
+        },
+        "tests/test_research_equity_m3_data_gate.py": {
+          "git_blob_id": "a3c1e918ca4848cc6ee3b6fd3047af26ad0417d5",
+          "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
+        }
+      },
+      "status": "PASS"
+    },
+    "iwm_normalization": {
+      "reason": "IWM raw source bundle is missing",
+      "status": "FAIL"
+    },
+    "iwm_pagination_chain": {
+      "reason": "IWM raw source bundle is missing",
+      "status": "FAIL"
+    },
+    "iwm_provider_contract": {
+      "reason": "IWM raw source bundle is missing",
+      "status": "FAIL"
+    },
+    "iwm_raw_bundle": {
+      "reason": "IWM raw source bundle is missing",
+      "status": "FAIL"
+    },
+    "iwm_source_completeness": {
+      "evidence": {
+        "complete": false,
+        "expected_session_count": 2659,
+        "references": {
+          "IWM": {
+            "complete": false,
+            "extra_sessions": {
+              "boundary_sample": [],
+              "count": 0,
+              "first": null,
+              "last": null,
+              "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+            },
+            "missing_sessions": {
+              "boundary_sample": [
+                "2016-01-04",
+                "2016-01-05",
+                "2016-01-06",
+                "2026-07-29",
+                "2026-07-30",
+                "2026-07-31"
+              ],
+              "count": 2659,
+              "first": "2016-01-04",
+              "last": "2026-07-31",
+              "sha256": "4fe69cdcb402e54ca3a8bdcc3c7f6b71a76fd228e3790dbe1c0cdfccf3a096da"
+            },
+            "observed_session_count": 0
+          },
+          "QQQ": {
+            "complete": false,
+            "extra_sessions": {
+              "boundary_sample": [],
+              "count": 0,
+              "first": null,
+              "last": null,
+              "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+            },
+            "missing_sessions": {
+              "boundary_sample": [
+                "2026-07-31"
+              ],
+              "count": 1,
+              "first": "2026-07-31",
+              "last": "2026-07-31",
+              "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+            },
+            "observed_session_count": 2658
+          },
+          "SPY": {
+            "complete": false,
+            "extra_sessions": {
+              "boundary_sample": [],
+              "count": 0,
+              "first": null,
+              "last": null,
+              "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+            },
+            "missing_sessions": {
+              "boundary_sample": [
+                "2026-07-31"
+              ],
+              "count": 1,
+              "first": "2026-07-31",
+              "last": "2026-07-31",
+              "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+            },
+            "observed_session_count": 2658
+          }
+        },
+        "source_end": "2026-07-31",
+        "source_start": "2016-01-01"
+      },
+      "reason": "SPY/IWM/QQQ source completeness through 2026-07-31 failed",
+      "status": "FAIL"
+    },
+    "lifetime_identity": {
+      "evidence": {
+        "byte_size": 2329186,
+        "commit": "HEAD",
+        "crlf_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "git_blob_id": "7ea3d564470b0509d98760c4306bb6973137d481",
+        "git_blob_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "git_blob_raw_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "logical_artifact_id": "equity_entity_lifetimes_v5",
+        "parse_source": "content_addressed_staged_file",
+        "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+        "provenance_class": "git_blob",
+        "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+        "source_descriptor_identity": {
+          "device": 16777232,
+          "inode": 28252439,
+          "mode": 33188,
+          "mtime_ns": 1787686624929046962,
+          "size": 2329186
+        },
+        "source_identity_after": {
+          "device": 16777232,
+          "inode": 28252439,
+          "mode": 33188,
+          "mtime_ns": 1787686624929046962,
+          "size": 2329186
+        },
+        "source_identity_before": {
+          "device": 16777232,
+          "inode": 28252439,
+          "mode": 33188,
+          "mtime_ns": 1787686624929046962,
+          "size": 2329186
+        },
+        "source_identity_kind": "opened_file_descriptor",
+        "working_normalized_sha256": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+        "working_raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+      },
+      "status": "PASS"
+    },
+    "manifest_only_commit": {
+      "evidence": {
+        "changed_paths": [
+          "data/research_manifests/equity_m3_data_gate_2026_09_r3.json"
+        ]
+      },
+      "status": "PASS"
+    },
+    "pit_reference_boundary": {
+      "reason": "no deterministic PIT scanner-universe input was supplied",
+      "status": "NOT_RUN_BLOCKED"
+    },
+    "receipt_forbidden_fields": {
+      "evidence": {
+        "fields": []
+      },
+      "status": "PASS"
+    },
+    "recent_weekly_coverage": {
+      "reason": "recent weekly coverage failed",
+      "status": "FAIL"
+    },
+    "reference_calendar": {
+      "evidence": {
+        "calendar": {
+          "calendar": "NYSE",
+          "name": "pandas_market_calendars",
+          "version": "5.4.0"
+        }
+      },
+      "reason": "reference source completeness or calendar failed",
+      "status": "FAIL"
+    },
+    "reference_common_sessions": {
+      "common_session_count": 0,
+      "status": "FAIL"
+    },
+    "reference_role_contract": {
+      "evidence": {
+        "configured_trade_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "QQQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ],
+        "effective_tradable_observation_capacity": 27,
+        "executable_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ],
+        "managed_position_reservations": 0,
+        "maximum_observation_capacity": 30,
+        "open_order_reservations": 0,
+        "original_configured_trade_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "QQQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ],
+        "reference_observation_symbols": [
+          "IWM",
+          "QQQ",
+          "SPY"
+        ],
+        "reference_pin_count": 3,
+        "removed_reference_symbols": [
+          "QQQ"
+        ],
+        "research_effective_trade_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ],
+        "runtime_state_used": false,
+        "target_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ],
+        "tradable_candidate_symbols": [
+          "AAPL",
+          "AMZN",
+          "DOG",
+          "GOOGL",
+          "JNJ",
+          "JPM",
+          "KO",
+          "MSFT",
+          "NVDA",
+          "PEP",
+          "PSQ",
+          "SH",
+          "TSLA",
+          "XLB",
+          "XLC",
+          "XLE",
+          "XLF",
+          "XLI",
+          "XLK",
+          "XLP",
+          "XLRE",
+          "XLU",
+          "XLV",
+          "XLY",
+          "XOM"
+        ]
+      },
+      "status": "PASS"
+    },
+    "reference_row_quality": {
+      "reason": "reference row quality failed",
+      "status": "FAIL"
+    }
+  },
+  "manifest_identity": {
+    "declared_before_results": true,
+    "git_blob_id": "bafd42e162fde2835614bc686c3277cf830dfc2a",
+    "path": "data/research_manifests/equity_m3_data_gate_2026_09_r3.json",
+    "raw_sha256": "3c0bef19c1f64a042d69df1d5d6dac65ad705e36dabcc8b1f9d9807f3b963754"
+  },
+  "merge_integrity": {
+    "reason": "IWM source not available",
+    "status": "NOT_RUN_BLOCKED"
+  },
+  "mission": "equity_m3_data_gate_2026_09_r3",
+  "next_required_gate": "M3_DATA_GATE_COMPLETION",
+  "normalization_contract": {
+    "calendar": {
+      "calendar": "NYSE",
+      "name": "pandas_market_calendars",
+      "version": "5.4.0"
+    },
+    "canonical_timeframe": "1d",
+    "no_rounding_or_synthesis": true,
+    "raw_timeframe": "1Day",
+    "timezone": "America/New_York",
+    "version": "m3-iwm-normalizer-v1"
+  },
+  "normalizer_identity": {
+    "git_blob": {
+      "git_blob_id": "78b9088cb1661a7f6452c9a9e1f26079c9c8aed1",
+      "raw_sha256": "a1ab4f9be73319bfd62a38c0fde3ec451a5edf138bf25fd3e21a4ca0d2b00d84"
+    },
+    "path": "scripts/m3_data_gate_helpers.py"
+  },
+  "numerical_contract": {
+    "design_matrix": [
+      "SPY",
+      "IWM-SPY",
+      "QQQ-SPY"
+    ],
+    "matrix_encoding": "m3-design-matrix-v1",
+    "residual_convention": "alpha_retaining: demeaned fit, non-demeaned application, no intercept",
+    "skip_window_convention": "latest 21 residual returns omitted from momentum; beta fit retains all 273 returns"
+  },
+  "pit_builder_identity": {
+    "git_blob_id": "0634a129822d505935654ce4b0da63811970f6d3",
+    "raw_sha256": "8df70f0ecb85588cfe9122f4ffa5e89d75eed701cf5038c0cb33feb79d78eac6"
+  },
+  "reference_inventory": {
+    "IWM": {
+      "adjustment": "split",
+      "conflicting_duplicate_count": 0,
+      "duplicate_count": 0,
+      "extra_off_calendar_sessions": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "feed": "sip",
+      "first_raw_timestamp": null,
+      "first_session_date": null,
+      "invalid_ohlc_count": 0,
+      "invalid_timestamp_count": 0,
+      "last_raw_timestamp": null,
+      "last_session_date": null,
+      "market_mismatch_count": 0,
+      "market_values": [],
+      "maximum_consecutive_missing_session_gap": 2658,
+      "missing_expected_sessions": {
+        "boundary_sample": [
+          "2016-01-04",
+          "2016-01-05",
+          "2016-01-06",
+          "2026-07-28",
+          "2026-07-29",
+          "2026-07-30"
+        ],
+        "count": 2658,
+        "first": "2016-01-04",
+        "last": "2026-07-30",
+        "sha256": "7b6ab6f9d85e2f284d82ee4afd8a565f1951132e2571a540009145349c6c8460"
+      },
+      "missing_symbol_count": 0,
+      "missing_timestamp_count": 0,
+      "naive_timestamp_count": 0,
+      "negative_volume_count": 0,
+      "nonfinite_count": 0,
+      "nonpositive_close_count": 0,
+      "normalized_reference_rows": 0,
+      "normalized_row_count": 0,
+      "post_evaluation_row_count": 0,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 0,
+      "raw_row_count": 0,
+      "rejected_row_count": 0,
+      "rejection_counts": {},
+      "row_accounting": {
+        "identity_holds": true,
+        "normalized_reference_rows": 0,
+        "post_evaluation_valid_rows": 0,
+        "raw_reference_rows": 0,
+        "rejected_row_count": 0
+      },
+      "source_identity": {
+        "adjustment": "split",
+        "api_family_version": "v2 stocks bars",
+        "endpoint_identity": "/v2/stocks/bars",
+        "feed": "sip",
+        "provider": "Alpaca Market Data API",
+        "sort": "asc",
+        "source_timeframe": "1d"
+      },
+      "source_range_violation_count": 0,
+      "timeframe_mismatch_count": 0,
+      "timeframe_values": [],
+      "unexpected_schema_count": 0,
+      "unique_session_count": 0,
+      "zero_volume_count": 0
+    },
+    "QQQ": {
+      "adjustment": "split",
+      "conflicting_duplicate_count": 0,
+      "duplicate_count": 0,
+      "extra_off_calendar_sessions": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "feed": "sip",
+      "first_raw_timestamp": "2016-01-04T05:00:00.000000Z",
+      "first_session_date": "2016-01-04",
+      "invalid_ohlc_count": 0,
+      "invalid_timestamp_count": 0,
+      "last_raw_timestamp": "2026-07-30T04:00:00.000000Z",
+      "last_session_date": "2026-07-30",
+      "market_mismatch_count": 0,
+      "market_values": [
+        "EQUITY"
+      ],
+      "maximum_consecutive_missing_session_gap": 0,
+      "missing_expected_sessions": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "missing_symbol_count": 0,
+      "missing_timestamp_count": 0,
+      "naive_timestamp_count": 0,
+      "negative_volume_count": 0,
+      "nonfinite_count": 0,
+      "nonpositive_close_count": 0,
+      "normalized_reference_rows": 2658,
+      "normalized_row_count": 2658,
+      "post_evaluation_row_count": 0,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 2658,
+      "raw_row_count": 2658,
+      "rejected_row_count": 0,
+      "rejection_counts": {},
+      "row_accounting": {
+        "identity_holds": true,
+        "normalized_reference_rows": 2658,
+        "post_evaluation_valid_rows": 0,
+        "raw_reference_rows": 2658,
+        "rejected_row_count": 0
+      },
+      "source_identity": {
+        "adjustment": "split",
+        "api_family_version": "v2 stocks bars",
+        "endpoint_identity": "/v2/stocks/bars",
+        "feed": "sip",
+        "provider": "Alpaca Market Data API",
+        "sort": "asc",
+        "source_timeframe": "1d"
+      },
+      "source_range_violation_count": 0,
+      "timeframe_mismatch_count": 0,
+      "timeframe_values": [
+        "1d"
+      ],
+      "unexpected_schema_count": 0,
+      "unique_session_count": 2658,
+      "zero_volume_count": 0
+    },
+    "SPY": {
+      "adjustment": "split",
+      "conflicting_duplicate_count": 0,
+      "duplicate_count": 0,
+      "extra_off_calendar_sessions": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "feed": "sip",
+      "first_raw_timestamp": "2016-01-04T05:00:00.000000Z",
+      "first_session_date": "2016-01-04",
+      "invalid_ohlc_count": 0,
+      "invalid_timestamp_count": 0,
+      "last_raw_timestamp": "2026-07-30T04:00:00.000000Z",
+      "last_session_date": "2026-07-30",
+      "market_mismatch_count": 0,
+      "market_values": [
+        "EQUITY"
+      ],
+      "maximum_consecutive_missing_session_gap": 0,
+      "missing_expected_sessions": {
+        "boundary_sample": [],
+        "count": 0,
+        "first": null,
+        "last": null,
+        "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+      },
+      "missing_symbol_count": 0,
+      "missing_timestamp_count": 0,
+      "naive_timestamp_count": 0,
+      "negative_volume_count": 0,
+      "nonfinite_count": 0,
+      "nonpositive_close_count": 0,
+      "normalized_reference_rows": 2658,
+      "normalized_row_count": 2658,
+      "post_evaluation_row_count": 0,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 2658,
+      "raw_row_count": 2658,
+      "rejected_row_count": 0,
+      "rejection_counts": {},
+      "row_accounting": {
+        "identity_holds": true,
+        "normalized_reference_rows": 2658,
+        "post_evaluation_valid_rows": 0,
+        "raw_reference_rows": 2658,
+        "rejected_row_count": 0
+      },
+      "source_identity": {
+        "adjustment": "split",
+        "api_family_version": "v2 stocks bars",
+        "endpoint_identity": "/v2/stocks/bars",
+        "feed": "sip",
+        "provider": "Alpaca Market Data API",
+        "sort": "asc",
+        "source_timeframe": "1d"
+      },
+      "source_range_violation_count": 0,
+      "timeframe_mismatch_count": 0,
+      "timeframe_values": [
+        "1d"
+      ],
+      "unexpected_schema_count": 0,
+      "unique_session_count": 2658,
+      "zero_volume_count": 0
+    }
+  },
+  "reference_panel": {
+    "evaluation_reference_panel_sha256": "a068c8f82761dcf388dadd52fb4132b1234cc68ee1ce235d28fe8c0a815b0c31",
+    "normalized_reference_panel_sha256": "a068c8f82761dcf388dadd52fb4132b1234cc68ee1ce235d28fe8c0a815b0c31"
+  },
+  "reference_role_evidence_levels": {
+    "contract": "CONTRACT_VERIFIED",
+    "execution": "EXECUTION_NOT_RUN",
+    "ocp": "OCP_NOT_RUN",
+    "pit_universe": "NOT_RUN"
+  },
+  "reference_role_separation": {
+    "configured_trade_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "QQQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ],
+    "effective_tradable_observation_capacity": 27,
+    "executable_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ],
+    "managed_position_reservations": 0,
+    "maximum_observation_capacity": 30,
+    "open_order_reservations": 0,
+    "original_configured_trade_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "QQQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ],
+    "reference_observation_symbols": [
+      "IWM",
+      "QQQ",
+      "SPY"
+    ],
+    "reference_pin_count": 3,
+    "removed_reference_symbols": [
+      "QQQ"
+    ],
+    "research_effective_trade_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ],
+    "runtime_state_used": false,
+    "target_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ],
+    "tradable_candidate_symbols": [
+      "AAPL",
+      "AMZN",
+      "DOG",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "KO",
+      "MSFT",
+      "NVDA",
+      "PEP",
+      "PSQ",
+      "SH",
+      "TSLA",
+      "XLB",
+      "XLC",
+      "XLE",
+      "XLF",
+      "XLI",
+      "XLK",
+      "XLP",
+      "XLRE",
+      "XLU",
+      "XLV",
+      "XLY",
+      "XOM"
+    ]
+  },
+  "remote_ci_status": "NOT_YET_OBSERVED",
+  "research_only": true,
+  "row_rejection_inventory": {
+    "IWM": {
+      "normalized_reference_rows": 0,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 0,
+      "rejected_row_count": 0,
+      "rejection_counts": {}
+    },
+    "QQQ": {
+      "normalized_reference_rows": 2658,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 2658,
+      "rejected_row_count": 0,
+      "rejection_counts": {}
+    },
+    "SPY": {
+      "normalized_reference_rows": 2658,
+      "post_evaluation_valid_rows": 0,
+      "raw_reference_rows": 2658,
+      "rejected_row_count": 0,
+      "rejection_counts": {}
+    }
+  },
+  "runtime_cache_isolation": {
+    "broker_read": false,
+    "cache_read": false,
+    "credentials_read": false,
+    "network_contacted": false,
+    "parse_source": "content_addressed_staged_files_only",
+    "runtime_state_read": false
+  },
+  "same_run_v3_control_input_readiness": {
+    "economics_run": false,
+    "required_before_comparison": true,
+    "same_data_vintage": false,
+    "same_evaluation_sessions": false,
+    "same_reference_reservation_contract": false,
+    "same_scanner_policy": false,
+    "same_terminal_inputs": false,
+    "status": "NOT_RUN_OUT_OF_SCOPE"
+  },
+  "schema_version": "3.0.0",
+  "self_digest_sha256": "27b59d0b353449a5fe694c93a44c9e659e795ad5e825085007517c3c0cf0e4cf",
+  "source_completeness_through_2026_07_31": {
+    "complete": false,
+    "expected_session_count": 2659,
+    "references": {
+      "IWM": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2016-01-04",
+            "2016-01-05",
+            "2016-01-06",
+            "2026-07-29",
+            "2026-07-30",
+            "2026-07-31"
+          ],
+          "count": 2659,
+          "first": "2016-01-04",
+          "last": "2026-07-31",
+          "sha256": "4fe69cdcb402e54ca3a8bdcc3c7f6b71a76fd228e3790dbe1c0cdfccf3a096da"
+        },
+        "observed_session_count": 0
+      },
+      "QQQ": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2026-07-31"
+          ],
+          "count": 1,
+          "first": "2026-07-31",
+          "last": "2026-07-31",
+          "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+        },
+        "observed_session_count": 2658
+      },
+      "SPY": {
+        "complete": false,
+        "extra_sessions": {
+          "boundary_sample": [],
+          "count": 0,
+          "first": null,
+          "last": null,
+          "sha256": "a8789c4798cdded93fe0f2fe7e84cc371d8b1cdf3e428a79a2fdc7820b05e834"
+        },
+        "missing_sessions": {
+          "boundary_sample": [
+            "2026-07-31"
+          ],
+          "count": 1,
+          "first": "2026-07-31",
+          "last": "2026-07-31",
+          "sha256": "423c2b56b670a150ddd0a68d95814a5106bd763a8ac14387679b9c868ad7aee7"
+        },
+        "observed_session_count": 2658
+      }
+    },
+    "source_end": "2026-07-31",
+    "source_start": "2016-01-01"
+  },
+  "source_provenance": {
+    "adjustment": "split",
+    "api_family_version": "v2 stocks bars",
+    "endpoint_identity": "/v2/stocks/bars",
+    "fallback_allowed": false,
+    "feed": "sip",
+    "provider": "Alpaca Market Data API",
+    "raw_source_restriction": "operator-supplied raw IWM page bundle only"
+  },
+  "tests_actually_executed": {
+    "gate": "EXECUTED"
+  },
+  "verifier_identity": {
+    "git_blob": {
+      "git_blob_id": "f282e826830ef58d41d37cbf1b2024254adeef96",
+      "raw_sha256": "60d2e35910317931c5b3e71b2673aeea8d3e166a50d43d9773637434836180ea"
+    },
+    "path": "scripts/research_equity_m3_data_gate.py"
+  },
+  "weekly_coverage": {
+    "full": {
+      "accepted_decision_count": 0,
+      "accepted_plus_initial_warmup_count": 0,
+      "decision_count": 552,
+      "decision_digest_sha256": "02b4075dbbcfb3c5c0acf025b931d5b8de00d23a843490b3c30370ce20283593",
+      "ever_feasible": false,
+      "failed_after_warmup_count": 552,
+      "first_accepted_decision": null,
+      "first_decision_session": "2016-01-04",
+      "first_feasible_decision": null,
+      "initial_warmup_decision_count": 0,
+      "jointly_stale_count": 0,
+      "last_accepted_decision": null,
+      "last_decision_session": "2026-07-27",
+      "no_feasible_reference_window": true,
+      "per_reference_stale_count": {
+        "IWM": 0,
+        "QQQ": 0,
+        "SPY": 0
+      },
+      "post_feasibility_decision_count": 0,
+      "post_feasibility_failure_count": 0,
+      "post_feasibility_jointly_stale_count": 0,
+      "post_feasibility_misaligned_count": 0,
+      "post_feasibility_reference_outage_count": 0,
+      "recent_window_accepted_covers_every_required_weekly_decision": false,
+      "requested_start": "2016-01-01",
+      "resolved_start": "2016-01-04",
+      "state_counts": {
+        "ACCEPTED": 0,
+        "INITIAL_WARMUP": 0,
+        "INSUFFICIENT_COMMON_WINDOW": 0,
+        "MISALIGNED_REFERENCE": 0,
+        "NO_FEASIBLE_REFERENCE_WINDOW": 552,
+        "REFERENCE_OUTAGE": 0,
+        "STALE_REFERENCE": 0
+      }
+    },
+    "recent": {
+      "accepted_decision_count": 0,
+      "accepted_plus_initial_warmup_count": 0,
+      "decision_count": 239,
+      "decision_digest_sha256": "31853f38cf9cc9e8cce6869b4af159f3cc00a24b75fbad1922c06fac466021e7",
+      "ever_feasible": false,
+      "failed_after_warmup_count": 239,
+      "first_accepted_decision": null,
+      "first_decision_session": "2022-01-03",
+      "first_feasible_decision": null,
+      "initial_warmup_decision_count": 0,
+      "jointly_stale_count": 0,
+      "last_accepted_decision": null,
+      "last_decision_session": "2026-07-27",
+      "no_feasible_reference_window": true,
+      "per_reference_stale_count": {
+        "IWM": 0,
+        "QQQ": 0,
+        "SPY": 0
+      },
+      "post_feasibility_decision_count": 0,
+      "post_feasibility_failure_count": 0,
+      "post_feasibility_jointly_stale_count": 0,
+      "post_feasibility_misaligned_count": 0,
+      "post_feasibility_reference_outage_count": 0,
+      "recent_window_accepted_covers_every_required_weekly_decision": false,
+      "requested_start": "2022-01-01",
+      "resolved_start": "2022-01-03",
+      "state_counts": {
+        "ACCEPTED": 0,
+        "INITIAL_WARMUP": 0,
+        "INSUFFICIENT_COMMON_WINDOW": 0,
+        "MISALIGNED_REFERENCE": 0,
+        "NO_FEASIBLE_REFERENCE_WINDOW": 239,
+        "REFERENCE_OUTAGE": 0,
+        "STALE_REFERENCE": 0
+      }
+    }
+  },
+  "worktree_cleanliness": {
+    "after": [],
+    "before": [],
+    "clean_after": true,
+    "clean_before": true
+  }
+}

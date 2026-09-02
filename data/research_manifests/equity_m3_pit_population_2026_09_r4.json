@@ -1,0 +1,64 @@
+{
+  "candidate_decision_eligibility_digest_sha256": "1f1b6a92bebc0a2f15ec970b05a64e0fded169138200ef55bb2538b0cc79287a",
+  "candidate_rankings_present": false,
+  "candidate_universe_digest_sha256": "9578efe89442bace27670845feede1ebf7cf692f0229e10b9461b7b10bb13636",
+  "canonical_bars_raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "canonical_manifest_git_blob": {
+    "commit": "HEAD",
+    "git_blob_id": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+    "path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "raw_sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f"
+  },
+  "capture_encoding": "m3-iwm-capture-first-v1",
+  "composite_semantic_digest_sha256": "5bb66b7ff15d1f9ef3e9ce7caa4ef2314fcc670cf80b9696ee576e1b9cac4eda",
+  "config_semantic_digest_sha256": "c8ca8e7f0b8059fdf85aa874c905ad4294ae235053e66c68e132341efbd0195d",
+  "explicit_empty_snapshot_count": 1,
+  "maximum_eligible_count": 299,
+  "median_eligible_count": 289,
+  "minimum_eligible_count": 0,
+  "mission": "equity_m3_pit_scanner_population_2026_09_r4",
+  "no_alpha_ranking": true,
+  "normalized_iwm_sidecar_raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2",
+  "normalized_iwm_sidecar_semantic_digest_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837",
+  "observation_strategy": null,
+  "pit_builder": {
+    "commit": "HEAD",
+    "git_blob_id": "8ff884c508b3e48dd040c295528d8b75f0af4a5a",
+    "path": "scripts/build_m3_pit_scanner_universe.py",
+    "raw_sha256": "6321b9d06a43d54836d08810d57f97a42b6d2214a5166fd2e85edc308f06bc3b"
+  },
+  "r4_contract": {
+    "commit": "HEAD",
+    "git_blob_id": "0cc789dba475242014856b60d4913b9b3e25cc4b",
+    "path": "data/research_manifests/equity_m3_data_gate_2026_09_r4.json",
+    "raw_sha256": "7cf31eef48a7a9352d689475ebc392dab336b8fc84fc62f7ac6374950fe0e55e"
+  },
+  "raw_pit_byte_size": 24774560,
+  "raw_pit_path": "data/research/generated/m3_data_gate_r4/pit_universe.json",
+  "raw_pit_sha256": "bfdf6e3f87d5c42a1923bc4009f2fa1892ade7317e11caf139d30239bac3f5ae",
+  "reference_exclusion_count": 7974,
+  "reference_exclusion_counts": {
+    "candidate_membership_reference_symbols": 0,
+    "pre_shortlist_reference_symbols": 7974
+  },
+  "scanner_config_digest": "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392",
+  "scanner_config_digests": [
+    "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81554128b33392"
+  ],
+  "scanner_rebalance_cadence": "daily",
+  "scanner_versions": [
+    "equity-scanner-v3"
+  ],
+  "scheduled_snapshot_count": 2659,
+  "schema_version": "1.0.0",
+  "semantic_candidate_population_digest_sha256": "9578efe89442bace27670845feede1ebf7cf692f0229e10b9461b7b10bb13636",
+  "semantic_population_digest_sha256": "9578efe89442bace27670845feede1ebf7cf692f0229e10b9461b7b10bb13636",
+  "snapshot_count": 2659,
+  "strict_prior_proof": {
+    "effective_at_is_strictly_after_latest_input": true,
+    "status": "PASS",
+    "violating_snapshots": []
+  },
+  "strictly_prior_data": true,
+  "unique_candidate_count": 890
+}

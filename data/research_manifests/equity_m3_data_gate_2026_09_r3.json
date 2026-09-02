@@ -11,20 +11,24 @@
   "candidate_economics_run": false,
   "economic_metrics_present": false,
   "economic_mission_ready": false,
-  "base_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
-  "implementation_parent_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
-  "implementation_commit": "782dcb573504ef3fcfb9ac2c65254615eb4ce50a",
-  "implementation_tree": "451ab93ce7c9653a7940949b8850c8d7639c95c0",
+  "base_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+  "implementation_parent_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+  "implementation_commit": "2f27ad3cd849a248e012c7f3dfb274db77a54493",
+  "implementation_tree": "12d4b2f8f22c81e0e74cad1e673a0d3a43466f17",
   "manifest_path": "data/research_manifests/equity_m3_data_gate_2026_09_r3.json",
   "manifest_commit_rule": "manifest-only: exactly the declared R3 manifest path",
-  "lineage_mode": "A4_B4_CORRECTIVE_AFTER_ABANDONED_A3_B3",
+  "lineage_mode": "A5_B5_CORRECTIVE_AFTER_ABANDONED_A3_B3_A4_B4",
   "recovery_lineage": {
-    "status": "ABANDONED_A3_B3",
+    "status": "ABANDONED_A3_B3_AND_A4_B4",
     "abandoned_implementation_commit": "f56062b532b15891b6a88eeb4136ddb55ded1be3",
     "abandoned_manifest_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399",
-    "reason_category": "response_schema_mismatch",
-    "reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
-    "corrective_base_commit": "c4022ae94aa4069893052f63c1700d9d73d2c399"
+    "reason_category": "bundle_validation_failure",
+    "reason": "A4 fixed acquisition parsing but bundle validation still passed Alpaca map-key bars without the envelope symbol",
+    "abandoned_corrective_implementation_commit": "782dcb573504ef3fcfb9ac2c65254615eb4ce50a",
+    "abandoned_corrective_manifest_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1",
+    "previous_reason_category": "response_schema_mismatch",
+    "previous_reason": "A3 rejected Alpaca v2 bars because the symbol is carried by the bars map key, not the bar object",
+    "corrective_base_commit": "f2d89c0a434e2ec7133d91f158271e9c6bc510c1"
   },
   "frozen_parameters": {
     "formation_bars": 252,
@@ -204,16 +208,16 @@
       "raw_sha256": "da0474f88f0e2c182c836e46fb58557a6603bbad91f56e56c0239262f63c2b6a"
     },
     "scripts/m3_data_gate_helpers.py": {
-      "git_blob_id": "453c27d6dc5e17938493f07a3c627045f118fd8d",
-      "raw_sha256": "7c0641089b7cd27c47c97d5e3ff02909a628fd22f604d6b4ffb15cb3a2710a50"
+      "git_blob_id": "78b9088cb1661a7f6452c9a9e1f26079c9c8aed1",
+      "raw_sha256": "a1ab4f9be73319bfd62a38c0fde3ec451a5edf138bf25fd3e21a4ca0d2b00d84"
     },
     "scripts/research_equity_m3_data_gate.py": {
-      "git_blob_id": "386ac2d6e715983be875f71e7fed51fea91553e3",
-      "raw_sha256": "9a470016a990cea8812805278a3bfd05d4c9a34062e285f7cd07d5538ab46677"
+      "git_blob_id": "f282e826830ef58d41d37cbf1b2024254adeef96",
+      "raw_sha256": "60d2e35910317931c5b3e71b2673aeea8d3e166a50d43d9773637434836180ea"
     },
     "scripts/research_equity_m3_m4.py": {
-      "git_blob_id": "3ee4c47860d01ed570b3faf86ca595b14d2d8125",
-      "raw_sha256": "22b4b54c1d8d1b684e85f8fa25423cb191154c2953ea1a2627ceee4ccaabeaad"
+      "git_blob_id": "3d01a9fd8eaad4e3722265c1e190094844daf4c6",
+      "raw_sha256": "ede29e87cdf3fc4551e67bdbe67003b5cfab95e0a2a0e5c3e5f4143733de97d6"
     },
     "scripts/acquire_m3_iwm_raw_bundle.py": {
       "git_blob_id": "90195f418f0d0d1679852a2ee98324f438d7640c",
@@ -228,8 +232,8 @@
       "raw_sha256": "e3f4707ce5195d4fd3587853351f0eaf4b33b3df998c6353b86fef031358838b"
     },
     "tests/test_m3_iwm_acquisition.py": {
-      "git_blob_id": "b9989b29bbc9b81caa1d67e7456106571beac52e",
-      "raw_sha256": "cbc0f039d5629892790fbdd2f3381b8556e967fd45beb39c28a89e72f8100ae8"
+      "git_blob_id": "6cb16c7d73c264cc749d2b453ec0e4fa788cc822",
+      "raw_sha256": "e26e79691f6bdf3c927d791689ce26500774e77ceb8e43efe416f574cf0e7ec8"
     },
     "tests/test_m3_pit_scanner_universe.py": {
       "git_blob_id": "d7dd7f5e4aa29ea716907ed0dc9b0c9e5cade725",

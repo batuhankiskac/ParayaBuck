@@ -88,6 +88,7 @@ R5_RECEIPT_PATH = "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
 R5_REPORT_PATH = "docs/equity_m3_data_gate_2026_09_r5.md"
 R5_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r5.json"
 R5_PIT_MANIFEST_BLOB = "1290869c1d665254eb1981d648c2ef6d44edc9e5"
+R5_PIT_MANIFEST_RAW_SHA256 = "2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4"
 R4_PIT_MANIFEST_PATH = "data/research_manifests/equity_m3_pit_population_2026_09_r4.json"
 R4_PIT_PATH = _REPO / "data/research/generated/m3_data_gate_r4/pit_universe.json"
 R4_SIDECAR_PATH = _REPO / "data/research/generated/m3_data_gate_r4/iwm_normalized.csv"
@@ -121,6 +122,8 @@ R4_RAW_PIT_BYTES = 24_774_560
 R5_PROJECTION_RAW_SHA256 = "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac"
 R5_PROJECTION_BYTES = 25_518_170
 R5_PROJECTION_DIGEST = "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240"
+R5_PROJECTION_IMPLEMENTATION_BLOB = "54bed91913012a2cfc939eae2a285e71941e7c3d"
+R5_PROJECTION_IMPLEMENTATION_RAW_SHA256 = "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
 R5_CANDIDATE_UNIVERSE_DIGEST = "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e"
 R5_CANDIDATE_ELIGIBILITY_DIGEST = "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32"
 R5_MATRIX_MERKLE_ROOT = "99187e5e0d94348b87e6c89aae3612d4bbd40e3795e6844289daf740d18073d9"
@@ -129,6 +132,17 @@ R5_SCANNER_CONFIG_DIGEST = "d8e06f54cd1a2fe0a201317fb6e3f4265470b2a10fe6e119ad81
 R5_SNAPSHOT_COUNT = 2658
 R5_EXPLICIT_EMPTY_COUNT = 1
 R5_UNIQUE_CANDIDATES = 889
+R5_EFFECTIVE_AT_SEQUENCE_DIGEST = "64eee673b7a0ca639b5a898d1f7a329c8b264336fd1e824271f170e24e5f45b7"
+R5_EVALUATION_FIRST = "2016-01-04T05:00:00.000000Z"
+R5_EVALUATION_LAST = "2026-07-30T04:00:00.000000Z"
+R5_EVALUATION_ENCODING = "m3-r5-pit-projection-v1"
+
+PRIOR_A22_COMMIT = "cae97cf9e059c5c03d79469b29e84d47533119d6"
+PRIOR_B22_COMMIT = "4d612d9f8fc50a5d4911f2c37d74979c61af93be"
+PRIOR_C22_COMMIT = "0f6d483eecf33cef863942c38fb8f6847e646b29"
+PRIOR_C22_REMOTE_CI_RUN = "33654462773"
+PRIOR_C22_REMOTE_RESULT = "FAILURE"
+PRIOR_C22_FAILURE_CATEGORY = "ci_hermeticity_failure_external_artifact_dependency"
 
 REFERENCE_SYMBOLS = ("SPY", "IWM", "QQQ")
 M3_FROZEN_PARAMETERS: dict[str, object] = {
@@ -373,6 +387,246 @@ def _tracked_identity(commit: str, path: str) -> dict[str, object]:
         "git_blob_id": blob_id,
         "raw_sha256": _sha256_bytes(blob),
     }
+
+
+def _tracked_r5_snapshot_contract() -> dict[str, object]:
+    """Read and authenticate the accepted R5 snapshot contract from Git only."""
+    blob_id = _git("rev-parse", f"{R5_RESULT_COMMIT}:{R5_PIT_MANIFEST_PATH}")
+    _require(
+        blob_id == R5_PIT_MANIFEST_BLOB,
+        "r5_snapshot_contract",
+        "R5 compact PIT manifest Git blob changed",
+    )
+    blob = _git_blob(R5_RESULT_COMMIT, R5_PIT_MANIFEST_PATH)
+    _require(
+        _sha256_bytes(blob) == R5_PIT_MANIFEST_RAW_SHA256,
+        "r5_snapshot_contract",
+        "R5 compact PIT manifest raw SHA changed",
+    )
+    try:
+        payload = json.loads(blob.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise OcpFailure("r5_snapshot_contract", "R5 compact PIT manifest is not valid UTF-8 JSON") from exc
+    _require(isinstance(payload, Mapping), "r5_snapshot_contract", "R5 compact PIT manifest must be an object")
+
+    for key, expected in {
+        "schema_version": "1.0.0",
+        "mission": "equity_m3_pit_scanner_population_2026_09_r5",
+        "snapshot_count": R5_SNAPSHOT_COUNT,
+        "consumed_decision_count": R5_SNAPSHOT_COUNT,
+        "evaluation_snapshot_count": R5_SNAPSHOT_COUNT,
+        "explicit_empty_snapshot_count": R5_EXPLICIT_EMPTY_COUNT,
+        "candidate_rankings_present": False,
+        "no_alpha_ranking": True,
+        "candidate_universe_digest_sha256": R5_CANDIDATE_UNIVERSE_DIGEST,
+        "candidate_decision_eligibility_digest_sha256": R5_CANDIDATE_ELIGIBILITY_DIGEST,
+        "projection_digest_sha256": R5_PROJECTION_DIGEST,
+        "scanner_version": R5_SCANNER_VERSION,
+        "scanner_config_digest": R5_SCANNER_CONFIG_DIGEST,
+        "raw_pit_sha256": R5_PROJECTION_RAW_SHA256,
+        "raw_pit_byte_size": R5_PROJECTION_BYTES,
+        "canonical_bars_raw_sha256": CANONICAL_RAW_SHA256,
+        "normalized_iwm_sidecar_raw_sha256": R4_SIDECAR_RAW_SHA256,
+        "normalized_iwm_sidecar_semantic_digest_sha256": R4_SIDECAR_SEMANTIC_SHA256,
+        "composite_semantic_digest_sha256": R4_COMPOSITE_SEMANTIC_SHA256,
+    }.items():
+        _require(payload.get(key) == expected, "r5_snapshot_contract", f"R5 compact PIT field {key} changed")
+
+    contract_identity = payload.get("r5_contract")
+    _require(
+        contract_identity
+        == {
+            "commit": R5_MANIFEST_COMMIT,
+            "git_blob_id": R5_MANIFEST_BLOB,
+            "path": R5_MANIFEST_PATH,
+            "raw_sha256": R5_MANIFEST_RAW_SHA256,
+        },
+        "r5_snapshot_contract",
+        "R5 data-gate contract identity changed",
+    )
+    projection_implementation = payload.get("r5_projection_implementation")
+    _require(
+        projection_implementation
+        == {
+            "git_blob_id": R5_PROJECTION_IMPLEMENTATION_BLOB,
+            "raw_sha256": R5_PROJECTION_IMPLEMENTATION_RAW_SHA256,
+        },
+        "r5_snapshot_contract",
+        "R5 projection implementation identity changed",
+    )
+    source_r4 = payload.get("source_r4_raw_pit")
+    _require(isinstance(source_r4, Mapping), "r5_snapshot_contract", "R5 source R4 PIT identity is missing")
+    _require(
+        source_r4.get("raw_sha256") == R4_RAW_PIT_SHA256 and source_r4.get("byte_size") == R4_RAW_PIT_BYTES,
+        "r5_snapshot_contract",
+        "R5 source R4 PIT identity changed",
+    )
+    source_manifest = source_r4.get("source_compact_manifest")
+    _require(isinstance(source_manifest, Mapping), "r5_snapshot_contract", "R5 source R4 manifest identity is missing")
+    _require(
+        source_manifest.get("commit") == R5_MANIFEST_COMMIT and source_manifest.get("path") == R4_PIT_MANIFEST_PATH,
+        "r5_snapshot_contract",
+        "R5 source R4 compact manifest identity changed",
+    )
+
+    boundary = payload.get("evaluation_boundary")
+    _require(isinstance(boundary, Mapping), "r5_snapshot_contract", "R5 evaluation boundary is missing")
+    for key, expected in {
+        "consumed_decision_count": R5_SNAPSHOT_COUNT,
+        "evaluation_snapshot_count": R5_SNAPSHOT_COUNT,
+        "candidate_population_digest_sha256": R5_CANDIDATE_UNIVERSE_DIGEST,
+        "candidate_decision_eligibility_digest_sha256": R5_CANDIDATE_ELIGIBILITY_DIGEST,
+        "projection_digest_sha256": R5_PROJECTION_DIGEST,
+        "evaluation_first_snapshot": R5_EVALUATION_FIRST,
+        "evaluation_last_snapshot": R5_EVALUATION_LAST,
+        "encoding": R5_EVALUATION_ENCODING,
+        "full_timestamp_ordering": True,
+        "terminal_observation_boundary_required": False,
+        "excluded_post_evaluation_snapshot_count": 1,
+    }.items():
+        _require(boundary.get(key) == expected, "r5_snapshot_contract", f"R5 evaluation field {key} changed")
+    strict_prior_proof = boundary.get("strict_prior_proof")
+    _require(
+        isinstance(strict_prior_proof, Mapping)
+        and strict_prior_proof.get("status") == "PASS"
+        and strict_prior_proof.get("effective_at_is_strictly_after_latest_input") is True
+        and strict_prior_proof.get("violating_snapshots") == [],
+        "r5_snapshot_contract",
+        "R5 strict-prior contract changed",
+    )
+
+    raw_timestamps = boundary.get("evaluation_effective_at_timestamps")
+    _require(
+        isinstance(raw_timestamps, list) and len(raw_timestamps) == R5_SNAPSHOT_COUNT,
+        "r5_snapshot_contract",
+        "R5 exact effective_at sequence is missing",
+    )
+    timestamps: list[str] = []
+    for index, raw_timestamp in enumerate(raw_timestamps):
+        _require(
+            isinstance(raw_timestamp, str),
+            "r5_snapshot_contract",
+            f"R5 effective_at timestamp {index} is not a string",
+        )
+        parsed = parse_timestamp(raw_timestamp)
+        canonical = parsed.isoformat(timespec="microseconds").replace("+00:00", "Z")
+        _require(
+            raw_timestamp == canonical,
+            "r5_snapshot_contract",
+            f"R5 effective_at timestamp {index} is not canonical",
+        )
+        timestamps.append(raw_timestamp)
+    _require(
+        timestamps[0] == R5_EVALUATION_FIRST and timestamps[-1] == R5_EVALUATION_LAST,
+        "r5_snapshot_contract",
+        "R5 effective_at endpoints changed",
+    )
+    _require(
+        timestamps == sorted(timestamps),
+        "r5_snapshot_contract",
+        "R5 effective_at sequence is not ordered",
+    )
+    sequence_digest = canonical_digest(timestamps)
+    _require(
+        sequence_digest == R5_EFFECTIVE_AT_SEQUENCE_DIGEST,
+        "r5_snapshot_contract",
+        "R5 effective_at sequence digest changed",
+    )
+    return {
+        "path": R5_PIT_MANIFEST_PATH,
+        "commit": R5_RESULT_COMMIT,
+        "git_blob_id": blob_id,
+        "raw_sha256": R5_PIT_MANIFEST_RAW_SHA256,
+        "snapshot_count": R5_SNAPSHOT_COUNT,
+        "consumed_decision_count": R5_SNAPSHOT_COUNT,
+        "first_effective_at": R5_EVALUATION_FIRST,
+        "last_effective_at": R5_EVALUATION_LAST,
+        "effective_at": tuple(timestamps),
+        "effective_at_sequence_digest_sha256": sequence_digest,
+        "candidate_universe_digest_sha256": R5_CANDIDATE_UNIVERSE_DIGEST,
+        "candidate_decision_eligibility_digest_sha256": R5_CANDIDATE_ELIGIBILITY_DIGEST,
+        "projection_digest_sha256": R5_PROJECTION_DIGEST,
+        "projection_raw_sha256": R5_PROJECTION_RAW_SHA256,
+        "projection_byte_size": R5_PROJECTION_BYTES,
+        "scanner_version": R5_SCANNER_VERSION,
+        "scanner_config_digest": R5_SCANNER_CONFIG_DIGEST,
+        "explicit_empty_snapshot_count": R5_EXPLICIT_EMPTY_COUNT,
+        "unique_candidate_count": R5_UNIQUE_CANDIDATES,
+        "encoding": R5_EVALUATION_ENCODING,
+    }
+
+
+def _validate_declared_snapshot_contract(manifest: Mapping[str, object]) -> None:
+    """Bind the committed pre-result declaration to the accepted R5 Git blob."""
+    contract = _tracked_r5_snapshot_contract()
+    accepted_upstream = manifest.get("accepted_upstream_r5")
+    _require(isinstance(accepted_upstream, Mapping), "manifest_contract", "accepted_upstream_r5 is missing")
+    for key, expected_key in {
+        "pit_manifest_path": "path",
+        "pit_manifest_commit": "commit",
+        "pit_manifest_git_blob_id": "git_blob_id",
+        "pit_manifest_raw_sha256": "raw_sha256",
+    }.items():
+        _require(
+            accepted_upstream.get(key) == contract[expected_key],
+            "manifest_contract",
+            f"accepted R5 PIT field {key} drifted",
+        )
+    accepted_data = manifest.get("accepted_data_identities")
+    _require(isinstance(accepted_data, Mapping), "manifest_contract", "accepted_data_identities is missing")
+    for key, expected_key in {
+        "r5_pit_manifest_git_blob": "git_blob_id",
+        "r5_pit_manifest_raw_sha256": "raw_sha256",
+        "r5_projection_raw_sha256": "projection_raw_sha256",
+        "r5_projection_byte_size": "projection_byte_size",
+        "r5_projection_digest": "projection_digest_sha256",
+        "candidate_universe_digest": "candidate_universe_digest_sha256",
+        "candidate_decision_eligibility_digest": "candidate_decision_eligibility_digest_sha256",
+    }.items():
+        _require(
+            accepted_data.get(key) == contract[expected_key],
+            "manifest_contract",
+            f"accepted R5 data field {key} drifted",
+        )
+    scanner = manifest.get("scanner_contract")
+    _require(isinstance(scanner, Mapping), "manifest_contract", "scanner_contract is missing")
+    for key, expected_key in {
+        "version": "scanner_version",
+        "config_digest": "scanner_config_digest",
+        "snapshot_count": "snapshot_count",
+        "explicit_empty_snapshot_count": "explicit_empty_snapshot_count",
+        "unique_candidate_count": "unique_candidate_count",
+    }.items():
+        _require(
+            scanner.get(key) == contract[expected_key],
+            "manifest_contract",
+            f"scanner contract field {key} drifted",
+        )
+    evaluation = manifest.get("evaluation_snapshot_contract")
+    _require(isinstance(evaluation, Mapping), "manifest_contract", "evaluation_snapshot_contract is missing")
+    _require(
+        evaluation.get("count") == contract["snapshot_count"]
+        and evaluation.get("first_effective_at") == contract["first_effective_at"]
+        and evaluation.get("last_effective_at") == contract["last_effective_at"]
+        and evaluation.get("effective_at_sequence_digest_sha256") == contract["effective_at_sequence_digest_sha256"],
+        "manifest_contract",
+        "declared R5 evaluation boundary drifted",
+    )
+    declared_timestamps = evaluation.get("effective_at")
+    _require(
+        isinstance(declared_timestamps, list) and tuple(declared_timestamps) == contract["effective_at"],
+        "manifest_contract",
+        "declared R5 effective_at sequence drifted",
+    )
+    declared_source = evaluation.get("source")
+    _require(
+        isinstance(declared_source, Mapping)
+        and declared_source.get("commit") == contract["commit"]
+        and declared_source.get("path") == contract["path"]
+        and declared_source.get("git_blob_id") == contract["git_blob_id"],
+        "manifest_contract",
+        "declared R5 snapshot source drifted",
+    )
 
 
 def _validate_r5_upstream(manifest_path: Path = _REPO / R5_MANIFEST_PATH) -> dict[str, object]:
@@ -1284,10 +1538,7 @@ def build_manifest(*, implementation_commit: str | None = None) -> dict[str, obj
         ".github/workflows/ci.yml",
     )
     critical = {path: _tracked_identity(implementation, path) for path in critical_paths}
-    projection_path, _regenerated = resolve_r5_projection()
-    projection = _load_json(projection_path)
-    snapshots = projection.get("snapshots", [])
-    timestamps = [str(item["effective_at"]) for item in snapshots if isinstance(item, Mapping)]
+    snapshot_contract = _tracked_r5_snapshot_contract()
     return {
         "schema_version": "1.0.0",
         "mission": MISSION,
@@ -1314,6 +1565,10 @@ def build_manifest(*, implementation_commit: str | None = None) -> dict[str, obj
             "receipt_self_digest_sha256": R5_RECEIPT_SELF_DIGEST,
             "result_commit": R5_RESULT_COMMIT,
             "d10_commit": R5_D10_COMMIT,
+            "pit_manifest_path": snapshot_contract["path"],
+            "pit_manifest_commit": snapshot_contract["commit"],
+            "pit_manifest_git_blob_id": snapshot_contract["git_blob_id"],
+            "pit_manifest_raw_sha256": snapshot_contract["raw_sha256"],
             "implementation_commit": R5_IMPLEMENTATION,
             "implementation_tree": R5_IMPLEMENTATION_TREE,
             "ci_run": R5_CI_RUN,
@@ -1341,27 +1596,37 @@ def build_manifest(*, implementation_commit: str | None = None) -> dict[str, obj
             "composite_semantic_sha256": R4_COMPOSITE_SEMANTIC_SHA256,
             "r4_raw_pit_sha256": R4_RAW_PIT_SHA256,
             "r4_raw_pit_byte_size": R4_RAW_PIT_BYTES,
-            "r5_projection_raw_sha256": R5_PROJECTION_RAW_SHA256,
-            "r5_projection_byte_size": R5_PROJECTION_BYTES,
-            "r5_projection_digest": R5_PROJECTION_DIGEST,
-            "candidate_universe_digest": R5_CANDIDATE_UNIVERSE_DIGEST,
-            "candidate_decision_eligibility_digest": R5_CANDIDATE_ELIGIBILITY_DIGEST,
+            "r5_pit_manifest_git_blob": snapshot_contract["git_blob_id"],
+            "r5_pit_manifest_raw_sha256": snapshot_contract["raw_sha256"],
+            "r5_projection_raw_sha256": snapshot_contract["projection_raw_sha256"],
+            "r5_projection_byte_size": snapshot_contract["projection_byte_size"],
+            "r5_projection_digest": snapshot_contract["projection_digest_sha256"],
+            "candidate_universe_digest": snapshot_contract["candidate_universe_digest_sha256"],
+            "candidate_decision_eligibility_digest": snapshot_contract["candidate_decision_eligibility_digest_sha256"],
             "matrix_merkle_root": R5_MATRIX_MERKLE_ROOT,
         },
         "scanner_contract": {
             "scanner": "EquityUniverseScanner",
-            "version": R5_SCANNER_VERSION,
-            "config_digest": R5_SCANNER_CONFIG_DIGEST,
+            "version": snapshot_contract["scanner_version"],
+            "config_digest": snapshot_contract["scanner_config_digest"],
             "cadence": "daily",
-            "snapshot_count": R5_SNAPSHOT_COUNT,
-            "explicit_empty_snapshot_count": R5_EXPLICIT_EMPTY_COUNT,
-            "unique_candidate_count": R5_UNIQUE_CANDIDATES,
+            "snapshot_count": snapshot_contract["snapshot_count"],
+            "explicit_empty_snapshot_count": snapshot_contract["explicit_empty_snapshot_count"],
+            "unique_candidate_count": snapshot_contract["unique_candidate_count"],
             "fallback": "reconstruct from exact composite bars; no alphabetical fallback",
             "references_excluded_before_stage_a": True,
         },
         "evaluation_snapshot_contract": {
-            "count": R5_SNAPSHOT_COUNT,
-            "effective_at": timestamps,
+            "count": snapshot_contract["snapshot_count"],
+            "first_effective_at": snapshot_contract["first_effective_at"],
+            "last_effective_at": snapshot_contract["last_effective_at"],
+            "effective_at": list(snapshot_contract["effective_at"]),
+            "effective_at_sequence_digest_sha256": snapshot_contract["effective_at_sequence_digest_sha256"],
+            "source": {
+                "commit": snapshot_contract["commit"],
+                "path": snapshot_contract["path"],
+                "git_blob_id": snapshot_contract["git_blob_id"],
+            },
             "comparison": "full timezone-aware effective_at <= exact cutoff",
             "strict_prior_rule": "latest_input_timestamp < effective_at",
             "date_only_selection_forbidden": True,
@@ -1423,6 +1688,17 @@ def build_manifest(*, implementation_commit: str | None = None) -> dict[str, obj
             "first_recent_window_snapshot",
             "terminal_evaluation_snapshot",
         ],
+        "recovery_lineage": {
+            "prior_implementation": PRIOR_A22_COMMIT,
+            "prior_manifest": PRIOR_B22_COMMIT,
+            "prior_local_result": PRIOR_C22_COMMIT,
+            "prior_remote_run": PRIOR_C22_REMOTE_CI_RUN,
+            "prior_remote_result": PRIOR_C22_REMOTE_RESULT,
+            "failure_category": PRIOR_C22_FAILURE_CATEGORY,
+            "exact_accepted_data_replay": True,
+            "automatic_refetch": False,
+            "expected_substantive_observation_parity": "unchanged",
+        },
         "mandatory_gates": list(OCP_MANDATORY_GATES),
         "forbidden_economic_fields": list(FORBIDDEN_ECONOMIC_FIELDS),
         "no_network_or_credentials": True,
@@ -1798,6 +2074,7 @@ def run_gate(
             "manifest_contract",
             "accepted upstream erratum declaration drifted",
         )
+        _validate_declared_snapshot_contract(manifest)
         historical_ocp = _e1_attestation()
     except OcpFailure as exc:
         blocked.append(str(exc))
@@ -2090,7 +2367,7 @@ def run_gate(
                 run_commit=run_commit,
                 implementation_identity={
                     "commit": implementation,
-                    "parent": BASE_COMMIT,
+                    "parent": manifest.get("implementation_parent_commit"),
                     "tree": manifest.get("implementation_tree"),
                     "critical_git_blobs": manifest.get("critical_git_blobs"),
                 },
@@ -2188,6 +2465,7 @@ __all__ = [
     "VERDICT_PASS",
     "_validate_projection",
     "_validate_r5_upstream",
+    "_tracked_r5_snapshot_contract",
     "build_manifest",
     "build_observation_basis",
     "iter_snapshot_inputs",

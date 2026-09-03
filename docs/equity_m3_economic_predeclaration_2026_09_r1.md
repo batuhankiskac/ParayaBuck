@@ -179,8 +179,11 @@ M3_ECONOMIC_GATE_BLOCKED. No real economic result was generated.
 - Required starting head: 06aaf78a7ea75aa3d97404916d5107194534fe6c.
 - A25 implementation commit: db1ce1c5abc316a75d5972fb9138ffd77da1ca6a.
 - B25 manifest commit: 7f0bd86cce6d9ccbadef5bbc1e49e6bb9c18d052; manifest-only.
-- C25 local result commit: a005dcd5ae3afd1ed90985836a9b61fc43d19d4b.
-- Remote CI claim: {"conclusion": "success", "head_sha": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b", "python_matrix": {"3.12": "PASS", "3.13": "PASS", "3.14": "PASS"}, "required_stages": {"build": "PASS", "dependency_audit": "PASS", "focused_acquisition_pit_tests": "PASS", "focused_economic_predeclaration_tests": "PASS", "focused_m3_data_gate_tests": "PASS", "focused_ocp_tests": "PASS", "focused_r2_attestation_tests": "PASS", "full_pytest": "PASS", "mypy": "PASS", "production_isolation": "PASS", "ruff_format": "PASS", "ruff_lint": "PASS", "secret_scan": "PASS", "wheel_smoke": "PASS"}, "run_id": "33711180326", "status": "PASS"}.
+- C25 full SHA: a005dcd5ae3afd1ed90985836a9b61fc43d19d4b.
+- C25 CI run: 33711180326; Python 3.12 PASS, Python 3.13 PASS, Python 3.14 PASS.
+- D25 full SHA: 960f0eaa42e300b95d1de2e8d3cd34626fb6d2a7.
+- D25 CI run: 33717286449; Python 3.12 PASS, Python 3.13 PASS, Python 3.14 PASS.
+- Final candidate-OCP remote closure: M3_ECONOMIC_MISSION_PREDECLARED; economics were not executed or authorized.
 - Receipt self-digest: a1e05cee72de803adf78b4eb8c51abefcbf85651a445d4d96c9c3e805cbd226f.
 
 Manifest-only proof: B25 changes exactly data/research_manifests/equity_m3_economic_2026_09_r1.json.

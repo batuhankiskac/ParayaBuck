@@ -67,9 +67,7 @@
       "max_positions": 6
     }
   },
-  "blocked_reasons": [
-    "remote_ci:NOT_RUN_BLOCKED"
-  ],
+  "blocked_reasons": [],
   "bootstrap_contract": {
     "block_length_weeks": 4,
     "diagnostic_only": true,
@@ -106,13 +104,13 @@
   "commit_topology": {
     "implementation_commit": "db1ce1c5abc316a75d5972fb9138ffd77da1ca6a",
     "implementation_parent": "06aaf78a7ea75aa3d97404916d5107194534fe6c",
-    "local_result_commit": "PENDING_C25_SELF_COMMIT",
+    "local_result_commit": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b",
     "manifest_commit": "7f0bd86cce6d9ccbadef5bbc1e49e6bb9c18d052",
     "manifest_parent": "db1ce1c5abc316a75d5972fb9138ffd77da1ca6a",
     "manifest_path": "data/research_manifests/equity_m3_economic_2026_09_r1.json",
     "receipt_path": "data/research_receipts/equity_m3_economic_predeclaration_2026_09_r1.json",
     "report_path": "docs/equity_m3_economic_predeclaration_2026_09_r1.md",
-    "result_parent": null,
+    "result_parent": "7f0bd86cce6d9ccbadef5bbc1e49e6bb9c18d052",
     "starting_head": "06aaf78a7ea75aa3d97404916d5107194534fe6c"
   },
   "cost_scenarios": {
@@ -645,9 +643,31 @@
     "references_outside_targets": true
   },
   "remote_ci": {
-    "head_sha": null,
-    "run_id": null,
-    "status": "NOT_RUN_BLOCKED"
+    "conclusion": "success",
+    "head_sha": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b",
+    "python_matrix": {
+      "3.12": "PASS",
+      "3.13": "PASS",
+      "3.14": "PASS"
+    },
+    "required_stages": {
+      "build": "PASS",
+      "dependency_audit": "PASS",
+      "focused_acquisition_pit_tests": "PASS",
+      "focused_economic_predeclaration_tests": "PASS",
+      "focused_m3_data_gate_tests": "PASS",
+      "focused_ocp_tests": "PASS",
+      "focused_r2_attestation_tests": "PASS",
+      "full_pytest": "PASS",
+      "mypy": "PASS",
+      "production_isolation": "PASS",
+      "ruff_format": "PASS",
+      "ruff_lint": "PASS",
+      "secret_scan": "PASS",
+      "wheel_smoke": "PASS"
+    },
+    "run_id": "33711180326",
+    "status": "PASS"
   },
   "research_only": true,
   "robustness_periods": [
@@ -688,7 +708,7 @@
     "real_command_reserved_for": "M3_ECONOMIC_MISSION_EXECUTION"
   },
   "schema_version": "1.0.0",
-  "self_digest_sha256": "3a46e37d8eb76fcb6fb56a6f7ab32c584d8aef9b3a7b83966141349c34623e29",
+  "self_digest_sha256": "a1e05cee72de803adf78b4eb8c51abefcbf85651a445d4d96c9c3e805cbd226f",
   "strategy_contract": {
     "candidate": {
       "execution_strategy": "fresh M3 instance",
@@ -794,5 +814,5 @@
     "self_digest_sha256": "8a576e650060c27e7f4a0c6f0fd8a532bc2509df26fd58c0587656ad47f766b6",
     "verdict": "M3_CANDIDATE_OCP_ATTESTATION_R2_PASS"
   },
-  "verdict": "M3_ECONOMIC_PREDECLARATION_BLOCKED"
+  "verdict": "M3_ECONOMIC_MISSION_PREDECLARED"
 }

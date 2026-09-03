@@ -13,11 +13,11 @@ from scripts import research_equity_m3_economic as economic
 
 def _implementation_commit() -> str | None:
     current = economic.git_head()
-    commits = economic._git("rev-list", "--first-parent", "--reverse", f"{economic.STARTING_HEAD}..{current}")  # type: ignore[attr-defined]
+    commits = economic._git("rev-list", "--first-parent", "--reverse", f"{economic.PREDECL_STARTING_HEAD}..{current}")  # type: ignore[attr-defined]
     for commit in commits.splitlines():
         try:
-            if economic.git_parents(commit) == [economic.STARTING_HEAD] and sorted(
-                economic.changed_paths(economic.STARTING_HEAD, commit)
+            if economic.git_parents(commit) == [economic.PREDECL_STARTING_HEAD] and sorted(
+                economic.changed_paths(economic.PREDECL_STARTING_HEAD, commit)
             ) == sorted(economic.IMPLEMENTATION_PATHS):
                 return commit
         except (economic.ContractError, OSError):
@@ -64,7 +64,8 @@ def _pair_fixture() -> tuple[dict[str, object], dict[str, object]]:
 
 def test_starting_head_anchor_exists() -> None:
     assert len(economic.STARTING_HEAD) == 40
-    assert economic.git_parents(economic.STARTING_HEAD) == [economic.E24_PARENT]
+    assert economic.git_parents(economic.PREDECL_STARTING_HEAD) == [economic.E24_PARENT]
+    assert economic.git_parents(economic.STARTING_HEAD) == [economic.PREDECL_D25_COMMIT]
 
 
 def test_upstream_r5_receipt_is_accepted() -> None:
@@ -112,7 +113,7 @@ def test_r5_data_gate_identity_mismatch_blocks() -> None:
 
 
 def test_config_baseline_matches_tracked_yaml() -> None:
-    commit = _implementation_commit() or economic.STARTING_HEAD
+    commit = _implementation_commit() or economic.PREDECL_STARTING_HEAD
     config = economic._yaml_blob(commit, economic.CONFIG_PATH)  # type: ignore[attr-defined]
     assert economic.validate_baseline_configuration(config) == economic.BASELINE_CONFIGURATION
 
@@ -380,7 +381,8 @@ def test_execution_authorization_schema_is_fail_closed(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    assert economic.validate_execution_authorization(path)["human_approval"] is True
+    with pytest.raises(economic.ContractError, match="tracked B26 manifest"):
+        economic.validate_execution_authorization(path)
 
 
 def test_execution_authorization_wrong_mission_blocks(tmp_path: Path) -> None:
@@ -395,7 +397,7 @@ def test_execution_authorization_wrong_mission_blocks(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    with pytest.raises(economic.ContractError, match="authorization mission"):
+    with pytest.raises(economic.ContractError, match="tracked B26 manifest"):
         economic.validate_execution_authorization(path)
 
 
@@ -411,7 +413,7 @@ def test_real_execution_stops_even_with_valid_authorization(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    with pytest.raises(economic.ContractError, match="reserved"):
+    with pytest.raises(economic.ContractError, match="tracked B26 manifest"):
         economic.guard_real_execution(explicit_execution_flag=True, execution_authorization=path)
 
 
@@ -455,11 +457,13 @@ def test_production_isolation_scope_is_narrow() -> None:
     implementation = _implementation_commit()
     if implementation is None:
         pytest.skip("A25 is not committed yet")
-    assert sorted(economic.changed_paths(economic.STARTING_HEAD, implementation)) == sorted(
+    assert sorted(economic.changed_paths(economic.PREDECL_STARTING_HEAD, implementation)) == sorted(
         economic.IMPLEMENTATION_PATHS
     )
-    assert not any(path.startswith("src/") for path in economic.changed_paths(economic.STARTING_HEAD, implementation))
-    assert "config/settings.yaml" not in economic.changed_paths(economic.STARTING_HEAD, implementation)
+    assert not any(
+        path.startswith("src/") for path in economic.changed_paths(economic.PREDECL_STARTING_HEAD, implementation)
+    )
+    assert "config/settings.yaml" not in economic.changed_paths(economic.PREDECL_STARTING_HEAD, implementation)
 
 
 def test_prior_r5_and_r2_artifacts_are_immutable() -> None:

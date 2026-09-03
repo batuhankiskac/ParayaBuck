@@ -161,7 +161,7 @@ def validate_predeclaration_receipt(
     topology = receipt.get("commit_topology")
     if not isinstance(topology, Mapping):
         _fail("receipt commit topology is missing")
-    _require_equal(topology.get("starting_head"), contract.STARTING_HEAD, "receipt starting head")
+    _require_equal(topology.get("starting_head"), contract.PREDECL_STARTING_HEAD, "receipt starting head")
     _require_equal(topology.get("implementation_commit"), expected_implementation_commit, "receipt implementation")
     _require_equal(topology.get("manifest_commit"), expected_manifest_commit, "receipt manifest")
     _require_equal(topology.get("manifest_parent"), expected_implementation_commit, "receipt manifest parent")
@@ -322,7 +322,7 @@ def _render_report(manifest: Mapping[str, object], receipt: Mapping[str, object]
             "",
             "## Append-only publication chain",
             "",
-            f"- Required starting head: {contract.STARTING_HEAD}.",
+            f"- Required starting head: {contract.PREDECL_STARTING_HEAD}.",
             f"- A25 implementation commit: {receipt['commit_topology']['implementation_commit']}.",
             f"- B25 manifest commit: {receipt['commit_topology']['manifest_commit']}; manifest-only.",
             f"- C25 local result commit: {receipt['commit_topology']['local_result_commit']}.",
@@ -419,8 +419,8 @@ def compact(
         "upstream_data_gate": copy.deepcopy(upstream["data_gate"]),
         "upstream_ocp_r2": copy.deepcopy(upstream["ocp_r2"]),
         "commit_topology": {
-            "starting_head": contract.STARTING_HEAD,
-            "implementation_parent": contract.STARTING_HEAD,
+            "starting_head": contract.PREDECL_STARTING_HEAD,
+            "implementation_parent": contract.PREDECL_STARTING_HEAD,
             "implementation_commit": implementation_commit,
             "manifest_parent": implementation_commit,
             "manifest_commit": manifest_commit,
@@ -432,7 +432,7 @@ def compact(
         },
         "implementation_identity": {
             "commit": implementation_commit,
-            "parent": contract.STARTING_HEAD,
+            "parent": contract.PREDECL_STARTING_HEAD,
             "changed_paths": sorted(contract.IMPLEMENTATION_PATHS),
             "source_identities": copy.deepcopy(manifest["source_identities"]),
         },

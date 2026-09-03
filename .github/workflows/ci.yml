@@ -50,6 +50,9 @@ jobs:
       - name: Focused economic-predeclaration tests
         if: always()
         run: pytest -q tests/test_research_equity_m3_economic.py
+      - name: Focused economic-execution tests
+        if: always()
+        run: pytest -q tests/test_research_equity_m3_economic_execution.py
       - name: Full pytest suite
         if: always()
         run: pytest

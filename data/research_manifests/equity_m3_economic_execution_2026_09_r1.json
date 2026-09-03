@@ -126,8 +126,8 @@
     "authorization_manifest_path": "data/research_manifests/equity_m3_economic_execution_2026_09_r1.json",
     "authorization_parent_rule": "manifest commit is a direct child of the implementation commit",
     "closure_rule": "verdict and documentation closure are fast-forward only",
-    "implementation_commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
-    "implementation_parent": "04e3739377e023f9c5fb93bcc55d3b0a9217c62a",
+    "implementation_commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
+    "implementation_parent": "f4157a3fe5aa5c1c2e405cd8d4bb8bfc03f9f981",
     "result_parent_rule": "result commit is a direct child of the authorization manifest commit",
     "starting_head": "b487d25ae1abf4140f536462463a8e83b97090bb"
   },
@@ -291,9 +291,9 @@
       "scripts/research_equity_m3_economic.py",
       "tests/test_research_equity_m3_economic_execution.py"
     ],
-    "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
-    "parent": "04e3739377e023f9c5fb93bcc55d3b0a9217c62a",
-    "tree": "aa6b80b91120759614edb103f32927c1789ac909"
+    "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
+    "parent": "f4157a3fe5aa5c1c2e405cd8d4bb8bfc03f9f981",
+    "tree": "29b3112c0f01b247197fce321f38b3a0bd9ea6e1"
   },
   "manifest_identity": {
     "commit_bound_at_runtime": true,
@@ -405,10 +405,32 @@
     "a27_ci_run": "33743511348",
     "a27_parent": "04e3739377e023f9c5fb93bcc55d3b0a9217c62a",
     "a27_recovery_implementation": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+    "a28_ci_head": "0ca30e128660e2c0d1373585b90f35703bafc64e",
+    "a28_ci_run": "33746402650",
+    "a28_fix": {
+      "parameter_or_threshold_change": false,
+      "regression_test": "tests/test_research_equity_m3_economic_execution.py::test_strategy_metrics_accepts_a_nonempty_curve",
+      "scope": "remove invalid strict length check from adjacent timestamp pairs"
+    },
+    "a28_parent": "f4157a3fe5aa5c1c2e405cd8d4bb8bfc03f9f981",
+    "a28_recovery_implementation": "0ca30e128660e2c0d1373585b90f35703bafc64e",
     "b26_ci_failure_category": "ci_test_manifest_head_misclassified_as_implementation_commit",
     "b26_ci_run": "33742599967",
     "b26_failed_authorization_manifest": "04e3739377e023f9c5fb93bcc55d3b0a9217c62a",
     "b26_parent": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+    "b27_authorization_manifest": "f4157a3fe5aa5c1c2e405cd8d4bb8bfc03f9f981",
+    "b27_ci_head": "f4157a3fe5aa5c1c2e405cd8d4bb8bfc03f9f981",
+    "b27_ci_run": "33744965003",
+    "b27_parent": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+    "b27_runtime_failure": {
+      "category": "post_b27_execution_integrity_defect",
+      "economic_execution_completed": false,
+      "economic_results_observed": false,
+      "exception": "ValueError: zip() argument 2 is shorter than argument 1",
+      "partial_raw_evidence_directory": "data/research/generated/equity_m3_economic_2026_09_r1",
+      "result_file_present": false,
+      "status": "SUPERSEDED_FAILED_POST_B27_EXECUTION"
+    },
     "economic_execution_before_b27": false,
     "economic_results_observed_before_b27": false,
     "initial_implementation": "b0739c318963867053f7229c9b6e901fad697534",
@@ -479,160 +501,160 @@
   "schema_version": "1.0.0",
   "source_identities": {
     ".github/workflows/ci.yml": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "2a98e438687d21875767c9b36a54c5f41c5ebaa9",
       "path": ".github/workflows/ci.yml",
       "raw_sha256": "eaed74b055a9cd43ec07357db0da6db79937c3b928afe5d476b438accd45bff1"
     },
     "config/settings.yaml": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "19317a998cbab852bc52ac22fc886a034829f6d1",
       "path": "config/settings.yaml",
       "raw_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
     },
     "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "5714502db5cae7161f0580e3b504f8552f3337be",
       "path": "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json",
       "raw_sha256": "2c33fd7adf2822f424289c698df317a355d5518a859982462d85302165fdc20b"
     },
     "data/research_manifests/equity_m3_data_gate_2026_09_r5.json": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d",
       "path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
       "raw_sha256": "83a2b7b796939423eff9c3c0a2d16000594cbbbed26e9de2df61206c5ecdb51e"
     },
     "data/research_manifests/equity_m3_pit_population_2026_09_r5.json": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "1290869c1d665254eb1981d648c2ef6d44edc9e5",
       "path": "data/research_manifests/equity_m3_pit_population_2026_09_r5.json",
       "raw_sha256": "2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4"
     },
     "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "67b4c9b2ad7a522c6aa85b63d40767b27d222b7d",
       "path": "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json",
       "raw_sha256": "53196217121d4dff99feef20b97e2d6df769ba2b882edc42881ab75691a4bc52"
     },
     "data/research_receipts/equity_m3_data_gate_2026_09_r5.json": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "7096ce9bccd99edda2e1e8d7d150d4fffb578070",
       "path": "data/research_receipts/equity_m3_data_gate_2026_09_r5.json",
       "raw_sha256": "841d5640352ee01c5d284b66a4fb186d6e8f62d5cdb8dadfbe185e2330b2aa36"
     },
     "docs/equity_m3_candidate_ocp_2026_09_r2.md": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "6460b4a39831d4860252e729084814d1e0335260",
       "path": "docs/equity_m3_candidate_ocp_2026_09_r2.md",
       "raw_sha256": "f378e431633d81ee5f9f73c249ac1819bd9395bb1c8516f5c6f478fc30a0dd94"
     },
     "docs/equity_m3_data_gate_2026_09_r5.md": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "a16807737f1d05d3df896316d7bc5cbe97d4d430",
       "path": "docs/equity_m3_data_gate_2026_09_r5.md",
       "raw_sha256": "d0036393a67e77404a814cab22611b43978c77522c7c89aafb04b432f17434ea"
     },
     "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "8dc012dce2bdf708dd731a3fd0d2ba1e66ccc7bc",
       "path": "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
       "raw_sha256": "38c1d230f4d19595d409f61c8f1580a5c4df8fa5d6541deeb5c8522ad9f8b281"
     },
     "scripts/compact_equity_m3_economic_predeclaration.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "d77fecf84547587c0e9efdc0b8ac48b62cad7b2e",
       "path": "scripts/compact_equity_m3_economic_predeclaration.py",
       "raw_sha256": "4d908551e4af76fe28d5a9568a8d34d930267e2e3f8a27eb3ca9490899208262"
     },
     "scripts/compact_equity_m3_economic_result.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "67adceb14d2c342b5e131a94c2aa0fc172ba4227",
       "path": "scripts/compact_equity_m3_economic_result.py",
       "raw_sha256": "ca40ee5da4f0c380033bf1b2596e5b24879913a183749735a11f6fd582e5e8bc"
     },
     "scripts/research_equity_m3_data_gate_r5.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "54bed91913012a2cfc939eae2a285e71941e7c3d",
       "path": "scripts/research_equity_m3_data_gate_r5.py",
       "raw_sha256": "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
     },
     "scripts/research_equity_m3_economic.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
-      "git_blob_id": "390dea940b22f5dca7327752dd4b86dee92c93c1",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
+      "git_blob_id": "d0af9408efd6954a791b40dd6d5bc5e21afd84e3",
       "path": "scripts/research_equity_m3_economic.py",
-      "raw_sha256": "4d501d57f320bde19eada1c5306341071a4f200cd314285dba6367dac1a67912"
+      "raw_sha256": "16bb593adf6c655c4c8cc5f98cbffc0f9b48d998980cb16e1f21d89410eceaab"
     },
     "scripts/research_equity_m3_m4.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "b796e2ce37d496d839eeb2a3fd27b4efffdcb08f",
       "path": "scripts/research_equity_m3_m4.py",
       "raw_sha256": "dc012e79903a6ccb7e1d7603dea7944216c5ce366c65c1a4a3a3b161e2e5c839"
     },
     "scripts/research_v3_equity_roadmap.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "ea31f04a37708307495b0d770f0e2b1cb3639876",
       "path": "scripts/research_v3_equity_roadmap.py",
       "raw_sha256": "4f5ad626c55ee7f8e3501ac8b944d32da5c1971130f4dcf94fba3d756583ca9a"
     },
     "src/parayabuck/backtest/numeric_history.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "47087b3f2ff92937f40e21850b6b285b3819f105",
       "path": "src/parayabuck/backtest/numeric_history.py",
       "raw_sha256": "f8ab222319dc80cbfd47d84b82cd2878edf88f4476be59ef30a7218102e6b499"
     },
     "src/parayabuck/backtest/portfolio_engine.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "f05402fcd03ff03c59f76fe6202fa6771a331508",
       "path": "src/parayabuck/backtest/portfolio_engine.py",
       "raw_sha256": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141"
     },
     "src/parayabuck/backtest/regulatory_fees.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "713ba116cfb8b033e70a44aa00af58f167455909",
       "path": "src/parayabuck/backtest/regulatory_fees.py",
       "raw_sha256": "3fa9bcbfbb21b5d302dc9740b14ef137d2640fba23dda3914cae7a22ead656ab"
     },
     "src/parayabuck/backtest/terminal_aware_engine.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "871eb6ea0617bf54491bf0a035d40324952fb815",
       "path": "src/parayabuck/backtest/terminal_aware_engine.py",
       "raw_sha256": "38c057e8eb4a0a08b5a6183f6799e5aebb5b9f39184fec2262de5985dc0f8f6d"
     },
     "src/parayabuck/backtest/universe.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
       "path": "src/parayabuck/backtest/universe.py",
       "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
     },
     "src/parayabuck/execution/portfolio.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "a489b44374cfa3637e62ece33449a32c49935cd6",
       "path": "src/parayabuck/execution/portfolio.py",
       "raw_sha256": "7f06ebacec6e7034497ddb8074f0ae0254d1ecacabf4246cfe439d3a5b9d4982"
     },
     "src/parayabuck/portfolio/base.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "a679228b73f2e377ccf950840910cb045a44d9f3",
       "path": "src/parayabuck/portfolio/base.py",
       "raw_sha256": "547e716e9f1abc603e439d9eee7334e9e43964595b2ec534aea7c87f201f3900"
     },
     "src/parayabuck/portfolio/equity_residual_momentum_v3.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "7c7d9eec532146f58d4ee616e4ac53bdfd3f2de0",
       "path": "src/parayabuck/portfolio/equity_residual_momentum_v3.py",
       "raw_sha256": "b04de53026c715cf2c99205f50336c361dc8e1ac7b9f1eb2ff9b3a02cb26f9bc"
     },
     "tests/test_research_equity_m3_economic.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
       "git_blob_id": "2ef8d0d7e2b164f10bc481fd52e94fc5d0b59e0b",
       "path": "tests/test_research_equity_m3_economic.py",
       "raw_sha256": "0d5aed06018f1c4e8b6d02a5a02cdf1c11f252b892a8d507adac1b27b1fcd674"
     },
     "tests/test_research_equity_m3_economic_execution.py": {
-      "commit": "71b9a17c604749bc866d51f90ecf45d4a7f3231f",
-      "git_blob_id": "28ac393342163bdd97153cd208587282b979985f",
+      "commit": "0ca30e128660e2c0d1373585b90f35703bafc64e",
+      "git_blob_id": "1fdb15d3e6668e8066d81ba14a9ad37b2f08e64f",
       "path": "tests/test_research_equity_m3_economic_execution.py",
-      "raw_sha256": "2a5ff6c2e29f10ff2455ce2c199a8684ac434e0810f3e141e2c2f44f39d9d1ce"
+      "raw_sha256": "cc5adc438f6f2a4607e31e55676f1ef3e2a4b0588856c3fb8318938d6a68508b"
     }
   },
   "strategy_contract": {

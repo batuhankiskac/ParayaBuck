@@ -67,3 +67,18 @@ promotion, PAPER/LIVE change, strategy/risk/config change, production
 behavior change, or history rewrite occurred during execution.
 
 Receipt self-digest: 0e950e4e754f19d4c285d620d517fbd30fb78aebc33c862d71ada587cc306a22.
+
+## E30 final remote closure
+
+- C30 full SHA: ee97c4e2a24685372ed1901f9a831ecade6a1b3e
+- C30 CI run: 33752455337
+- C30 Python 3.12: PASS
+- C30 Python 3.13: PASS
+- C30 Python 3.14: PASS
+- D30 full SHA: d8866e0bd5a13ce714bf9cce39ba7cf708557b7d
+- D30 CI run: 33753192580
+- D30 Python 3.12: PASS
+- D30 Python 3.13: PASS
+- D30 Python 3.14: PASS
+- Final candidate-OCP economic execution remote closure: complete.
+- The receipt is unchanged in E30.

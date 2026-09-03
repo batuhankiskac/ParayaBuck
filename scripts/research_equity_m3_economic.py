@@ -1362,14 +1362,17 @@ def _validate_predeclaration_closure(commit: str) -> dict[str, object]:
     }
 
 
-def _validate_execution_implementation_commit(implementation_commit: str) -> None:
+def _validate_execution_implementation_commit(implementation_commit: str) -> tuple[str, ...]:
     parents = git_parents(implementation_commit)
     if len(parents) != 1 or not _is_ancestor(STARTING_HEAD, implementation_commit):
         _fail("A26 implementation must be a linear descendant of E25")
-    if sorted(_git("diff", "--name-only", STARTING_HEAD, implementation_commit).splitlines()) != sorted(
-        EXECUTION_IMPLEMENTATION_PATHS
-    ):
-        _fail("A26 implementation changed paths do not match the declared scope")
+    direct_paths = tuple(sorted(changed_paths(parents[0], implementation_commit)))
+    allowed_paths = set(EXECUTION_IMPLEMENTATION_PATHS)
+    if not direct_paths or not set(direct_paths).issubset(allowed_paths):
+        _fail("execution implementation changed paths do not match the declared scope")
+    if parents[0] == STARTING_HEAD and set(direct_paths) != allowed_paths:
+        _fail("initial A26 implementation must change the complete declared scope")
+    return direct_paths
 
 
 def _execution_source_identities(implementation_commit: str) -> dict[str, dict[str, str]]:
@@ -1446,16 +1449,16 @@ def validate_execution_manifest_payload(
     topology = manifest.get("commit_topology")
     if not isinstance(topology, Mapping):
         _fail("execution manifest commit topology is missing")
-    _validate_execution_implementation_commit(implementation_commit)
+    implementation_changed_paths = _validate_execution_implementation_commit(implementation_commit)
     implementation_parent = git_parents(implementation_commit)[0]
     expected_topology = {
         "starting_head": STARTING_HEAD,
         "implementation_parent": implementation_parent,
         "implementation_commit": implementation_commit,
         "authorization_manifest_path": EXECUTION_MANIFEST_PATH,
-        "authorization_parent_rule": "B26 direct child of A26",
-        "result_parent_rule": "C26 direct child of B26",
-        "closure_rule": "D26 then E26 fast-forward only",
+        "authorization_parent_rule": "manifest commit is a direct child of the implementation commit",
+        "result_parent_rule": "result commit is a direct child of the authorization manifest commit",
+        "closure_rule": "verdict and documentation closure are fast-forward only",
     }
     for field, expected in expected_topology.items():
         _require_equal(topology.get(field), expected, f"execution topology {field}")
@@ -1481,7 +1484,7 @@ def validate_execution_manifest_payload(
     )
     _require_equal(
         implementation.get("changed_paths"),
-        sorted(EXECUTION_IMPLEMENTATION_PATHS),
+        list(implementation_changed_paths),
         "execution implementation changed paths",
     )
     sources = manifest.get("source_identities")
@@ -1580,7 +1583,7 @@ def build_execution_authorization_manifest(implementation_commit: str) -> dict[s
     if git_status():
         _fail("execution authorization construction requires a clean worktree")
     _require_equal(git_head(), implementation_commit, "execution implementation current HEAD")
-    _validate_execution_implementation_commit(implementation_commit)
+    implementation_changed_paths = _validate_execution_implementation_commit(implementation_commit)
     validate_upstream()
     _validate_predeclaration_closure(STARTING_HEAD)
     config = _yaml_blob(implementation_commit, CONFIG_PATH)
@@ -1610,15 +1613,15 @@ def build_execution_authorization_manifest(implementation_commit: str) -> dict[s
             "implementation_parent": implementation_parent,
             "implementation_commit": implementation_commit,
             "authorization_manifest_path": EXECUTION_MANIFEST_PATH,
-            "authorization_parent_rule": "B26 direct child of A26",
-            "result_parent_rule": "C26 direct child of B26",
-            "closure_rule": "D26 then E26 fast-forward only",
+            "authorization_parent_rule": "manifest commit is a direct child of the implementation commit",
+            "result_parent_rule": "result commit is a direct child of the authorization manifest commit",
+            "closure_rule": "verdict and documentation closure are fast-forward only",
         },
         "implementation_identity": {
             "commit": implementation_commit,
             "parent": implementation_parent,
             "tree": _git("rev-parse", f"{implementation_commit}^{{tree}}"),
-            "changed_paths": sorted(EXECUTION_IMPLEMENTATION_PATHS),
+            "changed_paths": list(implementation_changed_paths),
         },
         "manifest_identity": {
             "path": EXECUTION_MANIFEST_PATH,

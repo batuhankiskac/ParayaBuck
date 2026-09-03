@@ -81,8 +81,16 @@ def test_accepted_predeclaration_top_level_execution_flags_are_validated() -> No
     assert closure["receipt_path"] == economic.RECEIPT_PATH
 
 
-def test_authorization_builder_accepts_the_immutable_predeclaration_closure() -> None:
-    manifest = economic.build_execution_authorization_manifest(economic.git_head())
+def test_authorization_builder_accepts_the_immutable_predeclaration_closure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authorization = economic._json_blob(  # type: ignore[attr-defined]
+        economic.git_head(), economic.EXECUTION_MANIFEST_PATH
+    )
+    implementation = authorization["commit_topology"]["implementation_commit"]  # type: ignore[index]
+    monkeypatch.setattr(economic, "git_head", lambda: implementation)
+    monkeypatch.setattr(economic, "git_status", lambda: [])
+    manifest = economic.build_execution_authorization_manifest(implementation)  # type: ignore[arg-type]
     assert manifest["predeclaration_closure"] == economic.PREDECLARATION_CLOSURE
 
 

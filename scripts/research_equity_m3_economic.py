@@ -249,8 +249,9 @@ STRATEGY_CONTRACT: dict[str, object] = {
     },
 }
 
+REFERENCE_PIN_ORDER = ("SPY", "IWM", "QQQ")
 REFERENCE_CONTRACT: dict[str, object] = {
-    "observation_only_references": ["SPY", "IWM", "QQQ"],
+    "observation_only_references": list(REFERENCE_PIN_ORDER),
     "full_pin_order": ["SPY", "IWM", "QQQ", "SH", "PSQ", "DOG"],
     "references_outside_candidate_membership": True,
     "references_outside_targets": True,
@@ -2254,7 +2255,7 @@ def _load_accepted_universe(
         _require_equal(raw_snapshot.get("pinned_symbols"), list(FULL_PIN_ORDER), f"OCP {strategy_key} pins {index}")
         _require_equal(
             raw_snapshot.get("reference_pin_symbols"),
-            list(NON_TRADABLE_REFERENCES),
+            list(REFERENCE_PIN_ORDER),
             f"OCP {strategy_key} reference pins {index}",
         )
         observation = tuple(str(symbol) for symbol in raw_snapshot.get("observation_set", []))

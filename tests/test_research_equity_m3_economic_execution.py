@@ -206,6 +206,7 @@ def test_execution_manifest_commands_are_narrow() -> None:
 
 
 def test_reference_roles_keep_inverse_hedges_tradable() -> None:
+    assert economic.REFERENCE_PIN_ORDER == ("SPY", "IWM", "QQQ")
     economic.validate_reference_contract(["SH", "PSQ", "DOG"], ["SH"], ["DOG"])
     for symbol in economic.NON_TRADABLE_REFERENCES:
         with pytest.raises(economic.ContractError):

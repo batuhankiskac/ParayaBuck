@@ -89,6 +89,21 @@ def test_strategy_metrics_accepts_a_nonempty_curve() -> None:
     assert metrics["net total return"] == pytest.approx(0.01)
 
 
+def test_deduplicated_curve_anchors_at_the_metric_start_boundary() -> None:
+    metric_start = datetime(2017, 2, 6, tzinfo=UTC)
+    first_bar = datetime(2017, 2, 6, 5, tzinfo=UTC)
+    result = SimpleNamespace(curve_timestamps=[first_bar], equity_curve=[101.0])
+
+    timestamps, values = economic._deduplicated_curve(  # type: ignore[attr-defined]
+        result,
+        100.0,
+        metric_start=metric_start,
+    )
+
+    assert timestamps == [metric_start - timedelta(microseconds=1), first_bar]
+    assert values == [100.0, 101.0]
+
+
 def test_execution_mission_and_artifact_paths_are_separate_from_predeclaration() -> None:
     assert economic.EXECUTION_MISSION == "M3_ECONOMIC_MISSION_EXECUTION_R1"
     assert economic.EXECUTION_MANIFEST_PATH.endswith("equity_m3_economic_execution_2026_09_r1.json")

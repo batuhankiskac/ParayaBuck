@@ -2520,7 +2520,12 @@ def _make_execution_engine(
     return engine
 
 
-def _deduplicated_curve(result: object, starting_equity: float) -> tuple[list[datetime], list[float]]:
+def _deduplicated_curve(
+    result: object,
+    starting_equity: float,
+    *,
+    metric_start: datetime | None = None,
+) -> tuple[list[datetime], list[float]]:
     raw_timestamps = tuple(getattr(result, "curve_timestamps", ()))
     raw_values = tuple(float(value) for value in getattr(result, "equity_curve", ()))
     if len(raw_timestamps) != len(raw_values):
@@ -2534,7 +2539,11 @@ def _deduplicated_curve(result: object, starting_equity: float) -> tuple[list[da
         by_timestamp[timestamp] = value
     timestamps = sorted(by_timestamp)
     values = [by_timestamp[timestamp] for timestamp in timestamps]
-    anchor = timestamps[0] - timedelta(microseconds=1)
+    anchor = (
+        (metric_start - timedelta(microseconds=1))
+        if metric_start is not None
+        else timestamps[0] - timedelta(microseconds=1)
+    )
     return [anchor, *timestamps], [float(starting_equity), *values]
 
 
@@ -2961,7 +2970,11 @@ def _run_execution_cell(
         numeric_history=window.numeric_by_strategy[strategy_key],
         audit_window_end=window.metric_end,
     )
-    curve_timestamps, curve_values = _deduplicated_curve(result, float(getattr(config.backtest, "initial_cash")))
+    curve_timestamps, curve_values = _deduplicated_curve(
+        result,
+        float(getattr(config.backtest, "initial_cash")),
+        metric_start=window.metric_start,
+    )
     metrics = _strategy_metrics(result, engine, curve_timestamps, curve_values)
     fills = [_serialize_fill(fill) for fill in getattr(result, "fills")]
     target_symbols = {

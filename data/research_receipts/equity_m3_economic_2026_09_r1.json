@@ -224,9 +224,7 @@
       "max_positions": 6
     }
   },
-  "blocked_reasons": [
-    "remote_ci:NOT_RUN_BLOCKED"
-  ],
+  "blocked_reasons": [],
   "bootstrap": {
     "5th percentile": -0.0008493640787158686,
     "95th percentile": 0.0004726443639658436,
@@ -260,12 +258,12 @@
     "authorization_manifest_path": "data/research_manifests/equity_m3_economic_execution_2026_09_r1.json",
     "implementation_commit": "6d39fb81dda1bacaad291a39fbee103d7ff0f303",
     "implementation_parent": "d86ee935172c977de6763fd9514abf844b194b43",
-    "local_result_commit": "PENDING_C26_SELF_COMMIT",
+    "local_result_commit": "ee97c4e2a24685372ed1901f9a831ecade6a1b3e",
     "manifest_commit": "6110150e2069fd9f1dd16c4ecc2f208c099dade6",
     "manifest_parent": "6d39fb81dda1bacaad291a39fbee103d7ff0f303",
     "receipt_path": "data/research_receipts/equity_m3_economic_2026_09_r1.json",
     "report_path": "docs/equity_m3_economic_2026_09_r1.md",
-    "result_parent": null,
+    "result_parent": "6110150e2069fd9f1dd16c4ecc2f208c099dade6",
     "starting_head": "b487d25ae1abf4140f536462463a8e83b97090bb"
   },
   "cost_scenarios": {
@@ -12103,9 +12101,32 @@
     "references_outside_targets": true
   },
   "remote_ci": {
-    "head_sha": null,
-    "run_id": null,
-    "status": "NOT_RUN_BLOCKED"
+    "conclusion": "success",
+    "head_sha": "ee97c4e2a24685372ed1901f9a831ecade6a1b3e",
+    "python_matrix": {
+      "3.12": "PASS",
+      "3.13": "PASS",
+      "3.14": "PASS"
+    },
+    "required_stages": {
+      "build": "PASS",
+      "dependency_audit": "PASS",
+      "focused_acquisition_pit_tests": "PASS",
+      "focused_economic_execution_tests": "PASS",
+      "focused_economic_predeclaration_tests": "PASS",
+      "focused_m3_data_gate_tests": "PASS",
+      "focused_ocp_tests": "PASS",
+      "focused_r2_attestation_tests": "PASS",
+      "full_pytest": "PASS",
+      "mypy": "PASS",
+      "production_isolation": "PASS",
+      "ruff_format": "PASS",
+      "ruff_lint": "PASS",
+      "secret_scan": "PASS",
+      "wheel_smoke": "PASS"
+    },
+    "run_id": "33752455337",
+    "status": "PASS"
   },
   "research_only": true,
   "robustness_periods": [
@@ -12127,7 +12148,7 @@
     }
   ],
   "schema_version": "1.0.0",
-  "self_digest_sha256": "1fd4d1d3faef062b8163b7031edbd5b4e43e2a67cfe9f9395aa7db56bb912e83",
+  "self_digest_sha256": "0e950e4e754f19d4c285d620d517fbd30fb78aebc33c862d71ada587cc306a22",
   "strategy_contract": {
     "candidate": {
       "execution_strategy": "fresh M3 instance",
@@ -12190,5 +12211,5 @@
     "data_gate": "M3_DATA_GATE_PASS",
     "data_gate_result_commit": "3c2f67d31772f2fba118137ad262bd8ffdb737d8"
   },
-  "verdict": "M3_ECONOMIC_GATE_BLOCKED"
+  "verdict": "M3_ECONOMIC_GATE_FAIL"
 }

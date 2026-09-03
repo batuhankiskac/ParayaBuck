@@ -3,10 +3,10 @@
 ## Mission result
 
 - Mission: M3_ECONOMIC_MISSION_EXECUTION_R1
-- Compact phase: C26
-- Compact verdict: M3_ECONOMIC_GATE_BLOCKED
+- Compact phase: D30
+- Compact verdict: M3_ECONOMIC_GATE_FAIL
 - Raw economic verdict: M3_ECONOMIC_GATE_FAIL
-- Blocked reasons: ["remote_ci:NOT_RUN_BLOCKED"]
+- Blocked reasons: []
 - Economic execution run: true
 - Candidate economics run: true
 - Economic metrics present: true
@@ -20,9 +20,9 @@ and economic summary; it does not rerun any strategy or data gate.
 
 ## Authorization and upstream closure
 
-- A26 implementation: 6d39fb81dda1bacaad291a39fbee103d7ff0f303
-- B26 authorization manifest: 6110150e2069fd9f1dd16c4ecc2f208c099dade6
-- C26 result commit: PENDING_C26_SELF_COMMIT
+- A30 implementation: 6d39fb81dda1bacaad291a39fbee103d7ff0f303
+- B30 authorization manifest: 6110150e2069fd9f1dd16c4ecc2f208c099dade6
+- C30 result commit: ee97c4e2a24685372ed1901f9a831ecade6a1b3e
 - Authorization ID: M3_ECONOMIC_EXECUTION_R1_2026_09_03; operator: human_operator.
 - Predeclaration closure: {"closure_commit": "960f0eaa42e300b95d1de2e8d3cd34626fb6d2a7", "final_commit": "b487d25ae1abf4140f536462463a8e83b97090bb", "implementation_commit": "db1ce1c5abc316a75d5972fb9138ffd77da1ca6a", "manifest_commit": "7f0bd86cce6d9ccbadef5bbc1e49e6bb9c18d052", "receipt_path": "data/research_receipts/equity_m3_economic_predeclaration_2026_09_r1.json", "receipt_raw_sha256": "d631b387ad581b5386514e60db3950e838ec3910b9c2a00200c21c6484bbc6fb", "receipt_self_digest_sha256": "a1e05cee72de803adf78b4eb8c51abefcbf85651a445d4d96c9c3e805cbd226f", "remote_ci_head": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b", "remote_ci_run": "33711180326", "result_commit": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b", "starting_head": "06aaf78a7ea75aa3d97404916d5107194534fe6c"}
 - R5/R2 upstream: {"candidate_ocp": "M3_CANDIDATE_OCP_ATTESTATION_R2_PASS", "candidate_ocp_receipt_digest": "8a576e650060c27e7f4a0c6f0fd8a532bc2509df26fd58c0587656ad47f766b6", "data_gate": "M3_DATA_GATE_PASS", "data_gate_result_commit": "3c2f67d31772f2fba118137ad262bd8ffdb737d8"}
@@ -30,7 +30,7 @@ and economic summary; it does not rerun any strategy or data gate.
 
 ## Remote CI claim
 
-- {"head_sha": null, "run_id": null, "status": "NOT_RUN_BLOCKED"}
+- {"conclusion": "success", "head_sha": "ee97c4e2a24685372ed1901f9a831ecade6a1b3e", "python_matrix": {"3.12": "PASS", "3.13": "PASS", "3.14": "PASS"}, "required_stages": {"build": "PASS", "dependency_audit": "PASS", "focused_acquisition_pit_tests": "PASS", "focused_economic_execution_tests": "PASS", "focused_economic_predeclaration_tests": "PASS", "focused_m3_data_gate_tests": "PASS", "focused_ocp_tests": "PASS", "focused_r2_attestation_tests": "PASS", "full_pytest": "PASS", "mypy": "PASS", "production_isolation": "PASS", "ruff_format": "PASS", "ruff_lint": "PASS", "secret_scan": "PASS", "wheel_smoke": "PASS"}, "run_id": "33752455337", "status": "PASS"}
 
 ## Baseline economic summary
 
@@ -66,4 +66,4 @@ refetch, OCP replay, M3 data-gate replay, optimization, tournament,
 promotion, PAPER/LIVE change, strategy/risk/config change, production
 behavior change, or history rewrite occurred during execution.
 
-Receipt self-digest: 1fd4d1d3faef062b8163b7031edbd5b4e43e2a67cfe9f9395aa7db56bb912e83.
+Receipt self-digest: 0e950e4e754f19d4c285d620d517fbd30fb78aebc33c862d71ada587cc306a22.

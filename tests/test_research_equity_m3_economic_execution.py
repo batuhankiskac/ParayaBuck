@@ -76,6 +76,16 @@ def test_execution_starting_head_is_e25_and_predeclaration_anchor_is_distinct() 
     assert economic.EXECUTION_RAW_OUTPUT_DIR == economic.RAW_OUTPUT_DIR
 
 
+def test_accepted_predeclaration_top_level_execution_flags_are_validated() -> None:
+    closure = economic._validate_predeclaration_closure(economic.STARTING_HEAD)  # type: ignore[attr-defined]
+    assert closure["receipt_path"] == economic.RECEIPT_PATH
+
+
+def test_authorization_builder_accepts_the_immutable_predeclaration_closure() -> None:
+    manifest = economic.build_execution_authorization_manifest(economic.git_head())
+    assert manifest["predeclaration_closure"] == economic.PREDECLARATION_CLOSURE
+
+
 def test_execution_matrix_is_three_passes_and_48_cells() -> None:
     assert economic.PASS_ORDERS == {"A": ("C", "X"), "B": ("C", "X"), "C": ("X", "C")}
     assert len(economic.PASS_ORDERS) * 2 * len(economic.COST_SCENARIOS) * 2 == 48

@@ -705,6 +705,16 @@ def changed_paths(parent: str, commit: str) -> list[str]:
     return _git("diff-tree", "--no-commit-id", "--name-only", "-r", parent, commit).splitlines()
 
 
+def _is_ancestor(ancestor: str, commit: str) -> bool:
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor, commit],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
 def tracked_blob(commit: str, path: str) -> bytes:
     return subprocess.run(
         ["git", "cat-file", "blob", f"{commit}:{path}"],
@@ -1314,9 +1324,9 @@ def _validate_predeclaration_closure(commit: str) -> dict[str, object]:
     _require_equal(canonical_digest(body), PREDECL_RECEIPT_DIGEST, "predeclaration receipt self-digest")
     _require_equal(receipt.get("verdict"), PREDECLARED_VERDICT, "predeclaration closure verdict")
     _require_equal(receipt.get("blocked_reasons"), [], "predeclaration closure blockers")
-    _require_equal(receipt.get("candidate_economics_run"), False, "predeclaration candidate economics")
-    _require_equal(receipt.get("economic_metrics_present"), False, "predeclaration economic metrics")
-    _require_equal(receipt.get("economic_mission_authorized"), False, "predeclaration authorization")
+    _require_equal(receipt.get("economic_execution_run"), False, "predeclaration economic execution")
+    _require_equal(receipt.get("economic_results_present"), False, "predeclaration economic results")
+    _require_equal(receipt.get("real_execution_authorized"), False, "predeclaration authorization")
     topology = receipt.get("commit_topology")
     if not isinstance(topology, Mapping):
         _fail("predeclaration closure topology is missing")
@@ -1353,9 +1363,12 @@ def _validate_predeclaration_closure(commit: str) -> dict[str, object]:
 
 
 def _validate_execution_implementation_commit(implementation_commit: str) -> None:
-    if git_parents(implementation_commit) != [STARTING_HEAD]:
-        _fail("A26 implementation must be a direct child of E25")
-    if sorted(changed_paths(STARTING_HEAD, implementation_commit)) != sorted(EXECUTION_IMPLEMENTATION_PATHS):
+    parents = git_parents(implementation_commit)
+    if len(parents) != 1 or not _is_ancestor(STARTING_HEAD, implementation_commit):
+        _fail("A26 implementation must be a linear descendant of E25")
+    if sorted(_git("diff", "--name-only", STARTING_HEAD, implementation_commit).splitlines()) != sorted(
+        EXECUTION_IMPLEMENTATION_PATHS
+    ):
         _fail("A26 implementation changed paths do not match the declared scope")
 
 
@@ -1433,9 +1446,11 @@ def validate_execution_manifest_payload(
     topology = manifest.get("commit_topology")
     if not isinstance(topology, Mapping):
         _fail("execution manifest commit topology is missing")
+    _validate_execution_implementation_commit(implementation_commit)
+    implementation_parent = git_parents(implementation_commit)[0]
     expected_topology = {
         "starting_head": STARTING_HEAD,
-        "implementation_parent": STARTING_HEAD,
+        "implementation_parent": implementation_parent,
         "implementation_commit": implementation_commit,
         "authorization_manifest_path": EXECUTION_MANIFEST_PATH,
         "authorization_parent_rule": "B26 direct child of A26",
@@ -1454,12 +1469,11 @@ def validate_execution_manifest_payload(
         "execution manifest identity",
     )
 
-    _validate_execution_implementation_commit(implementation_commit)
     implementation = manifest.get("implementation_identity")
     if not isinstance(implementation, Mapping):
         _fail("execution implementation identity is missing")
     _require_equal(implementation.get("commit"), implementation_commit, "execution implementation commit")
-    _require_equal(implementation.get("parent"), STARTING_HEAD, "execution implementation parent")
+    _require_equal(implementation.get("parent"), implementation_parent, "execution implementation parent")
     _require_equal(
         implementation.get("tree"),
         _git("rev-parse", f"{implementation_commit}^{{tree}}"),
@@ -1573,6 +1587,7 @@ def build_execution_authorization_manifest(implementation_commit: str) -> dict[s
     baseline = validate_baseline_configuration(config)
     _validate_strategy_contract(config)
     _validate_source_has_no_broker_path()
+    implementation_parent = git_parents(implementation_commit)[0]
     manifest: dict[str, object] = {
         "schema_version": "1.0.0",
         "mission": EXECUTION_MISSION,
@@ -1592,7 +1607,7 @@ def build_execution_authorization_manifest(implementation_commit: str) -> dict[s
         "output_directory": EXECUTION_RAW_OUTPUT_DIR,
         "commit_topology": {
             "starting_head": STARTING_HEAD,
-            "implementation_parent": STARTING_HEAD,
+            "implementation_parent": implementation_parent,
             "implementation_commit": implementation_commit,
             "authorization_manifest_path": EXECUTION_MANIFEST_PATH,
             "authorization_parent_rule": "B26 direct child of A26",
@@ -1601,7 +1616,7 @@ def build_execution_authorization_manifest(implementation_commit: str) -> dict[s
         },
         "implementation_identity": {
             "commit": implementation_commit,
-            "parent": STARTING_HEAD,
+            "parent": implementation_parent,
             "tree": _git("rev-parse", f"{implementation_commit}^{{tree}}"),
             "changed_paths": sorted(EXECUTION_IMPLEMENTATION_PATHS),
         },

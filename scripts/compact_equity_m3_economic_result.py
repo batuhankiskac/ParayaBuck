@@ -269,6 +269,7 @@ def _build_receipt(
             _fail("C26 must change exactly the execution receipt and report")
         if not isinstance(compact_verdict, str):
             _fail("raw economic verdict is missing")
+    implementation_parent = contract.git_parents(implementation_commit)[0]
     remote = _remote_claim(
         status=remote_status,
         run_id=remote_run,
@@ -277,7 +278,7 @@ def _build_receipt(
     )
     topology = {
         "starting_head": contract.STARTING_HEAD,
-        "implementation_parent": contract.STARTING_HEAD,
+        "implementation_parent": implementation_parent,
         "implementation_commit": implementation_commit,
         "manifest_parent": implementation_commit,
         "manifest_commit": manifest_commit,

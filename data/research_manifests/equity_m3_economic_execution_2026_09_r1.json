@@ -1,0 +1,682 @@
+{
+  "acceptance_criteria": {
+    "blocked_on": [
+      "upstream receipt or input identity failure",
+      "C|C or X|X identity mismatch",
+      "observation, scanner, timestamp, execution, accounting, cost, reproducibility, or isolation failure",
+      "missing required result, incomplete scenario, or incomplete period"
+    ],
+    "fail_when": "integrity passes but one or more economic criteria fails",
+    "pass_criteria": [
+      "BASELINE_1X FULL M3 CAGR minus V3 CAGR >= +0.50 percentage points",
+      "BASELINE_1X RECENT M3 CAGR minus V3 CAGR >= +1.00 percentage points",
+      "BASELINE_1X active total return positive in FULL and RECENT",
+      "FULL and RECENT Sharpe difference >= -0.05",
+      "FULL maximum-drawdown difference <= +5.00 percentage points",
+      "RECENT maximum-drawdown difference <= +3.00 percentage points",
+      "FULL and RECENT turnover ratio <= 1.50",
+      "STRESS_2X active total return positive in FULL and RECENT",
+      "BASELINE_1X active total return positive in at least three of four robustness periods",
+      "immediate repeat and C-then-X/X-then-C results reproduce exactly",
+      "all integrity and no-lookahead invariants pass"
+    ],
+    "stress_diagnostics": [
+      "STRESS_3X",
+      "STRESS_5X"
+    ],
+    "thresholds_frozen_before_results": true,
+    "verdicts": [
+      "M3_ECONOMIC_GATE_PASS",
+      "M3_ECONOMIC_GATE_FAIL",
+      "M3_ECONOMIC_GATE_BLOCKED"
+    ]
+  },
+  "accepted_inputs": {
+    "canonical_bars": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "corporate_actions": {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "iwm_normalized_sidecar": {
+      "path": "data/research/generated/m3_data_gate_r4/iwm_normalized.csv",
+      "raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2",
+      "semantic_row_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837"
+    },
+    "iwm_raw_bundle": {
+      "path": "data/research/external/m3_iwm_raw_2026_09_r4",
+      "raw_sha256": "9590e35d2f5b80a4cd7f5c2c755acfcc088a6f7696d6eb86039d702ee6832258"
+    },
+    "iwm_source_receipt": {
+      "path": "data/research/external/m3_iwm_raw_2026_09_r4/source_receipt.json",
+      "raw_sha256": "2dbeeebc688dab111013a114e9c08b44c116e23c48a42968099f6c8671ea4003"
+    },
+    "lifetime": {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "ocp_candidate_X": {
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09_r2/m3_universe.json",
+      "raw_sha256": "1b67283e9d0d53bac6be22cb880ba1180ad1ba438995f29ab18a8a27d09435f2"
+    },
+    "ocp_control_C": {
+      "path": "data/research/generated/equity_m3_candidate_ocp_2026_09_r2/control_universe.json",
+      "raw_sha256": "2bdedc4f495960bac839c98e5fdd54c12d7935c8070684645619361cf7131509"
+    },
+    "r5_pit_projection": {
+      "path": "<external:m3-r5-b18-pit.json>",
+      "raw_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac"
+    }
+  },
+  "authorization_id": "M3_ECONOMIC_EXECUTION_R1_2026_09_03",
+  "automatic_promotion": false,
+  "baseline_configuration": {
+    "backtest": {
+      "commission": 0,
+      "equity_cat_per_share_fallback": 3e-06,
+      "equity_sec_fee_rate_fallback": 2.06e-05,
+      "equity_taf_cap_fallback": 9.79,
+      "equity_taf_per_share_fallback": 0.000195,
+      "equity_use_effective_dated_fees": true,
+      "initial_cash": 100000,
+      "slippage_bps": 2,
+      "spread_bps": 2
+    },
+    "equity_sleeve": {
+      "maximum_allocation": 0.55
+    },
+    "execution": {
+      "minimum_order_notional": 10,
+      "rebalance_band_pct": 0.005
+    },
+    "research_execution": {
+      "annualization_sessions": 252,
+      "benchmark_symbol": "SPY",
+      "enforce_drawdown_halt": false,
+      "risk_free_rate": 0,
+      "terminal_policy": "T1"
+    },
+    "risk": {
+      "cash_buffer_pct": 0.4,
+      "daily_loss_limit_pct": 0.005,
+      "max_drawdown_pct": 0.05,
+      "max_gross_exposure_pct": 0.6,
+      "max_position_pct": 0.1,
+      "max_positions": 6
+    }
+  },
+  "bootstrap_contract": {
+    "block_length_weeks": 4,
+    "diagnostic_only": true,
+    "method": "moving-block bootstrap on weekly active returns",
+    "reported": [
+      "bootstrap median",
+      "5th percentile",
+      "95th percentile",
+      "probability mean active return > 0"
+    ],
+    "resamples": 10000,
+    "seed": 20260902,
+    "statistic": "mean weekly X-minus-C return"
+  },
+  "branch": "main",
+  "commit_topology": {
+    "authorization_manifest_path": "data/research_manifests/equity_m3_economic_execution_2026_09_r1.json",
+    "authorization_parent_rule": "B26 direct child of A26",
+    "closure_rule": "D26 then E26 fast-forward only",
+    "implementation_commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+    "implementation_parent": "b0739c318963867053f7229c9b6e901fad697534",
+    "result_parent_rule": "C26 direct child of B26",
+    "starting_head": "b487d25ae1abf4140f536462463a8e83b97090bb"
+  },
+  "cost_scenario_contract": {
+    "multiplied_only": [
+      "slippage_bps",
+      "spread_bps"
+    ],
+    "not_multiplied": [
+      "commission",
+      "TAF",
+      "CAT",
+      "SEC fees",
+      "other effective-dated regulatory fees"
+    ],
+    "same_values_for_control_and_candidate": true
+  },
+  "cost_scenarios": {
+    "BASELINE_1X": {
+      "hard_acceptance": true,
+      "multiplier": 1,
+      "slippage_bps": 2,
+      "spread_bps": 2
+    },
+    "STRESS_2X": {
+      "hard_acceptance": true,
+      "multiplier": 2,
+      "slippage_bps": 4,
+      "spread_bps": 4
+    },
+    "STRESS_3X": {
+      "hard_acceptance": false,
+      "multiplier": 3,
+      "slippage_bps": 6,
+      "spread_bps": 6
+    },
+    "STRESS_5X": {
+      "hard_acceptance": false,
+      "multiplier": 5,
+      "slippage_bps": 10,
+      "spread_bps": 10
+    }
+  },
+  "declared_before_results": true,
+  "economic_execution_run": false,
+  "economic_results_present": false,
+  "evaluation_windows": {
+    "FULL": {
+      "inclusive_end": "2026-07-30",
+      "metric_start": "2017-02-06",
+      "warmup_source_start": "2016-01-04"
+    },
+    "RECENT": {
+      "inclusive_end": "2026-07-30",
+      "metric_start": "2022-01-03",
+      "separate_backtest_from_full": true,
+      "warmup_before_metric_start_allowed": true
+    }
+  },
+  "exact_data_identities": {
+    "canonical_equity_v5": {
+      "crlf_normalized_sha256": "df42733b640e6dea17e1ed11115846933a86d2c525810dd3f473acc32e6d0db3",
+      "manifest_git_blob": "a366944ec26d6f9edff82e9e892fe397f3aed112",
+      "raw_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "composite_semantic": {
+      "sha256": "5bb66b7ff15d1f9ef3e9ce7caa4ef2314fcc670cf80b9696ee576e1b9cac4eda"
+    },
+    "corporate_actions": {
+      "raw_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "iwm_normalized_sidecar": {
+      "raw_sha256": "8f8122e33d5ef2b194e22c7e53a15198920476690997535bbc5c05d522463dc2",
+      "semantic_row_sha256": "cc1855c607ee394fae9e5ede594d1420f0c4d03cb8a5af08e14e6a656cd7d837"
+    },
+    "iwm_raw_bundle": {
+      "raw_sha256": "9590e35d2f5b80a4cd7f5c2c755acfcc088a6f7696d6eb86039d702ee6832258"
+    },
+    "iwm_source_receipt": {
+      "raw_sha256": "2dbeeebc688dab111013a114e9c08b44c116e23c48a42968099f6c8671ea4003"
+    },
+    "lifetime": {
+      "raw_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "r5_evaluation": {
+      "candidate_decision_eligibility_digest_sha256": "ab5ee2d5c1bc58f711f1961dff505563adf67c02d67917c1d067431136514a32",
+      "candidate_universe_digest_sha256": "2a0c5b987d40cefed46c4f2ded595e1759e13c8744e2bc003f2da4befac2106e",
+      "matrix_merkle_root": "99187e5e0d94348b87e6c89aae3612d4bbd40e3795e6844289daf740d18073d9",
+      "pit_raw_sha256": "657f2d00716ca33dd4142f7bb6166fcd72f2344fad20678456c731b292fd77ac",
+      "projection_digest_sha256": "7e1a5ee098e23397d8f4d77e7d73e79c8491c28b089854f9174a8c0049a7b240"
+    }
+  },
+  "exact_execution_addendum": {
+    "active_drawdown": "drawdown of active wealth, with initial wealth anchor 1.0",
+    "active_wealth": "product of (1+X_daily)/(1+C_daily) over paired dates",
+    "bootstrap": {
+      "block_length_weeks": 4,
+      "generator": "numpy.random.Generator(numpy.random.PCG64(20260902))",
+      "method": "moving-block",
+      "percentile": "numpy.percentile linear method",
+      "resamples": 10000
+    },
+    "duplicate_terminal_timestamps": "retain the last post-liquidation value",
+    "initial_cash_anchor": "anchor initial cash immediately before the first metric session",
+    "ratio_zero_denominator": {
+      "negative_denominator": "BLOCKED",
+      "non_finite": "BLOCKED",
+      "positive_over_zero": "positive infinity; corresponding acceptance criterion fails",
+      "zero_over_zero": 1.0
+    },
+    "robustness_and_year_slices": "slice the BASELINE FULL paired curves without independent resets"
+  },
+  "exact_observation_identities": {
+    "candidate_X": {
+      "boundary": "X|X",
+      "market": "equity",
+      "ordered_observation_merkle_root": "cee257f5053570c2b5957adf5b6b4b8b2c0943273790b20135a24ed5ffbe568f",
+      "semantic_observation_universe_hash": "eb9b3df623a2fdcb5b02c9c174fbf629a355f4faf018df9989de8703f8907f6f",
+      "strategy": "equity_proxy_multifactor_residual_momentum_v1",
+      "strategy_parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "timeframe": "1d",
+      "version": "1.0.0"
+    },
+    "control_C": {
+      "boundary": "C|C",
+      "market": "equity",
+      "ordered_observation_merkle_root": "d6ec0d61b100ab527ee2978ddcd6210c09f866b03cc62637525c9ac4f2d6509a",
+      "semantic_observation_universe_hash": "e1f0e2ee7420a9d43a8fe69e2048e4a5a3e135f3d3ffc5d2bb8b425fdb487eb1",
+      "strategy": "equity_residual_momentum_v3",
+      "strategy_parameter_digest_sha256": "d25c225a0acc4a1e379da74e50b160d93a18de68ef9684205b84eceae93f98aa",
+      "timeframe": "1d",
+      "version": "3.0.0"
+    }
+  },
+  "execution_count": 48,
+  "feed_transferability_boundary": {
+    "economic_pass_scope": "M3 historical economic research PASS only",
+    "feed_match": false,
+    "historical_feed": "sip",
+    "human_promotion_only": true,
+    "next_required_technical_gate": "M3_FEED_TRANSFERABILITY_AND_PAPER_READINESS_GATE",
+    "not_established": [
+      "PAPER readiness",
+      "LIVE readiness",
+      "promotion readiness"
+    ],
+    "paper_live_stream_feed": "iex"
+  },
+  "full_pin_order": [
+    "SPY",
+    "IWM",
+    "QQQ",
+    "SH",
+    "PSQ",
+    "DOG"
+  ],
+  "human_approval": true,
+  "human_promotion_only": true,
+  "implementation_identity": {
+    "changed_paths": [
+      ".github/workflows/ci.yml",
+      "scripts/compact_equity_m3_economic_predeclaration.py",
+      "scripts/compact_equity_m3_economic_result.py",
+      "scripts/research_equity_m3_economic.py",
+      "tests/test_research_equity_m3_economic.py",
+      "tests/test_research_equity_m3_economic_execution.py"
+    ],
+    "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+    "parent": "b0739c318963867053f7229c9b6e901fad697534",
+    "tree": "18f4627a16543ce8a42b9cd78d033b30f3839f15"
+  },
+  "manifest_identity": {
+    "commit_bound_at_runtime": true,
+    "git_blob_bound_at_runtime": true,
+    "path": "data/research_manifests/equity_m3_economic_execution_2026_09_r1.json"
+  },
+  "metric_contract": {
+    "candidate_minus_control": [
+      "active total return",
+      "CAGR difference",
+      "annualized-return difference",
+      "volatility difference",
+      "Sharpe difference",
+      "Sortino difference",
+      "Calmar difference",
+      "maximum-drawdown difference",
+      "turnover ratio",
+      "trading-cost ratio",
+      "average-cash difference",
+      "average-gross-exposure difference",
+      "weekly active-return mean",
+      "weekly active-return volatility",
+      "information ratio",
+      "weekly active hit rate",
+      "maximum active drawdown",
+      "active return for every frozen robustness period",
+      "active return for every calendar year"
+    ],
+    "conventions": {
+      "active_wealth": "paired C and X returns over identical dates",
+      "annualization_factor": 252,
+      "daily_return": "consecutive daily end-of-session equity values",
+      "drawdown": "positive maximum-drawdown magnitude",
+      "omission_policy": "bad and negative results are never omitted",
+      "risk_free_rate": 0,
+      "weekly_value": "final available NYSE session of each calendar week"
+    },
+    "per_strategy": [
+      "net total return",
+      "CAGR",
+      "annualized volatility",
+      "Sharpe ratio",
+      "Sortino ratio",
+      "Calmar ratio",
+      "maximum drawdown",
+      "ending equity",
+      "turnover",
+      "average cash ratio",
+      "average gross exposure",
+      "maximum gross exposure",
+      "rebalance count",
+      "order count",
+      "fill count",
+      "commission cost",
+      "spread cost",
+      "slippage cost",
+      "regulatory fees",
+      "total estimated trading cost"
+    ]
+  },
+  "mission": "M3_ECONOMIC_MISSION_EXECUTION_R1",
+  "next_required_mission": "M3_FEED_TRANSFERABILITY_AND_PAPER_READINESS_GATE",
+  "no_credential_access": true,
+  "no_iwm_refetch": true,
+  "no_m3_data_gate_replay": true,
+  "no_network_market_data": true,
+  "no_ocp_replay": true,
+  "no_optimization": true,
+  "no_paper_live_change": true,
+  "no_promotion": true,
+  "non_tradable_references": [
+    "IWM",
+    "QQQ",
+    "SPY"
+  ],
+  "operator_approval": true,
+  "operator_id": "human_operator",
+  "output_directory": "data/research/generated/equity_m3_economic_2026_09_r1",
+  "pass_orders": {
+    "A": [
+      "C",
+      "X"
+    ],
+    "B": [
+      "C",
+      "X"
+    ],
+    "C": [
+      "X",
+      "C"
+    ]
+  },
+  "predeclaration_closure": {
+    "closure_commit": "960f0eaa42e300b95d1de2e8d3cd34626fb6d2a7",
+    "final_commit": "b487d25ae1abf4140f536462463a8e83b97090bb",
+    "implementation_commit": "db1ce1c5abc316a75d5972fb9138ffd77da1ca6a",
+    "manifest_commit": "7f0bd86cce6d9ccbadef5bbc1e49e6bb9c18d052",
+    "receipt_path": "data/research_receipts/equity_m3_economic_predeclaration_2026_09_r1.json",
+    "receipt_raw_sha256": "d631b387ad581b5386514e60db3950e838ec3910b9c2a00200c21c6484bbc6fb",
+    "receipt_self_digest_sha256": "a1e05cee72de803adf78b4eb8c51abefcbf85651a445d4d96c9c3e805cbd226f",
+    "remote_ci_head": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b",
+    "remote_ci_run": "33711180326",
+    "result_commit": "a005dcd5ae3afd1ed90985836a9b61fc43d19d4b",
+    "starting_head": "06aaf78a7ea75aa3d97404916d5107194534fe6c"
+  },
+  "real_execution_authorized": true,
+  "reference_contract": {
+    "effective_candidate_observation_capacity": 24,
+    "full_pin_order": [
+      "SPY",
+      "IWM",
+      "QQQ",
+      "SH",
+      "PSQ",
+      "DOG"
+    ],
+    "maximum_stream_symbols": 30,
+    "observation_only_references": [
+      "SPY",
+      "IWM",
+      "QQQ"
+    ],
+    "reference_bars_available_to_m3": true,
+    "references_outside_candidate_membership": true,
+    "references_outside_executable_symbols": true,
+    "references_outside_targets": true
+  },
+  "repository_url": "https://github.com/batuhankiskac/ParayaBuck",
+  "research_only": true,
+  "robustness_periods": [
+    {
+      "end": "2019-12-31",
+      "start": "2017-02-06"
+    },
+    {
+      "end": "2021-12-31",
+      "start": "2020-01-02"
+    },
+    {
+      "end": "2023-12-29",
+      "start": "2022-01-03"
+    },
+    {
+      "end": "2026-07-30",
+      "start": "2024-01-02"
+    }
+  ],
+  "runner_guards": {
+    "allowed_commands": [
+      "--validate-contract",
+      "--synthetic-fixture",
+      "--build-execution-authorization",
+      "--execute-predeclared-economic-mission"
+    ],
+    "authorization_required": true,
+    "broker_path": false,
+    "cost_overrides": false,
+    "date_overrides": false,
+    "dedicated_runner": "scripts/research_equity_m3_economic.py",
+    "fresh_engine_per_cell": true,
+    "paper_live_path": false,
+    "parameter_overrides": false,
+    "promotion_path": false,
+    "result_manifest_reuse": false,
+    "strategy_overrides": false
+  },
+  "schema_version": "1.0.0",
+  "source_identities": {
+    ".github/workflows/ci.yml": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "2a98e438687d21875767c9b36a54c5f41c5ebaa9",
+      "path": ".github/workflows/ci.yml",
+      "raw_sha256": "eaed74b055a9cd43ec07357db0da6db79937c3b928afe5d476b438accd45bff1"
+    },
+    "config/settings.yaml": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "19317a998cbab852bc52ac22fc886a034829f6d1",
+      "path": "config/settings.yaml",
+      "raw_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+    },
+    "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "5714502db5cae7161f0580e3b504f8552f3337be",
+      "path": "data/research_manifests/equity_m3_candidate_ocp_remote_attestation_2026_09_r2.json",
+      "raw_sha256": "2c33fd7adf2822f424289c698df317a355d5518a859982462d85302165fdc20b"
+    },
+    "data/research_manifests/equity_m3_data_gate_2026_09_r5.json": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "b11aa6302e9edac11389d211f772a5b1d13dcc5d",
+      "path": "data/research_manifests/equity_m3_data_gate_2026_09_r5.json",
+      "raw_sha256": "83a2b7b796939423eff9c3c0a2d16000594cbbbed26e9de2df61206c5ecdb51e"
+    },
+    "data/research_manifests/equity_m3_pit_population_2026_09_r5.json": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "1290869c1d665254eb1981d648c2ef6d44edc9e5",
+      "path": "data/research_manifests/equity_m3_pit_population_2026_09_r5.json",
+      "raw_sha256": "2d93b50fb7668fb899991f83a4223e6ab5f18acbdf3f4e9314a66f04d54400d4"
+    },
+    "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "67b4c9b2ad7a522c6aa85b63d40767b27d222b7d",
+      "path": "data/research_receipts/equity_m3_candidate_ocp_2026_09_r2.json",
+      "raw_sha256": "53196217121d4dff99feef20b97e2d6df769ba2b882edc42881ab75691a4bc52"
+    },
+    "data/research_receipts/equity_m3_data_gate_2026_09_r5.json": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "7096ce9bccd99edda2e1e8d7d150d4fffb578070",
+      "path": "data/research_receipts/equity_m3_data_gate_2026_09_r5.json",
+      "raw_sha256": "841d5640352ee01c5d284b66a4fb186d6e8f62d5cdb8dadfbe185e2330b2aa36"
+    },
+    "docs/equity_m3_candidate_ocp_2026_09_r2.md": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "6460b4a39831d4860252e729084814d1e0335260",
+      "path": "docs/equity_m3_candidate_ocp_2026_09_r2.md",
+      "raw_sha256": "f378e431633d81ee5f9f73c249ac1819bd9395bb1c8516f5c6f478fc30a0dd94"
+    },
+    "docs/equity_m3_data_gate_2026_09_r5.md": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "a16807737f1d05d3df896316d7bc5cbe97d4d430",
+      "path": "docs/equity_m3_data_gate_2026_09_r5.md",
+      "raw_sha256": "d0036393a67e77404a814cab22611b43978c77522c7c89aafb04b432f17434ea"
+    },
+    "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "8dc012dce2bdf708dd731a3fd0d2ba1e66ccc7bc",
+      "path": "scripts/compact_equity_m3_candidate_ocp_attestation_r2.py",
+      "raw_sha256": "38c1d230f4d19595d409f61c8f1580a5c4df8fa5d6541deeb5c8522ad9f8b281"
+    },
+    "scripts/compact_equity_m3_economic_predeclaration.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "d77fecf84547587c0e9efdc0b8ac48b62cad7b2e",
+      "path": "scripts/compact_equity_m3_economic_predeclaration.py",
+      "raw_sha256": "4d908551e4af76fe28d5a9568a8d34d930267e2e3f8a27eb3ca9490899208262"
+    },
+    "scripts/compact_equity_m3_economic_result.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "67adceb14d2c342b5e131a94c2aa0fc172ba4227",
+      "path": "scripts/compact_equity_m3_economic_result.py",
+      "raw_sha256": "ca40ee5da4f0c380033bf1b2596e5b24879913a183749735a11f6fd582e5e8bc"
+    },
+    "scripts/research_equity_m3_data_gate_r5.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "54bed91913012a2cfc939eae2a285e71941e7c3d",
+      "path": "scripts/research_equity_m3_data_gate_r5.py",
+      "raw_sha256": "6d2a66cabcb399651176b1db1cd12bab778506d9825d5d19fbeba4e55dcf4cbc"
+    },
+    "scripts/research_equity_m3_economic.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "2f50d1a4a144b2ffd0ce6629aa47ee46b6d0dd87",
+      "path": "scripts/research_equity_m3_economic.py",
+      "raw_sha256": "73aa6a1af404c9280ad6c53220ddae943ae7edb0cc28344bd5cbe1af8f330644"
+    },
+    "scripts/research_equity_m3_m4.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "b796e2ce37d496d839eeb2a3fd27b4efffdcb08f",
+      "path": "scripts/research_equity_m3_m4.py",
+      "raw_sha256": "dc012e79903a6ccb7e1d7603dea7944216c5ce366c65c1a4a3a3b161e2e5c839"
+    },
+    "scripts/research_v3_equity_roadmap.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "ea31f04a37708307495b0d770f0e2b1cb3639876",
+      "path": "scripts/research_v3_equity_roadmap.py",
+      "raw_sha256": "4f5ad626c55ee7f8e3501ac8b944d32da5c1971130f4dcf94fba3d756583ca9a"
+    },
+    "src/parayabuck/backtest/numeric_history.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "47087b3f2ff92937f40e21850b6b285b3819f105",
+      "path": "src/parayabuck/backtest/numeric_history.py",
+      "raw_sha256": "f8ab222319dc80cbfd47d84b82cd2878edf88f4476be59ef30a7218102e6b499"
+    },
+    "src/parayabuck/backtest/portfolio_engine.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "f05402fcd03ff03c59f76fe6202fa6771a331508",
+      "path": "src/parayabuck/backtest/portfolio_engine.py",
+      "raw_sha256": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141"
+    },
+    "src/parayabuck/backtest/regulatory_fees.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "713ba116cfb8b033e70a44aa00af58f167455909",
+      "path": "src/parayabuck/backtest/regulatory_fees.py",
+      "raw_sha256": "3fa9bcbfbb21b5d302dc9740b14ef137d2640fba23dda3914cae7a22ead656ab"
+    },
+    "src/parayabuck/backtest/terminal_aware_engine.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "871eb6ea0617bf54491bf0a035d40324952fb815",
+      "path": "src/parayabuck/backtest/terminal_aware_engine.py",
+      "raw_sha256": "38c057e8eb4a0a08b5a6183f6799e5aebb5b9f39184fec2262de5985dc0f8f6d"
+    },
+    "src/parayabuck/backtest/universe.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "f111ed03c689c7e1fd22b8368a8a131cf14f45f0",
+      "path": "src/parayabuck/backtest/universe.py",
+      "raw_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0"
+    },
+    "src/parayabuck/execution/portfolio.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "a489b44374cfa3637e62ece33449a32c49935cd6",
+      "path": "src/parayabuck/execution/portfolio.py",
+      "raw_sha256": "7f06ebacec6e7034497ddb8074f0ae0254d1ecacabf4246cfe439d3a5b9d4982"
+    },
+    "src/parayabuck/portfolio/base.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "a679228b73f2e377ccf950840910cb045a44d9f3",
+      "path": "src/parayabuck/portfolio/base.py",
+      "raw_sha256": "547e716e9f1abc603e439d9eee7334e9e43964595b2ec534aea7c87f201f3900"
+    },
+    "src/parayabuck/portfolio/equity_residual_momentum_v3.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "7c7d9eec532146f58d4ee616e4ac53bdfd3f2de0",
+      "path": "src/parayabuck/portfolio/equity_residual_momentum_v3.py",
+      "raw_sha256": "b04de53026c715cf2c99205f50336c361dc8e1ac7b9f1eb2ff9b3a02cb26f9bc"
+    },
+    "tests/test_research_equity_m3_economic.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "2ef8d0d7e2b164f10bc481fd52e94fc5d0b59e0b",
+      "path": "tests/test_research_equity_m3_economic.py",
+      "raw_sha256": "0d5aed06018f1c4e8b6d02a5a02cdf1c11f252b892a8d507adac1b27b1fcd674"
+    },
+    "tests/test_research_equity_m3_economic_execution.py": {
+      "commit": "5bb61a5623a9bb2cf9a167907f3977f1d3390254",
+      "git_blob_id": "44dba15032e37200b101221ebe8b19d80c937e67",
+      "path": "tests/test_research_equity_m3_economic_execution.py",
+      "raw_sha256": "e362be1c471c8d15f89dc9f00db62849708ba93f4d80517d0635693c6d32f629"
+    }
+  },
+  "strategy_contract": {
+    "candidate": {
+      "execution_strategy": "fresh M3 instance",
+      "name": "equity_proxy_multifactor_residual_momentum_v1",
+      "observation_boundary": "X|X",
+      "version": "1.0.0"
+    },
+    "control": {
+      "execution_strategy": "fresh V3 instance",
+      "name": "equity_residual_momentum_v3",
+      "observation_boundary": "C|C",
+      "version": "3.0.0"
+    },
+    "m3_formula": "r_stock - beta_spy*r_SPY - beta_size*(r_IWM-r_SPY) - beta_growth*(r_QQQ-r_SPY)",
+    "residual_semantics": {
+      "apply": "apply coefficients to non-demeaned factors",
+      "convention": "alpha-retaining residual",
+      "fit": "demeaned X and demeaned stock returns",
+      "intercept": "no explicit intercept"
+    },
+    "shared_parameters": {
+      "beta_window_bars": 273,
+      "exclude_symbols": [
+        "SPY"
+      ],
+      "formation_bars": 252,
+      "ivol_reject_quantile": 0.7,
+      "max_single_weight": 0.1,
+      "rebalance_frequency": "weekly",
+      "residual_vol_window": 63,
+      "skip_bars": 21,
+      "top_n": 8
+    },
+    "skip_semantics": {
+      "beta_fit": "all 273 returns remain in beta fitting",
+      "momentum": "newest 21 residual returns excluded only from compounding"
+    }
+  },
+  "timing_contract": {
+    "completed_bar_signal_timing": "The completed regular-session bar is ingested before the decision for that session timestamp.",
+    "corporate_action_ordering": "corporate actions apply before fills in the session cycle",
+    "decision_timestamp": "the first bar timestamp of the completed session cycle",
+    "execution": "next tradable bar only",
+    "final_valuation": "last included evaluation session after terminal handling and explicit end liquidation",
+    "near_window_end": "an order created on 2026-07-30 has no eligible next execution bar, is not silently filled, and is excluded from economics",
+    "order_creation_timestamp": "the decision timestamp",
+    "pit_snapshot": "latest snapshot with effective_at <= exact decision timestamp",
+    "post_window_data": "bars after 2026-07-30 cannot enter the reported window",
+    "same_bar_fill": "forbidden; pending orders are filled before the next decision cycle",
+    "terminal_map": "T1 terminal lifecycle is applied after the final decision and identically for C and X"
+  },
+  "tradable_reserved_inverse_hedges": [
+    "DOG",
+    "PSQ",
+    "SH"
+  ]
+}

@@ -63,6 +63,32 @@ def _cell_values(
     )
 
 
+def test_strategy_metrics_accepts_a_nonempty_curve() -> None:
+    timestamps = [
+        datetime(2022, 1, 3, tzinfo=UTC),
+        datetime(2022, 1, 4, tzinfo=UTC),
+    ]
+    result = SimpleNamespace(
+        fills=(),
+        slippage_cost_total=0.0,
+        spread_cost_total=0.0,
+        fee_total=0.0,
+        turnover=0.0,
+        rebalance_count=0,
+    )
+    engine = SimpleNamespace(
+        holdings_audit=[
+            {"cash": 100.0, "equity": 100.0, "gross_exposure": 0.0, "invested_capital": 0.0},
+            {"cash": 101.0, "equity": 101.0, "gross_exposure": 0.0, "invested_capital": 0.0},
+        ],
+        order_events=[],
+    )
+
+    metrics = economic._strategy_metrics(result, engine, timestamps, [100.0, 101.0])  # type: ignore[arg-type]
+
+    assert metrics["net total return"] == pytest.approx(0.01)
+
+
 def test_execution_mission_and_artifact_paths_are_separate_from_predeclaration() -> None:
     assert economic.EXECUTION_MISSION == "M3_ECONOMIC_MISSION_EXECUTION_R1"
     assert economic.EXECUTION_MANIFEST_PATH.endswith("equity_m3_economic_execution_2026_09_r1.json")

@@ -2560,7 +2560,7 @@ def _strategy_metrics(
     if not curve_values:
         _fail("economic result has an empty equity curve")
     if len(curve_timestamps) != len(curve_values) or any(
-        right <= left for left, right in zip(curve_timestamps, curve_timestamps[1:], strict=True)
+        right <= left for left, right in zip(curve_timestamps, curve_timestamps[1:])
     ):
         _fail("economic curve is not strictly timestamp ordered")
     returns = [curve_values[index] / curve_values[index - 1] - 1.0 for index in range(1, len(curve_values))]

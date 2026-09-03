@@ -47,6 +47,9 @@ jobs:
       - name: Focused M3 acquisition and PIT tests
         if: always()
         run: pytest -q tests/test_m3_iwm_acquisition.py tests/test_m3_pit_scanner_universe.py
+      - name: Focused economic-predeclaration tests
+        if: always()
+        run: pytest -q tests/test_research_equity_m3_economic.py
       - name: Full pytest suite
         if: always()
         run: pytest

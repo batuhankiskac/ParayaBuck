@@ -34,6 +34,18 @@ its tested candidate is rejected or remains ineligible for PAPER.
 
 ## Current records
 
+### `execution_cost_transferability_p0_2026_09`
+
+**Status:** `planned` technical measurement pipeline<br>
+**Verdict:** `UNKNOWN_COST_TRANSFERABILITY`<br>
+**Promotion:** none<br>
+**Execution model:** unchanged; the shadow comparator mirrors the current
+dynamic residual-capacity schedule.
+
+[Manifest](../../data/research_manifests/execution_cost_transferability_p0_2026_09.json) ·
+[technical receipt](../../data/research_receipts/execution_cost_transferability_p0_2026_09.json) ·
+[human report](execution_cost_transferability_p0_2026_09.md)
+
 ### `equity_profit_protection_2026_09`
 
 **Status:** `superseded` — archived blocked R1 attempt, preserved for lineage.

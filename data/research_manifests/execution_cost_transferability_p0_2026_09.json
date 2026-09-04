@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "mission": "execution_cost_transferability_p0_2026_09",
+  "status": "planned",
+  "research_only": true,
+  "declared_before_results": true,
+  "no_results_yet": true,
+  "commit_topology": {
+    "starting_head": "0a47aba35aa7a2b3eb00f0fd396bdee22c0f9c97",
+    "implementation_commit": "pending",
+    "result_recording_commit": "pending",
+    "self_reference_note": "Result-recording commit is intentionally not self-referential."
+  },
+  "purpose": "Add offline execution measurement integrity and a read-only comparator; do not select or change a cost model.",
+  "configuration_contract": {
+    "path": "config/settings.yaml",
+    "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "unchanged": true
+  },
+  "input_contract": {
+    "runtime_database": "operator-supplied SQLite path; opened mode=ro and query_only",
+    "executable_bars": "required local CSV or manifest; record path, SHA-256, feed identity when known, and coverage window",
+    "network": "forbidden"
+  },
+  "measurement_contract": {
+    "raw_event_journal": "append-only source-scoped broker cumulative facts; absent fee is unknown, not zero",
+    "ownership": "existing net portfolio ownership bookkeeping remains authoritative",
+    "quality": "missing, invalid, duplicate, out-of-order, and noncomparable observations remain explicit",
+    "fee_precedence": "matching reconciled activity supersedes stream fee evidence without double counting"
+  },
+  "backtest_benchmark_contract": {
+    "engine": "PortfolioBacktestEngine",
+    "schedule": "next eligible open; 20 positive known-volume bars; 10 percent capacity; residual carry-forward",
+    "resolved_dynamic_residual_capacity": "A residual order is recreated at the preceding fill bar and uses positive-volume bars known through that boundary; its current fill bar remains excluded.",
+    "superseded_statement": "Do not freeze one decision-time liquidity estimate across all residual fills.",
+    "costs": "existing 3 bps adverse price adjustment, crypto taker fee, and effective-dated equity regulatory fees",
+    "execution_model_change": false
+  },
+  "required_artifacts": {
+    "documentation": "docs/research/execution_cost_transferability_p0_2026_09.md",
+    "manifest": "data/research_manifests/execution_cost_transferability_p0_2026_09.json",
+    "receipt": "data/research_receipts/execution_cost_transferability_p0_2026_09.json",
+    "runner": "scripts/execution_shadow_report.py",
+    "tests": "tests/research/test_execution_cost_transferability_p0_2026_09.py",
+    "hash_pinned_outputs": []
+  },
+  "acceptance": {
+    "technical_pipeline": "offline deterministic tests pass and comparator leaves the runtime DB unchanged",
+    "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY",
+    "promotion": "none",
+    "no_paper_sample_claim": true
+  },
+  "boundaries": {
+    "broker_or_data_api_calls": false,
+    "paper_or_live_activation": false,
+    "orders": false,
+    "configuration_change": false,
+    "strategy_universe_risk_allocation_rebalance_change": false,
+    "cost_model_selection_or_promotion": false
+  }
+}

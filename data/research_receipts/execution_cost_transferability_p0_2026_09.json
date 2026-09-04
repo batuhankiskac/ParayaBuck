@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "research_id": "execution_cost_transferability_p0_2026_09",
+  "source_commit": "0a47aba35aa7a2b3eb00f0fd396bdee22c0f9c97",
+  "config_digest_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+  "receipt_kind": "implementation_verification",
+  "technical_pipeline_status": "focused_verification_passed_full_suite_not_clean",
+  "commands": [
+    {
+      "command": "PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_execution_measurement.py tests/test_execution_shadow_comparator.py tests/research/test_execution_cost_transferability_p0_2026_09.py tests/test_execution_telemetry.py tests/test_portfolio_engine_accounting.py tests/test_portfolio_runtime.py tests/test_two_phase_rebalance.py tests/test_paper_reliability_restart.py tests/test_restart_chaos.py",
+      "result": "149 passed"
+    },
+    {
+      "command": "PYTHONPATH=src .venv/bin/ruff check .",
+      "result": "passed"
+    },
+    {
+      "command": "PYTHONPATH=src .venv/bin/mypy src",
+      "result": "Success: no issues found in 148 source files"
+    },
+    {
+      "command": "PYTHONPATH=src .venv/bin/python -m pytest -q",
+      "result": "1670 passed, 11 skipped, 13 failed, 1 error; failures were existing clean-worktree assumptions, sandbox-denied loopback binds, and a test-isolation write to ignored data/runtime/parayabuck.sqlite3."
+    }
+  ],
+  "benchmark_resolution": {
+    "original_statement": "Use one 20-bar liquidity estimate from the original decision for every residual fill.",
+    "repository_truth": "Residual orders are recreated at each partial fill; their next capacity uses positive-volume bars known through that fill timestamp and excludes the current fill bar.",
+    "resolution": "Comparator mirrors the current dynamic residual-capacity behavior.",
+    "execution_model_change": false
+  },
+  "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY",
+  "promotion": "none",
+  "limitations": [
+    "No repository-contained predeclared PAPER sample exists.",
+    "Fee evidence is event-local until a future portfolio fee-activity reconciliation source defines authoritative cross-source precedence.",
+    "No local executable-bar input was supplied for a real PAPER comparison.",
+    "A full-suite result is not clean in this sandbox and the real ignored runtime database was modified by an unrelated isolation failure; it was not restored or overwritten."
+  ]
+}

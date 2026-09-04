@@ -7,9 +7,11 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from parayabuck.config import Config
 from parayabuck.core.models import Bar, Market
-from parayabuck.research.p1_paper_observation import build_p1_report
+from parayabuck.research.p1_paper_observation import account_identity_hash, build_p1_report
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "data" / "research_manifests" / "execution_cost_transferability_p1_paper_observation_2026_09.json"
@@ -44,10 +46,11 @@ def _seed(path: Path) -> None:
             """
         )
         for session, account, digest, started in (
-            ("s-good", "anon", "digest", EPOCH),
-            ("s-old", "anon", "digest", EPOCH - timedelta(days=20)),
-            ("s-bad", "anon", "wrong", EPOCH),
-            ("s-other", "different-account", "digest", EPOCH),
+            ("s-equity", "raw-account", "equity-digest", EPOCH),
+            ("s-crypto", "raw-account", "crypto-digest", EPOCH),
+            ("s-old", "raw-account", "equity-digest", EPOCH - timedelta(days=20)),
+            ("s-bad", "raw-account", "wrong", EPOCH),
+            ("s-other", "different-account", "equity-digest", EPOCH),
         ):
             connection.execute(
                 "INSERT INTO portfolio_runtime_sessions VALUES (?, ?, ?, 'paper', ?, NULL, 'running')",
@@ -55,12 +58,23 @@ def _seed(path: Path) -> None:
             )
         targets = json.dumps({"metadata": {"decision_origin": "scheduled"}})
         rows = (
-            ("d-good", "s-good", "anon", "digest", EPOCH, "equity", "eq-strategy", "o-good", "AAPL", "filled"),
+            (
+                "d-good",
+                "s-equity",
+                "raw-account",
+                "equity-digest",
+                EPOCH,
+                "equity",
+                "eq-strategy",
+                "o-good",
+                "AAPL",
+                "filled",
+            ),
             (
                 "d-crypto",
-                "s-good",
-                "anon",
-                "digest",
+                "s-crypto",
+                "raw-account",
+                "crypto-digest",
                 EPOCH + timedelta(days=1),
                 "crypto",
                 "cr-strategy",
@@ -71,8 +85,8 @@ def _seed(path: Path) -> None:
             (
                 "d-old",
                 "s-old",
-                "anon",
-                "digest",
+                "raw-account",
+                "equity-digest",
                 EPOCH - timedelta(days=10),
                 "equity",
                 "eq-strategy",
@@ -80,12 +94,12 @@ def _seed(path: Path) -> None:
                 "MSFT",
                 "filled",
             ),
-            ("d-bad", "s-bad", "anon", "wrong", EPOCH, "equity", "eq-strategy", "o-bad", "NVDA", "filled"),
+            ("d-bad", "s-bad", "raw-account", "wrong", EPOCH, "equity", "eq-strategy", "o-bad", "NVDA", "filled"),
             (
                 "d-other",
                 "s-other",
                 "different-account",
-                "digest",
+                "equity-digest",
                 EPOCH,
                 "equity",
                 "eq-strategy",
@@ -93,8 +107,30 @@ def _seed(path: Path) -> None:
                 "META",
                 "filled",
             ),
-            ("d-legacy", "s-good", "anon", "digest", EPOCH, "equity", "eq-strategy", "o-legacy", "TSLA", "filled"),
-            ("d-invalid", "s-good", "anon", "digest", EPOCH, "equity", "eq-strategy", "o-invalid", "AMZN", "filled"),
+            (
+                "d-legacy",
+                "s-equity",
+                "raw-account",
+                "equity-digest",
+                EPOCH,
+                "equity",
+                "eq-strategy",
+                "o-legacy",
+                "TSLA",
+                "filled",
+            ),
+            (
+                "d-invalid",
+                "s-equity",
+                "raw-account",
+                "equity-digest",
+                EPOCH,
+                "equity",
+                "eq-strategy",
+                "o-invalid",
+                "AMZN",
+                "filled",
+            ),
         )
         for decision, session, account, digest, at, market, strategy, order, symbol, status in rows:
             connection.execute(
@@ -150,20 +186,39 @@ def _bars() -> list[Bar]:
     return rows
 
 
-def _report(path: Path) -> dict[str, object]:
+def _receipt(
+    *, cutoff: datetime = EPOCH, digests: dict[str, str] | None = None, sessions: dict[str, str] | None = None
+) -> dict[str, object]:
+    return {
+        "manifest_commit": "fixture-commit",
+        "manifest_sha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
+        "manifest_git_blob_sha": "fixture-blob",
+        "manifest_commit_time": (EPOCH - timedelta(days=2)).isoformat(),
+        "deployed_code_commit": "fixture-commit",
+        "deployment_timestamp": (EPOCH - timedelta(days=1)).isoformat(),
+        "sample_cutoff": cutoff.isoformat(),
+        "account_identity_hash": account_identity_hash("raw-account"),
+        "configuration_digests": digests or {"equity": "equity-digest", "crypto": "crypto-digest"},
+        "first_eligible_session_ids": sessions or {"equity": "s-equity", "crypto": "s-crypto"},
+        "settings_sha256": "settings-fixture",
+        "local_bars_or_manifest_sha256": "fixture-sha",
+        "feed_identity": "fixture-feed",
+    }
+
+
+def _report(
+    path: Path, *, as_of: datetime = EPOCH + timedelta(days=4), receipt: dict[str, object] | None = None
+) -> dict[str, object]:
     return build_p1_report(
         path,
         _bars(),
         Config(),
         dataset={"path": "fixture", "sha256": "fixture-sha", "feed_identity": "fixture-feed"},
         contract={
-            "sample_cutoff": EPOCH.isoformat(),
-            "account_identity": "anon",
-            "configuration_digest": "digest",
-            "first_eligible_session_id": "s-good",
+            "epoch_receipt": receipt or _receipt(),
             "strategy_identities": {"equity": "eq-strategy", "crypto": "cr-strategy"},
         },
-        as_of=EPOCH + timedelta(days=4),
+        as_of=as_of,
     )
 
 
@@ -171,13 +226,14 @@ def test_p1_manifest_is_explicitly_planned_and_fee_limited() -> None:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert payload["status"] == "planned"
     assert payload["results_state"] == {
-        "p1_technical_results_recorded": False,
+        "p1_technical_results_recorded": True,
         "paper_economic_sample_results_recorded": False,
         "cost_transferability_results_recorded": False,
     }
     assert payload["fee_boundary"]["total_cost_comparison_eligible"] is False
     assert payload["acceptance"]["economic_verdict"] == "UNKNOWN_COST_TRANSFERABILITY"
     assert payload["boundaries"]["broker_or_data_api_calls"] is False
+    assert payload["technical_results"]["technical_tooling_status"] == "accepted"
 
 
 def test_p1_filters_epoch_lineage_legacy_and_quality_without_writing_runtime_db(tmp_path: Path) -> None:
@@ -219,6 +275,136 @@ def test_p1_windows_are_deterministic_and_keep_markets_and_gates_separate(tmp_pa
     assert gates["crypto"]["all_minimums_met"] is False
     assert first["economic_verdict"] == "UNKNOWN_COST_TRANSFERABILITY"
     assert first["promotion"] == "none"
+
+
+def test_p1_per_market_digests_exclude_only_the_cross_wired_market(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    crypto_wrong = _receipt(digests={"equity": "equity-digest", "crypto": "equity-digest"})
+    records = {row["client_order_id"]: row for row in _report(database, receipt=crypto_wrong)["records"]}
+    assert records["o-good"]["primary_price_eligible"] is True
+    assert "configuration_digest_mismatch" in records["o-crypto"]["primary_exclusion_reasons"]
+    equity_wrong = _receipt(digests={"equity": "crypto-digest", "crypto": "crypto-digest"})
+    records = {row["client_order_id"]: row for row in _report(database, receipt=equity_wrong)["records"]}
+    assert "configuration_digest_mismatch" in records["o-good"]["primary_exclusion_reasons"]
+    assert records["o-crypto"]["primary_price_eligible"] is True
+
+
+def test_p1_hashes_account_and_never_serializes_raw_identity(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    report = _report(database)
+    assert "raw-account" not in json.dumps(report, sort_keys=True)
+    assert report["sample_epoch_receipt"]["account_identity_hash"] == account_identity_hash("raw-account")
+
+
+def test_p1_rejects_bad_epoch_order_and_market_specific_pre_cutoff_session(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    bad = _receipt(cutoff=EPOCH - timedelta(days=2))
+    with pytest.raises(ValueError, match="ordering"):
+        _report(database, receipt=bad)
+    report = _report(database, receipt=_receipt(sessions={"equity": "s-old", "crypto": "s-crypto"}))
+    records = {row["client_order_id"]: row for row in report["records"]}
+    assert "first_eligible_session_missing_or_mismatched" in records["o-good"]["primary_exclusion_reasons"]
+    assert records["o-crypto"]["primary_price_eligible"] is True
+
+
+def test_p1_as_of_hides_future_decisions_and_raw_fill_terminal_changes(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    baseline = _report(database)
+    connection = sqlite3.connect(database)
+    try:
+        future = EPOCH + timedelta(days=10)
+        target = json.dumps({"metadata": {"decision_origin": "scheduled"}})
+        connection.execute(
+            "INSERT INTO portfolio_decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')",
+            (
+                "d-future",
+                "s-equity",
+                "raw-account",
+                "equity-digest",
+                future.isoformat(),
+                "equity",
+                "eq-strategy",
+                target,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO portfolio_orders VALUES (?, ?, ?, ?, 'buy', 1, 100, 'filled', '', 1, 101, ?)",
+            ("o-future", "d-future", "AAPL", "equity", future.isoformat()),
+        )
+        connection.execute(
+            "INSERT INTO portfolio_execution_events VALUES (NULL, 'stream', 'future', 'o-good', '', 'canceled', ?, ?, 2, 102, NULL, 0, 'status_only')",
+            (future.isoformat(), future.isoformat()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = _report(database)
+    current = {row["client_order_id"]: row for row in report["records"]}
+    before = {row["client_order_id"]: row for row in baseline["records"]}
+    assert "o-future" not in current
+    assert current["o-good"]["paper_vwap"] == before["o-good"]["paper_vwap"]
+    assert current["o-good"]["terminal_reason"] == before["o-good"]["terminal_reason"]
+
+
+def test_p1_terminal_truth_uses_shared_status_vocabulary(tmp_path: Path) -> None:
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute("UPDATE portfolio_orders SET quantity=2 WHERE client_order_id='o-good'")
+        connection.execute(
+            "UPDATE portfolio_execution_events SET event_type='partial_fill' WHERE client_order_id='o-good'"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    row = {item["client_order_id"]: item for item in _report(database)["records"]}["o-good"]
+    assert row["is_terminal"] is False and row["fill_outcome"] == "partial"
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "INSERT INTO portfolio_execution_events VALUES (NULL, 'stream', 'cancel', 'o-good', '', 'canceled', ?, ?, 1, 101, NULL, 0, 'status_only')",
+            ((EPOCH + timedelta(days=1)).isoformat(), (EPOCH + timedelta(days=1)).isoformat()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    row = {item["client_order_id"]: item for item in _report(database)["records"]}["o-good"]
+    assert row["is_terminal"] is True and row["fill_outcome"] == "partial" and row["terminal_reason"] == "canceled"
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "UPDATE portfolio_execution_events SET raw_cumulative_filled_quantity=0, raw_cumulative_average_fill_price=NULL WHERE client_order_id='o-good'"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    row = {item["client_order_id"]: item for item in _report(database)["records"]}["o-good"]
+    assert row["is_terminal"] is True and row["fill_outcome"] == "zero_fill" and row["terminal_reason"] == "canceled"
+
+
+def test_p1_manifest_gates_and_calendar_anniversary_are_authoritative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import parayabuck.research.p1_paper_observation as p1
+
+    assert p1._calendar_anniversary(datetime(2024, 8, 31, tzinfo=UTC), 6) == datetime(2025, 2, 28, tzinfo=UTC)
+    assert p1._calendar_anniversary(datetime(2023, 8, 31, tzinfo=UTC), 6) == datetime(2024, 2, 29, tzinfo=UTC)
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    for market in ("equity", "crypto"):
+        manifest["minimum_sample_gates"][market] = {key: 0 for key in manifest["minimum_sample_gates"][market]}
+    altered = tmp_path / "manifest.json"
+    altered.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(p1, "_MANIFEST", altered)
+    receipt = _receipt()
+    receipt["manifest_sha256"] = hashlib.sha256(altered.read_bytes()).hexdigest()
+    database = tmp_path / "runtime.sqlite3"
+    _seed(database)
+    assert _report(database, receipt=receipt)["sample_gate_progress"]["equity"]["all_minimums_met"] is True
 
 
 def test_p1_source_has_no_broker_or_network_import() -> None:

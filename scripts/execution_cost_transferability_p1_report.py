@@ -22,8 +22,13 @@ sys.path.insert(0, str(ROOT / "src"))
 from parayabuck.backtest.product import load_csv_bars  # noqa: E402
 from parayabuck.config import load_config  # noqa: E402
 from parayabuck.core.models import Market  # noqa: E402
+from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config  # noqa: E402
 from parayabuck.execution.shadow_comparator import dataset_metadata  # noqa: E402
+from parayabuck.portfolio import product_strategy_from  # noqa: E402
+from parayabuck.portfolio.runtime_models import configuration_digest  # noqa: E402
 from parayabuck.research.p1_paper_observation import build_p1_report  # noqa: E402
+from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest  # noqa: E402
+from parayabuck.universe.scanner import scanner_config_digest  # noqa: E402
 
 _MANIFEST = "data/research_manifests/execution_cost_transferability_p1_paper_observation_2026_09.json"
 
@@ -53,14 +58,39 @@ def _dataset_input(path: Path, default_market: Market, feed_override: str | None
     return bars_path, feed, Market(str(payload.get("default_market", default_market.value)).lower())
 
 
-def _committed_epoch(merged_commit: str) -> None:
+def _committed_epoch(receipt: dict[str, object]) -> None:
     if _git("status", "--porcelain"):
         raise ValueError("P1 report requires a clean worktree so the manifest is committed")
-    if _git("rev-parse", "HEAD") != merged_commit:
-        raise ValueError("--merged-commit must equal the committed checkout HEAD")
+    head = _git("rev-parse", "HEAD")
+    if str(receipt.get("manifest_commit")) != head or str(receipt.get("deployed_code_commit")) != head:
+        raise ValueError("receipt manifest and deployed commits must equal the committed checkout HEAD")
     tracked = _git("ls-tree", "-r", "--name-only", "HEAD", "--", _MANIFEST)
     if tracked != _MANIFEST:
         raise ValueError("P1 machine manifest is not tracked by the merged commit")
+    if str(receipt.get("manifest_git_blob_sha")) != _git("rev-parse", f"HEAD:{_MANIFEST}"):
+        raise ValueError("epoch receipt manifest blob does not match HEAD")
+    if str(receipt.get("manifest_commit_time")) != _git("show", "-s", "--format=%cI", head):
+        raise ValueError("epoch receipt manifest commit time does not match HEAD")
+    if str(receipt.get("manifest_sha256")) != _sha256(ROOT / _MANIFEST):
+        raise ValueError("epoch receipt manifest SHA-256 does not match HEAD")
+
+
+def _expected_digests(config: object) -> dict[str, str]:
+    risk_limits = portfolio_risk_limits_from_config(config.risk)
+    execution_policy = PortfolioExecutionPolicy(
+        rebalance_band_pct=config.execution.rebalance_band_pct,
+        minimum_order_notional=config.execution.minimum_order_notional,
+    )
+    result: dict[str, str] = {}
+    for market, selection, universe_version in (
+        ("equity", config.strategy.equity, scanner_config_digest(config.universe.equity)),
+        ("crypto", config.strategy.crypto, crypto_scanner_config_digest(config.universe.crypto)),
+    ):
+        strategy = product_strategy_from(selection.name, selection.parameters, timeframe=selection.timeframe)
+        result[market] = configuration_digest(
+            strategy, "paper", selection.maximum_allocation, universe_version, risk_limits, execution_policy
+        )
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,20 +99,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dataset", required=True, help="local CSV or local bars manifest")
     parser.add_argument("--feed-identity", default=None, help="required for a CSV dataset")
     parser.add_argument("--config", default=str(ROOT / "config" / "settings.yaml"))
-    parser.add_argument("--settings-sha", required=True, help="SHA-256 recorded for the deployed settings.yaml")
-    parser.add_argument("--merged-commit", required=True, help="merged P0/P1 commit defining this sample")
-    parser.add_argument("--account-identity", required=True, help="anonymized deployed account identity")
-    parser.add_argument("--configuration-digest", required=True)
-    parser.add_argument("--first-eligible-session-id", required=True)
-    parser.add_argument("--sample-cutoff", required=True, help="immutable ISO-8601 cutoff")
+    parser.add_argument("--epoch-receipt", required=True, help="immutable P1 epoch receipt JSON")
     parser.add_argument("--as-of", default=None, help="ISO-8601 report cutoff; defaults to current UTC")
     parser.add_argument("--default-market", choices=[item.value for item in Market], default="equity")
     parser.add_argument("--json-output", default=None, help="optional report output path; runtime DB is never written")
     args = parser.parse_args(argv)
 
-    _committed_epoch(args.merged_commit)
+    receipt_path = Path(args.epoch_receipt).resolve()
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("--epoch-receipt must name a readable JSON object") from exc
+    if not isinstance(receipt, dict):
+        raise ValueError("--epoch-receipt must contain a JSON object")
+    _committed_epoch(receipt)
     config_path = Path(args.config).resolve()
-    if _sha256(config_path) != args.settings_sha:
+    if _sha256(config_path) != str(receipt.get("settings_sha256")):
         raise ValueError("settings.yaml SHA-256 does not match the declared sample epoch")
     dataset_path = Path(args.dataset).resolve()
     bars_path, feed, default_market = _dataset_input(dataset_path, Market(args.default_market), args.feed_identity)
@@ -91,16 +123,15 @@ def main(argv: list[str] | None = None) -> int:
     metadata["manifest_path"] = str(dataset_path) if dataset_path.suffix.lower() == ".json" else None
     as_of = datetime.now(UTC) if args.as_of is None else datetime.fromisoformat(args.as_of.replace("Z", "+00:00"))
     config = load_config(config_path)
+    if receipt.get("configuration_digests") != _expected_digests(config):
+        raise ValueError("epoch receipt configuration digests do not match the loaded committed configuration")
     report = build_p1_report(
         args.db,
         bars,
         config,
         dataset=metadata,
         contract={
-            "sample_cutoff": args.sample_cutoff,
-            "account_identity": args.account_identity,
-            "configuration_digest": args.configuration_digest,
-            "first_eligible_session_id": args.first_eligible_session_id,
+            "epoch_receipt": receipt,
             "strategy_identities": {
                 "equity": config.strategy.equity.name,
                 "crypto": config.strategy.crypto.name,
@@ -108,10 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         },
         as_of=as_of,
     )
-    epoch = report["sample_epoch_contract"]
+    epoch = report["sample_epoch_receipt"]
     assert isinstance(epoch, dict)
-    epoch["merged_commit"] = args.merged_commit
-    epoch["settings_sha256"] = args.settings_sha
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.json_output:
         Path(args.json_output).write_text(rendered, encoding="utf-8")

@@ -812,6 +812,7 @@ def execution_measurement(
     db_path: str | Path,
     *,
     _connection: sqlite3.Connection | None = None,
+    as_of: datetime | None = None,
 ) -> dict[str, object]:
     """Read raw gross execution beside authoritative net ownership.
 
@@ -853,6 +854,14 @@ def execution_measurement(
         )
         events_by_order: dict[str, list[tuple[Any, ...]]] = {}
         for event in event_rows:
+            if as_of is not None:
+                try:
+                    event_at = datetime.fromisoformat(str(event[6]).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                event_at = event_at.replace(tzinfo=UTC) if event_at.tzinfo is None else event_at.astimezone(UTC)
+                if event_at > as_of:
+                    continue
             events_by_order.setdefault(str(event[3]), []).append(event)
         result_orders: list[dict[str, object]] = []
         valid_fill_qualities = {"first_fill", "valid_incremental"}

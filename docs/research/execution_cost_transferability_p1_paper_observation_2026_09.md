@@ -1,6 +1,6 @@
 # Execution-cost transferability P1 — natural PAPER observation
 
-**Record status:** `planned` — the manifest is prepared but not yet committed.<br>
+**Record status:** `planned` — technical tooling accepted; no PAPER economic sample recorded.<br>
 **Economic verdict:** `UNKNOWN_COST_TRANSFERABILITY`.<br>
 **Promotion:** none.
 
@@ -20,20 +20,22 @@ residual recreation, and current modeled price and fee rules. P1 does not
 modify `PortfolioBacktestEngine`, strategy, order policy, quantities, or cost
 assumptions.
 
-The P1 record was prepared from `main` at
-`0e15e29b27cb30e7fda69269625003b1967e6722` with a clean worktree. The merge
-commit that defines the future sample does not exist yet and is deliberately
-not invented. The report runner requires the operator to provide that SHA,
-requires it to equal the clean committed checkout `HEAD`, and verifies that
-this manifest is tracked there. Until then no row may be called P1 eligible.
+The P1 manifest is committed at `809613a8b8a47966145204d666d84e102fbf1787`.
+That commit followed the implementation tests, so this record makes no false
+claim that it preceded them. It does precede any future P1 economic sample.
+The runner requires an immutable receipt whose manifest and deployed commits,
+blob/SHA identity, and commit time match the clean committed checkout `HEAD`.
 
 ## Sample epoch and inclusion rules
 
-Before deployment, the operator records the exact merged P0/P1 SHA,
-`settings.yaml` SHA-256, configuration digest, anonymized account identity,
-deployment time, first eligible session ID, immutable cutoff, and local
-executable-bar/manifest hashes plus feed identity. The current settings file
-SHA-256 is `414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353`.
+Before deployment, the operator records an immutable receipt containing the
+manifest commit/blob/SHA identity, deployed commit, deployment timestamp,
+cutoff, settings SHA-256, local bars/manifest SHA-256 and feed identity, plus
+separate equity and crypto configuration digests and first session IDs. The
+account identity is `sha256("parayabuck-p1-account-v1\\0" + raw_account_id)`;
+the raw account ID is never emitted. The runner checks
+`manifest_commit_time <= deployment_timestamp <= sample_cutoff <= as_of` and
+uses each market only with its own digest/session lineage.
 
 A primary price comparison requires all of the following: PAPER mode; a
 session and decision at or after the immutable cutoff; matching account, session lineage,
@@ -42,7 +44,10 @@ valid nonblocking cumulative quantity/VWAP sequence; exactly one comparable
 timeframe; and sufficient local bars for P0's shadow schedule. Pre-cutoff,
 legacy/no-raw-event, wrong-account/session, wrong-digest, invalid-sequence,
 and non-comparable rows remain visible with explicit reasons but never enter
-primary aggregates.
+primary aggregates. Decisions and raw broker events after `as_of` are
+invisible to the historical report, including VWAP, fill ratio, and terminal
+state. Every reporting window and gate uses the inclusive interval
+`as_of - window <= decision_timestamp <= as_of`.
 
 ## Reporting contract
 
@@ -74,7 +79,9 @@ Equity needs six calendar months, 30 independent scheduled decisions, 150
 terminal orders, and 40 terminal BUY plus 40 terminal SELL orders. Crypto
 needs six calendar months, 45 independent 96-hour decisions, 80 terminal
 orders, and 25 terminal BUY plus 25 terminal SELL orders. Origin-specific
-claims need 20 independent decisions and 30 orders. A partial-fill outcome
+claims need 20 independent decisions and 30 orders. Calendar months use
+anniversary arithmetic (with end-of-month clamping, including leap years),
+never an elapsed-days approximation. A partial-fill outcome
 model remains forbidden before 30 partial/reject/expiry events and 300 eligible
 orders. Insufficient evidence returns `UNKNOWN`; it never relaxes a threshold.
 
@@ -84,9 +91,9 @@ orders. Insufficient evidence returns `UNKNOWN`; it never relaxes a threshold.
 2. Take a SQLite online backup, record its SHA-256 and location, run
    `PRAGMA integrity_check`, rehearse migration on a disposable copy, and
    compare row-count and ownership invariants.
-3. Record the exact settings SHA/configuration digest, anonymized account,
-   deployment timestamp, immutable cutoff, first eligible session, and local
-   bars/manifest hash and feed identity before interpreting any observation.
+3. Create and retain the immutable epoch receipt with both market digests and
+   sessions, the domain-separated account hash, deployment/cutoff times, and
+   local bars/manifest identity before interpreting any observation.
 4. Start PAPER only under the existing operator procedure. Do not induce
    restarts, enlarge orders, alter cadence, or modify strategy behavior to
    manufacture observations.
@@ -102,9 +109,7 @@ Example (not a deployment command):
 ```bash
 .venv/bin/python scripts/execution_cost_transferability_p1_report.py \
   --db /operator/path/parayabuck.sqlite3 --dataset /operator/path/bars-manifest.json \
-  --merged-commit <merged-sha> --settings-sha <settings-sha256> \
-  --account-identity <anonymized-id> --configuration-digest <digest> \
-  --first-eligible-session-id <session-id> --sample-cutoff <timestamp>
+  --epoch-receipt /operator/path/p1-epoch-receipt.json
 ```
 
 The runner opens the runtime database `mode=ro` with `PRAGMA query_only=ON`;

@@ -7,21 +7,29 @@
   "predeclaration": {
     "human_design_brief_existed_before_implementation": true,
     "machine_manifest_committed_before_p1_technical_results": false,
-    "machine_manifest_committed_before_paper_economic_sample": false,
+    "machine_manifest_committed_before_paper_economic_sample": true,
     "machine_manifest_commit_requirement": "A first eligible PAPER observation may be declared only after this exact manifest is tracked by the clean merged P0/P1 commit."
   },
   "results_state": {
-    "p1_technical_results_recorded": false,
+    "p1_technical_results_recorded": true,
     "paper_economic_sample_results_recorded": false,
     "cost_transferability_results_recorded": false
   },
   "record_timeline": {
     "human_design_brief_timing": "Operator-provided before this P1 implementation; this is not a machine commit timestamp.",
-    "machine_manifest_commit_timing": "pending: this working-tree artifact is not evidence until committed",
-    "starting_head": "0e15e29b27cb30e7fda69269625003b1967e6722",
+    "machine_manifest_commit_timing": "committed at 809613a8b8a47966145204d666d84e102fbf1787; this was after the P1 implementation tests, so it is not claimed to precede them",
+    "starting_head": "809613a8b8a47966145204d666d84e102fbf1787",
     "starting_branch": "main",
     "starting_worktree_status": "clean before P1 edits",
-    "future_sample_merge_commit": "operator must supply the exact committed merged P0/P1 SHA; no future SHA is invented here"
+    "future_sample_merge_commit": "operator must supply the exact committed deployed SHA in the immutable epoch receipt"
+  },
+  "technical_results": {
+    "technical_tooling_status": "accepted",
+    "machine_manifest_commit": "809613a8b8a47966145204d666d84e102fbf1787",
+    "machine_manifest_committed_before_paper_economic_sample": true,
+    "p1_technical_results_recorded": true,
+    "paper_economic_sample_results_recorded": false,
+    "cost_transferability_results_recorded": false
   },
   "p0_input_contract": {
     "accepted_pipeline_record": "execution_cost_transferability_p0_2026_09",
@@ -42,10 +50,11 @@
     "operator_supplies": [
       "merged_p0_p1_commit_sha",
       "settings_yaml_sha256",
-      "configuration_digest",
-      "anonymized_account_identity",
+      "configuration_digests_by_market",
+      "domain_separated_account_identity_hash",
       "deployment_timestamp",
-      "first_eligible_runtime_session_id",
+      "first_eligible_runtime_session_ids_by_market",
+      "manifest_commit_and_sha256_or_blob_identity",
       "immutable_sample_cutoff",
       "local_executable_bar_dataset_or_manifest_sha256",
       "dataset_feed_identity"
@@ -54,7 +63,7 @@
       "paper_mode",
       "decision_and_session_at_or_after_sample_cutoff",
       "matching_account_identity",
-      "matching_configuration_digest",
+      "matching_market_configuration_digest",
       "matching_market_strategy_identity",
       "raw_execution_event_coverage",
       "one_comparable_timeframe",

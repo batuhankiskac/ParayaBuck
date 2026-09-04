@@ -205,7 +205,7 @@ def _metadata_value(target_json: object, key: str, default: str) -> str:
     return default
 
 
-def _load_orders(connection: sqlite3.Connection) -> tuple[ShadowOrder, ...]:
+def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = None) -> tuple[ShadowOrder, ...]:
     required = {"portfolio_runtime_sessions", "portfolio_decisions", "portfolio_orders"}
     if not all(_table_exists(connection, table) for table in required):
         return ()
@@ -238,6 +238,8 @@ def _load_orders(connection: sqlite3.Connection) -> tuple[ShadowOrder, ...]:
             continue
         origin = str(row[10]) if row[10] is not None else _metadata_value(row[9], "decision_origin", "scheduled")
         role = str(row[11]) if row[11] is not None else _metadata_value(row[9], "execution_role", "immediate")
+        if as_of is not None and timestamp > as_of:
+            continue
         result.append(
             ShadowOrder(
                 client_order_id=str(row[0]),
@@ -271,7 +273,7 @@ def _load_orders(connection: sqlite3.Connection) -> tuple[ShadowOrder, ...]:
             market = Market(str(market_value).lower())
         except ValueError:
             continue
-        if timestamp is not None:
+        if timestamp is not None and (as_of is None or timestamp <= as_of):
             by_market.setdefault(market, set()).add(timestamp)
     superseded: dict[str, datetime] = {}
     for order in result:
@@ -284,7 +286,9 @@ def _load_orders(connection: sqlite3.Connection) -> tuple[ShadowOrder, ...]:
     return tuple(replace(order, superseded_at=superseded.get(order.client_order_id)) for order in result)
 
 
-def _actual_from_events(connection: sqlite3.Connection, client_order_id: str) -> dict[str, object] | None:
+def _actual_from_events(
+    connection: sqlite3.Connection, client_order_id: str, *, as_of: datetime | None = None
+) -> dict[str, object] | None:
     if not _table_exists(connection, "portfolio_execution_events"):
         return None
     cols = _columns(connection, "portfolio_execution_events")
@@ -297,7 +301,8 @@ def _actual_from_events(connection: sqlite3.Connection, client_order_id: str) ->
     type_sql = "event_type" if "event_type" in cols else "''"
     quality_sql = "measurement_quality" if "measurement_quality" in cols else "NULL"
     rows = connection.execute(
-        f"""SELECT raw_cumulative_filled_quantity, raw_cumulative_average_fill_price,
+        f"""SELECT {event_time} AS event_at,
+                   raw_cumulative_filled_quantity, raw_cumulative_average_fill_price,
                    {fee_sql} AS raw_fee, {observed_sql} AS fee_observed, {type_sql} AS event_type,
                    {quality_sql} AS measurement_quality
             FROM portfolio_execution_events
@@ -307,14 +312,16 @@ def _actual_from_events(connection: sqlite3.Connection, client_order_id: str) ->
     ).fetchall()
     valid_fill_qualities = {"first_fill", "valid_incremental"}
     benign_nonfill_qualities = {"status_only", "duplicate_or_zero_delta"}
-    observed_qualities = [str(row[5]) if row[5] is not None else "missing_measurement_quality" for row in rows]
+    if as_of is not None:
+        rows = [row for row in rows if (event_at := _parse_timestamp(row[0])) is not None and event_at <= as_of]
+    observed_qualities = [str(row[6]) if row[6] is not None else "missing_measurement_quality" for row in rows]
     blocking = sorted(
         {quality for quality in observed_qualities if quality not in valid_fill_qualities | benign_nonfill_qualities}
     )
     best_qty = 0.0
     best_price: float | None = None
     for row, quality in zip(rows, observed_qualities, strict=True):
-        quantity, price = _float(row[0]), _float(row[1])
+        quantity, price = _float(row[1]), _float(row[2])
         if (
             quality in valid_fill_qualities
             and quantity is not None
@@ -560,18 +567,28 @@ def _order_record(order: ShadowOrder, actual: dict[str, object], bars: Iterable[
 
 
 def run_shadow_comparator(
-    db_path: str | Path, bars: Iterable[Bar], config: Any, *, dataset: dict[str, object]
+    db_path: str | Path,
+    bars: Iterable[Bar],
+    config: Any,
+    *,
+    dataset: dict[str, object],
+    as_of: datetime | None = None,
 ) -> dict[str, object]:
-    """Build an offline comparison report from a read-only PAPER ledger."""
+    """Build an offline comparison report from a read-only PAPER ledger.
+
+    ``as_of`` makes the result historical: later decisions and raw broker
+    events are invisible, while the default preserves the existing latest
+    snapshot behavior.
+    """
     # Use the engine's existing duplicate/canonical-symbol contract before the
     # comparator applies its independent, golden-locked schedule loop.
     local_bars = tuple(PortfolioBacktestEngine._deduplicate(list(bars)))
     connection = _open_readonly(db_path)
     try:
-        orders = _load_orders(connection)
+        orders = _load_orders(connection, as_of=as_of)
         records: list[dict[str, object]] = []
         for order in orders:
-            actual = _actual_from_events(connection, order.client_order_id) or _actual_from_legacy_fills(
+            actual = _actual_from_events(connection, order.client_order_id, as_of=as_of) or _actual_from_legacy_fills(
                 connection, order.client_order_id
             )
             records.append(_order_record(order, actual, local_bars, config))

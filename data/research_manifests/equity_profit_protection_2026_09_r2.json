@@ -12,7 +12,7 @@
   },
   "commit_topology": {
     "starting_head": "480eacb2993aef8d77785147e2c68edcda860596",
-    "implementation_commit": "pending_commit_a_sha",
+    "implementation_commit": "17cd8c5203e46401756408f63bd8dbc1c35589b9",
     "implementation_parent": "480eacb2993aef8d77785147e2c68edcda860596",
     "manifest_pin_commit": "pending_manifest_pin_commit",
     "result_commit": "pending_commit_b_sha",

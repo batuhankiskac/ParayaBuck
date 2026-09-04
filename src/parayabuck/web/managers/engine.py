@@ -23,20 +23,16 @@ import yaml
 from dotenv import load_dotenv
 
 from parayabuck.config import load_config
-from parayabuck.live_safety import LiveOperatorApproval
+from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.logger import get_logger
 from parayabuck.utils.io import atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
 log = get_logger("parayabuck.web.engine")
 
-# Lazily created to avoid circular init with WebState.
-try:
-    from parayabuck.web.managers.backtest import BacktestManager as _BacktestManager
-
-    backtest_manager = _BacktestManager()
-except Exception:  # pragma: no cover
-    backtest_manager = None  # type: ignore[assignment]
+# Compatibility export only.  Mutual exclusion is owned by each composed
+# EngineManager/WebState pair, never by this module-level name.
+backtest_manager: Any | None = None
 
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
@@ -66,7 +62,7 @@ class LiveArmToken:
 
 # Global Web Server State
 class EngineManager:
-    def __init__(self) -> None:
+    def __init__(self, backtest_manager: Any | None = None, ticket_store: Any | None = None) -> None:
         self.config_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")
         self.env_path = Path(os.getenv("ENV_PATH") or ".env")
         if not self.config_path.exists() and Path("config/settings.yaml").exists():
@@ -92,6 +88,14 @@ class EngineManager:
             self.log_queues: set[tuple[asyncio.Queue[dict[str, Any]], asyncio.AbstractEventLoop]] = set()  # type: ignore[no-redef]
             self._log_queues_lock = threading.Lock()
         self._state_lock = threading.RLock()
+        if backtest_manager is None:
+            try:
+                from parayabuck.web.managers.backtest import BacktestManager
+
+                backtest_manager = BacktestManager(engine_state_provider=self.current_engine_state)
+            except Exception:
+                backtest_manager = None
+        self._backtest_manager = backtest_manager
         self.control_token = secrets.token_urlsafe(32)
         self._live_request_suffix: str | None = None
         self._live_armed = False
@@ -101,6 +105,9 @@ class EngineManager:
         # issue_ws_ticket rebuilds the map while consume_ws_ticket pops from
         # it; concurrent issuers must not drop each other's fresh tickets.
         self._ws_tickets_lock = threading.Lock()
+        # Composition-owned applications bind an app-local ticket store.  A
+        # missing store keeps the legacy direct-call behavior below.
+        self._ticket_store = ticket_store
         self._paper_mode_cache: tuple[int, bool] | None = None
         # Bounded autonomous startup recovery (Web auto-start path only):
         # attempt counter, next-attempt deadline (time.monotonic()), and the
@@ -115,6 +122,22 @@ class EngineManager:
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
+
+    def bind_backtest_manager(self, backtest_manager: Any) -> None:
+        """Bind the composition-owned backtest guard used by engine starts."""
+        if backtest_manager is None or not hasattr(backtest_manager, "lock"):
+            raise ValueError("EngineManager requires a bound BacktestManager guard")
+        with self._state_lock:
+            self._backtest_manager = backtest_manager
+
+    def bind_ticket_store(self, ticket_store: Any) -> None:
+        """Bind the app-local WebSocket ticket store used by this manager."""
+        if ticket_store is None or not all(
+            callable(getattr(ticket_store, name, None)) for name in ("issue", "consume")
+        ):
+            raise ValueError("EngineManager requires a bound WebSocket ticket store")
+        with self._state_lock:
+            self._ticket_store = ticket_store
 
     def is_paper_mode(self) -> bool:
         try:
@@ -380,8 +403,14 @@ class EngineManager:
         # The backtest lock is taken FIRST on both paths (BacktestManager.start
         # re-reads the engine state under it), so the two guards cannot
         # interleave the way two independent checks could.
-        with backtest_manager.lock:
-            if backtest_manager.is_running:
+        guard = getattr(self, "_backtest_manager", None)
+        if guard is None:
+            raise ValueError("Engine/backtest exclusion is not configured; refusing to start the engine")
+        # Lock order for both start paths is BacktestManager.lock ->
+        # EngineManager._state_lock.  BacktestManager.start holds its lock
+        # while reading this manager's state through the bound provider.
+        with guard.lock:
+            if guard.is_running:
                 raise ValueError(
                     "A Web backtest is still running; wait for it to finish before starting the trading engine"
                 )
@@ -430,10 +459,30 @@ class EngineManager:
                 raise ValueError(
                     "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES before starting the application."
                 )
+            live_startup_proof: LiveStartupProof | None = None
             if live_mode:
-                self._require_valid_live_arm(key, secret, consume=True)
+                # Keep the fresh interactive confirmation alive until the
+                # neutral proof is constructed; EngineRuntime consumes and
+                # independently verifies that proof before reconciliation.
+                token = self._require_valid_live_arm(key, secret, consume=False)
+                digests, digest_error = self._resolve_live_configuration_digests()
+                if digests is None:
+                    raise ValueError(f"Live configuration could not be verified: {digest_error}")
+                live_startup_proof = LiveStartupProof(
+                    account_id=token.account_id,
+                    credential_fingerprint=token.credential_fingerprint,
+                    configuration_digests=digests,
+                    issued_at=token.issued_at,
+                    expires_at=token.expires_at,
+                )
+                self.invalidate_live_arming()
 
-            runtime = EngineRuntime(api_key=key, secret_key=secret, config=cfg)
+            runtime = EngineRuntime(
+                api_key=key,
+                secret_key=secret,
+                config=cfg,
+                live_startup_proof=live_startup_proof,
+            )
             runtime.start()
             # Close the lazy /api/account broker (if any) instead of leaking
             # its pooled HTTP session; the runtime's broker takes over
@@ -989,7 +1038,7 @@ class EngineManager:
     ) -> tuple[tuple[str, ...] | None, str | None]:
         try:
             cfg = load_config(str(self.config_path))
-            from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+            from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
             from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
@@ -1011,7 +1060,11 @@ class EngineManager:
             ):
                 if not selection.enabled or not symbols:
                     continue
-                strategy = product_strategy_from(selection.name, selection.parameters)
+                strategy = product_strategy_from(
+                    selection.name,
+                    selection.parameters,
+                    timeframe=selection.timeframe,
+                )
                 digests.append(
                     configuration_digest(
                         strategy,
@@ -1019,6 +1072,10 @@ class EngineManager:
                         selection.maximum_allocation,
                         universe_version,
                         portfolio_risk_limits_from_config(cfg.risk),
+                        PortfolioExecutionPolicy(
+                            rebalance_band_pct=cfg.execution.rebalance_band_pct,
+                            minimum_order_notional=cfg.execution.minimum_order_notional,
+                        ),
                     )
                 )
             return tuple(digests), None
@@ -1128,31 +1185,32 @@ class EngineManager:
         return hashlib.sha256(encoded).hexdigest()
 
     def issue_ws_ticket(self, kind: str) -> str:
-        # Delegates to shared websocket ticket store so concurrent issuance
-        # through either EngineManager or the websocket router shares the same
-        # lock/TTL/scope enforcement.
-        from parayabuck.web.managers.websocket import issue_ws_ticket as _issue
+        store: Any = self._ticket_store
+        if store is None:
+            # Direct legacy calls retain the process-wide compatibility store;
+            # composed FastAPI apps always bind their own store in WebState.
+            from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
-        ticket = _issue(kind)
+            store = legacy_store
+        ticket = str(store.issue(kind))
         # Keep legacy _ws_tickets mirror for tests that inspect it directly
         try:
-            from parayabuck.web.managers.websocket import ticket_store as _store
-
             with self._ws_tickets_lock:
-                # copy store snapshot into legacy dict for visibility
-                self._ws_tickets = dict(_store.tickets)
+                self._ws_tickets = dict(store.tickets)
         except Exception:
             pass
         return ticket
 
     def consume_ws_ticket(self, ticket: str, kind: str) -> bool:
-        from parayabuck.web.managers.websocket import consume_ws_ticket as _consume
-        from parayabuck.web.managers.websocket import ticket_store as _store
+        store: Any = self._ticket_store
+        if store is None:
+            from parayabuck.web.managers.websocket import ticket_store as legacy_store
 
-        result = _consume(ticket, kind)
+            store = legacy_store
+        result = bool(store.consume(ticket, kind))
         try:
             with self._ws_tickets_lock:
-                self._ws_tickets = dict(_store.tickets)
+                self._ws_tickets = dict(store.tickets)
         except Exception:
             pass
         return result

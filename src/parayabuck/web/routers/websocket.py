@@ -26,8 +26,26 @@ log = get_logger("parayabuck.web.websocket")
 router = APIRouter()
 
 
-def _consume_ticket(ticket: str, kind: str) -> bool:
-    # Prefer shared store then EngineManager/server fallback (tests patch server.manager).
+def _web_state(websocket: WebSocket) -> Any | None:
+    app = getattr(websocket, "app", None)
+    app_state = getattr(app, "state", None)
+    return getattr(app_state, "web", None)
+
+
+def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) -> bool:
+    # A composed app must consume from its own state; falling back to a module
+    # singleton here would let one app accept another app's ticket.
+    if websocket is not None:
+        state = _web_state(websocket)
+        if state is not None:
+            manager = getattr(state, "engine_manager", None)
+            consume = getattr(manager, "consume_ws_ticket", None)
+            if callable(consume):
+                return bool(consume(ticket, kind))
+            store = getattr(state, "ticket_store", None)
+            consume = getattr(store, "consume", None)
+            return bool(consume(ticket, kind)) if callable(consume) else False
+
     if _consume_shared(ticket, kind):
         return True
     for mod in ("parayabuck.web.managers.engine", "parayabuck.web.server"):
@@ -73,7 +91,7 @@ class WebSocketTicketPayload(BaseModel):
 async def websocket_stream(websocket: WebSocket) -> None:
     ticket = getattr(websocket, "query_params", {}).get("ticket", "")
     origin_ok = _trusted_browser_origin(websocket.headers.get("origin"))
-    ticket_valid = _consume_ticket(ticket, "stream")
+    ticket_valid = _consume_ticket(ticket, "stream", websocket)
     if not origin_ok or not ticket_valid:
         try:
             close = getattr(websocket, "close", None)
@@ -83,10 +101,13 @@ async def websocket_stream(websocket: WebSocket) -> None:
             pass
         return
     await websocket.accept()
-    try:
-        from parayabuck.web.managers.engine import manager as engine_manager
-    except Exception:
-        engine_manager = None
+    state = _web_state(websocket)
+    engine_manager = getattr(state, "engine_manager", None) if state is not None else None
+    if engine_manager is None:
+        try:
+            from parayabuck.web.managers.engine import manager as engine_manager
+        except Exception:
+            engine_manager = None
     try:
         while True:
             account_data: dict[str, Any] = {}
@@ -112,7 +133,7 @@ async def websocket_stream(websocket: WebSocket) -> None:
 async def websocket_logs(websocket: WebSocket) -> None:
     ticket = getattr(websocket, "query_params", {}).get("ticket", "")
     origin_ok = _trusted_browser_origin(websocket.headers.get("origin"))
-    ticket_valid = _consume_ticket(ticket, "logs")
+    ticket_valid = _consume_ticket(ticket, "logs", websocket)
     if not origin_ok or not ticket_valid:
         try:
             close = getattr(websocket, "close", None)

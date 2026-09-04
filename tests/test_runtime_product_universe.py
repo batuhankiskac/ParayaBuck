@@ -14,6 +14,16 @@ from parayabuck.portfolio import product_strategy_from
 from parayabuck.runtime import EngineRuntime
 from parayabuck.runtime_universe import ActiveProductUniverse, load_active_product_universe
 
+_CLEAN_RECONCILIATION = {
+    "MATCH": [],
+    "LOCAL_STALE": [],
+    "BROKER_STALE": [],
+    "QUANTITY_MISMATCH": [],
+    "UNKNOWN_ORDER": [],
+    "MISSING_LOCAL_ORDER": [],
+    "MISSING_BROKER_ORDER": [],
+}
+
 
 def test_active_product_universe_uses_eligible_pool_for_membership(tmp_path) -> None:
     path = tmp_path / "active.json"
@@ -91,8 +101,8 @@ def test_start_composition_passes_product_universe_to_runtime(monkeypatch) -> No
     runtime._pin_managed_symbols = lambda: None
     runtime._restore_persistent_state = lambda: (_ for _ in ()).throw(RuntimeError("after composition"))
     runtime._circuit_breaker_reason = None
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
-    runtime.ledger = SimpleNamespace(clear_safety_incident=lambda _account: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
+    runtime.ledger = SimpleNamespace(clear_safety_incident=lambda _account, _reason=None: None)
     runtime.app_config = config
 
     captured: list[dict[str, object]] = []

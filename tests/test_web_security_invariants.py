@@ -30,12 +30,24 @@ def _app_with_fake_manager():
     # keep token deterministic for tests
     bm = BacktestManager(engine_state_provider=mgr.current_engine_state)
     bm.bind_engine_state_provider(mgr.current_engine_state)
-    from parayabuck.web.managers.websocket import ticket_store
-
-    state = WebState(engine_manager=mgr, backtest_manager=bm, ticket_store=ticket_store)
+    state = WebState(engine_manager=mgr, backtest_manager=bm, ticket_store=WebSocketTicketStore())
     state.bind()
     app = create_app(state)
     return app, mgr, bm
+
+
+def test_factory_apps_keep_control_and_websocket_state_isolated():
+    app_a, manager_a, _ = _app_with_fake_manager()
+    app_b, manager_b, _ = _app_with_fake_manager()
+
+    assert app_a.state.web is not app_b.state.web
+    assert app_a.state.web.engine_manager is manager_a
+    assert app_b.state.web.engine_manager is manager_b
+    assert app_a.state.web.ticket_store is not app_b.state.web.ticket_store
+
+    ticket = manager_a.issue_ws_ticket("stream")
+    assert manager_b.consume_ws_ticket(ticket, "stream") is False
+    assert manager_a.consume_ws_ticket(ticket, "stream") is True
 
 
 def test_trusted_host_allows_loopback_and_testserver():

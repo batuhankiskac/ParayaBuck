@@ -18,6 +18,16 @@ from parayabuck.runtime import EngineRuntime
 
 pytestmark = pytest.mark.paper_chaos
 
+_CLEAN_RECONCILIATION = {
+    "MATCH": [],
+    "LOCAL_STALE": [],
+    "BROKER_STALE": [],
+    "QUANTITY_MISMATCH": [],
+    "UNKNOWN_ORDER": [],
+    "MISSING_LOCAL_ORDER": [],
+    "MISSING_BROKER_ORDER": [],
+}
+
 
 def _runtime_with_ledger(ledger: ExecutionLedger) -> EngineRuntime:
     """A minimal EngineRuntime shell wired to a real ledger and fakes.
@@ -401,7 +411,7 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
         account=lambda: account,
     )
     runtime.ledger = ledger
@@ -415,15 +425,18 @@ def test_operator_reset_clears_only_the_verified_incident(tmp_path: Path) -> Non
     ledger.close()
 
 
-def test_verified_reconcile_success_clears_persisted_incidents(tmp_path: Path) -> None:
-    """A successful reconcile proves every persisted halt resolved (reconcile
-    raises on drift/protection issues), so all incidents are cleared."""
+def test_verified_reconcile_success_clears_only_reconciliation_incidents(tmp_path: Path) -> None:
+    """A clean reconcile clears only incidents owned by reconciliation.
+
+    Unrelated protection/ownership incidents retain their own recovery paths.
+    """
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
+    ledger.save_safety_incident("acct", "reconciliation_failed")
     ledger.save_safety_incident("acct", "ownership_drift")
     ledger.save_safety_incident("acct", "protection_failure")
 
     runtime = EngineRuntime.__new__(EngineRuntime)
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = ledger
     runtime._reconcile_lock = threading.Lock()
     runtime._last_reconciliation_at = None
@@ -434,7 +447,7 @@ def test_verified_reconcile_success_clears_persisted_incidents(tmp_path: Path) -
     runtime._reconcile_safely()
 
     assert runtime._circuit_breaker_reason is None
-    assert ledger.load_safety_incidents("acct") == ()
+    assert {i.reason for i in ledger.load_safety_incidents("acct")} == {"ownership_drift", "protection_failure"}
     ledger.close()
 
 
@@ -447,7 +460,7 @@ def test_reconcile_failure_keeps_persisted_incidents(tmp_path: Path) -> None:
     class _FlakyBroker:
         account_id = "acct"
 
-        def reconcile(self) -> None:
+        def reconcile(self) -> dict[str, list[str]]:
             raise RequestException("broker timeout")
 
     runtime = EngineRuntime.__new__(EngineRuntime)
@@ -462,7 +475,10 @@ def test_reconcile_failure_keeps_persisted_incidents(tmp_path: Path) -> None:
     runtime._reconcile_safely()
 
     assert runtime._circuit_breaker_reason == "reconciliation_failed"
-    assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["ownership_drift"]
+    assert [i.reason for i in ledger.load_safety_incidents("acct")] == [
+        "reconciliation_failed",
+        "ownership_drift",
+    ]
     ledger.close()
 
 
@@ -481,8 +497,9 @@ class _EpochBroker:
         self.reconcile_calls = 0
         self.reset_calls: list[float] = []
 
-    def reconcile(self) -> None:
+    def reconcile(self) -> dict[str, list[str]]:
         self.reconcile_calls += 1
+        return dict(_CLEAN_RECONCILIATION)
 
     def account(self) -> AccountSnapshot:
         return AccountSnapshot(

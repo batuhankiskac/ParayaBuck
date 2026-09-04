@@ -16,6 +16,8 @@ Responsibility:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -38,7 +40,69 @@ from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.execution.alpaca_reconciliation")
 
-__all__ = ["ReconciliationService"]
+RECONCILIATION_CATEGORIES: tuple[str, ...] = (
+    "MATCH",
+    "LOCAL_STALE",
+    "BROKER_STALE",
+    "QUANTITY_MISMATCH",
+    "UNKNOWN_ORDER",
+    "MISSING_LOCAL_ORDER",
+    "MISSING_BROKER_ORDER",
+)
+RECONCILIATION_DRIFT_CATEGORIES: frozenset[str] = frozenset(
+    category for category in RECONCILIATION_CATEGORIES if category != "MATCH"
+)
+
+
+class ReconciliationResultError(ValueError):
+    """Raised when a broker reconciliation result cannot be trusted."""
+
+
+@dataclass(frozen=True)
+class ReconciliationReport:
+    """Validated, immutable view of the broker reconciliation result."""
+
+    categories: tuple[tuple[str, tuple[str, ...]], ...]
+
+    @classmethod
+    def from_result(cls, result: object) -> ReconciliationReport:
+        if not isinstance(result, Mapping):
+            raise ReconciliationResultError("Reconciliation returned a non-mapping result")
+        if set(result) != set(RECONCILIATION_CATEGORIES):
+            raise ReconciliationResultError("Reconciliation result has an unexpected category shape")
+        normalized: list[tuple[str, tuple[str, ...]]] = []
+        for category in RECONCILIATION_CATEGORIES:
+            values = result[category]
+            if not isinstance(values, (list, tuple)):
+                raise ReconciliationResultError(f"Reconciliation category {category} is not a list")
+            if any(not isinstance(value, str) or not value.strip() for value in values):
+                raise ReconciliationResultError(f"Reconciliation category {category} contains an invalid value")
+            normalized.append((category, tuple(values)))
+        return cls(tuple(normalized))
+
+    def as_dict(self) -> dict[str, list[str]]:
+        return {category: list(values) for category, values in self.categories}
+
+    @property
+    def drift_categories(self) -> dict[str, tuple[str, ...]]:
+        return {
+            category: values
+            for category, values in self.categories
+            if category in RECONCILIATION_DRIFT_CATEGORIES and values
+        }
+
+    @property
+    def has_drift(self) -> bool:
+        return bool(self.drift_categories)
+
+
+__all__ = [
+    "RECONCILIATION_CATEGORIES",
+    "RECONCILIATION_DRIFT_CATEGORIES",
+    "ReconciliationReport",
+    "ReconciliationResultError",
+    "ReconciliationService",
+]
 
 
 class ReconciliationService:

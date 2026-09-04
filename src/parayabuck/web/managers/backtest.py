@@ -6,7 +6,7 @@ import io
 import json
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,8 @@ log = get_logger("parayabuck.web.backtest")
 _ACTIVE_ENGINE_STATES = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
 )
+_BACKTEST_ALLOWED_ENGINE_STATES = frozenset({"stopped", "error"})
+_MAX_OPERATOR_ERROR_LENGTH = 1000
 
 
 class BacktestManager:
@@ -45,11 +47,23 @@ class BacktestManager:
     @property
     def is_running(self) -> bool:
         with self.lock:
-            return self.state == "running" and self._thread is not None and self._thread.is_alive()
+            try:
+                alive = self._thread is not None and self._thread.is_alive()
+            except BaseException:
+                # An unobservable thread is not proof of termination; keep
+                # the exclusion closed until an operator can inspect it.
+                alive = True
+            return self.state == "running" and alive
 
     def start(self, payload: dict[str, Any]) -> str:
         with self.lock:
-            if self._thread is not None and self._thread.is_alive():
+            try:
+                active_thread = self._thread is not None and self._thread.is_alive()
+            except BaseException as exc:
+                raise ValueError(
+                    "The backtest thread state could not be verified; refusing to start another run"
+                ) from exc
+            if active_thread:
                 raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
             engine_state = self._resolve_engine_state()
             if engine_state in _ACTIVE_ENGINE_STATES:
@@ -57,7 +71,8 @@ class BacktestManager:
                     "A Web backtest cannot start while the trading engine is "
                     f"active ({engine_state}); stop the engine first"
                 )
-            self.state = "running"
+            if engine_state not in _BACKTEST_ALLOWED_ENGINE_STATES:
+                raise ValueError("The trading engine state could not be verified; refusing to start a Web backtest")
             self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
             self.output_dir = str(Path("reports") / self.run_id)
             self.started_at = datetime.now(UTC).isoformat()
@@ -66,32 +81,29 @@ class BacktestManager:
             self.summary = None
             self.universe = None
             self.progress = []
-            argv = self._build_argv(payload, self.output_dir)
-            self._thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
-            self._thread.start()
+            try:
+                # Validate all user input before publishing a running state.
+                argv = self._build_argv(payload, self.output_dir)
+                thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
+                self._thread = thread
+                self.state = "running"
+                thread.start()
+            except BaseException as exc:
+                self._thread = None
+                self._terminalize_start_failure(exc)
+                raise
             return self.run_id
 
     def _resolve_engine_state(self) -> str:
         if self._engine_state_provider is not None:
             try:
-                return self._engine_state_provider()
-            except Exception:
+                state = self._engine_state_provider()
+                return state if isinstance(state, str) else "unknown"
+            except BaseException:
                 return "unknown"
-        # Lazy fallback to global manager for compatibility
-        try:
-            from parayabuck.web.state import get_web_state
-
-            state = get_web_state()
-            if state is not None and getattr(state, "engine_manager", None) is not None:
-                return state.engine_manager.current_engine_state()  # type: ignore[no-any-return]
-        except Exception:
-            pass
-        try:
-            from parayabuck.web.server import manager as legacy_manager
-
-            return legacy_manager.current_engine_state()
-        except Exception:
-            return "stopped"
+        # A manager without an explicit composition-owned provider cannot
+        # prove mutual exclusion and must fail closed.
+        return "unknown"
 
     @staticmethod
     def _build_argv(payload: dict[str, Any], output_dir: str) -> list[str]:
@@ -123,10 +135,10 @@ class BacktestManager:
     def _run(self, argv: list[str]) -> None:
         import contextlib
 
-        from parayabuck import cli as product_cli
-
         error: str | None = None
         try:
+            from parayabuck import cli as product_cli
+
             with (
                 contextlib.redirect_stdout(self._stream()),
                 contextlib.redirect_stderr(self._stream()),
@@ -137,7 +149,11 @@ class BacktestManager:
         except Exception as exc:
             error = str(exc)
             log.exception("Backtest run failed")
-        self._finish(error)
+        except BaseException as exc:
+            error = str(exc) or f"{type(exc).__name__}"
+            log.exception("Backtest run failed with a base exception")
+        finally:
+            self._finish(error)
 
     def _stream(self) -> Any:
         class ProgressStream(io.StringIO):
@@ -157,20 +173,32 @@ class BacktestManager:
     def _finish(self, error: str | None) -> None:
         summary: dict[str, Any] | None = None
         universe: dict[str, Any] | None = None
-        if error is None:
-            reports = sorted(Path(self.output_dir).glob("*/report.json"))
-            report_path = reports[-1] if reports else Path(self.output_dir) / "report.json"
-            universe_path = report_path.with_name("universe.json")
-            try:
+        try:
+            if error is None:
+                output_dir = Path(self.output_dir)
+                reports = sorted(output_dir.glob("*/report.json"))
+                report_path = reports[-1] if reports else output_dir / "report.json"
+                universe_path = report_path.with_name("universe.json")
                 if not report_path.exists():
                     error = f"Rapor üretilmedi: {report_path} (CLI hatasız çıktı ama rapor dosyası yazılmadı)"
                 else:
                     raw = json.loads(report_path.read_text(encoding="utf-8"))
-                    summary = raw.get("summary")
+                    if not isinstance(raw, Mapping):
+                        raise ValueError("Rapor kökü bir JSON nesnesi değil")
+                    raw_summary = raw.get("summary")
+                    if raw_summary is not None and not isinstance(raw_summary, Mapping):
+                        raise ValueError("Rapor summary alanı bir JSON nesnesi değil")
+                    summary = dict(raw_summary) if isinstance(raw_summary, Mapping) else None
                 if universe_path.exists():
-                    universe = json.loads(universe_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                error = f"Rapor okunamadı: {exc}"
+                    raw_universe = json.loads(universe_path.read_text(encoding="utf-8"))
+                    if not isinstance(raw_universe, Mapping):
+                        raise ValueError("Universe raporu bir JSON nesnesi değil")
+                    universe = dict(raw_universe)
+        except BaseException as exc:
+            error = f"Rapor okunamadı: {exc}"
+            summary = None
+            universe = None
+        error = self._bounded_error(error)
         with self.lock:
             self.state = "error" if error else "done"
             self.error = error
@@ -178,6 +206,23 @@ class BacktestManager:
             self.universe = universe
             self.finished_at = datetime.now(UTC).isoformat()
         log.info("Web backtest finished: %s (%s)", self.run_id, self.state)
+
+    def _terminalize_start_failure(self, exc: BaseException) -> None:
+        """Publish a terminal error for an attempt that never launched."""
+        self.state = "error"
+        self.error = self._bounded_error(str(exc) or type(exc).__name__)
+        self.summary = None
+        self.universe = None
+        self.finished_at = datetime.now(UTC).isoformat()
+
+    @staticmethod
+    def _bounded_error(error: str | None) -> str | None:
+        if error is None:
+            return None
+        text = str(error).strip() or "Backtest failed"
+        if len(text) > _MAX_OPERATOR_ERROR_LENGTH:
+            return text[: _MAX_OPERATOR_ERROR_LENGTH - 3] + "..."
+        return text
 
     def status(self) -> dict[str, Any]:
         is_running = self.is_running

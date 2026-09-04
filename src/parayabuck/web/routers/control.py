@@ -21,40 +21,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 router = APIRouter(tags=["control"])
 
 
-def _resolve_manager() -> Any:
-    try:
-        from parayabuck.web.state import get_web_state
-
-        state = get_web_state()
-        if state is not None:
-            mgr = getattr(state, "engine_manager", None)
-            if mgr is not None:
-                return mgr
-            if hasattr(state, "current_engine_state"):
-                return state
-    except Exception:
-        pass
-    try:
-        from parayabuck.web import server as server_mod
-
-        mgr = getattr(server_mod, "manager", None)
-        if mgr is not None:
-            return mgr
-    except Exception:
-        pass
-    return None
+def _resolve_manager(request: Request) -> Any:
+    state = getattr(request.app.state, "web", None)
+    manager = getattr(state, "engine_manager", None) if state is not None else None
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Engine manager unavailable")
+    return manager
 
 
 @router.get("/api/control-token")
-async def get_control_token() -> JSONResponse:
-    manager = _resolve_manager()
-    token = getattr(manager, "control_token", "") if manager is not None else ""
+async def get_control_token(request: Request) -> JSONResponse:
+    manager = _resolve_manager(request)
+    token = getattr(manager, "control_token", None)
+    if not isinstance(token, str) or not token:
+        raise HTTPException(status_code=503, detail="Control token unavailable")
     response = JSONResponse({"control_token": token})
     response.headers["Cache-Control"] = "no-store"
     return response

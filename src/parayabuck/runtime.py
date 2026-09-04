@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import os
 import queue
 import threading
@@ -29,13 +30,14 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
+from parayabuck.execution.alpaca_reconciliation import ReconciliationReport, ReconciliationResultError
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     portfolio_risk_limits_from_config,
 )
-from parayabuck.live_safety import LiveOperatorApproval
+from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
@@ -61,6 +63,7 @@ from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
     PortfolioRuntime,
     PortfolioStateRepository,
+    configuration_digest,
     is_terminal_order_status,
 )
 from parayabuck.risk.state import RiskState
@@ -138,6 +141,7 @@ _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
 # Per-market scanner-refresh backoff (seconds) after a failed scheduled
 # refresh: ~5 min, then ~15, ~30, capped at ~60 min per consecutive failure.
 _UNIVERSE_RETRY_BACKOFF_SECONDS = (300.0, 900.0, 1800.0, 3600.0)
+_RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
 
 
 class _StrategyTimeframes(Protocol):
@@ -181,7 +185,13 @@ class EngineRuntime:
     # __init__-created lock, keeping per-instance isolation.
     _ingestion_lock = threading.Lock()
 
-    def __init__(self, api_key: str, secret_key: str, config: Config) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        config: Config,
+        live_startup_proof: LiveStartupProof | None = None,
+    ) -> None:
         self._validate_execution_mode(config)
         self.api_key = api_key
         self.secret_key = secret_key
@@ -424,6 +434,9 @@ class EngineRuntime:
         )
         self._runtime_session_id: str | None = None
         self._reconcile_failed = False
+        self._live_startup_proof = live_startup_proof
+        self._startup_committed = False
+        self._snapshot_writer_started = False
 
     @staticmethod
     def _validate_execution_mode(config: Config) -> None:
@@ -489,6 +502,53 @@ class EngineRuntime:
             snapshot_id=f"{market.value}:configured:{policy_digest}",
             config_digest=policy_digest,
         )
+
+    def _expected_live_configuration_digests(self) -> tuple[str, ...]:
+        risk_limits = portfolio_risk_limits_from_config(self.app_config.risk)
+        execution_policy = PortfolioExecutionPolicy(
+            rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
+            minimum_order_notional=self.app_config.execution.minimum_order_notional,
+        )
+        digests: list[str] = []
+        for strategy, _symbols, maximum_allocation in self._strategy_specs:
+            universe_version = (
+                scanner_config_digest(self.app_config.universe.equity)
+                if strategy.market == Market.EQUITY
+                else crypto_scanner_config_digest(self.app_config.universe.crypto)
+            )
+            digests.append(
+                configuration_digest(
+                    strategy,
+                    self.mode.value,
+                    maximum_allocation,
+                    universe_version,
+                    risk_limits,
+                    execution_policy,
+                )
+            )
+        return tuple(digests)
+
+    def _verify_live_startup_proof(self, expected_digests: tuple[str, ...]) -> LiveOperatorApproval:
+        proof = self._live_startup_proof
+        if not isinstance(proof, LiveStartupProof) or not proof.is_fresh():
+            raise RuntimeError("Live startup proof is missing or expired")
+        expected_fingerprint = hashlib.sha256(f"{self.api_key}\0{self.secret_key}".encode()).hexdigest()
+        if proof.credential_fingerprint != expected_fingerprint:
+            raise RuntimeError("Live startup proof does not match the configured credentials")
+        if proof.configuration_digests != expected_digests:
+            raise RuntimeError("Live startup proof does not match the loaded configuration")
+        secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
+        approval = LiveOperatorApproval.load_verified(
+            self.app_config.live.operator_approval_path,
+            secret=secret,
+            account_id=proof.account_id,
+            configuration_digests=expected_digests,
+        )
+        self.broker.account()
+        account_id = str(getattr(self.broker, "account_id", "") or "")
+        if not account_id or account_id != proof.account_id:
+            raise RuntimeError("Live startup proof does not match the verified broker account")
+        return approval
 
     @property
     def is_running(self) -> bool:
@@ -777,20 +837,29 @@ class EngineRuntime:
         }
 
     def start(self) -> None:
+        state = getattr(self, "_state", None)
+        preexisting = bool(getattr(self, "_running", False)) or state in {
+            "starting",
+            "running",
+            "warming_up",
+            "degraded",
+            "halted",
+            "stopping",
+            "stop_failed",
+        }
+        self._startup_committed = False
+        self._startup_cleanup_attempted = False
         try:
-            if _observe is not None:
-                _observe.on_runtime_started(
-                    session_id=getattr(self, "_session_id", None),
-                    mode=getattr(self, "mode", None).value if hasattr(self, "mode") else None,  # type: ignore[union-attr]
-                    pid=None,
-                )
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_snapshot_writer", None) is not None:
-                self._snapshot_writer.start()  # type: ignore[union-attr]
-        except Exception:
-            pass
+            self._start_impl()
+        except BaseException:
+            if not preexisting and not getattr(self, "_startup_cleanup_attempted", False):
+                try:
+                    self.stop()
+                except BaseException:
+                    log.exception("Runtime startup cleanup failed")
+            raise
+
+    def _start_impl(self) -> None:
         if self._running:
             raise RuntimeError("Engine runtime is already running")
         if self._state == "stop_failed":
@@ -804,17 +873,24 @@ class EngineRuntime:
                 raise RuntimeError("Live runtime requires a positive live.hard_dollar_cap")
             if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
                 raise RuntimeError("Live runtime requires PARAYABUCK_ENABLE_LIVE=YES")
+        expected_live_digests: tuple[str, ...] = ()
+        live_approval: LiveOperatorApproval | None = None
+        if self.mode == RuntimeMode.LIVE:
+            expected_live_digests = self._expected_live_configuration_digests()
+            live_approval = self._verify_live_startup_proof(expected_live_digests)
         self._stop_event.clear()
         self._state = "starting"
         try:
-            self.broker.reconcile()
+            reconciliation = ReconciliationReport.from_result(self.broker.reconcile())
+            if reconciliation.has_drift:
+                self._circuit_breaker_reason = "reconciliation_failed"
+                self._reconcile_failed = True
+                self._state = "halted"
+                raise ReconciliationResultError(
+                    f"Startup reconciliation found drift: {reconciliation.drift_categories}"
+                )
             self._last_reconciliation_at = datetime.now(UTC)
-            # A verified startup reconciliation is the same recovery
-            # condition the periodic path uses: reconcile() raises on
-            # ownership drift / protection / ambiguous state, so success
-            # means every persisted PERSISTENT_INCIDENT is resolved and a
-            # restart must not resurrect it.
-            self.ledger.clear_safety_incident(self.broker.account_id or "unknown")
+            self._clear_reconciliation_incidents()
         except Exception as exc:
             if _is_transient_network_error(exc):
                 # G2/G3 boundary: a transient broker API failure is NOT a
@@ -824,8 +900,15 @@ class EngineRuntime:
                     f"Startup reconciliation deferred after transient network failure: {exc}"
                 ) from exc
             self._circuit_breaker_reason = (
-                "protection_failure" if isinstance(exc, ProtectionReconciliationError) else "reconciliation_failed"
+                "protection_failure"
+                if isinstance(exc, ProtectionReconciliationError)
+                else "ownership_drift"
+                if isinstance(exc, OwnershipDriftError)
+                else "ambiguous_order_state"
+                if isinstance(exc, AmbiguousOrderState)
+                else "reconciliation_failed"
             )
+            self._persist_reconciliation_incident(self._circuit_breaker_reason)
             self._state = "halted"
             alerts.emit(
                 "reconciliation_failure",
@@ -881,13 +964,12 @@ class EngineRuntime:
             )
         self._portfolio_runtimes = tuple(portfolio_runtimes)
         if not self.paper:
-            secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
-            approval = LiveOperatorApproval.load_verified(
-                self.app_config.live.operator_approval_path,
-                secret=secret,
-                account_id=self.broker.account_id or "unknown",
-                configuration_digests=tuple(runtime.configuration_digest for runtime in self._portfolio_runtimes),
-            )
+            if live_approval is None:
+                raise RuntimeError("Live startup approval was not verified")
+            approval = live_approval
+            actual_digests = tuple(runtime.configuration_digest for runtime in self._portfolio_runtimes)
+            if actual_digests != expected_live_digests:
+                raise RuntimeError("Live runtime configuration changed during startup")
             authorized_live_cap = min(configured_live_cap, approval.maximum_dollar_exposure)
             if authorized_live_cap <= 0:
                 raise RuntimeError("Live operator approval does not authorize positive exposure")
@@ -1043,6 +1125,30 @@ class EngineRuntime:
         if record_session is not None:
             # Observability-only; fake ledgers in unit tests may omit it.
             self._runtime_session_id = record_session(self.broker.account_id or "unknown", self.mode.value)
+        self._startup_committed = True
+        try:
+            if getattr(self, "_snapshot_writer", None) is not None:
+                self._snapshot_writer.start()  # type: ignore[union-attr]
+                self._snapshot_writer_started = True
+        except Exception:
+            # ``start()`` may have created a worker before raising.  Give the
+            # writer its own best-effort stop even though the runtime commit
+            # itself succeeded.
+            try:
+                self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
+            except Exception:
+                pass
+            self._snapshot_writer_started = False
+            log.warning("Runtime snapshot writer could not start", exc_info=True)
+        try:
+            if _observe is not None:
+                _observe.on_runtime_started(
+                    session_id=self._runtime_session_id,
+                    mode=self.mode.value,
+                    pid=None,
+                )
+        except Exception:
+            pass
         runtime_metrics_store.record_event("runtime_started")
         alerts.emit(
             "runtime_started",
@@ -1672,24 +1778,31 @@ class EngineRuntime:
                 runtime.history.setdefault(symbol, [])
 
     def stop(self) -> bool:
+        self._startup_cleanup_attempted = True
         alive: list[str] = []
         previous_state = getattr(self, "_state", None)
         breaker_at_stop = getattr(self, "_circuit_breaker_reason", None)
-        if self._running:
+        if getattr(self, "_running", False):
             self._state = "stopping"
             self._running = False
             self._stop_event.set()
         try:
-            if _observe is not None:
-                _observe.on_runtime_stopping(session_id=getattr(self, "_session_id", None), reason="stop")
+            session_id = getattr(self, "_runtime_session_id", None)
+            if _observe is not None and (getattr(self, "_startup_committed", False) or session_id is not None):
+                _observe.on_runtime_stopping(session_id=session_id, reason="stop")
         except Exception:
             pass
-        try:
-            if getattr(self, "_snapshot_writer", None) is not None:
+        if getattr(self, "_snapshot_writer_started", False) and getattr(self, "_snapshot_writer", None) is not None:
+            try:
                 self._snapshot_writer.write_stopped()  # type: ignore[union-attr]
-                self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
-        except Exception:
-            pass
+            except Exception:
+                pass
+            finally:
+                try:
+                    self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
+                except Exception:
+                    pass
+                self._snapshot_writer_started = False
         try:
             if hasattr(self, "_events") and hasattr(self._events, "put_nowait"):
                 self._events.put_nowait(None)
@@ -1770,27 +1883,36 @@ class EngineRuntime:
                 circuit_breaker_reason=breaker_at_stop,
             )
         session_id = getattr(self, "_runtime_session_id", None)
-        if session_id is not None:
+        ledger = getattr(self, "ledger", None)
+        if session_id is not None and ledger is not None:
             try:
-                self.ledger.end_runtime_session(
+                ledger.end_runtime_session(
                     session_id,
                     "unexpected" if unexpected else "stopped",
                 )
             except Exception as exc:
                 log.warning("Runtime session end failed: %s", exc)
             self._runtime_session_id = None
-        if not self._storage_closed:
+        if not getattr(self, "_storage_closed", False):
             try:
                 for runtime in getattr(self, "_portfolio_runtimes", ()):
                     runtime.close("stopped")
                 # Give in-flight stream-thread writes a moment to land before
                 # the SQLite connections below are released.
                 time.sleep(0.25)
-                self.ledger.close()
+                if ledger is not None:
+                    ledger.close()
             except Exception as exc:
                 log.exception("Runtime storage close failed: %s", exc)
             self._storage_closed = True
-        self._state = "stopped"
+        # Preserve a pre-commit safety halt/error for operator visibility;
+        # transient and ordinary setup failures return to the reusable
+        # stopped state after their attempt-owned resources are closed.
+        if not getattr(self, "_startup_committed", False) and previous_state in {"halted", "error"}:
+            self._state = previous_state
+        else:
+            self._state = "stopped"
+        self._startup_committed = False
         log.info("Engine runtime stopped")
         return True
 
@@ -2003,6 +2125,25 @@ class EngineRuntime:
                 )
             )
 
+    def _persist_reconciliation_incident(self, reason: str) -> None:
+        """Persist a reconciliation-owned failure before returning to callers."""
+        account_id = getattr(self.broker, "account_id", None) or "unknown"
+        save = getattr(getattr(self, "ledger", None), "save_safety_incident", None)
+        if callable(save):
+            save(account_id, reason)
+            return
+        log.critical("Safety incident could not be persisted; ledger has no incident writer: %s", reason)
+
+    def _clear_reconciliation_incidents(self) -> None:
+        """Clear only incidents whose documented recovery is clean reconcile."""
+        account_id = getattr(self.broker, "account_id", None) or "unknown"
+        clear = getattr(getattr(self, "ledger", None), "clear_safety_incident", None)
+        if callable(clear):
+            for reason in sorted(_RECONCILIATION_INCIDENT_REASONS):
+                clear(account_id, reason)
+        if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
+            self._circuit_breaker_reason = None
+
     def _restore_persistent_state(self) -> None:
         """Restore persisted runtime state at startup.
 
@@ -2033,6 +2174,8 @@ class EngineRuntime:
             "post_fill_risk_violation",
             "final_market_event_queue_overflow",
             "ownership_drift",
+            "reconciliation_failed",
+            "reconciliation_bug_suspected",
         }
         incidents = self.ledger.load_safety_incidents(account_id)
         for incident in incidents:
@@ -2755,7 +2898,7 @@ class EngineRuntime:
                         message=msg,
                         market=market_name,
                         strategy=portfolio_runtime.strategy.name,
-                        session_id=getattr(self, "_runtime_session_id", None) or getattr(self, "_session_id", None),
+                        session_id=getattr(self, "_runtime_session_id", None),
                         account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
                         deterministic_extra=f"{market_name}:{portfolio_runtime.strategy.name}:{first_reason}:{day}",
                         fields={
@@ -3134,7 +3277,7 @@ class EngineRuntime:
                         age = (datetime.now(UTC) - self._last_account_at).total_seconds()
                     _observe.on_account_stale(
                         age_seconds=age,
-                        session_id=getattr(self, "_session_id", None),
+                        session_id=getattr(self, "_runtime_session_id", None),
                         account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
                     )
             except Exception:
@@ -3143,7 +3286,7 @@ class EngineRuntime:
             try:
                 if _observe is not None:
                     _observe.on_account_recovered(
-                        session_id=getattr(self, "_session_id", None),
+                        session_id=getattr(self, "_runtime_session_id", None),
                         account_id=getattr(self.broker, "account_id", None) if hasattr(self, "broker") else None,
                     )
             except Exception:
@@ -3696,47 +3839,32 @@ class EngineRuntime:
         reconcile_lock = getattr(self, "_reconcile_lock", threading.Lock())
         with reconcile_lock:
             try:
-                result = self.broker.reconcile()
-                # --- 7-category fail-closed handling (ALPACA-7) ---
-                if isinstance(result, dict):
-                    mismatched = []
-                    for key in (
-                        "LOCAL_STALE",
-                        "BROKER_STALE",
-                        "QUANTITY_MISMATCH",
-                        "UNKNOWN_ORDER",
-                        "MISSING_LOCAL_ORDER",
-                        "MISSING_BROKER_ORDER",
-                    ):
-                        if result.get(key):
-                            mismatched.append(f"{key}={result[key]}")
-                    if mismatched:
-                        log.warning(
-                            "Reconciliation categories show drift (fail-closed, new orders blocked): %s",
-                            "; ".join(mismatched),
-                        )
-                        self._circuit_breaker_reason = "reconciliation_failed"
-                        self._reconcile_failed = True
-                        runtime_metrics_store.record_event("reconciliation_failure")
-                        alerts.emit(
-                            "reconciliation_failure",
-                            message="Reconciliation drift detected; new orders blocked pending verified reconcile",
-                            reason="reconciliation_failed",
-                            categories={k: result.get(k) for k in result},
-                        )
-                        # Still update last_reconciliation_at so the drift is visible,
-                        # but do not clear incidents — require operator-verified recovery.
-                        self._last_reconciliation_at = datetime.now(UTC)
-                        self._last_account_at = datetime.now(UTC)
-                        self._generic_reconcile_failures = 0
-                        return
+                report = ReconciliationReport.from_result(self.broker.reconcile())
+                if report.has_drift:
+                    log.warning(
+                        "Reconciliation categories show drift (fail-closed, new orders blocked): %s",
+                        "; ".join(f"{key}={values}" for key, values in report.drift_categories.items()),
+                    )
+                    self._circuit_breaker_reason = "reconciliation_failed"
+                    self._reconcile_failed = True
+                    self._persist_reconciliation_incident("reconciliation_failed")
+                    runtime_metrics_store.record_event("reconciliation_failure")
+                    alerts.emit(
+                        "reconciliation_failure",
+                        message="Reconciliation drift detected; new orders blocked pending verified reconcile",
+                        reason="reconciliation_failed",
+                        categories=report.as_dict(),
+                    )
+                    # Still update last_reconciliation_at so the drift is visible,
+                    # but do not clear incidents — require operator-verified recovery.
+                    self._last_reconciliation_at = datetime.now(UTC)
+                    self._last_account_at = datetime.now(UTC)
+                    self._generic_reconcile_failures = 0
+                    return
                 self._last_reconciliation_at = datetime.now(UTC)
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0
                 account_id = self.broker.account_id or "unknown"
-                # reconcile() raises on drift/protection issues, so reaching
-                # this line proves every persisted halt resolved; clear the
-                # incidents so a restart does not resurrect them.
                 if getattr(self, "_reconcile_failed", False):
                     self._reconcile_failed = False
                     runtime_metrics_store.record_event("reconciliation_recovered")
@@ -3745,9 +3873,18 @@ class EngineRuntime:
                         message="Periodic reconciliation recovered",
                         account_id=account_id,
                     )
-                self.ledger.clear_safety_incident(account_id)
-                if self._circuit_breaker_reason == "reconciliation_failed":
-                    self._circuit_breaker_reason = None
+                self._clear_reconciliation_incidents()
+            except ReconciliationResultError as exc:
+                self._circuit_breaker_reason = "reconciliation_failed"
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                runtime_metrics_store.record_event("reconciliation_failure")
+                alerts.emit(
+                    "reconciliation_failure",
+                    message="Reconciliation returned an invalid result shape",
+                    reason="reconciliation_failed",
+                    error=str(exc),
+                )
             except RequestException as exc:
                 # Alpaca occasionally times out for a single request. The next
                 # scheduled reconciliation retries it; a full traceback every
@@ -3755,6 +3892,7 @@ class EngineRuntime:
                 log.warning("Position protection check deferred after Alpaca API error: %s", exc)
                 self._circuit_breaker_reason = "reconciliation_failed"
                 self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
                 runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
@@ -3779,6 +3917,7 @@ class EngineRuntime:
                 log.exception("Managed position protection reconciliation failed")
                 self._circuit_breaker_reason = "protection_failure"
                 self._reconcile_failed = True
+                self._persist_reconciliation_incident("protection_failure")
                 runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
@@ -3797,6 +3936,7 @@ class EngineRuntime:
                     self._circuit_breaker_reason = "reconciliation_bug_suspected"
                 else:
                     self._circuit_breaker_reason = "reconciliation_failed"
+                self._persist_reconciliation_incident(self._circuit_breaker_reason)
                 runtime_metrics_store.record_event("reconciliation_failure")
                 alerts.emit(
                     "reconciliation_failure",
@@ -3845,7 +3985,22 @@ class EngineRuntime:
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
-        self.broker.reconcile()  # verified recovery before rebasing
+        try:
+            report = ReconciliationReport.from_result(self.broker.reconcile())
+        except Exception as exc:
+            self._circuit_breaker_reason = "reconciliation_failed"
+            self._reconcile_failed = True
+            self._persist_reconciliation_incident("reconciliation_failed")
+            raise RuntimeError(f"Cannot reset the risk epoch before reconciliation succeeds: {exc}") from exc
+        if report.has_drift:
+            self._circuit_breaker_reason = "reconciliation_failed"
+            self._reconcile_failed = True
+            self._persist_reconciliation_incident("reconciliation_failed")
+            raise RuntimeError(
+                f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
+            )
+        self._last_reconciliation_at = datetime.now(UTC)
+        self._clear_reconciliation_incidents()
         account = self.broker.account()  # fresh authoritative snapshot
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
@@ -3923,8 +4078,20 @@ class EngineRuntime:
             except Exception as exc:
                 raise ValueError(f"Stream membership cannot be reconnected: {exc}") from exc
         with self._reconcile_lock:
-            self.broker.reconcile()
+            try:
+                report = ReconciliationReport.from_result(self.broker.reconcile())
+            except Exception as exc:
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise ValueError(f"Safety lock remains active until reconciliation succeeds: {exc}") from exc
+            if report.has_drift:
+                self._reconcile_failed = True
+                self._persist_reconciliation_incident("reconciliation_failed")
+                raise ValueError(
+                    f"Safety lock remains active while reconciliation reports drift: {report.drift_categories}"
+                )
             self._last_reconciliation_at = datetime.now(UTC)
+            self._clear_reconciliation_incidents()
             account_id = self.broker.account_id or "unknown"
             entries = self.ledger.managed_entries_for_account(account_id)
             if any(item.status == "manual_intervention_required" for item in entries):

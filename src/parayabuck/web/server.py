@@ -54,6 +54,14 @@ class _ServerModule(sys.modules[__name__].__class__):  # type: ignore[misc]
                     backtest_manager.bind_engine_state_provider(value.current_engine_state)
                 except Exception:
                     pass
+                try:
+                    value.bind_backtest_manager(backtest_manager)
+                except Exception:
+                    pass
+                try:
+                    value.bind_ticket_store(web_state.ticket_store)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -125,10 +133,18 @@ except Exception:
     serve_tools = None
     serve_research = None
 
-try:
-    from parayabuck.web.routers.control import get_control_token  # noqa: F401
-except Exception:
-    get_control_token = None
+
+async def get_control_token() -> Any:
+    """Direct-call compatibility wrapper for the legacy server surface."""
+    from fastapi import HTTPException as _HTTP
+    from fastapi.responses import JSONResponse
+
+    token = getattr(manager, "control_token", None)
+    if not isinstance(token, str) or not token:
+        raise _HTTP(status_code=503, detail="Control token unavailable")
+    response = JSONResponse({"control_token": token})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # --- Status / account / ops (wrappers without Request for direct calls) ---
@@ -357,7 +373,7 @@ async def dashboard_overview() -> dict[str, Any]:
 
     from parayabuck.web.services.dashboard import get_overview_payload
 
-    return await _aio.to_thread(get_overview_payload)
+    return await _aio.to_thread(get_overview_payload, web_state)
 
 
 async def _dashboard_panel(key: str) -> dict[str, Any]:
@@ -365,7 +381,7 @@ async def _dashboard_panel(key: str) -> dict[str, Any]:
 
     from parayabuck.web.services.dashboard import get_panel
 
-    return await _aio.to_thread(get_panel, key)
+    return await _aio.to_thread(get_panel, key, web_state)
 
 
 async def dashboard_equity() -> dict[str, Any]:
@@ -427,8 +443,16 @@ def _dashboard_payload(*args: Any, **kwargs: Any) -> Any:
     try:
         import parayabuck.web.server_legacy as _leg
 
-        # _leg._dashboard_payload is sync in original
-        return _leg._dashboard_payload(*args, **kwargs)
+        # The legacy implementation now receives explicit per-request state.
+        context = kwargs.pop("context", None)
+        if context is None:
+            context = _leg.DashboardContext(
+                engine_manager=web_state.engine_manager,
+                backtest_manager=web_state.backtest_manager,
+            )
+        call_kwargs = dict(kwargs)
+        call_kwargs["context"] = context
+        return _leg._dashboard_payload(*args, **call_kwargs)
     except Exception:
         pass
     try:
@@ -443,26 +467,10 @@ def _dashboard_payload(*args: Any, **kwargs: Any) -> Any:
 
 
 def _dashboard_market_decisions(*args: Any, **kwargs: Any) -> Any:
-    # Patch legacy's manager to current (possibly stub) for test isolation
     try:
-        import parayabuck.web.server as srv
         import parayabuck.web.server_legacy as leg
 
-        orig = getattr(leg, "manager", None)
-        orig_back = getattr(leg, "backtest_manager", None)
-        try:
-            leg.manager = srv.manager  # type: ignore[assignment]
-            try:
-                leg.backtest_manager = srv.backtest_manager  # type: ignore[assignment]
-            except Exception:
-                pass
-            return leg._dashboard_market_decisions(*args, **kwargs)
-        finally:
-            try:
-                leg.manager = orig  # type: ignore[assignment]
-                leg.backtest_manager = orig_back  # type: ignore[assignment]
-            except Exception:
-                pass
+        return leg._dashboard_market_decisions(*args, **kwargs)
     except Exception:
         try:
             from parayabuck.web.services.status import (  # type: ignore[attr-defined]

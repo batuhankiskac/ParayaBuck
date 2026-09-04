@@ -14,9 +14,9 @@ from fastapi import HTTPException
 import parayabuck.execution.alpaca as alpaca_module
 from parayabuck.config import load_config
 from parayabuck.core.models import Market
-from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
 from parayabuck.live_safety import LiveOperatorApproval
-from parayabuck.portfolio import portfolio_strategy_from
+from parayabuck.portfolio import product_strategy_from
 from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
 from parayabuck.universe.crypto_scanner import crypto_scanner_config_digest
@@ -59,7 +59,11 @@ def _expected_digests(config_path: Path) -> tuple[str, ...]:
     ):
         if not selection.enabled or not symbols:
             continue
-        strategy = portfolio_strategy_from(selection.name, selection.parameters)
+        strategy = product_strategy_from(
+            selection.name,
+            selection.parameters,
+            timeframe=selection.timeframe,
+        )
         digests.append(
             configuration_digest(
                 strategy,
@@ -67,6 +71,10 @@ def _expected_digests(config_path: Path) -> tuple[str, ...]:
                 selection.maximum_allocation,
                 universe_version,
                 portfolio_risk_limits_from_config(cfg.risk),
+                PortfolioExecutionPolicy(
+                    rebalance_band_pct=cfg.execution.rebalance_band_pct,
+                    minimum_order_notional=cfg.execution.minimum_order_notional,
+                ),
             )
         )
     return tuple(digests)

@@ -5,24 +5,27 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from parayabuck.web.lifespan import create_lifespan
 from parayabuck.web.security import build_protect_middleware
-from parayabuck.web.state import WebState, get_web_state, set_web_state
+from parayabuck.web.state import WebState
 
 
 def _default_state() -> WebState:
     from parayabuck.web.managers.backtest import BacktestManager
     from parayabuck.web.managers.engine import EngineManager
-    from parayabuck.web.managers.websocket import ticket_store
+    from parayabuck.web.security import WebSocketTicketStore
 
     engine_manager = EngineManager()
     backtest_manager = BacktestManager(engine_state_provider=engine_manager.current_engine_state)
-    backtest_manager.bind_engine_state_provider(engine_manager.current_engine_state)
 
-    state = WebState(engine_manager=engine_manager, backtest_manager=backtest_manager, ticket_store=ticket_store)
+    state = WebState(
+        engine_manager=engine_manager,
+        backtest_manager=backtest_manager,
+        ticket_store=WebSocketTicketStore(ttl_seconds=30.0),
+    )
     state.bind()
     return state
 
@@ -30,21 +33,20 @@ def _default_state() -> WebState:
 def create_app(state: WebState | None = None) -> FastAPI:
     """Create FastAPI app with all routers and middleware."""
     if state is None:
-        state = get_web_state()
-        if state is None:
-            state = _default_state()
-
-    set_web_state(state)
+        state = _default_state()
+    state.bind()
 
     lifespan = create_lifespan(lambda: state)
 
     app = FastAPI(title="ParayaBuck Trading Terminal", lifespan=lifespan)
+    app.state.web = state
+    app.state.web_state = state
 
-    def _token_provider() -> str:
-        try:
-            return str(state.engine_manager.control_token)
-        except Exception:
-            return ""
+    def _token_provider(request: Request) -> str:
+        token = getattr(request.app.state.web.engine_manager, "control_token", None)
+        if not isinstance(token, str) or not token:
+            raise RuntimeError("control token unavailable")
+        return token
 
     app.middleware("http")(build_protect_middleware(_token_provider))
 
@@ -101,8 +103,6 @@ def create_app(state: WebState | None = None) -> FastAPI:
     except Exception:
         pass
 
-    app.state.web = state
-    app.state.web_state = state
     return app
 
 

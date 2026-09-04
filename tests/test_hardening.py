@@ -47,6 +47,16 @@ from tests.helpers import apply_entry_fill
 
 pytestmark = pytest.mark.paper_chaos
 
+_CLEAN_RECONCILIATION = {
+    "MATCH": [],
+    "LOCAL_STALE": [],
+    "BROKER_STALE": [],
+    "QUANTITY_MISMATCH": [],
+    "UNKNOWN_ORDER": [],
+    "MISSING_LOCAL_ORDER": [],
+    "MISSING_BROKER_ORDER": [],
+}
+
 
 def test_market_models_reject_non_finite_values() -> None:
     aware = datetime.now(UTC)
@@ -934,7 +944,7 @@ def test_safety_lock_reset_requires_clean_reconciliation() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: reconciled.append(True),
+        reconcile=lambda: reconciled.append(True) or dict(_CLEAN_RECONCILIATION),
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -974,7 +984,7 @@ def test_safety_lock_reset_is_granular_per_market_halt() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,  # ownership reconciliation succeeds
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),  # ownership reconciliation succeeds
         account=lambda: account,
     )
     # A crypto managed exit is still in flight (not provably terminal).
@@ -1034,7 +1044,7 @@ def test_safety_lock_reset_retains_unrecognized_halt() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1068,7 +1078,7 @@ def test_safety_lock_reset_subscription_halt_needs_resync() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1125,7 +1135,7 @@ def test_safety_lock_reset_universe_halt_needs_valid_refresh() -> None:
     account = AccountSnapshot(10_000, 10_000, 10_000, 0)
     runtime.broker = SimpleNamespace(
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
         account=lambda: account,
     )
     runtime.ledger = SimpleNamespace(
@@ -1168,7 +1178,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
     runtime._not_ready_symbols = set()
     runtime._reconcile_lock = threading.Lock()
     runtime.market_state = SimpleNamespace(has_data_gaps=False, entry_halt_reason="locked")
-    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: None)
+    runtime.broker = SimpleNamespace(account_id="acct", reconcile=lambda: dict(_CLEAN_RECONCILIATION))
     runtime.ledger = SimpleNamespace(
         managed_entries_for_account=lambda _account: (SimpleNamespace(status="manual_intervention_required"),),
         clear_safety_incident=lambda _account, _reason=None: None,

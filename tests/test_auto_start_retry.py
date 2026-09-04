@@ -30,6 +30,16 @@ from parayabuck.web import server
 
 _REAL_SLEEP = asyncio.sleep
 
+_CLEAN_RECONCILIATION = {
+    "MATCH": [],
+    "LOCAL_STALE": [],
+    "BROKER_STALE": [],
+    "QUANTITY_MISMATCH": [],
+    "UNKNOWN_ORDER": [],
+    "MISSING_LOCAL_ORDER": [],
+    "MISSING_BROKER_ORDER": [],
+}
+
 
 # ---------------------------------------------------------------------------
 # Runtime-side classification
@@ -51,9 +61,10 @@ class _ReconcilingBroker:
     def __init__(self, exc: BaseException | None = None) -> None:
         self.exc = exc
 
-    def reconcile(self) -> None:
+    def reconcile(self) -> dict[str, list[str]]:
         if self.exc is not None:
             raise self.exc
+        return dict(_CLEAN_RECONCILIATION)
 
 
 def _http_error(status: int) -> requests.exceptions.HTTPError:
@@ -68,7 +79,7 @@ def test_reconcile_connection_error_is_transient_and_not_recorded() -> None:
         runtime.start()
     # G2/G3 boundary: no permanent incident and no halt are recorded.
     assert getattr(runtime, "_circuit_breaker_reason", None) is None
-    assert runtime._state == "starting"
+    assert runtime._state == "stopped"
 
 
 def test_reconcile_timeout_is_transient() -> None:
@@ -116,7 +127,7 @@ def test_reconcile_ambiguous_order_state_stays_permanent() -> None:
     runtime = _bare_runtime(broker=_ReconcilingBroker(AmbiguousOrderState("submitting crash window")))
     with pytest.raises(AmbiguousOrderState):
         runtime.start()
-    assert runtime._circuit_breaker_reason == "reconciliation_failed"
+    assert runtime._circuit_breaker_reason == "ambiguous_order_state"
     assert runtime._state == "halted"
 
 
@@ -197,7 +208,7 @@ def _full_paper_runtime(**overrides: Any) -> EngineRuntime:
     runtime.broker = SimpleNamespace(  # type: ignore[attr-defined]
         account_id="acct",
         account=lambda: SimpleNamespace(positions=()),
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
     )
     runtime.ledger = SimpleNamespace(  # type: ignore[attr-defined]
         managed_entries_for_account=lambda account_id: (),
@@ -289,7 +300,7 @@ def _tail_capable_runtime(**overrides: Any) -> EngineRuntime:
     }
     runtime.broker = SimpleNamespace(  # type: ignore[attr-defined]
         account_id="acct",
-        reconcile=lambda: None,
+        reconcile=lambda: dict(_CLEAN_RECONCILIATION),
         account=lambda: SimpleNamespace(
             equity=100_000.0,
             daily_pnl=0.0,
@@ -327,10 +338,8 @@ def test_final_account_fetch_network_failure_is_transient() -> None:
     assert getattr(runtime, "_circuit_breaker_reason", None) is None
 
 
-def test_verified_startup_reconcile_clears_persisted_incidents() -> None:
-    """A successful startup reconciliation is the same verified recovery the
-    periodic path uses: persisted PERSISTENT_INCIDENTs must be cleared so a
-    restart cannot resurrect an already-resolved halt."""
+def test_verified_startup_reconcile_clears_reconciliation_incidents() -> None:
+    """A clean startup reconciliation clears only its owned incidents."""
     cleared: list[tuple[str, str | None]] = []
     runtime = _tail_capable_runtime()
     runtime.ledger = SimpleNamespace(  # type: ignore[attr-defined]
@@ -342,9 +351,12 @@ def test_verified_startup_reconcile_clears_persisted_incidents() -> None:
         total_fees_for_account=lambda account_id: 0.0,
     )
     runtime.start()
-    # The verified startup reconcile cleared ALL persisted incidents; the
-    # account-poll latch mirror may add a no-breach drawdown clear after.
-    assert cleared and cleared[0] == ("acct", None)
+    # Startup reconciliation clears only its own reason-scoped incidents. A
+    # later fresh account evaluation may clear its separately verified
+    # drawdown mirror, but no account-wide clear is permitted.
+    assert ("acct", "reconciliation_failed") in cleared
+    assert ("acct", "reconciliation_bug_suspected") in cleared
+    assert all(reason is not None for _account, reason in cleared)
 
 
 def test_restart_rebalance_resume_deferred_while_breaker_active() -> None:
@@ -362,6 +374,73 @@ def test_restart_rebalance_resume_deferred_while_breaker_active() -> None:
     runtime._advance_portfolio_rebalance = advanced.append  # type: ignore[attr-defined]
     runtime.start()
     assert advanced == []
+
+
+def test_start_commits_before_snapshot_writer_and_runtime_started(monkeypatch: Any) -> None:
+    runtime = _tail_capable_runtime()
+    runtime._runtime_session_id = None  # type: ignore[attr-defined]
+    runtime.stop = EngineRuntime.stop.__get__(runtime)  # type: ignore[method-assign]
+    events: list[str] = []
+
+    class Writer:
+        started = False
+
+        def start(self) -> None:
+            events.append("writer_start")
+            self.started = True
+
+        def write_stopped(self) -> None:
+            events.append("writer_write_stopped")
+
+        def stop(self, *, timeout: float) -> None:
+            events.append("writer_stop")
+
+    writer = Writer()
+    runtime._snapshot_writer = writer  # type: ignore[attr-defined]
+
+    class Observer:
+        def on_runtime_started(self, **_kwargs: Any) -> None:
+            assert runtime._startup_committed  # type: ignore[attr-defined]
+            assert writer.started
+            events.append("runtime_started")
+
+    monkeypatch.setattr(runtime_module, "_observe", Observer())
+    runtime.start()
+    try:
+        assert events[:2] == ["writer_start", "runtime_started"]
+    finally:
+        runtime.stop()
+
+
+def test_precommit_stream_failure_does_not_start_writer_or_observability(monkeypatch: Any) -> None:
+    runtime = _tail_capable_runtime()
+    runtime.stop = EngineRuntime.stop.__get__(runtime)  # type: ignore[method-assign]
+    events: list[str] = []
+
+    class Writer:
+        def start(self) -> None:
+            events.append("writer_start")
+
+        def stop(self, *, timeout: float) -> None:
+            events.append("writer_stop")
+
+    runtime._snapshot_writer = Writer()  # type: ignore[attr-defined]
+
+    def subscribe(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("stream subscribe failed")
+
+    runtime.stream.subscribe = subscribe  # type: ignore[attr-defined]
+
+    class Observer:
+        def on_runtime_started(self, **_kwargs: Any) -> None:
+            events.append("runtime_started")
+
+    monkeypatch.setattr(runtime_module, "_observe", Observer())
+    with pytest.raises(RuntimeError, match="stream subscribe failed"):
+        runtime.start()
+
+    assert runtime._state == "stopped"
+    assert events == []
 
 
 # ---------------------------------------------------------------------------

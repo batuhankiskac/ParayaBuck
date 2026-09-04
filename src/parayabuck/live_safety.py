@@ -13,6 +13,39 @@ class LiveApprovalError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class LiveStartupProof:
+    """Short-lived, immutable proof passed from the web arm to the runtime.
+
+    The web layer verifies the interactive account confirmation and creates
+    this neutral value before consuming its in-process arm token.  The runtime
+    independently checks the account, credential fingerprint, configuration
+    digests, and freshness before it reaches any broker mutation boundary.
+    """
+
+    account_id: str
+    credential_fingerprint: str
+    configuration_digests: tuple[str, ...]
+    issued_at: datetime
+    expires_at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.account_id.strip() or not self.credential_fingerprint.strip():
+            raise ValueError("Live startup proof identity must not be empty")
+        if not self.configuration_digests or any(not digest.strip() for digest in self.configuration_digests):
+            raise ValueError("Live startup proof requires configuration digests")
+        if len(set(self.configuration_digests)) != len(self.configuration_digests):
+            raise ValueError("Live startup proof configuration digests must be unique")
+        if self.issued_at.tzinfo is None or self.expires_at.tzinfo is None:
+            raise ValueError("Live startup proof timestamps must be timezone-aware")
+        if self.expires_at <= self.issued_at:
+            raise ValueError("Live startup proof expiry must follow issuance")
+
+    def is_fresh(self, now: datetime | None = None) -> bool:
+        current = now or datetime.now(UTC)
+        return self.issued_at <= current < self.expires_at
+
+
+@dataclass(frozen=True)
 class LiveOperatorApproval:
     """Short-lived HMAC proof bound to account, runtime config, and dollar cap."""
 
@@ -101,4 +134,4 @@ class LiveOperatorApproval:
         return approval
 
 
-__all__ = ["LiveApprovalError", "LiveOperatorApproval"]
+__all__ = ["LiveApprovalError", "LiveOperatorApproval", "LiveStartupProof"]

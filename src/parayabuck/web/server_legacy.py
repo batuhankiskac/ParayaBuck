@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1149,7 +1150,7 @@ class EngineManager:
     ) -> tuple[tuple[str, ...] | None, str | None]:
         try:
             cfg = load_config(str(self.config_path))
-            from parayabuck.execution.portfolio import portfolio_risk_limits_from_config
+            from parayabuck.execution.portfolio import PortfolioExecutionPolicy, portfolio_risk_limits_from_config
             from parayabuck.portfolio import product_strategy_from
             from parayabuck.portfolio.runtime_service import configuration_digest
             from parayabuck.universe import load_active_crypto_symbols, load_active_symbols
@@ -1171,7 +1172,11 @@ class EngineManager:
             ):
                 if not selection.enabled or not symbols:
                     continue
-                strategy = product_strategy_from(selection.name, selection.parameters)
+                strategy = product_strategy_from(
+                    selection.name,
+                    selection.parameters,
+                    timeframe=selection.timeframe,
+                )
                 digests.append(
                     configuration_digest(
                         strategy,
@@ -1179,6 +1184,10 @@ class EngineManager:
                         selection.maximum_allocation,
                         universe_version,
                         portfolio_risk_limits_from_config(cfg.risk),
+                        PortfolioExecutionPolicy(
+                            rebalance_band_pct=cfg.execution.rebalance_band_pct,
+                            minimum_order_notional=cfg.execution.minimum_order_notional,
+                        ),
                     )
                 )
             return tuple(digests), None
@@ -2392,14 +2401,47 @@ async def backtest_status() -> dict[str, Any]:
 _DASHBOARD_DEFAULT_DB = Path(DEFAULT_DECISION_DB_PATH)
 
 
+@dataclass(frozen=True)
+class DashboardContext:
+    """Explicit display dependencies for one dashboard request."""
+
+    engine_manager: Any
+    backtest_manager: Any | None = None
+    market_decisions: Callable[[str], dict[str, dict[str, Any]]] | None = None
+
+
+_dashboard_context: ContextVar[DashboardContext | None] = ContextVar("parayabuck_dashboard_context", default=None)
+
+
+@contextmanager
+def _dashboard_context_scope(context: DashboardContext) -> Iterator[None]:
+    token = _dashboard_context.set(context)
+    try:
+        yield
+    finally:
+        _dashboard_context.reset(token)
+
+
+def _dashboard_manager() -> Any:
+    context = _dashboard_context.get()
+    return context.engine_manager if context is not None else manager
+
+
+def _dashboard_market_decisions_for_context(account_id: str) -> dict[str, dict[str, Any]]:
+    context = _dashboard_context.get()
+    if context is not None and context.market_decisions is not None:
+        return context.market_decisions(account_id)
+    return _dashboard_market_decisions(account_id)
+
+
 def _dashboard_runtime() -> Any:
     """The live EngineRuntime instance, or None when stopped (or stubbed)."""
-    return getattr(manager, "runtime", None)
+    return getattr(_dashboard_manager(), "runtime", None)
 
 
 def _manager_engine_state() -> str:
     """Current engine state via the module manager (getattr tolerates stubs)."""
-    return getattr(manager, "current_engine_state", lambda: "stopped")()
+    return getattr(_dashboard_manager(), "current_engine_state", lambda: "stopped")()
 
 
 # Display-only caches for dashboard payload assembly. None of these can ever
@@ -2445,7 +2487,7 @@ def _dashboard_load_json(path: str | Path) -> dict[str, Any]:
 def _dashboard_config_key() -> tuple[str, int] | None:
     """Cache key for the settings file: (path, mtime_ns); None when unreadable."""
     try:
-        path = Path(str(manager.config_path))
+        path = Path(str(_dashboard_manager().config_path))
         return (str(path), path.stat().st_mtime_ns if path.exists() else 0)
     except OSError:
         return None
@@ -2544,7 +2586,7 @@ def _dashboard_config() -> Any | None:
         if cached is not None or key in _dashboard_config_cache:
             return cached
     try:
-        cfg = load_config(str(manager.config_path))
+        cfg = load_config(str(_dashboard_manager().config_path))
     except Exception:
         return None
     with _dashboard_config_cache_lock:
@@ -2667,7 +2709,7 @@ def _dashboard_mode(cfg: Any) -> dict[str, Any]:
         configured_mode = getattr(getattr(cfg, "runtime", None), "mode", None)
         runtime_mode = str(getattr(configured_mode, "value", None) or configured_mode or "paper")
         live_enabled = bool(getattr(getattr(cfg, "live", None), "enabled", False))
-    paper = bool(getattr(manager, "is_paper_mode", lambda: True)())
+    paper = bool(getattr(_dashboard_manager(), "is_paper_mode", lambda: True)())
     engine_state = _manager_engine_state()
     live_configured = bool(runtime_mode == "live" and live_enabled)
     live_active = bool(live_configured and engine_state in {"running", "warming_up", "degraded"})
@@ -3475,7 +3517,7 @@ def _runtime_metrics_payload(account_id: str) -> dict[str, Any]:
 # never feeds trading state, decisions, or the runtime (display-only).
 _DASHBOARD_SNAPSHOT_TTL_SECONDS = 1.5
 _dashboard_snapshot_lock = threading.Lock()
-_dashboard_snapshot: tuple[float, str, tuple[str, int] | None, dict[str, Any]] | None = None
+_dashboard_snapshot: tuple[float, str, tuple[str, int] | None, int, int, dict[str, Any]] | None = None
 
 
 def _dashboard_snapshot_reset() -> None:
@@ -3485,22 +3527,37 @@ def _dashboard_snapshot_reset() -> None:
         _dashboard_snapshot = None
 
 
-def _dashboard_payload() -> dict[str, Any]:
+def _dashboard_payload(context: DashboardContext | None = None) -> dict[str, Any]:
     """Full aggregated dashboard payload; each panel degrades on failure."""
+    if context is not None:
+        with _dashboard_context_scope(context):
+            return _dashboard_payload()
     global _dashboard_snapshot
     engine_state = _manager_engine_state()
     config_key = _dashboard_config_key()
+    manager_key = id(_dashboard_manager())
+    current_context = _dashboard_context.get()
+    decisions_key = id(current_context.market_decisions) if current_context is not None else 0
     now = time.monotonic()
     with _dashboard_snapshot_lock:
         cached = _dashboard_snapshot
-        if cached is not None and now < cached[0] and cached[1] == engine_state and cached[2] == config_key:
-            return cached[3]
+        if (
+            cached is not None
+            and now < cached[0]
+            and cached[1] == engine_state
+            and cached[2] == config_key
+            and cached[3] == manager_key
+            and cached[4] == decisions_key
+        ):
+            return cached[5]
     payload = _build_dashboard_payload(engine_state)
     with _dashboard_snapshot_lock:
         _dashboard_snapshot = (
             time.monotonic() + _DASHBOARD_SNAPSHOT_TTL_SECONDS,
             engine_state,
             config_key,
+            manager_key,
+            decisions_key,
             payload,
         )
     return payload
@@ -3518,7 +3575,7 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
     health = _dashboard_runtime_health()
     account = _dashboard_account()
     account_id = _dashboard_account_id()
-    decisions = _dashboard_market_decisions(account_id)
+    decisions = _dashboard_market_decisions_for_context(account_id)
     # runtime_metrics is consumed by BOTH the health panel and the metrics
     # panel; compute it once per build instead of twice.
     runtime_metrics_payload = _runtime_metrics_payload(account_id)
@@ -3533,7 +3590,7 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "engine_state": engine_state,
-        "engine_error": getattr(manager, "last_engine_error", None),
+        "engine_error": getattr(_dashboard_manager(), "last_engine_error", None),
         "last_no_trade": _dashboard_safe_panel("last_no_trade", _dashboard_last_no_trade),
         "mode": _dashboard_safe_panel("mode", lambda: _dashboard_mode(cfg)),
         "account": {
@@ -3606,7 +3663,7 @@ def _dashboard_metrics_payload(
 
 
 def _dashboard_account() -> dict[str, Any]:
-    fetch = getattr(manager, "fetch_account_snapshot", None)
+    fetch = getattr(_dashboard_manager(), "fetch_account_snapshot", None)
     if fetch is not None:
         try:
             return dict(fetch())

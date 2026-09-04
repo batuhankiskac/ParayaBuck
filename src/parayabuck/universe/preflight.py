@@ -53,6 +53,25 @@ class UniversePreflightResult:
     crypto_refreshed: bool = False
 
 
+def _close_refresh_resource(resource: Any | None) -> None:
+    """Close one refresh-owned client without masking the primary failure."""
+    if resource is None:
+        return
+    close = getattr(resource, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception as exc:
+            log.warning("Universe refresh client close warning: %s", exc)
+        return
+    session = getattr(resource, "_session", None)
+    if session is not None:
+        try:
+            session.close()
+        except Exception as exc:
+            log.warning("Universe refresh session close warning: %s", exc)
+
+
 def _refresh_with_retry(refresh: Callable[[], object], name: str) -> bool:
     """Run one universe refresh with a single bounded retry on transient failures.
 
@@ -205,6 +224,42 @@ def refresh_equity_universe(
     *,
     now: datetime | None = None,
 ) -> ScannerResult:
+    """Refresh the equity universe and close clients owned by this call."""
+    trading: Any | None = None
+    history: AlpacaHistoricalData | None = None
+
+    def make_history() -> AlpacaHistoricalData:
+        nonlocal history
+        history = AlpacaHistoricalData(
+            api_key,
+            secret_key,
+            stock_feed=config.alpaca.stock_historical_feed,
+            data_delayed=config.alpaca.data_delayed,
+        )
+        return history
+
+    try:
+        trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
+        if (session := getattr(trading, "_session", None)) is not None:
+            patch_session_timeout(session, timeout=15.0)
+        return _refresh_equity_universe_with_clients(
+            config,
+            now=now,
+            trading=trading,
+            history_factory=make_history,
+        )
+    finally:
+        _close_refresh_resource(history)
+        _close_refresh_resource(trading)
+
+
+def _refresh_equity_universe_with_clients(
+    config: Config,
+    *,
+    now: datetime | None = None,
+    trading: TradingClient,
+    history_factory: Callable[[], AlpacaHistoricalData],
+) -> ScannerResult:
     """Build the equity eligible pool and scan it, with pagination, cache, and atomic persistence.
 
     Guarantees (production policy):
@@ -237,15 +292,13 @@ def refresh_equity_universe(
     """
     universe = config.universe.equity
     source_path = Path(universe.candidate_universe_path)
-    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
-    if (session := getattr(trading, "_session", None)) is not None:
-        patch_session_timeout(session, timeout=15.0)
     started = time.monotonic()
     # Clock injection for deterministic tests: production passes None -> wall clock,
     # tests pass a fixed UTC timestamp so window boundaries, cache age and
     # skip decisions are deterministic (no datetime.now() nondeterminism).
     end = now if now is not None else datetime.now(UTC)
     allowed = eligible_equity_assets(config, trading)
+    history = history_factory()
     reserved = {
         *universe.reference_symbols,
         *universe.inverse_trade_symbols,
@@ -274,12 +327,6 @@ def refresh_equity_universe(
                 refresh_mode = "incremental"
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         pass
-    history = AlpacaHistoricalData(
-        api_key,
-        secret_key,
-        stock_feed=config.alpaca.stock_historical_feed,
-        data_delayed=config.alpaca.data_delayed,
-    )
     historical_requests = 0
     bars_downloaded = 0
     by_symbol: dict[str, list[Bar]] = {}
@@ -465,11 +512,42 @@ def refresh_crypto_universe(
     api_key: str,
     secret_key: str,
 ) -> CryptoScannerResult:
+    """Refresh the crypto universe and close clients owned by this call."""
+    trading: Any | None = None
+    history: AlpacaHistoricalData | None = None
+
+    def make_history() -> AlpacaHistoricalData:
+        nonlocal history
+        history = AlpacaHistoricalData(
+            api_key,
+            secret_key,
+            stock_feed=config.alpaca.stock_historical_feed,
+            data_delayed=config.alpaca.data_delayed,
+        )
+        return history
+
+    try:
+        trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
+        if (session := getattr(trading, "_session", None)) is not None:
+            patch_session_timeout(session, timeout=15.0)
+        assets = trading.get_all_assets(GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE))
+        return _refresh_crypto_universe_with_clients(
+            config,
+            assets,
+            history_factory=make_history,
+        )
+    finally:
+        _close_refresh_resource(history)
+        _close_refresh_resource(trading)
+
+
+def _refresh_crypto_universe_with_clients(
+    config: Config,
+    assets: list[Any],
+    *,
+    history_factory: Callable[[], AlpacaHistoricalData],
+) -> CryptoScannerResult:
     universe = config.universe.crypto
-    trading = TradingClient(api_key, secret_key, paper=config.runtime.mode.value != "live")
-    if (session := getattr(trading, "_session", None)) is not None:
-        patch_session_timeout(session, timeout=15.0)
-    assets = trading.get_all_assets(GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE))
     # Paper candidate-pool parity: the authoritative alpha-search pool is the
     # configured trade_symbols (22-pair researched universe). The broker's
     # currently supported active/tradable assets are an intersection, not a
@@ -524,12 +602,7 @@ def refresh_crypto_universe(
     candidate_symbols = tuple(candidate_symbols_list)
     if not candidate_symbols:
         raise ValueError("No configured crypto trade symbols are currently active/tradable (broker intersection empty)")
-    history = AlpacaHistoricalData(
-        api_key,
-        secret_key,
-        stock_feed=config.alpaca.stock_historical_feed,
-        data_delayed=config.alpaca.data_delayed,
-    )
+    history = history_factory()
     end = datetime.now(UTC)
     start = end - timedelta(days=universe.scanner.lookback_days)
     bars = _incremental_history(

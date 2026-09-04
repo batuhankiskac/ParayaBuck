@@ -5,44 +5,37 @@ from __future__ import annotations
 from typing import Any
 
 
-def get_overview_payload() -> dict[str, Any]:
-    # Use legacy dashboard payload but with the current (possibly patched) manager
-    # and also respect monkeypatched _dashboard_market_decisions on server
+def _context(state: Any | None) -> Any:
+    import parayabuck.web.server as srv
+    import parayabuck.web.server_legacy as leg
+
+    if state is None:
+        state = getattr(srv, "web_state", None)
+    engine_manager = getattr(state, "engine_manager", None) if state is not None else getattr(srv, "manager", None)
+    backtest_manager = (
+        getattr(state, "backtest_manager", None) if state is not None else getattr(srv, "backtest_manager", None)
+    )
+    callback = getattr(srv, "_dashboard_market_decisions", None)
+    if not callable(callback):
+        callback = None
+    return leg.DashboardContext(
+        engine_manager=engine_manager,
+        backtest_manager=backtest_manager,
+        market_decisions=callback,
+    )
+
+
+def get_overview_payload(state: Any | None = None) -> dict[str, Any]:
     try:
-        import parayabuck.web.server as srv
         import parayabuck.web.server_legacy as leg
 
-        # Patch legacy's global manager to the current (test-patched) one
-        orig_manager = getattr(leg, "manager", None)
-        orig_backtest = getattr(leg, "backtest_manager", None)
-        orig_decisions = getattr(leg, "_dashboard_market_decisions", None)
-        # Check if server has a custom _dashboard_market_decisions (monkeypatched)
-        srv_decisions = getattr(srv, "_dashboard_market_decisions", None)
-        # Determine if srv's version is different from leg's original (i.e., patched)
-        is_patched_decisions = srv_decisions is not None and srv_decisions is not orig_decisions
-        try:
-            leg.manager = srv.manager  # type: ignore[assignment]
-            try:
-                leg.backtest_manager = srv.backtest_manager  # type: ignore[assignment]
-            except Exception:
-                pass
-            if is_patched_decisions:
-                leg._dashboard_market_decisions = srv_decisions  # type: ignore[assignment]
-            return leg._dashboard_payload()
-        finally:
-            try:
-                leg.manager = orig_manager  # type: ignore[assignment]
-                leg.backtest_manager = orig_backtest  # type: ignore[assignment]
-                if is_patched_decisions:
-                    leg._dashboard_market_decisions = orig_decisions  # type: ignore[assignment]
-            except Exception:
-                pass
+        return leg._dashboard_payload(context=_context(state))
     except Exception as exc:  # pragma: no cover
         return {"unavailable": True, "error": str(exc)}
 
 
-def get_panel(key: str) -> dict[str, Any]:
-    payload = get_overview_payload()
+def get_panel(key: str, state: Any | None = None) -> dict[str, Any]:
+    payload = get_overview_payload(state)
     if isinstance(payload, dict) and key in payload:
         return payload[key]  # type: ignore[no-any-return]
     return {"unavailable": True, "error": f"panel {key} not found"}

@@ -130,3 +130,31 @@ def test_backtest_lock_is_rlock_and_reentrant():
     with bm.lock:
         with bm.lock:
             assert bm.lock._is_owned()  # type: ignore
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [lambda: "unknown", lambda: (_ for _ in ()).throw(RuntimeError("state probe failed"))],
+)
+def test_backtest_refuses_unverified_engine_state(provider):
+    bm = BacktestManager(engine_state_provider=provider)
+    with pytest.raises(ValueError, match="could not be verified"):
+        bm.start({})
+    assert bm.state == "idle"
+
+
+def test_engine_start_uses_bound_backtest_guard_not_module_global(monkeypatch):
+    local = BacktestManager(engine_state_provider=lambda: "stopped")
+    global_guard = BacktestManager(engine_state_provider=lambda: "stopped")
+    mgr = EngineManager(backtest_manager=local)
+
+    class AliveThread:
+        def is_alive(self) -> bool:
+            return True
+
+    local._thread = AliveThread()
+    local.state = "running"
+    monkeypatch.setattr("parayabuck.web.managers.engine.backtest_manager", global_guard)
+
+    with pytest.raises(ValueError, match="Web backtest is still running"):
+        mgr.start_engine()

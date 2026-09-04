@@ -59,8 +59,12 @@ def is_mutating_method(method: str) -> bool:
     return method not in {"GET", "HEAD", "OPTIONS"}
 
 
-def validate_control_token(provided: str, expected: str) -> bool:
-    return secrets.compare_digest(provided.encode("latin-1", "replace"), expected.encode())
+def validate_control_token(provided: str | None, expected: str | None) -> bool:
+    if not isinstance(provided, str) or not provided:
+        return False
+    if not isinstance(expected, str) or not expected:
+        return False
+    return secrets.compare_digest(provided, expected)
 
 
 def validate_host_header(host_header: str) -> bool:
@@ -68,7 +72,7 @@ def validate_host_header(host_header: str) -> bool:
 
 
 def build_protect_middleware(
-    control_token_provider: Callable[[], str],
+    control_token_provider: Callable[[Request], str],
 ) -> Callable[[Request, Callable[..., Any]], Any]:
     """Return an ``@app.middleware("http")``-compatible callable that enforces
 
@@ -95,11 +99,13 @@ def build_protect_middleware(
             request.headers.get("origin")
         ):
             return JSONResponse(status_code=403, content={"detail": "Untrusted browser origin"})
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and not secrets.compare_digest(
-            request.headers.get(_CONTROL_TOKEN_HEADER, "").encode("latin-1", "replace"),
-            control_token_provider().encode(),
-        ):
-            return JSONResponse(status_code=403, content={"detail": "Invalid local control token"})
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            try:
+                expected_token = control_token_provider(request)
+            except Exception:
+                expected_token = None
+            if not validate_control_token(request.headers.get(_CONTROL_TOKEN_HEADER), expected_token):
+                return JSONResponse(status_code=403, content={"detail": "Invalid local control token"})
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "

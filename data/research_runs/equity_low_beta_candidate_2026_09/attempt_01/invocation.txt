@@ -1,0 +1,1 @@
+.venv/bin/python scripts/research/equity_low_beta_candidate_2026_09.py --run

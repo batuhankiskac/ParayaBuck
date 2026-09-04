@@ -1,0 +1,111 @@
+{
+  "candidate": {
+    "market": "equity",
+    "name": "equity_low_beta_252d_monthly_v1",
+    "timeframe": "1d",
+    "version": "1.0.0"
+  },
+  "config": {
+    "semantic_sha256": "c4608b0254dfc932928650c7ce4585c771228ef897edb8162299c19ab4a4df24",
+    "settings_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "controls": [
+    {
+      "name": "equity_residual_momentum_v3",
+      "role": "same_run_same_source_current_frozen_control"
+    },
+    {
+      "name": "monthly_dollar_volume_top6_v1",
+      "role": "same_candidate_valid_universe_equal_weight_control"
+    }
+  ],
+  "economic_gates": "PENDING_DESIGNER_AND_ROOT_REVIEW",
+  "inputs": {
+    "bars": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "corporate_actions": {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "cutoff": "2026-07-30T23:59:59+00:00",
+    "lifetimes": {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "inventory": {
+    "first_timestamp": "2016-01-04T05:00:00+00:00",
+    "last_timestamp": "2026-07-31T04:00:00Z",
+    "post_cutoff_rows_unused": 5602,
+    "rows": 11686832,
+    "symbol_count": 9010
+  },
+  "observed_sha256": {
+    "bars": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "lifetimes": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "settings": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "policy": {
+    "allocation": 0.55,
+    "beta_window_returns": 252,
+    "cadence": "monthly:first_completed_session_then_next_tradable_bar",
+    "candidate": "equity_low_beta_252d_monthly_v1",
+    "cash_accrual": "zero",
+    "controls": [
+      "equity_residual_momentum_v3_same_run_same_source",
+      "monthly_dollar_volume_top6_same_candidate_valid_universe"
+    ],
+    "cost_multipliers": [
+      1,
+      2,
+      3
+    ],
+    "excluded_symbols": [
+      "DOG",
+      "PSQ",
+      "SH",
+      "SPY"
+    ],
+    "max_single_weight": 0.1,
+    "required_prices": 253,
+    "risk_semantics": "research_drawdown_shadow; production_entry_halt_not simulated as a research block",
+    "timeframe": "1d",
+    "top_n": 6,
+    "version": "1.0.0"
+  },
+  "receipt": {
+    "command": "python scripts/research/equity_low_beta_candidate_2026_09.py --preflight",
+    "frozen_manifest_sha256": "980acb86e750e3fed8ef402d31589ff2b47eb8f91a01de896c3a938e3239ab2f",
+    "generated_at_utc": "2026-09-04T22:08:51.854291+00:00",
+    "manifest_sha256": "99ef7db9ab640b5d9770acc701aafa3295b4f82189765b8f5b6a7419007e8fb0",
+    "source_file_sha256": {
+      "scripts/research/equity_low_beta_candidate_2026_09.py": "e09a1b342194770b3e254061ddccd60badd50854328a22c64167ccbad8271edd",
+      "scripts/research/equity_low_beta_engine_2026_09.py": "c9d77323c813459d7b71b00fbc93bd123ebb29a573e76991f1606e2db029018c"
+    },
+    "status": "DATA_READY_INPUT_IDENTITIES_VERIFIED_R2"
+  },
+  "review": {
+    "frozen": false,
+    "markers": []
+  },
+  "schema_version": "1.0.0",
+  "source": {
+    "dirty_paths": [
+      "data/research/full_survivorship_2026_08/final_verdict_v5.json",
+      "data/research/full_survivorship_2026_08/old_vs_full_walk_forward_real_v5.json",
+      "data/research/full_survivorship_2026_08/parity_canary.json",
+      "data/research/full_survivorship_2026_08/parity_manifest.json",
+      "docs/research/candidate_feasibility_2026_09_05.md",
+      "docs/research/strategy_candidate_shortlist_2026_09_05.md"
+    ],
+    "file_sha256": {
+      "scripts/research/equity_low_beta_candidate_2026_09.py": "e09a1b342194770b3e254061ddccd60badd50854328a22c64167ccbad8271edd",
+      "scripts/research/equity_low_beta_engine_2026_09.py": "49d710904bef3ec2daa6ee40dff7059d8f57449ddedf89fc0603531a34840ee1"
+    },
+    "head": "ed11beba916202dcb4986853e848652af6e7a3ef"
+  },
+  "status": "DATA_READY_INPUT_IDENTITIES_VERIFIED_R2"
+}

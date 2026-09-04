@@ -1,0 +1,32 @@
+# C2 düşük beta özsermaye araştırması
+
+**Durum:** `R4_FINAL_REJECT` — R4 gerçek veri çalışması 18/18 hücreyi tamamladı ve frozen gate sonucu `REJECT` oldu. R1–R3 korunur; R3 gerçek veri denemesi `BLOCKED_BY_START_BOUNDARY` ile `0/18` kalmıştır.
+
+Bu çalışma, ParayaBuck için düşük beta özsermaye sinyalinin, mevcut kripto ve ETF araştırmalarından ayrı bir mekanizma olarak teknik ve ekonomik açıdan incelenmesini amaçlar. Önceki incelemede ETF C1 adayının arşivdeki `strategy_foundation` çoklu varlık trend ailesini tekrarladığı görüldü; bu nedenle C1 yeni ekonomi olarak durduruldu. C2 ise önceki beta temelli seçim bulunmadığı için yalnızca araştırma adayı olarak açıldı. Bu durum kârlılık kanıtı değildir.
+
+C2, klasik BAB faktörüyle aynı strateji değildir: BAB düşük betalı varlıkları kaldıraçla uzun, yüksek betalıları kısa tutarak beta nötr portföy kurar; C2 kaldıraçsız ve yalnızca uzun yönlüdür. Frazzini ve Pedersen’in finansman kısıtları hipotezini, düşük SPY-betalı altı hisseyi `0.55` toplam tahsisle seçen spot uygulamada sınar. Bu, residual momentum kontrolünden de ayrıdır: C2 geçmiş residual getiriyi değil, piyasa duyarlılığını (OLS beta) sıralar. Literatür bulguları eski ABD/uluslararası örneklemlerdeki BAB veya low-beta portföylerine aittir; bu frozen uygulamaya veya gelecekteki getirilerine garanti oluşturmaz ([Frazzini & Pedersen, 2014](https://doi.org/10.1016/j.jfineco.2013.10.005); [Baker, Bradley & Wurgler, 2011](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1745108)).
+
+## Dondurulmuş protokol
+
+C2, canonical PIT v5 günlük özsermaye verisinde, her ayın ilk tamamlanmış işlem seansında karar verip sonraki işlem yapılabilir barın açılışında uygulanan uzun yönlü bir portföydür. SPY ile zaman damgası hizalı 252 günlük getiriler üzerinden OLS beta hesaplanır; en düşük betalı altı isim seçilir. Hedef brüt tahsis `0.55`, isim başına hedef `0.55/6 = 0.0916666667`, üst sınır `0.10`dur. `SPY`, `SH`, `PSQ` ve `DOG` aday ve likidite kontrol havuzundan çıkarılır.
+
+İki kontrol aynı canonical kaynak ve risk geometrisiyle çalışır: mevcut dondurulmuş `equity_residual_momentum_v3` kendi haftalık ritmini ve yalnızca `SPY` dışlamasını korur; aylık likidite kontrolü aynı C2-geçerli havuzda son 20 bar medyan dolar hacmine göre ilk altıyı seçer. Her pencere ve her strateji için yeni engine örneği oluşturulur. R4 tam dönem penceresi, ilk aylık kararın 252 günlük geçmiş ve bir önceki SPY gözlemiyle gerçekten kurulabildiği ilk ortak oturum olan `2017-02-01`–`2026-07-30` olarak belirlendi; son 24 ay penceresi `2024-07-31`–`2026-07-30` olarak değişmedi. Bu tarih performansa göre seçilmiş bir holdout değildir; veri-feasibility kuralıdır ve R3 orijinal `2017-01-03` başlangıcının yerini aldığı açıkça kayda geçirilmiştir. Maliyet katsayıları `1x`, `2x`, `3x` olduğundan toplam matris 18 hücredir.
+
+Kararlar tamamlanmış bar geçmişiyle, gerçekleşmeler sonraki tradable bar açılışıyla sınırlıdır. Canonical T1 yaşam döngüsü ve kurumsal aksiyon akışı, pozisyonun yaşam süresi bittiğinde uygulanır; pencere sonundaki olağan liquidation bunun yerine geçmez ve ayrı bir muhasebe adımıdır. Ham veri 2026-07-31’e uzansa da 2026-07-30 sonrası barlar değerlendirmeye alınmaz. Split-adjusted fiyatlara ayrıca split aksiyonu eklenmez; açık temettü akışları kurumsal aksiyon girdisidir. Nakit getirisi tahakkuk ettirilmez; nakit karşılaştırması yalnızca tanılayıcıdır.
+
+## Kapılar ve izlenebilirlik
+
+Araştırma drawdown koruması gölge ölçüm olarak tutulur; üretimdeki operatör kontrollü giriş durdurması bu çalışmada simüle edilmez. 3x maliyet kapısı, C2’nin likidite kontrolüne göre en az 50 baz puan CAGR üstünlüğü ve en fazla 2 puan drawdown farkı sağlamasını veya V3’e göre belirgin drawdown iyileşmesini ister. Son 24 ay koruması ayrıca uygulanır. Eksik, boş veya sonlu olmayan gerekli metrikler `BLOCKED` olur; geçerli sıfır değerler korunur. Sonuçlar tamamlanmadan aday `PAPER` ya da `LIVE` için terfi ettirilmez.
+
+R3’ün [dondurulmuş manifesti](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_04_R3/frozen_manifest_r3.json), [veri ön koşul makbuzu](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_04_R3/data_preflight_r3.json) ve [kapsama tanısı](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_04_R3/coverage_diagnostic.json) birlikte okunmalıdır: `2017-01-03` oturumunda SPY’de 252 fiyat (251 getiri), 252 fiyatı bulunan uygun özsermaye sembollerinde 3085 ve 253 fiyatı bulunanlarda 0 gözlem vardı; `2017-01-04` ilk 253 fiyatlı gündür, ilk uygulanabilir aylık oturum ise `2017-02-01` oldu (SPY 272, uygun özsermaye 3192). R4’ün [frozen manifesti](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_05_R4_data_feasibility/frozen_manifest_r4.json), [veri ön koşul makbuzu](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_05_R4_data_feasibility/data_preflight_r4.json), [ekonomik output’u](../../data/research_runs/equity_low_beta_candidate_2026_09/attempt_05_R4_data_feasibility/economic_results.json) ve [provenance denetimi](equity_low_beta_r4_provenance_audit.md) kaynak kaydıdır. R4 tam ve son-24-ay pencerelerinde aynı 18 hücreyi (`1x/2x/3x` maliyet) çalıştırdı; 26 hedefli test de geçti.
+
+### R4 sonucu (3x maliyet)
+
+| Pencere | C2 düşük beta | Likidite ilk-6 | V3 haftalık |
+|---|---:|---:|---:|
+| Tam `2017-02-01`–`2026-07-30` CAGR / DD | -4.02% / 42.51% | 14.32% / 30.38% | 6.30% / 22.13% |
+| Son 24 ay `2024-07-31`–`2026-07-30` CAGR / DD | -6.42% / 23.63% | 19.15% / 16.64% | 8.15% / 9.88% |
+
+Frozen verdict `REJECT`: tam dönem branch’lerinin ikisi de geçmedi ve son-24-ay koruması başarısız oldu. Bu karar yalnızca bu frozen C2 uygulamasına aittir; düşük-beta fikrinin, başka evrenlerin veya başka uygulamaların tamamına genellenmez. Nakit faizsizdir, üretim giriş durdurması gölge muhasebede simüle edilmemiştir ve sonuçlar `PAPER`/`LIVE` terfisi için kullanılmaz.
+
+R4 output’u yalnız aggregate metrikler sakladığı için seçilen sembolleri, işlemleri, pozisyonları veya beta izini göstermiyor; bu nedenle altı seçimin ordinary hisse olduğunu ya da zararın hangi sembollerden geldiğini doğrulayamıyoruz. C2 CAGR’ı `1x`→`2x` maliyette tam dönemde `-4.089%`→`-3.924%`, son 24 ayda `-7.419%`→`-6.315%` olduğundan monoton değildir; nedeni aggregate output’tan açıklanamaz ve salt maliyet etkisi olarak yorumlanmamalıdır. Bu sınırlar gate `REJECT` kararını değiştirmez; üç maliyet katsayısında da C2 CAGR negatiftir.

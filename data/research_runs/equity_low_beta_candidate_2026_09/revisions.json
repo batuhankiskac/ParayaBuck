@@ -1,0 +1,8 @@
+{
+  "parent_manifest": "data/research_runs/equity_low_beta_candidate_2026_09/frozen_manifest.json",
+  "parent_manifest_sha256": "980acb86e750e3fed8ef402d31589ff2b47eb8f91a01de896c3a938e3239ab2f",
+  "r1_engine_source_copy_preserved": false,
+  "r2_engine_sha256": "c9d77323c813459d7b71b00fbc93bd123ebb29a573e76991f1606e2db029018c",
+  "r2_manifest": "data/research_manifests/equity_low_beta_candidate_2026_09_r2.json",
+  "r2_manifest_sha256": "99ef7db9ab640b5d9770acc701aafa3295b4f82189765b8f5b6a7419007e8fb0"
+}

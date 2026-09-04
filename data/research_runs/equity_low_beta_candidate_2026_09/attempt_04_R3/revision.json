@@ -1,0 +1,17 @@
+{
+  "execution_attempt": "attempt_04_R3",
+  "freeze_status": "PENDING_ROOT_REVIEW_AND_TESTS",
+  "parent_manifest_sha256": "99ef7db9ab640b5d9770acc701aafa3295b4f82189765b8f5b6a7419007e8fb0",
+  "prior_attempts_preserved": [
+    "attempt_01",
+    "attempt_02",
+    "attempt_03_R2"
+  ],
+  "revision": "R3",
+  "source_sha256": {
+    "scripts/research/equity_low_beta_candidate_2026_09.py": "82c1c80ab68d4faf4508685989bef9999e141c87181f3cad0fc294b5eb8c1a31",
+    "scripts/research/equity_low_beta_engine_2026_09.py": "961359460831bff785574d7b4c1b6083ba003f40937cd4e55252f22a15ef2e4d"
+  },
+  "technical_fix": "explicit selected manifest/preflight receipt/output propagation; no default R1 mixing",
+  "tests": "test worker reports 25 focused bootstrap tests plus tinyfixture vertical smoke pending root acceptance"
+}

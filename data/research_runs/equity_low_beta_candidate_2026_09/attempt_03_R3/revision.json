@@ -1,0 +1,12 @@
+{
+  "freeze_status": "PENDING_ROOT_REVIEW_AND_TESTS",
+  "parent_candidate_sha256": "e09a1b342194770b3e254061ddccd60badd50854328a22c64167ccbad8271edd",
+  "parent_manifest_sha256": "99ef7db9ab640b5d9770acc701aafa3295b4f82189765b8f5b6a7419007e8fb0",
+  "prior_attempt_03_blocked": "stale R1 receipt binding plus PIT bootstrap interruption; 0/18 cells",
+  "revision": "R3",
+  "source_sha256": {
+    "scripts/research/equity_low_beta_candidate_2026_09.py": "82c1c80ab68d4faf4508685989bef9999e141c87181f3cad0fc294b5eb8c1a31",
+    "scripts/research/equity_low_beta_engine_2026_09.py": "2736f848a30b5b50a016e38c9334b5583a68ce580d55509fe51674600ecf746a"
+  },
+  "technical_fix": "selected manifest and selected preflight receipt are explicit runner arguments; selected output directory is explicit"
+}

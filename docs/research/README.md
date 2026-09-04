@@ -48,6 +48,20 @@ dynamic residual-capacity schedule.
 [technical receipt](../../data/research_receipts/execution_cost_transferability_p0_2026_09.json) ·
 [human report](execution_cost_transferability_p0_2026_09.md)
 
+### `execution_cost_transferability_p1_paper_observation_2026_09`
+
+**Status:** `planned` — prepared but not yet committed<br>
+**Verdict:** `UNKNOWN_COST_TRANSFERABILITY`<br>
+**Promotion:** none<br>
+**Purpose:** predeclared natural-PAPER sample epoch and read-only 7/30/90-day
+observation reports; P0 remains measurement infrastructure, not a cost-model
+acceptance.
+
+[Manifest](../../data/research_manifests/execution_cost_transferability_p1_paper_observation_2026_09.json) ·
+[human report](execution_cost_transferability_p1_paper_observation_2026_09.md) ·
+[runner](../../scripts/execution_cost_transferability_p1_report.py) ·
+[test](../../tests/research/test_execution_cost_transferability_p1_paper_observation_2026_09.py)
+
 ### `equity_profit_protection_2026_09`
 
 **Status:** `superseded` — archived blocked R1 attempt, preserved for lineage.

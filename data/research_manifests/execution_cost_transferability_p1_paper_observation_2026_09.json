@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0.0",
+  "mission": "execution_cost_transferability_p1_paper_observation_2026_09",
+  "status": "planned",
+  "research_only": true,
+  "parent_record": "execution_cost_transferability_p0_2026_09",
+  "predeclaration": {
+    "human_design_brief_existed_before_implementation": true,
+    "machine_manifest_committed_before_p1_technical_results": false,
+    "machine_manifest_committed_before_paper_economic_sample": false,
+    "machine_manifest_commit_requirement": "A first eligible PAPER observation may be declared only after this exact manifest is tracked by the clean merged P0/P1 commit."
+  },
+  "results_state": {
+    "p1_technical_results_recorded": false,
+    "paper_economic_sample_results_recorded": false,
+    "cost_transferability_results_recorded": false
+  },
+  "record_timeline": {
+    "human_design_brief_timing": "Operator-provided before this P1 implementation; this is not a machine commit timestamp.",
+    "machine_manifest_commit_timing": "pending: this working-tree artifact is not evidence until committed",
+    "starting_head": "0e15e29b27cb30e7fda69269625003b1967e6722",
+    "starting_branch": "main",
+    "starting_worktree_status": "clean before P1 edits",
+    "future_sample_merge_commit": "operator must supply the exact committed merged P0/P1 SHA; no future SHA is invented here"
+  },
+  "p0_input_contract": {
+    "accepted_pipeline_record": "execution_cost_transferability_p0_2026_09",
+    "implementation_commits": [
+      "491ffa12e7460fe5353d3dd544a8a33e78ce61b6",
+      "140c3def3267e683e20c449314d8bfab01c2429b"
+    ],
+    "p0_c_commits": [
+      "8c4420fae5d18aede00d9fb95af4658341c5f7b8",
+      "c16a58f53b266f28646b0e792d4d014df9afb4ad",
+      "c3d65d73b6ebd22159f44f5d00eb7eec8c57e30d",
+      "c0e167b2df8fc3cb2f5e4e4843a40d480fa56151"
+    ],
+    "technical_status": "accepted measurement infrastructure only",
+    "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY"
+  },
+  "sample_epoch_contract": {
+    "operator_supplies": [
+      "merged_p0_p1_commit_sha",
+      "settings_yaml_sha256",
+      "configuration_digest",
+      "anonymized_account_identity",
+      "deployment_timestamp",
+      "first_eligible_runtime_session_id",
+      "immutable_sample_cutoff",
+      "local_executable_bar_dataset_or_manifest_sha256",
+      "dataset_feed_identity"
+    ],
+    "primary_inclusion": [
+      "paper_mode",
+      "decision_and_session_at_or_after_sample_cutoff",
+      "matching_account_identity",
+      "matching_configuration_digest",
+      "matching_market_strategy_identity",
+      "raw_execution_event_coverage",
+      "one_comparable_timeframe",
+      "valid_nonblocking_cumulative_quantity_and_vwap_sequence",
+      "local_bar_coverage_for_current_dynamic_open_shadow_schedule"
+    ],
+    "diagnostic_only": [
+      "pre_cutoff_rows",
+      "legacy_rows_without_raw_execution_events",
+      "wrong_account_or_session_lineage",
+      "wrong_configuration_digest",
+      "invalid_cumulative_or_vwap_sequence"
+    ]
+  },
+  "minimum_sample_gates": {
+    "equity": {
+      "calendar_months": 6,
+      "independent_scheduled_decisions": 30,
+      "terminal_orders": 150,
+      "buy_terminal_orders": 40,
+      "sell_terminal_orders": 40
+    },
+    "crypto": {
+      "calendar_months": 6,
+      "independent_96_hour_decisions": 45,
+      "terminal_orders": 80,
+      "buy_terminal_orders": 25,
+      "sell_terminal_orders": 25
+    },
+    "origin_specific_claim": {
+      "independent_decisions": 20,
+      "orders": 30
+    },
+    "partial_fill_model": {
+      "partial_reject_or_expiry_events": 30,
+      "eligible_orders": 300
+    }
+  },
+  "fee_boundary": {
+    "event_local_fee_observation": "preserve observed zero versus unknown; never aggregate as actual total cost",
+    "total_cost_comparison_eligible": false,
+    "future_p1_f": "A separately predeclared fee-attribution mission must prove source matching, precedence, deduplication, and completeness before total-cost comparison."
+  },
+  "boundaries": {
+    "broker_or_data_api_calls": false,
+    "paper_or_live_activation": false,
+    "orders_or_synthetic_broker_fills": false,
+    "runtime_economics_change": false,
+    "portfolio_backtest_engine_change": false,
+    "auto_calibration_or_model_selection": false,
+    "operator_runtime_database_write_or_cleanup": false
+  },
+  "required_artifacts": {
+    "documentation": "docs/research/execution_cost_transferability_p1_paper_observation_2026_09.md",
+    "manifest": "data/research_manifests/execution_cost_transferability_p1_paper_observation_2026_09.json",
+    "runner": "scripts/execution_cost_transferability_p1_report.py",
+    "implementation": "src/parayabuck/research/p1_paper_observation.py",
+    "tests": "tests/research/test_execution_cost_transferability_p1_paper_observation_2026_09.py"
+  },
+  "acceptance": {
+    "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY",
+    "promotion": "none",
+    "equity_and_crypto_primary_verdicts": "separate",
+    "insufficient_evidence_behavior": "UNKNOWN; thresholds are never relaxed"
+  }
+}

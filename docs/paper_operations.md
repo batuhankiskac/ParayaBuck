@@ -104,3 +104,13 @@ behavior):
 
 `scripts/execution_quality_report.py` prints the report; it exits 0 even
 against an empty or missing database.
+
+## P1 natural-PAPER observation (planned)
+
+The planned P1 record is documented in
+[`docs/research/execution_cost_transferability_p1_paper_observation_2026_09.md`](research/execution_cost_transferability_p1_paper_observation_2026_09.md).
+Its report runner is read-only and requires a committed sample epoch, local
+executable bars, a configuration digest, an anonymized account identity, and a
+first eligible session ID. It reports 7/30/90-day review windows only; it
+cannot start PAPER, call a broker/data API, calibrate costs, or approve a
+promotion.

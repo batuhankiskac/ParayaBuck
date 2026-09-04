@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "mission": "execution_model_robustness_backtest_2026_09",
+  "research_only": true,
+  "declared_before_results": true,
+  "result_status": "NOT_RUN",
+  "starting_snapshot": {
+    "branch": "main",
+    "head": "d337a701bf9e9a6db05cb2fcdefe5f23af79bee0",
+    "working_tree": "clean",
+    "settings_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "product_contract": {
+    "equity": {"strategy": "equity_residual_momentum_v3", "allocation": 0.55, "cadence": "weekly", "parameters": {"formation_bars": 252, "skip_bars": 21, "beta_window_bars": 273, "residual_vol_window": 63, "top_n": 8, "max_single_weight": 0.1, "ivol_reject_quantile": 0.7, "exclude_symbols": ["SPY"]}},
+    "crypto": {"strategy": "crypto_low_variance_hysteresis_v1", "allocation": 0.05, "cadence": "96h", "parameters": {"variance_lookback_days": 22, "top_n": 2, "retention_rank": 4}},
+    "shared_risk": {"max_gross": 0.6, "cash_buffer": 0.4, "equity_max_position": 0.1, "crypto_max_position": 0.05, "crypto_max_positions": 2, "rebalance_band": 0.005, "minimum_order_notional": 10},
+    "execution": {"slippage_bps": 2, "spread_bps": 2, "adverse_price_bps": 3, "crypto_taker_fee_bps": 25, "first_fill": "next eligible open", "liquidity_lookback_positive_bars": 20, "max_participation_pct": 0.1, "residual_capacity": "dynamic", "equity_fees": "effective-dated"}
+  },
+  "dataset_contract": {
+    "equity": {"bars": {"path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv", "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"}, "lifetimes": {"path": "data/historical/equity_entity_lifetimes_full_v5.csv", "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"}, "corporate_actions": {"path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv", "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"}, "adjustment": "split-adjusted executable bars; cash dividends applied once; no feed, universe, warmup, scanner, or corporate-action change"},
+    "crypto": {"bars": {"path": "data/historical/crypto_expanded_1h.csv", "sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e"}, "aggregation": "canonical 1h to complete 1d bars; current PIT universe semantics"}
+  },
+  "reference_evidence": {
+    "equity_cost_stress": {"path": "data/research/mh_raw_promotion_2026_08/cost_stress.json", "sha256": "f1d66c19a39ff41caaa4bb11fa90801bbbf76c7924bf1f766c5bf19bd0e6a2ae", "levels": [1, 2, 3, 5], "role": "historical parity reference only; not the later symmetric T1 control"},
+    "crypto_cost_stress": {"path": "data/research/crypto_candidate_tournament_2026_08/cost_stress.json", "sha256": "1227a8ef59aef3f0170629cd19edf6635672e1deae46649a7015609ab8f6ebc1", "levels": [1, 2, 3], "role": "historical parity reference only"}
+  },
+  "windows": {"equity_full": "canonical current V3 full window through 2026-07-30", "crypto_full": "2021-04-01 through 2026-07-31", "recent": "existing comparable recent window only", "walk_forward": "existing directly reproducible temporal partitions only", "combined": "intersection of the two canonical full windows"},
+  "scenarios": {
+    "C0": {"cost_multiplier": 1, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "COST3": {"cost_multiplier": 3, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "COST5": {"cost_multiplier": 5, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "CAP5": {"cost_multiplier": 1, "max_participation_pct": 0.05, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "CAP2": {"cost_multiplier": 1, "max_participation_pct": 0.02, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "CAP1": {"cost_multiplier": 1, "max_participation_pct": 0.01, "additional_eligible_bar_delay": 0, "capacity_reference": "dynamic_current_residual"},
+    "LAT1": {"cost_multiplier": 1, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 1, "capacity_reference": "dynamic_current_residual"},
+    "LAT2": {"cost_multiplier": 1, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 2, "capacity_reference": "dynamic_current_residual"},
+    "FROZEN_DECISION_LIQUIDITY": {"cost_multiplier": 1, "max_participation_pct": 0.1, "additional_eligible_bar_delay": 0, "capacity_reference": "decision_timestamp_only"},
+    "COMBO_MEDIUM": {"cost_multiplier": 3, "max_participation_pct": 0.02, "additional_eligible_bar_delay": 1, "capacity_reference": "dynamic_current_residual"},
+    "COMBO_SEVERE": {"cost_multiplier": 5, "max_participation_pct": 0.01, "additional_eligible_bar_delay": 2, "capacity_reference": "dynamic_current_residual"}
+  },
+  "parity_gate": {"C0": "exact target, fill, curve, terminal-event, and PIT-universe component hashes against same-current-source control; stop on any unexplained mismatch", "tolerances": {"component_hash_mismatches": 0, "metrics_relative": 0.0}},
+  "red_flags": {"applicable_scenarios": ["CAP2", "LAT1", "COMBO_MEDIUM"], "positive_return_becomes_negative": true, "sharpe_below_zero": true, "max_drawdown_multiple_gt": 1.5, "exposure_relative_drop_gt": 0.2, "parent_orders_superseded_fraction_gt": 0.2, "intended_notional_lost_before_supersession_gt": 0.25, "one_bar_latency_changes_economic_conclusion": true},
+  "classification_vocabulary": ["BACKTEST_EXECUTION_ROBUST", "BACKTEST_EXECUTION_FRAGILE", "MIXED_BY_SLEEVE", "INCONCLUSIVE"],
+  "hard_boundaries": ["offline backtest only", "no broker or market-data API", "no orders", "no runtime database writes", "no config/settings.yaml change", "no strategy, universe, allocation, risk, or production-engine change", "no automatic promotion", "PAPER/LIVE transferability remains UNKNOWN_COST_TRANSFERABILITY"],
+  "required_artifacts": {"runner": "scripts/research/execution_model_robustness_backtest_2026_09.py", "tests": "tests/research/test_execution_model_robustness_backtest_2026_09.py", "report": "docs/research/execution_model_robustness_backtest_2026_09.md", "generated_results": "data/research/execution_model_robustness_backtest_2026_09/ (ignored)"}
+}

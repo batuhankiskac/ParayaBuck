@@ -1449,6 +1449,20 @@ def run_research(
         "research_only": True,
         "production_registration_or_promotion": False,
     }
+    write_json(
+        output_dir / "E0_CONTROL.json",
+        {
+            "candidate": "E0_CONTROL",
+            "full": _case_payload(control_full),
+            "recent": _case_payload(control_recent),
+            "current_control_reference": {
+                "receipt_path": str(reference_output),
+                "components": reference["components"],
+                "metrics": reference["metrics"],
+                "counts": reference["counts"],
+            },
+        },
+    )
     write_json(output_dir / "stage_one.json", stage_one)
     artifact_hashes = {
         path.name: _sha256(path) for path in sorted(output_dir.glob("*.json")) if path.name != "artifact_hashes.json"

@@ -1,0 +1,12 @@
+{
+  "mission": "equity_profit_protection_2026_09",
+  "declared_before_results": true,
+  "no_results_yet": true,
+  "baseline_commit": "9578d5be695a00316e13e4a5ec9646ba3bc79a1c",
+  "baseline": {"strategy":"equity_residual_momentum_v3","maximum_allocation":0.55,"period":["2017-01-03","2026-07-30"],"recent_start":"2022-01-01"},
+  "candidates": ["E0_CONTROL","E1_TP5_CLOSE","E2_PROFIT_LOCK_50","E3_PROFIT_ALPHA_CONFIRMED"],
+  "thresholds": {"activation":0.05,"profit_lock_fraction":0.50,"alpha_rank":12,"confirmation_bars":2},
+  "robustness": {"folds":20,"cost_multipliers":[1,2,3,5],"bootstrap_block":20,"bootstrap_seed":202609030,"bootstrap_resamples":2000},
+  "dataset": {"bars_sha256":"3baec12e21a1230732421df5aae9142873e82727b6e526f325948bc8385e903a","dividends_sha256":"7d79025d327a9f43b0170b252499ce00343d1dcf2f48cfde3e05e5ebd073e1e0"},
+  "result_artifacts": []
+}

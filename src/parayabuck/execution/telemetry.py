@@ -827,12 +827,8 @@ def execution_measurement(
         if not _table_exists(connection, "portfolio_orders"):
             return {"available": True, "orders": [], "asof": _iso_now()}
         order_columns = _columns(connection, "portfolio_orders")
-        submit_started_expr = (
-            "o.submit_call_started_at" if "submit_call_started_at" in order_columns else "NULL"
-        )
-        submit_returned_expr = (
-            "o.submit_call_returned_at" if "submit_call_returned_at" in order_columns else "NULL"
-        )
+        submit_started_expr = "o.submit_call_started_at" if "submit_call_started_at" in order_columns else "NULL"
+        submit_returned_expr = "o.submit_call_returned_at" if "submit_call_returned_at" in order_columns else "NULL"
         order_rows = _query(
             connection,
             f"""SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
@@ -859,6 +855,8 @@ def execution_measurement(
         for event in event_rows:
             events_by_order.setdefault(str(event[3]), []).append(event)
         result_orders: list[dict[str, object]] = []
+        valid_fill_qualities = {"first_fill", "valid_incremental"}
+        benign_nonfill_qualities = {"status_only", "duplicate_or_zero_delta"}
         for row in order_rows:
             (
                 client_order_id,
@@ -896,7 +894,7 @@ def execution_measurement(
                     fee_unknown = True
                 if str(event[5]).lower() in {"fill", "filled", "canceled", "cancelled", "rejected", "expired"}:
                     terminal_at = str(event[6])
-                if quality not in {"first_fill", "valid_incremental"} or raw_average is None:
+                if quality not in valid_fill_qualities or raw_average is None:
                     continue
                 average = _to_float(raw_average)
                 if average <= 0:
@@ -935,6 +933,13 @@ def execution_measurement(
                 decision_origin = "intermediate_risk_reduction"
             net_owned = _to_float(net_owned_qty)
             latest_quality = qualities[-1] if qualities else "no_raw_execution_event"
+            blocking_qualities = sorted(
+                {quality for quality in qualities if quality not in valid_fill_qualities | benign_nonfill_qualities}
+            )
+            reconstruction_eligible = bool(incremental_fills) and not blocking_qualities
+            exclusion_reasons = [f"raw_execution_quality_excluded:{quality}" for quality in blocking_qualities]
+            if not incremental_fills:
+                exclusion_reasons.append("raw_execution_quality_excluded:no_valid_cumulative_vwap")
             result_orders.append(
                 {
                     "client_order_id": str(client_order_id),
@@ -957,15 +962,30 @@ def execution_measurement(
                     "terminal_at": terminal_at,
                     "expected_order_quantity": expected,
                     "gross_cumulative_executed_quantity": gross_executed,
-                    "gross_fill_ratio": gross_executed / expected if gross_executed is not None and expected > 0 else None,
+                    "gross_fill_ratio": gross_executed / expected
+                    if gross_executed is not None and expected > 0
+                    else None,
                     "net_owned_quantity": net_owned,
                     "net_ownership_ratio": net_owned / expected if expected > 0 else None,
                     "fee_status": (
-                        "unknown"
-                        if fee_unknown or not raw_events
-                        else "observed_event_local_not_aggregated"
+                        "unknown" if fee_unknown or not raw_events else "observed_event_local_not_aggregated"
                     ),
                     "measurement_quality": latest_quality,
+                    "measurement_quality_states": qualities,
+                    "comparison_eligibility": {
+                        # Only monotonic cumulative observations with a valid
+                        # VWAP may establish final gross quantity or VWAP.
+                        # Status-only/duplicate events are harmless but do
+                        # not themselves create a comparable fill.
+                        "final_gross_execution_quantity": reconstruction_eligible,
+                        "final_vwap": reconstruction_eligible,
+                        "price_only": reconstruction_eligible,
+                        # Fees remain event-local, so no total-cost claim is
+                        # possible until a future cross-source reconciler is
+                        # implemented and independently proven.
+                        "total_cost": False,
+                    },
+                    "comparison_exclusion_reasons": exclusion_reasons,
                     "raw_event_count": len(raw_events),
                     "incremental_fills": incremental_fills,
                 }

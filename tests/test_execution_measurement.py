@@ -118,6 +118,12 @@ def test_raw_gross_execution_is_separate_from_crypto_net_ownership_and_reconstru
     assert observed["net_owned_quantity"] == 0.49875
     assert observed["net_ownership_ratio"] == 0.9975
     assert observed["fee_status"] == "unknown"
+    assert observed["comparison_eligibility"] == {
+        "final_gross_execution_quantity": True,
+        "final_vwap": True,
+        "price_only": True,
+        "total_cost": False,
+    }
     assert [item["incremental_price"] for item in observed["incremental_fills"]] == [100.0, 120.0]
 
 
@@ -156,3 +162,13 @@ def test_raw_event_source_identity_is_idempotent_and_invalid_sequence_is_retaine
         (order.client_order_id,),
     ).fetchone()
     assert row == (0.49875,)
+    measurement = telemetry.execution_measurement(path)["orders"][0]
+    assert measurement["comparison_eligibility"] == {
+        "final_gross_execution_quantity": False,
+        "final_vwap": False,
+        "price_only": False,
+        "total_cost": False,
+    }
+    assert measurement["comparison_exclusion_reasons"] == [
+        "raw_execution_quality_excluded:out_of_order_or_decreasing_cumulative_quantity"
+    ]

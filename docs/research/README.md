@@ -42,6 +42,7 @@ its tested candidate is rejected or remains ineligible for PAPER.
 **Execution model:** unchanged; the shadow comparator mirrors the current
 dynamic residual-capacity schedule.
 **Technical verification source:** `c3d65d73b6ebd22159f44f5d00eb7eec8c57e30d`<br>
+**Result-recording commit:** `c0e167b2df8fc3cb2f5e4e4843a40d480fa56151`<br>
 
 [Manifest](../../data/research_manifests/execution_cost_transferability_p0_2026_09.json) ·
 [technical receipt](../../data/research_receipts/execution_cost_transferability_p0_2026_09.json) ·

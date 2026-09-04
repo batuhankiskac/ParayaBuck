@@ -11,7 +11,18 @@ def test_p0_manifest_freezes_research_only_unknown_transferability_boundary() ->
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert payload["status"] == "accepted"
     assert payload["research_only"] is True
-    assert payload["declared_before_results"] is True
+    assert "declared_before_results" not in payload
+    assert "no_results_yet" not in payload
+    assert payload["predeclaration"] == {
+        "human_design_brief_existed_before_implementation": True,
+        "machine_manifest_committed_before_technical_results": False,
+        "machine_manifest_committed_before_paper_economic_sample": True,
+    }
+    assert payload["results_state"] == {
+        "technical_results_recorded": True,
+        "paper_economic_results_recorded": False,
+    }
+    assert payload["commit_topology"]["result_recording_commit"] == "c0e167b2df8fc3cb2f5e4e4843a40d480fa56151"
     assert payload["acceptance"]["economic_verdict"] == "UNKNOWN_COST_TRANSFERABILITY"
     assert payload["acceptance"]["promotion"] == "none"
     assert payload["boundaries"]["broker_or_data_api_calls"] is False

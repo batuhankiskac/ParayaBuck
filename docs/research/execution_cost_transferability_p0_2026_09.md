@@ -22,6 +22,11 @@ design brief predates implementation; that is distinct from the machine
 manifest's first commit timestamp (`2026-09-04T16:40:58+03:00`). See the
 compact [technical receipt](../../data/research_receipts/execution_cost_transferability_p0_2026_09.json).
 
+The machine manifest was committed before a future PAPER economic sample, but
+not before P0's technical result: both are recorded explicitly. The result
+recording commit is `c0e167b2df8fc3cb2f5e4e4843a40d480fa56151`; this later
+metadata clarification is not self-referential.
+
 ## Purpose and non-goals
 
 This record establishes an offline, read-only measurement path for comparing

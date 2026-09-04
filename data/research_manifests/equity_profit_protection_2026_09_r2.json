@@ -3,7 +3,7 @@
   "mission": "equity_profit_protection_2026_09_r2",
   "research_only": true,
   "declared_before_results": true,
-  "no_results_yet": true,
+  "no_results_yet": false,
   "supersedes": {
     "mission": "equity_profit_protection_2026_09",
     "status": "archived_blocked_attempt",
@@ -14,7 +14,7 @@
     "starting_head": "480eacb2993aef8d77785147e2c68edcda860596",
     "implementation_commit": "05837c33e06cf3f548f2b41f8633c3a4128f05e7",
     "implementation_parent": "d0c46b5dbbcdcac82236eed4fa026b6dc49a7669",
-    "manifest_pin_commit": "pending_manifest_pin_commit",
+    "manifest_pin_commit": "6b0cabe5a03d8d3c02173ebfce5b6430252b12a1",
     "result_commit": "pending_commit_b_sha",
     "result_parent_required": "manifest_pin_commit",
     "self_reference_note": "A commit cannot contain its own object id; the implementation commit is pinned in the pre-result manifest follow-up and the final report records the exact result parent."
@@ -188,10 +188,49 @@
       "data/research/equity_profit_protection_2026_09_r2/E2_PROFIT_LOCK_50.json",
       "data/research/equity_profit_protection_2026_09_r2/E3_PROFIT_ALPHA_CONFIRMED.json",
       "data/research/equity_profit_protection_2026_09_r2/artifact_hashes.json",
-      "docs/research/equity_profit_protection_2026_09_r2.md"
+      "docs/research/equity_profit_protection_2026_09_r2.md",
+      "data/research_receipts/equity_profit_protection_2026_09_r2_current_control.json"
     ],
     "no_results_before_commit_a": true,
-    "results_hashes": {},
+    "results_hashes": {
+      "data/research/equity_profit_protection_2026_09_r2/E0_CONTROL.json": "fe709d5f1bb19000a69c348e612f55421375532d2df0d9eb6f2ab4cf5de0e065",
+      "data/research/equity_profit_protection_2026_09_r2/E1_TP5_CLOSE.json": "0ca5bc65e5e94a264541603f72e26eda692d0ef042064c2ac50519d13546c25a",
+      "data/research/equity_profit_protection_2026_09_r2/E2_PROFIT_LOCK_50.json": "77e1347d3fc4d839e647ee9be676fe1c73507256fa06607ce0594f056b14b63d",
+      "data/research/equity_profit_protection_2026_09_r2/E3_PROFIT_ALPHA_CONFIRMED.json": "27e099d6db94c204cdaab107134d9011818bb8ee4b431071e998f780e248e021",
+      "data/research/equity_profit_protection_2026_09_r2/stage_one.json": "58f12fc34e3de5766c93c5bd430afd90f3c376b9d88e3a8c73bec13db798df4a",
+      "data/research/equity_profit_protection_2026_09_r2/artifact_hashes.json": "1cb63dbfc084c3f2796f549eef8d5d7a1f9742c79187d06bdd0d53a4a6b47b6f",
+      "docs/research/equity_profit_protection_2026_09_r2.md": "f6f7ed0f1063242fbc08aad848be4f95075859584949b499315dc5ebdd93115b",
+      "data/research_receipts/equity_profit_protection_2026_09_r2_current_control.json": "9692288e5319334321227d9a1da5a0c2e89e566fc9d19c21b9df438c35b1b1a1"
+    },
+    "result_summary": {
+      "execution_commit": "6b0cabe5a03d8d3c02173ebfce5b6430252b12a1",
+      "classification": "KEEP_CURRENT_V3_AFTER_VALID_COMPARISON",
+      "stage_one_survivors": [],
+      "robustness": {
+        "status": "not_run",
+        "reason": "no Stage One survivor; frozen stop condition"
+      },
+      "candidates": {
+        "E1_TP5_CLOSE": {
+          "stage_one_passed": false,
+          "full_incomplete_strategy_batches": 42,
+          "net_protection_value": -8286.959938650805,
+          "failed_gates": ["complete_run_no_incomplete_batches", "max_drawdown_not_materially_worse", "net_protection_value_positive"]
+        },
+        "E2_PROFIT_LOCK_50": {
+          "stage_one_passed": false,
+          "full_incomplete_strategy_batches": 42,
+          "net_protection_value": -15802.572188567116,
+          "failed_gates": ["complete_run_no_incomplete_batches", "full_return_floor", "full_sharpe_not_below_control", "max_drawdown_not_materially_worse", "net_protection_value_positive", "recent_sharpe_not_below_control"]
+        },
+        "E3_PROFIT_ALPHA_CONFIRMED": {
+          "stage_one_passed": false,
+          "full_incomplete_strategy_batches": 42,
+          "net_protection_value": -6534.673655025953,
+          "failed_gates": ["complete_run_no_incomplete_batches", "net_protection_value_positive"]
+        }
+      }
+    },
     "final_classification_vocabulary": [
       "BLOCKED_DATA_MISSING_OR_HASH_MISMATCH",
       "BLOCKED_CONTROL_PARITY_FAILURE",

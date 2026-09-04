@@ -1,0 +1,77 @@
+{
+  "components": {
+    "equity_curve_sha256": "9d08f9c3b3a6959189fb0a482c7de6d294fd4a72e1cec3ae7fe7f79d6f2e02fb",
+    "fill_sequence_sha256": "dff4000e6c71074bcd7ffde96c98a209eb9b54c74233ddb264b7fb151d1b0b63",
+    "target_sequence_sha256": "b3b39c78d7731776d9dcc90a9eff2352b2e18007848bb14d23f68027d77f15c9",
+    "terminal_events_sha256": "8fd87474a7aaf9a7c5977dcb6c5d0cd02b09af0254d9fdefe81ba9ca0c766c95",
+    "universe_sha256": "d51ab5c816f9614cf9508d5ab6529e4cd8cad9d7d1feb886b233a3ad3556a011"
+  },
+  "config_digest_sha256": "1833407d7c42fcef45b1f2aef200a3fd14e344d6cdcc9b03c578f8e494152a3e",
+  "counts": {
+    "fills": 1890,
+    "incomplete_strategy_batches": 0,
+    "rebalance_decisions": 495,
+    "terminal_events": 12
+  },
+  "dataset": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+  },
+  "dirty_paths_after": [],
+  "dirty_paths_before": [],
+  "metrics": {
+    "avg_exposure": 0.4619,
+    "avg_holdings": 5.032,
+    "avg_losing_rebalance": -0.011025,
+    "avg_winning_rebalance": 0.01063,
+    "cagr": 0.055197,
+    "calmar": 0.270825,
+    "closed_position_events": 798,
+    "closed_positions": 798,
+    "dividend_total": 17785.55,
+    "fees_pct_avg_equity": 0.046641,
+    "fees_pct_gross_pnl": 0.068585,
+    "fees_total": 5835.61,
+    "gross_return": 0.850864,
+    "max_drawdown": 0.203809,
+    "max_drawdown_duration_days": 1363,
+    "max_exposure": 0.55,
+    "max_holdings": 6,
+    "profit_factor": 1.264166,
+    "rebalance_count": 495,
+    "rebalance_win_rate": 0.569697,
+    "return": 0.764538,
+    "sharpe": 0.571342,
+    "sortino": 0.710389,
+    "turnover": 149.724817,
+    "volatility": 0.103422
+  },
+  "policy": {
+    "allocation": 0.55,
+    "evaluation_end": "2026-07-30T00:00:00+00:00",
+    "terminal_policy": "T1"
+  },
+  "receipt_name": "CURRENT_PARITY_V3_CONTROL_R1",
+  "receipt_sha256": "4bdfda2ba2c415a14b3a82002cea92362e18da8d55348e6ea8e93351ef5f6a80",
+  "schema_version": "1.0.0",
+  "script_sha256": "0870f7648f0074a5dedcee92235f0e906d89bec3b39592dfd201321bc4c3452c",
+  "source_commit": "6b0cabe5a03d8d3c02173ebfce5b6430252b12a1",
+  "strategy": {
+    "name": "equity_residual_momentum_v3",
+    "parameters": {
+      "beta_window_bars": 273,
+      "exclude_symbols": [
+        "SPY"
+      ],
+      "formation_bars": 252,
+      "ivol_reject_quantile": 0.7,
+      "max_single_weight": 0.1,
+      "rebalance_frequency": "weekly",
+      "residual_vol_window": 63,
+      "skip_bars": 21,
+      "top_n": 8
+    },
+    "version": "3.0.0"
+  }
+}

@@ -878,9 +878,7 @@ class PortfolioStateRepository:
             observed_fee = fee is not None if fee_observed is None else bool(fee_observed)
             raw_fee = float(fee) if observed_fee and fee is not None else None
             event_received_at = received_at or datetime.now(UTC)
-            event_identity = activity_id or (
-                f"{client_order_id}:{status}:{occurred_at.isoformat()}:{raw_cumulative}"
-            )
+            event_identity = activity_id or (f"{client_order_id}:{status}:{occurred_at.isoformat()}:{raw_cumulative}")
             previous_raw = self.store.connection.execute(
                 """SELECT raw_cumulative_filled_quantity, raw_cumulative_average_fill_price
                    FROM portfolio_execution_events
@@ -1008,7 +1006,11 @@ class PortfolioStateRepository:
         if previous is None:
             if cumulative_quantity == 0:
                 return "status_only"
-            return "first_fill" if cumulative_average_price and cumulative_average_price > 0 else "missing_cumulative_average"
+            return (
+                "first_fill"
+                if cumulative_average_price and cumulative_average_price > 0
+                else "missing_cumulative_average"
+            )
         previous_quantity = float(str(previous[0] or 0.0))
         previous_average = float(str(previous[1])) if previous[1] is not None else None
         if cumulative_quantity < previous_quantity:

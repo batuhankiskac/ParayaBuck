@@ -285,13 +285,76 @@ def c0_parity() -> dict[str, object]:
     return {"equity": result_components(base_result, base, window.universe), "crypto": result_components(crypto_base_result, crypto_base, crypto_base.universe)}
 
 
+def _red_flags(control: Mapping[str, object], stressed: Mapping[str, object]) -> list[str]:
+    flags: list[str] = []
+    if float(control["total_return"]) > 0 and float(stressed["total_return"]) < 0:
+        flags.append("positive_return_becomes_negative")
+    if float(stressed["sharpe"]) < 0:
+        flags.append("sharpe_below_zero")
+    if float(control["max_drawdown"]) > 0 and float(stressed["max_drawdown"]) > 1.5 * float(control["max_drawdown"]):
+        flags.append("max_drawdown_over_1_5x_control")
+    if float(control["average_exposure"]) > 0 and float(stressed["average_exposure"]) < 0.8 * float(control["average_exposure"]):
+        flags.append("exposure_drop_over_20pct")
+    if float(stressed["superseded_parent_fraction"]) > 0.2:
+        flags.append("superseded_parent_orders_over_20pct")
+    if float(stressed["superseded_notional_fraction"]) > 0.25:
+        flags.append("superseded_notional_over_25pct")
+    return flags
+
+
+def run_sleeves(output: Path) -> dict[str, object]:
+    """Execute all fixed sleeve scenarios after C0 parity.
+
+    It intentionally does not synthesize a combined curve.  The repository
+    lacks a shared-account offline event loop, and independent sleeve curves
+    cannot evidence cross-sleeve cash drag or capacity crowding.
+    """
+    manifest = load_manifest(); verify_inputs(manifest)
+    parity = c0_parity()
+    config = load_config(str(REPO / "config/settings.yaml"))
+    equity_bars = equity_roadmap.load_bars(equity_roadmap.DATASET_V5)
+    terminal_map, _ = equity_roadmap.load_lifetimes(); actions = equity_roadmap.load_corporate_actions_all()
+    window = equity_roadmap.prepare_window(config, equity_bars, key="execution-stress", start=None, end=equity_roadmap.EVAL_END)
+    crypto_1h = load_csv_bars(CRYPTO_DATASET, default_market=Market.CRYPTO)
+    sleeves: dict[str, dict[str, dict[str, object]]] = {"equity": {}, "crypto": {}}
+    for name in manifest["scenarios"]:  # type: ignore[union-attr]
+        scenario = _scenario(manifest, name)
+        equity_engine = _equity_engine(config, window, terminal_map, scenario, adapter=True)
+        equity_result = equity_engine.run(window.filtered, warmup=window.warmup, liquidate_at_end=True, corporate_actions=list(actions), prepared_inputs=window.prepared, numeric_history=window.numeric_history)
+        sleeves["equity"][name] = _metrics(equity_result, equity_engine)
+        crypto_engine, filtered, warmup = _crypto_engine(config, crypto_1h, scenario, adapter=True)
+        crypto_result = crypto_engine.run(filtered, warmup=warmup)
+        sleeves["crypto"][name] = _metrics(crypto_result, crypto_engine)
+    flags = {
+        sleeve: {name: _red_flags(records["C0"], records[name]) for name in ("CAP2", "LAT1", "COMBO_MEDIUM")}
+        for sleeve, records in sleeves.items()
+    }
+    classifications = {
+        sleeve: ("BACKTEST_EXECUTION_FRAGILE" if sum(bool(value) for value in per_scenario.values()) >= 2 else "BACKTEST_EXECUTION_ROBUST")
+        for sleeve, per_scenario in flags.items()
+    }
+    payload: dict[str, object] = {
+        "mission": MISSION, "predeclaration_sha256": sha256(MANIFEST), "c0_parity": parity,
+        "sleeves": sleeves, "red_flags": flags, "sleeve_classifications": classifications,
+        "combined": {"status": "INCONCLUSIVE", "reason": "no research-only shared-account multi-market event loop; independent sleeve curves are not substituted"},
+        "overall_classification": "INCONCLUSIVE", "paper_live_transferability": "UNKNOWN_COST_TRANSFERABILITY",
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(_normalise(payload), indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    return payload
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify-predeclaration", action="store_true")
     parser.add_argument("--c0-parity", action="store_true")
+    parser.add_argument("--run-sleeves", action="store_true")
+    parser.add_argument("--output", type=Path, default=OUTPUT / "sleeve_results.json")
     args = parser.parse_args()
     manifest = load_manifest(); verify_inputs(manifest)
-    if args.c0_parity:
+    if args.run_sleeves:
+        print(json.dumps(run_sleeves(args.output), indent=2, sort_keys=True))
+    elif args.c0_parity:
         print(json.dumps(c0_parity(), indent=2, sort_keys=True))
     else:
         print(json.dumps({"mission": MISSION, "predeclaration_sha256": sha256(MANIFEST), "status": "READY_FOR_C0_PARITY"}, indent=2))

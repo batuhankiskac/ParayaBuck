@@ -91,7 +91,7 @@ class AlpacaBroker:
         ledger: ExecutionLedger | None = None,
         portfolio_owned_quantities: Callable[[], dict[str, float]] | None = None,
         portfolio_open_orders: Callable[[], object] | None = None,
-        portfolio_fill_recovered: (Callable[[str, str, float, float, datetime, str, float], None] | None) = None,
+        portfolio_fill_recovered: (Callable[[str, str, float, float, datetime, str, float | None], None] | None) = None,
         portfolio_stop_recorded: (Callable[[str, Market, float, str, float], None] | None) = None,
         portfolio_flat_reconciled: (Callable[[str, Market], object] | None) = None,
         crypto_stop_limit_offset_bps: float = 25.0,

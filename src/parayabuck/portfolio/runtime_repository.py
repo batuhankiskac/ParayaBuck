@@ -74,6 +74,23 @@ class PortfolioStateRepository:
                     slippage REAL NOT NULL,
                     FOREIGN KEY(client_order_id) REFERENCES portfolio_orders(client_order_id)
                 );
+                CREATE TABLE IF NOT EXISTS portfolio_execution_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    dedup_identity TEXT NOT NULL,
+                    client_order_id TEXT NOT NULL,
+                    broker_order_id TEXT NOT NULL DEFAULT '',
+                    event_type TEXT NOT NULL,
+                    broker_event_at TEXT NOT NULL,
+                    received_at TEXT NOT NULL,
+                    raw_cumulative_filled_quantity REAL NOT NULL,
+                    raw_cumulative_average_fill_price REAL,
+                    raw_fee REAL,
+                    fee_observed INTEGER NOT NULL,
+                    measurement_quality TEXT NOT NULL,
+                    FOREIGN KEY(client_order_id) REFERENCES portfolio_orders(client_order_id),
+                    UNIQUE(source, dedup_identity)
+                );
                 CREATE TABLE IF NOT EXISTS portfolio_high_water (
                     account_id TEXT PRIMARY KEY, equity REAL NOT NULL,
                     updated_at TEXT NOT NULL
@@ -155,6 +172,13 @@ class PortfolioStateRepository:
                        )
                        WHERE average_fill_price IS NULL"""
                 )
+            # These times intentionally do not reuse ``created_at``.  That
+            # timestamp means the logical order was persisted, whereas the
+            # following fields describe the bounded broker-call interval.
+            if "submit_call_started_at" not in columns:
+                self.store.connection.execute("ALTER TABLE portfolio_orders ADD COLUMN submit_call_started_at TEXT")
+            if "submit_call_returned_at" not in columns:
+                self.store.connection.execute("ALTER TABLE portfolio_orders ADD COLUMN submit_call_returned_at TEXT")
             fill_columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_fills)")}
             # Execution-quality capture (telemetry, REPORT ONLY): submission ->
             # fill delay per fill. Nullable; legacy rows stay valid.
@@ -450,6 +474,31 @@ class PortfolioStateRepository:
                     status,
                     datetime.now(UTC).isoformat(),
                 ),
+            )
+
+    def record_submit_call_started(self, client_order_id: str, occurred_at: datetime) -> None:
+        """Record an observed broker-call start without changing submission state.
+
+        Telemetry failure must never turn a previously valid order submission
+        into a different execution decision, so callers deliberately isolate
+        exceptions from this best-effort measurement write.
+        """
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_orders
+                   SET submit_call_started_at=COALESCE(submit_call_started_at, ?)
+                   WHERE client_order_id=?""",
+                (occurred_at.isoformat(), client_order_id),
+            )
+
+    def record_submit_call_returned(self, client_order_id: str, occurred_at: datetime) -> None:
+        """Record an observed broker-call return without changing order state."""
+        with self.store.lock, self.store.connection:
+            self.store.connection.execute(
+                """UPDATE portfolio_orders
+                   SET submit_call_returned_at=COALESCE(submit_call_returned_at, ?)
+                   WHERE client_order_id=?""",
+                (occurred_at.isoformat(), client_order_id),
             )
 
     def save_rebalance_execution(
@@ -802,9 +851,12 @@ class PortfolioStateRepository:
         average_fill_price: float | None,
         occurred_at: datetime,
         activity_id: str,
-        fee: float,
+        fee: float | None,
         realized_pnl: float,
         unrealized_pnl: float,
+        source: str = "other",
+        received_at: datetime | None = None,
+        fee_observed: bool | None = None,
     ) -> bool:
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
@@ -818,6 +870,51 @@ class PortfolioStateRepository:
             ).fetchone()
             if row is None:
                 return False
+            # Append raw broker facts before the crypto ownership conversion
+            # below.  ``portfolio_orders.cumulative_filled_quantity`` remains
+            # the authoritative *net owned* quantity; this journal is solely
+            # execution measurement and never drives execution behavior.
+            raw_cumulative = float(cumulative_filled_quantity)
+            observed_fee = fee is not None if fee_observed is None else bool(fee_observed)
+            raw_fee = float(fee) if observed_fee and fee is not None else None
+            event_received_at = received_at or datetime.now(UTC)
+            event_identity = activity_id or (
+                f"{client_order_id}:{status}:{occurred_at.isoformat()}:{raw_cumulative}"
+            )
+            previous_raw = self.store.connection.execute(
+                """SELECT raw_cumulative_filled_quantity, raw_cumulative_average_fill_price
+                   FROM portfolio_execution_events
+                   WHERE client_order_id=?
+                   ORDER BY id DESC LIMIT 1""",
+                (client_order_id,),
+            ).fetchone()
+            measurement_quality = self._raw_execution_quality(
+                raw_cumulative,
+                average_fill_price,
+                previous_raw,
+            )
+            self.store.connection.execute(
+                """INSERT OR IGNORE INTO portfolio_execution_events(
+                    source, dedup_identity, client_order_id, broker_order_id,
+                    event_type, broker_event_at, received_at,
+                    raw_cumulative_filled_quantity, raw_cumulative_average_fill_price,
+                    raw_fee, fee_observed, measurement_quality
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    source,
+                    event_identity,
+                    client_order_id,
+                    broker_order_id,
+                    status,
+                    occurred_at.isoformat(),
+                    event_received_at.isoformat(),
+                    raw_cumulative,
+                    average_fill_price,
+                    raw_fee,
+                    int(observed_fee),
+                    measurement_quality,
+                ),
+            )
             previous = float(row[0] or 0.0)
             reference = float(row[1] or 0.0)
             side = str(row[2])
@@ -870,7 +967,7 @@ class PortfolioStateRepository:
                         occurred_at.isoformat(),
                         fill_delta,
                         average_fill_price,
-                        fee,
+                        float(fee or 0.0),
                         realized_pnl,
                         unrealized_pnl,
                         slippage,
@@ -893,6 +990,40 @@ class PortfolioStateRepository:
                             fill_delta,
                         )
         return True
+
+    @staticmethod
+    def _raw_execution_quality(
+        cumulative_quantity: float,
+        cumulative_average_price: float | None,
+        previous: tuple[object, ...] | None,
+    ) -> str:
+        """Classify a cumulative broker observation without repairing it.
+
+        The raw event is retained even when it cannot safely produce an
+        incremental fill.  Ownership continues through the established,
+        fail-closed path above.
+        """
+        if cumulative_quantity < 0:
+            return "invalid_negative_cumulative_quantity"
+        if previous is None:
+            if cumulative_quantity == 0:
+                return "status_only"
+            return "first_fill" if cumulative_average_price and cumulative_average_price > 0 else "missing_cumulative_average"
+        previous_quantity = float(str(previous[0] or 0.0))
+        previous_average = float(str(previous[1])) if previous[1] is not None else None
+        if cumulative_quantity < previous_quantity:
+            return "out_of_order_or_decreasing_cumulative_quantity"
+        if cumulative_quantity == previous_quantity:
+            return "duplicate_or_zero_delta"
+        if not cumulative_average_price or cumulative_average_price <= 0:
+            return "missing_cumulative_average"
+        if previous_quantity > 0 and previous_average is None:
+            return "previous_cumulative_average_missing"
+        if previous_quantity > 0 and previous_average is not None:
+            delta_notional = cumulative_quantity * cumulative_average_price - previous_quantity * previous_average
+            if delta_notional <= 0:
+                return "invalid_incremental_notional"
+        return "valid_incremental"
 
     def update_high_water(self, account_id: str, equity: float) -> float:
         with self.store.lock, self.store.connection:

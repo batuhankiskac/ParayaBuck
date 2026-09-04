@@ -80,7 +80,7 @@ class OrderService:
 
     def _fill_from_broker_order(
         self, order: Any, client_order_id: str, broker_order_id: str
-    ) -> tuple[str, str, float, float, datetime, str, float] | None:
+    ) -> tuple[str, str, float, float, datetime, str, float | None] | None:
         filled_qty = float(self._field(order, "filled_qty", 0) or self._field(order, "cumulative_qty", 0) or 0)
         avg_price = float(self._field(order, "filled_avg_price", 0) or 0)
         if filled_qty <= 0 or avg_price <= 0:
@@ -98,7 +98,9 @@ class OrderService:
             avg_price,
             occurred_at,
             f"{client_order_id}:recovered:{filled_qty}",
-            0.0,
+            # The order lookup does not establish a fee.  Treating absence as
+            # a zero fee would corrupt execution-quality measurements.
+            None,
         )
 
     def resolve_portfolio_submission(

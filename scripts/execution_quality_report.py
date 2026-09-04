@@ -88,13 +88,17 @@ def main() -> int:
     print(f"  total observed fees: {_fmt(observed.get('total_fees'), 6)}")
 
     comparison = calibration["comparison"]
-    print("\nCost calibration (configured vs observed):")
+    print("\nDecision-close diagnostic (configured vs observed; not backtest-aligned):")
     modeled = comparison.get("modeled_adverse_bps")
     print(f"  modeled adverse bps (slippage + spread/2): {_fmt(modeled)}")
     print(f"  observed median bps: {_fmt(comparison.get('observed_median_bps'))}")
     print(f"  observed p75 bps:    {_fmt(comparison.get('observed_p75_bps'))}")
     print(f"  observed p95 bps:    {_fmt(comparison.get('observed_p95_bps'))}")
-    print(f"  verdict: {comparison.get('verdict')}")
+    print(f"  within-reference verdict: {comparison.get('verdict')}")
+    print(f"  reference basis: {comparison.get('reference_basis', 'decision_close')}")
+    print(f"  alignment status: {comparison.get('alignment_status', 'not_backtest_aligned')}")
+    print(f"  transferability verdict: {comparison.get('transferability_verdict', 'UNKNOWN')}")
+    print(f"  measurement quality: {comparison.get('measurement_quality', 'unknown')}")
     print(f"  policy: {calibration.get('policy')}")
 
     metrics = execution_metrics(db_path)

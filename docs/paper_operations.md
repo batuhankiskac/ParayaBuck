@@ -94,7 +94,10 @@ behavior):
   and portfolio PnL / drawdown;
 - `cost_calibration` — configured (backtest) slippage/spread/fees vs
   observed median / p75 / p95 slippage and observed fees; the verdict is
-  informational and NEVER adjusts assumptions;
+  informational and NEVER adjusts assumptions.  Its existing reference is
+  the completed decision-bar close, so a `within_model` diagnostic is not
+  proof that the later-open backtest schedule is conservative or
+  PAPER-transferable;
 - `expected_vs_actual` / `decision_expected_vs_actual` — per-order and
   per-decision comparison of expected quantity/price vs actual fills,
   slippage bps, fees and fill delay.

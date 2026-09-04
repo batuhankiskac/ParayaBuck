@@ -23,8 +23,18 @@ class TradeUpdate:
     filled_qty: float
     average_fill_price: float | None
     timestamp: datetime
-    fee: float = 0.0
+    # ``None`` means Alpaca did not supply a fee.  It is intentionally
+    # distinct from an observed zero: execution measurement must not infer
+    # that a missing fee is free.
+    fee: float | None = None
     activity_id: str | None = None
+    source: str = "stream"
+    received_at: datetime | None = None
+    # ``None`` retains compatibility for local/fake callers that provide a
+    # concrete fee but predate explicit provenance; the repository treats a
+    # supplied fee as observed in that case.  Stream callers always provide
+    # an explicit boolean.
+    fee_observed: bool | None = None
 
 
 UpdateHandler = Callable[[TradeUpdate], Awaitable[None]]
@@ -47,6 +57,7 @@ class AlpacaTradingUpdateStream:
         self._stream.subscribe_trade_updates(self._on_update)
 
     async def _on_update(self, raw: Any) -> None:
+        received_at = datetime.now(UTC)
         order = _field(raw, "order", raw)
         asset_class = str(_field(order, "asset_class", "")).lower()
         raw_symbol = str(_field(order, "symbol", ""))
@@ -92,6 +103,18 @@ class AlpacaTradingUpdateStream:
             role = OrderRole.ENTRY
         else:
             role = OrderRole.MANUAL_EXIT
+        missing = object()
+        fee_raw = _field(raw, "commission", missing)
+        if fee_raw is missing:
+            fee_raw = _field(raw, "fee", missing)
+        if fee_raw is missing:
+            fee_raw = _field(order, "commission", missing)
+        fee_observed = fee_raw is not missing and fee_raw is not None
+        try:
+            fee = float(fee_raw) if fee_observed else None
+        except (TypeError, ValueError):
+            fee = None
+            fee_observed = False
         update = TradeUpdate(
             event=str(_field(raw, "event", "")).lower().split(".")[-1],
             client_order_id=client_order_id,
@@ -104,7 +127,7 @@ class AlpacaTradingUpdateStream:
             filled_qty=float(_field(order, "filled_qty", 0) or 0),
             average_fill_price=float(average) if average is not None else None,
             timestamp=timestamp.astimezone(UTC),
-            fee=float(_field(raw, "commission", _field(raw, "fee", _field(order, "commission", 0))) or 0),
+            fee=fee,
             activity_id=str(
                 _field(raw, "execution_id", _field(raw, "id", ""))
                 or (
@@ -112,6 +135,9 @@ class AlpacaTradingUpdateStream:
                     f"{timestamp.isoformat()}:{_field(order, 'filled_qty', 0)}"
                 )
             ),
+            source="stream",
+            received_at=received_at,
+            fee_observed=fee_observed,
         )
         await self._handler(update)
 

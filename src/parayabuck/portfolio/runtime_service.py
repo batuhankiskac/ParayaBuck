@@ -1497,11 +1497,26 @@ class PortfolioRuntime:
                 if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:
                     continue
             self.repository.record_order(order, "submitting")
+            submit_started_at = datetime.now(UTC)
+            try:
+                self.repository.record_submit_call_started(order.client_order_id, submit_started_at)
+            except Exception:
+                # Measurement is deliberately non-authoritative: a telemetry
+                # write failure must not alter the existing broker-order path.
+                log.warning("Could not record order submit start for %s", order.client_order_id, exc_info=True)
             try:
                 broker_order_id = self.broker.submit_portfolio_order(order)
             except Exception:
+                try:
+                    self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))
+                except Exception:
+                    log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
                 self.repository.update_order(order.client_order_id, "reconciliation_required")
                 raise
+            try:
+                self.repository.record_submit_call_returned(order.client_order_id, datetime.now(UTC))
+            except Exception:
+                log.warning("Could not record order submit return for %s", order.client_order_id, exc_info=True)
             self.repository.update_order(order.client_order_id, "submitted", broker_order_id)
             submitted.append(broker_order_id)
         return tuple(submitted)

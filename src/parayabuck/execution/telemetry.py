@@ -704,6 +704,17 @@ def cost_calibration(
         slippage_values: list[float] = []
         spread_values: list[float] = []
         fee_values: list[float] = []
+        fee_completeness = "legacy_or_no_raw_fee_provenance"
+        if _table_exists(connection, "portfolio_execution_events"):
+            fee_rows = _query(
+                connection,
+                """SELECT raw_cumulative_filled_quantity, fee_observed
+                   FROM portfolio_execution_events""",
+            )
+            if any(_to_float(quantity) > 0 and not bool(observed) for quantity, observed in fee_rows):
+                fee_completeness = "unknown"
+            elif fee_rows:
+                fee_completeness = "observed_event_local_not_aggregated"
         if _table_exists(connection, "portfolio_fills") and _table_exists(connection, "portfolio_orders"):
             for row in _query(
                 connection,
@@ -761,6 +772,7 @@ def cost_calibration(
                 "spread_estimate_bps": observed_spread,
                 "fees": observed_fees,
                 "total_fees": round(sum(fee_values), 6),
+                "fee_completeness": fee_completeness,
             },
             "comparison": {
                 "modeled_adverse_bps": round(modeled_total_bps, 4),
@@ -768,11 +780,202 @@ def cost_calibration(
                 "observed_p75_bps": observed_slippage["p75"],
                 "observed_p95_bps": observed_slippage["p95"],
                 "verdict": verdict,
+                # The current diagnostic is deliberately a decision-close
+                # reference comparison.  It is useful within that diagnostic,
+                # but cannot prove the backtest cost model is conservative.
+                "reference_basis": "decision_close",
+                "alignment_status": "not_backtest_aligned",
+                "transferability_verdict": "UNKNOWN",
+                "measurement_quality": "legacy_close_reference_only",
             },
+            "reference_basis": "decision_close",
+            "alignment_status": "not_backtest_aligned",
+            "transferability_verdict": "UNKNOWN",
+            "measurement_quality": "legacy_close_reference_only",
             "policy": (
                 "REPORT ONLY: observed costs never adjust any configured "
                 "assumption; a cost-model change requires a separate research mission."
             ),
+            "asof": _iso_now(),
+        }
+    finally:
+        if owns:
+            connection.close()
+
+
+# --------------------------------------------------------------------------
+# Raw PAPER execution measurement
+# --------------------------------------------------------------------------
+
+
+def execution_measurement(
+    db_path: str | Path,
+    *,
+    _connection: sqlite3.Connection | None = None,
+) -> dict[str, object]:
+    """Read raw gross execution beside authoritative net ownership.
+
+    This is a measurement-only view of ``portfolio_execution_events``.  It
+    does not repair invalid broker sequences or infer missing fees; those
+    facts remain explicit in the returned quality fields.
+    """
+    owns = _connection is None
+    connection = _connection if _connection is not None else _open_readonly(db_path)
+    if connection is None:
+        return _empty_state()
+    try:
+        if not _table_exists(connection, "portfolio_orders"):
+            return {"available": True, "orders": [], "asof": _iso_now()}
+        order_columns = _columns(connection, "portfolio_orders")
+        submit_started_expr = (
+            "o.submit_call_started_at" if "submit_call_started_at" in order_columns else "NULL"
+        )
+        submit_returned_expr = (
+            "o.submit_call_returned_at" if "submit_call_returned_at" in order_columns else "NULL"
+        )
+        order_rows = _query(
+            connection,
+            f"""SELECT o.client_order_id, o.symbol, o.market, o.side, o.quantity,
+                      o.cumulative_filled_quantity, o.status, o.created_at,
+                      {submit_started_expr}, {submit_returned_expr},
+                      d.decision_timestamp, d.target_json,
+                      (SELECT r.phase FROM portfolio_rebalance_executions r
+                       WHERE r.decision_id=o.decision_id)
+               FROM portfolio_orders o
+               JOIN portfolio_decisions d ON d.decision_id=o.decision_id
+               ORDER BY o.created_at""",
+        )
+        event_rows = _query(
+            connection,
+            """SELECT id, source, dedup_identity, client_order_id, broker_order_id,
+                      event_type, broker_event_at, received_at,
+                      raw_cumulative_filled_quantity,
+                      raw_cumulative_average_fill_price, raw_fee, fee_observed,
+                      measurement_quality
+               FROM portfolio_execution_events
+               ORDER BY client_order_id, id""",
+        )
+        events_by_order: dict[str, list[tuple[Any, ...]]] = {}
+        for event in event_rows:
+            events_by_order.setdefault(str(event[3]), []).append(event)
+        result_orders: list[dict[str, object]] = []
+        for row in order_rows:
+            (
+                client_order_id,
+                symbol,
+                market,
+                side,
+                expected_qty,
+                net_owned_qty,
+                status,
+                persisted_at,
+                submit_call_started_at,
+                submit_call_returned_at,
+                decision_timestamp,
+                target_json,
+                rebalance_phase,
+            ) = row
+            expected = _to_float(expected_qty)
+            raw_events = events_by_order.get(str(client_order_id), [])
+            previous_qty = 0.0
+            previous_notional = 0.0
+            has_previous = False
+            gross_executed: float | None = None
+            incremental_fills: list[dict[str, object]] = []
+            qualities: list[str] = []
+            fee_unknown = False
+            first_fill_at: str | None = None
+            last_fill_at: str | None = None
+            terminal_at: str | None = None
+            for event in raw_events:
+                raw_qty = _to_float(event[8])
+                raw_average = event[9]
+                quality = str(event[12])
+                qualities.append(quality)
+                if raw_qty > 0 and not bool(event[11]):
+                    fee_unknown = True
+                if str(event[5]).lower() in {"fill", "filled", "canceled", "cancelled", "rejected", "expired"}:
+                    terminal_at = str(event[6])
+                if quality not in {"first_fill", "valid_incremental"} or raw_average is None:
+                    continue
+                average = _to_float(raw_average)
+                if average <= 0:
+                    continue
+                notional = raw_qty * average
+                delta_qty = raw_qty if not has_previous else raw_qty - previous_qty
+                delta_notional = notional if not has_previous else notional - previous_notional
+                if delta_qty <= 0 or delta_notional <= 0:
+                    continue
+                incremental_fills.append(
+                    {
+                        "source": str(event[1]),
+                        "dedup_identity": str(event[2]),
+                        "broker_event_at": str(event[6]),
+                        "local_received_at": str(event[7]),
+                        "delta_quantity": delta_qty,
+                        "delta_notional": delta_notional,
+                        "incremental_price": delta_notional / delta_qty,
+                    }
+                )
+                previous_qty = raw_qty
+                previous_notional = notional
+                has_previous = True
+                gross_executed = raw_qty
+                first_fill_at = first_fill_at or str(event[6])
+                last_fill_at = str(event[6])
+            try:
+                metadata = json.loads(str(target_json)).get("metadata", {})
+            except (TypeError, ValueError):
+                metadata = {}
+            decision_origin = str(metadata.get("decision_origin") or "scheduled")
+            role = "immediate_buy" if str(side) == "buy" else "immediate_sell"
+            if rebalance_phase is not None:
+                role = "deferred_replanned_buy" if str(side) == "buy" else "two_phase_sell"
+            if bool(metadata.get("intermediate_risk_reduction")):
+                decision_origin = "intermediate_risk_reduction"
+            net_owned = _to_float(net_owned_qty)
+            latest_quality = qualities[-1] if qualities else "no_raw_execution_event"
+            result_orders.append(
+                {
+                    "client_order_id": str(client_order_id),
+                    "symbol": str(symbol),
+                    "market": str(market),
+                    "side": str(side),
+                    "status": str(status),
+                    "decision_origin": decision_origin,
+                    "execution_role": role,
+                    "decision_timestamp": str(decision_timestamp),
+                    "order_persisted_at": str(persisted_at),
+                    "broker_submit_call_started_at": (
+                        str(submit_call_started_at) if submit_call_started_at is not None else None
+                    ),
+                    "broker_submit_call_returned_at": (
+                        str(submit_call_returned_at) if submit_call_returned_at is not None else None
+                    ),
+                    "first_fill_at": first_fill_at,
+                    "last_fill_at": last_fill_at,
+                    "terminal_at": terminal_at,
+                    "expected_order_quantity": expected,
+                    "gross_cumulative_executed_quantity": gross_executed,
+                    "gross_fill_ratio": gross_executed / expected if gross_executed is not None and expected > 0 else None,
+                    "net_owned_quantity": net_owned,
+                    "net_ownership_ratio": net_owned / expected if expected > 0 else None,
+                    "fee_status": (
+                        "unknown"
+                        if fee_unknown or not raw_events
+                        else "observed_event_local_not_aggregated"
+                    ),
+                    "measurement_quality": latest_quality,
+                    "raw_event_count": len(raw_events),
+                    "incremental_fills": incremental_fills,
+                }
+            )
+        return {
+            "available": True,
+            "orders": result_orders,
+            "reference_basis": "decision_close",
+            "alignment_status": "not_backtest_aligned",
+            "transferability_verdict": "UNKNOWN",
             "asof": _iso_now(),
         }
     finally:
@@ -949,6 +1152,7 @@ __all__ = [
     "configured_cost_assumptions",
     "cost_calibration",
     "decision_expected_vs_actual",
+    "execution_measurement",
     "execution_metrics",
     "expected_vs_actual",
     "fill_delay_seconds",

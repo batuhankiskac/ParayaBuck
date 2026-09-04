@@ -1658,7 +1658,7 @@ class EngineRuntime:
         avg_price: float,
         occurred_at: datetime,
         activity_id: str,
-        fee: float,
+        fee: float | None,
     ) -> None:
         """Book a real fill recovered from Alpaca order history at its actual
         price (see AlpacaBroker._reconcile_stale_portfolio_ownership)."""
@@ -1673,6 +1673,9 @@ class EngineRuntime:
             fee=fee,
             realized_pnl=0.0,
             unrealized_pnl=0.0,
+            source="recovered_submission",
+            received_at=datetime.now(UTC),
+            fee_observed=fee is not None,
         )
 
     def _pin_managed_symbols(self) -> None:
@@ -2307,6 +2310,9 @@ class EngineRuntime:
                 fee=update.fee,
                 realized_pnl=0.0,
                 unrealized_pnl=0.0,
+                source=update.source,
+                received_at=update.received_at,
+                fee_observed=update.fee_observed,
             )
             # A rejected portfolio order is an operator-visible event: the
             # dependent rebalance replans smaller (or absent) buys, so the

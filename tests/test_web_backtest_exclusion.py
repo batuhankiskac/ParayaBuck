@@ -73,9 +73,17 @@ def test_engine_rejected_while_backtest_running():
         eng_mod.backtest_manager = bm
 
 
-def test_engine_backtest_race_only_one_wins():
+def test_engine_backtest_race_only_one_wins(monkeypatch: pytest.MonkeyPatch, tmp_path: Any):
     """Concurrent start_engine vs start_backtest: at most one succeeds (deterministic)."""
+    # The test proves only the mutual-exclusion race.  Never let its engine
+    # contender discover an operator dotenv/config path or create a runtime
+    # database when it wins the race.
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text("runtime:\n  mode: paper\n", encoding="utf-8")
+    monkeypatch.setenv("CONFIG_PATH", str(config_path))
+    monkeypatch.setenv("ENV_PATH", str(tmp_path / ".env"))
     mgr, bm, _ = _wired_pair()
+    monkeypatch.setattr(mgr, "get_credentials", lambda: (None, None))
     # Stub both to be slow and report success
     results: dict[str, Any] = {"engine": None, "backtest": None}
 

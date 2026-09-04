@@ -12,8 +12,8 @@
   },
   "commit_topology": {
     "starting_head": "480eacb2993aef8d77785147e2c68edcda860596",
-    "implementation_commit": "17cd8c5203e46401756408f63bd8dbc1c35589b9",
-    "implementation_parent": "480eacb2993aef8d77785147e2c68edcda860596",
+    "implementation_commit": "05837c33e06cf3f548f2b41f8633c3a4128f05e7",
+    "implementation_parent": "d0c46b5dbbcdcac82236eed4fa026b6dc49a7669",
     "manifest_pin_commit": "pending_manifest_pin_commit",
     "result_commit": "pending_commit_b_sha",
     "result_parent_required": "manifest_pin_commit",
@@ -26,7 +26,7 @@
   ],
   "runner": {
     "path": "scripts/research/equity_profit_protection_2026_09_r2.py",
-    "sha256": "071f2cae9c3c2b729185cbfa8155df90dd7b90722b3e439bab150a4b3aed788b",
+    "sha256": "42247e32c5c0d081d9c3aa32a52779a57a1e59dc0016377b51f29ab2c060f7ec",
     "imports_current_parity_machinery": [
       "scripts/research_v3_current_parity_control.py",
       "scripts/research_v3_equity_roadmap.py",

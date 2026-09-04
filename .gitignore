@@ -6,6 +6,14 @@ __pycache__/
 # GPT Pro handoff artifacts (prompts/reports) — local, never committed
 gptpro/
 
+# Local Mission 3 experiment bundles are generated/local. Canonical evidence is
+# curated under data/research_manifests/, data/research_receipts/, data/research/
+# and docs/research/.
+/research_runs/
+
+# Local backup of project metadata; pyproject.toml is authoritative.
+/pyproject.toml.bak
+
 # C extensions
 *.so
 

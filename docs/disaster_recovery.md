@@ -26,7 +26,8 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
 | **Backups** | `data/backups/parayabuck-*.sqlite3` (rollback-journal, no sidecars) | **CRITICAL** | SELF (are the backups) | Source for DB restore; `latest_verified_backup()` scans `mtime` + `verify_backup()` | Partial file from crash → `verify_backup() == False` → deleted, previous backups preserved, `BackupVerificationError` | No |
 | **Health snapshot** | `data/runtime/health_snapshot.json` (atomic `temp+replace`, 30s cadence, ~2KB) | **EPHEMERAL** | NO | NO — regenerated every `snapshot_interval_seconds` (30s) | Missing/stale → `ops status` UNKNOWN, `snapshot_age_seconds`; `doctor` UNKNOWN; trading still runs if process alive | No — derived from in-memory health |
 | **Reports** | `reports/` (backtest curves: `equity_final_oos/`, `crypto_baseline_*/`, `robustness/`, `portfolio_research/`) | **RECONSTRUCTIBLE** | NO | Regenerate via `run_product_backtest` + `research_helpers` (deterministic, PIT dataset pinned) | Missing → no runtime impact | No |
-| **Research runs** | `research_runs/` (`2026-08-28_...`), `data/research/`, `data/research_manifests/` | **EPHEMERAL / RECONSTRUCTIBLE** | NO | Archive policy in `repository_cleanup_inventory_2026_08.md` | Missing → no runtime impact | No |
+| **Local generated experiment bundles** | `research_runs/` | **GENERATED LOCAL / RECONSTRUCTIBLE FOR RUNTIME PURPOSES** | **NO** — not part of product runtime backup; operator may preserve locally | Optional local restoration; not required for trading | Missing → no runtime impact | No |
+| **Canonical and historical research evidence** | `data/research_manifests/`, `data/research_receipts/`, manifest-required tracked `data/research/`, `docs/research/`, `docs/archive/research_2026_08/`, tracked `data/research/archive/` | **VERSIONED EVIDENCE / NOT RUNTIME STATE** | **YES** — versioned in Git or an approved archival backup | Restore from the pinned Git revision or approved archival backup; do not assume the bytes can be regenerated equivalently | Missing or corrupt → audit/reproducibility gap; no runtime impact | No |
 
 **Backup coverage — what IS included vs what is NOT:**
 
@@ -35,7 +36,8 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
   - Peak sidecar (`data/runtime/paper_equity_peak.json`) — via tarball step in `docs/deployment.md` §3.
   - Config + secrets (`config/`, `.env`) — via same tarball (operator-managed, host backup recommended).
 - **NOT included** (reconstructed or ephemeral):
-  - `observability.sqlite3`, `health_snapshot.json`, `data/cache/`, `data/historical/` cache, `reports/`, `research_runs/` — all regenerable.
+  - `observability.sqlite3`, `health_snapshot.json`, `data/cache/`, `data/historical/` cache, and `reports/` — all regenerable.
+  - `research_runs/` — generated local bundles, not runtime backup; canonical and historical research evidence is restored from its pinned Git revision or approved archive.
   - `active_*_universe.json` — rescanned; history `.jsonl` is append-only log for forensics, not required for restart.
 
 ---

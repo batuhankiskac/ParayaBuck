@@ -2,6 +2,21 @@
 
 The research platform turns the existing `ResearchRunner` into a **reproducible, resumable, inspectable** experiment system. Every experiment is defined once, fingerprinted deterministically, and persisted as a self-describing filesystem bundle under `research_runs/`.
 
+## Version-control and retention lifecycle
+
+See the [current research-record index and lifecycle policy](research/README.md)
+for the distinction between local runs, canonical evidence and immutable
+history.
+
+- `research_runs/` contains generated, resumable local bundles. Caches,
+  temporary trials and exploratory bundles remain local and are not canonical
+  evidence.
+- A run becomes canonical only through a reviewed manifest, receipt, required
+  hash-pinned results and human report chain.
+- The existing `data/research/` ignore rule keeps ordinary generated output
+  local. Required canonical artifacts must be reviewed and intentionally added
+  by explicit path; do not use blanket force-adds.
+
 ## 1. Create an experiment YAML
 
 ```yaml

@@ -10,6 +10,12 @@
 > This document classifies every relevant file before any deletion/move. All deletions/moves below preserve canonical PIT SHAs and frozen V3 math (`formation 252 / skip 21 / beta 273 / residual_vol 63 / top_n 8 / ivol 0.70 / max_single 0.10 / weekly`).
 > Produced before COMMIT A per mission §2.
 
+> **Historical proposal — not current retention authority.** This inventory is
+> the 2026-08-26 proposal frozen at the commits above. Subsequent changes mean
+> its path and retention claims may no longer match the current tree. See the
+> [current research index](research/README.md) for the current lifecycle. Do
+> not treat this historical classification as automatic deletion authority.
+
 ---
 
 ## 1. Classification Key

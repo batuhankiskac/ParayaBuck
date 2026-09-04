@@ -9,6 +9,11 @@
 
 Root `docs/` now shows only current canonical state (15 active docs). This archive preserves reproducibility without appearing as current results.
 
+> **Current index:** For present-day research-record status and retention, see
+> the [current research index](../../research/README.md). This archive remains
+> immutable historical evidence; its classifications are not current deletion
+> authority.
+
 ---
 
 ## How to use this archive

@@ -130,6 +130,8 @@ Persisted rebalance state survives restart via `portfolio_rebalance_executions` 
 
 ## H. Research UX
 
+> **Current hygiene note:** The exact `research_runs/2026-08-28_equity-v3-small-grid_26981590_080ede` path below is a historical local smoke example. It is not distributed in new clones after the repository-hygiene cleanup. Operators should inspect a locally generated run or substitute their own run ID. The original historical report and command are retained unchanged below.
+
 - **New commands:**
   - `parayabuck research list` (alias `ls`) — discovery without loading full `trials.jsonl` (uses `manifest.json` + `summary.json` per run). Columns: `created status experiment strategy market tier trials completed failed best_sharpe best_cagr run_dir`. Filters: `--root`, `--status`, `--strategy`, `--market`, `--tag`, `--limit`, `--sort (created|best_sharpe|best_cagr|status)`, `--json`. Handles malformed/incomplete dirs gracefully (skip, continue). Sorting default newest first. Efficient for 500 bundles (one small JSON per run).
   - `parayabuck research top <run> --metric {sharpe|sortino|cagr|calmar|max_drawdown|turnover} --limit N [--json]` — top N trials by bounded metric set, no expression language. `max_drawdown` (higher/less negative better), `turnover` (lower better) ranked correctly.
@@ -248,4 +250,3 @@ Decomposing `execution/alpaca.py` or `web/server.py` next would chase LOC again 
 ## 57. Final Instruction
 
 Mission 4 makes production system modifiable in 6 months without holding 100KB+ files in head: state (repository), decision (models), execution lifecycle (rebalance/ownership), runtime events, universe, health are boundaries, while `EngineRuntime` and `PortfolioRuntime` remain recognizable facades. Safety and behavior preservation before LOC.
-

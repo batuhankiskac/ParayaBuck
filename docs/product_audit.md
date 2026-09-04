@@ -5,6 +5,12 @@ Audit date: 2026-08-11 · HEAD at audit: `199d153` · HEAD after hardening:
 
 Documentation only. Nothing at runtime reads this file.
 
+> **Historical snapshot — not current retention authority.** This audit was
+> written on 2026-08-11 against HEAD `199d153`; later changes mean its path and
+> retention claims may no longer match the current tree. See the [current
+> research index](research/README.md) for the current lifecycle. Do not treat
+> this historical classification as automatic deletion authority.
+
 ## Verdict
 
 **B — AUTOMATED TRADING PRODUCT WITH MINOR PRODUCT GAPS** (pre-hardening),

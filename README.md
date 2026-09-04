@@ -146,6 +146,7 @@ live.
 - `docs/validated_strategies.md` — validated specs: v1 baselines + v2/v3 identities
 - `docs/v3_historical_validation_final.md` — **canonical V3 historical validation (frozen, 2026-08-26)**
 - `docs/repository_cleanup_inventory_2026_08.md` — pre-cleanup file classification (A/B/C/D)
+- `docs/research/README.md` — current research-record index and lifecycle policy
 - `docs/archive/research_2026_08/README.md` — archived superseded experiments index
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules

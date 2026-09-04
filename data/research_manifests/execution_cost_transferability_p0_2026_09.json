@@ -1,15 +1,24 @@
 {
   "schema_version": "1.0.0",
   "mission": "execution_cost_transferability_p0_2026_09",
-  "status": "planned",
+  "status": "accepted",
   "research_only": true,
   "declared_before_results": true,
   "no_results_yet": true,
   "commit_topology": {
     "starting_head": "0a47aba35aa7a2b3eb00f0fd396bdee22c0f9c97",
-    "implementation_commit": "pending",
+    "implementation_commits": [
+      "491ffa12e7460fe5353d3dd544a8a33e78ce61b6",
+      "140c3def3267e683e20c449314d8bfab01c2429b"
+    ],
+    "technical_verification_commit": "c3d65d73b6ebd22159f44f5d00eb7eec8c57e30d",
     "result_recording_commit": "pending",
     "self_reference_note": "Result-recording commit is intentionally not self-referential."
+  },
+  "record_timeline": {
+    "human_design_brief": "Operator-authored before implementation; it is not a machine commit timestamp.",
+    "machine_manifest_first_committed_at": "2026-09-04T16:40:58+03:00",
+    "technical_verification_completed_at": "2026-09-04T18:19:25+03:00"
   },
   "purpose": "Add offline execution measurement integrity and a read-only comparator; do not select or change a cost model.",
   "configuration_contract": {
@@ -26,7 +35,8 @@
     "raw_event_journal": "append-only source-scoped broker cumulative facts; absent fee is unknown, not zero",
     "ownership": "existing net portfolio ownership bookkeeping remains authoritative",
     "quality": "missing, invalid, duplicate, out-of-order, and noncomparable observations remain explicit",
-    "fee_precedence": "matching reconciled activity supersedes stream fee evidence without double counting"
+    "fee_evidence": "event-local only; unknown fee blocks actual total-cost comparison",
+    "cross_source_fee_reconciliation": "future work; no cross-source precedence is implemented in P0"
   },
   "backtest_benchmark_contract": {
     "engine": "PortfolioBacktestEngine",
@@ -45,7 +55,7 @@
     "hash_pinned_outputs": []
   },
   "acceptance": {
-    "technical_pipeline": "offline deterministic tests pass and comparator leaves the runtime DB unchanged",
+    "technical_pipeline": "accepted after engine differential parity, temporary-worktree isolation, and a base-versus-head full-suite differential; sandbox-denied loopback tests are common to base and head",
     "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY",
     "promotion": "none",
     "no_paper_sample_claim": true

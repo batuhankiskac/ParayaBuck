@@ -9,6 +9,7 @@ MANIFEST = ROOT / "data" / "research_manifests" / "execution_cost_transferabilit
 
 def test_p0_manifest_freezes_research_only_unknown_transferability_boundary() -> None:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    assert payload["status"] == "accepted"
     assert payload["research_only"] is True
     assert payload["declared_before_results"] is True
     assert payload["acceptance"]["economic_verdict"] == "UNKNOWN_COST_TRANSFERABILITY"
@@ -17,3 +18,8 @@ def test_p0_manifest_freezes_research_only_unknown_transferability_boundary() ->
     assert payload["boundaries"]["paper_or_live_activation"] is False
     assert payload["boundaries"]["orders"] is False
     assert payload["backtest_benchmark_contract"]["execution_model_change"] is False
+    assert (
+        payload["measurement_contract"]["fee_evidence"]
+        == "event-local only; unknown fee blocks actual total-cost comparison"
+    )
+    assert payload["measurement_contract"]["cross_source_fee_reconciliation"].startswith("future work")

@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0.0",
   "research_id": "execution_cost_transferability_p0_2026_09",
-  "source_commit": "0a47aba35aa7a2b3eb00f0fd396bdee22c0f9c97",
+  "source_commit": "c3d65d73b6ebd22159f44f5d00eb7eec8c57e30d",
   "config_digest_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
   "receipt_kind": "implementation_verification",
-  "technical_pipeline_status": "focused_verification_passed_full_suite_not_clean",
+  "technical_pipeline_status": "accepted_no_head_regression_common_sandbox_socket_failures",
   "commands": [
     {
       "command": "PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_execution_measurement.py tests/test_execution_shadow_comparator.py tests/research/test_execution_cost_transferability_p0_2026_09.py tests/test_execution_telemetry.py tests/test_portfolio_engine_accounting.py tests/test_portfolio_runtime.py tests/test_two_phase_rebalance.py tests/test_paper_reliability_restart.py tests/test_restart_chaos.py",
-      "result": "149 passed"
+      "result": "154 passed"
     },
     {
       "command": "PYTHONPATH=src .venv/bin/ruff check .",
@@ -19,8 +19,20 @@
       "result": "Success: no issues found in 148 source files"
     },
     {
-      "command": "PYTHONPATH=src .venv/bin/python -m pytest -q",
-      "result": "1670 passed, 11 skipped, 13 failed, 1 error; failures were existing clean-worktree assumptions, sandbox-denied loopback binds, and a test-isolation write to ignored data/runtime/parayabuck.sqlite3."
+      "command": "PYTHONPATH=src /Users/batuhankiskac/Desktop/ParayaBuck/.venv/bin/python -m pytest -q (in disposable base worktree at 0a47aba35aa7a2b3eb00f0fd396bdee22c0f9c97)",
+      "result": "1662 passed, 15 skipped, 6 failed; all failures were sandbox-denied loopback binds."
+    },
+    {
+      "command": "PYTHONPATH=src /Users/batuhankiskac/Desktop/ParayaBuck/.venv/bin/python -m pytest -q (in disposable head worktree at c3d65d73b6ebd22159f44f5d00eb7eec8c57e30d)",
+      "result": "1678 passed, 15 skipped, 6 failed; exact same six sandbox-denied loopback bind failures as base."
+    },
+    {
+      "command": "python scripts/check_production_isolation.py --record BEFORE; pytest; python scripts/check_production_isolation.py --verify BEFORE (disposable head worktree)",
+      "result": "Production isolation OK — no protected files mutated."
+    },
+    {
+      "command": "ruff format --check .",
+      "result": "344 files already formatted"
     }
   ],
   "benchmark_resolution": {
@@ -33,8 +45,9 @@
   "promotion": "none",
   "limitations": [
     "No repository-contained predeclared PAPER sample exists.",
-    "Fee evidence is event-local until a future portfolio fee-activity reconciliation source defines authoritative cross-source precedence.",
+    "Fee evidence is event-local; cross-source fee reconciliation and precedence are future work, so actual total-cost comparison remains blocked.",
     "No local executable-bar input was supplied for a real PAPER comparison.",
-    "A full-suite result is not clean in this sandbox and the real ignored runtime database was modified by an unrelated isolation failure; it was not restored or overwritten."
+    "The six common full-suite failures require loopback socket binding, which this sandbox denies with PermissionError: [Errno 1] Operation not permitted; GitHub Actions remains the network-capable gate.",
+    "An isolated PEP 517 build could not resolve wheel because this sandbox has no DNS, and the local environment lacks setuptools.build_meta; wheel build/import remains unverified locally."
   ]
 }

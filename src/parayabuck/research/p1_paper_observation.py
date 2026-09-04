@@ -23,8 +23,7 @@ _MARKETS = ("equity", "crypto")
 _WINDOW_DAYS = (7, 30, 90)
 _ACCOUNT_HASH_DOMAIN = b"parayabuck-p1-account-v1\0"
 _FEE_LIMITATION = "event-local fee evidence is not an authoritative reconciled fee activity"
-_ROOT = Path(__file__).resolve().parents[3]
-_MANIFEST = _ROOT / "data/research_manifests/execution_cost_transferability_p1_paper_observation_2026_09.json"
+_MANIFEST = Path.cwd() / "data/research_manifests/execution_cost_transferability_p1_paper_observation_2026_09.json"
 
 
 def account_identity_hash(raw_account_id: str) -> str:
@@ -78,9 +77,9 @@ def _open_readonly(path: str | Path) -> sqlite3.Connection:
     return connection
 
 
-def _load_manifest() -> tuple[dict[str, object], str]:
+def _load_manifest(path: Path) -> tuple[dict[str, object], str]:
     try:
-        payload = json.loads(_MANIFEST.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError("P1 manifest is unreadable") from exc
     if not isinstance(payload, dict) or payload.get("status") != "planned":
@@ -94,7 +93,7 @@ def _load_manifest() -> tuple[dict[str, object], str]:
             isinstance(value, int) and value >= 0 for value in required.values()
         ):
             raise ValueError("P1 manifest has malformed minimum sample gates")
-    return payload, hashlib.sha256(_MANIFEST.read_bytes()).hexdigest()
+    return payload, hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _lineage(
@@ -184,12 +183,11 @@ def _market_report(rows: list[dict[str, object]], *, start: datetime, as_of: dat
         row for row in rows if (at := _parse_time(row.get("decision_timestamp"))) is not None and start <= at <= as_of
     ]
     eligible = [row for row in scoped if bool(row.get("primary_price_eligible"))]
-    excluded = Counter(
-        reason
-        for row in scoped
-        if not bool(row.get("primary_price_eligible"))
-        for reason in row.get("primary_exclusion_reasons", [])
-    )
+    excluded: Counter[str] = Counter()
+    for row in scoped:
+        reasons = row.get("primary_exclusion_reasons")
+        if not bool(row.get("primary_price_eligible")) and isinstance(reasons, list):
+            excluded.update(str(reason) for reason in reasons)
     actual = [_number(row.get("actual_price_cost")) for row in eligible]
     modeled = [_number(row.get("modeled_price_cost")) for row in eligible]
     return {
@@ -357,7 +355,14 @@ def build_p1_report(
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must be timezone-aware")
     as_of = as_of.astimezone(UTC)
-    manifest, manifest_sha = _load_manifest()
+    manifest_path = contract.get("manifest_path")
+    if manifest_path is None:
+        path = _MANIFEST
+    elif isinstance(manifest_path, str):
+        path = Path(manifest_path)
+    else:
+        raise ValueError("P1 manifest_path must be a filesystem path")
+    manifest, manifest_sha = _load_manifest(path)
     receipt, cutoff = _receipt(contract, dataset, as_of, manifest_sha)
     strategies = contract.get("strategy_identities")
     if not isinstance(strategies, Mapping) or set(strategies) != set(_MARKETS):
@@ -365,24 +370,30 @@ def build_p1_report(
     shadow = run_shadow_comparator(db_path, bars, config, dataset=dict(dataset), as_of=as_of)
     measurement = execution_measurement(db_path, as_of=as_of)
     lineage_by_order, sessions, events = _lineage(db_path)
+    shadow_rows = shadow.get("orders")
+    measurement_rows = measurement.get("orders")
+    if not isinstance(shadow_rows, list) or not isinstance(measurement_rows, list):
+        raise ValueError("P0 measurement output has an invalid order collection")
     shadow_by_order = {
-        str(row["client_order_id"]): row
-        for row in shadow.get("orders", [])
-        if isinstance(row, Mapping) and "client_order_id" in row
+        str(row["client_order_id"]): row for row in shadow_rows if isinstance(row, Mapping) and "client_order_id" in row
     }
     observed_by_order = {
         str(row["client_order_id"]): row
-        for row in measurement.get("orders", [])
+        for row in measurement_rows
         if isinstance(row, Mapping) and "client_order_id" in row
     }
     first_matches: dict[str, bool] = {}
+    configuration_digests = receipt["configuration_digests"]
+    first_session_ids = receipt["first_eligible_session_ids"]
+    assert isinstance(configuration_digests, Mapping)
+    assert isinstance(first_session_ids, Mapping)
     for market in _MARKETS:
-        first = sessions.get(str(receipt["first_eligible_session_ids"][market]))
+        first = sessions.get(str(first_session_ids[market]))
         first_matches[market] = bool(
             first
             and str(first.get("mode", "")).lower() == "paper"
             and account_identity_hash(str(first.get("account_id", ""))) == receipt["account_identity_hash"]
-            and str(first.get("configuration_digest", "")) == str(receipt["configuration_digests"][market])
+            and str(first.get("configuration_digest", "")) == str(configuration_digests[market])
             and (_parse_time(first.get("started_at")) or datetime.min.replace(tzinfo=UTC)) >= cutoff
         )
     records: list[dict[str, object]] = []
@@ -412,7 +423,7 @@ def build_p1_report(
         if session_at is None or session_at < cutoff:
             reasons.append("session_before_sample_cutoff")
         if market in _MARKETS:
-            digest = str(receipt["configuration_digests"][market])
+            digest = str(configuration_digests[market])
             if (
                 account_identity_hash(str(line.get("account_id", ""))) != receipt["account_identity_hash"]
                 or account_identity_hash(str(session.get("account_id", ""))) != receipt["account_identity_hash"]
@@ -426,7 +437,7 @@ def build_p1_report(
             if not first_matches[market]:
                 reasons.append("first_eligible_session_missing_or_mismatched")
             elif session_at is None or session_at < (
-                _parse_time(sessions[str(receipt["first_eligible_session_ids"][market])].get("started_at")) or cutoff
+                _parse_time(sessions[str(first_session_ids[market])].get("started_at")) or cutoff
             ):
                 reasons.append("session_precedes_first_eligible_session")
         raw_count = int(_number(observed.get("raw_event_count")) or 0)
@@ -501,6 +512,8 @@ def build_p1_report(
         }
         for days in _WINDOW_DAYS
     }
+    minimums = manifest.get("minimum_sample_gates")
+    assert isinstance(minimums, Mapping)
     return {
         "research_id": str(manifest["mission"]),
         "read_only": True,
@@ -510,7 +523,7 @@ def build_p1_report(
         "manifest_sha256": manifest_sha,
         "records": records,
         "reporting_windows_days": reports,
-        "sample_gate_progress": _sample_gates(records, as_of, manifest["minimum_sample_gates"]),
+        "sample_gate_progress": _sample_gates(records, as_of, minimums),
         "economic_verdict": "UNKNOWN_COST_TRANSFERABILITY",
         "promotion": "none",
         "fee_limitation": _FEE_LIMITATION,

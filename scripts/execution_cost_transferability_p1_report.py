@@ -132,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset=metadata,
         contract={
             "epoch_receipt": receipt,
+            "manifest_path": str(ROOT / _MANIFEST),
             "strategy_identities": {
                 "equity": config.strategy.equity.name,
                 "crypto": config.strategy.crypto.name,

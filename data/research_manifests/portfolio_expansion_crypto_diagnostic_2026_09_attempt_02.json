@@ -1,0 +1,26 @@
+{
+  "identity": "portfolio_expansion_crypto_diagnostic_2026_09_attempt_02_corrected",
+  "status": "FROZEN_CORRECTED_DIAGNOSTIC",
+  "created_utc": "2026-09-05T00:00:00Z",
+  "purpose": "Corrected curve-only diagnostic; no economic rerun or shared ledger",
+  "immutable_inputs": {
+    "max_output": {"path":"data/research/crypto_max_return_economic_2026_09/attempt_01_canonical/economic_results.json","sha256":"0a007600e4ecb603928bf372d7bc958f9c3f736a5079c15ea367de46797a001c"},
+    "signed_risk_output": {"path":"data/research/crypto_signed_risk_economic_2026_09/attempt_01_canonical/economic_results.json","sha256":"10555181eaf17b91d36fe431bed431127955398d7c197606556ce2dce4c1e826"},
+    "protocol": {"path":"docs/research/portfolio_expansion_batch_2026_09_05_protocol.md","sha256":"bd3d29a6ecc700fb70f0650f0a82e97be0d4129de6b7fe5164d4e422f2a6de02"}
+  },
+  "matrix": {"windows":["full","recent"],"cost_multipliers":[1.0,2.0,3.0],"candidates":["max","signed_risk"],"required_unique_cells":12},
+  "measurement_contract": {
+    "initial_cash": 100000.0,
+    "native": "TR/CAGR/hourly DD/hourly Sharpe from INITIAL_CASH day0 sentinel through terminal mark; annualization sqrt(8760), RF 0",
+    "daily": "common UTC day-end curves; daily Sharpe and correlation include first day-end return from INITIAL_CASH; annualization sqrt(365.25), RF 0",
+    "blend": "50/50 normalized standalone NAVs; effective incumbent 0.025 plus candidate 0.025; total crypto budget 0.05",
+    "terminal": "final_mark_no_forced_sale"
+  },
+  "fresh_reset_source_cells": true,
+  "output_path": "data/research/portfolio_expansion_crypto_diagnostic_2026_09/attempt_02_corrected/diagnostic_results.json",
+  "output_sha256": "9b7706c0a960d59dc753b546a5b72f1fda0a13710301f72a227749bdafb1f877",
+  "script": {"path":"scripts/research/portfolio_expansion_crypto_diagnostic_2026_09_05.py","sha256":"22ad125d3d48b8ab389c109baddc5d1db3d924c7e937bf192984708db618791e"},
+  "windows": {"full":{"start":"2021-04-01T00:00:00Z","end":"2026-07-31T23:59:59Z"},"recent":{"start":"2024-01-01T00:00:00Z","end":"2026-07-31T23:59:59Z"}},
+  "source_attempt_01_preserved": true,
+  "no_new_economic_backtest": true
+}

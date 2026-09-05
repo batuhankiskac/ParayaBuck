@@ -1,0 +1,60 @@
+{
+  "identity": "high_proximity364_history_fixed_2026_09",
+  "status": "FROZEN_CORRECTED_HIGH_PROXIMITY_PROTOCOL",
+  "candidate": {
+    "name": "research_high_proximity364_history_fixed",
+    "version": "1.0.0-research-history-fixed",
+    "score": "close / max(last 364 consecutive complete daily closes, current close included)",
+    "history_bars": 364,
+    "top_n": 2,
+    "rebalance_hours": 96,
+    "allocation": 0.05,
+    "change_from_frozen_screen": "minimum_history_bars declaration only"
+  },
+  "inputs": {
+    "bars_1h": {
+      "path": "data/historical/crypto_expanded_1h.csv",
+      "sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+      "as_of": "2026-07-31T23:59:59Z"
+    }
+  },
+  "settings": {
+    "path": "config/settings.yaml",
+    "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "protocol": {
+    "path": "docs/research/high_proximity364_deep_assessment_protocol_2026_09_05.md",
+    "sha256": "d0ed18e41d8382a0e1b5b956cb4c5f5212bf71e601b021a4ee4b69d609a0bb82"
+  },
+  "source": {
+    "scripts/research/high_proximity364_history_fixed_2026_09_05.py": "a0aeb18a663342b01b31c482c7f2b36e19915004971b18e00a20f58a2c2cf3f5",
+    "scripts/research/high_proximity364_history_fixed_runner_2026_09_05.py": "c4d32709fcbf5879c272d5ca61b38151d9a1ecc496122d615f4f46ec3a1499e5",
+    "scripts/research/portfolio_expansion_crypto_screen_2026_09.py": "8a0eb3ccb8dc9a4ebddb0b9cd2d711bb40f2b7866fab8b07fdbf757e34f53d6d"
+  },
+  "windows": {
+    "full": {"start": "2022-01-01T00:00:00Z", "end": "2026-07-31T23:59:59Z"},
+    "recent": {"start": "2024-01-01T00:00:00Z", "end": "2026-07-31T23:59:59Z"}
+  },
+  "cost_multipliers": [1.0, 2.0, 3.0],
+  "matrix": {
+    "cells": [
+      "full/high_proximity364_history_fixed/1x",
+      "full/high_proximity364_history_fixed/2x",
+      "full/high_proximity364_history_fixed/3x",
+      "recent/high_proximity364_history_fixed/1x",
+      "recent/high_proximity364_history_fixed/2x",
+      "recent/high_proximity364_history_fixed/3x"
+    ],
+    "cell_count": 6
+  },
+  "execution": {
+    "signal_shift": "daily bars shifted +24h; decisions use completed bars only",
+    "fill": "next later executable 1h open",
+    "terminal_policy": "final_mark_no_forced_sale",
+    "state_path": null,
+    "initial_cash": 100000.0,
+    "no_parameter_or_weight_search": true,
+    "run_status": "FROZEN_NO_RUN_STARTED"
+  },
+  "manifest_sha256": "2e391f735055d43af7903536e3f6ef2636b9080c343b36e3bea045d2e7784ed0"
+}

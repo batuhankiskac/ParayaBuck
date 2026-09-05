@@ -1,0 +1,131 @@
+{
+  "status": "FROZEN_ECONOMIC",
+  "identity": "crypto_signed_risk_economic_2026_09",
+  "protocol_identity": "crypto_signed_risk_economic_protocol_2026_09_05",
+  "purpose": "Pre-results economic matrix for signed-risk candidate; no run authorization until source/test STOP and final freeze.",
+  "candidate": {
+    "arm": "signed_risk",
+    "score": "sum(min(r,0)^2)/sum(r^2) over 22 completed single-day returns",
+    "ordering": "ascending score then symbol",
+    "history": "23 consecutive completed D1 prices",
+    "top_n": 2,
+    "hysteresis": "HYST4",
+    "rebalance_hours": 96,
+    "allocation": 0.05,
+    "weights": "equal"
+  },
+  "controls": {
+    "incumbent": "low_variance",
+    "liquidity": "dollar_volume",
+    "liquidity_definition": "trailing 20 completed D1 median(close*volume), descending, symbol tie-break"
+  },
+  "matrix": {
+    "arms": [
+      "signed_risk",
+      "low_variance",
+      "dollar_volume"
+    ],
+    "windows": [
+      "full",
+      "recent"
+    ],
+    "cost_multipliers": [
+      1.0,
+      2.0,
+      3.0
+    ],
+    "required_unique_cells": 18,
+    "fresh_reset_each_cell": true
+  },
+  "evaluation": {
+    "full": {
+      "start": "2021-04-01T00:00:00Z",
+      "end": "2026-07-31T23:59:59Z"
+    },
+    "recent": {
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2026-07-31T23:59:59Z"
+    }
+  },
+  "accounting": {
+    "crypto_allocation": 0.05,
+    "idle_cash": 0.95,
+    "cash_yield": 0.0,
+    "native_terminal_mark": true,
+    "forced_crypto_liquidation": false,
+    "actual_fee_ledger_required": true
+  },
+  "technical_gate": {
+    "exact_unique_cells": 18,
+    "finite_required_metrics": true,
+    "hashes_and_asof_match": true,
+    "actual_fee_terminal_ledger": true,
+    "failure_class": "BLOCKED"
+  },
+  "economic_gates": {
+    "R1": "signed_risk total_return > 0 for full and recent at 3x",
+    "R2": "full_1x: signed_risk sharpe > incumbent sharpe OR (signed_risk max_dd <= 0.90*incumbent max_dd AND signed_risk cagr > 0 AND signed_risk cagr >= max(0,0.90*incumbent cagr))",
+    "R3": "signed_risk max_dd <= 1.5*incumbent max_dd for full and recent at 3x",
+    "R4": "signed_risk total_return >= 0 for full and recent at 2x",
+    "R5": "signed_risk total_return >= liquidity total_return for full and recent at 3x"
+  },
+  "classification": {
+    "any_gate_failure": "REJECT",
+    "all_gates_pass": "RETAIN_FOR_RESEARCH",
+    "paper_live": "unsupported"
+  },
+  "inputs": {
+    "bars_1h": {
+      "path": "data/historical/crypto_expanded_1h.csv",
+      "sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e"
+    }
+  },
+  "economic_provenance": {
+    "protocol_path": "docs/research/crypto_signed_risk_economic_protocol_2026_09_05.md",
+    "protocol_sha256": "ff7b79076ba19fa393074a4f2736b1c0b99247c532aef970f2fea62784af6422",
+    "settings_path": "config/settings.yaml",
+    "settings_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+    "timing_contract_path": "data/research/crypto_max_return_novelty_2026_09/attempt_02_trace_complete/economic_execution_timing_contract.json",
+    "required_source_pin_paths": [
+      "scripts/research/crypto_signed_risk_economic_2026_09.py",
+      "scripts/research/crypto_signed_risk_novelty_2026_09.py",
+      "scripts/research/crypto_signed_risk_novelty_runner_2026_09.py",
+      "src/parayabuck/portfolio/crypto_low_variance_hysteresis.py",
+      "src/parayabuck/backtest/portfolio_engine.py",
+      "src/parayabuck/backtest/product.py",
+      "src/parayabuck/backtest/universe.py",
+      "src/parayabuck/execution/portfolio.py",
+      "src/parayabuck/data/aggregator.py"
+    ]
+  },
+  "source": {
+    "file_sha256": {
+      "scripts/research/crypto_signed_risk_economic_2026_09.py": "4da63eda4ad1cb421565aaa8b2721ec990146d96aa8353e229b4bb5969b58963",
+      "scripts/research/crypto_signed_risk_novelty_2026_09.py": "c0d2140f53c67b07cbb70064d621a2f59065191d58eec6b5bfe4163eb0c5fc54",
+      "scripts/research/crypto_signed_risk_novelty_runner_2026_09.py": "1edce98c635ee7ffc422c118923b67a6ad3cd8b679dc817e7ae5784fe7ac51c3",
+      "src/parayabuck/portfolio/crypto_low_variance_hysteresis.py": "749eee371fa0f61ae1bf4a5f9308ed2386ac72a990301e10425aa50e9dcbc491",
+      "src/parayabuck/backtest/portfolio_engine.py": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141",
+      "src/parayabuck/backtest/product.py": "9eff2bd4b040be15c1d7d72f50b247d3767e407d741a011512d4d1470bdd1150",
+      "src/parayabuck/backtest/universe.py": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0",
+      "src/parayabuck/execution/portfolio.py": "7f06ebacec6e7034497ddb8074f0ae0254d1ecacabf4246cfe439d3a5b9d4982",
+      "src/parayabuck/data/aggregator.py": "eb9938f0f0d376b2642faec46f45ca076686a7bda5ad73dd5394d999b94da885"
+    }
+  },
+  "limitations": [
+    "configured pool and bar availability are not venue-PIT completeness",
+    "no PAPER/LIVE inference",
+    "fold/BTC regime views descriptive only",
+    "no post-result tuning"
+  ],
+  "protocol_revision": "2026-09-05-signed-risk-economic-r1",
+  "created_utc": "2026-09-05T00:00:00Z",
+  "frozen_at": "2026-09-05T00:00:00Z",
+  "frozen_snapshot_dir": "data/research/crypto_signed_risk_economic_2026_09/attempt_01_canonical",
+  "freeze_note": "Frozen after final source/test STOP; exact 18-cell C4 economic matrix; no post-freeze tuning.",
+  "test_evidence": {
+    "path": "tests/research/test_crypto_signed_risk_economic_2026_09.py",
+    "result": "15 passed in 117.02s; Ruff clean",
+    "sha256": "278c6ecb5ddd8ee1fd9d90054108e54b4dc53ec540eb965716a3ee0d8ef3d6f6"
+  },
+  "manifest_sha256": "96d62d9a8ce614a77cf0290033f9e8a3eff0306476d888fa852f5840b8ebc182"
+}

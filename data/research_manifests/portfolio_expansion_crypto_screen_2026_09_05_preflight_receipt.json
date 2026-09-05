@@ -1,0 +1,19 @@
+{
+  "status": "PRE_FREEZE_READY",
+  "canonical_run_started": false,
+  "checks": {
+    "py_compile": "PASS",
+    "seven_arm_build_strategy_smoke": "PASS",
+    "deterministic_shard_partition_42_cells": "PASS",
+    "shard_counts": [14, 14, 14],
+    "shard_union_count": 42,
+    "shard_intersection_count": 0,
+    "draft_validate_inputs": "PASS",
+    "canonical_run_draft_digest_fail_closed": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "runner_sha256": "ca623c3fc79dc67a4e655237cc85fdab3384f1edd0868ea08112d0b6c70df0da",
+  "protocol_sha256": "39213f8aabed1a1268f36179d4cabe9cb79e678274ba6a4317b2b14911543a52",
+  "manifest": "data/research_manifests/portfolio_expansion_crypto_screen_2026_09_05_draft.json",
+  "note": "Draft digest placeholder is accepted only by --validate-inputs; --run fails closed."
+}

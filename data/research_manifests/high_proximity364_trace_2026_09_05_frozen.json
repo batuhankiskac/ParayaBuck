@@ -1,0 +1,17 @@
+{
+  "baseline": {"fee_total": 87.61515954663696, "fills": 68, "forced_liquidation": false, "terminal_policy": "final_mark_no_forced_sale"},
+  "economic_rerun": false,
+  "frozen_inputs": {"dataset": "data/historical/crypto_expanded_1h.csv", "manifest": "data/research_manifests/portfolio_expansion_crypto_screen_2026_09_05_attempt03_frozen.json", "native_components": ["src/parayabuck/backtest/portfolio_engine.py", "src/parayabuck/backtest/product.py", "src/parayabuck/portfolio/crypto_low_variance_hysteresis.py", "src/parayabuck/execution/portfolio.py"], "native_runner": "scripts/research/portfolio_expansion_crypto_screen_2026_09.py"},
+  "identity": "high_proximity364_trace_2026_09_05",
+  "initial_cash": 100000.0,
+  "manifest_sha256": "d1a0c9ec2c01d1729b5ddaaff2e90ac580bd7ae65808d099733edc21130f4648",
+  "parameters": {"rebalance_hours": 96, "top_n": 2},
+  "promotion": "none; trace is diagnostic and cannot change candidate/config/PAPER/LIVE",
+  "scope": "one unchanged high_proximity364 full-window 1x native replay with forwarding observers",
+  "signal_contract": {"daily_complete_24h": true, "execution": "next_later_hour", "liquidate_at_end": false, "signal_shift_hours": 24},
+  "source_pins": {"dataset_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e", "engine_sha256": "abe9cf740a6524a2b1f49213231ebbe7c680cf76feb3ea007913064838824141", "execution_sha256": "7f06ebacec6e7034497ddb8074f0ae0254d1ecacabf4246cfe439d3a5b9d4982", "frozen_manifest_raw_sha256": "b84d411e1edcf855afc1505098415e707b605a8517cacdbb4e3cb4b8df4140f2", "hysteresis_sha256": "749eee371fa0f61ae1bf4a5f9308ed2386ac72a990301e10425aa50e9dcbc491", "native_runner_sha256": "8a0eb3ccb8dc9a4ebddb0b9cd2d711bb40f2b7866fab8b07fdbf757e34f53d6d", "product_sha256": "9eff2bd4b040be15c1d7d72f50b247d3767e407d741a011512d4d1470bdd1150", "trace_source_sha256": "a8456c6e2c0ebbe2e29f43df0f8f87e0e69c430487f3f92d980b4b6f33f132a5"},
+  "status": "FROZEN_TRACE_CONTRACT",
+  "strategy": "screen_high_proximity364 v1.0.0-research",
+  "trace_contract": {"branch_state": "scheduled, context built, strategy called, zero target, preflight/completeness skip, no rebalance due", "candidate_scores": "364-D1 contiguity, in_universe, score, rank for actually provided symbols", "configured_pool": "config/settings.yaml universe.crypto.trade_symbols (22)", "decision_state": "held, retained, targets, target weights, cash weight", "parity_gate": "entire equity timestamps/values, fills, fees, cash ledger, terminal positions, first/last activity", "provided_history": "per-symbol count/first/last/timeframe/gap counts, inherited minimum_history_bars=23, native nonbenchmark context cap=274 and BTC benchmark exemption", "scanner_and_observer": "PIT snapshots: symbols, observation_set, candidate_count, eliminated, score_breakdown"},
+  "window": {"end": "2026-07-31T23:59:59Z", "start": "2022-01-01T00:00:00Z"}
+}

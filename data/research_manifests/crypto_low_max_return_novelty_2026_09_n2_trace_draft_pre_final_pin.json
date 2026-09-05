@@ -1,0 +1,138 @@
+{
+  "blocking_conditions": [
+    "missing or stale actual input hash",
+    "PIT/scanner projection not reproduced for the configured pool and stream cap",
+    "first decision lacks 23 completed daily bars",
+    "near-duplicate rule triggered",
+    "any candidate change beyond ranking score"
+  ],
+  "candidate": {
+    "market": "crypto",
+    "maximum_allocation": 0.05,
+    "no_parameter_grid": true,
+    "only_changed_factor": "ranking score",
+    "rebalance_hours": 96,
+    "retention_rank": 4,
+    "return_window_days": 22,
+    "risk_contract": "incumbent crypto_low_variance_hysteresis_v1 unchanged",
+    "score_definition": "MAX_i(P_i / P_{i-1} - 1) for the last 22 completed daily returns, using 23 consecutive completed daily bars; sort ascending score, then symbol",
+    "signal": "rank the maximum of the last 22 single-day simple returns in ascending order; the lowest MAX score ranks first",
+    "timeframe": "1d",
+    "top_n": 2,
+    "weighting": "equal weight among selected symbols"
+  },
+  "controls": [
+    "crypto_low_variance_hysteresis_v1 same pool, cadence, top_n, equal weights, retention rank and risk contract"
+  ],
+  "created_utc": "2026-09-05T00:00:02Z",
+  "evaluation": {
+    "full": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2021-04-01T00:00:00Z"
+    },
+    "recent": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2024-01-01T00:00:00Z"
+    }
+  },
+  "evaluation_windows": {
+    "feasibility_earliest_observed_complete_history": "2021-02-03T00:00:00Z",
+    "full": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2021-04-01T00:00:00Z"
+    },
+    "native_96h_schedule_anchor": "2021-04-01T00:00:00Z; fixed UTC elapsed grid at +96h, independent of missing daily buckets",
+    "recent": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2024-01-01T00:00:00Z"
+    },
+    "schedule_gap_rule": "missing daily buckets do not advance or compress the 96h grid",
+    "scheduled_first_decision": "2021-04-01T00:00:00Z",
+    "scheduled_first_decision_availability": "2021-04-02T00:00:00Z"
+  },
+  "identity": "crypto_max_22d_hyst4",
+  "inputs": {
+    "aggregation": "existing complete 1h to 1d path; no forward fill",
+    "bars_1h": {
+      "path": "data/historical/crypto_expanded_1h.csv",
+      "sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e"
+    },
+    "source_hashes_verified_utc": "2026-09-05"
+  },
+  "manifest_sha256": "8b7ef698cc27f1744a18e161b9afcb328f6de2f45c622113b745b3d88dc3ad4c",
+  "native_projection_contract": {
+    "candidate_observation_basis": "candidate-owned observed symbols capped at 12 from the common PIT pool",
+    "context_source": "reviewed native PortfolioContext projection; no PortfolioBacktestEngine.run in novelty mode",
+    "daily_bar_visibility": "a UTC daily bucket is visible only after bucket_end (label + 24 hours) has passed as_of",
+    "incumbent_observation_basis": "same as-of snapshot key and common PIT pool, independently traced",
+    "pairing": "candidate and incumbent contexts must have identical decision timestamp and snapshot key",
+    "virtual_holdings": "previous targets only to exercise inherited retention rank 4; no fills, PnL, or costs"
+  },
+  "novelty_gate": {
+    "archive_search": "No MAX-return, lottery, or max-daily-return signal implementation/result found in searched scripts, archive, docs, or research artifacts.",
+    "comparison_required": "paired raw-score overlap against incumbent before any economics",
+    "minimum_valid_pairs": 30,
+    "near_duplicate_rule": "NO_ECONOMIC_RUN if median Spearman >= 0.95 AND raw top-2 identical fraction >= 0.90",
+    "near_duplicate_rule_denominator": "valid paired full samples only",
+    "primary_full_samples": "full evaluation window only, same as-of and snapshot keys",
+    "recent_slice": "2024-01-01..2026-07-31 descriptive replay slice; no independent reset or gate",
+    "score_measurement": "not yet performed",
+    "undefined_or_invalid_pair_rule": "exclude with serialized reason; never coerce to zero"
+  },
+  "output_policy": "new isolated attempt_02_trace_complete; retain R4 artifacts immutable; no economic engine/PnL/fills/costs",
+  "parent_manifest_sha256": "10f410dda538d8814d84a530cbf60fc6f095a6c0b96dea7deb5d97f4f08276ab",
+  "parent_result_path": "data/research/crypto_max_return_novelty_2026_09/attempt_05_R4_data_feasibility/novelty_results.json",
+  "parent_result_sha256": "19ac441105c0f00887a269fd46b3d68fce9b05cc909731f3c035a44d0fd3f4cb",
+  "provenance": {
+    "incumbent_source": "src/parayabuck/portfolio/crypto_low_variance_hysteresis.py",
+    "incumbent_source_sha256": "749eee371fa0f61ae1bf4a5f9308ed2386ac72a990301e10425aa50e9dcbc491",
+    "prior_family_evidence": "docs/crypto_candidate_tournament_validation.md:5-23; docs/crypto_residual_low_variance_validation.md:8-21",
+    "tournament_source": "scripts/research_crypto_candidate_tournament.py",
+    "tournament_source_sha256": "5ae8701cd308325a20fa3aafe5b9b8ce5bf8af32d21196ae4287907c1cc32fbb"
+  },
+  "purpose": "Pre-economic novelty and data-feasibility registration; no score measurement or economic run is authorized by this file.",
+  "review": {
+    "economic_run_authorized": false,
+    "scope": "technical trace persistence only; formula, ordering, hysteresis, eligibility, cadence, windows and thresholds unchanged",
+    "status": "PENDING_SOURCE_OWNER_TRACE_FIX_AND_INDEPENDENT_REVIEW"
+  },
+  "schema_version": "1.0.0",
+  "source": {
+    "file_sha256": {
+      "scripts/research/crypto_max_return_novelty_2026_09.py": "e747791a04e360860e07efd8e56b6f9bbfc1386d2199977799069aa981500ca3",
+      "scripts/research/crypto_max_return_novelty_runner_2026_09.py": "2d93f652e97bbed5d1f3422437560fe2e993ef3c57fae860f596134f702caf36",
+      "src/parayabuck/portfolio/crypto_low_variance_hysteresis.py": "749eee371fa0f61ae1bf4a5f9308ed2386ac72a990301e10425aa50e9dcbc491"
+    },
+    "snapshot_dir": "data/research/crypto_max_return_novelty_2026_09/attempt_02_trace_complete/source_snapshots"
+  },
+  "status": "N2_TRACE_COMPLETE_DRAFT",
+  "trace_requirements": {
+    "no_fake_invalid_values": true,
+    "persist_per_decision_trace": true,
+    "required_fields": [
+      "decision_timestamp",
+      "paired_snapshot_key",
+      "candidate_scores",
+      "incumbent_scores",
+      "candidate_top2",
+      "incumbent_top2",
+      "candidate_virtual_targets",
+      "incumbent_virtual_targets",
+      "spearman",
+      "identical_top2",
+      "target_jaccard"
+    ]
+  },
+  "universe_contract": {
+    "configured_pool_sha256_sorted_join": "744fa9c610a73b0d1afefb1024ef8117894995b7b49483a02c7178219d8ab37e",
+    "configured_pool_size": 22,
+    "dataset_only_symbols_never_eligible": [
+      "MKR/USD",
+      "NEAR/USD",
+      "TRX/USD"
+    ],
+    "pit_universe_hash_reference": "92518890e5814de46d8144982259986bd32cd2a6152cce899657a06a4468fed9",
+    "stream_cap": 12,
+    "universe_mode": "configured pool plus existing PIT/scanner availability; stream cap is an observation constraint, not an alpha feature"
+  }
+}

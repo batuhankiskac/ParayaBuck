@@ -1,0 +1,16 @@
+{
+  "status": "FROZEN_STRICT_VALIDATED_NO_RUN",
+  "manifest_path": "data/research_manifests/portfolio_expansion_crypto_screen_2026_09_05_attempt03_frozen.json",
+  "manifest_permissions": "0444",
+  "manifest_raw_sha256": "b84d411e1edcf855afc1505098415e707b605a8517cacdbb4e3cb4b8df4140f2",
+  "manifest_canonical_sha256": "0ebb7ad3141add14abaac7abb0f9ec2b2ddd1c36d7d386712b5aa686f8a03ac9",
+  "manifest_declared_sha256": "0ebb7ad3141add14abaac7abb0f9ec2b2ddd1c36d7d386712b5aa686f8a03ac9",
+  "strict_validate_manifest_require_canonical": "PASS",
+  "runner_sha256": "8a0eb3ccb8dc9a4ebddb0b9cd2d711bb40f2b7866fab8b07fdbf757e34f53d6d",
+  "protocol_sha256": "39213f8aabed1a1268f36179d4cabe9cb79e678274ba6a4317b2b14911543a52",
+  "settings_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+  "data_sha256": "73425011c3e021a10a5d4d7d29c2c169957000f89b23afb9aea9d2354729067e",
+  "source_pin_count": 9,
+  "canonical_run_started": false,
+  "attempt02_preserved": true
+}

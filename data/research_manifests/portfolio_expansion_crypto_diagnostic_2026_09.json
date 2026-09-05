@@ -1,0 +1,106 @@
+{
+  "capital_contract": {
+    "baseline_crypto_budget": 0.05,
+    "candidate_crypto_budget": 0.05,
+    "cash_yield": 0.0,
+    "effective_baseline_weight": 0.025,
+    "effective_candidate_weight": 0.025,
+    "idle_cash_fraction": 0.95,
+    "normalized_standalone_nav_average": true,
+    "same_initial_capital": true,
+    "total_crypto_budget": 0.05
+  },
+  "created_utc": "2026-09-05T00:00:00Z",
+  "evaluation": {
+    "fresh_reset_source_cells": true,
+    "full": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2021-04-01T00:00:00Z"
+    },
+    "recent": {
+      "end": "2026-07-31T23:59:59Z",
+      "start": "2024-01-01T00:00:00Z"
+    }
+  },
+  "identity": "portfolio_expansion_crypto_diagnostic_2026_09",
+  "inputs": {
+    "max_output": {
+      "path": "data/research/crypto_max_return_economic_2026_09/attempt_01_canonical/economic_results.json",
+      "sha256": "0a007600e4ecb603928bf372d7bc958f9c3f736a5079c15ea367de46797a001c"
+    },
+    "settings": {
+      "path": "config/settings.yaml",
+      "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+    },
+    "signed_risk_output": {
+      "path": "data/research/crypto_signed_risk_economic_2026_09/attempt_01_canonical/economic_results.json",
+      "sha256": "10555181eaf17b91d36fe431bed431127955398d7c197606556ce2dce4c1e826"
+    }
+  },
+  "limitations": [
+    "curve blend is diagnostic approximation, not actual bot or V3 combined result",
+    "no shared fills, netting, position suppression, shared-risk or cash competition modeled",
+    "configured pool/bar availability is not venue-PIT completeness",
+    "fee and turnover values are weighted source proxies",
+    "regime claims are omitted; full/recent heterogeneity is descriptive only"
+  ],
+  "manifest_sha256": "a5e75a9ab391f4959d4e7c4ec33076e93b205fa0f4705b2c44f9d887a0425c3f",
+  "matrix": {
+    "baseline": "low_variance",
+    "candidates": [
+      "max",
+      "signed_risk"
+    ],
+    "cost_multipliers": [
+      1.0,
+      2.0,
+      3.0
+    ],
+    "fixed_mixture_weight_each": 0.5,
+    "required_unique_cells": 12,
+    "windows": [
+      "full",
+      "recent"
+    ]
+  },
+  "measurement_rules": {
+    "daily_return_correlation": "paired daily net returns on exact common timestamps; finite denominator reported",
+    "fee_turnover": "weighted standalone source proxy only; not joint execution",
+    "metrics": [
+      "total_return",
+      "cagr",
+      "sharpe",
+      "max_drawdown",
+      "worst_month"
+    ],
+    "optional_metrics": [
+      "rolling_12_month_return"
+    ],
+    "synchronization": "common UTC calendar date; last source observation per UTC date",
+    "terminal": "source terminal marks retained; equality checked where comparable"
+  },
+  "output_path": "data/research/portfolio_expansion_crypto_diagnostic_2026_09/attempt_01_curve_only/diagnostic_results.json",
+  "protocol_path": "docs/research/portfolio_expansion_batch_2026_09_05_protocol.md",
+  "protocol_sha256": "bd3d29a6ecc700fb70f0650f0a82e97be0d4129de6b7fe5164d4e422f2a6de02",
+  "purpose": "Derived crypto sleeve complementarity diagnostic from existing standalone native curves; no new backtest, shared ledger, V3 rerun, promotion, or elimination.",
+  "source": {
+    "diagnostic_output": {
+      "path": "data/research/portfolio_expansion_crypto_diagnostic_2026_09/attempt_01_curve_only/diagnostic_results.json",
+      "sha256": "ac59802493cf79690139b879e95153af53bcd6d490713741987303deea65f6d4"
+    },
+    "script": {
+      "path": "scripts/research/portfolio_expansion_crypto_diagnostic_2026_09_05.py",
+      "sha256": "761fe9767aeec00056ab4222ae0da8e303f4f965c6bd24148e4f9b39e06c1ebd"
+    }
+  },
+  "status": "FROZEN_DIAGNOSTIC",
+  "technical_gate": {
+    "candidate_decision": "no promote or eliminate",
+    "constant_cash_identity_required": true,
+    "exact_50_50_endpoint_required": true,
+    "failure_class": "BLOCKED",
+    "finite_aligned_curves_required": true,
+    "identical_blend_identity_required": true,
+    "input_hashes_match": true
+  }
+}

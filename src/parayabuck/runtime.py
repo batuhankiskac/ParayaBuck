@@ -8,7 +8,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
@@ -35,6 +35,7 @@ from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, Trade
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
+    PortfolioOrderSide,
     portfolio_risk_limits_from_config,
 )
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
@@ -87,6 +88,21 @@ from parayabuck.universe.scanner import scanner_config_digest, validate_active_u
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.runtime")
+
+_ACCOUNT_SNAPSHOT_INIT_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class _AccountSnapshotLease:
+    """A cache generation captured at the decision boundary.
+
+    ``generation=None`` is reserved for lightweight test doubles that
+    override the historical snapshot method without constructing cache state;
+    production instances always carry an integer generation and validate it.
+    """
+
+    snapshot: AccountSnapshot
+    generation: int | None
 
 
 class TransientStartupError(RuntimeError):
@@ -373,6 +389,11 @@ class EngineRuntime:
         # instead of issuing a second full broker account() fetch per batch.
         self._last_account_snapshot: AccountSnapshot | None = None
         self._last_account_snapshot_at: datetime | None = None
+        self._account_snapshot_lock = threading.Lock()
+        self._account_snapshot_generation = 0
+        self._account_snapshot_lease_enabled = True
+        self._account_snapshot_active_leases: set[int] = set()
+        self._account_snapshot_invalidation_pending = False
         self._last_reconciliation_at: datetime | None = None
         # Observability snapshot writer — isolated, bounded, never blocks trading
         self._snapshot_writer = None
@@ -985,22 +1006,6 @@ class EngineRuntime:
                 message="Persisted circuit breaker restored at startup",
                 reason=self._circuit_breaker_reason,
             )
-        # Restart recovery: a two-phase rebalance interrupted between phases
-        # must resume here — SELL state is reconciled from the repository, a
-        # fresh account is taken, and the deferred BUY phase continues exactly
-        # once. No duplicate orders: the deferred BUY rows are only created at
-        # submission time with deterministic broker idempotency keys.
-        for runtime in self._portfolio_runtimes:
-            if self._circuit_breaker_reason is not None:
-                # A restored PERSISTENT_INCIDENT (cross-day restart) must
-                # hold until its verified recovery; the persisted rebalance
-                # stays deferred and resumes once the breaker clears.
-                log.warning(
-                    "Restart rebalance resume deferred: circuit breaker active (%s)",
-                    self._circuit_breaker_reason,
-                )
-                break
-            self._advance_portfolio_rebalance(runtime.market)
         self._last_account_at = datetime.now(UTC)
         self._state = "warming_up"
         stocks = sorted(self._symbols_by_market[Market.EQUITY])
@@ -1091,9 +1096,7 @@ class EngineRuntime:
             self._signal_adjustment_thread.start()
         try:
             account = self.broker.account()
-            self._last_account_snapshot = account
-            self._last_account_snapshot_at = datetime.now(UTC)
-            self._last_account_at = datetime.now(UTC)
+            self._publish_account_snapshot(account)
             self._persist_risk_state(account)
         except Exception as exc:
             self._state = "error"
@@ -1103,6 +1106,10 @@ class EngineRuntime:
                     f"Startup account fetch deferred after transient network failure: {exc}"
                 ) from exc
             raise
+        # Restart recovery shares the one fresh account snapshot with every
+        # market. The helper orders crypto first so its capped sleeve reserves
+        # slots before equity, independent of runtime construction order.
+        self._resume_startup_rebalances(account=account)
         # Seeded warmup history exists and the account snapshot is fresh: a
         # mid-period start must not leave a fresh account in cash until the
         # next cadence boundary (backtest decides on its first usable bar).
@@ -1110,7 +1117,7 @@ class EngineRuntime:
         # exceptions are invalid composition/safety/provider failures and
         # must not be hidden behind an apparently running engine.
         try:
-            self._run_startup_catch_up()
+            self._run_startup_catch_up(account=account)
         except Exception as exc:
             self._state = "error"
             self.stop()
@@ -1919,7 +1926,53 @@ class EngineRuntime:
         log.info("Engine runtime stopped")
         return True
 
-    def _fresh_account_snapshot(self) -> AccountSnapshot:
+    def _account_snapshot_guard(self):
+        """Return the narrow lock protecting the account cache metadata."""
+        lock = getattr(self, "_account_snapshot_lock", None)
+        if lock is None:
+            # Production instances initialize this in __init__; the guarded
+            # lazy path keeps small EngineRuntime.__new__ test shells safe too.
+            with _ACCOUNT_SNAPSHOT_INIT_LOCK:
+                lock = getattr(self, "_account_snapshot_lock", None)
+                if lock is None:
+                    lock = threading.Lock()
+                    self._account_snapshot_lock = lock
+        return lock
+
+    def _account_snapshot_cache_state(self) -> tuple[AccountSnapshot | None, datetime | None, int]:
+        """Read the immutable cache pair and its invalidation generation."""
+        with self._account_snapshot_guard():
+            return (
+                getattr(self, "_last_account_snapshot", None),
+                getattr(self, "_last_account_snapshot_at", None),
+                int(getattr(self, "_account_snapshot_generation", 0)),
+            )
+
+    def _publish_account_snapshot(
+        self,
+        account: AccountSnapshot,
+        *,
+        expected_generation: int | None = None,
+        timestamp: datetime | None = None,
+    ) -> bool:
+        """Publish a snapshot only if no execution invalidated its fetch.
+
+        Broker calls happen outside this lock. The generation check makes an
+        in-flight pre-fill fetch lose the race rather than republishing stale
+        account state as fresh; callers choose whether to refetch or fail
+        closed after a rejected publication.
+        """
+        with self._account_snapshot_guard():
+            generation = int(getattr(self, "_account_snapshot_generation", 0))
+            if expected_generation is not None and generation != expected_generation:
+                return False
+            published_at = timestamp or datetime.now(UTC)
+            self._last_account_snapshot = account
+            self._last_account_snapshot_at = published_at
+            self._last_account_at = published_at
+            return True
+
+    def _fresh_account_snapshot(self, *, _allow_retry: bool = True) -> AccountSnapshot:
         """The freshest account snapshot, fetched at most once per freshness
         boundary.
 
@@ -1932,8 +1985,7 @@ class EngineRuntime:
         ``account_poll_interval_seconds`` by the account loop, which is
         strictly fresher than the tolerated boundary.
         """
-        snapshot: AccountSnapshot | None = getattr(self, "_last_account_snapshot", None)
-        snapshot_at: datetime | None = getattr(self, "_last_account_snapshot_at", None)
+        snapshot, snapshot_at, fetch_generation = self._account_snapshot_cache_state()
         if (
             snapshot is not None
             and snapshot_at is not None
@@ -1982,10 +2034,104 @@ class EngineRuntime:
             except Exception:
                 pass
         now = datetime.now(UTC)
-        self._last_account_snapshot = account
-        self._last_account_snapshot_at = now
-        self._last_account_at = now
-        return account
+        if self._publish_account_snapshot(account, expected_generation=fetch_generation, timestamp=now):
+            return account
+        if _allow_retry:
+            # An execution invalidated this fetch while the broker call was in
+            # flight. Refetch once against the new generation; a second race
+            # fails closed instead of ever returning an unverified snapshot.
+            return self._fresh_account_snapshot(_allow_retry=False)
+        raise RuntimeError("Account snapshot invalidated during broker fetch")
+
+    def _fresh_account_snapshot_lease(self, *, _allow_retry: bool = True) -> _AccountSnapshotLease:
+        """Fetch a snapshot and retain the cache generation used by a decision.
+
+        The account fetch itself remains outside the portfolio lock. The
+        lease is a narrow compare-at-use fence: an execution invalidating the
+        cache after this method returns makes the decision skip rather than
+        sizing against pre-fill positions. Lightweight ``__new__`` test
+        doubles that override ``_fresh_account_snapshot`` and have no cache
+        metadata receive an unvalidated lease for compatibility.
+        """
+        account = self._fresh_account_snapshot()
+        snapshot, snapshot_at, generation = self._account_snapshot_cache_state()
+        if snapshot is account and snapshot_at is not None:
+            return _AccountSnapshotLease(account, generation)
+        if not getattr(self, "_account_snapshot_lease_enabled", False):
+            return _AccountSnapshotLease(account, None)
+        if _allow_retry:
+            # Invalidation after _fresh_account_snapshot returned but before
+            # metadata was captured: reacquire against the new generation.
+            return self._fresh_account_snapshot_lease(_allow_retry=False)
+        raise RuntimeError(
+            "Account snapshot invalidated between fetch return and decision lease"
+        )
+
+    def _account_snapshot_lease_is_current(self, lease: _AccountSnapshotLease) -> bool:
+        """Atomically validate a decision lease immediately before use."""
+        if lease.generation is None:
+            return True
+        with self._account_snapshot_guard():
+            active = getattr(self, "_account_snapshot_active_leases", None) or set()
+            return (
+                int(getattr(self, "_account_snapshot_generation", 0)) == lease.generation
+                and getattr(self, "_last_account_snapshot", None) is lease.snapshot
+                and getattr(self, "_last_account_snapshot_at", None) is not None
+                and (
+                    not getattr(self, "_account_snapshot_invalidation_pending", False)
+                    or id(lease) in active
+                )
+            )
+
+    def _claim_account_snapshot_lease(self, lease: _AccountSnapshotLease) -> bool:
+        """Claim a valid lease without retaining the cache lock.
+
+        The claim is the linearization point for decision use. An execution
+        invalidation that arrives after it is deferred until release, so it
+        cannot fall into the check-to-call gap; no broker or order I/O runs
+        while the cache lock is held.
+        """
+        if lease.generation is None:
+            return True
+        with self._account_snapshot_guard():
+            active = getattr(self, "_account_snapshot_active_leases", None)
+            if not (
+                int(getattr(self, "_account_snapshot_generation", 0)) == lease.generation
+                and getattr(self, "_last_account_snapshot", None) is lease.snapshot
+                and getattr(self, "_last_account_snapshot_at", None) is not None
+                and not getattr(self, "_account_snapshot_invalidation_pending", False)
+            ):
+                return False
+            if active is None:
+                active = set()
+                self._account_snapshot_active_leases = active
+            active.add(id(lease))
+            return True
+
+    def _release_account_snapshot_lease(self, lease: _AccountSnapshotLease) -> None:
+        """Release a decision claim and publish any deferred invalidation."""
+        if lease.generation is None:
+            return
+        with self._account_snapshot_guard():
+            active = getattr(self, "_account_snapshot_active_leases", None)
+            if active is None or id(lease) not in active:
+                return
+            active.remove(id(lease))
+            if not active and getattr(self, "_account_snapshot_invalidation_pending", False):
+                self._account_snapshot_generation = int(
+                    getattr(self, "_account_snapshot_generation", 0)
+                ) + 1
+                self._last_account_snapshot_at = None
+                self._account_snapshot_invalidation_pending = False
+
+    def _invalidate_account_snapshot_after_execution(self) -> None:
+        """Force the next entry decision to refetch post-fill positions."""
+        with self._account_snapshot_guard():
+            if getattr(self, "_account_snapshot_active_leases", None):
+                self._account_snapshot_invalidation_pending = True
+            else:
+                self._account_snapshot_generation = int(getattr(self, "_account_snapshot_generation", 0)) + 1
+                self._last_account_snapshot_at = None
 
     def _account_loop(self) -> None:
         worker = self._workers["pb-account"]
@@ -1994,18 +2140,26 @@ class EngineRuntime:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
                 try:
+                    _, _, fetch_generation = self._account_snapshot_cache_state()
                     account = self.broker.account()
-                    # Snapshot first, timestamps second: a concurrent reader
-                    # sees either the old pair (age over-estimated -> fresh
-                    # fetch) or the new pair, never a fresh timestamp with an
-                    # older snapshot.
-                    self._last_account_snapshot = account
-                    self._last_account_snapshot_at = datetime.now(UTC)
-                    self._last_account_at = datetime.now(UTC)
-                    worker.last_event_at = self._last_account_at
-                    worker.last_error = None
-                    self._portfolio_repository.update_high_water(self.broker.account_id or "unknown", account.equity)
-                    self._persist_risk_state(account)
+                    now = datetime.now(UTC)
+                    if not self._publish_account_snapshot(
+                        account,
+                        expected_generation=fetch_generation,
+                        timestamp=now,
+                    ):
+                        # An execution invalidated the fetch while the broker
+                        # call was in flight. Do not publish or persist the
+                        # stale result; the next poll fetches a new generation.
+                        worker.last_error = "account snapshot invalidated during fetch"
+                        log.warning("Discarded account snapshot invalidated during broker fetch")
+                    else:
+                        worker.last_event_at = now
+                        worker.last_error = None
+                        self._portfolio_repository.update_high_water(
+                            self.broker.account_id or "unknown", account.equity
+                        )
+                        self._persist_risk_state(account)
                 except OwnershipDriftError:
                     # Ownership drift is not a transient broker/API error: the
                     # broker holds fewer shares than the repository claims as
@@ -2248,7 +2402,13 @@ class EngineRuntime:
                 exc,
             )
 
-    def _advance_portfolio_rebalance(self, market: Market) -> None:
+    def _advance_portfolio_rebalance(
+        self,
+        market: Market,
+        *,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> Any:
         """Advance the persisted two-phase rebalance for one market.
 
         Called from trade-update callbacks, the bar decision loop and engine
@@ -2260,7 +2420,12 @@ class EngineRuntime:
                 continue
             try:
                 with self._portfolio_lock:
-                    result = portfolio_runtime.advance_rebalance()
+                    advance_kwargs: dict[str, object] = {}
+                    if account is not None:
+                        advance_kwargs["account"] = account
+                    if reserved_position_keys:
+                        advance_kwargs["reserved_position_keys"] = reserved_position_keys
+                    result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
                 # The bar-path twin of this handler (in _process_timestamp)
                 # halts with a circuit breaker; here the persisted two-phase
@@ -2287,6 +2452,36 @@ class EngineRuntime:
                     market=market.value,
                     decision_id=result.decision_id,
                 )
+            return result
+        return None
+
+    def _resume_startup_rebalances(self, *, account: AccountSnapshot) -> None:
+        """Resume pending rebalances crypto-first against one account snapshot."""
+        reserved_position_keys: set[tuple[Market, str]] = set()
+        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
+            if self._circuit_breaker_reason is not None:
+                # A restored persistent incident keeps every pending rebalance
+                # deferred until the operator verifies recovery.
+                log.warning(
+                    "Restart rebalance resume deferred: circuit breaker active (%s)",
+                    self._circuit_breaker_reason,
+                )
+                break
+            ordered_reservations = tuple(
+                sorted(
+                    reserved_position_keys,
+                    key=lambda key: (
+                        key[0].value if hasattr(key[0], "value") else str(key[0]),
+                        key[1],
+                    ),
+                )
+            )
+            result = self._advance_portfolio_rebalance(
+                portfolio_runtime.market,
+                account=account,
+                reserved_position_keys=ordered_reservations,
+            )
+            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         portfolio_repository = getattr(self, "_portfolio_repository", None)
@@ -2339,21 +2534,43 @@ class EngineRuntime:
             freshness = getattr(getattr(self, "config", None), "account_poll_interval_seconds", 15.0)
             snapshot_provider = getattr(self.broker, "snapshot_if_fresh", None)
             cached = None
+            _, _, fetch_generation = self._account_snapshot_cache_state()
+            with self._account_snapshot_guard():
+                last_account_at = getattr(self, "_last_account_at", None)
             if (
                 snapshot_provider is not None
-                and self._last_account_at is not None
-                and (now - self._last_account_at).total_seconds() <= freshness
+                and last_account_at is not None
+                and (now - last_account_at).total_seconds() <= freshness
             ):
                 cached = snapshot_provider(freshness)
+                if cached is not None:
+                    with self._account_snapshot_guard():
+                        if int(getattr(self, "_account_snapshot_generation", 0)) != fetch_generation:
+                            cached = None
             if cached is not None:
                 account = cached
             else:
+                # If the cache read raced with an invalidation, use the latest
+                # generation as the publication fence for this broker fetch.
+                _, _, fetch_generation = self._account_snapshot_cache_state()
                 account = await asyncio.to_thread(self.broker.account)
                 # The fill-path fetch is the freshest snapshot in the system;
                 # share it with the decision-path cache.
-                self._last_account_snapshot = account
-                self._last_account_snapshot_at = now
-                self._last_account_at = now
+                now = datetime.now(UTC)
+                if not self._publish_account_snapshot(
+                    account,
+                    expected_generation=fetch_generation,
+                    timestamp=now,
+                ):
+                    raise RuntimeError("Account snapshot invalidated during trade-update fetch")
+            event = str(update.event).lower()
+            if event == "partial_fill" or is_terminal_order_status(event):
+                # A terminal order must not release its ledger slot while this
+                # cache still proves only the pre-event position state. This
+                # also covers a terminal SELL cancellation/rejection: the next
+                # decision must reverify the still-held position before
+                # reusing its account slot.
+                self._invalidate_account_snapshot_after_execution()
             self._persist_risk_state(account)
             # A terminal SELL fill may unlock the dependent BUY phase of a
             # two-phase rebalance: advance it now, event-driven, instead of
@@ -2830,6 +3047,31 @@ class EngineRuntime:
         # This cadence updates bar and readiness state only. PortfolioRuntime
         # is the sole strategy/risk/order decision path.
 
+    @staticmethod
+    def _crypto_first_portfolio_order(portfolio_runtimes: Sequence[Any]) -> tuple[Any, ...]:
+        """Order simultaneous portfolio decisions by the explicit slot policy."""
+        return tuple(
+            sorted(
+                portfolio_runtimes,
+                key=lambda runtime: 0 if runtime.market == Market.CRYPTO else 1,
+            )
+        )
+
+    @staticmethod
+    def _ordered_buy_position_keys(portfolio_runtime: Any, result: Any) -> tuple[tuple[Market, str], ...]:
+        """Reserve only positive slots represented by an actual planned BUY."""
+        keys: set[tuple[Market, str]] = set()
+        for order in getattr(result, "orders", ()) or ():
+            side = getattr(order, "side", None)
+            side_value = getattr(side, "value", side)
+            if str(side_value).lower() != PortfolioOrderSide.BUY.value:
+                continue
+            order_market = getattr(order, "market", portfolio_runtime.market)
+            if not isinstance(order_market, Market):
+                order_market = Market(str(order_market))
+            keys.add((order_market, canonical_symbol(order.symbol, order_market)))
+        return tuple(sorted(keys, key=lambda key: (key[0].value, key[1])))
+
     def _process_portfolio_timestamp(self, bars: list[Bar], *, health: RuntimeHealth | None = None) -> None:
         if self._warming_up or self._circuit_breaker_reason is not None or getattr(self, "_reconcile_failed", False):
             return
@@ -2843,7 +3085,9 @@ class EngineRuntime:
         # per market). Fetched lazily on the first actual decision; freshness
         # is enforced against maximum_account_age_for_entry_seconds.
         account: AccountSnapshot | None = None
-        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+        account_lease: _AccountSnapshotLease | None = None
+        reserved_position_keys: set[tuple[Market, str]] = set()
+        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
             relevant = [
                 bar
                 for bar in bars
@@ -2932,13 +3176,48 @@ class EngineRuntime:
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
             try:
+                if account is None and getattr(self, "broker", None) is not None:
+                    # Broker I/O happens before the portfolio lock. The lease
+                    # is checked again at the decision boundary below so a
+                    # fill cannot invalidate the cached snapshot in between.
+                    account_lease = self._fresh_account_snapshot_lease()
+                    account = account_lease.snapshot
+                if account_lease is not None and not self._account_snapshot_lease_is_current(account_lease):
+                    log.warning(
+                        "Portfolio decision skipped: account snapshot lease invalidated for market=%s",
+                        portfolio_runtime.market.value,
+                    )
+                    continue
                 with self._portfolio_lock:
-                    if account is None and getattr(self, "broker", None) is not None:
-                        account = self._fresh_account_snapshot()
-                    kwargs = {"entry_latch": entry_latch}
-                    if account is not None:
-                        kwargs["account"] = account
-                    portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
+                    # Claim under the narrow cache guard immediately before
+                    # the call. Invalidation after this point is deferred
+                    # until release, closing the check-to-use race without
+                    # retaining the cache lock across order I/O.
+                    lease_claimed = account_lease is None or self._claim_account_snapshot_lease(account_lease)
+                    if not lease_claimed:
+                        log.warning(
+                            "Portfolio decision skipped: account snapshot lease invalidated before use for market=%s",
+                            portfolio_runtime.market.value,
+                        )
+                        continue
+                    try:
+                        kwargs = {"entry_latch": entry_latch}
+                        if account is not None:
+                            kwargs["account"] = account
+                        if reserved_position_keys:
+                            kwargs["reserved_position_keys"] = tuple(
+                                sorted(
+                                    reserved_position_keys,
+                                    key=lambda key: (
+                                        key[0].value if hasattr(key[0], "value") else str(key[0]),
+                                        key[1],
+                                    ),
+                                )
+                            )
+                        portfolio_result = portfolio_runtime.process_closed_bars(relevant, **kwargs)
+                    finally:
+                        if account_lease is not None:
+                            self._release_account_snapshot_lease(account_lease)
             except OwnershipDriftError as exc:
                 self._circuit_breaker_reason = "ownership_drift"
                 self._state = "halted"
@@ -3213,8 +3492,9 @@ class EngineRuntime:
                 except Exception as exc:
                     log.warning("PAPER receipt/observability failed: %s", exc, exc_info=True)
             self._last_portfolio_status[portfolio_runtime.market] = portfolio_result.status
+            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, portfolio_result))
 
-    def _run_startup_catch_up(self) -> None:
+    def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
 
         A fresh account started mid-period would otherwise sit in cash until
@@ -3231,7 +3511,8 @@ class EngineRuntime:
             or getattr(self, "_reconcile_failed", False)
         ):
             return
-        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+        reserved_position_keys: set[tuple[Market, str]] = set()
+        for portfolio_runtime in self._crypto_first_portfolio_order(getattr(self, "_portfolio_runtimes", ())):
             reasons = self._entry_readiness_reasons(portfolio_runtime.market)
             if reasons:
                 portfolio_runtime.startup_catch_up_status = "blocked:" + ",".join(reasons)
@@ -3246,7 +3527,21 @@ class EngineRuntime:
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
             with self._portfolio_lock:
-                result = portfolio_runtime.startup_catch_up(entry_latch=entry_latch)
+                catch_up_kwargs = {"entry_latch": entry_latch}
+                if account is not None:
+                    catch_up_kwargs["account"] = account
+                if reserved_position_keys:
+                    catch_up_kwargs["reserved_position_keys"] = tuple(
+                        sorted(
+                            reserved_position_keys,
+                            key=lambda key: (
+                                key[0].value if hasattr(key[0], "value") else str(key[0]),
+                                key[1],
+                            ),
+                        )
+                    )
+                result = portfolio_runtime.startup_catch_up(**catch_up_kwargs)
+            reserved_position_keys.update(self._ordered_buy_position_keys(portfolio_runtime, result))
             log.info(
                 "Startup catch-up: market=%s status=%s decision_id=%s",
                 portfolio_runtime.market.value,
@@ -4103,7 +4398,7 @@ class EngineRuntime:
             if any(item.status == "manual_intervention_required" for item in entries):
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
-            self._last_account_at = datetime.now(UTC)
+            self._publish_account_snapshot(account)
             self._circuit_breaker_reason = None
             # The operator verified THIS halt's recovery condition above;
             # clear exactly its incident, never unrelated incidents (those

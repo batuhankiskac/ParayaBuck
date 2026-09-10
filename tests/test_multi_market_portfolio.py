@@ -9,13 +9,18 @@ per-asset position limits and SELL->BUY ordering all hold across markets.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
+import pytest
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
+    PortfolioOrderSide,
     PortfolioRiskLimits,
     PortfolioRiskOverlay,
     TargetToOrderPlanner,
@@ -197,6 +202,386 @@ def test_equity_sleeve_respects_allocation_and_position_limits() -> None:
     )
     assert len(decision.target.weights) <= 6  # maximum_positions
     assert decision.target.invested_weight <= 0.50 + 1e-9  # maximum_allocation
+
+
+def _ranked_target(
+    strategy_name: str,
+    timestamp: datetime,
+    weights: tuple[tuple[str, float], ...],
+) -> TargetPortfolio:
+    return TargetPortfolio(
+        strategy_name=strategy_name,
+        strategy_version="1.0.0",
+        decision_timestamp=timestamp,
+        weights=tuple(
+            TargetWeight(symbol, weight, "test", rank=index)
+            for index, (symbol, weight) in enumerate(weights, start=1)
+        ),
+        cash_weight=max(0.0, 1.0 - sum(weight for _symbol, weight in weights)),
+        universe_version="test",
+        parameters=(),
+    )
+
+
+def test_global_position_limit_counts_existing_cross_market_slots_and_keeps_equity_ranks() -> None:
+    """The six-account-position cap includes already-held crypto positions."""
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+    overlay = PortfolioRiskOverlay(_limits())
+    account = _account(
+        crypto_positions=(
+            ("BTC/USD", 25.0, 100.0),
+            ("ETH/USD", 25.0, 100.0),
+        )
+    )
+    symbols = tuple((f"S{index:02d}", 0.10) for index in range(8))
+    decision = overlay.apply(
+        _ranked_target("equity_residual_momentum_v3", timestamp, symbols),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=tuple(symbol for symbol, _weight in symbols),
+        maximum_allocation=0.55,
+        mode="paper",
+    )
+
+    assert tuple(weight.symbol for weight in decision.target.weights) == ("S00", "S01", "S02", "S03")
+    assert decision.gross_after == pytest.approx(0.45)
+    assert len(account.positions) + len(decision.target.weights) == 6
+    assert "position_count_limit" in decision.reasons
+
+
+def test_same_cycle_reservation_coordinates_global_position_limit() -> None:
+    """A prior market's same-cycle target reserves account-level slots."""
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+    overlay = PortfolioRiskOverlay(_limits())
+    account = _account()
+    equity_symbols = tuple((f"S{index:02d}", 0.10) for index in range(6))
+    reserved = tuple((Market.EQUITY, symbol) for symbol, _weight in equity_symbols)
+    decision = overlay.apply(
+        _target("crypto_low_variance_v1", timestamp, (("BTC/USD", 0.05), ("ETH/USD", 0.05))),
+        account,
+        market=Market.CRYPTO,
+        approved_symbols=("BTC/USD", "ETH/USD"),
+        maximum_allocation=0.10,
+        mode="paper",
+        reserved_position_keys=reserved,
+    )
+
+    assert decision.target.weights == ()
+    assert "position_count_limit" in decision.reasons
+
+
+class _CoordinatedPortfolioRuntime:
+    """Small engine-facing seam test double using the real risk overlay."""
+
+    def __init__(
+        self,
+        market: Market,
+        target: TargetPortfolio,
+        symbols: tuple[str, ...],
+        maximum_allocation: float,
+        *,
+        emit_orders: bool = True,
+    ) -> None:
+        self.market = market
+        self.strategy = SimpleNamespace(timeframe="1d", name=f"{market.value}_test")
+        self.symbols = symbols
+        self.target = target
+        self.maximum_allocation = maximum_allocation
+        self.emit_orders = emit_orders
+        self.overlay = PortfolioRiskOverlay(_limits())
+        self.reservations: list[tuple[tuple[Market, str], ...]] = []
+        self.accounts_seen: list[AccountSnapshot | None] = []
+        self.last_target: TargetPortfolio | None = None
+        self.history: dict[str, list[Bar]] = {}
+        self.account = _account()
+
+    def process_closed_bars(
+        self,
+        _bars: list[Bar],
+        *,
+        entry_latch: str | None = None,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> SimpleNamespace:
+        del entry_latch
+        assert account is not None
+        self.accounts_seen.append(account)
+        self.reservations.append(reserved_position_keys)
+        decision = self.overlay.apply(
+            self.target,
+            account,
+            market=self.market,
+            approved_symbols=self.symbols,
+            maximum_allocation=self.maximum_allocation,
+            mode="paper",
+            reserved_position_keys=reserved_position_keys,
+        )
+        self.last_target = decision.target
+        orders = (
+            tuple(
+                SimpleNamespace(
+                    symbol=weight.symbol,
+                    market=self.market,
+                    side="buy",
+                )
+                for weight in decision.target.weights
+                if weight.weight > 0.0
+            )
+            if self.emit_orders
+            else ()
+        )
+        return SimpleNamespace(
+            status="submitted",
+            target=decision.target,
+            risk=None,
+            orders=orders,
+            submitted_order_ids=(),
+        )
+
+    def startup_catch_up(
+        self,
+        *,
+        entry_latch: str | None = None,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> SimpleNamespace:
+        del entry_latch
+        self.accounts_seen.append(account)
+        self.reservations.append(reserved_position_keys)
+        decision = self.overlay.apply(
+            self.target,
+            account or self.account,
+            market=self.market,
+            approved_symbols=self.symbols,
+            maximum_allocation=self.maximum_allocation,
+            mode="paper",
+            reserved_position_keys=reserved_position_keys,
+        )
+        self.last_target = decision.target
+        orders = (
+            tuple(
+                SimpleNamespace(
+                    symbol=weight.symbol,
+                    market=self.market,
+                    side="buy",
+                )
+                for weight in decision.target.weights
+                if weight.weight > 0.0
+            )
+            if self.emit_orders
+            else ()
+        )
+        return SimpleNamespace(
+            status="submitted",
+            decision_id=f"{self.market.value}-catch-up",
+            target=decision.target,
+            orders=orders,
+        )
+
+
+class _RecoveryPortfolioRuntime:
+    """Engine-facing restart-recovery double that records shared context."""
+
+    def __init__(self, market: Market, buy_symbols: tuple[str, ...]) -> None:
+        self.market = market
+        self.strategy = SimpleNamespace(timeframe="1d", name=f"{market.value}_recovery")
+        self.buy_symbols = buy_symbols
+        self.calls: list[tuple[AccountSnapshot | None, tuple[tuple[Market, str], ...]]] = []
+
+    def advance_rebalance(
+        self,
+        *,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> SimpleNamespace:
+        self.calls.append((account, reserved_position_keys))
+        return SimpleNamespace(
+            status="buy_phase_submitted",
+            decision_id=f"{self.market.value}-recovery",
+            orders=tuple(
+                SimpleNamespace(symbol=symbol, market=self.market, side=PortfolioOrderSide.BUY)
+                for symbol in self.buy_symbols
+            ),
+        )
+
+
+def test_engine_coordinates_crypto_before_equity_for_global_slots() -> None:
+    """Crypto reservation is evaluated before the equity sleeve."""
+    from parayabuck.runtime import EngineRuntime
+
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+    equity_symbols = tuple(f"S{index:02d}" for index in range(6))
+    equity_runtime = _CoordinatedPortfolioRuntime(
+        Market.EQUITY,
+        _ranked_target(
+            "equity_test",
+            timestamp,
+            tuple((symbol, 0.10) for symbol in equity_symbols),
+        ),
+        equity_symbols,
+        0.60,
+    )
+    crypto_runtime = _CoordinatedPortfolioRuntime(
+        Market.CRYPTO,
+        _target("crypto_test", timestamp, (("BTC/USD", 0.05), ("ETH/USD", 0.05))),
+        ("BTC/USD", "ETH/USD"),
+        0.10,
+    )
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._portfolio_runtimes = (equity_runtime, crypto_runtime)
+    runtime._entry_readiness_reasons = lambda _market: ()
+    runtime._equity_signal_basis_latch = lambda _timestamp: None
+    runtime._last_portfolio_status = {}
+    account = _account()
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime._fresh_account_snapshot = lambda: account
+
+    runtime._process_portfolio_timestamp(
+        [
+            Bar(timestamp, "S00", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.EQUITY),
+            Bar(timestamp, "BTC/USD", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.CRYPTO),
+        ]
+    )
+
+    assert equity_runtime.last_target is not None
+    assert crypto_runtime.last_target is not None
+    assert len(equity_runtime.last_target.weights) + len(crypto_runtime.last_target.weights) == 6
+    assert tuple(weight.symbol for weight in crypto_runtime.last_target.weights) == ("BTC/USD", "ETH/USD")
+    assert tuple(weight.symbol for weight in equity_runtime.last_target.weights) == equity_symbols[:4]
+    assert crypto_runtime.reservations == [()]
+    assert equity_runtime.reservations == [
+        ((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))
+    ]
+
+
+def test_engine_startup_catch_up_coordinates_crypto_before_equity() -> None:
+    """Startup catch-up applies the same crypto-first slot policy."""
+    from parayabuck.runtime import EngineRuntime
+
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+    equity_symbols = tuple(f"S{index:02d}" for index in range(6))
+    equity_runtime = _CoordinatedPortfolioRuntime(
+        Market.EQUITY,
+        _ranked_target(
+            "equity_test",
+            timestamp,
+            tuple((symbol, 0.10) for symbol in equity_symbols),
+        ),
+        equity_symbols,
+        0.60,
+    )
+    crypto_runtime = _CoordinatedPortfolioRuntime(
+        Market.CRYPTO,
+        _target("crypto_test", timestamp, (("BTC/USD", 0.05), ("ETH/USD", 0.05))),
+        ("BTC/USD", "ETH/USD"),
+        0.10,
+    )
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = True
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._portfolio_runtimes = (equity_runtime, crypto_runtime)
+    runtime._entry_readiness_reasons = lambda _market: ()
+    runtime._equity_signal_basis_latch = lambda _timestamp: None
+
+    account = _account()
+    runtime._run_startup_catch_up(account=account)
+
+    assert equity_runtime.last_target is not None
+    assert crypto_runtime.last_target is not None
+    assert len(equity_runtime.last_target.weights) + len(crypto_runtime.last_target.weights) == 6
+    assert tuple(weight.symbol for weight in crypto_runtime.last_target.weights) == ("BTC/USD", "ETH/USD")
+    assert tuple(weight.symbol for weight in equity_runtime.last_target.weights) == equity_symbols[:4]
+    assert crypto_runtime.reservations == [()]
+    assert equity_runtime.reservations == [
+        ((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))
+    ]
+    assert crypto_runtime.accounts_seen == [account]
+    assert equity_runtime.accounts_seen == [account]
+
+
+def test_restart_recovery_is_crypto_first_with_one_account_and_reservation_set() -> None:
+    """Restarted deferred BUY phases share one fresh account and reserve
+    crypto targets before equity, regardless of runtime construction order."""
+    from parayabuck.runtime import EngineRuntime
+
+    equity_runtime = _RecoveryPortfolioRuntime(Market.EQUITY, ("S00",))
+    crypto_runtime = _RecoveryPortfolioRuntime(Market.CRYPTO, ("BTC/USD", "ETH/USD"))
+    account = _account()
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._portfolio_lock = threading.RLock()
+    runtime._circuit_breaker_reason = None
+    runtime._portfolio_runtimes = (equity_runtime, crypto_runtime)
+
+    runtime._resume_startup_rebalances(account=account)
+
+    assert [item.market for item in (crypto_runtime, equity_runtime) if item.calls] == [
+        Market.CRYPTO,
+        Market.EQUITY,
+    ]
+    assert crypto_runtime.calls == [(account, ())]
+    assert equity_runtime.calls == [
+        (
+            account,
+            ((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD")),
+        )
+    ]
+
+
+def test_engine_does_not_reserve_unordered_positive_target_slots() -> None:
+    """A positive target with no executable BUY must not starve the other sleeve."""
+    from parayabuck.runtime import EngineRuntime
+
+    timestamp = datetime(2025, 1, 15, 4, 0, tzinfo=UTC)
+    equity_symbols = tuple(f"S{index:02d}" for index in range(6))
+    equity_runtime = _CoordinatedPortfolioRuntime(
+        Market.EQUITY,
+        _ranked_target(
+            "equity_test",
+            timestamp,
+            tuple((symbol, 0.10) for symbol in equity_symbols),
+        ),
+        equity_symbols,
+        0.60,
+    )
+    crypto_runtime = _CoordinatedPortfolioRuntime(
+        Market.CRYPTO,
+        _target("crypto_test", timestamp, (("BTC/USD", 0.05), ("ETH/USD", 0.05))),
+        ("BTC/USD", "ETH/USD"),
+        0.10,
+        emit_orders=False,
+    )
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None, Market.CRYPTO: None}
+    runtime._portfolio_runtimes = (equity_runtime, crypto_runtime)
+    runtime._entry_readiness_reasons = lambda _market: ()
+    runtime._equity_signal_basis_latch = lambda _timestamp: None
+    runtime._last_portfolio_status = {}
+    account = _account()
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime._fresh_account_snapshot = lambda: account
+
+    runtime._process_portfolio_timestamp(
+        [
+            Bar(timestamp, "S00", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.EQUITY),
+            Bar(timestamp, "BTC/USD", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.CRYPTO),
+        ]
+    )
+
+    assert tuple(weight.symbol for weight in equity_runtime.last_target.weights) == equity_symbols
+    assert equity_runtime.reservations == [()]
 
 
 def test_planner_orders_sells_before_buys_across_markets() -> None:

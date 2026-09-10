@@ -138,6 +138,136 @@ def test_planner_skips_symbol_with_existing_open_order() -> None:
     assert orders == ()
 
 
+def test_planner_pending_buy_does_not_block_risk_reducing_sell() -> None:
+    account = _account((_position("SPY", 100, 100),))
+    orders = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.05}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={"SPY": _rule("SPY")},
+        approved_symbols=("SPY",),
+        open_order_sides={"SPY": {"buy"}},
+    )
+
+    assert len(orders) == 1
+    assert orders[0].side == PortfolioOrderSide.SELL
+
+
+def test_planner_pending_buy_still_suppresses_risk_increasing_duplicate() -> None:
+    account = _account((_position("SPY", 100, 100),))
+    orders = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.15}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={"SPY": _rule("SPY")},
+        approved_symbols=("SPY",),
+        open_order_sides={"SPY": {"buy"}},
+    )
+
+    assert orders == ()
+
+
+def test_planner_broker_symbol_only_order_still_blocks_risk_reducing_duplicate() -> None:
+    account = _account((_position("SPY", 100, 100),))
+    orders = TargetToOrderPlanner().plan(
+        _target({"SPY": 0.05}),
+        account,
+        market=Market.EQUITY,
+        prices={"SPY": 100},
+        rules={"SPY": _rule("SPY")},
+        approved_symbols=("SPY",),
+        open_order_symbols={"SPY"},
+    )
+
+    assert orders == ()
+
+
+def test_overlay_counts_deduplicated_broker_open_slots_across_markets() -> None:
+    account = _account(tuple(_position(f"HELD{index}", 100, 100) for index in range(5)))
+    limits = PortfolioRiskLimits(
+        maximum_gross=1.0,
+        maximum_equity=1.0,
+        maximum_crypto=1.0,
+        maximum_equity_asset=1.0,
+        maximum_crypto_asset=1.0,
+        minimum_cash=0.0,
+        maximum_positions=7,
+        maximum_crypto_positions=3,
+    )
+
+    decision = PortfolioRiskOverlay(limits).apply(
+        _target({"NEW1": 0.10, "NEW2": 0.10}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("NEW1", "NEW2"),
+        maximum_allocation=1.0,
+        mode="paper",
+        open_order_symbols=("BTCUSD", "BTC/USD"),
+    )
+
+    # Five held equities plus one distinct broker-only BTC/USD order leave
+    # exactly one of the two new target slots under the account cap.
+    assert len(decision.target.weights) == 1
+    assert "position_count_limit" in decision.reasons
+
+
+def test_overlay_broker_only_order_consumes_last_account_slot() -> None:
+    account = _account(
+        tuple(_position(f"HELD{index}", 100, 100, ownership="external") for index in range(5))
+    )
+    limits = PortfolioRiskLimits(
+        maximum_gross=1.0,
+        maximum_equity=1.0,
+        maximum_crypto=1.0,
+        maximum_equity_asset=1.0,
+        maximum_crypto_asset=1.0,
+        minimum_cash=0.0,
+        maximum_positions=6,
+        maximum_crypto_positions=3,
+    )
+
+    decision = PortfolioRiskOverlay(limits).apply(
+        _target({"NEW": 0.10}),
+        account,
+        market=Market.EQUITY,
+        approved_symbols=("NEW",),
+        maximum_allocation=1.0,
+        mode="paper",
+        open_order_symbols=("MANUAL",),
+    )
+
+    assert decision.target.weights == ()
+    assert "position_count_limit" in decision.reasons
+
+
+def test_overlay_infers_crypto_open_order_for_crypto_market_capacity() -> None:
+    limits = PortfolioRiskLimits(
+        maximum_gross=1.0,
+        maximum_equity=1.0,
+        maximum_crypto=1.0,
+        maximum_equity_asset=1.0,
+        maximum_crypto_asset=1.0,
+        minimum_cash=0.0,
+        maximum_positions=6,
+        maximum_crypto_positions=1,
+    )
+
+    decision = PortfolioRiskOverlay(limits).apply(
+        _target({"ETH/USD": 0.10}),
+        _account(),
+        market=Market.CRYPTO,
+        approved_symbols=("ETH/USD",),
+        maximum_allocation=1.0,
+        mode="paper",
+        open_order_symbols=("BTCUSD",),
+    )
+
+    assert decision.target.weights == ()
+    assert "position_count_limit" in decision.reasons
+
+
 def test_overlay_removes_purely_external_symbol_from_tradable_target() -> None:
     account = _account(
         (
@@ -398,3 +528,36 @@ def test_planner_never_sells_external_units_of_a_mixed_position() -> None:
     assert len(orders_flat) == 1
     assert orders_flat[0].side == PortfolioOrderSide.SELL
     assert orders_flat[0].quantity == pytest.approx(20.0)
+
+
+def test_position_snapshot_rejects_invalid_managed_quantity() -> None:
+    with pytest.raises(ValueError, match="managed_qty"):
+        PositionSnapshot(
+            symbol="AAPL",
+            qty=10.0,
+            avg_price=100.0,
+            current_price=100.0,
+            market=Market.EQUITY,
+            qty_available=10.0,
+            ownership="mixed",
+            managed_qty=11.0,
+        )
+
+
+def test_overlay_rejects_duplicate_canonical_account_positions() -> None:
+    account = _account(
+        (
+            _position("AAPL", 1.0, 100.0),
+            _position("aapl", 2.0, 101.0),
+        )
+    )
+
+    with pytest.raises(ValueError, match="Duplicate account position"):
+        PortfolioRiskOverlay().apply(
+            _target({"AAPL": 0.10}),
+            account,
+            market=Market.EQUITY,
+            approved_symbols=("AAPL",),
+            maximum_allocation=0.50,
+            mode="paper",
+        )

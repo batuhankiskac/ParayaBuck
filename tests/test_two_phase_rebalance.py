@@ -526,6 +526,47 @@ def test_pure_buy_decision_has_no_unnecessary_delay(tmp_path) -> None:
     assert repository.current_rebalance_execution("acct", Market.EQUITY) is None
 
 
+def test_pending_buy_reserves_position_slot_across_new_decision_cycle(tmp_path) -> None:
+    """A working BUY must consume its account slot after the cycle ends."""
+    first_targets = {
+        "AAPL": 0.10,
+        "MSFT": 0.10,
+        "NVDA": 0.10,
+        "SPY": 0.10,
+        "QQQ": 0.10,
+        "IWM": 0.10,
+    }
+    second_targets = {"AMD": 0.10}
+    broker = _SimBroker()
+    repository = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    strategy = _FixedTargetStrategy(first_targets)
+    runtime = PortfolioRuntime(
+        strategy,
+        tuple(sorted(first_targets | second_targets)),
+        broker,
+        repository,
+        mode="paper",
+        maximum_allocation=0.60,
+        risk_limits=PortfolioRiskLimits(maximum_positions=6, maximum_crypto_positions=2),
+        account_id="acct",
+    )
+
+    first = runtime.process_closed_bars(_bars(tuple(sorted(first_targets | second_targets))))
+    assert first.status == "submitted"
+    assert len([order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]) == 6
+    assert len(repository.open_orders("acct", Market.EQUITY)) == 6
+
+    strategy._targets = second_targets
+    next_month = first.orders[0].decision_timestamp + timedelta(days=31)
+    second = runtime.process_closed_bars(
+        _bars(tuple(sorted(first_targets | second_targets)), day=next_month)
+    )
+
+    assert second.status == "submitted"
+    assert second.orders == ()
+    assert len(broker.submitted) == 6
+
+
 def test_sells_only_decision_submits_immediately(tmp_path) -> None:
     """A pure risk-reducing decision (no BUY leg) is not deferred either."""
     broker = _SimBroker((_position("AAPL", 400),))
@@ -534,3 +575,148 @@ def test_sells_only_decision_submits_immediately(tmp_path) -> None:
     assert result.status == "submitted"
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
     assert repository.current_rebalance_execution("acct", Market.EQUITY) is None
+
+
+def test_pending_sell_reserves_position_slot_across_new_decision_cycle(tmp_path) -> None:
+    """Working SELLs remain fixed slots until they become terminal."""
+    held_symbols = tuple(f"S{index:02d}" for index in range(6))
+    initial_targets = {symbol: 0.0 for symbol in held_symbols}
+    initial_targets["NEW"] = 0.0
+    broker = _SimBroker(tuple(_position(symbol, 100) for symbol in held_symbols))
+    runtime, _repository = _runtime(tmp_path, broker, initial_targets)
+
+    first = runtime.process_closed_bars(_bars(tuple(sorted(initial_targets))))
+    assert first.status == "submitted"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL] * 6
+
+    runtime.strategy._targets = {"NEW": 0.10}
+    next_month = first.orders[0].decision_timestamp + timedelta(days=31)
+    second = runtime.process_closed_bars(_bars(tuple(sorted(initial_targets)), day=next_month))
+
+    assert second.orders == ()
+    assert len(broker.submitted) == 6
+
+
+def test_local_nonterminal_order_suppresses_normal_planner_when_broker_is_empty(tmp_path) -> None:
+    """A local managed order still suppresses a duplicate after a broker
+    open-order API omission or process crash window."""
+    broker = _SimBroker()
+    broker.all_open_order_symbols = lambda: set()  # type: ignore[method-assign]
+    runtime, _repository = _runtime(tmp_path, broker, {"AAPL": 0.20})
+
+    first = runtime.process_closed_bars(_bars(("AAPL",)))
+    assert first.status == "submitted"
+    assert [order.side for order in first.orders] == [PortfolioOrderSide.BUY]
+    # The broker no longer reports the still-working order, but the local
+    # account-scoped ledger row remains nonterminal.
+    broker.open_symbols.clear()
+
+    next_month = first.orders[0].decision_timestamp + timedelta(days=31)
+    second = runtime.process_closed_bars(_bars(("AAPL",), day=next_month))
+
+    assert second.status == "submitted"
+    assert second.orders == ()
+    assert len(broker.submitted) == 1
+
+
+def test_local_nonterminal_order_suppresses_deferred_planner_when_broker_is_empty(tmp_path) -> None:
+    """The deferred BUY phase also honors a local order absent from the
+    broker's open-order response."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    broker.all_open_order_symbols = lambda: set()  # type: ignore[method-assign]
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert first.status == "sell_phase_submitted"
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+
+    # A separate local submission for the deferred target is still open, but
+    # it is invisible to the broker adapter in this crash/recovery scenario.
+    assert first.decision_id is not None
+    repository.record_order(
+        PortfolioOrderRequest(
+            client_order_id="local-msft-blocker",
+            decision_id=first.decision_id,
+            symbol="MSFT",
+            market=Market.EQUITY,
+            side=PortfolioOrderSide.BUY,
+            quantity=1.0,
+            reference_price=100.0,
+            decision_timestamp=sell.decision_timestamp,
+            strategy_name="fixed_target",
+            strategy_version="1.0.0",
+            risk_reducing=False,
+        ),
+        "submitted",
+    )
+    _fill(repository, sell)
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+
+    resumed = runtime.advance_rebalance()
+
+    assert resumed is not None and resumed.status == "rebalance_complete"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+
+
+def test_process_closed_bars_exposes_deferred_buys_advanced_in_same_cycle(tmp_path) -> None:
+    """When the bar path advances a ready rebalance, its BUYs remain visible
+    to the engine's same-cycle reservation accounting."""
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert first.status == "sell_phase_submitted"
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell)
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+
+    next_day = sell.decision_timestamp + timedelta(days=1)
+    resumed = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_day))
+
+    assert resumed.status == "rebalance_in_progress"
+    assert any(order.side == PortfolioOrderSide.BUY for order in resumed.orders)
+
+
+def test_process_closed_bars_returns_after_rebalance_completion_without_new_decision(tmp_path) -> None:
+    """A terminal deferred BUY completion must end this cycle.
+
+    The caller may still hold the account snapshot captured before the BUY
+    fill. Re-entering the decision path with that stale snapshot could submit
+    the same BUY a second time before the next fresh account snapshot.
+    """
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    assert first.status == "sell_phase_submitted"
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell, activity_id="sell-terminal")
+    broker.positions = [_position("AAPL", 150)]
+    broker.open_symbols.discard("AAPL")
+
+    resumed = runtime.advance_rebalance()
+    assert resumed is not None and resumed.status == "buy_phase_submitted"
+    buy = next(order for order in resumed.orders if order.side == PortfolioOrderSide.BUY)
+
+    # This is the stale account that was captured while MSFT was still only a
+    # working order. The broker has the position only after the terminal fill.
+    pre_fill_account = broker.account()
+    _fill(repository, buy, activity_id="buy-terminal")
+    broker.positions.append(_position("MSFT", buy.quantity))
+    broker.open_symbols.discard("MSFT")
+
+    next_day = buy.decision_timestamp + timedelta(days=1)
+    result = runtime.process_closed_bars(
+        _bars(("AAPL", "MSFT"), day=next_day),
+        account=pre_fill_account,
+        force_scheduled=True,
+    )
+
+    assert result.status == "rebalance_complete"
+    assert result.decision_id == first.decision_id
+    assert [order.side for order in broker.submitted] == [
+        PortfolioOrderSide.SELL,
+        PortfolioOrderSide.BUY,
+    ]

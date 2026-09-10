@@ -95,6 +95,19 @@ class PortfolioRiskLimits:
     maximum_crypto_positions: int = 3
 
 
+def _validate_unique_account_positions(account: AccountSnapshot) -> None:
+    """Reject duplicate broker rows before dict-based risk/planning views."""
+    seen: set[tuple[Market, str]] = set()
+    for position in account.positions:
+        key = (position.market, canonical_symbol(position.symbol, position.market))
+        if key in seen:
+            raise ValueError(
+                f"Duplicate account position for {key[1]} ({key[0].value}); "
+                "reconciliation is required before trading resumes"
+            )
+        seen.add(key)
+
+
 def portfolio_risk_limits_from_config(risk: RiskLimits) -> PortfolioRiskLimits:
     """Single semantic mapping shared by backtest, paper, and live."""
     return PortfolioRiskLimits(
@@ -134,6 +147,8 @@ class PortfolioRiskOverlay:
         maximum_allocation: float,
         mode: str,
         enforce_drawdown_halt: bool = True,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+        open_order_symbols: tuple[str, ...] = (),
     ) -> RiskOverlayDecision:
         """Apply the portfolio risk overlay to a strategy target.
 
@@ -144,6 +159,7 @@ class PortfolioRiskOverlay:
         trading. Production (paper/live) always enforces the halt until an
         operator starts a new risk epoch.
         """
+        _validate_unique_account_positions(account)
         equity = account.equity
         if equity <= 0:
             raise ValueError("Account equity must be positive")
@@ -245,8 +261,66 @@ class PortfolioRiskOverlay:
             # is authorized to sell; for mixed positions keep the floor.
             desired[symbol] = max(desired[symbol], external_weight)
 
-        position_limit = (
+        market_position_limit = (
             self.limits.maximum_crypto_positions if market == Market.CRYPTO else self.limits.maximum_positions
+        )
+        # ``maximum_positions`` is an account-level cap, while this overlay is
+        # intentionally called once per market. Count every distinct
+        # cross-market account slot and every positive target slot already
+        # reserved by an earlier market in this decision cycle. Current-market
+        # external/unapproved inventory is also fixed: it cannot be sold by
+        # this runtime, so it consumes a slot even when the strategy omits it.
+        # Managed current-market positions omitted by the target remain
+        # replaceable through the existing SELL->BUY two-phase path; a later
+        # decision still sees the broker's fresh snapshot before reusing that
+        # slot.
+        account_slots = {
+            (position.market, canonical_symbol(position.symbol, position.market))
+            for position in account.positions
+            if not position.is_flat
+        }
+        reserved_slots = {
+            (reserved_market, canonical_symbol(symbol, reserved_market))
+            for reserved_market, symbol in reserved_position_keys
+        }
+        # Broker-only/manual working orders are account-wide slot claims even
+        # when the adapter exposes only symbols. Infer the market once and
+        # canonicalize before deduplication (e.g. BTCUSD == BTC/USD).
+        open_order_slots: set[tuple[Market, str]] = set()
+        for symbol in open_order_symbols:
+            order_market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
+            open_order_slots.add((order_market, canonical_symbol(symbol, order_market)))
+        fixed_slots = {
+            slot
+            for slot in account_slots
+            if slot[0] != market
+        }
+        fixed_slots.update(reserved_slots)
+        fixed_slots.update(open_order_slots)
+        fixed_slots.update(
+            (position.market, canonical_symbol(position.symbol, position.market))
+            for position in account.positions
+            if not position.is_flat
+            and position.market == market
+            and (
+                canonical_symbol(position.symbol, position.market) not in approved
+                or position.external_qty > 1e-12
+            )
+        )
+        fixed_current_symbols = {
+            symbol
+            for fixed_market, symbol in fixed_slots
+            if fixed_market == market
+        }
+        mandatory_symbols = set(desired) & fixed_current_symbols
+        available_global_slots = max(0, self.limits.maximum_positions - len(fixed_slots))
+        available_market_slots = max(0, market_position_limit - len(fixed_current_symbols))
+        optional_position_limit = min(available_global_slots, available_market_slots)
+        pre_position_desired = dict(desired)
+        pre_position_managed_desired = max(
+            0.0,
+            sum(pre_position_desired.values())
+            - sum(external_weight_by_symbol.get(symbol, 0.0) for symbol in pre_position_desired),
         )
         # Position-count policy: the LIMIT is risk enforcement and stays
         # intact, but WHO survives must follow the strategy's declared alpha
@@ -266,7 +340,8 @@ class PortfolioRiskOverlay:
             )
         else:
             priority = sorted(desired, key=lambda symbol: (-desired[symbol], symbol))
-        kept_symbols = set(priority[:position_limit])
+        optional_priority = [symbol for symbol in priority if symbol not in mandatory_symbols]
+        kept_symbols = mandatory_symbols | set(optional_priority[:optional_position_limit])
         if len(desired) > len(kept_symbols):
             desired = {symbol: weight for symbol, weight in desired.items() if symbol in kept_symbols}
             halted_reasons.append("position_count_limit")
@@ -307,6 +382,18 @@ class PortfolioRiskOverlay:
                 + max(0.0, weight - external_weight_by_symbol.get(symbol, 0.0)) * scale
                 for symbol, weight in desired.items()
             }
+            halted_reasons.append("exposure_scaled_to_limit")
+        elif (
+            not desired
+            and pre_position_managed_desired > 1e-12
+            and managed_limit <= 1e-12
+            and "exposure_scaled_to_limit" not in halted_reasons
+        ):
+            # A position-count trim can remove every candidate before the
+            # exposure scaler runs. Preserve the existing diagnostic contract
+            # when the same immutable/account gross state leaves no exposure
+            # capacity at all (for example six full equity slots blocking
+            # crypto).
             halted_reasons.append("exposure_scaled_to_limit")
         weights = tuple(
             TargetWeight(symbol, weight, "portfolio_risk_overlay")
@@ -359,6 +446,7 @@ class TargetToOrderPlanner:
         rules: dict[str, AssetTradingRules],
         approved_symbols: tuple[str, ...],
         open_order_symbols: set[str] | None = None,
+        open_order_sides: dict[str, set[str] | frozenset[str]] | None = None,
         decision_id: str | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
@@ -368,6 +456,7 @@ class TargetToOrderPlanner:
         client order ids so that two configurations sharing a strategy name,
         version and timestamp never produce the same broker idempotency key.
         """
+        _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
         # Open orders arrive broker-wide (``all_open_order_symbols``); only
         # this market's working orders must suppress order placement here. A
@@ -379,6 +468,21 @@ class TargetToOrderPlanner:
             for symbol in (open_order_symbols or set())
             if is_crypto(symbol) == (market == Market.CRYPTO)
         }
+        # Account-local ledger rows retain sides, unlike the broker-wide
+        # symbol-only endpoint. A lone pending BUY is safe to coexist with a
+        # risk-reducing SELL, but every risk-increasing/duplicate direction
+        # remains suppressed. Broker-visible symbols stay conservative and
+        # suppress both directions through ``open_symbols``.
+        local_order_sides: dict[str, frozenset[str]] = {}
+        for raw_symbol, raw_sides in (open_order_sides or {}).items():
+            if is_crypto(raw_symbol) != (market == Market.CRYPTO):
+                continue
+            sides = raw_sides
+            if isinstance(sides, (str, PortfolioOrderSide)):
+                sides = {str(getattr(sides, "value", sides))}
+            local_order_sides[canonical_symbol(raw_symbol, market)] = frozenset(
+                str(getattr(side, "value", side)).lower() for side in sides
+            )
         positions = {
             canonical_symbol(position.symbol, position.market): position
             for position in account.positions
@@ -389,8 +493,6 @@ class TargetToOrderPlanner:
         decision_id = decision_id or _decision_id(target)
         orders: list[PortfolioOrderRequest] = []
         for symbol in sorted(symbols):
-            if symbol in open_symbols:
-                continue
             price = prices.get(symbol) or (positions[symbol].current_price if symbol in positions else 0.0)
             rule = rules.get(symbol)
             if price <= 0 or rule is None:
@@ -419,6 +521,13 @@ class TargetToOrderPlanner:
                 # in depth against an external-position BUY.
                 continue
             side = PortfolioOrderSide.BUY if delta > 0 else PortfolioOrderSide.SELL
+            if symbol in open_symbols:
+                continue
+            local_sides = local_order_sides.get(symbol)
+            if local_sides is not None and not (
+                side == PortfolioOrderSide.SELL and local_sides == frozenset({PortfolioOrderSide.BUY.value})
+            ):
+                continue
             quantity = floor_increment(abs(delta), rule.quantity_increment)
             if position is not None and side == PortfolioOrderSide.SELL:
                 available = position.qty_available if position.qty_available is not None else position.qty

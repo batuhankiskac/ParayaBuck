@@ -438,7 +438,13 @@ class PortfolioRuntime:
                 common_latest = max(common_timestamps)
                 self.previous_timestamp = max(filter(None, (self.previous_timestamp, common_latest)))
 
-    def startup_catch_up(self, *, entry_latch: str | None = None) -> PortfolioRuntimeResult:
+    def startup_catch_up(
+        self,
+        *,
+        entry_latch: str | None = None,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> PortfolioRuntimeResult:
         """Decide immediately on the latest completed warmup bars.
 
         Restores BACKTEST/PAPER parity: the backtest engine fires its initial
@@ -543,7 +549,8 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "catch_up_superseded")
-        account = self.broker.account()
+        if account is None:
+            account = self.broker.account()
         if any(
             position.market == self.market and not position.is_flat and position.managed_qty > 1e-12
             for position in account.positions
@@ -564,26 +571,40 @@ class PortfolioRuntime:
         # Let a persisted two-phase rebalance advance first; a still-active
         # rebalance defers the catch-up (submitting fresh BUYs while an older
         # SELL is working could stack risk-increasing exposure).
-        self.advance_rebalance()
+        advance_result = self.advance_rebalance(
+            account=account,
+            reserved_position_keys=reserved_position_keys,
+        )
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
-            self.startup_catch_up_status = "rebalance_in_progress"
+            status = advance_result.status if advance_result is not None else "rebalance_in_progress"
+            reason = "rebalance_blocked" if status == "rebalance_blocked" else "rebalance_in_progress"
+            self.startup_catch_up_status = status
             _emit_no_trade_safe(
                 market=self.market.value if hasattr(self.market, "value") else str(self.market),
                 strategy=getattr(self.strategy, "name", None),
-                reason="rebalance_in_progress",
+                reason=reason,
                 decision_timestamp=timestamp,
                 data_timestamp=timestamp,
                 session_id=self.session_id,
                 account_id=self.account_id,
             )
-            return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_in_progress")
+            return PortfolioRuntimeResult(
+                current_rebalance.decision_id,
+                None,
+                None,
+                advance_result.orders if advance_result is not None else (),
+                advance_result.submitted_order_ids if advance_result is not None else (),
+                status,
+            )
         bars = [series[-1] for series in series_by_symbol.values()]
         result = self.process_closed_bars(
             bars,
             entry_latch=entry_latch,
             force_scheduled=True,
             decision_origin="startup_catch_up",
+            account=account,
+            reserved_position_keys=reserved_position_keys,
         )
         self.startup_catch_up_status = result.status
         return result
@@ -679,6 +700,7 @@ class PortfolioRuntime:
         force_scheduled: bool = False,
         decision_origin: str = "scheduled",
         account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
     ) -> PortfolioRuntimeResult:
         eligible = [
             bar
@@ -761,7 +783,15 @@ class PortfolioRuntime:
         # defer any new decision while the previous rebalance is still in
         # flight: submitting a fresh BUY while an older SELL is working could
         # stack risk-increasing exposure on top of the not-yet-sold position.
-        self.advance_rebalance()
+        advance_result = self.advance_rebalance(
+            account=account,
+            reserved_position_keys=reserved_position_keys,
+        )
+        # A terminal deferred BUY has just completed the persisted rebalance.
+        # End this cycle before planning again: the caller's account snapshot
+        # may predate that fill, so a same-cycle decision could replay the BUY.
+        if advance_result is not None and advance_result.status == "rebalance_complete":
+            return advance_result
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
@@ -811,8 +841,8 @@ class PortfolioRuntime:
                 current_rebalance.decision_id,
                 None,
                 None,
-                (),
-                (),
+                advance_result.orders if advance_result is not None else (),
+                advance_result.submitted_order_ids if advance_result is not None else (),
                 "rebalance_in_progress",
             )
         # maximum_account_age_for_entry_seconds). Direct callers (tests,
@@ -982,6 +1012,8 @@ class PortfolioRuntime:
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
+        reserved_slots = self._effective_reserved_position_keys(reserved_position_keys)
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
         risk = self.risk_overlay.apply(
             raw_target,
             account,
@@ -989,6 +1021,8 @@ class PortfolioRuntime:
             approved_symbols=self.symbols,
             maximum_allocation=maximum_allocation,
             mode=self.mode,
+            reserved_position_keys=reserved_slots,
+            open_order_symbols=tuple(sorted(open_order_symbols)),
         )
         # Visibility: if risk overlay scaled to limit and left no managed
         # exposure, emit persistent no-trade (e.g., 6×10% equity blocks crypto).
@@ -1040,7 +1074,8 @@ class PortfolioRuntime:
             prices=context.prices,
             rules=rules,
             approved_symbols=self.symbols,
-            open_order_symbols=self.broker.all_open_order_symbols(),
+            open_order_symbols=open_order_symbols,
+            open_order_sides=open_order_sides,
             decision_id=decision_id,
         )
         observed_target = self._with_paper_observability(
@@ -1167,7 +1202,12 @@ class PortfolioRuntime:
             "submitted",
         )
 
-    def advance_rebalance(self) -> PortfolioRuntimeResult | None:
+    def advance_rebalance(
+        self,
+        *,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> PortfolioRuntimeResult | None:
         """Advance a persisted two-phase rebalance by one step.
 
         ``sell_pending``: while any required SELL is still working (or its
@@ -1193,7 +1233,11 @@ class PortfolioRuntime:
         if current.phase == REBALANCE_PHASE_BLOCKED:
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if current.phase == REBALANCE_PHASE_BUY_READY:
-            return self._submit_deferred_buys(current.decision_id)
+            return self._submit_deferred_buys(
+                current.decision_id,
+                account=account,
+                reserved_position_keys=reserved_position_keys,
+            )
         if current.phase == REBALANCE_PHASE_BUY_PENDING:
             buys = self.repository.orders_for_decision(current.decision_id, side="buy")
             if buys and any(str(item["status"]) == "submitting" for item in buys):
@@ -1219,7 +1263,11 @@ class PortfolioRuntime:
             # No sell rows recorded for a sell_pending rebalance: nothing can
             # ever become terminal, so re-plan the buys from the fresh state.
             self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
-            return self._submit_deferred_buys(current.decision_id)
+            return self._submit_deferred_buys(
+                current.decision_id,
+                account=account,
+                reserved_position_keys=reserved_position_keys,
+            )
         if any(str(item["status"]) == "submitting" for item in sells):
             # A crash between repository persistence and broker acknowledgement
             # leaves a row at ``submitting``. Resolve it against the broker so
@@ -1240,7 +1288,11 @@ class PortfolioRuntime:
         if not is_sell_phase_complete(statuses):
             return None
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
-        return self._submit_deferred_buys(current.decision_id)
+        return self._submit_deferred_buys(
+            current.decision_id,
+            account=account,
+            reserved_position_keys=reserved_position_keys,
+        )
 
     def _resolve_stuck_submission_rows(
         self, decision_id: str, orders: tuple[dict[str, object], ...], side: str
@@ -1281,7 +1333,13 @@ class PortfolioRuntime:
             return orders
         return self.repository.orders_for_decision(decision_id, side=side)
 
-    def _submit_deferred_buys(self, decision_id: str) -> PortfolioRuntimeResult | None:
+    def _submit_deferred_buys(
+        self,
+        decision_id: str,
+        *,
+        account: AccountSnapshot | None = None,
+        reserved_position_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> PortfolioRuntimeResult | None:
         """Re-plan and submit the BUY side of a completed SELL phase.
 
         The original decision target is re-applied against a FRESH broker
@@ -1318,10 +1376,11 @@ class PortfolioRuntime:
                 session_id=self.session_id,
             )
             return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
-        account = self.broker.account()
+        account = account or self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
             maximum_allocation = min(maximum_allocation, self.live_dollar_cap / max(1.0, account.equity))
+        open_order_symbols, open_order_sides = self._effective_open_order_constraints()
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -1329,6 +1388,8 @@ class PortfolioRuntime:
             approved_symbols=self.symbols,
             maximum_allocation=maximum_allocation,
             mode=self.mode,
+            reserved_position_keys=self._effective_reserved_position_keys(reserved_position_keys),
+            open_order_symbols=tuple(sorted(open_order_symbols)),
         )
         prices: dict[str, float] = {symbol: series[-1].close for symbol, series in self.history.items() if series}
         for position in account.positions:
@@ -1349,7 +1410,8 @@ class PortfolioRuntime:
             prices=prices,
             rules=rules,
             approved_symbols=self.symbols,
-            open_order_symbols=self.broker.all_open_order_symbols(),
+            open_order_symbols=open_order_symbols,
+            open_order_sides=open_order_sides,
             decision_id=decision_id,
         )
         buy_orders = tuple(
@@ -1402,6 +1464,62 @@ class PortfolioRuntime:
             submitted,
             "buy_phase_submitted",
         )
+
+    def _effective_reserved_position_keys(
+        self,
+        same_cycle_keys: tuple[tuple[Market, str], ...] = (),
+    ) -> tuple[tuple[Market, str], ...]:
+        """Return same-cycle plus persisted working order position slots.
+
+        A broker snapshot may remain unchanged while a submitted BUY or SELL
+        is still working (or its broker outcome is ambiguous). The persisted
+        portfolio order ledger is therefore part of account position-cap
+        enforcement until every such order reaches a terminal status. A SELL
+        remains a fixed slot while it is working: reusing that slot before a
+        terminal result and fresh broker snapshot can create a seventh
+        position. The planner's symbol-level open-order guard remains in
+        place; this separate set reserves the account-level slot even when the
+        next decision selects a different symbol.
+        """
+        slots = {
+            (market, canonical_symbol(symbol, market))
+            for market, symbol in same_cycle_keys
+        }
+        slots.update(
+            (order.market, canonical_symbol(order.symbol, order.market))
+            for order in self.repository.open_orders(self.account_id)
+        )
+        return tuple(sorted(slots, key=lambda item: (item[0].value, item[1])))
+
+    def _effective_open_order_symbols(self) -> set[str]:
+        """Union broker-visible and account-local nonterminal order symbols.
+
+        The broker open-order endpoint may omit a submission during a crash
+        window or transiently lag the local ledger. Local rows are account and
+        market scoped through their persisted session lineage, so they suppress
+        duplicate planner output without importing manual/external orders.
+        """
+        broker_symbols, local_sides = self._effective_open_order_constraints()
+        return broker_symbols | set(local_sides)
+
+    def _effective_open_order_constraints(self) -> tuple[set[str], dict[str, frozenset[str]]]:
+        """Return broker-wide symbols plus side-aware local ledger rows.
+
+        ``all_open_order_symbols`` intentionally remains conservative because
+        it has no side information: a broker-visible symbol suppresses both
+        directions. Account-local rows carry a trusted side and can therefore
+        permit a risk-reducing SELL past a pending BUY while retaining
+        duplicate/risk-increase suppression.
+        """
+        broker_symbols = set(self.broker.all_open_order_symbols())
+        local_sides: dict[str, set[str]] = {}
+        for order in self.repository.open_orders(self.account_id):
+            if order.market != self.market:
+                continue
+            symbol = canonical_symbol(order.symbol, order.market)
+            side = str(getattr(order.side, "value", order.side)).lower()
+            local_sides.setdefault(symbol, set()).add(side)
+        return broker_symbols, {symbol: frozenset(sides) for symbol, sides in local_sides.items()}
 
     def _size_buys_to_safe_capacity(
         self,

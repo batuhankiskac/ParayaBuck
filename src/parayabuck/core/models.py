@@ -179,6 +179,16 @@ class PositionSnapshot:
     lowest_low: float | None = None
     pending_trailing_stop: float | None = None
 
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.qty):
+            raise ValueError("Position qty must be finite")
+        if (
+            not math.isfinite(self.managed_qty)
+            or self.managed_qty < -1e-12
+            or self.managed_qty > abs(self.qty) + 1e-12
+        ):
+            raise ValueError("managed_qty must be finite, non-negative, and no greater than abs(qty)")
+
     @property
     def is_flat(self) -> bool:
         return self.qty == 0

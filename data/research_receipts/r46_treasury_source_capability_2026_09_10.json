@@ -1,0 +1,62 @@
+{
+  "artifact_sha256": "8f5a7582d5dd8b9107e6fe92cde41ba4925a2bfac85b4ce75a16c0d6c8f7331a",
+  "blockers": [
+    "RESULT_PUBLICATION_TIMESTAMP_UNAVAILABLE",
+    "COMPLETE_EVENT_INVENTORY_NOT_PINNED",
+    "BLOCKED_NO_AUTHORIZED_CREDENTIALS"
+  ],
+  "candidate_id": "R46",
+  "checked_at": "2026-09-10T13:13:09Z",
+  "credentials_used": false,
+  "network_acquisition_attempted": false,
+  "observations": {
+    "archive": "Historical announcement/result press releases are linked by auction year; page does not expose a complete machine-readable inventory in this probe.",
+    "auction_query": "Official query advertises date-range CSV/JSON/TSV/XML export and identity/document filename fields; no per-document publication clock is exposed.",
+    "fiscaldata_publication_field": "record_date is DATE-only, not a source publication timestamp",
+    "sample_announcement_clock": "Embargoed Until 08:30 A.M.",
+    "sample_announcement_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240131_2.pdf",
+    "sample_auction_date": "2024-02-08",
+    "sample_issue_date": "2024-02-15",
+    "sample_result_clock": null,
+    "sample_result_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240208_3.pdf"
+  },
+  "paid_source_used": false,
+  "r46_admission_status": "DATA_ACQUISITION_REQUIRED",
+  "research_id": "r46_treasury_auction_unwind_tlt_v1_2026_09_10",
+  "routes": {
+    "archive": "https://treasurydirect.gov/auctions/announcements-data-results/announcement-results-press-releases/",
+    "auction_query": "https://treasurydirect.gov/auctions/auction-query/",
+    "fiscal_documents": "https://fiscaldata.treasury.gov/static-data/published-reports/auctions-query/"
+  },
+  "schema": "r46-treasury-source-capability-v1",
+  "route_capability_status": "PUBLIC_ROUTES_IDENTIFIED",
+  "source_evidence": [
+    {
+      "checked_at": "2026-09-10T13:13:09Z",
+      "fact": "Historical announcement/result press releases are linked by auction year; complete machine-readable coverage was not proven.",
+      "url": "https://treasurydirect.gov/auctions/announcements-data-results/announcement-results-press-releases/"
+    },
+    {
+      "checked_at": "2026-09-10T13:13:09Z",
+      "fact": "The official query advertises date-range export formats and document identity/filename fields, but no per-document publication clock.",
+      "url": "https://treasurydirect.gov/auctions/auction-query/"
+    },
+    {
+      "checked_at": "2026-09-10T13:13:09Z",
+      "fact": "The sample announcement identifies CUSIP 912810TX6, nominal 30-year bond, auction date 2024-02-08, original issue date 2024-02-15, and an 08:30 A.M. embargo line.",
+      "url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240131_2.pdf"
+    },
+    {
+      "checked_at": "2026-09-10T13:13:09Z",
+      "fact": "The sample result identifies the same issue and says For Immediate Release, but exposes no exact publication clock.",
+      "url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240208_3.pdf"
+    },
+    {
+      "checked_at": "2026-09-10T13:13:09Z",
+      "fact": "The public fiscal route exposes record_date as date-only, which cannot prove published_at or available_at.",
+      "url": "https://fiscaldata.treasury.gov/static-data/published-reports/auctions-query/"
+    }
+  ],
+  "status": "CAPABILITY_OR_PAID_BLOCKED",
+  "timestamp_rule": "Never use caller metadata, retrieval time, HTTP retrieval time, or date-only record_date as published_at/available_at; preserve the 16:15 America/New_York cutoff."
+}

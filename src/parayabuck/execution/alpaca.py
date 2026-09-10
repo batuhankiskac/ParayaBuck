@@ -425,6 +425,7 @@ class AlpacaBroker:
         intraday_unrealized = 0.0
         raw_positions: Any = self._client.get_all_positions()
         drift_candidates: list[tuple[str, float, float, Market]] = []
+        seen_position_keys: set[tuple[Market, str]] = set()
         for raw in raw_positions:
             current_price = float(raw.current_price)
             unrealized += float(raw.unrealized_pl or 0)
@@ -432,6 +433,13 @@ class AlpacaBroker:
             asset_class = str(getattr(raw, "asset_class", "")).lower()
             market = Market.CRYPTO if "crypto" in asset_class or is_crypto(str(raw.symbol)) else Market.EQUITY
             canonical = canonical_symbol(str(raw.symbol), market)
+            position_key = (market, canonical)
+            if position_key in seen_position_keys:
+                raise OwnershipDriftError(
+                    f"Duplicate broker position for {canonical} ({market.value}); "
+                    "reconciliation is required before trading resumes"
+                )
+            seen_position_keys.add(position_key)
             managed = managed_positions.get(canonical)
             raw_qty = float(raw.qty)
             ledger_owned = float(managed.owned_qty) if managed is not None else 0.0

@@ -1,0 +1,172 @@
+{
+  "schema_version": "r46-source-matrix-v1",
+  "research_id": "r46_treasury_auction_unwind_tlt_v1_2026_09_10",
+  "candidate_id": "R46",
+  "status": "DATA_ACQUISITION_REQUIRED",
+  "declared_before_outcomes": true,
+  "economic_execution": false,
+  "economic_run": false,
+  "economic_outcomes_accessed": false,
+  "outcome_artifacts_present": false,
+  "source_routes": {
+    "treasury_documents": {
+      "provider": "TreasuryDirect",
+      "route": "official announcement and result document archive",
+      "status": "ROUTE_IDENTIFIED_COVERAGE_UNPROVED",
+      "required_document_types": [
+        "original nominal 30-year offering announcement",
+        "actual auction completion/result document"
+      ],
+      "required_fields": [
+        "canonical_event_id",
+        "security_identifier",
+        "original_tenor",
+        "issue_or_reopening",
+        "announcement_document_hash",
+        "result_document_hash",
+        "published_at",
+        "available_at",
+        "correction_or_amendment_chain"
+      ],
+      "availability_rule": "Both original documents must have a provable available_at at or before 16:15 America/New_York on the auction session. Retrieval time is not a substitute."
+    },
+    "tlt_history": {
+      "provider": "UNSPECIFIED_UNTIL_OPERATOR_AUTHORIZES_SOURCE",
+      "status": "NOT_ACQUIRED",
+      "required_fields": [
+        "permanent_security_identifier",
+        "listing_and_tradability_interval",
+        "session_date",
+        "open",
+        "close",
+        "volume",
+        "source_vintage",
+        "available_at"
+      ],
+      "missing_policy": "Unknown identity, timestamp, price basis, or tradability excludes the observation and is counted."
+    },
+    "corporate_actions": {
+      "status": "REQUIRED_BEFORE_ECONOMIC_RUN",
+      "required_fields": [
+        "security_identifier",
+        "action_type",
+        "effective_date",
+        "cash_or_ratio",
+        "source_document_hash",
+        "duplicate_event_key"
+      ],
+      "basis_policy": "Signal and outcome price/share basis must be reconciled; duplicate identical events are not credited twice; distinct same-date distributions remain additive."
+    },
+    "nyse_calendar": {
+      "status": "REQUIRED_BEFORE_ECONOMIC_RUN",
+      "required_fields": [
+        "regular_session_date",
+        "regular_open_timestamp",
+        "regular_close_timestamp",
+        "holiday_or_closure_reason"
+      ],
+      "timezone": "America/New_York with explicit DST conversion"
+    }
+  },
+  "record_schema": {
+    "event_key": "security_identifier + auction_session_date + issue_or_reopening + source_document_hashes",
+    "publication_fields": ["published_at", "available_at", "source_timezone", "retrieved_at"],
+    "identity_fields": ["security_identifier", "issuer_identifier", "instrument_type", "listing_interval"],
+    "correction_fields": ["supersedes_document_hash", "correction_reason", "effective_version"],
+    "outcome_fields_not_exposed_to_preflight": ["bid_to_cover", "yield", "tail", "price_return", "NAV", "P&L", "drawdown", "CVaR", "Sharpe"]
+  },
+  "portfolio_research_field_map": {
+    "auction_event": {
+      "producer_schema": "r46-treasury-auction-ledger-v1",
+      "producer_to_governance": {
+        "event_id": "canonical_event_id",
+        "cusip": "security_identifier",
+        "term_years": "original_tenor",
+        "auction_type": "issue_or_reopening",
+        "auction_date": "auction_session_date",
+        "announcement_document_id": "announcement_document_id",
+        "result_document_id": "result_document_id",
+        "announcement_available_at": "published_at",
+        "result_available_at": "available_at",
+        "entry_available_at": "available_at",
+        "result_status": "completion_status"
+      },
+      "raw_document_fields_required_for_hash_lineage": [
+        "document_id",
+        "document_kind",
+        "source_url",
+        "raw_path",
+        "sha256",
+        "published_at",
+        "available_at",
+        "publication_at_source",
+        "retrieved_at",
+        "revision_id",
+        "supersedes_document_id"
+      ]
+    },
+    "tlt_bars": {
+      "producer_schema": "r46-tlt-split-adjusted-bars-v1",
+      "producer_to_governance": {
+        "date": "session_date",
+        "timestamp": "regular_open_timestamp",
+        "symbol": "canonical_symbol",
+        "adjustment": "price_basis",
+        "open": "open",
+        "close": "close",
+        "volume": "volume"
+      }
+    },
+    "tlt_dividends": {
+      "producer_schema": "r46-tlt-separate-dividends-v1",
+      "producer_to_governance": {
+        "symbol": "canonical_symbol",
+        "ex_date": "effective_date",
+        "event_timestamp": "available_at",
+        "amount": "cash_or_ratio",
+        "currency": "currency"
+      }
+    },
+    "tlt_eligibility": {
+      "producer_schema": "r46-tlt-pit-eligibility-v1",
+      "producer_to_governance": {
+        "canonical_symbol": "canonical_symbol",
+        "historical_symbol": "historical_symbol",
+        "provider_asset_id": "permanent_security_identifier",
+        "cusip": "security_identifier",
+        "venue": "venue",
+        "valid_from": "listing_valid_from",
+        "valid_to": "listing_valid_to",
+        "identity_basis": "identity_provenance",
+        "source_available_at": "available_at"
+      }
+    },
+    "field_mapping_rule": "Aliases are semantic mappings only; the producer record, raw source hash, and normalized governance record must all be retained. No alias may substitute for missing identity, timestamp, price basis, tradability, or correction lineage."
+  },
+  "coverage": {
+    "event_count": null,
+    "available_by_cutoff_count": null,
+    "duplicate_or_superseded_count": null,
+    "tlt_identity_coverage_count": null,
+    "capacity_intersection_count": null,
+    "status": "NOT_MEASURED_UNTIL_FROZEN_DATA_ONLY_PREFLIGHT",
+    "sample_gate_policy": "Do not change the separately approved statistical plan after observing coverage."
+  },
+  "allowed_data_only_tests": [
+    "document schema, content hash, identity, duplicate, correction, and coverage checks",
+    "publication/available_at cutoff and timezone checks",
+    "TLT identity, tradability, corporate-action, and next-open calendar checks",
+    "aggregate event-frequency and residual-capacity counts",
+    "synthetic native-ledger and missing-data fixture checks"
+  ],
+  "forbidden_before_final_release": [
+    "candidate return, NAV, P&L, fill, turnover, drawdown, CVaR, or Sharpe output",
+    "historical event-date ranking or threshold tuning",
+    "holdout body or outcome disclosure to the research owner",
+    "best-cell or best-variant selection"
+  ],
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators; omit integrity.artifact_sha256 before hashing",
+    "artifact_sha256": "98edacc1f6060d57e99cdc92aca1e897e0d8ccb5610ceca29a10f059548d3d2d"
+  }
+}

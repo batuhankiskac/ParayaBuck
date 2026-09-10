@@ -27,6 +27,7 @@ from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
 from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV1
 from parayabuck.portfolio.models import RebalancePolicy, TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_service import (
+    REBALANCE_PHASE_BLOCKED,
     REBALANCE_PHASE_SELL_PENDING,
     PortfolioRuntime,
     PortfolioStateRepository,
@@ -587,6 +588,40 @@ def test_mixed_position_splits_managed_and_external_quantity(tmp_path) -> None:
     assert position.qty == 12.0
 
 
+def test_duplicate_canonical_broker_positions_fail_closed(tmp_path) -> None:
+    """Two broker rows for one canonical symbol must never be merged silently."""
+    from parayabuck.execution.alpaca import OwnershipDriftError
+
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    client = _FakeAlpacaClient()
+    client.positions = [
+        SimpleNamespace(
+            symbol="AAPL",
+            qty="2",
+            avg_entry_price="100",
+            current_price="100",
+            qty_available="2",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="us_equity",
+        ),
+        SimpleNamespace(
+            symbol="aapl",
+            qty="3",
+            avg_entry_price="101",
+            current_price="101",
+            qty_available="3",
+            unrealized_pl="0",
+            unrealized_intraday_pl="0",
+            asset_class="us_equity",
+        ),
+    ]
+    broker = _portfolio_broker(client, repo, tmp_path)
+
+    with pytest.raises(OwnershipDriftError, match="Duplicate broker position"):
+        broker.account()
+
+
 def test_emergency_stop_fill_releases_portfolio_ownership(tmp_path) -> None:
     """Stop submit -> fill -> repository net quantity zero -> external/flat:
     the full protective-stop lifecycle must be visible to the portfolio
@@ -1115,6 +1150,225 @@ def test_partial_sell_fill_is_booked_before_the_drift_snapshot(tmp_path) -> None
     asyncio.run(runtime._handle_trade_update(update))
 
     assert repo.owned_quantities("acct") == pytest.approx({"BTC/USD": 0.19875})
+
+
+def test_terminal_fill_invalidates_cached_account_snapshot(tmp_path) -> None:
+    """A fill cannot leave the next decision trusting a pre-fill snapshot."""
+    import asyncio
+
+    from parayabuck.core.models import OrderRole
+    from parayabuck.execution.alpaca_updates import TradeUpdate
+    from parayabuck.runtime import EngineRuntime
+
+    stale = AccountSnapshot(100_000, 100_000, 100_000, 0.0)
+    held = PositionSnapshot(
+        "AAPL",
+        1.0,
+        100.0,
+        100.0,
+        Market.EQUITY,
+        qty_available=1.0,
+        ownership="managed",
+        managed_qty=1.0,
+    )
+    fresh = AccountSnapshot(99_900, 100_000, 100_000, 0.0, positions=(held,))
+
+    class _Repository:
+        def has_order(self, client_order_id: str) -> bool:
+            return client_order_id == "buy-1"
+
+        def apply_trade_update(self, **_kwargs: object) -> None:
+            return None
+
+    class _Broker:
+        account_id = "acct"
+
+        def __init__(self) -> None:
+            self.account_calls = 0
+
+        def snapshot_if_fresh(self, _max_age: float) -> AccountSnapshot:
+            return stale
+
+        def account(self) -> AccountSnapshot:
+            self.account_calls += 1
+            return fresh
+
+    broker = _Broker()
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._portfolio_repository = _Repository()
+    runtime.broker = broker
+    now = datetime.now(UTC)
+    runtime._last_account_at = now
+    runtime._last_account_snapshot = stale
+    runtime._last_account_snapshot_at = now
+    runtime.config = SimpleNamespace(
+        account_poll_interval_seconds=15.0,
+        maximum_account_age_for_entry_seconds=30.0,
+    )
+    runtime._persist_risk_state = lambda *_args, **_kwargs: None
+    runtime._advance_portfolio_rebalance = lambda _market: None
+    update = TradeUpdate(
+        event="fill",
+        client_order_id="buy-1",
+        broker_order_id="broker-buy-1",
+        parent_order_id=None,
+        role=OrderRole.ENTRY,
+        symbol="AAPL",
+        market=Market.EQUITY,
+        requested_qty=1.0,
+        filled_qty=1.0,
+        average_fill_price=100.0,
+        timestamp=now,
+        fee=0.0,
+        activity_id="activity-buy-1",
+    )
+
+    asyncio.run(runtime._handle_trade_update(update))
+
+    assert runtime._fresh_account_snapshot() is fresh
+    assert broker.account_calls == 1
+
+
+def test_inflight_account_fetch_cannot_republish_after_execution_invalidation() -> None:
+    """An execution invalidation racing an account fetch must force a second
+    broker snapshot instead of publishing the pre-fill result as fresh."""
+    from parayabuck.runtime import EngineRuntime
+
+    stale = AccountSnapshot(100_000, 100_000, 100_000, 0.0)
+    fresh = AccountSnapshot(99_900, 100_000, 100_000, 0.0)
+    started = threading.Event()
+    release = threading.Event()
+
+    class _Broker:
+        account_id = "acct"
+
+        def __init__(self) -> None:
+            self.account_calls = 0
+
+        def account(self) -> AccountSnapshot:
+            self.account_calls += 1
+            if self.account_calls == 1:
+                started.set()
+                assert release.wait(2.0)
+            return fresh
+
+    broker = _Broker()
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.broker = broker
+    runtime.config = SimpleNamespace(maximum_account_age_for_entry_seconds=30.0)
+    now = datetime.now(UTC)
+    runtime._last_account_snapshot = stale
+    runtime._last_account_snapshot_at = now - timedelta(seconds=60)
+    runtime._last_account_at = now - timedelta(seconds=60)
+    runtime._account_snapshot_lock = threading.Lock()
+    runtime._account_snapshot_generation = 0
+    result: list[AccountSnapshot] = []
+    errors: list[BaseException] = []
+
+    def fetch() -> None:
+        try:
+            result.append(runtime._fresh_account_snapshot())
+        except BaseException as exc:  # pragma: no cover - diagnostic assertion
+            errors.append(exc)
+
+    worker = threading.Thread(target=fetch)
+    worker.start()
+    assert started.wait(2.0)
+    runtime._invalidate_account_snapshot_after_execution()
+    release.set()
+    worker.join(3.0)
+
+    assert not worker.is_alive()
+    assert errors == []
+    assert result == [fresh]
+    assert broker.account_calls == 2
+
+
+def test_account_snapshot_generation_lease_rejects_invalidation_before_use() -> None:
+    """A decision lease must fail closed when a fill invalidates its cache."""
+    from parayabuck.runtime import EngineRuntime
+
+    account = AccountSnapshot(100_000, 100_000, 100_000, 0.0)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(maximum_account_age_for_entry_seconds=30.0)
+    runtime._account_snapshot_lock = threading.Lock()
+    runtime._account_snapshot_generation = 0
+    runtime._last_account_snapshot = account
+    runtime._last_account_snapshot_at = datetime.now(UTC)
+
+    lease = runtime._fresh_account_snapshot_lease()
+
+    runtime._invalidate_account_snapshot_after_execution()
+
+    assert lease.snapshot is account
+    assert lease.generation == 0
+    assert not runtime._account_snapshot_lease_is_current(lease)
+
+
+def test_account_snapshot_lease_defers_interleaved_invalidation_until_release() -> None:
+    """An invalidation after the atomic claim cannot interrupt decision use."""
+    from parayabuck.runtime import EngineRuntime
+
+    account = AccountSnapshot(100_000, 100_000, 100_000, 0.0)
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime.config = SimpleNamespace(maximum_account_age_for_entry_seconds=30.0)
+    runtime._account_snapshot_lock = threading.Lock()
+    runtime._account_snapshot_generation = 0
+    runtime._last_account_snapshot = account
+    runtime._last_account_snapshot_at = datetime.now(UTC)
+
+    lease = runtime._fresh_account_snapshot_lease()
+    assert runtime._claim_account_snapshot_lease(lease)
+
+    # Deterministic interleaving: an execution arrives after claim but before
+    # the decision finishes. The invalidation is deferred, not lost.
+    runtime._invalidate_account_snapshot_after_execution()
+    assert runtime._account_snapshot_lease_is_current(lease)
+
+    runtime._release_account_snapshot_lease(lease)
+    assert not runtime._account_snapshot_lease_is_current(lease)
+
+
+def test_portfolio_decision_skips_when_lease_invalidates_at_handoff() -> None:
+    """A deterministic fill interleaving cannot enter the planner."""
+    from parayabuck.runtime import EngineRuntime
+
+    account = AccountSnapshot(100_000, 100_000, 100_000, 0.0)
+    calls: list[object] = []
+    portfolio_runtime = SimpleNamespace(
+        market=Market.EQUITY,
+        symbols=("AAPL",),
+        strategy=SimpleNamespace(timeframe="1d", name="equity_test"),
+        process_closed_bars=lambda *_args, **_kwargs: calls.append(object()),
+    )
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._warming_up = False
+    runtime._circuit_breaker_reason = None
+    runtime._reconcile_failed = False
+    runtime._portfolio_lock = threading.RLock()
+    runtime._entry_risk_latch = {Market.EQUITY: None}
+    runtime._portfolio_runtimes = (portfolio_runtime,)
+    runtime._entry_readiness_reasons = lambda _market: ()
+    runtime._equity_signal_basis_latch = lambda _timestamp: None
+    runtime.broker = SimpleNamespace(account_id="acct")
+    runtime.config = SimpleNamespace(maximum_account_age_for_entry_seconds=30.0)
+    runtime._account_snapshot_lock = threading.Lock()
+    runtime._account_snapshot_generation = 0
+    runtime._last_account_snapshot = account
+    runtime._last_account_snapshot_at = datetime.now(UTC)
+
+    def invalidate_before_use(_lease: object) -> bool:
+        runtime._invalidate_account_snapshot_after_execution()
+        return False
+
+    runtime._account_snapshot_lease_is_current = invalidate_before_use
+    timestamp = datetime.now(UTC)
+    runtime._process_portfolio_timestamp(
+        [Bar(timestamp, "AAPL", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.EQUITY)]
+    )
+
+    assert calls == []
+    assert runtime._account_snapshot_generation == 1
 
 
 def test_ownership_drift_is_exempt_while_an_open_order_is_working(tmp_path) -> None:
@@ -2741,6 +2995,44 @@ def test_startup_catch_up_rebalance_in_progress_defers(tmp_path) -> None:
     result = runtime.startup_catch_up()
     assert result.status == "rebalance_in_progress"
     assert runtime.startup_catch_up_status == "rebalance_in_progress"
+
+
+def test_startup_catch_up_propagates_rebalance_blocked(tmp_path) -> None:
+    repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
+    session = repo.begin_session("acct", "legacy-digest", "paper")
+    target = TargetPortfolio(
+        strategy_name="equity_dynamic_trend_1d_v1",
+        strategy_version="1.0.0",
+        decision_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        weights=(TargetWeight("AAPL", 0.10, "test"),),
+        cash_weight=0.9,
+    )
+    risk = RiskOverlayDecision(target, False, (), 0.0, 0.10)
+    decision_id = repo.record_decision(session, "acct", "legacy-digest", target, risk, Market.EQUITY)
+    repo.save_rebalance_execution(
+        decision_id,
+        "acct",
+        Market.EQUITY,
+        REBALANCE_PHASE_BLOCKED,
+        status="reconciliation_required",
+    )
+    runtime = PortfolioRuntime(
+        _fixture_strategy(),
+        EQUITY_UNIVERSE,
+        _Broker(),
+        repo,
+        mode="paper",
+        maximum_allocation=0.50,
+        allow_static_universe=True,
+        account_id="acct",
+    )
+    runtime.seed(_bars())
+
+    result = runtime.startup_catch_up()
+
+    assert result.status == "rebalance_blocked"
+    assert runtime.startup_catch_up_status == "rebalance_blocked"
+    assert result.decision_id == decision_id
 
 
 def test_forced_scheduled_applies_full_target_and_leaves_normal_cadence_unchanged(

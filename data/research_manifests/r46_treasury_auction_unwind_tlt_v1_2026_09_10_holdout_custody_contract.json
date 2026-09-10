@@ -1,0 +1,79 @@
+{
+  "schema_version": "r46-holdout-custody-contract-v1",
+  "research_id": "r46_treasury_auction_unwind_tlt_v1_2026_09_10",
+  "candidate_id": "R46",
+  "holdout_id": "r46_treasury_auction_unwind_tlt_v1_2026_09_10:prospective_holdout",
+  "status": "BLOCKED_NO_HOLDOUT",
+  "mode": "prospective_single_use",
+  "historical_holdout_accepted": false,
+  "historical_holdout_reason": "The existing 2026 historical interval was already designated/accessed by prior research, and local ignored artifacts and access history cannot establish non-exposure.",
+  "requirements": {
+    "independent_custodian": true,
+    "operator_attestation": true,
+    "independent_reviewer": true,
+    "immutable_storage": true,
+    "encrypted_at_rest": true,
+    "access_log_append_only": true,
+    "raw_holdout_hidden_until_release": true,
+    "one_release_only": true,
+    "no_same_sample_rerun": true,
+    "no_formula_or_family_change_after_seal": true
+  },
+  "signature_verification": {
+    "required": true,
+    "mode": "external_cryptographic_verifier",
+    "status": "BLOCKED_SIGNATURE_VERIFICATION",
+    "embedded_signature_accepted": false
+  },
+  "required_seal_receipt_fields": [
+    "schema_version",
+    "research_id",
+    "holdout_id",
+    "manifest_sha256",
+    "holdout_contract_sha256",
+    "data_root_sha256",
+    "access_log_sha256",
+    "sealed_at",
+    "holdout_start",
+    "holdout_end_exclusive",
+    "storage_class",
+    "encrypted_at_rest",
+    "access_log_append_only",
+    "raw_holdout_hidden_until_release",
+    "operator",
+    "custodian",
+    "independent_reviewer",
+    "outcomes_accessed_before_release",
+    "one_release_only",
+    "release_count"
+  ],
+  "attestation_scope": [
+    "No agent, prior prompt, local gptpro artifact, ignored run, or manual research exposed holdout event-level data before release.",
+    "Formula, timing, instrument identity, source route, family membership, sample plan, and gates were frozen before holdout sealing.",
+    "The custodian and operator are distinct people and each signature covers the exact manifest, custody-contract, data-root, and access-log hashes.",
+    "Any unknown access history is reported as contamination, not assumed clean."
+  ],
+  "release_policy": {
+    "release_authority": "independent custodian after PRE_RUN_OK signed by operator and reviewer",
+    "release_is_single_use": true,
+    "release_receipt_required": true,
+    "post_release_mutation": "INVALID",
+    "second_release": "INVALID",
+    "same_sample_rerun": "INVALID"
+  },
+  "invalid_if": [
+    "missing or unverifiable signature",
+    "operator and custodian identities match",
+    "manifest/data/access-log hash mismatch",
+    "holdout-contract hash mismatch",
+    "release_count is not zero at seal or one at release",
+    "holdout was accessed before release",
+    "storage is mutable or custody is not independent",
+    "operator, custodian, and reviewer identities are not all distinct",
+    "formula, family, source, runner, or gate changed after seal"
+  ],
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators; omit integrity.artifact_sha256 before hashing",
+    "artifact_sha256": "a2dd58ad76a806b06c0ef1838138e5e6f744b84af184cf02de5067acc074fc8c"
+  }
+}

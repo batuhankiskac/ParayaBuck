@@ -1,0 +1,99 @@
+{
+  "admitted_rows": 0,
+  "cards": [
+    "X01",
+    "X02",
+    "X03",
+    "X04",
+    "X05",
+    "X06"
+  ],
+  "cost_scenarios": [
+    1,
+    2,
+    3
+  ],
+  "cutoff": "2026-07-31T23:59:59Z",
+  "diagnostic_windows": [
+    "full",
+    "recent",
+    "holdout"
+  ],
+  "economic_eligible": false,
+  "economic_run": false,
+  "formulae": {
+    "X01": "(10y-2y)/max(abs(2y),1e-9); curve-shape descriptive diagnostic only",
+    "X04": "short_volume/total_volume - 0.5; FINRA lower-bound diagnostic only",
+    "X06": "mean(funding_rate) per instrument and UTC day; interval-rate diagnostic only"
+  },
+  "frozen_before_outcomes": true,
+  "lags_days": [
+    1,
+    3,
+    7
+  ],
+  "missing_metric_disposition": {
+    "bootstrap": "NOT_RUN_MISSING_OUTCOME",
+    "correlation": "NOT_RUN_MISSING_CANDIDATE_RETURN",
+    "cost": "NOT_RUN_MISSING_EXECUTABLE_RETURN",
+    "drawdown_tail": "NOT_RUN_MISSING_CANDIDATE_RETURN",
+    "permutation_placebo": "NOT_RUN_MISSING_OUTCOME",
+    "regime_analysis": "NOT_RUN_MISSING_DECLARED_REGIME_LABELS",
+    "standalone_return": "NOT_RUN_MISSING_CANDIDATE_RETURN",
+    "turnover": "NOT_RUN_MISSING_EXECUTABLE_RETURN",
+    "two_leg_feasibility": "BLOCKED_MISSING_BORROW_MARGIN_OR_EXECUTION"
+  },
+  "overlay": {
+    "constraints": {
+      "cash_floor": 0.4,
+      "crypto_ceiling": 0.05,
+      "equity_ceiling": 0.55,
+      "gross_ceiling": 0.6,
+      "max_crypto_positions": 2,
+      "max_total_positions": 6
+    },
+    "recipe": "0.95*current_v3_daily_nav + 0.05*candidate_return",
+    "status": "NOT_RUN_NO_ELIGIBLE_CANDIDATE"
+  },
+  "promotion": false,
+  "protocol_sha256": "861eb1e011b05880226dbd37399359dd2dd548bcfd510cc6bd7c6fd7afdef0bd",
+  "schema": "crossasset-retrospective-diagnostic-protocol-v2",
+  "source_inputs": [
+    {
+      "card": "X01",
+      "path": "data/research/generated/crossasset_preflight_2026_09_08/x01_treasury_curve_normalized.csv",
+      "sha256": "e9fed56ba93ee857c22434a9b0df75250a191406e3de860efcb5b1888b397ed4"
+    },
+    {
+      "card": "X04",
+      "path": "data/research/generated/crossasset_preflight_2026_09_08/x04_pairs_finra_short_volume_sample.csv",
+      "sha256": "ba514c23e06cb1c5e80e9eeb89539b9c9533420681754e6bcc14f67679591b45"
+    },
+    {
+      "card": "X06",
+      "path": "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K09_binance_funding_archive_pilot.csv",
+      "sha256": "4fb3aaa217dcf6c43d89bfd872c1760cc30b690c34e4a0f57ebb5344b340baf6"
+    },
+    {
+      "card": "X06",
+      "path": "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K09_binance_causal_bars_pilot.csv",
+      "sha256": "9980a795fd27229e31dbcdfd5b6227d0eb46f07655f84c03a5b7159b3b2c0673"
+    },
+    {
+      "card": "X02-X06",
+      "path": "data/research_runs/crossasset_x02_x06_2026_09_08/gate_report.json",
+      "sha256": "5c3d8f1b982f0ac05aff69bdc6ef052a63b858d9db75871dcaae4abe9ffb7478"
+    },
+    {
+      "card": "X02-X06",
+      "path": "data/research_runs/crossasset_x02_x06_2026_09_08/two_leg_ledger_report.json",
+      "sha256": "ac19d23b641d9e826ae865c40c16fc24f56c850c78a529ae4529da74a5be5c76"
+    },
+    {
+      "card": "X01-X06",
+      "path": "data/research_manifests/crossasset_preflight_2026_09_08.json",
+      "sha256": "f339a8cce0036447e48186814b6d702756b765e629b02e75211aa41c61fd1431"
+    }
+  ],
+  "version": "2026-09-09"
+}

@@ -1,0 +1,58 @@
+{
+  "candidate_count": 16,
+  "candidate_ids": [
+    "H01",
+    "H02",
+    "H03",
+    "H04",
+    "H05",
+    "H06",
+    "H07",
+    "H08",
+    "H09",
+    "H10",
+    "H11",
+    "H12",
+    "H13",
+    "H14",
+    "H15",
+    "H16"
+  ],
+  "economic_run": false,
+  "inputs": {
+    "data/research_runs/all_34_research_closure_2026_09_09/closure_record.json": {
+      "sha256": "71576a9f0b239940b7ebd6a5d5371b949b30518f468c3f880eb7e3403f95b96a"
+    },
+    "data/research_runs/h14_v3_daily_nav_comparability_2026_09_09/current_v3_daily_nav_comparability.json": {
+      "sha256": "2c8b30eca960750a5bf31843d0577c087c835b6d822fa6a09cb6b61e161eab32"
+    },
+    "docs/research/strategy_queue_equity_review_2026_09_06.md": {
+      "sha256": "99fd21f76bf44ede1a96f209216ec4e86fb235240748f356d16c0694238e3829"
+    },
+    "docs/research/strategy_queue_full_report_2026_09_06.md": {
+      "sha256": "0bbeb251c02bf3b2df00fbf0f02ca37ba6164e1abdd13a216d0e44d658d22191"
+    }
+  },
+  "integration_candidate_count": 0,
+  "manifest_sha256": "640c523c150eb9ac956bdcb07d56362102f0a2c997e3682b162aeaa68ab7822f",
+  "no_auto_promotion": true,
+  "no_ohlcv_proxy": true,
+  "protocol": {
+    "path": "docs/research/equity_h01_h16_standalone_overlay_protocol_2026_09_09_v1.md",
+    "sha256": "4b5c64f6c1e9407f680cabcf20e4366a749c06e4a3b452f03abba7ad1c52ede5"
+  },
+  "results": {
+    "path": "data/research_runs/equity_h01_h16_standalone_overlay_2026_09_09/protocol_results.json",
+    "sha256": "20ed9603fdd70c59ba04b40d85b8fe9c7166590bf69cbf37762130a5e7492d33"
+  },
+  "schema": "equity-h01-h16-standalone-overlay-manifest-v1",
+  "script": {
+    "path": "scripts/research/build_equity_h01_h16_protocol_2026_09_09.py",
+    "sha256": "8e3a2f1d0d4f29d90b8d70542cf5e2852de5de94c625f47c3bb3cc3cf38045de"
+  },
+  "status": "FROZEN_PRE_OUTCOME_DEFINITIONS",
+  "test": {
+    "path": "tests/research/test_equity_h01_h16_protocol_2026_09_09.py",
+    "sha256": "5c91897bce4fa0f336a9553080de0ecdac33bd2d50e564884b23ba499f27d0db"
+  }
+}

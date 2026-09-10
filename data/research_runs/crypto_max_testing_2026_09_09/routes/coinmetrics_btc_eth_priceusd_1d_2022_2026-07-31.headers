@@ -1,0 +1,19 @@
+HTTP/2 200 
+date: Wed, 09 Sep 2026 18:23:29 GMT
+content-type: application/json
+x-content-type-options: nosniff
+access-control-allow-origin: *
+cache-control: no-cache
+expires: Thu, 01 Jan 1970 00:00:00 GMT
+access-control-expose-headers: x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, x-ratelimit-plan
+x-ratelimit-plan: download
+x-ratelimit-limit: 6000, 6000;w=20;comment="sliding window"
+x-ratelimit-remaining: 5998
+x-ratelimit-reset: 20
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Accept-Encoding
+cf-cache-status: DYNAMIC
+cf-ray: a388396c9ca71dff-IST
+alt-svc: h3=":443"; ma=86400
+

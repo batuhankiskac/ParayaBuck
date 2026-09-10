@@ -1,0 +1,20 @@
+HTTP status: 200
+Date: Wed, 09 Sep 2026 18:09:43 GMT
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: close
+X-Content-Type-Options: nosniff
+access-control-allow-origin: *
+cache-control: no-cache
+expires: Thu, 01 Jan 1970 00:00:00 GMT
+access-control-expose-headers: x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, x-ratelimit-plan
+x-ratelimit-plan: download
+x-ratelimit-limit: 6000, 6000;w=20;comment="sliding window"
+x-ratelimit-remaining: 5997
+x-ratelimit-reset: 20
+Server: cloudflare
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Vary: Accept-Encoding
+cf-cache-status: DYNAMIC
+CF-RAY: a38825457f3d720d-IST
+alt-svc: h3=":443"; ma=86400

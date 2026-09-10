@@ -1,0 +1,24 @@
+{
+  "mission": "equity_sec_normalization_2026_09_07",
+  "status": "COMPLETE_RESEARCH_ONLY",
+  "input": "data/research/external/equity_fundamentals_pilot_2026_09_07_v2",
+  "input_acquisition_receipt_sha256": "29f06553d9afb17c3ea5571561d3e899eee27355a7025b42b91a360a8ee97376",
+  "normalizer": "scripts/research/normalize_equity_sec_fundamentals_pilot_2026_09_07.py",
+  "normalizer_sha256": "60ef9685784653a9c7154dcf1413087a09717f3fec30ed832179a44f4db55454",
+  "output": "data/research/external/equity_fundamentals_normalized_2026_09_07/normalized_observations.jsonl",
+  "output_sha256": "1f3c7aefc8d796e4db9db2617ca707602fb6a6a22557032e4aefb3ab8bc1ce86",
+  "row_count": 19958,
+  "causal_schema": {
+    "lineage": ["cik", "tag", "unit", "value", "accn", "form", "start", "end", "filed", "accepted", "revision_group", "revision_sequence"],
+    "availability": ["available_at", "availability_basis"],
+    "flow_conversion": ["normalized_flow_value", "flow_basis"]
+  },
+  "limitations": [
+    "Current Companyfacts payloads are endpoint snapshots, not historical response vintages.",
+    "Rows without acceptanceDateTime use a conservative next-day filed-date boundary.",
+    "This pilot is not an economic acceptance universe; the PIT lifetime manifest is separate.",
+    "Reported shares require an explicit as-of split factor before joining split-adjusted prices."
+  ],
+  "credential_fields_persisted": false,
+  "production_or_runtime_changes": false
+}

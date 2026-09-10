@@ -1,0 +1,33 @@
+{
+  "archive": {
+    "endpoint": "https://data.binance.vision/data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2026-07-30.zip",
+    "expected_id_set": null,
+    "expected_row_count": 834335,
+    "first_agg_trade_id": 3397437001,
+    "id_contract": "unique_strict_contiguous_range_inclusive",
+    "last_agg_trade_id": 3398271335,
+    "member": "BTCUSDT-aggTrades-2026-07-30.csv",
+    "member_crc32": 3620023861,
+    "member_size_bytes": 55419751,
+    "path": "data/research/external/crypto_queue_acquisition_2026_09_07/binance/archive_pilot/BTCUSDT-aggTrades-2026-07-30.zip",
+    "receipt": "data/research/external/crypto_queue_acquisition_2026_09_07/binance/archive_pilot/BTCUSDT-aggTrades-2026-07-30.zip.receipt.json",
+    "receipt_sha256": "286be6ca3f4c191306abc36dde1a3f6776fb7ffcffde65f20d2c71c33a0fdbbc",
+    "sha256": "5dff8ccfefbfac283a86d3978e1a9df56b6c06ff6b525ea9f5965a6c4bb984d7"
+  },
+  "card": "K11",
+  "limitations": [
+    "This declaration covers one BTCUSDT UTC day only.",
+    "It does not establish ETH coverage or a full/recent return sample.",
+    "The archive Last-Modified bound is availability evidence; it is not a per-trade publication timestamp or a historical label vintage."
+  ],
+  "status": "FROZEN_EXPECTED_ARCHIVE_SET",
+  "symbol_day": {
+    "event_date_utc": "2026-07-30",
+    "instrument": "BTCUSDT",
+    "venue": "binance_usdm"
+  },
+  "window": {
+    "end_utc": "2026-07-31T00:00:00Z",
+    "start_utc": "2026-07-30T00:00:00Z"
+  }
+}

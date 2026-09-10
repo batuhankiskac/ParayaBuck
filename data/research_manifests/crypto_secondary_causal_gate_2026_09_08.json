@@ -1,0 +1,1125 @@
+{
+  "artifacts": {
+    "data/research_runs/crypto_secondary_causal_gate_2026_09_08/gate_report.json": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "bb3a60303d71a4ea2481948a7a60d874e0d2d6469640def76996cda9b54de319"
+    },
+    "docs/research/crypto_secondary_causal_gate_report_2026_09_08.md": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "28141cba8560e4c4f1866dd7054e0efb39f2dbc3acf31a9157db7bf0392441c6"
+    },
+    "docs/research/crypto_secondary_causal_protocol_2026_09_08.md": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "5f3132f746d160ef29f85af8bd4b229f0ccbb4bd360d3bcf7b3a7761ad5f8c8d"
+    },
+    "docs/research/portfolio_expansion_crypto_screen_protocol_2026_09_05.md": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "39213f8aabed1a1268f36179d4cabe9cb79e678274ba6a4317b2b14911543a52"
+    },
+    "docs/research/strategy_queue_crypto_review_2026_09_06.md": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "1115b197d201dcee8f73d9f68e0844d57cb5d31468e351a95ca7bbf2ed21ed3d"
+    },
+    "docs/research/strategy_queue_full_report_2026_09_06.md": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "0bbeb251c02bf3b2df00fbf0f02ca37ba6164e1abdd13a216d0e44d658d22191"
+    },
+    "scripts/research/acquire_crypto_secondary_public_2026_09_08.py": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "4dba7c219ee2cf7bb024a20899e00d51a8cd6cd724a6d84067571da29f568d4d"
+    },
+    "scripts/research/crypto_secondary_causal_gate_2026_09_08.py": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "c44f8216febfbebfcc3911c7325c0ba6ade8f3e58ffbf58c46e1901da625d15e"
+    },
+    "tests/research/test_crypto_secondary_causal_gate_2026_09_08.py": {
+      "kind": "protocol_or_gate_artifact",
+      "sha256": "2cb240219317be695b801836bc2c982fa11f9031b7b0ffd25b8a758282876b00"
+    }
+  },
+  "canonical_hash_policy": "canonical JSON hash excludes only manifest_sha256",
+  "contracts": {
+    "K02": {
+      "availability_boundary": "available_at <= decision_time",
+      "cadence": "daily completed observations",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "completed daily observation",
+      "execution_shift": "one-period lag, next tradable spot open",
+      "field_meaning": "NVTAdj is market value divided by adjusted transfer value; adjusted-transfer version and chain policy are required",
+      "formula": "NVTAdj = market_value / adjusted_transfer_value",
+      "minimum_breadth_history": "BTC and ETH with complete daily history across the selected window",
+      "portfolio_role": "slow usage/value state, long/cash",
+      "provider": "Coin Metrics adjusted-transfer methodology",
+      "signal_formula_window_threshold": "one-period lag; within-asset only; smoothing, direction and threshold unspecified by authoritative review",
+      "universe": "configured BTC/ETH assets with complete provider history"
+    },
+    "K05": {
+      "availability_boundary": "immutable capture and publication_time <= decision_time",
+      "cadence": "event-only",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "configured_assets": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD",
+        "XRP/USD",
+        "ADA/USD",
+        "DOGE/USD",
+        "AVAX/USD",
+        "LINK/USD",
+        "LTC/USD",
+        "BCH/USD",
+        "DOT/USD",
+        "UNI/USD",
+        "AAVE/USD",
+        "ARB/USD",
+        "FIL/USD",
+        "RENDER/USD",
+        "ONDO/USD",
+        "HYPE/USD",
+        "SHIB/USD",
+        "GRT/USD",
+        "CRV/USD",
+        "PEPE/USD"
+      ],
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "announcement publication before decision_time",
+      "execution_shift": "event availability to next tradable spot open",
+      "field_meaning": "scheduled vesting/unlock and actual on-chain unlock, including beneficiary class",
+      "formula": "published-before-decision event; exact direction/window/eligibility unspecified by authoritative review",
+      "minimum_breadth_history": "every selected event must have announcement, schedule, actual transfer and amendments",
+      "portfolio_role": "token supply pressure event, long/cash",
+      "provider": "token-specific issuer/governance primary announcement plus chain confirmation",
+      "signal_formula_window_threshold": "unspecified until a pre-result event manifest freezes it",
+      "universe": "frozen configured 22-pair pool; every asset requires primary event evidence"
+    },
+    "K06": {
+      "availability_boundary": "publication_time and available_at <= decision_time",
+      "cadence": "daily issuer publication",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "post-2024 untouched; exact dates unspecified by review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "issuer publication time",
+      "execution_shift": "one decision interval, next tradable spot open",
+      "field_meaning": "net creations/redemptions aggregated by underlying; cash versus in-kind retained",
+      "formula": "daily net ETF flow; exact threshold unspecified by authoritative review",
+      "issuer_set": [
+        "IBIT",
+        "GBTC",
+        "FBTC",
+        "BITB",
+        "ARKB",
+        "ETHA"
+      ],
+      "mapping_status": "route probes only; series/CIK mapping and complete creation/redemption history remain unproven",
+      "minimum_breadth_history": "daily BTC/ETH ETF set history with creation/redemption and exchange-calendar coverage",
+      "portfolio_role": "institutional flow, long/cash",
+      "provider": "issuer-published spot BTC/ETH ETF creations/redemptions; SEC filings for treatment audit",
+      "signal_formula_window_threshold": "at least one decision interval lag; event window and direction frozen before economics",
+      "universe": "BTC/ETH only; ETF set frozen before economics"
+    },
+    "K07": {
+      "availability_boundary": "PIT snapshot or immutable vintage with available_at <= decision_time",
+      "cadence": "daily or hourly only when provider supplies available_at",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "completed provider interval",
+      "execution_shift": "one-period lag, next tradable spot open",
+      "field_meaning": "labeled exchange inflow minus outflow; native-unit and USD-normalized versions remain separate",
+      "formula": "net_flow = FlowInEx - FlowOutEx; sign frozen with metric version",
+      "minimum_breadth_history": "BTC/ETH flow, label-set hash per vintage, confirmations, venue scope and exclusions",
+      "portfolio_role": "exchange liquidity flow, long/cash",
+      "provider": "Glassnode or equivalent PIT exchange-wallet flow provider",
+      "signal_formula_window_threshold": "one-period lag; threshold unspecified by authoritative review",
+      "universe": "BTC/ETH pilot with frozen exchange-label universe"
+    },
+    "K08": {
+      "availability_boundary": "PIT flow with available_at <= decision_time",
+      "cadence": "completed interval; one-hour result in source paper is evidence only",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "completed provider interval",
+      "execution_shift": "one decision interval, next tradable spot open",
+      "field_meaning": "stablecoin net exchange flow excluding mint, burn and bridge movements",
+      "formula": "net exchange flow by stablecoin contract; no minting-as-buying shortcut",
+      "minimum_breadth_history": "USDT/USDC contract identity, bridge/mint/burn filters, exchange labels and cross-venue coverage",
+      "portfolio_role": "deployable exchange liquidity, long/cash",
+      "provider": "Coin Metrics or Chi-compatible stablecoin flow provider with frozen contracts/labels",
+      "signal_formula_window_threshold": "one-period lag; exact interval and direction unspecified until frozen",
+      "universe": "BTC/ETH spot target; USDT and USDC series separate"
+    },
+    "K10": {
+      "availability_boundary": "event publication and available_at <= decision_time",
+      "cadence": "event-driven liquidation plus spot/OI context",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "confirmed liquidation event availability",
+      "execution_shift": "fixed wait interval, next tradable spot open",
+      "field_meaning": "venue-tagged liquidation volume, side/quantity, OI delta, mark/index and spot context",
+      "formula": "event detector after available liquidation; fixed wait/hold intervals selected before results",
+      "minimum_breadth_history": "venue event semantics, duplicate policy, OI units, aggregation, latency and shock fill cost",
+      "portfolio_role": "forced-selling rebound, long/cash spot; no derivatives execution",
+      "provider": "Deribit/Kraken liquidation schemas; Binance archive may be used for a venue pilot",
+      "signal_formula_window_threshold": "threshold, wait and hold must be frozen before economics",
+      "universe": "BTC/ETH spot target; venue aggregation frozen"
+    },
+    "K12": {
+      "availability_boundary": "immutable metric vintage with available_at <= decision_time",
+      "cadence": "daily completed observation",
+      "cells": {
+        "full": "2022-01-01..2026-07-31",
+        "holdout": "not specified by source review",
+        "recent": "2024-01-01..2026-07-31"
+      },
+      "controls": "incumbent, candidate, passive/cash or matched-exposure control, shared-capital diagnostic",
+      "cost_stress": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "decision_clock": "completed daily observation",
+      "execution_shift": "one-period lag, next tradable spot open",
+      "field_meaning": "spent-output value divided by creation value; entity-adjusted clustering policy retained",
+      "formula": "SOPR = spent_output_value / creation_value; level or fixed deviation from one unspecified",
+      "minimum_breadth_history": "UTXO/account method, entity-cluster version, internal transfers, chain coverage and immutable lag",
+      "portfolio_role": "on-chain loss realization, long/cash",
+      "provider": "Glassnode entity-adjusted SOPR or Coin Metrics SOPR with immutable PIT method",
+      "signal_formula_window_threshold": "one-period lag; exact level/deviation threshold unspecified by authoritative review",
+      "universe": "BTC first, then assets with identical documented semantics"
+    }
+  },
+  "economic_run": false,
+  "frozen_at_utc": "2026-09-08T20:00:00Z",
+  "historical_cutoff": "2026-07-31T23:59:59Z",
+  "identity": "crypto_secondary_causal_gate_2026_09_08",
+  "inputs": {
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k02_nvt_adj_unavailable_btc_eth_2019_2026-07-31.json": {
+      "sha256": "df1a7206db1ed6cab34a0df77c4f8336f59a09d6fa2375f89e9be3db587b64ea"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k02_nvt_adj_unavailable_btc_eth_2019_2026-07-31.json.receipt.json": {
+      "sha256": "6877f236695861d1b0576c701657537980503dc77596321c09e1c2526322da3f"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k07_exchange_flows_btc_eth_2019_2026-07-31.json": {
+      "sha256": "1278755a09e92c55fade23b946c1bdc051edb9a3a24143121a13bb544c123638"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k07_exchange_flows_btc_eth_2019_2026-07-31.json.receipt.json": {
+      "sha256": "f77284f64fffa467ba640be96d3c4eaa2d1ccd79d8f70a3d847f6fdf2a93a64f"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k08_stablecoin_catalog_assets.json": {
+      "sha256": "e6ace3d3068e40ff1fcaaf515e98c48978e0b1e5ec0c8e2d026259f813c89f8a"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k08_stablecoin_catalog_assets.json.receipt.json": {
+      "sha256": "8d481dde496f7b0f587a5a9a9f96be9cb35c0c26a09eb3df095211148e8df6ae"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k08_stablecoin_flow_probe.json": {
+      "sha256": "2f12f09f7bbcb8a24b9a61b99ff4efe00d504a393f951f0df15eab6eabab332c"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k08_stablecoin_flow_probe.json.receipt.json": {
+      "sha256": "8c7212d642cc167b32c283ed9a9b901a285ade66dde90d5ef2855934d3be21b8"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k12_sopr_unavailable_btc_eth_2019_2026-07-31.json": {
+      "sha256": "3f6d29de14e928baf617fc47c89210d9b7df4d4fe9582cc68e999dff4e1089cf"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/coinmetrics/k12_sopr_unavailable_btc_eth_2019_2026-07-31.json.receipt.json": {
+      "sha256": "b1778ff4be9b10a83cf3c8a7406ab2f44302442767d1256a8171ccedf38b2c8f"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/farside/btc.html": {
+      "sha256": "30d4edeb547e2ed02d42156bc0e13498c25fda71f8ce8169fac308859a4e04ac"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/farside/btc.html.receipt.json": {
+      "sha256": "0245ac72217ba2252135d5705bac7d2e119e9707ec7fcb1aaaec6251460b23f9"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/farside/btc_daily_snapshot.csv": {
+      "sha256": "2ba2d398e64a5f6a25c14c2403bcd9db5cdde11f1d30b0e44a531c8971b96d0a"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/farside/btc_daily_snapshot.csv.receipt.json": {
+      "sha256": "469c4e5769c21b28b37ea025b3ed984dc146fbdf41f42ea7457e1c2f60a2c916"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K10_binance_liquidation_snapshot_pilot.csv": {
+      "sha256": "14bef2fbe23e9565bdbadede8acc543a48c7f3c02c0c5dc53fbf808baa1a3ef3"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K10_binance_liquidation_snapshot_pilot.csv.receipt.json": {
+      "sha256": "1228ecf42c30a649edda067d55220e03587b175c1be2b025fd6e0735782d2556"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/other/tokenomist_api_root.body": {
+      "sha256": "8699bf1eda7e016dec3efeff8db5e3400183e9ebf6ce42355b97b843def2b035"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/other/tokenomist_api_root.body.receipt.json": {
+      "sha256": "cdb916939c6abbf0888f80b32d55b764f1309b8ced9aa8a42c651adfaa5e02f3"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/other/tokenomist_home.body": {
+      "sha256": "0dc5f349ea006fd318e8f5f002741d8a3e5ba14aba3b4e23a129c741aab7af1a"
+    },
+    "data/research/external/crypto_queue_acquisition_2026_09_07/other/tokenomist_home.body.receipt.json": {
+      "sha256": "ddf95bac116920b169c9aa3a78855dc77e32cda0dad78224c5d9454fde5fa2b0"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/binance/BTCUSD_PERP-liquidationSnapshot-2026-07-30.body": {
+      "sha256": "30146b9ba6b27ebdf4983fbdc25b0f3506270a324913e8ed171ae7b6b2ede2c3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/binance/BTCUSD_PERP-liquidationSnapshot-2026-07-30.body.receipt.json": {
+      "sha256": "cc117ec27f427e7feea39b6a3e4cc26a8ee6e3cbb107f558b5a8bb829324824f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/binance/ETHUSD_PERP-liquidationSnapshot-2026-07-30.body": {
+      "sha256": "2b55bc96adfe2f3ffbd37770b13c2f57270124a56e996f8c1bc9b8f01ba76489"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/binance/ETHUSD_PERP-liquidationSnapshot-2026-07-30.body.receipt.json": {
+      "sha256": "029f8780cc78e4d5ded1a0f8dbb2fca829d5353bf73873bb1f810440a7c48f92"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_catalog_asset_metrics_all.body": {
+      "sha256": "8aac772b112204037adbf05139d46a2a66fc1f97b579ef2c1cff5ae6e9f83c67"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_catalog_asset_metrics_all.body.receipt.json": {
+      "sha256": "becd2b24d5cf100b1d4ac62e01677b4562411c54ba244a53b17fea0502a6b842"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_catalog_assets_btc_eth.body": {
+      "sha256": "357542072b62e48631db0cc284aaa98ff0df41c64364d5e76c90916fb019dfd2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_catalog_assets_btc_eth.body.receipt.json": {
+      "sha256": "5f5e57a8e6f1ef847f84ae397d3f5adaf8cf04c656a4ed097d913698c0345a0c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_docs_asset_metrics.body": {
+      "sha256": "8476b048115c219678fabf3157ec3760aa2ec8ba363738572177bd44e1103d51"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_docs_asset_metrics.body.receipt.json": {
+      "sha256": "4c99cd82e8d91f4a507f528be5a56b26ec83d77e9da0b33d93c387b8fbfa35d4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_nvtadj.body": {
+      "sha256": "df1a7206db1ed6cab34a0df77c4f8336f59a09d6fa2375f89e9be3db587b64ea"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_nvtadj.body.receipt.json": {
+      "sha256": "f96207b7f78b7860076099ea71ab5e402f284b93e896fe886cf561f21fd5477d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_txtfrvaladjntv.body": {
+      "sha256": "d1c21056b718e2f84fadd87c5d86c73f78d616921a78b0940f82999b0bddaad1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_txtfrvaladjntv.body.receipt.json": {
+      "sha256": "c7c59acec8cbfd016f883bd6d1dbb7bc73c2bc049c32f4454a37fea75a63e463"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_txtfrvaladjusd.body": {
+      "sha256": "94fc7c7b5adc459e66dbb8e7408c181b3dabee1940dbd69944e622c18020b7dc"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k02_timeseries_txtfrvaladjusd.body.receipt.json": {
+      "sha256": "be57efaca7f8ba4db37030f33cae07f35090ae6fd34643151b6739ca92298f93"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_aave_usd_official_archive.body": {
+      "sha256": "0a73658d4bae061dcdfe78bda846f6484f8ae2b091caf1d6809df6e5ce82ec3a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_aave_usd_official_archive.body.receipt.json": {
+      "sha256": "85a9e1e204006f12b7975e532bc3f98563e5a66f5562474a21afde7430484218"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ada_usd_official_archive.body": {
+      "sha256": "8d14cc28defc0018e13b82c26729596ae961fb1fdce555680ad9abf2623afb19"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ada_usd_official_archive.body.receipt.json": {
+      "sha256": "f3ab07a5d16a6790813b5e46b4f763a28b780c4e2bcf72e8ad9e153dd92c5ab2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_arb_usd_official_archive.body": {
+      "sha256": "772a6297d1ef24a0b1adc6ae7406618b95bb5b98a5899d0ebb79e81076e55d02"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_arb_usd_official_archive.body.receipt.json": {
+      "sha256": "a30751adc2f284d4a3e030be88d129f8d2799bb9477b688c4eb114f074d40a4d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_avax_usd_official_archive.body": {
+      "sha256": "a5107e3d87031227f8aa977ad44ecd8dea5323ed7f946cf8f55edd4c1e3d3ef7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_avax_usd_official_archive.body.receipt.json": {
+      "sha256": "aeff9a70fc74a25379ffdf2aef947690b49d962fef497422ef93f17b9f0d641a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_bch_usd_official_archive.body": {
+      "sha256": "117adef91c11ff2c77bd4ceb9f160d79930acc1edfc43a2d3894fbd8a1c6a146"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_bch_usd_official_archive.body.receipt.json": {
+      "sha256": "aa13020e33f352cde28243f26906866215407cc8a540ca78f76b98e4b782b38a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_btc_usd_official_archive.body": {
+      "sha256": "11f86f55d9e0cd9419717e7e906293ea11b3b9b57deab23aef2872ec7d85e6e9"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_btc_usd_official_archive.body.receipt.json": {
+      "sha256": "7a02e7cbf7628d9386f08009e38acc07a557321182272790e2f62b3abbbdba6e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_01_transaction_confirmation_docs.body": {
+      "sha256": "921adcd67311c3a33e4c87a61647add3fe6842dca9b48f0eab08f42ae661ce5f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_01_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "01d2aa59a0690d760e24f8fb3f389852b658876ede21c283b40efff5be2d87e7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_02_transaction_confirmation_docs.body": {
+      "sha256": "3e87d6211f8b76520531d24246002060e64a77d2b78693898e7d915a06050358"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_02_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "e755da185dc5069c70951af230314d6b2a93dd222889b62d246d4d63af7256bb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_03_transaction_confirmation_docs.body": {
+      "sha256": "2862306c5404590affd0bf183989e720842f077c70c4d5243b550447b84a9e16"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_03_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "20d4fdb2f8a1a7aa0ab4156aaf3eab691020de2ea9dd2c32afb807b68836d392"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_04_transaction_confirmation_docs.body": {
+      "sha256": "ebaa5433f6bb51f353f01b9becee003415926db179dcf8bb8637637af688237a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_04_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "de6d42b84af95abcece86c30224f121270da48df36078aae9fe37e4abfb0eeaa"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_05_transaction_confirmation_docs.body": {
+      "sha256": "fb738f9cbde158b73d1066279a88ff367872b91828173883b55911cd23c3cda4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_05_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "5f3a0cab8e3c955f0cecf3b1ace9a6d59121d5fd638d1e44b724a0076f7ec856"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_06_transaction_confirmation_docs.body": {
+      "sha256": "b620507312c5e97566a3c6cfaf99144fefc18a0da7d941401dfa0f5f58fb0368"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_06_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "e77efa543e294313970ac39e753275d62a9cfb22db1590b881f000d0a0f555f1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_07_transaction_confirmation_docs.body": {
+      "sha256": "1b5ba58f9fa2b7700d1dcbf7a0a8754b4f8b5d5b6739acca923a90e65377d582"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_07_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "7dc0cc405ff24c139a354be6c46f7040db91bb2568d4ab36eb93cf5a6c61f40a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_08_transaction_confirmation_docs.body": {
+      "sha256": "70d613e3acfba24fd2876fcbacaf639e1e111ef4d54baf70761c47673f37d6a3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_08_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "2928c92a73875cc84a6bf644c87b897c50727adefc04739041f5f3e62d3e6fd8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_09_transaction_confirmation_docs.body": {
+      "sha256": "9016ea9c7b9aa942b3796120593fa07745b27872cabdaf238c5ba40f4e2aef66"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_09_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "bd27c1434aaefce0bf0e3e94fc31108e7930b21e94f5b061adb00cbca280929b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_10_transaction_confirmation_docs.body": {
+      "sha256": "75e4dd48d60d6ac8ef6f07a1d14524d64a6b09621a74451f772f80333f7e8dc9"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_10_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "7957cc11a93f3423149ccb27f4081e63639482a7e5c11f37f10c83165a3d39b5"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_11_transaction_confirmation_docs.body": {
+      "sha256": "c9bb312d9c8a5f89496738b54fe08d3257a369f3125dd3cb1a83d3d3099026b6"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_11_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "068303c769c0857563009bd78f9b185aa727510681df3cb8788d412d0ddaf408"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_12_transaction_confirmation_docs.body": {
+      "sha256": "65decf3662dd43f5b9588784eafddd42c5ae9be4a20d66249f2dec7d2bb304e7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_12_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "85a0b368a9b9b75e2b6140bb38c3ae5188e85df8914a2c153f11c5b8e0701afb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_13_transaction_confirmation_docs.body": {
+      "sha256": "84f884d06066ea5262002dcddd0d3320430cccccb75240c84fadbb04f9cc54f6"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_chain_13_transaction_confirmation_docs.body.receipt.json": {
+      "sha256": "c8ed20d698b0dcce7c005be7cabf86853df970bbe6dae22752d88747dc5f29de"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_crv_usd_official_archive.body": {
+      "sha256": "7b0e9bd825ac622338f01ff15ff3ab44b6ef8053f483ea18c28d864fa0e061e3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_crv_usd_official_archive.body.receipt.json": {
+      "sha256": "db028d2c385ffd4a8322b61b8ecadf9ba518932753f4580a62507fa8e5cd2915"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_doge_usd_official_archive.body": {
+      "sha256": "c40da7cb211dc06eb06710bf1cf3aedb83439c8ea85180b7f8fb17575799d398"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_doge_usd_official_archive.body.receipt.json": {
+      "sha256": "add8caab318f81708becb09a982473e2dac650fd58b79461321d14df3cecda99"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_dot_usd_official_archive.body": {
+      "sha256": "47164f73151b5a9d520800e8534132c3ff96598cf297393ec7621bf2dc7d19a3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_dot_usd_official_archive.body.receipt.json": {
+      "sha256": "bc8d1b7eadb133e842f4f03cc6958955ad5a74a4170afdbefa2e5c7d600c1463"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_eth_usd_official_archive.body": {
+      "sha256": "4a0e4d3a6d107aeb5c36ea89a236911ef14765fa91eea680a1104ee147a6f0ee"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_eth_usd_official_archive.body.receipt.json": {
+      "sha256": "3b6c3a786effecefa378497c807b923b8ecb07a0ec26c6eb2ee17eeae322a68d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_fil_usd_official_archive.body": {
+      "sha256": "e7c9e3a7a4529137bf0593e82a60dea90fe43d541e34f2bd71827e90e704b439"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_fil_usd_official_archive.body.receipt.json": {
+      "sha256": "83a0e1ead910f0342afc3ab03c92c9647afa9f284d495fc6781c589c1234e871"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_grt_usd_official_archive.body": {
+      "sha256": "8f9359a70489aa36fa7658ab8e1484c062d56adbf67e8ffa33c95107bd9d9091"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_grt_usd_official_archive.body.receipt.json": {
+      "sha256": "b10cf29dcf26263cd4fa78c3a06df3543c4268206ed673050b789f114d2a5a75"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_hype_usd_official_archive.body": {
+      "sha256": "8209a4d0056cc6834d64dcccd405eda56d5ab56db58c9611f61d173521a10a42"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_hype_usd_official_archive.body.receipt.json": {
+      "sha256": "e3120546627d843c3e62158156d7f4a63bae269f87eb1527e33ec48e31505902"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_link_usd_official_archive.body": {
+      "sha256": "5616f2bd2db9a066b6ba9454d4b669c9eb39a2d79e53eaae4d7c953db04af0d5"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_link_usd_official_archive.body.receipt.json": {
+      "sha256": "46a735d7f93bb3549723f3180fbd04fc80c2dce3f009a242cbc545e83a06beb8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ltc_usd_official_archive.body": {
+      "sha256": "766c1d6bcb81d3e983fb7adbc19c616d7fc01dafb7893738edc242e2adc59c07"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ltc_usd_official_archive.body.receipt.json": {
+      "sha256": "4d8eb1e45d6cdb6073efbb849ef67537c5e64b00afa045d61f6d56cae22c1491"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ondo_usd_official_archive.body": {
+      "sha256": "ba98307c31ff3d80cf3d6dced58411862d1bf371f6e995ef003baa39870b7421"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_ondo_usd_official_archive.body.receipt.json": {
+      "sha256": "5e703535368043fe04d1cde92c138e8732eb4c592b13b4afb564335d9fe2e9cf"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_pepe_usd_official_archive.body": {
+      "sha256": "f2ddb00ec0ac021a42f54da26f09496772c4b9beae496566f71ecc439b5d8514"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_pepe_usd_official_archive.body.receipt.json": {
+      "sha256": "9e6c96c1c74896a50b187cfe7e11e1f24fa2c73640b811573706ef8e23d0a100"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_render_usd_official_archive.body": {
+      "sha256": "b87d6994d5d9eb7d945467fbe2ee0232e30581694fd64167ab2f86c4abfb293e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_render_usd_official_archive.body.receipt.json": {
+      "sha256": "43203c730e1a20cf586545b42bd6d072e217862a7f35757f0214b783a8e7a6d5"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_shib_usd_official_archive.body": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_shib_usd_official_archive.body.receipt.json": {
+      "sha256": "1fa1f4754c6e001c16e1ba1eae261e900e4a09510f391a2fd0363f0e9e513800"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_sol_usd_official_archive.body": {
+      "sha256": "6f79da396b2b9a826f10904b43b2f0069b935a4dd9fe1ec776785c961e880ca8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_sol_usd_official_archive.body.receipt.json": {
+      "sha256": "64d7053d2484acb73a89a27c716827541941d5ef1a24ed85944894d8a78b7c06"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_announcement_channel.body": {
+      "sha256": "7630304f22a62618985580f6b94d84bd677492348243f21246d12873b5b9b875"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_announcement_channel.body.receipt.json": {
+      "sha256": "257c3b93dd860b5e93293bbdc4a91b3b84b78fbe903ccbd98c4ff196f81888d2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_docs.body": {
+      "sha256": "3506ab4866d97d0b47146f7536682faffb46330e379fd27ddd55ef159d0d1d42"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_docs.body.receipt.json": {
+      "sha256": "cac920e119191710527c47385fb615c13c758dd99ea7ee54bb8b4014a4e22ff9"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_emission_crypto_market.body": {
+      "sha256": "995eb0edcd6136db56f427090056c7b6930bee261d41578d064f29032dae7322"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_emission_crypto_market.body.receipt.json": {
+      "sha256": "04bd191e6bc17947a56e0e23084410da1f1b619378ad43dd7df2843a15e45a21"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_enterprise.body": {
+      "sha256": "1302227a6f63c71e5a00a864961c0038d7f1b622ae0c95fb3c3f8ef6ca05fae8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_tokenomist_enterprise.body.receipt.json": {
+      "sha256": "f23862df1c552946e9fa982823ab0a9839b5372661c927bfb08a65d80523e153"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_uni_usd_official_archive.body": {
+      "sha256": "bda3f538df202c76990786a1d31a9cfd6efc3e75478bbb477e569353f0ac5cd7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_uni_usd_official_archive.body.receipt.json": {
+      "sha256": "5f8b181d9e4a427b5b50b14a1d18f3dee73e32f73106ce53dbc6ea2f2f5c5553"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_xrp_usd_official_archive.body": {
+      "sha256": "288eaf8a6f830f2a173ca9beefa188d053a7d0449a6c97b20d7b1f887d5bf1fa"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k05_xrp_usd_official_archive.body.receipt.json": {
+      "sha256": "413d0f8482ad2746a6ccd72533ad775b4044b784907538f739494400b0c74428"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_ark_arkb_issuer.body": {
+      "sha256": "33d3441a4baa820ecf1998db9386b532c64909fa4fa187d70581b36868eef9d7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_ark_arkb_issuer.body.receipt.json": {
+      "sha256": "f6aa98d4ae9d04834fbc189ad8bcea6f91a04813c7640a8a002030c8c4d490cd"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_bitwise_bitb_issuer.body": {
+      "sha256": "7ef384ff26ebb4e7352369907fba618eab556c15a2967b7bfdd6c644446d38ee"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_bitwise_bitb_issuer.body.receipt.json": {
+      "sha256": "7eb510d6a64d9d6e26de13d22b9287e76b260edbc221bb7a242b896c16a54f5b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_eth_page.body": {
+      "sha256": "d2b22b345dd64357ac8c40cc5741c68ee49823087d89136710e4f0eeb6393657"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_eth_page.body.receipt.json": {
+      "sha256": "dd1a25c6697affe12034083222be8ee648483d32865998ebe3ecc31a9e231d75"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_btc_slug.body": {
+      "sha256": "d4d28008014eab29ff40e6641c3dd9be73d32d38115dca60a7942b722801f450"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_btc_slug.body.receipt.json": {
+      "sha256": "e9972e89d5a13f2e8dde4b24425af0610bc2260a3aa4e171dc0d18033a42b99d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_eth_slug.body": {
+      "sha256": "e7526f9a4360fd590555d5b3a1107042f18a6ace66a09cbbfd266f86621266fb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_eth_slug.body.receipt.json": {
+      "sha256": "992ac92d8ad99632b5f1f69c6da1b8ef96b473c4bb7dec50a38df8f2056b1a47"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_page997.body": {
+      "sha256": "d43338e90e3f12e4ca3f5526763067d112de3cb9f95997402701e68c635c64a2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_farside_wp_page997.body.receipt.json": {
+      "sha256": "67033ebc204dc47fa0e9bfed0a1be8486aceba332b193e435acac356522d396e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_fidelity_fbtc_issuer.body": {
+      "sha256": "45aeab8c47fabcfacb4dbba59b1ddaf4ba97c6e15c8c30a6b22060ed9e7c51d8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_fidelity_fbtc_issuer.body.receipt.json": {
+      "sha256": "ee3122be0a97cb071785b365ecc6a5a9aae18e50df80a7c95d9c0a0d05a9c9e1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_grayscale_gbtc_issuer.body": {
+      "sha256": "24c118c029d419abc1638471cce244682d289e5b3492a0ed6d4b421df64dfa4a"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_grayscale_gbtc_issuer.body.receipt.json": {
+      "sha256": "6ba8796b54fcdba8570ca6e0281fd9ddb8385460fd28e469798ef85c0dcd5025"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_ishares_ibit_page.body": {
+      "sha256": "76363264ede90502168bdd64db2db3073a75b7dd594d7db5003a118bbdbe155d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_ishares_ibit_page.body.receipt.json": {
+      "sha256": "849fc420e78896b732ebfd9f01393c76b9608b3fc5ee277af3c51bdf8fa1047b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_arkb_etf_series_search.body": {
+      "sha256": "a9376beefd0f6f81e2368e21d6251d27866dcfff943497fc2985bc4d37decb13"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_arkb_etf_series_search.body.receipt.json": {
+      "sha256": "e8907454f95134b0382a76377a2521be52749cb5a2ac50c9755b39da8a8db000"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_arkb_fund_search.body": {
+      "sha256": "af872c1673995b78712bfd26cf3a91b5d25ffd133291800125d2b13742475e84"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_arkb_fund_search.body.receipt.json": {
+      "sha256": "780b7eb29c1afeec54c274f34158be937cbc697802103b82f5680b259437230f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_bitb_etf_series_search.body": {
+      "sha256": "8502edd9477068666427340aa0408acb60ea88118ea014c03609065223eda43b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_bitb_etf_series_search.body.receipt.json": {
+      "sha256": "1f9e8cf412ade4298083c238b70d5355cf615e3f98775491e72c6c8ef76b3715"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_bitb_fund_search.body": {
+      "sha256": "691ff21c37352333146c2d6f8936975ef4703a85c88ffa9a15a92f1f1f68b937"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_bitb_fund_search.body.receipt.json": {
+      "sha256": "ce63e767bb2f6df5f44ba110e358980c48db66d6c251faf6ac63ff63da0af08c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_company_tickers.body": {
+      "sha256": "37b94fb4df67b9ddbb0bb74cba5205fade38a3dfa2c07dda6d3c355934aeeebf"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_company_tickers.body.receipt.json": {
+      "sha256": "ecc513d50dcc3e59e73fc09e7aa39bd2cd97779df50c4ee930e3872100716f0c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_company_tickers_exchange.body": {
+      "sha256": "3a9c5388ec41e320aed325eebf3aeab4b68bd4ab575069f411cda8e364ff9812"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_company_tickers_exchange.body.receipt.json": {
+      "sha256": "c12c0a039cb644bfb1896cc8278654862e3057027f044ab8dee97f1dfcf671df"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_etha_etf_series_search.body": {
+      "sha256": "ed51a7ac682515d83f2330c704b2a81e5d5cd6a189a98c3435c1b955e52ced17"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_etha_etf_series_search.body.receipt.json": {
+      "sha256": "0badeb5a2587b313caedac0cf26728b54530bce4b5bdb8fc8228bd8a1aa95df3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_etha_fund_search.body": {
+      "sha256": "7b8e696aefca7bc9a58f1f73008f61b9741d22062a305bc2da60ab61d5bae60d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_etha_fund_search.body.receipt.json": {
+      "sha256": "1bb9dad499ec56ca2087c7af796853e49599b746b0716874e9c148783de86560"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_fbtc_etf_series_search.body": {
+      "sha256": "4e973261d874c173a5d4d8e68b127269ec07ab6b41a4e27e923628b7a49f8c46"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_fbtc_etf_series_search.body.receipt.json": {
+      "sha256": "74132748fdd6a9feeed710ae3daf75be02e8fc8871d71675e212f1e9fc4ad57e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_fbtc_fund_search.body": {
+      "sha256": "6ae5a372f2b5bce55f2dab608d25860d0b6790d24bef1ee3ec47a8f783d040cb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_fbtc_fund_search.body.receipt.json": {
+      "sha256": "1aa3233a661fa640e5d7a8fb50489877bf9f7b04e8c547e45259acbcfcb54c6b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_gbtc_etf_series_search.body": {
+      "sha256": "aa833a1233db966c2696c8f11c700153cdb81eda8521bb3880ee49e7d48d9db4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_gbtc_etf_series_search.body.receipt.json": {
+      "sha256": "aa41f8a970a317bf6b44239a667ace7d7ecb4d9dcd3a934bfb0c848b574c5df1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_gbtc_fund_search.body": {
+      "sha256": "a70c2d733ce1550883f08823584188a733211c351f2a8af7f41458cbe4a30428"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_gbtc_fund_search.body.receipt.json": {
+      "sha256": "d9aab0e37191559f0d06ea45beb2640742c6fb85abfd494f8d3261a258847eda"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_etf_series_search.body": {
+      "sha256": "411621680a6fafc1f36f6662f4806c2f36ce97ab88687cd24bab41c6edb1de5c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_etf_series_search.body.receipt.json": {
+      "sha256": "69fade7fcdcf215b0ee248a54c02af280d4bc87b4d6f871bf45225edbb753fde"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_filing.body": {
+      "sha256": "2defd9045efb4d6ffd532fd65977879756fe13945e963b04525cf63cd91877dc"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_filing.body.receipt.json": {
+      "sha256": "9100bed4ece50e311397c28e3c58f9ec4003c6d07d20406cd1547feb183a12a4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_fund_search.body": {
+      "sha256": "b8d5cfdf8386e9d115758ada43a200e3120a4af7eeb321cf8ab151ae5aa2871d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ibit_fund_search.body.receipt.json": {
+      "sha256": "02707017f1c39f9ffabad433bd210be98ff7ad5308be190e08a90c53398cacd2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ishares_etha_filing_route.body": {
+      "sha256": "454de64991caba34988aa1e44b6e803e6e501eaa8ef09ec3c47947b4bbd32c27"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k06_sec_ishares_etha_filing_route.body.receipt.json": {
+      "sha256": "f36d298dfb794a5cc04a17929063839533797c6e4945b7f5cf59ea42d9b0ca20"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_catalog_asset_metrics.body": {
+      "sha256": "8aac772b112204037adbf05139d46a2a66fc1f97b579ef2c1cff5ae6e9f83c67"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_catalog_asset_metrics.body.receipt.json": {
+      "sha256": "d6b295a3011d6d6a17a22a2c5efc7dbc3be5f2bff7da313d9399a9f3b74370e6"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_catalog_assets_btc_eth.body": {
+      "sha256": "b3bd3408153e66bd449f75e3f11a0684ef57d2fb856372fbad9fdd2246ac26ef"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_catalog_assets_btc_eth.body.receipt.json": {
+      "sha256": "5c17d90ca4ebd8e2d9f828168861ce2eb48d87c25f0b7c8892a97b60fad99074"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_timeseries_docs.body": {
+      "sha256": "8476b048115c219678fabf3157ec3760aa2ec8ba363738572177bd44e1103d51"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_coinmetrics_timeseries_docs.body.receipt.json": {
+      "sha256": "91ba705c77bd908e3a4308350472aa8ff933cac801f64ad31f5d54f29c8f7c68"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_glassnode_pit_docs.body": {
+      "sha256": "dca49b1e329663727bb0935d0a54589769c9da5db403514f10129d0bc2350342"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_glassnode_pit_docs.body.receipt.json": {
+      "sha256": "6f12a2acd11f10aea148168e950dd57bde31985da27083cac508b0b341b6035f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_glassnode_transactions_docs.body": {
+      "sha256": "834c20a264f633b3823494d538153b05fa3508eb1daeb746b7caba494c66b1cb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k07_glassnode_transactions_docs.body.receipt.json": {
+      "sha256": "2050cd716ba23998348abda594dd65fe0e87bdf04d56dee2f39a5b7d1cdad885"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_catalog_asset_metrics_usdt_usdc.body": {
+      "sha256": "a998ec7dd303e9e59021c829b8b8039a325182e0f5a9e98cc8740ff71bc3bb50"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_catalog_asset_metrics_usdt_usdc.body.receipt.json": {
+      "sha256": "46a1245f469cb2b215acd1204bfc302465c433b959e2c5d890baff2c3cc2dd2c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_catalog_assets_usdt_usdc.body": {
+      "sha256": "67ec57e80df4fb1432b37cabeaa8007f2da2a3278edb79536b60da4829fe5ec0"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_catalog_assets_usdt_usdc.body.receipt.json": {
+      "sha256": "e7f21d1ea6cf90a8f6d740863e5270ae31200e6b5e3f4b1bb36463b561aef2b1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_circle_usdc_transparency.body": {
+      "sha256": "a26f3378c40e6b68aea5101c66a33c7e51756b12db4715d143f52754b0065f4b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_circle_usdc_transparency.body.receipt.json": {
+      "sha256": "f646efb8d8c0fda36d6cf8533fc3e4f5cc2868cc545d73e00f1f83538a406caf"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_glassnode_transactions_docs.body": {
+      "sha256": "82c680d13529c00bc624dd7735751f6438fa4087eaee333f76b075c9893e8bbb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_glassnode_transactions_docs.body.receipt.json": {
+      "sha256": "a8ec63af620185078211c14a9524a5c8812bbefb5a8f98b56a087d5b6a6ff1a5"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_tether_transparency.body": {
+      "sha256": "fe0649ccb609cbfcb9fcd89e856ef7f2b0dbb2a6b9539c3fe99d12f3b06ed2fb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_tether_transparency.body.receipt.json": {
+      "sha256": "3880e96067d69961cd6ec8f7f6c686d584c45f5f467baebb1a9d932708649ebb"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_timeseries_flowinout_exntv.body": {
+      "sha256": "2f12f09f7bbcb8a24b9a61b99ff4efe00d504a393f951f0df15eab6eabab332c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k08_timeseries_flowinout_exntv.body.receipt.json": {
+      "sha256": "7c59ce7b5e9c95ffd5ef4456c2eb03f36030102033899253e5aafee447a5e9ec"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_all_force_orders_btc.body": {
+      "sha256": "28d6e7766c0ac0b9a2a58a99d11c44f4ffd3fadfa8bdeb636c7f5ce2900ba2a4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_all_force_orders_btc.body.receipt.json": {
+      "sha256": "d8112f65b3bb3b26aa95590a437a6c7bd7cea94afe32a625f42999a724ad595f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btc_2024_01_03.zip": {
+      "sha256": "48ff08f14d378c6b3ddfedfeada03fa274032362f8f1471765e36208ea13877f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btc_2024_01_03.zip.receipt.json": {
+      "sha256": "ac9636f2ac9cc35f965baa984f07829bcd430bb51ce0bd7305c26c9d1556b521"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2024_01_01.zip": {
+      "sha256": "d2c2fe30499c3e3390674e0e1aa51434a95196c4071363cec2c50c6250dbd2aa"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2024_01_01.zip.receipt.json": {
+      "sha256": "ff43ebc215a2b02acede1181a57e9aaaab01d57734e51c8b2ecff6c2aefc35d2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2024_01_04.zip": {
+      "sha256": "b42d86b289e133bc1c8d85658f34ec80e066459f39aa50f8b3156fcff534fea6"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2024_01_04.zip.receipt.json": {
+      "sha256": "4332475ceea9f3ddf4895d3aaaf07c0e8cd79a98ec1d00fd9442cd48edabebbd"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_29.zip": {
+      "sha256": "61b4d50781aabb7243f41ac1d6a01d3dee26a32e311a9b6b1a144bdc51457191"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_29.zip.receipt.json": {
+      "sha256": "c5ef992d2d74ca6bcc98168b882c73a1e8d908fcae43f7d96d98a5b3ef1ee201"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_30.zip": {
+      "sha256": "ef722ca5df4819ca45e1245223acf582cc035db9f694d797644cf4f0699bb65c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_30.zip.receipt.json": {
+      "sha256": "118b615cf18a880f1b191aa1bae325107ab4fb90465dd899db284e586d9d6ec5"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_31.zip": {
+      "sha256": "09f3f778bcd5de53cf4211370fae08ef1b0072b9c0f97f4452129b48394b7c25"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_2026_07_31.zip.receipt.json": {
+      "sha256": "d490675ff91ce250c59a2a37e6a086f4fefd3145e68a46c507a5a5c8979c154b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_indexPriceKlines_2024_01_03.zip": {
+      "sha256": "c62620a73e711d669652bfb383b1c7122721d33afd9148bae25a610b1794ecc7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_indexPriceKlines_2024_01_03.zip.receipt.json": {
+      "sha256": "3d7b79ed133aee82f40faae8a51f04ab59b39e9dfd0590958fde5fbc53eaeb1e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_markPriceKlines_2024_01_03.zip": {
+      "sha256": "4bae8f6506076c5c8325110bdb8a7b569aefd62adf1d2a350f5edba11fc25348"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_markPriceKlines_2024_01_03.zip.receipt.json": {
+      "sha256": "71187456993dfffb41497dab4b3c753301a1e6ea42dad39021b72ed3a7c4d301"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_metrics_2024_01_03.zip": {
+      "sha256": "6ae2175f647c9b27710b943ef25b092ef60a6120ad7a406eff20b8c8644039d4"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_btcusdperp_metrics_2024_01_03.zip.receipt.json": {
+      "sha256": "3cee15baecb66ee3cae3bde04ac0e25711a0c2d0ecbdd5725e1169a7b303d2a0"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_eth_2024_01_03.zip": {
+      "sha256": "baef4990f536bf705d3206386e490700bd5514893621487123c373eee277587b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_eth_2024_01_03.zip.receipt.json": {
+      "sha256": "aae1c7e754e195e8ce7828c9a6116d6a27799d1ac6f9206e81b438ab43a4a36c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2024_01_01.zip": {
+      "sha256": "a23dd921daaf1332a84dcedc74bfef90b9aea3945515cde3cf9282795e5dadc0"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2024_01_01.zip.receipt.json": {
+      "sha256": "fb7bbacb45cf35b539eb3cc68b362bdacb823a999ce7b4ff98e02d0691704361"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2024_01_04.zip": {
+      "sha256": "75df98261dccbb1b2386f3f8569043c8e43394c52b61eb20d694f55fa2fff377"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2024_01_04.zip.receipt.json": {
+      "sha256": "7bcfdff3402eb7c1318b87adfd8441c57829ec6fa51304f9059d30bcb935bcfd"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_29.zip": {
+      "sha256": "84ae044618de3cc332b11d269834ac54382e56bfcc0de6cb62b708629fd52cf2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_29.zip.receipt.json": {
+      "sha256": "77d8ef17f16706481e0a01e5afbf039ef361986ae0482cb08436c771f5d1c135"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_30.zip": {
+      "sha256": "f17d4e97e1d98effe535a3a7494a794089c59eb65f6ad9fd27a586927cbaba17"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_30.zip.receipt.json": {
+      "sha256": "9ac7e5ce329f9aa00a6fd3a9f8aecfc579cb84b29d3462d10f8b62d8b5c0df0c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_31.zip": {
+      "sha256": "40c26f2acb1d9e2383ad5bc5938b5c57873d67221e92429820df8343e52b670d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_2026_07_31.zip.receipt.json": {
+      "sha256": "26013b9044db4e760cd32186779db8b6ed2d8d0705f894703fd059d13595d67e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_indexPriceKlines_2024_01_03.zip": {
+      "sha256": "39c6ba3aa04ec480ca7bfcc47e4eba62a7e88fa1fc243759151fda8a04aab7c6"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_indexPriceKlines_2024_01_03.zip.receipt.json": {
+      "sha256": "07b42cac32fb7a3f9407c1a327db5039bbbb749878649dab8b6ed9aa12d29f14"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_markPriceKlines_2024_01_03.zip": {
+      "sha256": "0a31f6b264c5f686d6333a9808a0b35cafbd75a2ea1507bae18c2ebd36c4063b"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_markPriceKlines_2024_01_03.zip.receipt.json": {
+      "sha256": "cc7bd98f35c04e9cedc2b1cd6fda8f6762449d8b2d56636c2af6143ce1d0f443"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_metrics_2024_01_03.zip": {
+      "sha256": "aebc05c8f733e18e53a18531e4d79af2b430763a20f5c173591dc203f56e1fc1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_ethusdperp_metrics_2024_01_03.zip.receipt.json": {
+      "sha256": "499e4075d3c091b0b39c2f0ef6129aae6d01ede727238a6862fb3af6fc21b878"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_listing.body": {
+      "sha256": "23f61ef363d5b3c13933dab23d776d5f176c873b0504440de5e424c23bcc6413"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_cm_listing.body.receipt.json": {
+      "sha256": "99df4e5e27b9a9432ea309982762ceb00d397eb2a83d5d145f76b33b1bb51c1f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_force_orders_btc.body": {
+      "sha256": "e7712db7077e81c13ccaf23d57a54ffb8e54c18d680a7bc30979e711ebdffbf1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_force_orders_btc.body.receipt.json": {
+      "sha256": "14c5789cd88a60be2b1e0e672f8e8f814bd4847c6ba44c6b425b41086e8ea374"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_btc_2024.zip": {
+      "sha256": "0774a0e177ffce9c2030a2d143e8b5915cbe8fbf9865b508d0ff46ef4eb8e5d3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_btc_2024.zip.receipt.json": {
+      "sha256": "23274e74eed0a25f1a85b48383fca028ab105cc3141c25a466984353431d6d9e"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_btc_2026.zip": {
+      "sha256": "e9b78852600905406275339afaf2e0f8eaa2317e0a84fcbd164c3f217c796511"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_btc_2026.zip.receipt.json": {
+      "sha256": "8cdcb123e28a1fe5d859b79b66e5c61a24d149d43a3075678f1b04284c983127"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_eth_2024.zip": {
+      "sha256": "076c686700b55fb952562be2d0744f03f4f641e1dc9b95d51fc9297e20f4234d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_eth_2024.zip.receipt.json": {
+      "sha256": "64ab3167d56cf6e3abc95a8ed5876a34edbb669e5878be20bf5e639724627292"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_eth_2026.zip": {
+      "sha256": "679d51c05fca1e6fbbb121cc65fdc0c0001abe50c3e100f939c21eb6f2f33cad"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_eth_2026.zip.receipt.json": {
+      "sha256": "0cabb064bc521acb98667c5e92be0f39bba48a082adb6508c87aca5cfe479692"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_listing.body": {
+      "sha256": "23f61ef363d5b3c13933dab23d776d5f176c873b0504440de5e424c23bcc6413"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_binance_um_listing.body.receipt.json": {
+      "sha256": "3d211f7ad138d7f749583e67451069cb55c56cf31336408a41437dfcf7855754"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_deribit_liquidation_api.body": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_deribit_liquidation_api.body.receipt.json": {
+      "sha256": "b441154e3751fb5204b724956852354569e1fa6e5840e8399a0a674bfffc6835"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_deribit_liquidation_docs.body": {
+      "sha256": "981237bc3c7485af5f8b1438f7e2c6ea90245cca1c10d6235cb5b3779890fe31"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_deribit_liquidation_docs.body.receipt.json": {
+      "sha256": "5607498ebd8389fada30870f7ce3c80f3143f8067ee8663c199d5b2524e162c3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_kraken_liquidation_api.body": {
+      "sha256": "1ae1a7be0b309a49cbc535c1a4b361405d6145469e682167a2599268ca03c53c"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_kraken_liquidation_api.body.receipt.json": {
+      "sha256": "5c1007fc89c1cd8a8a81b9187b08bddd1133d50e3499c525cac75b37bac6bf78"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_kraken_liquidation_docs.body": {
+      "sha256": "d83923333b238f18b797fc1f6cb3d500bb611bcfc3147ba5342cd64cbca0622f"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k10_kraken_liquidation_docs.body.receipt.json": {
+      "sha256": "f1c489232a0168906c0a7a2908e8a0871ce2fd3e6887c2b5a414565440c9e147"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_catalog_assets_btc_eth.body": {
+      "sha256": "1a1850df85dfa73ff0725bb2d45c737090f55a235826d13217594bc7174da484"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_catalog_assets_btc_eth.body.receipt.json": {
+      "sha256": "65af0eff5d073b19f1639a3fb866ee1ad14df2d04ee7fd908104139b2805f9b8"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_glassnode_entity_adjusted_docs.body": {
+      "sha256": "58a98c2469ea3d04da79f2109d1cf3e04ee57be77c4b79b63f1eda0298203465"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_glassnode_entity_adjusted_docs.body.receipt.json": {
+      "sha256": "80534632994bd431d76be2de8a9f66b9d1bbe1bbec584ebf85fca08ae9fc2468"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_glassnode_sopr_docs.body": {
+      "sha256": "4e2a5d798aeeb3a49dab1d266e985e075fcde0803a4b9439f4705e5d19296c08"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_glassnode_sopr_docs.body.receipt.json": {
+      "sha256": "d0603a7c4a747cacf80687ffdf2426c0172259dff25a6104ea0eb2051c8d1efc"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_timeseries_sopr.body": {
+      "sha256": "3f6d29de14e928baf617fc47c89210d9b7df4d4fe9582cc68e999dff4e1089cf"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/k12_timeseries_sopr.body.receipt.json": {
+      "sha256": "3db8c757676775acaa30a53f02b439087c55d2fbe75d7d35d481363016cc63d3"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/probe_inventory.json": {
+      "sha256": "2ec769d818b14a3a27837f2585626ebbf010358c154962704d0662ce38c833b1"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/bitcoin_all_data_403.body": {
+      "sha256": "8273c5d2c0a0370a31a16383e2544feb1006c9e4f0482cad29a95c98f1ec4655"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/bitcoin_all_data_403.body.receipt.json": {
+      "sha256": "53ec6213c5c11abcd95a4c82c5a68f3384d2f97a1c2ee8d97b718b5bd9fc3cb2"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/ethereum_403.body": {
+      "sha256": "36259eabcf56116fab41a66fa34d9a2c658ea0afa0fde518ab35c50ddb8f750d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/ethereum_403.body.receipt.json": {
+      "sha256": "c5aa0faab536b3d0cb1702bdac2897c0558b65716f35593250ca5ba94272c85d"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/ethereum_all_data_403.body": {
+      "sha256": "65fbff8938456ea2aafb6416872dc5df51b2c3a944417b90ae94f2929a9c03b7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/farside/ethereum_all_data_403.body.receipt.json": {
+      "sha256": "99147923b1dceccdc0ebc858b88ebcbe13c6415527fbbc020da19bb7fac589d7"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/tokenomist/api_root.body": {
+      "sha256": "8699bf1eda7e016dec3efeff8db5e3400183e9ebf6ce42355b97b843def2b035"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/tokenomist/api_root.body.receipt.json": {
+      "sha256": "6857891f56911df6cc1650c9ee83157acf07cdff4f27f82163435da8d515b963"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/tokenomist/home.body": {
+      "sha256": "78f53f1d50272a06c15b180bafa90ed84d96becc9a04572ac2fe814d9c5db2dc"
+    },
+    "data/research/external/crypto_secondary_acquisition_2026_09_08/probes/tokenomist/home.body.receipt.json": {
+      "sha256": "a1ef1ad79ebaf000a82a67e7def30fb1ad30ce46115bcc906a2985e8f38a58be"
+    },
+    "data/research_runs/crypto_secondary_causal_gate_2026_09_08/validation_receipt.json": {
+      "sha256": "74d5ab84081b6bc32088e11c8c52c0b6cde2b151637b47510aeac7fafa6b2371"
+    }
+  },
+  "manifest_sha256": "b7463df82952198735eb6441b6880db505568e4624f40e29763179f4bd12dc30",
+  "no_auto_promotion": true,
+  "pit_policy": "explicit timezone-aware publication/vintage/available_at required; retrieval time and mutable labels never substitute",
+  "report": {
+    "card_counts": {
+      "K02": {
+        "available_at_rows": 0,
+        "coverage_rows": 0,
+        "economic_signal_rows": 0,
+        "http_status": 403,
+        "metric_catalog_status": 200
+      },
+      "K05": {
+        "available_at_rows": 0,
+        "coverage_rows": 0,
+        "economic_signal_rows": 0,
+        "publication_time_rows": 0
+      },
+      "K06": {
+        "available_at_rows": 0,
+        "btc_rows_through_cutoff": 0,
+        "btc_snapshot_rows": 13,
+        "economic_signal_rows": 0,
+        "eth_page_status": 200,
+        "publication_time_rows": 0
+      },
+      "K07": {
+        "available_at_rows": 0,
+        "economic_signal_rows": 0,
+        "publication_time_rows": 0,
+        "rows": 5538,
+        "rows_with_status_time_after_event": 5538
+      },
+      "K08": {
+        "available_at_rows": 0,
+        "economic_signal_rows": 0,
+        "flow_rows": 0,
+        "probe_http_status": 400,
+        "publication_time_rows": 0
+      },
+      "K10": {
+        "available_at_rows": 0,
+        "cm_context_rows": 576,
+        "coverage_days": 1,
+        "duplicate_event_records": 259,
+        "economic_signal_rows": 0,
+        "publication_time_rows": 0,
+        "rows": 518,
+        "rows_with_blank_available_at": 518
+      },
+      "K12": {
+        "available_at_rows": 0,
+        "coverage_rows": 0,
+        "economic_signal_rows": 0,
+        "http_status": 403
+      }
+    },
+    "card_statuses": {
+      "K02": "DATA_ACCESS_BLOCKED",
+      "K05": "DATA_ACCESS_BLOCKED",
+      "K06": "PIT_PENDING",
+      "K07": "PIT_PENDING",
+      "K08": "DATA_ACCESS_BLOCKED",
+      "K10": "PIT_PENDING",
+      "K12": "DATA_ACCESS_BLOCKED"
+    },
+    "economic_run": false,
+    "path": "data/research_runs/crypto_secondary_causal_gate_2026_09_08/gate_report.json",
+    "sha256": "bb3a60303d71a4ea2481948a7a60d874e0d2d6469640def76996cda9b54de319",
+    "status": "DONE_WITH_CONCERNS"
+  },
+  "status": "FROZEN_SECONDARY_CAUSAL_GATE",
+  "validation_receipt": {
+    "path": "data/research_runs/crypto_secondary_causal_gate_2026_09_08/validation_receipt.json",
+    "sha256": "74d5ab84081b6bc32088e11c8c52c0b6cde2b151637b47510aeac7fafa6b2371",
+    "test_count": 36
+  }
+}

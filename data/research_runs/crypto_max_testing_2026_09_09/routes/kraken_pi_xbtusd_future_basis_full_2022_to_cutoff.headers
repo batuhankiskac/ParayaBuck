@@ -1,0 +1,19 @@
+HTTP status: 200
+Date: Wed, 09 Sep 2026 18:17:10 GMT
+Content-Type: application/json
+Content-Length: 34217
+Connection: close
+access-control-allow-headers: Accept, Authorization, Cache-Control, Expires, Pragma, Content-Type, DNT, If-Modified-Since, Keep-Alive, Origin, User-Agent, X-Requested-With, X-XSRF-TOKEN, x-korigin, priority
+access-control-allow-methods: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS
+access-control-max-age: 600
+access-control-allow-credentials: true
+access-control-allow-origin: 
+vary: Origin, accept-encoding
+Accept-Ranges: bytes
+X-Robots-Tag: noindex, nofollow
+cf-cache-status: BYPASS
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+set-cookie: __cf_bm=FbFuiJg6FeMD6ZTQGBoTH7XfAyPPW9aX_Jk3HsIb9qU-1788977829.9086628-1.0.1.1-zZbSBAuFQSVPzBm6KwWhBRQMviuhVGMaT294B7PWp7fFyN5Slwz83DmAYZe6HqiWEf5AWVRTAHcNyR18Oj.QNVoIoy5KwfdJ201EZu1zI9o6aRDMh_yIwgvhYK8EXewR; HttpOnly; SameSite=None; Secure; Path=/; Domain=kraken.com; Expires=Wed, 09 Sep 2026 18:47:10 GMT
+Server: cloudflare
+CF-RAY: a388302cefe92c88-IST

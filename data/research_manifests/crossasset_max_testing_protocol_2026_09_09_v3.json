@@ -1,0 +1,120 @@
+{
+  "admitted_rows": 0,
+  "bootstrap": {
+    "kind": "5-day circular block",
+    "replicates": 256,
+    "seed": 20260909
+  },
+  "constraints": {
+    "cash_min": 0.4,
+    "crypto_max": 0.05,
+    "equity_max": 0.55,
+    "gross_max": 0.6,
+    "max_crypto_positions": 2,
+    "max_total_positions": 6
+  },
+  "cost_multipliers": [
+    1,
+    2,
+    3
+  ],
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_eligible": false,
+  "economic_run": false,
+  "formulae": {
+    "X01": "(10y-2y)/max(abs(2y),1e-9); negative selects TLT, positive SHY, zero IEF",
+    "X05": "negative cross-sectional z(log(sum_open_interest_value_usd)) by exact five-minute timestamp",
+    "X06": "negative cross-sectional z(mean eight-hour funding_rate) by exact UTC date"
+  },
+  "frozen_before_outcomes": true,
+  "lags_days": [
+    1,
+    3,
+    7
+  ],
+  "outcome_join": "exact asset plus UTC calendar date to next daily PriceUSD return; no current snapshot substitution",
+  "overlays": {
+    "capacity_aware": "preserve V3 and allocate only dated spare capacity",
+    "fixed": "0.95*V3 + 0.05*candidate"
+  },
+  "permutation": {
+    "kind": "candidate contribution permutation placebo",
+    "replicates": 128,
+    "seed": 20260910
+  },
+  "promotion": false,
+  "protocol_sha256": "f9989dcbefbe0c4699e94db214365cfeebee60a9e39ce740c5f8397ae7a5be6f",
+  "schema": "crossasset-max-testing-protocol-v3",
+  "source_inputs": [
+    {
+      "path": "data/research/generated/crossasset_preflight_2026_09_08/x01_treasury_curve_normalized.csv",
+      "sha256": "e9fed56ba93ee857c22434a9b0df75250a191406e3de860efcb5b1888b397ed4"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/SHY_bars.csv",
+      "sha256": "d12836b93e36d93cef1250af338191381f44040f450bf11a1d780e209eeb5bea"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/IEF_bars.csv",
+      "sha256": "8193ca754cd0c4010e84b296a1a9427f32683ed940f44a4a38aec6ad7a3a2e50"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/TLT_bars.csv",
+      "sha256": "51fe5acd47d562a99e9178ea8a5de63c9721a8d48b333bc62e8c3b2aeecc3cf8"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/SHY_dividends.csv",
+      "sha256": "9ec898555944ac847d0fa7c39357598437716d4ec7263a903695f8dd2cfd0aeb"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/IEF_dividends.csv",
+      "sha256": "88087607af524de7282bf522149a7237d0b51dd3adee2c585178872e3c3f1a7a"
+    },
+    {
+      "path": "data/research/external/crossasset_public_2026_09_08/x01_yahoo/TLT_dividends.csv",
+      "sha256": "a26b28aaf82818f62db369fe9159afbcc30e27f1bbe517d2ef8b3bfccf678da3"
+    },
+    {
+      "path": "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K09_binance_oi_metrics_archive_pilot.csv",
+      "sha256": "b7fbe9de6c94eaa2a066c0120c8a846ead833c7e70f25a46736ce53b76daacc9"
+    },
+    {
+      "path": "data/research/external/crypto_queue_acquisition_2026_09_07/normalized/K09_binance_funding_archive_pilot.csv",
+      "sha256": "4fb3aaa217dcf6c43d89bfd872c1760cc30b690c34e4a0f57ebb5344b340baf6"
+    },
+    {
+      "path": "data/research_runs/crypto_max_testing_2026_09_09/routes/coinmetrics_btc_eth_priceusd_1d_2022_2026-07-31.csv",
+      "sha256": "482cd8ecb585b16941ddc9bf1ff11206f951e27736d2a83ae72d68323dd705db"
+    },
+    {
+      "path": "data/research_runs/crypto_max_testing_2026_09_09/routes/coinmetrics_btc_eth_priceusd_1d_2022_2026-07-31.receipt.json",
+      "sha256": "f650b2d8c64d950df3144a3b46549128ac306871e206397fc1a7e5df0c418b98"
+    },
+    {
+      "path": "data/research_runs/crypto_max_testing_2026_09_09/routes/coinmetrics_btc_eth_priceusd_1d_2022_2026-07-31.body",
+      "sha256": "6c4ee915e975e07b3046ad7ac5c866e531237284b24952101ddbe9043c7b6e3a"
+    },
+    {
+      "path": "data/research_runs/h14_v3_daily_nav_comparability_2026_09_09/current_v3_daily_nav_comparability.json",
+      "sha256": "2c8b30eca960750a5bf31843d0577c087c835b6d822fa6a09cb6b61e161eab32"
+    },
+    {
+      "path": "data/research_runs/crossasset_x02_x06_2026_09_08/gate_report.json",
+      "sha256": "5c3d8f1b982f0ac05aff69bdc6ef052a63b858d9db75871dcaae4abe9ffb7478"
+    },
+    {
+      "path": "data/research_runs/crossasset_x02_x06_2026_09_08/two_leg_ledger_report.json",
+      "sha256": "ac19d23b641d9e826ae865c40c16fc24f56c850c78a529ae4529da74a5be5c76"
+    },
+    {
+      "path": "data/research_manifests/crossasset_x01_yahoo_fallback_2026_09_08.json",
+      "sha256": "52a1c57652dfd6147b4a2eeaeddfad02498aa99e68b9152fa43cb93e0fdec956"
+    }
+  ],
+  "version": "2026-09-09",
+  "windows": {
+    "full": "2022-01-01..2026-07-31",
+    "recent": "2024-01-01..2026-07-31",
+    "true_holdout": "2025-01-01..2026-07-31"
+  }
+}

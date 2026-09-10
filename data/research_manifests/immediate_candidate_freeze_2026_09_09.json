@@ -1,0 +1,365 @@
+{
+  "schema": "immediate-candidate-freeze-v1",
+  "status": "FROZEN_PRE_OUTCOME",
+  "frozen_at": "2026-09-09T00:00:00Z",
+  "economic_run": false,
+  "outcome_scan_performed": false,
+  "research_only": true,
+  "production_paper_live_untouched": true,
+  "candidate_count": 6,
+  "candidate_ids": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06"
+  ],
+  "selection_basis": {
+    "rule": "Select at most six mechanically distinct long-only equity rules whose exact inputs are present in the pinned PIT OHLCV and corporate-action inventory; selection uses no candidate returns, NAV, Sharpe, drawdown, turnover, bootstrap, permutation, placebo, or overlay output.",
+    "included_input_families": [
+      "split-adjusted daily OHLCV",
+      "PIT security/entity lifetime",
+      "corporate actions",
+      "PIT eligibility intervals"
+    ],
+    "excluded_families": [
+      "SEC event or filing text",
+      "fund holdings/flows",
+      "borrow/locate/financing",
+      "futures settlement or expiry",
+      "perpetual funding/open interest",
+      "intraday auction or quote data"
+    ],
+    "corporate_action_policy": {
+      "signal_basis": "split-adjusted OHLCV only; dividend-adjusted prices are not signal inputs",
+      "outcome_basis": "corporate-action cash, split, and terminal treatment uses only rows with ex_date at or before the frozen cutoff",
+      "post_cutoff_policy": "corporate-action rows after 2026-07-31 are quarantined and cannot affect any claimed window",
+      "raw_adjusted_pair": "not present in the canonical equity input; no raw/adjusted mixing is permitted"
+    },
+    "novelty_rule": "Each candidate owns a non-residual signal family and does not call V3 ranking, residual construction, V3 horizon consensus, or V3 inverse-volatility selection."
+  },
+  "evaluation": {
+    "cutoff": "2026-07-31T23:59:59Z",
+    "windows": {
+      "full": {
+        "start": "2022-01-01T00:00:00Z",
+        "end": "2025-12-31T23:59:59Z",
+        "warmup_outside_window_allowed": true
+      },
+      "recent": {
+        "start": "2024-01-01T00:00:00Z",
+        "end": "2025-12-31T23:59:59Z",
+        "warmup_outside_window_allowed": true
+      },
+      "true_holdout": {
+        "start": "2026-01-01T00:00:00Z",
+        "end": "2026-07-31T23:59:59Z",
+        "warmup_outside_window_allowed": true,
+        "selection_use_forbidden": true
+      }
+    },
+    "decision": "Use only completed daily bars available strictly before the decision timestamp; submit target after the completed bar and fill at the next supported NYSE regular-session open.",
+    "signal_lag_application": "For each scheduled rebalance session, compute features only through the completed bar lagged by 1, 3, or 7 supported sessions; submit the resulting target at the scheduled session boundary and fill only at the next supported NYSE regular-session open. A lag never creates a same-bar fill or overlapping target.",
+    "rebalance_holding_policy": "At each scheduled rebalance, close the prior candidate target and open at most one new target per symbol after the lagged signal is eligible; the holding interval is from fill through the next scheduled rebalance, with no duplicate overlapping target.",
+    "lag_days": [
+      1,
+      3,
+      7
+    ],
+    "holding_grid_sessions": [
+      5,
+      21,
+      63
+    ],
+    "rebalance_grid": [
+      "weekly",
+      "monthly"
+    ],
+    "missing_data": "Drop a symbol for that decision when any required field, continuity, identity, or PIT eligibility check fails; do not forward-fill features, substitute OHLCV for a causal field, or convert missing data to zero return. A window with fewer than top_n valid symbols is cash.",
+    "universe": "The exact V3-compatible PIT equity universe and security/entity identity tables, excluding SPY as benchmark and excluding non-equity markets; no current-list or survivor-only expansion.",
+    "direction_and_parameters": "All directions, formulas, windows, top_n, cadence, lags, hold periods, cost multipliers, seeds, and caps below are frozen before any economic run.",
+    "cost_multipliers": [
+      1.0,
+      2.0,
+      3.0
+    ],
+    "trade_ledger": {
+      "turnover_definition": "gross traded notional divided by lagged candidate-sleeve NAV",
+      "required_fields": [
+        "decision_timestamp",
+        "signal_asof_timestamp",
+        "fill_timestamp",
+        "symbol",
+        "pre_weight",
+        "target_weight",
+        "filled_weight",
+        "quantity",
+        "notional",
+        "fee",
+        "slippage",
+        "spread"
+      ],
+      "missing_or_nonfinite_policy": "any missing or nonfinite ledger field blocks the affected cell; no cost or turnover is imputed"
+    },
+    "position_policy": {
+      "allocation": 0.55,
+      "top_n": 8,
+      "max_single_weight": 0.1,
+      "sizing": "equal weight, capped at 10% per name and renormalized within the 55% equity sleeve",
+      "overlay_candidate_holding_limit": "min(candidate_top_n, max_total_positions - dated_v3_position_count); zero when no dated spare position slot exists",
+      "terminal_policy": "T1",
+      "risk_policy": "Use current V3 execution, regulatory fee, terminal, and risk settings for measurement; candidate may not alter V3 or product settings."
+    },
+    "robustness": {
+      "metrics": [
+        "standalone total return",
+        "CAGR",
+        "Sharpe",
+        "Sortino",
+        "turnover",
+        "fees/slippage/spread",
+        "maximum drawdown",
+        "worst day",
+        "CVaR05",
+        "calendar-year and declared regime means",
+        "exact-date candidate/V3 correlation",
+        "exact-date candidate/V3 selected-name overlap when dated V3 weights are present"
+      ],
+      "mechanical_complementarity": {
+        "required": true,
+        "measure": "report exact-date selected-name overlap alongside candidate/V3 return correlation; missing dated V3 weights makes this measure unavailable and never inferred from NAV",
+        "selection_use": "diagnostic only; no outcome-based candidate filtering"
+      },
+      "bootstrap": {
+        "method": "moving block on daily candidate-minus-control returns",
+        "block_sessions": 21,
+        "resamples": 10000,
+        "seed": 20260909
+      },
+      "permutation": {
+        "method": "within-window paired-sign permutation of candidate-minus-control daily returns",
+        "resamples": 10000,
+        "seed": 20260910
+      },
+      "placebo": "fixed +7 supported trading-session shift of the frozen signal schedule, labeled diagnostic and never used for selection"
+    },
+    "v3_overlay": {
+      "recipe": "95% unchanged V3 daily NAV/dated weights + 5% candidate sleeve",
+      "v3_weights_preserved": true,
+      "candidate_funded_only_from_measured_v3_spare_capacity": true,
+      "candidate_position_rule": {
+        "max_positions": "min(candidate_top_n, max_total_positions - dated_v3_position_count)",
+        "zero_when_no_slots": true,
+        "rank_order": "frozen candidate rank order",
+        "v3_positions_unchanged": true
+      },
+      "date_alignment": "Join candidate and V3 by exact supported date; current V3 reference ends 2026-07-29, so any 2026-07-30 or 2026-07-31 overlay date without V3 state is ineligible and is never forward-filled.",
+      "caps": {
+        "equity": 0.55,
+        "crypto": 0.05,
+        "gross": 0.6,
+        "cash_floor": 0.4,
+        "max_crypto_positions": 2,
+        "max_total_positions": 6
+      },
+      "capacity_disposition": "If dated spare capacity or V3 decision state is missing, the overlay date is ineligible; V3 return remains unchanged. No capacity is invented."
+    },
+    "admission_gates": {
+      "status": "TO_BE_RUN_AFTER_FREEZE",
+      "required": [
+        "complete full/recent/true_holdout cells at 1x/2x/3x costs",
+        "finite accounting and terminal reconciliation",
+        "nonzero valid decision coverage in every claimed window",
+        "standalone and 95/5 V3-preserved overlay outputs",
+        "drawdown/tail, regime, turnover, bootstrap, permutation, and placebo outputs",
+        "capacity and caps audit",
+        "no missing-field substitution",
+        "exact V3 date alignment and candidate holding count no greater than dated spare slots"
+      ],
+      "promotion": false,
+      "integration": false
+    }
+  },
+  "candidates": [
+    {
+      "id": "A01",
+      "name": "equity_low_realized_vol_22_v1",
+      "mechanism": "cross-sectional low realized volatility",
+      "formula": "sigma_22 = stdev(close_t/close_(t-1)-1) over the prior 22 completed sessions",
+      "direction": "ascending sigma_22",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "monthly at the first supported session of each month",
+      "holding": "21 sessions or until next monthly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "close",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require 23 aligned positive finite closes; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Uses raw price volatility only; no market beta, residuals, 12-1 formation, horizon consensus, or inverse-residual-volatility sizing."
+    },
+    {
+      "id": "A02",
+      "name": "equity_short_reversal_5_v1",
+      "mechanism": "short-horizon cross-sectional reversal",
+      "formula": "r_5 = close_t/close_(t-5)-1 over the prior five completed sessions",
+      "direction": "ascending r_5",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "weekly at the first supported session of each week",
+      "holding": "5 sessions or until next weekly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "close",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require six aligned positive finite closes; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Uses a five-session raw-return reversal direction and weekly holding; it does not use V3 residual momentum or its 21-session skip."
+    },
+    {
+      "id": "A03",
+      "name": "equity_volume_surprise_20x60_v1",
+      "mechanism": "cross-sectional dollar-volume surprise",
+      "formula": "VS = median(close*volume over prior 20 sessions) / median(close*volume over prior 60 sessions)",
+      "direction": "descending VS",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "monthly at the first supported session of each month",
+      "holding": "21 sessions or until next monthly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "close",
+        "volume",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require 60 aligned finite strictly positive volume and positive close observations; zero-volume bars are missing for this signal and the denominator must remain positive; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Ranks a volume/liquidity shock from OHLCV and has no return, beta, residual, or V3 rank input. It is measured as an alpha candidate, not a liquidity control."
+    },
+    {
+      "id": "A04",
+      "name": "equity_log_price_slope_126_v1",
+      "mechanism": "time-series trend slope",
+      "formula": "beta_126 = OLS slope of log(close) on session index over the prior 126 completed sessions",
+      "direction": "descending beta_126",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "monthly at the first supported session of each month",
+      "holding": "21 sessions or until next monthly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "close",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require 126 aligned positive finite closes and finite nonzero design variance; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Uses a single-name time-series log-price slope; no cross-sectional residualization, beta hedge, skip window, or multi-horizon V3 consensus."
+    },
+    {
+      "id": "A05",
+      "name": "equity_52w_breakout_distance_252_v1",
+      "mechanism": "price breakout persistence",
+      "formula": "BD = close_t / max(high over prior 252 completed sessions) - 1",
+      "direction": "descending BD",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "monthly at the first supported session of each month",
+      "holding": "21 sessions or until next monthly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "high",
+        "close",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require 252 aligned finite highs and positive close; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Uses distance from a trailing raw-price high and no residual return, beta, 12-1 formation, skip, or consensus score."
+    },
+    {
+      "id": "A06",
+      "name": "equity_range_efficiency_20_v1",
+      "mechanism": "directional range efficiency",
+      "formula": "ER = abs(close_t-close_(t-20)) / sum(abs(close_i-close_(i-1))) over the prior 20 completed sessions",
+      "direction": "descending ER",
+      "universe": "V3-compatible PIT equity universe, excluding SPY",
+      "rebalance": "monthly at the first supported session of each month",
+      "holding": "21 sessions or until next monthly rebalance",
+      "lag": "1/3/7 supported-session signal lag grid",
+      "top_n": 8,
+      "weighting": "equal capped 55% sleeve",
+      "required_fields": [
+        "timestamp",
+        "symbol",
+        "close",
+        "PIT identity",
+        "PIT eligibility"
+      ],
+      "missing_data": "Require 21 aligned positive finite closes and positive path denominator; otherwise symbol is omitted for that decision.",
+      "distinct_from_v3": "Ranks path efficiency rather than residual magnitude or volatility; its denominator and 20-session horizon are fixed independently of V3."
+    }
+  ],
+  "data_inventory": {
+    "data/historical/equity_pit_symmetric_2016_2026_v5.csv": {
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "schema": "timestamp,symbol,timeframe,open,high,low,close,volume,market",
+      "first_timestamp": "2016-01-04T05:00:00+00:00",
+      "last_timestamp": "2026-07-31T04:00:00Z",
+      "row_count": 11686832,
+      "symbol_count": 9010,
+      "basis": "split-adjusted daily OHLCV; direct inputs for A01-A06"
+    },
+    "data/historical/equity_entity_lifetimes_full_v5.csv": {
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "role": "PIT security/entity continuity and terminal lifecycle"
+    },
+    "data/historical/equity_survivorship_full_corporate_actions_v5.csv": {
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "role": "split/dividend/corporate-action cash treatment"
+    },
+    "data/research/external/equity_pit_universe_2026_09_07/pit_eligibility_intervals.jsonl": {
+      "sha256": "58f95474d559d2847c4d94099e33fe32c82d35cfff562e46c19f42b87240e302",
+      "role": "dated PIT universe eligibility intervals"
+    },
+    "config/settings.yaml": {
+      "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+      "role": "read-only current execution/risk/fee policy"
+    },
+    "data/research_runs/h14_v3_daily_nav_comparability_2026_09_09/current_v3_daily_nav_comparability.json": {
+      "sha256": "2c8b30eca960750a5bf31843d0577c087c835b6d822fa6a09cb6b61e161eab32",
+      "daily_nav_rows": 2658,
+      "dated_weight_decisions": 495,
+      "fills": 1890,
+      "pit_snapshots": 2656,
+      "v3_first_daily_nav": "2016-01-04",
+      "v3_last_daily_nav": "2026-07-29",
+      "role": "unchanged V3 reference for 95/5 overlay and capacity accounting; no V3 parameter modification"
+    }
+  },
+  "source_pins": {
+    "v3_strategy": "equity_residual_momentum_v3",
+    "v3_strategy_source": "scripts/research_v3_equity_roadmap.py",
+    "v3_strategy_source_sha256": "4f5ad626c55ee7f8e3501ac8b944d32da5c1971130f4dcf94fba3d756583ca9a",
+    "v3_baseline_protocol": "docs/research/v3_baseline_no_persist_protocol_2026_09_08.md",
+    "v3_baseline_protocol_sha256": "1c2663d8bf5b3a914199435260ddd8416d09a597a9dd3d7ec5c3d271f6a55a2d"
+  },
+  "protocol_sha256": "c6230ec5c8c3ef37a761c30d7425275e523528155ab73232e6d5a351ca2c27c1"
+}

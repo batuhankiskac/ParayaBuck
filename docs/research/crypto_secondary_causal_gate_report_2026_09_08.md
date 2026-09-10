@@ -1,0 +1,36 @@
+# Crypto secondary causal/schema gate report — 2026-09-08
+
+This is an acquisition and schema/PIT gate only for K02, K05, K06, K07, K08, K10 and K12. The historical boundary is `2026-07-31T23:59:59Z`; no return, Sharpe, drawdown, portfolio, PAPER or LIVE cell was run. The frozen contracts are in `crypto_secondary_causal_protocol_2026_09_08.md`, sourced from the authoritative strategy queue and crypto review.
+
+## Verdict
+
+`DONE_WITH_CONCERNS`; `CURRENT_ACQUISITION_RUN_CLOSED_WITH_BLOCKERS`. No next research stage, economic testing, or promotion is approved. Every card has `economic_signal_rows: 0`; missing causal data, PIT availability, or schema identity is fail-closed.
+
+| Candidate | Gate status | Acquisition evidence through cutoff | Blocking evidence |
+|---|---|---:|---|
+| K02 | `DATA_ACCESS_BLOCKED` | Coin Metrics asset catalog HTTP 200; documented no-`assets=` asset-metrics catalog route HTTP 200 enumerates 32 metric definitions; `NVTAdj`, `TxTfrValAdjNtv` and `TxTfrValAdjUSD` probes HTTP 403 | adjusted-transfer names are absent from the community catalog and metric access/PIT revision policy remains unavailable |
+| K05 | `DATA_ACCESS_BLOCKED` | Frozen configured 22-pair pool was probed asset-by-asset through issuer/governance archive and chain-confirmation documentation routes; 0 immutable historical events | public pages and documentation are reachable for some assets, but no immutable token-specific announcement/amendment archive, asset-specific transaction ID, or on-chain unlock confirmation was captured |
+| K06 | `PIT_PENDING` | Farside WP/current routes, five issuer routes, and six SEC ticker mapping attempts were probed; BTC snapshot 13 rows are post-cutoff | current pages and issuer routes do not supply immutable historical creations/redemptions; SEC mapping attempts were access-blocked; ETF set, holiday and underlying mapping remain unproven |
+| K07 | `PIT_PENDING` | 5,538 Coin Metrics rows, BTC/ETH, 2019-01-01..2026-07-31; 0 explicit `available_at` | provider `flash` status labels are mutable; status times occur after event rows; no label-set hash, exchange scope or PIT vintage |
+| K08 | `DATA_ACCESS_BLOCKED` | Coin Metrics USDT/USDC catalog HTTP 200; no exchange-flow metric listed; flow probe HTTP 400; Glassnode docs HTTP 403 | no exact public stablecoin exchange-flow series with frozen contract, mint/burn/bridge filters, exchange labels and PIT availability |
+| K10 | `PIT_PENDING` | 518 rows covering one day (2024-01-02), BTCUSD_PERP/ETHUSD_PERP; 518 blank availability fields; 259 duplicate event records; CM date-grid archives plus BTC/ETH metrics context were probed, with successful ZIP member CRC/size/header/row/first-last-ID receipts; UM archive paths HTTP 404 | no full/recent target, order identity or availability; CM metrics context exists but no timestamp/availability join with liquidation rows is admitted; mark/index attempts, venue aggregation and liquidation latency remain absent |
+| K12 | `DATA_ACCESS_BLOCKED` | 0 rows; Coin Metrics catalog HTTP 200; SOPR probe HTTP 403 | catalog visibility does not grant SOPR access; no UTXO/account history, entity-cluster PIT version or revision policy |
+
+## Frozen contract and gate checks
+
+Each card records provider field meaning, universe, daily/hourly decision clock, explicit availability boundary, signal formula/window/threshold state, execution shift, portfolio role, cost stress, passive/fixed controls, 1x/2x/3x cells, full/recent cells, unspecified holdout state where the source review did not specify dates, and minimum breadth/history. No thresholds, windows, directions or holdout dates were invented during acquisition.
+
+The expanded public probe inventory is receipt-backed under `data/research/external/crypto_secondary_acquisition_2026_09_08/probes/expanded/`. K02 records the exact no-`assets=` asset-metrics catalog route, enumerates BTC/ETH adjusted-transfer candidates from the official catalog, and separately probes exact metric routes; catalog visibility is not treated as data access or PIT proof. K05 records public docs, enterprise, crypto-market, announcement, chain-confirmation, and asset-by-asset configured 22-pair archive/confirmation routes; duplicate generic confirmation endpoints are collapsed into shared probes and referenced by asset-specific source records. K06 records Farside, five issuer routes, SEC ticker mapping attempts and SEC routes; month-only cumulative chart data remains non-admissible. K07 records public PIT/methodology documentation probes; event-day plus a publication schedule cannot reconstruct mutable label vintages. K08 records the USDT/USDC catalog, rejected exact flow probe, and issuer transparency routes. K10 records CM-only bounded date-grid and same-instrument metrics-context attempts plus UM listing/force-order probes; successful ZIP receipts include archive SHA, recipe and member integrity metadata. K12 records the catalog, SOPR and entity-adjusted documentation probes. Each expanded receipt is bound to its canonical inventory record, endpoint, status, retrieval timestamp, content type, byte/hash and exact count semantics; non-tabular bodies carry `row_count: null` and `count_semantics: not_applicable`.
+
+`crypto_secondary_causal_gate_2026_09_08.py` programmatically checks timezone-aware event fields, coverage, mutable status timing, blank availability, duplicates, HTTP blockers and zero economic rows. K06 and K10 card states and probe statuses are derived from the verified inventory and observed availability counts. Its manifest hashes every declared input and artifact and uses a canonical hash with only `manifest_sha256` excluded. A hash mismatch or economic run fails closed. The canonical validation receipt records exactly 36 crypto tests: 14 secondary-gate tests and 22 adapter tests, both exit code 0; cross-asset suites are outside this crypto validation count. The `--verify` path is read-only and network-free: it checks the frozen manifest/report/receipt chain without rewriting files. The package entered this repair from canonical manifest pin `50fa800889100ebcbbae1828c4a5aa3420488664120b71919764ef43ad6a50b6`; the absent `b63459d673e93ecbb528e239d0782b62225314bca2bd80fef932836c24020cc7` acceptance pin is explicitly superseded.
+
+## Required next acquisition
+
+The exact public URLs, statuses, body hashes and sanitized receipts are listed in `probes/expanded/probe_inventory.json`. The current acquisition run is closed with blockers. The next permitted probes are limited to already-authorized local/provider exports by path presence, immutable issuer/SEC historical ETF records, issuer/governance announcement plus transaction archives, documented PIT/vintage endpoints, and same-instrument/venue liquidation context. A provisioned metric entitlement or PIT feed is a genuine blocker where public access remains 403; no purchase or signup is part of this package.
+
+## Scope constraints
+
+- No OHLCV substitution for adjusted transfer, unlock, ETF creation/redemption, exchange flow, stablecoin exchange flow, liquidation, or SOPR fields.
+- No production, configuration, registry, PAPER or LIVE mutation.
+- No economic returns or remaining candidates were run.
+- No automatic promotion is possible from this package.

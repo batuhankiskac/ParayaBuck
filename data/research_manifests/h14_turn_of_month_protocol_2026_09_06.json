@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0.0",
+  "mission": "h14_turn_of_month_protocol_2026_09_06",
+  "status": "DATA_BLOCKED",
+  "research_only": true,
+  "economic_run": false,
+  "automatic_promotion": false,
+  "candidate": {
+    "id": "h14_spy_turn_of_month_lastday_first3_v1",
+    "symbol": "SPY",
+    "calendar": "NYSE",
+    "calendar_library": "pandas-market-calendars",
+    "calendar_version": "5.4.0",
+    "signal": "last NYSE session of month plus first three NYSE sessions of next month",
+    "decision_entry": "after P0 closed bar; next supported fill at L0 open",
+    "decision_exit": "after F3 closed bar; next supported fill at F4 open",
+    "price_model": "split-adjusted OHLCV plus explicit dividend cash flows",
+    "fill_model": "next tradable bar open",
+    "adaptation": "open-to-open; no close execution assumed"
+  },
+  "windows": {
+    "full": {"start": "2016-01-04", "end": "2026-07-30"},
+    "recent": {"start": "2022-01-03", "end": "2026-07-30"},
+    "post_evaluation_rows_forbidden": true,
+    "synthetic_future_data_forbidden": true
+  },
+  "isolated_diagnostic": {
+    "initial_nav": 100000.0,
+    "candidate_budget_fraction": 0.05,
+    "cash_fraction": 0.95,
+    "joint_capital_claim": false,
+    "cost_multipliers": [1.0, 2.0, 3.0],
+    "cost_basis": "current equity execution-cost model, hash-pinned before run",
+    "controls": [
+      "same-SPY 5% passive/cash to actual endpoint",
+      "same-SPY 5% exposure-matched four-session neutral calendar windows"
+    ],
+    "v3_comparison": "only exact shared decision/fill timestamps; otherwise NOT_COMPARABLE"
+  },
+  "inputs": [
+    {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "feed": "sip",
+      "adjustment": "split",
+      "timeframe": "1d",
+      "row_count": 11686832,
+      "supported_spy_sessions": 2658,
+      "actual_source_last": "2026-07-31T04:00:00Z",
+      "evaluation_last": "2026-07-30T04:00:00Z"
+    },
+    {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+      "sha256": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f"
+    },
+    {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "schema": "source ex_date/rate schema; not yet product-loader compatible",
+      "spy_rows": 40
+    },
+    {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
+      "sha256": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "1d4d89edf8622f229b9e847ee6818741a6f860c0e9666bc6a4095a488e12a3f6"
+    },
+    {
+      "path": "requirements.lock",
+      "sha256": "f33d2ba645350a8d8daa8df317025744c83a3cb9499f27e335aa6fdbcf842f2b"
+    }
+  ],
+  "gates": {
+    "pit_available_at_boundary": "required",
+    "corporate_action_lossless_normalization": "required",
+    "dividend_timing_proven": "required",
+    "split_basis_no_double_adjustment": "required",
+    "next_open_mapping_proven": "required",
+    "source_or_action_failure_verdict": "DATA_BLOCKED",
+    "no_runner_in_this_mission": true
+  },
+  "source": {
+    "original_paper": "https://doi.org/10.2469/faj.v64.n2.11",
+    "checked_on": "2026-09-06"
+  }
+}

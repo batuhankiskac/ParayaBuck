@@ -19,6 +19,36 @@ economic promotion decision and does not make a candidate PAPER-eligible.
 - `docs/archive/**` and `data/research/archive/**` — immutable historical
   lineage.
 
+## Test lifecycle
+
+`pytest` is the active regression suite: it includes production/current
+invariants and the current research contracts, while excluding tests marked
+`historical_research`. Current research contracts are also marked `research`,
+so they can be selected explicitly with:
+
+```bash
+pytest -m "research and not historical_research"
+```
+
+Closed, superseded, and retrospective research tests remain in their original
+paths and are still runnable without moving or rewriting their evidence:
+
+```bash
+pytest -m historical_research
+```
+
+The classification is maintained in `tests/conftest.py`. The current allowlist
+covers the reusable research platform, the P0/P1 execution-cost contracts,
+profit-protection R2, and the active R46 contract. Other mission-specific
+tests under `tests/research/` default to historical until their status is
+reviewed. Use `--include-historical-research` with an explicit path when a
+path-oriented invocation is clearer.
+
+Historical tests are not run by the normal CI Python-version matrix. Current
+research tests remain part of the active suite, and the immutable manifests,
+receipts, reports, and archived result files are retained for manual
+reproduction.
+
 ## Lifecycle
 
 | Status | Meaning |

@@ -35,25 +35,7 @@ jobs:
       - name: Record production file signatures (isolation gate)
         if: always()
         run: python scripts/check_production_isolation.py --record /tmp/before.json
-      - name: Focused OCP closure tests
-        if: always()
-        run: pytest -q tests/test_candidate_observation_parity.py tests/test_research_equity_m3_candidate_ocp.py tests/test_normalized_hash.py
-      - name: Focused R2 attestation tests
-        if: always()
-        run: pytest -q tests/test_research_equity_m3_candidate_ocp_attestation_r2.py
-      - name: Focused M3 data-gate tests
-        if: always()
-        run: pytest -q tests/test_research_equity_m3_data_gate.py tests/test_research_equity_m3_r5.py
-      - name: Focused M3 acquisition and PIT tests
-        if: always()
-        run: pytest -q tests/test_m3_iwm_acquisition.py tests/test_m3_pit_scanner_universe.py
-      - name: Focused economic-predeclaration tests
-        if: always()
-        run: pytest -q tests/test_research_equity_m3_economic.py
-      - name: Focused economic-execution tests
-        if: always()
-        run: pytest -q tests/test_research_equity_m3_economic_execution.py
-      - name: Full pytest suite
+      - name: Active pytest suite
         if: always()
         run: pytest
       - name: Verify production files untouched (isolation gate)

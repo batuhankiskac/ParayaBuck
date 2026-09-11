@@ -78,8 +78,8 @@ def load_bars(path: pathlib.Path) -> list[Bar]:
     return bars
 
 
-def load_lifetimes() -> tuple[dict[str, TerminalInfo], dict[str, dict]]:
-    lifetimes_raw = list(csv.DictReader(open(LIFETIMES_V5)))
+def load_lifetimes(path: pathlib.Path = LIFETIMES_V5) -> tuple[dict[str, TerminalInfo], dict[str, dict]]:
+    lifetimes_raw = list(csv.DictReader(path.open()))
     lt_map: dict[str, dict] = {}
     tmap: dict[str, TerminalInfo] = {}
     dataset_end = datetime(2026, 7, 31, 4, 0, tzinfo=UTC)
@@ -109,12 +109,12 @@ def load_lifetimes() -> tuple[dict[str, TerminalInfo], dict[str, dict]]:
     return tmap, lt_map
 
 
-def load_corporate_actions_all() -> list[CorporateAction]:
+def load_corporate_actions_all(path: pathlib.Path = CA_V5) -> list[CorporateAction]:
     """Load all CA v5 cash dividends once."""
     cas: list[CorporateAction] = []
-    if not CA_V5.exists():
+    if not path.exists():
         return cas
-    with open(CA_V5, newline="") as f:
+    with path.open(newline="") as f:
         for row in csv.DictReader(f):
             if row["action_type"] != "cash_dividends":
                 continue

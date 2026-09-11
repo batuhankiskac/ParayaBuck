@@ -170,6 +170,10 @@ class PortfolioBacktestResult:
     worst_year_return: float
     positive_month_ratio: float
     state: PortfolioState
+    # Immutable audit rows for terminal/final liquidation.  These rows are
+    # deliberately separate from decision-driven fills: liquidation is an
+    # engine event and must remain replayable without inventing a decision.
+    terminal_events: tuple[dict[str, object], ...] = ()
     information_ratio: float = 0.0
     cash_yield: float = 0.0
     dividend_total: float = 0.0
@@ -346,6 +350,7 @@ class PortfolioBacktestEngine:
         self._pending: list[PortfolioOrder] = []
         self._fills: list[PortfolioFill] = []
         self._liquidation_costs: list[tuple[str, float, float, float]] = []
+        self._liquidation_events: list[dict[str, object]] = []
         self._rebalances: list[RebalanceRecord] = []
         self._realized_pnl_events: list[tuple[datetime, str, float]] = []
         self._closed_position_events: list[tuple[datetime, str, float]] = []
@@ -454,6 +459,7 @@ class PortfolioBacktestEngine:
         self._realized_pnl_events = []
         self._closed_position_events = []
         self._liquidation_costs = []
+        self._liquidation_events = []
         self._dividend_total = 0.0
         self._cash_rate_observations = tuple(sorted(cash_rates or [], key=lambda item: item.timestamp))
         self._risk_contribution_history = []
@@ -541,8 +547,10 @@ class PortfolioBacktestEngine:
                 if exit_bar is not None:
                     self._close_position(position, exit_bar)
             if curve:
-                curve.append(self._equity())
-                curve_timestamps.append(curve_timestamps[-1])
+                # Liquidation occurs after the final observed bar.  Update
+                # that bar's account value in place instead of serializing a
+                # duplicate timestamp that cannot be ordered/replayed.
+                curve[-1] = self._equity()
             if not self._positions:
                 # The state must reflect the liquidation: holdings and pending
                 # orders are gone and cash already holds the proceeds, so a
@@ -1388,6 +1396,24 @@ class PortfolioBacktestEngine:
                 fee,
             )
         )
+        self._liquidation_events.append(
+            {
+                "symbol": position.symbol,
+                "timestamp": bar.timestamp.isoformat(),
+                "quantity": position.qty,
+                "policy": "FINAL_BAR",
+                "effective_policy": "FINAL_BAR",
+                "last_close": bar.close,
+                "fill_price": exit_price,
+                "proceeds": max(0.0, position.qty * exit_price - fee),
+                "fee": fee,
+                "slippage_cost": position.qty * bar.close * self.slippage_bps / 10_000,
+                "spread_cost": position.qty * bar.close * (self.spread_bps / 2) / 10_000,
+                "cash_before": self._cash - (position.qty * exit_price - fee),
+                "cash_after": self._cash,
+                "position_removed": True,
+            }
+        )
         self._positions.pop(position.symbol, None)
 
     def _cash_hurdle_return(self, timestamps: list[datetime]) -> float:
@@ -1577,6 +1603,13 @@ class PortfolioBacktestEngine:
             worst_year_return=worst_year,
             positive_month_ratio=positive_month_ratio,
             state=self.state,
+            terminal_events=tuple(
+                dict(event)
+                for event in (
+                    *getattr(self, "terminal_events_fired", ()),
+                    *self._liquidation_events,
+                )
+            ),
             information_ratio=information_ratio,
             cash_yield=cash_yield,
             dividend_total=self._dividend_total,

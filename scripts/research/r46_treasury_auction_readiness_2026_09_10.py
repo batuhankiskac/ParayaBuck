@@ -12,11 +12,16 @@ import hashlib
 import math
 import re
 from collections import defaultdict
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
+
+from scripts.research.acquire_r46_treasury_xml_v2_2026_09_10 import (
+    RESULT_AVAILABILITY_POLICY,
+    RESULT_SIGNAL_ELIGIBILITY,
+)
 
 CUTOFF_UTC = "2026-07-31T23:59:59Z"
 AUCTION_CUTOFF_LOCAL = "16:15 America/New_York"
@@ -51,6 +56,7 @@ ALLOWED_PUBLICATION_SOURCES = {
     "treasury_document_header",
     "official_archive_metadata",
     "official_release_timestamp",
+    "official_XML_release_time_missing",
 }
 
 
@@ -117,6 +123,12 @@ def _cutoff_for_session(auction_date: date) -> datetime:
     return datetime.combine(auction_date, AUCTION_CUTOFF_TIME, tzinfo=NEW_YORK).astimezone(UTC)
 
 
+def _result_available_at(auction_date: date) -> datetime:
+    """Return the policy boundary using civil-day arithmetic in New York."""
+
+    return datetime.combine(auction_date + timedelta(days=1), time.min, tzinfo=NEW_YORK)
+
+
 def _validate_document(document: dict[str, Any], *, repo_root: Path) -> dict[str, Any]:
     required = {
         "document_id",
@@ -172,15 +184,57 @@ def _validate_document(document: dict[str, Any], *, repo_root: Path) -> dict[str
     cutoff_date = _parse_aware(CUTOFF_UTC, "historical_cutoff").date()
     if auction_date > cutoff_date:
         raise ValueError("auction_date post_cutoff")
-    published_at = _parse_aware(document["published_at"], "published_at")
-    available_at = _parse_aware(document["available_at"], "available_at")
-    if available_at < published_at:
-        raise ValueError("available_at precedes published_at")
-    session_cutoff = _cutoff_for_session(auction_date)
-    if available_at > session_cutoff:
-        raise ValueError("auction_cutoff available_at after 16:15 America/New_York")
     if not isinstance(document["source_timezone"], str) or not document["source_timezone"].strip():
         raise ValueError("source_timezone missing")
+    if kind == "result":
+        if document.get("official_publication_date") != auction_date.isoformat():
+            raise ValueError("result official_publication_date mismatch")
+        if document.get("availability_derivation") != RESULT_AVAILABILITY_POLICY:
+            raise ValueError("result availability policy mismatch")
+        if document.get("result_signal_eligibility") != RESULT_SIGNAL_ELIGIBILITY:
+            raise ValueError("result signal eligibility mismatch")
+        if document.get("same_day_signal_allowed") is not False:
+            raise ValueError("result same-day signal policy mismatch")
+        if document["source_timezone"] != "America/New_York":
+            raise ValueError("result source_timezone policy mismatch")
+        available_at = _parse_aware(document["available_at"], "available_at")
+        expected_available_at = _result_available_at(auction_date).astimezone(UTC)
+        if available_at != expected_available_at:
+            raise ValueError("result available_at policy mismatch")
+        publication_time_proven = document.get("publication_time_proven")
+        if not isinstance(publication_time_proven, bool):
+            raise ValueError("result publication_time_proven missing")
+        release_time = document.get("release_time")
+        if publication_time_proven:
+            published_at = _parse_aware(document["published_at"], "published_at")
+            if not isinstance(release_time, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?", release_time):
+                raise ValueError("result release_time evidence missing")
+            if document["publication_at_source"] != "official_release_timestamp":
+                raise ValueError("result publication_at_source mismatch")
+            parts = [int(part) for part in release_time.split(":")]
+            release_local = datetime.combine(
+                auction_date,
+                time(parts[0], parts[1], parts[2] if len(parts) == 3 else 0),
+                tzinfo=NEW_YORK,
+            )
+            if release_local.time() > AUCTION_CUTOFF_TIME:
+                raise ValueError("result release_time after auction cutoff")
+            if published_at != release_local.astimezone(UTC):
+                raise ValueError("result published_at release_time mismatch")
+        else:
+            if document["published_at"] is not None or release_time not in (None, ""):
+                raise ValueError("result published_at missing-release mismatch")
+            published_at = None
+            if document["publication_at_source"] != "official_XML_release_time_missing":
+                raise ValueError("result publication_at_source mismatch")
+    else:
+        published_at = _parse_aware(document["published_at"], "published_at")
+        available_at = _parse_aware(document["available_at"], "available_at")
+        if available_at < published_at:
+            raise ValueError("available_at precedes published_at")
+        session_cutoff = _cutoff_for_session(auction_date)
+        if available_at > session_cutoff:
+            raise ValueError("auction_cutoff available_at after 16:15 America/New_York")
     retrieved_at = _parse_aware(document["retrieved_at"], "retrieved_at")
     if document["publication_at_source"] not in ALLOWED_PUBLICATION_SOURCES:
         raise ValueError("publication_at_source missing")
@@ -255,8 +309,8 @@ def normalize_auction_documents(documents: list[dict[str, Any]], *, repo_root: P
         identity_fields = ("security_identifier", "auction_session_date", "security_type", "original_tenor", "issue_or_reopening", "issuer_identifier", "instrument_type", "source_timezone")
         if any(announcement[field] != result[field] for field in identity_fields):
             raise ValueError(f"auction document identity mismatch:{event_id}")
-        available_at = max(announcement["available_at_value"], result["available_at_value"])
-        published_at = max(announcement["published_at_value"], result["published_at_value"])
+        available_at = result["available_at_value"]
+        published_at = result["published_at_value"]
         chain = []
         for candidate in by_event_kind[(event_id, "announcement")] + by_event_kind[(event_id, "result")]:
             chain.append(
@@ -284,7 +338,7 @@ def normalize_auction_documents(documents: list[dict[str, Any]], *, repo_root: P
                 "result_document_hash": result["sha256"],
                 "announcement_revision_id": announcement["revision_id"],
                 "result_revision_id": result["revision_id"],
-                "published_at": published_at.isoformat().replace("+00:00", "Z"),
+                "published_at": published_at.isoformat().replace("+00:00", "Z") if published_at is not None else None,
                 "available_at": available_at.isoformat().replace("+00:00", "Z"),
                 "source_timezone": announcement["source_timezone"],
                 "retrieved_at": max(announcement["retrieved_at_value"], result["retrieved_at_value"]).isoformat().replace("+00:00", "Z"),
@@ -293,6 +347,9 @@ def normalize_auction_documents(documents: list[dict[str, Any]], *, repo_root: P
                 "announcement_available_at": announcement["available_at_value"].isoformat().replace("+00:00", "Z"),
                 "result_available_at": result["available_at_value"].isoformat().replace("+00:00", "Z"),
                 "entry_available_at": available_at.isoformat().replace("+00:00", "Z"),
+                "availability_derivation": result["availability_derivation"],
+                "result_signal_eligibility": result["result_signal_eligibility"],
+                "same_day_signal_allowed": result["same_day_signal_allowed"],
                 "result_status": result["result_status"],
             }
         )
@@ -782,11 +839,19 @@ def _cross_validate_tlt_data(
     if not isinstance(bar_records, list) or not isinstance(dividend_records, list) or not isinstance(calendar_records, list):
         return ["tlt_identity_binding", "nyse_calendar"]
 
-    eligibility_by_id = {
-        str(row.get("permanent_security_identifier")): row
-        for row in eligibility_records
-        if isinstance(row, dict) and row.get("permanent_security_identifier")
-    }
+    eligibility_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in eligibility_records:
+        if not isinstance(row, dict) or not row.get("permanent_security_identifier"):
+            continue
+        eligibility_by_id[str(row["permanent_security_identifier"])].append(row)
+
+    def _eligibility_for_date(identifier: Any, observed_date: date) -> dict[str, Any] | None:
+        candidates = [
+            candidate
+            for candidate in eligibility_by_id.get(str(identifier), [])
+            if _date_in_eligibility_interval(observed_date, candidate)
+        ]
+        return candidates[0] if len(candidates) == 1 else None
     calendar_by_date: dict[date, dict[str, Any]] = {}
     for row in calendar_records:
         if not isinstance(row, dict):
@@ -804,7 +869,6 @@ def _cross_validate_tlt_data(
             blockers.append("tlt_identity_binding")
             continue
         identifier = row.get("permanent_security_identifier")
-        eligibility_row = eligibility_by_id.get(str(identifier))
         try:
             session_date = _parse_date(row.get("session_date"), "bar session_date")
             row_available_at = _parse_aware(row.get("available_at"), "bar available_at")
@@ -812,10 +876,10 @@ def _cross_validate_tlt_data(
         except ValueError:
             blockers.append("tlt_identity_binding")
             continue
+        eligibility_row = _eligibility_for_date(identifier, session_date)
         if (
             eligibility_row is None
             or row.get("listing_and_tradability_interval") != eligibility_row.get("listing_and_tradability_interval")
-            or not _date_in_eligibility_interval(session_date, eligibility_row)
             or row_available_at > artifact_available_at
         ):
             blockers.append("tlt_identity_binding")
@@ -831,22 +895,38 @@ def _cross_validate_tlt_data(
             else:
                 if bar_open != calendar_open:
                     blockers.append("nyse_session_open")
+                if row_available_at < bar_open:
+                    blockers.append("tlt_bar_availability")
 
     for row in dividend_records:
         if not isinstance(row, dict):
             blockers.append("tlt_identity_binding")
             continue
         identifier = row.get("permanent_security_identifier")
-        eligibility_row = eligibility_by_id.get(str(identifier))
         try:
             effective_date = _parse_date(row.get("effective_date"), "dividend effective_date")
+            event_timestamp = _parse_aware(row.get("event_timestamp"), "dividend event_timestamp")
             row_available_at = _parse_aware(row.get("available_at"), "dividend available_at")
             artifact_available_at = _parse_aware(dividends.get("available_at"), "dividends artifact available_at")
         except ValueError:
-            blockers.append("tlt_identity_binding")
+            blockers.append("tlt_dividend_event_timestamp")
             continue
-        if eligibility_row is None or not _date_in_eligibility_interval(effective_date, eligibility_row) or row_available_at > artifact_available_at:
+        eligibility_row = _eligibility_for_date(identifier, effective_date)
+        if eligibility_row is None or row_available_at > artifact_available_at:
             blockers.append("tlt_identity_binding")
+        calendar_row = calendar_by_date.get(effective_date)
+        if calendar_row is None or calendar_row.get("holiday_or_closure_reason") not in (None, "", "NONE"):
+            blockers.append("tlt_dividend_event_timestamp")
+        else:
+            try:
+                calendar_open = _parse_aware(calendar_row.get("regular_open_timestamp"), "calendar regular_open_timestamp")
+            except ValueError:
+                blockers.append("tlt_dividend_event_timestamp")
+            else:
+                if event_timestamp != calendar_open:
+                    blockers.append("tlt_dividend_event_timestamp")
+        if row_available_at > event_timestamp:
+            blockers.append("tlt_dividend_availability")
     return sorted(set(blockers))
 
 

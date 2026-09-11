@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -16,6 +17,10 @@ from scripts.research.r46_treasury_auction_readiness_2026_09_10 import (
     validate_tlt_eligibility,
     verify_r46_package,
 )
+
+RESULT_AVAILABILITY_POLICY = "official_XML_AuctionDate_plus_one_civil_day_midnight_America_New_York_for_all_results"
+RESULT_SIGNAL_ELIGIBILITY = "FIRST_REGULAR_OPEN_STRICTLY_AFTER_AVAILABLE_AT"
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def _write_document(root: Path, name: str, content: bytes = b"official treasury fixture\n") -> tuple[str, str]:
@@ -36,6 +41,11 @@ def _document(
     result_status: str | None = None,
 ) -> dict[str, object]:
     raw_path, digest = _write_document(root, f"documents/{document_id}.pdf", document_id.encode())
+    availability_at = (
+        datetime.combine(date(2024, 2, 9), time.min, tzinfo=NEW_YORK).isoformat()
+        if kind == "result"
+        else publication_at
+    )
     return {
         "document_id": document_id,
         "document_kind": kind,
@@ -51,14 +61,20 @@ def _document(
         "security_identifier": "912810TM2",
         "auction_session_date": "2024-02-08",
         "published_at": publication_at,
-        "available_at": publication_at,
+        "available_at": availability_at,
         "source_timezone": "America/New_York",
-        "publication_at_source": "treasury_document_header",
+        "publication_at_source": "official_release_timestamp" if kind == "result" else "treasury_document_header",
         "retrieved_at": "2026-09-10T08:00:00Z",
         "revision_id": revision_id,
         "supersedes_document_id": supersedes_document_id,
         "correction_or_amendment_chain": [],
         "result_status": result_status,
+        "release_time": "13:00" if kind == "result" else None,
+        "publication_time_proven": True if kind == "result" else None,
+        "official_publication_date": "2024-02-08" if kind == "result" else None,
+        "availability_derivation": "official_release_timestamp" if kind == "announcement" else RESULT_AVAILABILITY_POLICY,
+        "result_signal_eligibility": RESULT_SIGNAL_ELIGIBILITY if kind == "result" else None,
+        "same_day_signal_allowed": False if kind == "result" else None,
     }
 
 
@@ -314,8 +330,97 @@ def test_normalize_auction_documents_pairs_completed_nominal_30y_event(tmp_path:
     assert result["admitted_event_count"] == 1
     event = result["events"][0]
     assert event["canonical_event_id"] == "2024-02-08-30Y-ORIGINAL"
-    assert event["entry_available_at"] == "2024-02-08T18:00:00Z"
+    assert event["entry_available_at"] == "2024-02-09T05:00:00Z"
     assert event["result_status"] == "COMPLETED"
+
+
+def test_normalize_auction_documents_accepts_missing_release_only_with_policy(tmp_path: Path) -> None:
+    documents = _valid_documents(tmp_path)
+    result = documents[1]
+    result.update(
+        {
+            "published_at": None,
+            "release_time": None,
+            "publication_time_proven": False,
+            "publication_at_source": "official_XML_release_time_missing",
+        }
+    )
+
+    normalized = normalize_auction_documents(documents, repo_root=tmp_path)
+
+    event = normalized["events"][0]
+    assert event["published_at"] is None
+    assert event["available_at"] == "2024-02-09T05:00:00Z"
+    assert event["result_available_at"] == "2024-02-09T05:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("auction_date", "expected_available_at"),
+    (
+        ("2024-03-09", "2024-03-10T05:00:00Z"),
+        ("2024-11-02", "2024-11-03T04:00:00Z"),
+        ("2024-11-03", "2024-11-04T05:00:00Z"),
+    ),
+)
+def test_normalize_auction_documents_policy_is_dst_safe(
+    tmp_path: Path,
+    auction_date: str,
+    expected_available_at: str,
+) -> None:
+    documents = _valid_documents(tmp_path)
+    for document in documents:
+        document["canonical_event_id"] = f"{auction_date}-30Y-ORIGINAL"
+        document["auction_session_date"] = auction_date
+        if document["document_kind"] == "result":
+            result_date = date.fromisoformat(auction_date)
+            publication = datetime.combine(result_date, time(13), tzinfo=NEW_YORK)
+            available = datetime.combine(result_date + timedelta(days=1), time.min, tzinfo=NEW_YORK)
+            document["published_at"] = publication.isoformat()
+            document["available_at"] = available.isoformat()
+            document["official_publication_date"] = auction_date
+        else:
+            announcement_date = date.fromisoformat(auction_date) - timedelta(days=1)
+            announcement = datetime.combine(announcement_date, time(23, 59, 59), tzinfo=NEW_YORK)
+            document["published_at"] = announcement.isoformat()
+            document["available_at"] = announcement.isoformat()
+
+    normalized = normalize_auction_documents(documents, repo_root=tmp_path)
+
+    assert normalized["events"][0]["available_at"] == expected_available_at
+
+
+def test_normalize_auction_documents_rejects_forged_result_offset_or_date(tmp_path: Path) -> None:
+    documents = _valid_documents(tmp_path)
+    documents[1]["available_at"] = "2024-02-09T00:00:00Z"
+
+    with pytest.raises(ValueError, match="result available_at policy"):
+        normalize_auction_documents(documents, repo_root=tmp_path)
+
+
+def test_normalize_auction_documents_rejects_last_modified_publication_substitution(tmp_path: Path) -> None:
+    documents = _valid_documents(tmp_path)
+    documents[1]["publication_at_source"] = "server_last_modified"
+    documents[1]["published_at"] = "2026-05-22T15:11:25Z"
+
+    with pytest.raises(ValueError, match="publication_at_source"):
+        normalize_auction_documents(documents, repo_root=tmp_path)
+
+
+def test_normalize_auction_documents_rejects_published_at_not_matching_release_time(tmp_path: Path) -> None:
+    documents = _valid_documents(tmp_path)
+    documents[1]["published_at"] = "2026-05-22T15:11:25Z"
+
+    with pytest.raises(ValueError, match="release_time"):
+        normalize_auction_documents(documents, repo_root=tmp_path)
+
+
+def test_normalize_auction_documents_rejects_null_published_when_release_is_present(tmp_path: Path) -> None:
+    documents = _valid_documents(tmp_path)
+    documents[1]["published_at"] = None
+    documents[1]["publication_time_proven"] = True
+
+    with pytest.raises(ValueError, match="published_at"):
+        normalize_auction_documents(documents, repo_root=tmp_path)
 
 
 def test_normalize_auction_documents_rejects_missing_source_publication_time(tmp_path: Path) -> None:
@@ -334,11 +439,11 @@ def test_normalize_auction_documents_rejects_retrieval_time_as_publication_evide
         normalize_auction_documents(documents, repo_root=tmp_path)
 
 
-def test_normalize_auction_documents_rejects_result_after_1615_new_york(tmp_path: Path) -> None:
+def test_normalize_auction_documents_rejects_result_availability_policy_substitution(tmp_path: Path) -> None:
     documents = _valid_documents(tmp_path)
     documents[1]["available_at"] = "2024-02-08T16:16:00-05:00"
 
-    with pytest.raises(ValueError, match="auction_cutoff"):
+    with pytest.raises(ValueError, match="result available_at policy"):
         normalize_auction_documents(documents, repo_root=tmp_path)
 
 
@@ -400,6 +505,114 @@ def test_validate_tlt_eligibility_rejects_current_snapshot_identity() -> None:
         validate_tlt_eligibility([row])
 
 
+def test_cross_validate_tlt_data_selects_same_id_historical_interval_by_date() -> None:
+    identifier = "sec:TLT:S000004360:C000012090"
+    old_interval = "2002-07-22/2024-02-01"
+    new_interval = "2024-02-01/"
+    eligibility = {
+        "records": [
+            {
+                "permanent_security_identifier": identifier,
+                "listing_and_tradability_interval": old_interval,
+                "valid_from": "2002-07-22",
+                "valid_to": "2024-02-01",
+            },
+            {
+                "permanent_security_identifier": identifier,
+                "listing_and_tradability_interval": new_interval,
+                "valid_from": "2024-02-01",
+                "valid_to": None,
+            },
+        ]
+    }
+    bars = {
+        "available_at": "2024-02-02T00:00:00Z",
+        "records": [
+            {
+                "permanent_security_identifier": identifier,
+                "listing_and_tradability_interval": old_interval,
+                "session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "available_at": "2024-01-31T15:00:00Z",
+            },
+            {
+                "permanent_security_identifier": identifier,
+                "listing_and_tradability_interval": new_interval,
+                "session_date": "2024-02-01",
+                "regular_open_timestamp": "2024-02-01T14:30:00Z",
+                "available_at": "2024-02-01T15:00:00Z",
+            },
+        ],
+    }
+    dividends = {
+        "available_at": "2024-02-02T00:00:00Z",
+        "records": [
+                {
+                    "permanent_security_identifier": identifier,
+                    "effective_date": "2024-01-31",
+                    "event_timestamp": "2024-01-31T14:30:00Z",
+                    "available_at": "2024-01-31T14:00:00Z",
+                }
+        ],
+    }
+    calendar = {
+        "records": [
+            {
+                "regular_session_date": session_date,
+                "regular_open_timestamp": f"{session_date}T14:30:00Z",
+                "holiday_or_closure_reason": None,
+            }
+            for session_date in ("2024-01-31", "2024-02-01")
+        ]
+    }
+
+    assert readiness._cross_validate_tlt_data(
+        bars=bars,
+        dividends=dividends,
+        eligibility=eligibility,
+        calendar=calendar,
+    ) == []
+
+
+def test_cross_validate_tlt_data_fails_closed_on_overlapping_identity_intervals() -> None:
+    identifier = "sec:TLT:S000004360:C000012090"
+    interval = {
+        "permanent_security_identifier": identifier,
+        "listing_and_tradability_interval": "2002-07-22/",
+        "valid_from": "2002-07-22",
+        "valid_to": None,
+    }
+    bars = {
+        "available_at": "2024-02-02T00:00:00Z",
+        "records": [
+            {
+                "permanent_security_identifier": identifier,
+                "listing_and_tradability_interval": "2002-07-22/",
+                "session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "available_at": "2024-01-31T15:00:00Z",
+            }
+        ],
+    }
+    dividends = {"available_at": "2024-02-02T00:00:00Z", "records": []}
+    calendar = {
+        "records": [
+            {
+                "regular_session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "holiday_or_closure_reason": None,
+            }
+        ]
+    }
+
+    assert readiness._cross_validate_tlt_data(
+        bars=bars,
+        dividends=dividends,
+        eligibility={"records": [interval, dict(interval)]},
+        calendar=calendar,
+    ) == ["tlt_identity_binding"]
+
+
 def test_verify_r46_package_remains_blocked_even_when_data_and_holdout_shapes_pass(tmp_path: Path) -> None:
     documents = _valid_documents(tmp_path)
     auction = normalize_auction_documents(documents, repo_root=tmp_path)
@@ -457,6 +670,94 @@ def test_validate_tlt_dividends_requires_each_row_available_by_artifact_time() -
 
     with pytest.raises(ValueError, match="artifact available_at"):
         validate_tlt_dividends(dividends, available_at="2024-01-01T00:00:00Z")
+
+
+def test_cross_validate_tlt_data_rejects_bar_available_before_exact_session_open() -> None:
+    bars = {
+        "available_at": "2024-02-02T00:00:00Z",
+        "records": [
+            {
+                "permanent_security_identifier": "sec:TLT",
+                "listing_and_tradability_interval": "2002-07-22/",
+                "session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "available_at": "2024-01-31T14:29:59Z",
+            }
+        ],
+    }
+    dividends = {"available_at": "2024-02-02T00:00:00Z", "records": []}
+    eligibility = {
+        "records": [
+            {
+                "permanent_security_identifier": "sec:TLT",
+                "listing_and_tradability_interval": "2002-07-22/",
+                "valid_from": "2002-07-22",
+                "valid_to": None,
+            }
+        ]
+    }
+    calendar = {
+        "records": [
+            {
+                "regular_session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "holiday_or_closure_reason": None,
+            }
+        ]
+    }
+
+    blockers = readiness._cross_validate_tlt_data(
+        bars=bars,
+        dividends=dividends,
+        eligibility=eligibility,
+        calendar=calendar,
+    )
+
+    assert "tlt_bar_availability" in blockers
+
+
+def test_cross_validate_tlt_data_rejects_dividend_before_event_open_or_event_mismatch() -> None:
+    bars = {"available_at": "2024-02-02T00:00:00Z", "records": []}
+    dividends = {
+        "available_at": "2024-02-02T00:00:00Z",
+        "records": [
+            {
+                "permanent_security_identifier": "sec:TLT",
+                "effective_date": "2024-01-31",
+                "event_timestamp": "2024-01-31T14:29:59Z",
+                "available_at": "2024-01-31T14:30:00Z",
+            }
+        ],
+    }
+    eligibility = {
+        "records": [
+            {
+                "permanent_security_identifier": "sec:TLT",
+                "listing_and_tradability_interval": "2002-07-22/",
+                "valid_from": "2002-07-22",
+                "valid_to": None,
+            }
+        ]
+    }
+    calendar = {
+        "records": [
+            {
+                "regular_session_date": "2024-01-31",
+                "regular_open_timestamp": "2024-01-31T14:30:00Z",
+                "holiday_or_closure_reason": None,
+            }
+        ]
+    }
+
+    blockers = readiness._cross_validate_tlt_data(
+        bars=bars,
+        dividends=dividends,
+        eligibility=eligibility,
+        calendar=calendar,
+    )
+
+    assert "tlt_dividend_event_timestamp" in blockers
+    assert "tlt_dividend_availability" in blockers
 
 
 def test_validate_nyse_calendar_rejects_non_regular_open_timestamp() -> None:

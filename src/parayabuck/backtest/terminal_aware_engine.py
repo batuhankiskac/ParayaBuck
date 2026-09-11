@@ -267,6 +267,7 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
         self._realized_pnl_events = []
         self._closed_position_events = []
         self._liquidation_costs = []
+        self._liquidation_events = []
         self._dividend_total = 0.0
         self._cash_rate_observations = tuple(sorted(cash_rates or [], key=lambda x: x.timestamp))
         self._risk_contribution_history = []
@@ -361,8 +362,9 @@ class TerminalAwareResearchEngine(PortfolioBacktestEngine):
                 if exit_bar is not None:
                     self._close_position(position, exit_bar)
             if curve:
-                curve.append(self._equity())
-                curve_timestamps.append(curve_timestamps[-1])
+                # The final liquidation belongs to the final observed bar;
+                # replace its value rather than emitting a duplicate time.
+                curve[-1] = self._equity()
             if not self._positions:
                 self.state.holdings = {}
                 self.state.avg_prices = {}

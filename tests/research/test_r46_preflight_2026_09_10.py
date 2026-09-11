@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import scripts.research.r46_v2_preflight_2026_09_10 as v2_preflight
 from scripts.research.r46_preflight_2026_09_10 import verify_r46_manifest
 from scripts.research.r46_treasury_auction_readiness_2026_09_10 import CUTOFF_UTC
 
@@ -46,7 +47,7 @@ def _write_jsonl(root: Path, relative: str, rows: list[dict[str, Any]]) -> tuple
 
 def _document(root: Path, kind: str, identifier: str, *, result_status: str | None = None) -> dict[str, Any]:
     raw_path, raw_hash = _write(root, f"raw/{identifier}.pdf", identifier.encode())
-    return {
+    document = {
         "document_id": identifier,
         "document_kind": kind,
         "canonical_event_id": EVENT_ID,
@@ -70,6 +71,23 @@ def _document(root: Path, kind: str, identifier: str, *, result_status: str | No
         "correction_or_amendment_chain": [],
         "result_status": result_status,
     }
+    if kind == "result":
+        document.update(
+            {
+                "official_publication_date": "2024-02-08",
+                "published_at": None,
+                "available_at": "2024-02-09T05:00:00Z",
+                "availability_derivation": (
+                    "official_XML_AuctionDate_plus_one_civil_day_midnight_America_New_York_for_all_results"
+                ),
+                "result_signal_eligibility": "FIRST_REGULAR_OPEN_STRICTLY_AFTER_AVAILABLE_AT",
+                "same_day_signal_allowed": False,
+                "publication_time_proven": False,
+                "release_time": None,
+                "publication_at_source": "official_XML_release_time_missing",
+            }
+        )
+    return document
 
 
 def _write_bars(root: Path) -> tuple[str, str]:
@@ -483,3 +501,105 @@ def test_preflight_module_cli_accepts_frozen_invocation_for_live_governance_mani
     payload = json.loads(result.stdout)
     assert payload["status"] == "DATA_ACQUISITION_REQUIRED"
     assert "manifest_schema" not in payload["blockers"]
+
+
+def test_v2_outcome_scanner_normalizes_keys_without_scanning_prose(tmp_path: Path) -> None:
+    prose_path = tmp_path / "review.txt"
+    prose_path.write_text('{"comment": "returns and sharpe are discussed"}\n', encoding="utf-8")
+    key_path = tmp_path / "review.txt.jsonl"
+    key_path.write_text('{"  PnL  ": 1}\n', encoding="utf-8")
+    punctuation_key_path = tmp_path / "review.bin"
+    punctuation_key_path.write_text('{" P & L ": 1}\n', encoding="utf-8")
+
+    assert v2_preflight._artifact_contains_forbidden(prose_path) is False
+    assert v2_preflight._artifact_contains_forbidden(key_path) is True
+    assert v2_preflight._artifact_contains_forbidden(punctuation_key_path) is True
+
+
+def test_v2_independent_review_has_strict_schema_and_path_allowlist(tmp_path: Path) -> None:
+    manifest = {
+        "research_id": "r46_treasury_auction_unwind_tlt_v2_2026_09_10",
+        "candidate_id": "R46",
+        "integrity": {"manifest_sha256": "a" * 64},
+    }
+    source = {"source_commit": "b" * 40, "source_files": {"runner.py": {"path": "runner.py"}}}
+    review: dict[str, Any] = {
+        "schema_version": "r46-independent-software-review-v1",
+        "status": "REVIEWED",
+        "research_id": manifest["research_id"],
+        "candidate_id": "R46",
+        "reviewed_commit": source["source_commit"],
+        "governance_manifest_sha256": manifest["integrity"]["manifest_sha256"],
+        "independence": "independent_software_review",
+        "reviewed_paths": ["../runner.py"],
+        "returns": "must not be an outcome field",
+        "integrity": {"review_sha256": ""},
+    }
+    review["integrity"]["review_sha256"] = v2_preflight.canonical_hash(review, self_field="review_sha256")  # type: ignore[index]
+    review_path = tmp_path / "review.json"
+    review_path.write_text(json.dumps(review, sort_keys=True) + "\n", encoding="utf-8")
+
+    reasons, _ = v2_preflight._validate_independent_review(review_path, manifest, source, root=tmp_path)
+    assert "INDEPENDENT_SOFTWARE_REVIEW_OUTCOME_FIELDS" in reasons
+    assert "INDEPENDENT_SOFTWARE_REVIEW_SCHEMA_KEYS" in reasons
+    assert "INDEPENDENT_SOFTWARE_REVIEW_PATH_INVALID" in reasons
+
+
+def test_v2_source_provenance_requires_base_commit_ancestor_and_required_blobs(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    runner_path = tmp_path / "runner.py"
+    lock_path = tmp_path / "uv.lock"
+    runner_path.write_text("runner\n", encoding="utf-8")
+    lock_path.write_text("lock\n", encoding="utf-8")
+    runner_hash = v2_preflight.sha256_file(runner_path)
+    lock_hash = v2_preflight.sha256_file(lock_path)
+    base_commit = "b" * 40
+    source_commit = "c" * 40
+    freeze_commit = "d" * 40
+    source_spec = {
+        "path": "runner.py",
+        "sha256": runner_hash,
+        "git_blob_sha256": "a" * 64,
+        "required_in_base_commit": True,
+        "required_in_source_commit": True,
+    }
+    source_files: dict[str, Any] = {"runner.py": dict(source_spec)}
+    for role in v2_preflight.REQUIRED_SOURCE_ROLES:
+        source_files.setdefault(f"{role}.py", {**source_spec, "path": "runner.py"})
+    source_files["uv.lock"] = {
+        "path": "uv.lock",
+        "sha256": lock_hash,
+        "git_blob_sha256": "c" * 64,
+        "required_in_base_commit": True,
+        "required_in_source_commit": True,
+    }
+    source: dict[str, Any] = {
+        "base_commit": base_commit,
+        "source_commit": source_commit,
+        "clean_tree_required": True,
+        "clean_tree_observed": True,
+        "source_files": source_files,
+        "environment": {
+            **v2_preflight._runtime_environment(),
+            "dependency_lock_path": "uv.lock",
+            "dependency_lock_sha256": lock_hash,
+            "dependency_lock_git_blob_sha256": "c" * 64,
+        },
+    }
+    for role in v2_preflight.REQUIRED_SOURCE_ROLES:
+        source[role] = dict(source_spec)
+    monkeypatch.setattr(v2_preflight, "_git_commit_exists", lambda root, commit: True)
+    monkeypatch.setattr(v2_preflight, "_git_head", lambda root: freeze_commit)
+    monkeypatch.setattr(v2_preflight, "_git_is_ancestor", lambda root, ancestor, descendant: ancestor != base_commit)
+    monkeypatch.setattr(v2_preflight, "_git_diff_paths", lambda root, source, freeze: [])
+    monkeypatch.setattr(v2_preflight, "_git_worktree_clean", lambda root, **kwargs: True)
+    monkeypatch.setattr(
+        v2_preflight,
+        "_git_blob_sha256",
+        lambda root, commit, relative: None if commit == base_commit else ("c" * 64 if relative == "uv.lock" else "a" * 64),
+    )
+
+    reasons = v2_preflight._validate_source_provenance(source, tmp_path, freeze_commit=freeze_commit)
+    assert "BASE_COMMIT_NOT_ANCESTOR_OF_SOURCE" in reasons
+    assert "SOURCE_FILE_NOT_IN_BASE_COMMIT:runner.py" in reasons

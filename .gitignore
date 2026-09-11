@@ -163,6 +163,10 @@ activemq-data/
 data/runtime/
 data/cache/
 data/research/
+# R46 v2 one-shot transition journals are runtime evidence, not freeze inputs.
+data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json
+data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.consumed.json
+data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.aborted_consumed.json
 data/backups/
 parayabuck.sqlite3
 parayabuck.sqlite3-*

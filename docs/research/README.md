@@ -34,20 +34,26 @@ Closed, superseded, and retrospective research tests remain in their original
 paths and are still runnable without moving or rewriting their evidence:
 
 ```bash
-pytest -m historical_research
+pytest --include-historical-research -m historical_research
+pytest --include-historical-research tests/research/test_x.py
 ```
 
 The classification is maintained in `tests/conftest.py`. The current allowlist
 covers the reusable research platform, the P0/P1 execution-cost contracts,
-profit-protection R2, and the active R46 contract. Other mission-specific
-tests under `tests/research/` default to historical until their status is
-reviewed. Use `--include-historical-research` with an explicit path when a
-path-oriented invocation is clearer.
+profit-protection R2, the canonical terminal-engine guards, and the active R46
+contract. Other mission-specific tests under `tests/research/` default to
+historical until their status is reviewed. The explicit option is required for
+marker-based historical collection so those modules can remain excluded before
+import. Use it with an explicit path when a path-oriented invocation is clearer;
+a directly named test file is also an explicit pytest request.
 
-Historical tests are not run by the normal CI Python-version matrix. Current
-research tests remain part of the active suite, and the immutable manifests,
-receipts, reports, and archived result files are retained for manual
-reproduction.
+Normal directory collection skips historical modules before Python import, so
+they do not appear as deselected items.
+
+CI runs `pytest -m "not research"` on Python 3.12, 3.13, and 3.14, then runs
+`pytest -m "research and not historical_research"` once on Python 3.13. The
+immutable manifests, receipts, reports, and archived result files are retained
+for manual reproduction.
 
 ## Lifecycle
 

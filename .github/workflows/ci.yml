@@ -35,9 +35,12 @@ jobs:
       - name: Record production file signatures (isolation gate)
         if: always()
         run: python scripts/check_production_isolation.py --record /tmp/before.json
-      - name: Active pytest suite
+      - name: Product pytest suite
         if: always()
-        run: pytest
+        run: pytest -m "not research"
+      - name: Current research pytest suite (Python 3.13)
+        if: ${{ always() && matrix.python-version == '3.13' }}
+        run: pytest -m "research and not historical_research"
       - name: Verify production files untouched (isolation gate)
         if: always()
         run: python scripts/check_production_isolation.py --verify /tmp/before.json

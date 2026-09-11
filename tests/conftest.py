@@ -30,104 +30,150 @@ _PROTECTED_PATHS = [
     Path("data/runtime/health_snapshot.json"),
 ]
 
-# Research tests are deliberately classified here instead of by directory:
-# ``tests/research/`` contains both live contracts and closed mission records.
-# New tests in that directory are historical by default until their research
-# status is reviewed and added to the current allowlist.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_CURRENT_RESEARCH_TESTS = frozenset(
-    {
-        "tests/test_equity_v3_current_parity_control.py",
-        "tests/test_normalized_hash.py",
-        "tests/test_research_experiment.py",
-        "tests/test_research_runner.py",
-        "tests/research/test_equity_profit_protection_2026_09_r2.py",
-        "tests/research/test_execution_cost_transferability_p0_2026_09.py",
-        "tests/research/test_execution_cost_transferability_p1_paper_observation_2026_09.py",
-        "tests/research/test_r46_governance_contract_2026_09_10.py",
-        "tests/research/test_r46_nyse_calendar_2026_09_10.py",
-        "tests/research/test_r46_preflight_2026_09_10.py",
-        "tests/research/test_r46_publication_availability_evidence_2026_09_11.py",
-        "tests/research/test_r46_tlt_market_data_2026_09_10.py",
-        "tests/research/test_r46_treasury_acquisition_2026_09_10.py",
-        "tests/research/test_r46_treasury_auction_readiness_2026_09_10.py",
-        "tests/research/test_r46_treasury_xml_v2_2026_09_10.py",
-        "tests/research/test_r46_v2_data_package_2026_09_10.py",
-        "tests/research/test_r46_v2_execution_2026_09_10.py",
-        "tests/research/test_r46_v2_governance_2026_09_10.py",
-        "tests/research/test_r46_v3_oracle_2026_09_11.py",
-    }
+
+# Research tests are deliberately classified here instead of by directory:
+# ``tests/research/`` contains both current contracts and closed mission
+# records. New tests in that directory are historical by default until their
+# research status is reviewed and added to the current allowlist.
+_PRODUCT = "product"
+_CURRENT_RESEARCH = "current_research"
+_HISTORICAL_RESEARCH = "historical_research"
+
+_CURRENT_RESEARCH_TEST_PATHS = (
+    "tests/test_equity_v3_current_parity_control.py",
+    "tests/test_full_survivorship_terminal.py",
+    "tests/test_normalized_hash.py",
+    "tests/test_research_experiment.py",
+    "tests/test_research_runner.py",
+    "tests/test_terminal_aware_engine.py",
+    "tests/research/test_equity_profit_protection_2026_09_r2.py",
+    "tests/research/test_execution_cost_transferability_p0_2026_09.py",
+    "tests/research/test_execution_cost_transferability_p1_paper_observation_2026_09.py",
+    "tests/research/test_r46_governance_contract_2026_09_10.py",
+    "tests/research/test_r46_nyse_calendar_2026_09_10.py",
+    "tests/research/test_r46_preflight_2026_09_10.py",
+    "tests/research/test_r46_publication_availability_evidence_2026_09_11.py",
+    "tests/research/test_r46_tlt_market_data_2026_09_10.py",
+    "tests/research/test_r46_treasury_acquisition_2026_09_10.py",
+    "tests/research/test_r46_treasury_auction_readiness_2026_09_10.py",
+    "tests/research/test_r46_treasury_xml_v2_2026_09_10.py",
+    "tests/research/test_r46_v2_data_package_2026_09_10.py",
+    "tests/research/test_r46_v2_execution_2026_09_10.py",
+    "tests/research/test_r46_v2_governance_2026_09_10.py",
+    "tests/research/test_r46_v3_oracle_2026_09_11.py",
 )
 
-_HISTORICAL_RESEARCH_TESTS = frozenset(
-    {
-        "tests/test_candidate_observation_parity_receipts.py",
-        "tests/test_crypto_candidate_tournament.py",
-        "tests/test_crypto_residual_low_variance.py",
-        "tests/test_equity_v3_alpha_roadmap.py",
-        "tests/test_equity_v3_followups.py",
-        "tests/test_full_survivorship_terminal.py",
-        "tests/test_m3_iwm_acquisition.py",
-        "tests/test_research_alpha.py",
-        "tests/test_research_equity_m3_candidate_ocp.py",
-        "tests/test_research_equity_m3_candidate_ocp_attestation_r2.py",
-        "tests/test_research_equity_m3_data_gate.py",
-        "tests/test_research_equity_m3_economic.py",
-        "tests/test_research_equity_m3_economic_execution.py",
-        "tests/test_research_equity_m3_m4.py",
-        "tests/test_research_equity_m3_r5.py",
-        "tests/test_research_sec_normalization.py",
-        "tests/test_terminal_aware_engine.py",
-        "tests/test_v3_exit_latency_integrity.py",
-        "tests/test_v3_position_risk_cost_stress_integrity.py",
-        "tests/test_v3_position_risk_integrity.py",
-    }
+_HISTORICAL_RESEARCH_TEST_PATHS = (
+    "tests/test_candidate_observation_parity_receipts.py",
+    "tests/test_crypto_candidate_tournament.py",
+    "tests/test_crypto_residual_low_variance.py",
+    "tests/test_equity_v3_alpha_roadmap.py",
+    "tests/test_equity_v3_followups.py",
+    "tests/test_m3_iwm_acquisition.py",
+    "tests/test_research_alpha.py",
+    "tests/test_research_equity_m3_candidate_ocp.py",
+    "tests/test_research_equity_m3_candidate_ocp_attestation_r2.py",
+    "tests/test_research_equity_m3_data_gate.py",
+    "tests/test_research_equity_m3_economic.py",
+    "tests/test_research_equity_m3_economic_execution.py",
+    "tests/test_research_equity_m3_m4.py",
+    "tests/test_research_equity_m3_r5.py",
+    "tests/test_research_sec_normalization.py",
+    "tests/test_v3_exit_latency_integrity.py",
+    "tests/test_v3_position_risk_cost_stress_integrity.py",
+    "tests/test_v3_position_risk_integrity.py",
 )
+
+_CURRENT_RESEARCH_TESTS = frozenset(_CURRENT_RESEARCH_TEST_PATHS)
+_HISTORICAL_RESEARCH_TESTS = frozenset(_HISTORICAL_RESEARCH_TEST_PATHS)
+
+
+def _duplicate_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
+    seen = set()
+    duplicates = set()
+    for path in paths:
+        if path in seen:
+            duplicates.add(path)
+        seen.add(path)
+    return tuple(sorted(duplicates))
+
+
+def _validate_research_classification() -> None:
+    errors = []
+    for label, paths in (
+        ("current research", _CURRENT_RESEARCH_TEST_PATHS),
+        ("historical research", _HISTORICAL_RESEARCH_TEST_PATHS),
+    ):
+        duplicates = _duplicate_paths(paths)
+        if duplicates:
+            errors.append(f"{label} has duplicate paths: {', '.join(duplicates)}")
+        missing = sorted(path for path in paths if not (_REPO_ROOT / path).is_file())
+        if missing:
+            errors.append(f"{label} has missing files: {', '.join(missing)}")
+
+    overlap = sorted(_CURRENT_RESEARCH_TESTS & _HISTORICAL_RESEARCH_TESTS)
+    if overlap:
+        errors.append(f"current and historical research overlap: {', '.join(overlap)}")
+
+    root_research_tests = {
+        path.relative_to(_REPO_ROOT).as_posix() for path in (_REPO_ROOT / "tests").glob("test_research_*.py")
+    }
+    unclassified = sorted(root_research_tests - (_CURRENT_RESEARCH_TESTS | _HISTORICAL_RESEARCH_TESTS))
+    if unclassified:
+        errors.append(f"unclassified root research tests: {', '.join(unclassified)}")
+
+    if errors:
+        raise pytest.UsageError(
+            "Invalid research test classification metadata:\n" + "\n".join(f"- {error}" for error in errors)
+        )
+
+
+def _classify_test_path(path: Path) -> str:
+    try:
+        relative = path.resolve().relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return _PRODUCT
+
+    if relative in _CURRENT_RESEARCH_TESTS:
+        return _CURRENT_RESEARCH
+    if relative in _HISTORICAL_RESEARCH_TESTS or relative.startswith("tests/research/"):
+        return _HISTORICAL_RESEARCH
+    return _PRODUCT
 
 
 def pytest_addoption(parser):
     parser.addoption(
         "--include-historical-research",
         action="store_true",
-        help="include tests marked historical_research in the collection",
+        help="include historical_research test modules before collection",
     )
 
 
-@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    del config
+    _validate_research_classification()
+
+
+def pytest_ignore_collect(collection_path: Path, config) -> bool:
+    """Skip historical modules before pytest imports or collects them."""
+    path = Path(str(collection_path))
+    if not path.is_file():
+        return False
+    return _classify_test_path(path) == _HISTORICAL_RESEARCH and not config.getoption("include_historical_research")
+
+
 def pytest_collection_modifyitems(config, items):
-    """Keep closed research out of default runs without hiding its tests."""
-    marker_expression = getattr(config.option, "markexpr", "") or ""
-    include_historical = config.getoption("include_historical_research") or ("historical_research" in marker_expression)
-    selected = []
-    deselected = []
-
+    """Mark research items after only the allowed modules have been collected."""
+    del config
     for item in items:
-        try:
-            relative = Path(str(item.fspath)).resolve().relative_to(_REPO_ROOT).as_posix()
-        except ValueError:
-            selected.append(item)
-            continue
-
-        if relative in _CURRENT_RESEARCH_TESTS:
+        item_path = getattr(item, "path", None) or item.fspath
+        classification = _classify_test_path(Path(str(item_path)))
+        if classification == _CURRENT_RESEARCH:
             item.add_marker("research")
-            selected.append(item)
-            continue
-
-        is_historical = relative in _HISTORICAL_RESEARCH_TESTS or relative.startswith("tests/research/")
-        if not is_historical:
-            selected.append(item)
-            continue
-
-        item.add_marker("research")
-        item.add_marker("historical_research")
-        if include_historical:
-            selected.append(item)
-        else:
-            deselected.append(item)
-
-    if deselected:
-        config.hook.pytest_deselected(items=deselected)
-    items[:] = selected
+        elif classification == _HISTORICAL_RESEARCH:
+            item.add_marker("research")
+            item.add_marker("historical_research")
 
 
 def _file_signature(path: Path):

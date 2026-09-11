@@ -1,0 +1,20 @@
+{
+  "candidate_id": "R46",
+  "confirmatory_claim_forbidden": true,
+  "contamination_acknowledged": true,
+  "integrity": {
+    "artifact_sha256": "b2977b5f516cd4371af2201a87cb84637beb47214e74cc3d0980bbc9eaf33fab",
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators, ensure_ascii=false; omit the nested self-hash before hashing"
+  },
+  "outcome_artifacts_present": false,
+  "prior_access_acknowledged": true,
+  "release_count": 0,
+  "rerun_forbidden": true,
+  "research_id": "r46_treasury_auction_unwind_tlt_v2_2026_09_10",
+  "reservation_owner": "execution",
+  "reservation_state": "UNRESERVED",
+  "run_count": 0,
+  "schema_version": "r46-one-shot-state-v2",
+  "status": "SEALED_UNUSED",
+  "tuning_forbidden": true
+}

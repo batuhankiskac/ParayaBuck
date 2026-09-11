@@ -1,0 +1,102 @@
+{
+  "approvals": {
+    "independent_reviewer": null,
+    "operator": null,
+    "statistician": null
+  },
+  "candidate_id": "R46",
+  "claim_policy": "retrospective_descriptive_only_no_confirmatory_claim",
+  "coverage_claim_policy": "minimums_are_operational_gates_not_power_claims",
+  "coverage_gates": {
+    "insufficient_policy": "BLOCKED_INSUFFICIENT_EVENT_RATE_no_extension_or_relaxation",
+    "max_capacity_suppression_rate": 0.25,
+    "max_missing_rate": 0.0,
+    "min_event_episodes": 24,
+    "min_holding_intervals": 120,
+    "require_fifth_open_exit": true
+  },
+  "episode_definition": {
+    "daily_marks_are_not_independent": true,
+    "holding_horizon": "five_open_to_open_intervals",
+    "key": "canonical_event_id:auction_session_date",
+    "overlap": "no pyramid and no extension",
+    "same_date_events": "one exposure episode"
+  },
+  "inferential_family": {
+    "ids": [
+      "R46_PRIMARY_EVENT_EPISODE_EXCESS_VS_EXPOSURE_MATCHED_NULL",
+      "R46_INCUMBENT_COMPARISON",
+      "R46_COST_2X",
+      "R46_COST_3X"
+    ],
+    "interpretation": "descriptive_only_no_threshold_or_selection",
+    "method": "holm_step_down_for_descriptive_adjusted_p_values",
+    "size": 4
+  },
+  "integrity": {
+    "artifact_sha256": "21ebb2e453bd3587388fa800919d5ca24eb9fab4d29b21c106d8e1ce8a015331",
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators, ensure_ascii=false; omit the nested self-hash before hashing"
+  },
+  "outcome_fields_forbidden_before_run": [
+    "returns",
+    "nav",
+    "pnl",
+    "fills",
+    "turnover",
+    "drawdown",
+    "cvar",
+    "sharpe",
+    "p_values"
+  ],
+  "primary_estimand": {
+    "aggregation": "equal_weight_over_eligible_event_episodes",
+    "confirmatory_threshold": null,
+    "contrast": "candidate_minus_exposure_matched_null",
+    "direction": "descriptive_signed_difference",
+    "estimand": "initial_equity_portfolio_contribution",
+    "horizon": "five_open_to_open_intervals",
+    "id": "R46_PRIMARY_EVENT_EPISODE_EXCESS_VS_EXPOSURE_MATCHED_NULL"
+  },
+  "reported_output_count": 7,
+  "resampling": {
+    "block_length": 5,
+    "block_unit": "event_episode",
+    "bootstrap_repetitions": 10000,
+    "bootstrap_seed": 4601,
+    "method": "circular_event_episode_block_bootstrap",
+    "permutation_method": "paired_sign_flip_randomization_under_exchangeability",
+    "permutation_repetitions": 10000,
+    "permutation_seed": 4602,
+    "placebo_seed": 4603
+  },
+  "research_id": "r46_treasury_auction_unwind_tlt_v2_2026_09_10",
+  "sample_unit": "event_episode",
+  "schema_version": "r46-statistics-plan-v2",
+  "secondary_diagnostics": [
+    {
+      "id": "R46_INCUMBENT_COMPARISON",
+      "role": "descriptive_control"
+    },
+    {
+      "id": "R46_TIMING_PLACEBO",
+      "role": "descriptive_control"
+    },
+    {
+      "id": "R46_COST_2X",
+      "role": "cost_stress"
+    },
+    {
+      "id": "R46_COST_3X",
+      "role": "cost_stress"
+    },
+    {
+      "id": "R46_CAPACITY_SUPPRESSION",
+      "role": "coverage_only"
+    },
+    {
+      "id": "R46_MISSINGNESS",
+      "role": "coverage_only"
+    }
+  ],
+  "status": "FROZEN_PRE_RUN_UNAPPROVED"
+}

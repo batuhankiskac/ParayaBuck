@@ -1,0 +1,3140 @@
+{
+  "admission": "DATA_ACQUISITION_REQUIRED",
+  "announced_rss": {
+    "blockers": [
+      "ANNOUNCEMENT_RSS_UNVALIDATED"
+    ],
+    "raw_sha256": "0ed188fe6c5d79f85929d980710c67958b2b8596252920cb395222d2f138d7a0",
+    "source_url": "https://www.treasurydirect.gov/TA_WS/securities/announced/rss",
+    "status": "HASH_ONLY_UNVALIDATED"
+  },
+  "artifact_sha256": "64359be24dca6a5768cef006a2fc479f38ee13f34beefbe944e6477653ff13a1",
+  "artifacts": {
+    "announced_rss": {
+      "bytes": 22407,
+      "kind": "announced_rss",
+      "path": "data/research/external/r46_treasury_public_source_2026_09_10_v1/announced_2026_09_10.rss",
+      "sha256": "0ed188fe6c5d79f85929d980710c67958b2b8596252920cb395222d2f138d7a0",
+      "source_url": "https://www.treasurydirect.gov/TA_WS/securities/announced/rss"
+    },
+    "legacy_json": {
+      "bytes": 37508551,
+      "kind": "legacy_json",
+      "path": "data/research/external/r46_treasury_public_source_2026_09_10_v1/treasury_auction_search_2016_2026.json",
+      "sha256": "fa1f0c61acd45c943e32d4d944bbc27c66ef574ff57be10884027e04c602d3a2",
+      "source_url": "https://www.treasurydirect.gov/TA_WS/securities/search?startdate=2016-01-01&enddate=2026-07-31&format=json"
+    },
+    "result_rss": {
+      "bytes": 24060,
+      "kind": "result_rss",
+      "path": "data/research/external/r46_treasury_public_source_2026_09_10_v1/auctioned_2026_09_10.rss",
+      "sha256": "6aa6b103983fff041702a30e16dcc1da4001d3677b0f08c2aac796af25f7b3d1",
+      "source_url": "https://www.treasurydirect.gov/TA_WS/securities/auctioned/rss"
+    },
+    "result_xml": [
+      {
+        "bytes": 4678,
+        "kind": "result_xml",
+        "path": "data/research/external/r46_treasury_public_source_2026_09_10_v1/R_20240208_3.xml",
+        "sha256": "eba6fb19f021de445e9978ba7f12c868ae031df05673ec741e395eb67f111d3b",
+        "source_url": "https://www.treasurydirect.gov/xml/R_20240208_3.xml"
+      },
+      {
+        "bytes": 4923,
+        "kind": "result_xml",
+        "path": "data/research/external/r46_treasury_public_source_2026_09_10_v1/R_20260909_2.xml",
+        "sha256": "133820277439653548e72d41c7d2a4499b1f241f07f0369c814ea2c7e852dab0",
+        "source_url": "https://www.treasurydirect.gov/xml/R_20260909_2.xml"
+      }
+    ]
+  },
+  "blockers": [
+    "ANNOUNCEMENT_RSS_UNVALIDATED",
+    "POST_CUTOFF_CAPABILITY_ONLY",
+    "PUBLIC_AVAILABILITY_UNPROVEN",
+    "RESULT_VERSION_LINEAGE_UNPROVEN",
+    "RSS_CROSSCHECK_ONLY",
+    "SOURCE_TIMEZONE_UNPROVEN",
+    "XML_SCHEMA_VALIDATION_NOT_PERFORMED"
+  ],
+  "candidate_id": "R46",
+  "credentials_used": false,
+  "cross_source_reconciliation": {
+    "legacy_event_count": 127,
+    "result_rss_item_count": 18,
+    "result_rss_matched": 1,
+    "result_rss_unmatched": 17,
+    "result_xml_count": 2,
+    "result_xml_in_window": 1,
+    "result_xml_in_window_matched": 1,
+    "result_xml_post_cutoff": 1,
+    "result_xml_post_cutoff_matched": 1,
+    "status": "RECONCILED_CAPABILITY_ONLY"
+  },
+  "dataset_update_semantic_class": "dataset_update",
+  "economic_execution": false,
+  "economic_outcomes_accessed": false,
+  "economic_run": false,
+  "events": [
+    {
+      "announcement": {
+        "pdf_name": "A_20160107_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160107_3.pdf",
+        "xml_name": "A_20160107_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160107_3.xml"
+      },
+      "auction_date": "2016-01-14",
+      "cusip": "912810RP5",
+      "dataset_update": "2016-02-22T16:11:58",
+      "issue_date": "2016-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2015-11-16",
+      "result": {
+        "pdf_name": "R_20160114_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160114_1.pdf",
+        "xml_name": "R_20160114_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160114_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160203_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160203_1.pdf",
+        "xml_name": "A_20160203_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160203_1.xml"
+      },
+      "auction_date": "2016-02-11",
+      "cusip": "912810RQ3",
+      "dataset_update": "2016-02-11T13:02:53",
+      "issue_date": "2016-02-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20160211_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160211_1.pdf",
+        "xml_name": "R_20160211_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160211_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160303_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160303_5.pdf",
+        "xml_name": "A_20160303_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160303_5.xml"
+      },
+      "auction_date": "2016-03-10",
+      "cusip": "912810RQ3",
+      "dataset_update": "2016-03-10T13:03:43",
+      "issue_date": "2016-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-02-16",
+      "result": {
+        "pdf_name": "R_20160310_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160310_1.pdf",
+        "xml_name": "R_20160310_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160310_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160407_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160407_3.pdf",
+        "xml_name": "A_20160407_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160407_3.xml"
+      },
+      "auction_date": "2016-04-14",
+      "cusip": "912810RQ3",
+      "dataset_update": "2016-04-14T13:03:03",
+      "issue_date": "2016-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-02-16",
+      "result": {
+        "pdf_name": "R_20160414_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160414_1.pdf",
+        "xml_name": "R_20160414_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160414_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160504_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160504_3.pdf",
+        "xml_name": "A_20160504_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160504_3.xml"
+      },
+      "auction_date": "2016-05-12",
+      "cusip": "912810RS9",
+      "dataset_update": "2016-05-12T13:02:55",
+      "issue_date": "2016-05-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20160512_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160512_1.pdf",
+        "xml_name": "R_20160512_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160512_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160602_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160602_1.pdf",
+        "xml_name": "A_20160602_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160602_1.xml"
+      },
+      "auction_date": "2016-06-09",
+      "cusip": "912810RS9",
+      "dataset_update": "2016-06-09T13:02:50",
+      "issue_date": "2016-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-05-16",
+      "result": {
+        "pdf_name": "R_20160609_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160609_1.pdf",
+        "xml_name": "R_20160609_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160609_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160707_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160707_5.pdf",
+        "xml_name": "A_20160707_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160707_5.xml"
+      },
+      "auction_date": "2016-07-13",
+      "cusip": "912810RS9",
+      "dataset_update": "2016-07-13T13:03:07",
+      "issue_date": "2016-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-05-16",
+      "result": {
+        "pdf_name": "R_20160713_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160713_1.pdf",
+        "xml_name": "R_20160713_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160713_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160803_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160803_2.pdf",
+        "xml_name": "A_20160803_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160803_2.xml"
+      },
+      "auction_date": "2016-08-11",
+      "cusip": "912810RT7",
+      "dataset_update": "2016-08-11T13:02:43",
+      "issue_date": "2016-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20160811_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160811_1.pdf",
+        "xml_name": "R_20160811_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160811_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20160908_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20160908_5.pdf",
+        "xml_name": "A_20160908_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20160908_5.xml"
+      },
+      "auction_date": "2016-09-13",
+      "cusip": "912810RT7",
+      "dataset_update": "2016-09-13T13:02:44",
+      "issue_date": "2016-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-08-15",
+      "result": {
+        "pdf_name": "R_20160913_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20160913_3.pdf",
+        "xml_name": "R_20160913_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20160913_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20161006_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20161006_5.pdf",
+        "xml_name": "A_20161006_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20161006_5.xml"
+      },
+      "auction_date": "2016-10-13",
+      "cusip": "912810RT7",
+      "dataset_update": "2016-10-13T13:02:41",
+      "issue_date": "2016-10-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-08-15",
+      "result": {
+        "pdf_name": "R_20161013_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20161013_1.pdf",
+        "xml_name": "R_20161013_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20161013_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20161102_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20161102_2.pdf",
+        "xml_name": "A_20161102_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20161102_2.xml"
+      },
+      "auction_date": "2016-11-10",
+      "cusip": "912810RU4",
+      "dataset_update": "2016-11-10T13:02:41",
+      "issue_date": "2016-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20161110_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20161110_1.pdf",
+        "xml_name": "R_20161110_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20161110_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20161208_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/A_20161208_5.pdf",
+        "xml_name": "A_20161208_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20161208_5.xml"
+      },
+      "auction_date": "2016-12-13",
+      "cusip": "912810RU4",
+      "dataset_update": "2016-12-13T13:02:47",
+      "issue_date": "2016-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-11-15",
+      "result": {
+        "pdf_name": "R_20161213_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2016/R_20161213_2.pdf",
+        "xml_name": "R_20161213_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20161213_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170105_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170105_5.pdf",
+        "xml_name": "A_20170105_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170105_5.xml"
+      },
+      "auction_date": "2017-01-12",
+      "cusip": "912810RU4",
+      "dataset_update": "2017-01-12T13:02:50",
+      "issue_date": "2017-01-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2016-11-15",
+      "result": {
+        "pdf_name": "R_20170112_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170112_1.pdf",
+        "xml_name": "R_20170112_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170112_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170201_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170201_3.pdf",
+        "xml_name": "A_20170201_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170201_3.xml"
+      },
+      "auction_date": "2017-02-09",
+      "cusip": "912810RV2",
+      "dataset_update": "2017-02-09T13:02:52",
+      "issue_date": "2017-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20170209_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170209_1.pdf",
+        "xml_name": "R_20170209_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170209_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170302_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170302_1.pdf",
+        "xml_name": "A_20170302_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170302_1.xml"
+      },
+      "auction_date": "2017-03-09",
+      "cusip": "912810RV2",
+      "dataset_update": "2017-03-09T13:02:47",
+      "issue_date": "2017-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-02-15",
+      "result": {
+        "pdf_name": "R_20170309_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170309_1.pdf",
+        "xml_name": "R_20170309_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170309_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170406_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170406_3.pdf",
+        "xml_name": "A_20170406_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170406_3.xml"
+      },
+      "auction_date": "2017-04-12",
+      "cusip": "912810RV2",
+      "dataset_update": "2017-04-12T13:02:53",
+      "issue_date": "2017-04-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-02-15",
+      "result": {
+        "pdf_name": "R_20170412_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170412_1.pdf",
+        "xml_name": "R_20170412_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170412_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170503_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170503_1.pdf",
+        "xml_name": "A_20170503_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170503_1.xml"
+      },
+      "auction_date": "2017-05-11",
+      "cusip": "912810RX8",
+      "dataset_update": "2017-05-11T13:03:02",
+      "issue_date": "2017-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20170511_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170511_1.pdf",
+        "xml_name": "R_20170511_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170511_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170608_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170608_3.pdf",
+        "xml_name": "A_20170608_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170608_3.xml"
+      },
+      "auction_date": "2017-06-13",
+      "cusip": "912810RX8",
+      "dataset_update": "2017-06-13T13:03:02",
+      "issue_date": "2017-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-05-15",
+      "result": {
+        "pdf_name": "R_20170613_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170613_2.pdf",
+        "xml_name": "R_20170613_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170613_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170706_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170706_3.pdf",
+        "xml_name": "A_20170706_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170706_3.xml"
+      },
+      "auction_date": "2017-07-13",
+      "cusip": "912810RX8",
+      "dataset_update": "2017-07-13T13:02:57",
+      "issue_date": "2017-07-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-05-15",
+      "result": {
+        "pdf_name": "R_20170713_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170713_1.pdf",
+        "xml_name": "R_20170713_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170713_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170802_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170802_2.pdf",
+        "xml_name": "A_20170802_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170802_2.xml"
+      },
+      "auction_date": "2017-08-10",
+      "cusip": "912810RY6",
+      "dataset_update": "2017-08-10T13:03:00",
+      "issue_date": "2017-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20170810_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170810_1.pdf",
+        "xml_name": "R_20170810_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170810_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20170907_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20170907_2.pdf",
+        "xml_name": "A_20170907_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20170907_2.xml"
+      },
+      "auction_date": "2017-09-13",
+      "cusip": "912810RY6",
+      "dataset_update": "2017-09-13T13:03:24",
+      "issue_date": "2017-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-08-15",
+      "result": {
+        "pdf_name": "R_20170913_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20170913_1.pdf",
+        "xml_name": "R_20170913_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20170913_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20171005_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20171005_3.pdf",
+        "xml_name": "A_20171005_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20171005_3.xml"
+      },
+      "auction_date": "2017-10-12",
+      "cusip": "912810RY6",
+      "dataset_update": "2017-10-12T13:02:59",
+      "issue_date": "2017-10-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-08-15",
+      "result": {
+        "pdf_name": "R_20171012_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20171012_1.pdf",
+        "xml_name": "R_20171012_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20171012_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20171101_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20171101_2.pdf",
+        "xml_name": "A_20171101_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20171101_2.xml"
+      },
+      "auction_date": "2017-11-09",
+      "cusip": "912810RZ3",
+      "dataset_update": "2017-11-09T13:02:55",
+      "issue_date": "2017-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20171109_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20171109_1.pdf",
+        "xml_name": "R_20171109_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20171109_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20171207_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/A_20171207_4.pdf",
+        "xml_name": "A_20171207_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20171207_4.xml"
+      },
+      "auction_date": "2017-12-12",
+      "cusip": "912810RZ3",
+      "dataset_update": "2017-12-12T13:02:53",
+      "issue_date": "2017-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-11-15",
+      "result": {
+        "pdf_name": "R_20171212_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2017/R_20171212_2.pdf",
+        "xml_name": "R_20171212_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20171212_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180104_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180104_5.pdf",
+        "xml_name": "A_20180104_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180104_5.xml"
+      },
+      "auction_date": "2018-01-11",
+      "cusip": "912810RZ3",
+      "dataset_update": "2018-01-11T13:03:21",
+      "issue_date": "2018-01-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2017-11-15",
+      "result": {
+        "pdf_name": "R_20180111_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180111_1.pdf",
+        "xml_name": "R_20180111_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180111_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180131_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180131_2.pdf",
+        "xml_name": "A_20180131_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180131_2.xml"
+      },
+      "auction_date": "2018-02-08",
+      "cusip": "912810SA7",
+      "dataset_update": "2018-02-08T13:03:44",
+      "issue_date": "2018-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20180208_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180208_1.pdf",
+        "xml_name": "R_20180208_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180208_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180308_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180308_5.pdf",
+        "xml_name": "A_20180308_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180308_5.xml"
+      },
+      "auction_date": "2018-03-13",
+      "cusip": "912810SA7",
+      "dataset_update": "2018-03-13T13:02:47",
+      "issue_date": "2018-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-02-15",
+      "result": {
+        "pdf_name": "R_20180313_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180313_2.pdf",
+        "xml_name": "R_20180313_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180313_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180405_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180405_3.pdf",
+        "xml_name": "A_20180405_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180405_3.xml"
+      },
+      "auction_date": "2018-04-12",
+      "cusip": "912810SA7",
+      "dataset_update": "2018-04-12T13:02:24",
+      "issue_date": "2018-04-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-02-15",
+      "result": {
+        "pdf_name": "R_20180412_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180412_1.pdf",
+        "xml_name": "R_20180412_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180412_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180502_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180502_3.pdf",
+        "xml_name": "A_20180502_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180502_3.xml"
+      },
+      "auction_date": "2018-05-10",
+      "cusip": "912810SC3",
+      "dataset_update": "2018-05-10T13:02:57",
+      "issue_date": "2018-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20180510_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180510_1.pdf",
+        "xml_name": "R_20180510_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180510_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180607_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180607_4.pdf",
+        "xml_name": "A_20180607_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180607_4.xml"
+      },
+      "auction_date": "2018-06-12",
+      "cusip": "912810SC3",
+      "dataset_update": "2018-06-12T13:02:55",
+      "issue_date": "2018-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-05-15",
+      "result": {
+        "pdf_name": "R_20180612_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180612_2.pdf",
+        "xml_name": "R_20180612_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180612_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180705_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180705_1.pdf",
+        "xml_name": "A_20180705_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180705_1.xml"
+      },
+      "auction_date": "2018-07-12",
+      "cusip": "912810SC3",
+      "dataset_update": "2018-07-12T13:03:07",
+      "issue_date": "2018-07-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-05-15",
+      "result": {
+        "pdf_name": "R_20180712_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180712_1.pdf",
+        "xml_name": "R_20180712_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180712_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180801_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180801_2.pdf",
+        "xml_name": "A_20180801_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180801_2.xml"
+      },
+      "auction_date": "2018-08-09",
+      "cusip": "912810SD1",
+      "dataset_update": "2018-08-09T13:02:50",
+      "issue_date": "2018-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20180809_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180809_1.pdf",
+        "xml_name": "R_20180809_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180809_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20180906_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20180906_1.pdf",
+        "xml_name": "A_20180906_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20180906_1.xml"
+      },
+      "auction_date": "2018-09-13",
+      "cusip": "912810SD1",
+      "dataset_update": "2018-09-13T13:02:32",
+      "issue_date": "2018-09-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-08-15",
+      "result": {
+        "pdf_name": "R_20180913_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20180913_1.pdf",
+        "xml_name": "R_20180913_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20180913_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20181004_6.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20181004_6.pdf",
+        "xml_name": "A_20181004_6.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20181004_6.xml"
+      },
+      "auction_date": "2018-10-11",
+      "cusip": "912810SD1",
+      "dataset_update": "2018-10-11T13:02:31",
+      "issue_date": "2018-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-08-15",
+      "result": {
+        "pdf_name": "R_20181011_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20181011_1.pdf",
+        "xml_name": "R_20181011_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20181011_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20181031_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20181031_1.pdf",
+        "xml_name": "A_20181031_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20181031_1.xml"
+      },
+      "auction_date": "2018-11-07",
+      "cusip": "912810SE9",
+      "dataset_update": "2018-11-07T13:03:16",
+      "issue_date": "2018-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20181107_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20181107_1.pdf",
+        "xml_name": "R_20181107_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20181107_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20181206_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/A_20181206_4.pdf",
+        "xml_name": "A_20181206_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20181206_4.xml"
+      },
+      "auction_date": "2018-12-13",
+      "cusip": "912810SE9",
+      "dataset_update": "2018-12-13T13:03:08",
+      "issue_date": "2018-12-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-11-15",
+      "result": {
+        "pdf_name": "R_20181213_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2018/R_20181213_3.pdf",
+        "xml_name": "R_20181213_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20181213_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190103_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190103_5.pdf",
+        "xml_name": "A_20190103_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190103_5.xml"
+      },
+      "auction_date": "2019-01-10",
+      "cusip": "912810SE9",
+      "dataset_update": "2019-01-10T13:03:14",
+      "issue_date": "2019-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2018-11-15",
+      "result": {
+        "pdf_name": "R_20190110_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190110_3.pdf",
+        "xml_name": "R_20190110_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190110_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190130_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190130_3.pdf",
+        "xml_name": "A_20190130_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190130_3.xml"
+      },
+      "auction_date": "2019-02-07",
+      "cusip": "912810SF6",
+      "dataset_update": "2019-02-07T13:02:55",
+      "issue_date": "2019-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20190207_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190207_3.pdf",
+        "xml_name": "R_20190207_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190207_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190307_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190307_1.pdf",
+        "xml_name": "A_20190307_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190307_1.xml"
+      },
+      "auction_date": "2019-03-13",
+      "cusip": "912810SF6",
+      "dataset_update": "2019-03-13T13:03:04",
+      "issue_date": "2019-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-02-15",
+      "result": {
+        "pdf_name": "R_20190313_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190313_1.pdf",
+        "xml_name": "R_20190313_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190313_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190404_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190404_4.pdf",
+        "xml_name": "A_20190404_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190404_4.xml"
+      },
+      "auction_date": "2019-04-11",
+      "cusip": "912810SF6",
+      "dataset_update": "2019-04-11T13:02:53",
+      "issue_date": "2019-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-02-15",
+      "result": {
+        "pdf_name": "R_20190411_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190411_3.pdf",
+        "xml_name": "R_20190411_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190411_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190501_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190501_3.pdf",
+        "xml_name": "A_20190501_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190501_3.xml"
+      },
+      "auction_date": "2019-05-09",
+      "cusip": "912810SH2",
+      "dataset_update": "2019-05-09T13:02:55",
+      "issue_date": "2019-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20190509_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190509_3.pdf",
+        "xml_name": "R_20190509_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190509_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190606_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190606_2.pdf",
+        "xml_name": "A_20190606_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190606_2.xml"
+      },
+      "auction_date": "2019-06-13",
+      "cusip": "912810SH2",
+      "dataset_update": "2019-06-13T13:03:02",
+      "issue_date": "2019-06-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-05-15",
+      "result": {
+        "pdf_name": "R_20190613_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190613_3.pdf",
+        "xml_name": "R_20190613_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190613_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190703_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190703_5.pdf",
+        "xml_name": "A_20190703_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190703_5.xml"
+      },
+      "auction_date": "2019-07-11",
+      "cusip": "912810SH2",
+      "dataset_update": "2019-07-11T13:03:22",
+      "issue_date": "2019-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-05-15",
+      "result": {
+        "pdf_name": "R_20190711_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190711_3.pdf",
+        "xml_name": "R_20190711_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190711_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190731_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190731_1.pdf",
+        "xml_name": "A_20190731_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190731_1.xml"
+      },
+      "auction_date": "2019-08-08",
+      "cusip": "912810SJ8",
+      "dataset_update": "2019-08-08T13:02:57",
+      "issue_date": "2019-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20190808_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190808_3.pdf",
+        "xml_name": "R_20190808_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190808_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20190905_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20190905_1.pdf",
+        "xml_name": "A_20190905_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20190905_1.xml"
+      },
+      "auction_date": "2019-09-12",
+      "cusip": "912810SJ8",
+      "dataset_update": "2019-09-12T13:03:49",
+      "issue_date": "2019-09-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-08-15",
+      "result": {
+        "pdf_name": "R_20190912_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20190912_3.pdf",
+        "xml_name": "R_20190912_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20190912_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20191003_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20191003_3.pdf",
+        "xml_name": "A_20191003_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20191003_3.xml"
+      },
+      "auction_date": "2019-10-10",
+      "cusip": "912810SJ8",
+      "dataset_update": "2019-10-10T13:03:20",
+      "issue_date": "2019-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-08-15",
+      "result": {
+        "pdf_name": "R_20191010_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20191010_3.pdf",
+        "xml_name": "R_20191010_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20191010_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20191030_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20191030_2.pdf",
+        "xml_name": "A_20191030_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20191030_2.xml"
+      },
+      "auction_date": "2019-11-07",
+      "cusip": "912810SK5",
+      "dataset_update": "2019-11-07T13:02:44",
+      "issue_date": "2019-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20191107_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20191107_3.pdf",
+        "xml_name": "R_20191107_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20191107_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20191205_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/A_20191205_3.pdf",
+        "xml_name": "A_20191205_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20191205_3.xml"
+      },
+      "auction_date": "2019-12-12",
+      "cusip": "912810SK5",
+      "dataset_update": "2019-12-12T13:02:41",
+      "issue_date": "2019-12-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-11-15",
+      "result": {
+        "pdf_name": "R_20191212_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2019/R_20191212_3.pdf",
+        "xml_name": "R_20191212_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20191212_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200102_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200102_4.pdf",
+        "xml_name": "A_20200102_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200102_4.xml"
+      },
+      "auction_date": "2020-01-09",
+      "cusip": "912810SK5",
+      "dataset_update": "2020-01-09T13:03:10",
+      "issue_date": "2020-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2019-11-15",
+      "result": {
+        "pdf_name": "R_20200109_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200109_3.pdf",
+        "xml_name": "R_20200109_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200109_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200205_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200205_1.pdf",
+        "xml_name": "A_20200205_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200205_1.xml"
+      },
+      "auction_date": "2020-02-13",
+      "cusip": "912810SL3",
+      "dataset_update": "2020-02-13T13:03:27",
+      "issue_date": "2020-02-18",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20200213_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200213_3.pdf",
+        "xml_name": "R_20200213_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200213_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200305_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200305_1.pdf",
+        "xml_name": "A_20200305_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200305_1.xml"
+      },
+      "auction_date": "2020-03-12",
+      "cusip": "912810SL3",
+      "dataset_update": "2020-03-12T13:03:07",
+      "issue_date": "2020-03-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-02-18",
+      "result": {
+        "pdf_name": "R_20200312_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200312_3.pdf",
+        "xml_name": "R_20200312_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200312_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200402_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200402_5.pdf",
+        "xml_name": "A_20200402_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200402_5.xml"
+      },
+      "auction_date": "2020-04-08",
+      "cusip": "912810SL3",
+      "dataset_update": "2020-04-08T13:03:29",
+      "issue_date": "2020-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-02-18",
+      "result": {
+        "pdf_name": "R_20200408_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200408_4.pdf",
+        "xml_name": "R_20200408_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200408_4.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200506_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200506_3.pdf",
+        "xml_name": "A_20200506_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200506_3.xml"
+      },
+      "auction_date": "2020-05-13",
+      "cusip": "912810SN9",
+      "dataset_update": "2020-05-13T13:05:58",
+      "issue_date": "2020-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20200513_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200513_3.pdf",
+        "xml_name": "R_20200513_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200513_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200604_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200604_7.pdf",
+        "xml_name": "A_20200604_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200604_7.xml"
+      },
+      "auction_date": "2020-06-11",
+      "cusip": "912810SN9",
+      "dataset_update": "2020-06-11T13:02:59",
+      "issue_date": "2020-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-05-15",
+      "result": {
+        "pdf_name": "R_20200611_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200611_3.pdf",
+        "xml_name": "R_20200611_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200611_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200702_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200702_3.pdf",
+        "xml_name": "A_20200702_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200702_3.xml"
+      },
+      "auction_date": "2020-07-09",
+      "cusip": "912810SN9",
+      "dataset_update": "2020-07-09T13:03:19",
+      "issue_date": "2020-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-05-15",
+      "result": {
+        "pdf_name": "R_20200709_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200709_3.pdf",
+        "xml_name": "R_20200709_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200709_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200805_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200805_2.pdf",
+        "xml_name": "A_20200805_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200805_2.xml"
+      },
+      "auction_date": "2020-08-13",
+      "cusip": "912810SP4",
+      "dataset_update": "2020-08-13T13:03:13",
+      "issue_date": "2020-08-17",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20200813_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200813_3.pdf",
+        "xml_name": "R_20200813_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200813_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20200903_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20200903_7.pdf",
+        "xml_name": "A_20200903_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20200903_7.xml"
+      },
+      "auction_date": "2020-09-10",
+      "cusip": "912810SP4",
+      "dataset_update": "2020-09-10T13:03:31",
+      "issue_date": "2020-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-08-17",
+      "result": {
+        "pdf_name": "R_20200910_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20200910_3.pdf",
+        "xml_name": "R_20200910_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20200910_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20201001_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20201001_5.pdf",
+        "xml_name": "A_20201001_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20201001_5.xml"
+      },
+      "auction_date": "2020-10-08",
+      "cusip": "912810SP4",
+      "dataset_update": "2020-10-08T13:02:51",
+      "issue_date": "2020-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-08-17",
+      "result": {
+        "pdf_name": "R_20201008_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20201008_3.pdf",
+        "xml_name": "R_20201008_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20201008_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20201104_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20201104_1.pdf",
+        "xml_name": "A_20201104_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20201104_1.xml"
+      },
+      "auction_date": "2020-11-12",
+      "cusip": "912810SS8",
+      "dataset_update": "2020-11-12T13:03:17",
+      "issue_date": "2020-11-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20201112_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20201112_5.pdf",
+        "xml_name": "R_20201112_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20201112_5.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20201203_6.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/A_20201203_6.pdf",
+        "xml_name": "A_20201203_6.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20201203_6.xml"
+      },
+      "auction_date": "2020-12-10",
+      "cusip": "912810SS8",
+      "dataset_update": "2020-12-10T13:03:51",
+      "issue_date": "2020-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-11-16",
+      "result": {
+        "pdf_name": "R_20201210_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2020/R_20201210_3.pdf",
+        "xml_name": "R_20201210_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20201210_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210107_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210107_2.pdf",
+        "xml_name": "A_20210107_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210107_2.xml"
+      },
+      "auction_date": "2021-01-13",
+      "cusip": "912810SS8",
+      "dataset_update": "2021-01-13T13:03:36",
+      "issue_date": "2021-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2020-11-16",
+      "result": {
+        "pdf_name": "R_20210113_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210113_3.pdf",
+        "xml_name": "R_20210113_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210113_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210203_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210203_1.pdf",
+        "xml_name": "A_20210203_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210203_1.xml"
+      },
+      "auction_date": "2021-02-11",
+      "cusip": "912810SU3",
+      "dataset_update": "2021-02-11T13:03:32",
+      "issue_date": "2021-02-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20210211_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210211_3.pdf",
+        "xml_name": "R_20210211_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210211_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210304_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210304_3.pdf",
+        "xml_name": "A_20210304_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210304_3.xml"
+      },
+      "auction_date": "2021-03-11",
+      "cusip": "912810SU3",
+      "dataset_update": "2021-03-11T13:03:05",
+      "issue_date": "2021-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-02-16",
+      "result": {
+        "pdf_name": "R_20210311_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210311_3.pdf",
+        "xml_name": "R_20210311_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210311_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210408_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210408_3.pdf",
+        "xml_name": "A_20210408_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210408_3.xml"
+      },
+      "auction_date": "2021-04-13",
+      "cusip": "912810SU3",
+      "dataset_update": "2021-04-13T13:03:18",
+      "issue_date": "2021-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-02-16",
+      "result": {
+        "pdf_name": "R_20210413_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210413_2.pdf",
+        "xml_name": "R_20210413_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210413_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210505_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210505_2.pdf",
+        "xml_name": "A_20210505_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210505_2.xml"
+      },
+      "auction_date": "2021-05-13",
+      "cusip": "912810SX7",
+      "dataset_update": "2021-05-13T13:03:01",
+      "issue_date": "2021-05-17",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20210513_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210513_3.pdf",
+        "xml_name": "R_20210513_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210513_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210603_6.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210603_6.pdf",
+        "xml_name": "A_20210603_6.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210603_6.xml"
+      },
+      "auction_date": "2021-06-10",
+      "cusip": "912810SX7",
+      "dataset_update": "2021-06-10T13:02:45",
+      "issue_date": "2021-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-05-17",
+      "result": {
+        "pdf_name": "R_20210610_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210610_3.pdf",
+        "xml_name": "R_20210610_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210610_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210708_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210708_1.pdf",
+        "xml_name": "A_20210708_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210708_1.xml"
+      },
+      "auction_date": "2021-07-13",
+      "cusip": "912810SX7",
+      "dataset_update": "2021-07-13T13:02:57",
+      "issue_date": "2021-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-05-17",
+      "result": {
+        "pdf_name": "R_20210713_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210713_3.pdf",
+        "xml_name": "R_20210713_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210713_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210804_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210804_1.pdf",
+        "xml_name": "A_20210804_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210804_1.xml"
+      },
+      "auction_date": "2021-08-12",
+      "cusip": "912810SZ2",
+      "dataset_update": "2021-08-12T13:03:00",
+      "issue_date": "2021-08-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20210812_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210812_3.pdf",
+        "xml_name": "R_20210812_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210812_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20210902_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20210902_7.pdf",
+        "xml_name": "A_20210902_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20210902_7.xml"
+      },
+      "auction_date": "2021-09-09",
+      "cusip": "912810SZ2",
+      "dataset_update": "2021-09-09T13:03:16",
+      "issue_date": "2021-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-08-16",
+      "result": {
+        "pdf_name": "R_20210909_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20210909_3.pdf",
+        "xml_name": "R_20210909_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20210909_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20211007_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20211007_2.pdf",
+        "xml_name": "A_20211007_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20211007_2.xml"
+      },
+      "auction_date": "2021-10-13",
+      "cusip": "912810SZ2",
+      "dataset_update": "2021-10-13T13:02:54",
+      "issue_date": "2021-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-08-16",
+      "result": {
+        "pdf_name": "R_20211013_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20211013_2.pdf",
+        "xml_name": "R_20211013_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20211013_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20211103_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20211103_1.pdf",
+        "xml_name": "A_20211103_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20211103_1.xml"
+      },
+      "auction_date": "2021-11-10",
+      "cusip": "912810TB4",
+      "dataset_update": "2021-11-10T13:03:32",
+      "issue_date": "2021-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20211110_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20211110_4.pdf",
+        "xml_name": "R_20211110_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20211110_4.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20211202_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/A_20211202_4.pdf",
+        "xml_name": "A_20211202_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20211202_4.xml"
+      },
+      "auction_date": "2021-12-09",
+      "cusip": "912810TB4",
+      "dataset_update": "2021-12-09T13:03:47",
+      "issue_date": "2021-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-11-15",
+      "result": {
+        "pdf_name": "R_20211209_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2021/R_20211209_3.pdf",
+        "xml_name": "R_20211209_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20211209_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220106_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220106_2.pdf",
+        "xml_name": "A_20220106_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220106_2.xml"
+      },
+      "auction_date": "2022-01-13",
+      "cusip": "912810TB4",
+      "dataset_update": "2022-01-13T13:03:12",
+      "issue_date": "2022-01-18",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2021-11-15",
+      "result": {
+        "pdf_name": "R_20220113_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220113_3.pdf",
+        "xml_name": "R_20220113_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220113_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220202_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220202_2.pdf",
+        "xml_name": "A_20220202_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220202_2.xml"
+      },
+      "auction_date": "2022-02-10",
+      "cusip": "912810TD0",
+      "dataset_update": "2022-02-10T13:03:26",
+      "issue_date": "2022-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20220210_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220210_3.pdf",
+        "xml_name": "R_20220210_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220210_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220303_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220303_1.pdf",
+        "xml_name": "A_20220303_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220303_1.xml"
+      },
+      "auction_date": "2022-03-10",
+      "cusip": "912810TD0",
+      "dataset_update": "2022-03-10T13:03:29",
+      "issue_date": "2022-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-02-15",
+      "result": {
+        "pdf_name": "R_20220310_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220310_3.pdf",
+        "xml_name": "R_20220310_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220310_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220407_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220407_3.pdf",
+        "xml_name": "A_20220407_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220407_3.xml"
+      },
+      "auction_date": "2022-04-13",
+      "cusip": "912810TD0",
+      "dataset_update": "2022-04-13T13:03:08",
+      "issue_date": "2022-04-18",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-02-15",
+      "result": {
+        "pdf_name": "R_20220413_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220413_2.pdf",
+        "xml_name": "R_20220413_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220413_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220504_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220504_1.pdf",
+        "xml_name": "A_20220504_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220504_1.xml"
+      },
+      "auction_date": "2022-05-12",
+      "cusip": "912810TG3",
+      "dataset_update": "2022-05-12T13:03:15",
+      "issue_date": "2022-05-16",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20220512_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220512_3.pdf",
+        "xml_name": "R_20220512_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220512_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220602_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220602_5.pdf",
+        "xml_name": "A_20220602_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220602_5.xml"
+      },
+      "auction_date": "2022-06-09",
+      "cusip": "912810TG3",
+      "dataset_update": "2022-06-09T13:05:03",
+      "issue_date": "2022-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-05-16",
+      "result": {
+        "pdf_name": "R_20220609_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220609_3.pdf",
+        "xml_name": "R_20220609_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220609_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220707_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220707_1.pdf",
+        "xml_name": "A_20220707_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220707_1.xml"
+      },
+      "auction_date": "2022-07-13",
+      "cusip": "912810TG3",
+      "dataset_update": "2022-07-13T13:03:37",
+      "issue_date": "2022-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-05-16",
+      "result": {
+        "pdf_name": "R_20220713_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220713_2.pdf",
+        "xml_name": "R_20220713_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220713_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220803_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220803_3.pdf",
+        "xml_name": "A_20220803_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220803_3.xml"
+      },
+      "auction_date": "2022-08-11",
+      "cusip": "912810TJ7",
+      "dataset_update": "2022-08-11T13:03:33",
+      "issue_date": "2022-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20220811_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220811_3.pdf",
+        "xml_name": "R_20220811_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220811_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20220908_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20220908_3.pdf",
+        "xml_name": "A_20220908_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20220908_3.xml"
+      },
+      "auction_date": "2022-09-13",
+      "cusip": "912810TJ7",
+      "dataset_update": "2022-09-13T13:03:58",
+      "issue_date": "2022-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-08-15",
+      "result": {
+        "pdf_name": "R_20220913_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20220913_1.pdf",
+        "xml_name": "R_20220913_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20220913_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20221006_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20221006_5.pdf",
+        "xml_name": "A_20221006_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20221006_5.xml"
+      },
+      "auction_date": "2022-10-13",
+      "cusip": "912810TJ7",
+      "dataset_update": "2022-10-13T13:03:36",
+      "issue_date": "2022-10-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-08-15",
+      "result": {
+        "pdf_name": "R_20221013_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20221013_3.pdf",
+        "xml_name": "R_20221013_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20221013_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20221102_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20221102_1.pdf",
+        "xml_name": "A_20221102_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20221102_1.xml"
+      },
+      "auction_date": "2022-11-10",
+      "cusip": "912810TL2",
+      "dataset_update": "2022-11-10T13:04:31",
+      "issue_date": "2022-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20221110_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20221110_3.pdf",
+        "xml_name": "R_20221110_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20221110_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20221208_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/A_20221208_3.pdf",
+        "xml_name": "A_20221208_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20221208_3.xml"
+      },
+      "auction_date": "2022-12-13",
+      "cusip": "912810TL2",
+      "dataset_update": "2022-12-13T13:04:13",
+      "issue_date": "2022-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-11-15",
+      "result": {
+        "pdf_name": "R_20221213_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2022/R_20221213_1.pdf",
+        "xml_name": "R_20221213_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20221213_1.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230105_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230105_5.pdf",
+        "xml_name": "A_20230105_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230105_5.xml"
+      },
+      "auction_date": "2023-01-12",
+      "cusip": "912810TL2",
+      "dataset_update": "2023-01-12T13:03:56",
+      "issue_date": "2023-01-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2022-11-15",
+      "result": {
+        "pdf_name": "R_20230112_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230112_4.pdf",
+        "xml_name": "R_20230112_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230112_4.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230201_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230201_3.pdf",
+        "xml_name": "A_20230201_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230201_3.xml"
+      },
+      "auction_date": "2023-02-09",
+      "cusip": "912810TN8",
+      "dataset_update": "2023-02-09T13:04:28",
+      "issue_date": "2023-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20230209_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230209_3.pdf",
+        "xml_name": "R_20230209_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230209_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230302_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230302_2.pdf",
+        "xml_name": "A_20230302_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230302_2.xml"
+      },
+      "auction_date": "2023-03-09",
+      "cusip": "912810TN8",
+      "dataset_update": "2023-04-28T11:34:05",
+      "issue_date": "2023-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-02-15",
+      "result": {
+        "pdf_name": "R_20230309_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230309_3.pdf",
+        "xml_name": "R_20230309_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230309_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230406_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230406_5.pdf",
+        "xml_name": "A_20230406_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230406_5.xml"
+      },
+      "auction_date": "2023-04-13",
+      "cusip": "912810TN8",
+      "dataset_update": "2023-04-13T13:04:11",
+      "issue_date": "2023-04-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-02-15",
+      "result": {
+        "pdf_name": "R_20230413_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230413_3.pdf",
+        "xml_name": "R_20230413_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230413_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230503_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230503_2.pdf",
+        "xml_name": "A_20230503_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230503_2.xml"
+      },
+      "auction_date": "2023-05-11",
+      "cusip": "912810TR9",
+      "dataset_update": "2023-05-11T13:07:46",
+      "issue_date": "2023-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20230511_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230511_4.pdf",
+        "xml_name": "R_20230511_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230511_4.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230608_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230608_7.pdf",
+        "xml_name": "A_20230608_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230608_7.xml"
+      },
+      "auction_date": "2023-06-13",
+      "cusip": "912810TR9",
+      "dataset_update": "2023-06-13T13:03:55",
+      "issue_date": "2023-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-05-15",
+      "result": {
+        "pdf_name": "R_20230613_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230613_3.pdf",
+        "xml_name": "R_20230613_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230613_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230706_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230706_7.pdf",
+        "xml_name": "A_20230706_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230706_7.xml"
+      },
+      "auction_date": "2023-07-13",
+      "cusip": "912810TR9",
+      "dataset_update": "2023-07-13T13:04:21",
+      "issue_date": "2023-07-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-05-15",
+      "result": {
+        "pdf_name": "R_20230713_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230713_3.pdf",
+        "xml_name": "R_20230713_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230713_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230802_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230802_1.pdf",
+        "xml_name": "A_20230802_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230802_1.xml"
+      },
+      "auction_date": "2023-08-10",
+      "cusip": "912810TT5",
+      "dataset_update": "2023-08-10T13:04:17",
+      "issue_date": "2023-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20230810_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230810_3.pdf",
+        "xml_name": "R_20230810_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230810_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20230907_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20230907_4.pdf",
+        "xml_name": "A_20230907_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20230907_4.xml"
+      },
+      "auction_date": "2023-09-13",
+      "cusip": "912810TT5",
+      "dataset_update": "2023-09-13T13:03:46",
+      "issue_date": "2023-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-08-15",
+      "result": {
+        "pdf_name": "R_20230913_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20230913_2.pdf",
+        "xml_name": "R_20230913_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20230913_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20231005_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20231005_2.pdf",
+        "xml_name": "A_20231005_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20231005_2.xml"
+      },
+      "auction_date": "2023-10-12",
+      "cusip": "912810TT5",
+      "dataset_update": "2023-10-12T13:03:42",
+      "issue_date": "2023-10-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-08-15",
+      "result": {
+        "pdf_name": "R_20231012_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20231012_3.pdf",
+        "xml_name": "R_20231012_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20231012_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20231101_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20231101_3.pdf",
+        "xml_name": "A_20231101_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20231101_3.xml"
+      },
+      "auction_date": "2023-11-09",
+      "cusip": "912810TV0",
+      "dataset_update": "2023-11-09T13:03:15",
+      "issue_date": "2023-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20231109_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20231109_3.pdf",
+        "xml_name": "R_20231109_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20231109_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20231207_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/A_20231207_4.pdf",
+        "xml_name": "A_20231207_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20231207_4.xml"
+      },
+      "auction_date": "2023-12-12",
+      "cusip": "912810TV0",
+      "dataset_update": "2023-12-12T13:04:55",
+      "issue_date": "2023-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-11-15",
+      "result": {
+        "pdf_name": "R_20231212_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2023/R_20231212_2.pdf",
+        "xml_name": "R_20231212_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20231212_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240104_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240104_4.pdf",
+        "xml_name": "A_20240104_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240104_4.xml"
+      },
+      "auction_date": "2024-01-11",
+      "cusip": "912810TV0",
+      "dataset_update": "2024-01-11T13:03:56",
+      "issue_date": "2024-01-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2023-11-15",
+      "result": {
+        "pdf_name": "R_20240111_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240111_3.pdf",
+        "xml_name": "R_20240111_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240111_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240131_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240131_2.pdf",
+        "xml_name": "A_20240131_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240131_2.xml"
+      },
+      "auction_date": "2024-02-08",
+      "cusip": "912810TX6",
+      "dataset_update": "2024-02-08T13:04:23",
+      "issue_date": "2024-02-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20240208_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240208_3.pdf",
+        "xml_name": "R_20240208_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240208_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240307_5.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240307_5.pdf",
+        "xml_name": "A_20240307_5.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240307_5.xml"
+      },
+      "auction_date": "2024-03-13",
+      "cusip": "912810TX6",
+      "dataset_update": "2024-03-13T13:04:03",
+      "issue_date": "2024-03-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-02-15",
+      "result": {
+        "pdf_name": "R_20240313_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240313_2.pdf",
+        "xml_name": "R_20240313_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240313_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240404_6.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240404_6.pdf",
+        "xml_name": "A_20240404_6.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240404_6.xml"
+      },
+      "auction_date": "2024-04-11",
+      "cusip": "912810TX6",
+      "dataset_update": "2024-04-11T13:04:11",
+      "issue_date": "2024-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-02-15",
+      "result": {
+        "pdf_name": "R_20240411_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240411_3.pdf",
+        "xml_name": "R_20240411_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240411_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240501_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240501_3.pdf",
+        "xml_name": "A_20240501_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240501_3.xml"
+      },
+      "auction_date": "2024-05-09",
+      "cusip": "912810UA4",
+      "dataset_update": "2024-05-09T13:04:47",
+      "issue_date": "2024-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20240509_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240509_3.pdf",
+        "xml_name": "R_20240509_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240509_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240606_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240606_1.pdf",
+        "xml_name": "A_20240606_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240606_1.xml"
+      },
+      "auction_date": "2024-06-13",
+      "cusip": "912810UA4",
+      "dataset_update": "2024-06-13T13:03:29",
+      "issue_date": "2024-06-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-05-15",
+      "result": {
+        "pdf_name": "R_20240613_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240613_3.pdf",
+        "xml_name": "R_20240613_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240613_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240703_7.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240703_7.pdf",
+        "xml_name": "A_20240703_7.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240703_7.xml"
+      },
+      "auction_date": "2024-07-11",
+      "cusip": "912810UA4",
+      "dataset_update": "2024-07-11T13:04:14",
+      "issue_date": "2024-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-05-15",
+      "result": {
+        "pdf_name": "R_20240711_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240711_3.pdf",
+        "xml_name": "R_20240711_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240711_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240731_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240731_3.pdf",
+        "xml_name": "A_20240731_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240731_3.xml"
+      },
+      "auction_date": "2024-08-08",
+      "cusip": "912810UC0",
+      "dataset_update": "2024-08-08T13:04:56",
+      "issue_date": "2024-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20240808_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240808_3.pdf",
+        "xml_name": "R_20240808_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240808_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20240905_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20240905_4.pdf",
+        "xml_name": "A_20240905_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20240905_4.xml"
+      },
+      "auction_date": "2024-09-12",
+      "cusip": "912810UC0",
+      "dataset_update": "2024-09-12T13:03:56",
+      "issue_date": "2024-09-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-08-15",
+      "result": {
+        "pdf_name": "R_20240912_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240912_3.pdf",
+        "xml_name": "R_20240912_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20240912_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20241003_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20241003_4.pdf",
+        "xml_name": "A_20241003_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20241003_4.xml"
+      },
+      "auction_date": "2024-10-10",
+      "cusip": "912810UC0",
+      "dataset_update": "2024-10-10T13:04:04",
+      "issue_date": "2024-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-08-15",
+      "result": {
+        "pdf_name": "R_20241010_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20241010_3.pdf",
+        "xml_name": "R_20241010_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20241010_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20241030_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20241030_1.pdf",
+        "xml_name": "A_20241030_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20241030_1.xml"
+      },
+      "auction_date": "2024-11-06",
+      "cusip": "912810UE6",
+      "dataset_update": "2024-11-06T13:04:09",
+      "issue_date": "2024-11-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20241106_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20241106_2.pdf",
+        "xml_name": "R_20241106_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20241106_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20241205_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/A_20241205_4.pdf",
+        "xml_name": "A_20241205_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20241205_4.xml"
+      },
+      "auction_date": "2024-12-12",
+      "cusip": "912810UE6",
+      "dataset_update": "2024-12-12T13:04:19",
+      "issue_date": "2024-12-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-11-15",
+      "result": {
+        "pdf_name": "R_20241212_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20241212_3.pdf",
+        "xml_name": "R_20241212_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20241212_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250102_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250102_2.pdf",
+        "xml_name": "A_20250102_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250102_2.xml"
+      },
+      "auction_date": "2025-01-08",
+      "cusip": "912810UE6",
+      "dataset_update": "2025-01-09T11:34:03",
+      "issue_date": "2025-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2024-11-15",
+      "result": {
+        "pdf_name": "R_20250108_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250108_2.pdf",
+        "xml_name": "R_20250108_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250108_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250205_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250205_2.pdf",
+        "xml_name": "A_20250205_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250205_2.xml"
+      },
+      "auction_date": "2025-02-13",
+      "cusip": "912810UG1",
+      "dataset_update": "2025-02-13T13:04:11",
+      "issue_date": "2025-02-18",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20250213_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250213_3.pdf",
+        "xml_name": "R_20250213_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250213_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250306_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250306_3.pdf",
+        "xml_name": "A_20250306_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250306_3.xml"
+      },
+      "auction_date": "2025-03-13",
+      "cusip": "912810UG1",
+      "dataset_update": "2025-03-13T13:04:34",
+      "issue_date": "2025-03-17",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-02-18",
+      "result": {
+        "pdf_name": "R_20250313_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250313_3.pdf",
+        "xml_name": "R_20250313_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250313_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250403_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250403_2.pdf",
+        "xml_name": "A_20250403_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250403_2.xml"
+      },
+      "auction_date": "2025-04-10",
+      "cusip": "912810UG1",
+      "dataset_update": "2025-04-10T13:04:26",
+      "issue_date": "2025-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-02-18",
+      "result": {
+        "pdf_name": "R_20250410_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250410_3.pdf",
+        "xml_name": "R_20250410_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250410_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250430_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250430_1.pdf",
+        "xml_name": "A_20250430_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250430_1.xml"
+      },
+      "auction_date": "2025-05-08",
+      "cusip": "912810UK2",
+      "dataset_update": "2025-05-08T13:03:59",
+      "issue_date": "2025-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20250508_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250508_4.pdf",
+        "xml_name": "R_20250508_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250508_4.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250605_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250605_4.pdf",
+        "xml_name": "A_20250605_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250605_4.xml"
+      },
+      "auction_date": "2025-06-12",
+      "cusip": "912810UK2",
+      "dataset_update": "2025-06-12T13:04:14",
+      "issue_date": "2025-06-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-05-15",
+      "result": {
+        "pdf_name": "R_20250612_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250612_3.pdf",
+        "xml_name": "R_20250612_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250612_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250703_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250703_4.pdf",
+        "xml_name": "A_20250703_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250703_4.xml"
+      },
+      "auction_date": "2025-07-10",
+      "cusip": "912810UK2",
+      "dataset_update": "2025-07-10T13:04:20",
+      "issue_date": "2025-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-05-15",
+      "result": {
+        "pdf_name": "R_20250710_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250710_3.pdf",
+        "xml_name": "R_20250710_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250710_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250730_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250730_2.pdf",
+        "xml_name": "A_20250730_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250730_2.xml"
+      },
+      "auction_date": "2025-08-07",
+      "cusip": "912810UM8",
+      "dataset_update": "2025-08-07T13:03:58",
+      "issue_date": "2025-08-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20250807_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250807_3.pdf",
+        "xml_name": "R_20250807_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250807_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20250904_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20250904_4.pdf",
+        "xml_name": "A_20250904_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20250904_4.xml"
+      },
+      "auction_date": "2025-09-11",
+      "cusip": "912810UM8",
+      "dataset_update": "2025-09-11T13:04:42",
+      "issue_date": "2025-09-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-08-15",
+      "result": {
+        "pdf_name": "R_20250911_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20250911_3.pdf",
+        "xml_name": "R_20250911_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20250911_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20251002_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20251002_4.pdf",
+        "xml_name": "A_20251002_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20251002_4.xml"
+      },
+      "auction_date": "2025-10-09",
+      "cusip": "912810UM8",
+      "dataset_update": "2025-10-09T13:05:03",
+      "issue_date": "2025-10-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-08-15",
+      "result": {
+        "pdf_name": "R_20251009_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20251009_3.pdf",
+        "xml_name": "R_20251009_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20251009_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20251105_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20251105_1.pdf",
+        "xml_name": "A_20251105_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20251105_1.xml"
+      },
+      "auction_date": "2025-11-13",
+      "cusip": "912810UP1",
+      "dataset_update": "2025-11-13T13:08:10",
+      "issue_date": "2025-11-17",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20251113_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20251113_3.pdf",
+        "xml_name": "R_20251113_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20251113_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20251204_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/A_20251204_2.pdf",
+        "xml_name": "A_20251204_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20251204_2.xml"
+      },
+      "auction_date": "2025-12-11",
+      "cusip": "912810UP1",
+      "dataset_update": "2025-12-11T13:04:17",
+      "issue_date": "2025-12-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-11-17",
+      "result": {
+        "pdf_name": "R_20251211_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2025/R_20251211_3.pdf",
+        "xml_name": "R_20251211_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20251211_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260108_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260108_4.pdf",
+        "xml_name": "A_20260108_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260108_4.xml"
+      },
+      "auction_date": "2026-01-13",
+      "cusip": "912810UP1",
+      "dataset_update": "2026-01-13T13:04:11",
+      "issue_date": "2026-01-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2025-11-17",
+      "result": {
+        "pdf_name": "R_20260113_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260113_2.pdf",
+        "xml_name": "R_20260113_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260113_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260204_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260204_3.pdf",
+        "xml_name": "A_20260204_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260204_3.xml"
+      },
+      "auction_date": "2026-02-12",
+      "cusip": "912810UR7",
+      "dataset_update": "2026-02-12T13:04:18",
+      "issue_date": "2026-02-17",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20260212_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260212_3.pdf",
+        "xml_name": "R_20260212_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260212_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260305_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260305_1.pdf",
+        "xml_name": "A_20260305_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260305_1.xml"
+      },
+      "auction_date": "2026-03-12",
+      "cusip": "912810UR7",
+      "dataset_update": "2026-03-12T13:03:57",
+      "issue_date": "2026-03-16",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2026-02-17",
+      "result": {
+        "pdf_name": "R_20260312_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260312_3.pdf",
+        "xml_name": "R_20260312_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260312_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260402_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260402_4.pdf",
+        "xml_name": "A_20260402_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260402_4.xml"
+      },
+      "auction_date": "2026-04-09",
+      "cusip": "912810UR7",
+      "dataset_update": "2026-04-09T13:04:16",
+      "issue_date": "2026-04-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2026-02-17",
+      "result": {
+        "pdf_name": "R_20260409_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260409_3.pdf",
+        "xml_name": "R_20260409_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260409_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260506_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260506_3.pdf",
+        "xml_name": "A_20260506_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260506_3.xml"
+      },
+      "auction_date": "2026-05-13",
+      "cusip": "912810UU0",
+      "dataset_update": "2026-05-13T13:04:05",
+      "issue_date": "2026-05-15",
+      "issue_or_reopening": "original",
+      "original_cusip": null,
+      "original_issue_date": null,
+      "result": {
+        "pdf_name": "R_20260513_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260513_2.pdf",
+        "xml_name": "R_20260513_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260513_2.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260604_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260604_3.pdf",
+        "xml_name": "A_20260604_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260604_3.xml"
+      },
+      "auction_date": "2026-06-11",
+      "cusip": "912810UU0",
+      "dataset_update": "2026-06-11T13:04:00",
+      "issue_date": "2026-06-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2026-05-15",
+      "result": {
+        "pdf_name": "R_20260611_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260611_3.pdf",
+        "xml_name": "R_20260611_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260611_3.xml"
+      }
+    },
+    {
+      "announcement": {
+        "pdf_name": "A_20260702_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/A_20260702_2.pdf",
+        "xml_name": "A_20260702_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/A_20260702_2.xml"
+      },
+      "auction_date": "2026-07-09",
+      "cusip": "912810UU0",
+      "dataset_update": "2026-07-09T13:03:21",
+      "issue_date": "2026-07-15",
+      "issue_or_reopening": "reopening",
+      "original_cusip": null,
+      "original_issue_date": "2026-05-15",
+      "result": {
+        "pdf_name": "R_20260709_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260709_3.pdf",
+        "xml_name": "R_20260709_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260709_3.xml"
+      }
+    }
+  ],
+  "historical_window": {
+    "end_exclusive": "2026-08-01",
+    "start": "2016-01-01"
+  },
+  "network_attempted": false,
+  "outcomes_accessed": false,
+  "paid_source_used": false,
+  "raw_artifact_hashes": {
+    "announced_rss": "0ed188fe6c5d79f85929d980710c67958b2b8596252920cb395222d2f138d7a0",
+    "legacy_json": "fa1f0c61acd45c943e32d4d944bbc27c66ef574ff57be10884027e04c602d3a2",
+    "result_rss": "6aa6b103983fff041702a30e16dcc1da4001d3677b0f08c2aac796af25f7b3d1",
+    "result_xml": [
+      "eba6fb19f021de445e9978ba7f12c868ae031df05673ec741e395eb67f111d3b",
+      "133820277439653548e72d41c7d2a4499b1f241f07f0369c814ea2c7e852dab0"
+    ]
+  },
+  "receipt_path": "r46_treasury_public_source_evidence_2026_09_10_v1.json",
+  "research_id": "r46_treasury_auction_unwind_tlt_v1_2026_09_10",
+  "result_rss": {
+    "admission_source": false,
+    "blockers": [
+      "RSS_CROSSCHECK_ONLY",
+      "PUBLIC_AVAILABILITY_UNPROVEN",
+      "POST_CUTOFF_CAPABILITY_ONLY"
+    ],
+    "credentials_used": false,
+    "historical_window": {
+      "end_exclusive": "2026-08-01",
+      "start": "2016-01-01"
+    },
+    "inventory_source": false,
+    "items": [
+      {
+        "auction_date": "2026-08-27",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VE4",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260827_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260827_1.pdf",
+        "pub_date": "Thu, 27 Aug 2026 15:33:29 GMT",
+        "pub_date_utc": "2026-08-27T15:33:29Z",
+        "term": "4-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260827_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260827_1.xml"
+      },
+      {
+        "auction_date": "2026-08-27",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VN4",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260827_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260827_2.pdf",
+        "pub_date": "Thu, 27 Aug 2026 15:33:30 GMT",
+        "pub_date_utc": "2026-08-27T15:33:30Z",
+        "term": "8-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260827_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260827_2.xml"
+      },
+      {
+        "auction_date": "2026-08-27",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "91282CRJ2",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260827_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260827_3.pdf",
+        "pub_date": "Thu, 27 Aug 2026 17:03:39 GMT",
+        "pub_date_utc": "2026-08-27T17:03:39Z",
+        "term": "7-Year",
+        "within_historical_window": false,
+        "xml_name": "R_20260827_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260827_3.xml"
+      },
+      {
+        "auction_date": "2026-08-31",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VA2",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260831_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260831_1.pdf",
+        "pub_date": "Mon, 31 Aug 2026 15:33:37 GMT",
+        "pub_date_utc": "2026-08-31T15:33:37Z",
+        "term": "13-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260831_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260831_1.xml"
+      },
+      {
+        "auction_date": "2026-08-31",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797WD5",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260831_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260831_2.pdf",
+        "pub_date": "Mon, 31 Aug 2026 15:33:38 GMT",
+        "pub_date_utc": "2026-08-31T15:33:38Z",
+        "term": "26-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260831_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260831_2.xml"
+      },
+      {
+        "auction_date": "2026-09-01",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797UK1",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260901_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260901_1.pdf",
+        "pub_date": "Tue, 01 Sep 2026 15:33:19 GMT",
+        "pub_date_utc": "2026-09-01T15:33:19Z",
+        "term": "6-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260901_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260901_1.xml"
+      },
+      {
+        "auction_date": "2026-09-01",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797WA1",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260901_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260901_2.pdf",
+        "pub_date": "Tue, 01 Sep 2026 15:33:20 GMT",
+        "pub_date_utc": "2026-09-01T15:33:20Z",
+        "term": "52-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260901_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260901_2.xml"
+      },
+      {
+        "auction_date": "2026-09-02",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797WN3",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260902_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260902_1.pdf",
+        "pub_date": "Wed, 02 Sep 2026 15:33:25 GMT",
+        "pub_date_utc": "2026-09-02T15:33:25Z",
+        "term": "17-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260902_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260902_1.xml"
+      },
+      {
+        "auction_date": "2026-09-03",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VK0",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260903_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260903_2.pdf",
+        "pub_date": "Thu, 03 Sep 2026 15:33:27 GMT",
+        "pub_date_utc": "2026-09-03T15:33:27Z",
+        "term": "4-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260903_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260903_2.xml"
+      },
+      {
+        "auction_date": "2026-09-03",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VP9",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260903_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260903_1.pdf",
+        "pub_date": "Thu, 03 Sep 2026 15:33:26 GMT",
+        "pub_date_utc": "2026-09-03T15:33:26Z",
+        "term": "8-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260903_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260903_1.xml"
+      },
+      {
+        "auction_date": "2026-09-08",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797UL9",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260908_4.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260908_4.pdf",
+        "pub_date": "Tue, 08 Sep 2026 17:03:17 GMT",
+        "pub_date_utc": "2026-09-08T17:03:17Z",
+        "term": "6-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260908_4.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260908_4.xml"
+      },
+      {
+        "auction_date": "2026-09-08",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VG9",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260908_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260908_2.pdf",
+        "pub_date": "Tue, 08 Sep 2026 15:33:21 GMT",
+        "pub_date_utc": "2026-09-08T15:33:21Z",
+        "term": "13-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260908_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260908_2.xml"
+      },
+      {
+        "auction_date": "2026-09-08",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797WK9",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260908_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260908_1.pdf",
+        "pub_date": "Tue, 08 Sep 2026 15:33:20 GMT",
+        "pub_date_utc": "2026-09-08T15:33:20Z",
+        "term": "26-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260908_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260908_1.xml"
+      },
+      {
+        "auction_date": "2026-09-08",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "91282CRL7",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260908_3.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260908_3.pdf",
+        "pub_date": "Tue, 08 Sep 2026 17:03:18 GMT",
+        "pub_date_utc": "2026-09-08T17:03:18Z",
+        "term": "3-Year",
+        "within_historical_window": false,
+        "xml_name": "R_20260908_3.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260908_3.xml"
+      },
+      {
+        "auction_date": "2026-09-09",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797WP8",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260909_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260909_1.pdf",
+        "pub_date": "Wed, 09 Sep 2026 15:33:24 GMT",
+        "pub_date_utc": "2026-09-09T15:33:24Z",
+        "term": "17-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260909_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260909_1.xml"
+      },
+      {
+        "auction_date": "2026-09-09",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cross_source_match": "POST_CUTOFF_CAPABILITY_ONLY",
+        "cusip": "91282CRF0",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260909_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260909_2.pdf",
+        "pub_date": "Wed, 09 Sep 2026 17:03:22 GMT",
+        "pub_date_utc": "2026-09-09T17:03:22Z",
+        "term": "9-Year 11-Month",
+        "within_historical_window": false,
+        "xml_name": "R_20260909_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260909_2.xml"
+      },
+      {
+        "auction_date": "2026-09-10",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VL8",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260910_2.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260910_2.pdf",
+        "pub_date": "Thu, 10 Sep 2026 15:33:20 GMT",
+        "pub_date_utc": "2026-09-10T15:33:20Z",
+        "term": "4-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260910_2.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260910_2.xml"
+      },
+      {
+        "auction_date": "2026-09-10",
+        "available_at": null,
+        "capability_evidence_only": true,
+        "cusip": "912797VW4",
+        "historical_admission_eligible": false,
+        "pdf_name": "R_20260910_1.pdf",
+        "pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260910_1.pdf",
+        "pub_date": "Thu, 10 Sep 2026 15:33:21 GMT",
+        "pub_date_utc": "2026-09-10T15:33:21Z",
+        "term": "8-Week",
+        "within_historical_window": false,
+        "xml_name": "R_20260910_1.xml",
+        "xml_url": "https://www.treasurydirect.gov/xml/R_20260910_1.xml"
+      }
+    ],
+    "raw_sha256": "6aa6b103983fff041702a30e16dcc1da4001d3677b0f08c2aac796af25f7b3d1",
+    "retention_complete": false,
+    "schema": "r46-treasury-result-rss-crosscheck-v1",
+    "source_url": "https://www.treasurydirect.gov/TA_WS/securities/auctioned/rss",
+    "status": "CROSSCHECK_ONLY"
+  },
+  "result_xml": [
+    {
+      "admission_status": "PRESENT_NOT_ADMITTED",
+      "admitted": false,
+      "auction_date": "2024-02-08",
+      "available_at": null,
+      "blockers": [
+        "SOURCE_TIMEZONE_UNPROVEN",
+        "RESULT_VERSION_LINEAGE_UNPROVEN",
+        "PUBLIC_AVAILABILITY_UNPROVEN",
+        "XML_SCHEMA_VALIDATION_NOT_PERFORMED"
+      ],
+      "capability_evidence_only": false,
+      "credential_fields_persisted": false,
+      "cross_source_match": "LEGACY_EVENT",
+      "cusip": "912810TX6",
+      "historical_admission_eligible": false,
+      "historical_window": {
+        "end_exclusive": "2026-08-01",
+        "start": "2016-01-01"
+      },
+      "published_at": null,
+      "raw_sha256": "eba6fb19f021de445e9978ba7f12c868ae031df05673ec741e395eb67f111d3b",
+      "release_time": "13:01",
+      "results_pdf_name": "R_20240208_3.pdf",
+      "results_pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2024/R_20240208_3.pdf",
+      "schema": "r46-treasury-result-xml-evidence-v1",
+      "schema_location": "http://www.treasurydirect.gov/ https://www.treasurydirect.gov/xsd/Auction_v6_0_0.xsd",
+      "schema_validation_status": "NOT_PERFORMED",
+      "schema_version": "v6_0_0",
+      "source_timezone": null,
+      "source_url": "https://www.treasurydirect.gov/xml/R_20240208_3.xml",
+      "status": "RAW_UNADMITTED",
+      "within_historical_window": true
+    },
+    {
+      "admission_status": "PRESENT_NOT_ADMITTED",
+      "admitted": false,
+      "auction_date": "2026-09-09",
+      "available_at": null,
+      "blockers": [
+        "SOURCE_TIMEZONE_UNPROVEN",
+        "RESULT_VERSION_LINEAGE_UNPROVEN",
+        "PUBLIC_AVAILABILITY_UNPROVEN",
+        "XML_SCHEMA_VALIDATION_NOT_PERFORMED",
+        "POST_CUTOFF_CAPABILITY_ONLY"
+      ],
+      "capability_evidence_only": true,
+      "credential_fields_persisted": false,
+      "cross_source_match": "POST_CUTOFF_CAPABILITY_ONLY",
+      "cusip": "91282CRF0",
+      "historical_admission_eligible": false,
+      "historical_window": {
+        "end_exclusive": "2026-08-01",
+        "start": "2016-01-01"
+      },
+      "published_at": null,
+      "raw_sha256": "133820277439653548e72d41c7d2a4499b1f241f07f0369c814ea2c7e852dab0",
+      "release_time": "13:02",
+      "results_pdf_name": "R_20260909_2.pdf",
+      "results_pdf_url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260909_2.pdf",
+      "schema": "r46-treasury-result-xml-evidence-v1",
+      "schema_location": "http://www.treasurydirect.gov/ https://www.treasurydirect.gov/xsd/Auction_v7_0_0.xsd",
+      "schema_validation_status": "NOT_PERFORMED",
+      "schema_version": "v7_0_0",
+      "source_timezone": null,
+      "source_url": "https://www.treasurydirect.gov/xml/R_20260909_2.xml",
+      "status": "RAW_UNADMITTED",
+      "within_historical_window": false
+    }
+  ],
+  "schema": "r46-treasury-public-source-evidence-receipt-v1",
+  "source_routes": {
+    "announced_rss": "https://www.treasurydirect.gov/TA_WS/securities/announced/rss",
+    "archive": "https://treasurydirect.gov/auctions/announcements-data-results/announcement-results-press-releases/",
+    "auction_query": "https://treasurydirect.gov/auctions/auction-query/",
+    "auctioned_result_rss": "https://www.treasurydirect.gov/TA_WS/securities/auctioned/rss",
+    "fiscal_documents": "https://fiscaldata.treasury.gov/static-data/published-reports/auctions-query/",
+    "legacy_json_search": "https://www.treasurydirect.gov/TA_WS/securities/search?startdate=2016-01-01&enddate=2026-07-31&format=json",
+    "xml_base": "https://www.treasurydirect.gov/xml/",
+    "xml_xsd": "https://www.treasurydirect.gov/xsd/Auction_v6_0_0.xsd"
+  },
+  "status": "SOURCE_EVIDENCE_PARTIAL"
+}

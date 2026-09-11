@@ -74,9 +74,6 @@ _HISTORICAL_RESEARCH_TEST_PATHS = (
     "tests/test_research_equity_m3_economic_execution.py",
     "tests/test_research_equity_m3_m4.py",
     "tests/test_research_equity_m3_r5.py",
-    "tests/test_v3_exit_latency_integrity.py",
-    "tests/test_v3_position_risk_cost_stress_integrity.py",
-    "tests/test_v3_position_risk_integrity.py",
 )
 
 _CURRENT_RESEARCH_TESTS = frozenset(_CURRENT_RESEARCH_TEST_PATHS)

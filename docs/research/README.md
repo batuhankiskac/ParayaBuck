@@ -185,3 +185,18 @@ records the resulting artifacts on the current branch.
 - Manifests, receipts, summaries, current indexes and archive indexes remain
   tracked.
 - Supersession never silently deletes historical evidence.
+
+### Data and artifact lifecycle
+
+- `data/research_manifests/` and `data/research_receipts/` are immutable
+  read-only inputs; exact path, hash, size, source and result identities keep
+  their referenced artifacts pinned.
+- Retain one canonical final result for each accepted or frozen record, plus
+  the immutable inputs and receipts needed to reproduce or audit it.
+- An exact-path or exact-hash pin is never moved or deleted. Unpinned
+  historical payloads may move under `data/research/archive/<period>/` only
+  with an index entry; this cleanup moved none.
+- After reference and content proof, exact duplicates, invalid placeholders,
+  and superseded intermediates may be deleted. Git history remains the
+  recovery path for deleted intermediates; economic results and provenance
+  claims are not rewritten.

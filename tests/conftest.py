@@ -66,12 +66,7 @@ _CURRENT_RESEARCH_TEST_PATHS = (
 
 _HISTORICAL_RESEARCH_TEST_PATHS = (
     "tests/test_candidate_observation_parity_receipts.py",
-    "tests/test_crypto_candidate_tournament.py",
-    "tests/test_crypto_residual_low_variance.py",
-    "tests/test_equity_v3_alpha_roadmap.py",
-    "tests/test_equity_v3_followups.py",
     "tests/test_m3_iwm_acquisition.py",
-    "tests/test_research_alpha.py",
     "tests/test_research_equity_m3_candidate_ocp.py",
     "tests/test_research_equity_m3_candidate_ocp_attestation_r2.py",
     "tests/test_research_equity_m3_data_gate.py",
@@ -79,7 +74,6 @@ _HISTORICAL_RESEARCH_TEST_PATHS = (
     "tests/test_research_equity_m3_economic_execution.py",
     "tests/test_research_equity_m3_m4.py",
     "tests/test_research_equity_m3_r5.py",
-    "tests/test_research_sec_normalization.py",
     "tests/test_v3_exit_latency_integrity.py",
     "tests/test_v3_position_risk_cost_stress_integrity.py",
     "tests/test_v3_position_risk_integrity.py",

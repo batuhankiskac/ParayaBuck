@@ -70,6 +70,7 @@ V5_INCUMBENT_PATHS = {
 }
 V5_EXTERNAL_CONTENT_KEYS = frozenset({"bars", "corporate_actions", "bars_manifest", "corporate_actions_manifest"})
 V5_TRACKED_CONTENT_KEYS = frozenset({"lifetimes", "seam"})
+V5_BASE_REQUIRED_CONTENT_KEYS = frozenset({"lifetimes"})
 EXPECTED_V1_MANIFEST_SHA256 = "f0897f8aaeb56ca285b9ac626b95fb3131105b8653ea137b9d8ad621a44ec509"
 RESULT_AVAILABILITY_POLICY = (
     "official_XML_AuctionDate_plus_one_civil_day_midnight_America_New_York_for_all_results"
@@ -454,7 +455,9 @@ def _pin_source_files(source: dict[str, Any], *, repo_root: Path, source_commit:
             spec["required_in_base_commit"] = False
             spec["required_in_source_commit"] = True
         elif relative in {V5_INCUMBENT_PATHS[key] for key in V5_TRACKED_CONTENT_KEYS}:
-            spec["required_in_base_commit"] = True
+            spec["required_in_base_commit"] = relative in {
+                V5_INCUMBENT_PATHS[key] for key in V5_BASE_REQUIRED_CONTENT_KEYS
+            }
             spec["required_in_source_commit"] = True
         else:
             spec.setdefault("required_in_base_commit", False)
@@ -529,7 +532,7 @@ def _incumbent_dependency_block(source: Mapping[str, Any], *, repo_root: Path) -
             spec["required_in_base_commit"] = False
             spec["required_in_source_commit"] = False
         elif is_tracked:
-            spec["required_in_base_commit"] = True
+            spec["required_in_base_commit"] = key in V5_BASE_REQUIRED_CONTENT_KEYS
             spec["required_in_source_commit"] = True
             source_commit = source.get("source_commit")
             spec["git_blob_sha256"] = _git_blob_sha256(

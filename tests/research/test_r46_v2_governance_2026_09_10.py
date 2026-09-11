@@ -76,13 +76,25 @@ def test_v2_builder_freezes_disclosed_child_contract_without_human_signatures(tm
     for key in ("bars", "corporate_actions", "bars_manifest", "corporate_actions_manifest"):
         dependency = incumbent_dependencies[key]
         assert dependency["byte_size"] > 0
+        assert dependency["required_in_base_commit"] is False
         assert dependency["required_in_source_commit"] is False
         assert dependency["git_blob_sha256"] is None
-    for key in ("lifetimes", "seam"):
-        dependency = incumbent_dependencies[key]
-        assert dependency["byte_size"] > 0
-        assert dependency["required_in_source_commit"] is True
-        assert dependency["git_blob_sha256"] is None or len(dependency["git_blob_sha256"]) == 64
+    lifetimes = incumbent_dependencies["lifetimes"]
+    assert lifetimes["byte_size"] > 0
+    assert lifetimes["required_in_base_commit"] is True
+    assert lifetimes["required_in_source_commit"] is True
+    assert lifetimes["git_blob_sha256"] is None or len(lifetimes["git_blob_sha256"]) == 64
+    seam = incumbent_dependencies["seam"]
+    assert seam["byte_size"] > 0
+    assert seam["required_in_base_commit"] is False
+    assert seam["required_in_source_commit"] is True
+    assert seam["git_blob_sha256"] is None or len(seam["git_blob_sha256"]) == 64
+
+    source_files = manifest["source_provenance"]["source_files"]
+    assert source_files[lifetimes["path"]]["required_in_base_commit"] is True
+    assert source_files[lifetimes["path"]]["required_in_source_commit"] is True
+    assert source_files[seam["path"]]["required_in_base_commit"] is False
+    assert source_files[seam["path"]]["required_in_source_commit"] is True
 
     assert statistics["schema_version"] == "r46-statistics-plan-v2"
     assert statistics["sample_unit"] == "event_episode"

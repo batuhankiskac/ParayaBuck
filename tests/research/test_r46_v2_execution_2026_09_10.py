@@ -3001,6 +3001,16 @@ def test_package_backed_runner_exposes_real_engine_and_exact_package_entrypoints
     assert callable(getattr(r46_runner, "run_package_backed", None))
 
 
+def _strict_v5_source_file_overrides() -> dict[str, Any]:
+    """Keep disposable governance fixtures cross-linked to code-owned V5 paths."""
+
+    source_files = {
+        preflight.V5_INCUMBENT_PATHS[key]: {"path": preflight.V5_INCUMBENT_PATHS[key]}
+        for key in ("lifetimes", "seam")
+    }
+    return {"clean_tree_observed": True, "source_files": source_files}
+
+
 def test_governance_package_native_preflight_and_runner_gate_round_trip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -3236,7 +3246,7 @@ def test_governance_package_native_preflight_and_runner_gate_round_trip(
         output_root=root / "data/research_manifests",
         source_commit=source_commit,
         base_commit=source_commit,
-        source_overrides={"clean_tree_observed": True},
+        source_overrides=_strict_v5_source_file_overrides(),
     )
     manifest_path = manifest_paths["manifest"]
 
@@ -3650,7 +3660,7 @@ def _prepare_strict_green_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         output_root=root / "data/research_manifests",
         source_commit=source_commit,
         base_commit=source_commit,
-        source_overrides={"clean_tree_observed": True},
+        source_overrides=_strict_v5_source_file_overrides(),
     )
     manifest_path = manifest_paths["manifest"]
     governance = json.loads(manifest_path.read_text(encoding="utf-8"))

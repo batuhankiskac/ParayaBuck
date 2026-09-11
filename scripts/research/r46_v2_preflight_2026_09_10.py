@@ -161,14 +161,18 @@ EXPECTED_FAMILY_ROLES = {
     "R46_CAPACITY_SUPPRESSION": "coverage",
     "R46_MISSINGNESS": "coverage",
 }
-V5_EXTERNAL_CONTENT_PATHS = frozenset(
-    {
-        "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
-        "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
-        "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
-        "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
-    }
-)
+V5_INCUMBENT_PATHS = {
+    "bars": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "lifetimes": "data/historical/equity_entity_lifetimes_full_v5.csv",
+    "corporate_actions": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "bars_manifest": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "corporate_actions_manifest": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
+    "seam": "scripts/run_symmetric_v5_validation.py",
+}
+V5_EXTERNAL_CONTENT_KEYS = frozenset({"bars", "corporate_actions", "bars_manifest", "corporate_actions_manifest"})
+V5_BASE_REQUIRED_CONTENT_KEYS = frozenset({"lifetimes"})
+V5_SOURCE_REQUIRED_CONTENT_KEYS = frozenset({"lifetimes", "seam"})
+V5_EXTERNAL_CONTENT_PATHS = frozenset(V5_INCUMBENT_PATHS[key] for key in V5_EXTERNAL_CONTENT_KEYS)
 # C_src may be followed by a freeze-only commit containing immutable,
 # outcome-free evidence and governance artifacts.  Runtime source/config/lock
 # changes are never permitted in that interval; all outcome-relevant source is
@@ -1276,6 +1280,64 @@ V5_INCUMBENT_DEPENDENCY_KEYS = (
 )
 
 
+def _v5_spec_policy_reasons(key: str, spec: Mapping[str, Any]) -> list[str]:
+    expected_path = V5_INCUMBENT_PATHS[key]
+    reasons: list[str] = []
+    if spec.get("path") != expected_path:
+        reasons.append(f"INCUMBENT_DATA_PATH_MISMATCH:{key}")
+    if spec.get("required_in_base_commit") is not (key in V5_BASE_REQUIRED_CONTENT_KEYS):
+        reasons.append(f"INCUMBENT_DATA_BASE_COMMIT_REQUIREMENT:{key}")
+    if spec.get("required_in_source_commit") is not (key in V5_SOURCE_REQUIRED_CONTENT_KEYS):
+        reasons.append(f"INCUMBENT_DATA_SOURCE_COMMIT_REQUIREMENT:{key}")
+    blob = spec.get("git_blob_sha256")
+    if key in V5_EXTERNAL_CONTENT_KEYS:
+        if blob is not None:
+            reasons.append(f"INCUMBENT_DATA_EXTERNAL_BLOB_FORBIDDEN:{key}")
+    elif not isinstance(blob, str) or not HEX64_RE.fullmatch(blob):
+        reasons.append(f"INCUMBENT_DATA_GIT_BLOB_REQUIRED:{key}")
+    return reasons
+
+
+def _validate_v5_incumbent_policy(source: Any) -> list[str]:
+    """Reject manifest-declared V5 paths and commit requirements that drift from code."""
+
+    if not isinstance(source, Mapping):
+        return ["INCUMBENT_DATA_CONTRACT_REQUIRED"]
+    source_block = source.get("incumbent_dependencies")
+    if not isinstance(source_block, Mapping):
+        return ["INCUMBENT_DATA_CONTRACT_REQUIRED"]
+    source_files = source.get("source_files")
+    if not isinstance(source_files, Mapping):
+        source_files = {}
+
+    reasons: list[str] = []
+    crosslink_fields = (
+        "path",
+        "sha256",
+        "byte_size",
+        "git_blob_sha256",
+        "required_in_base_commit",
+        "required_in_source_commit",
+        "status",
+    )
+    for key in V5_INCUMBENT_DEPENDENCY_KEYS:
+        spec = source_block.get(key)
+        if not isinstance(spec, Mapping):
+            reasons.append(f"INCUMBENT_DATA_SPEC:{key}")
+            continue
+        reasons.extend(_v5_spec_policy_reasons(key, spec))
+        source_spec = source_files.get(V5_INCUMBENT_PATHS[key])
+        if not isinstance(source_spec, Mapping):
+            if key not in V5_EXTERNAL_CONTENT_KEYS:
+                reasons.append(f"INCUMBENT_DATA_SOURCE_PIN:{key}")
+            continue
+        reasons.extend(_v5_spec_policy_reasons(key, source_spec))
+        for field in crosslink_fields:
+            if spec.get(field) != source_spec.get(field):
+                reasons.append(f"INCUMBENT_DATA_SOURCE_CROSSLINK:{key}:{field}")
+    return sorted(set(reasons))
+
+
 def _validate_incumbent_data_contract(manifest: Mapping[str, Any], root: Path) -> list[str]:
     """Validate static V5 PIT dependencies and their manifest cross-links."""
 
@@ -1296,18 +1358,20 @@ def _validate_incumbent_data_contract(manifest: Mapping[str, Any], root: Path) -
     if not isinstance(source_files, Mapping):
         reasons.append("INCUMBENT_DATA_SOURCE_FILES_REQUIRED")
         source_files = {}
+    reasons.extend(_validate_v5_incumbent_policy(source))
     paths: dict[str, Path] = {}
-    external_content_keys = {"bars", "corporate_actions", "bars_manifest", "corporate_actions_manifest"}
+    external_content_keys = V5_EXTERNAL_CONTENT_KEYS
     for key in V5_INCUMBENT_DEPENDENCY_KEYS:
         spec = source_block.get(key)
         if not isinstance(spec, Mapping):
             reasons.append(f"INCUMBENT_DATA_SPEC:{key}")
             continue
+        expected_relative = V5_INCUMBENT_PATHS[key]
         relative = spec.get("path")
         if not isinstance(relative, str) or not relative:
             reasons.append(f"INCUMBENT_DATA_PATH:{key}")
             continue
-        source_spec = source_files.get(relative)
+        source_spec = source_files.get(expected_relative)
         if not isinstance(source_spec, Mapping) and key not in external_content_keys:
             reasons.append(f"INCUMBENT_DATA_SOURCE_PIN:{key}")
         elif isinstance(source_spec, Mapping):

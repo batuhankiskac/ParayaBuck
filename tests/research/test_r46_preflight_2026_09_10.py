@@ -603,3 +603,134 @@ def test_v2_source_provenance_requires_base_commit_ancestor_and_required_blobs(
     reasons = v2_preflight._validate_source_provenance(source, tmp_path, freeze_commit=freeze_commit)
     assert "BASE_COMMIT_NOT_ANCESTOR_OF_SOURCE" in reasons
     assert "SOURCE_FILE_NOT_IN_BASE_COMMIT:runner.py" in reasons
+
+
+def test_v2_source_provenance_base_validation_skips_source_only_seam_but_checks_lifetimes(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    lifetime_relative = "data/historical/equity_entity_lifetimes_full_v5.csv"
+    seam_relative = "scripts/run_symmetric_v5_validation.py"
+    lifetime_path = tmp_path / lifetime_relative
+    seam_path = tmp_path / seam_relative
+    lifetime_path.parent.mkdir(parents=True, exist_ok=True)
+    seam_path.parent.mkdir(parents=True, exist_ok=True)
+    lifetime_path.write_text("lifetime\n", encoding="utf-8")
+    seam_path.write_text("seam\n", encoding="utf-8")
+    source_commit = "c" * 40
+    base_commit = "b" * 40
+    freeze_commit = "d" * 40
+    source_blobs = {
+        lifetime_relative: v2_preflight.sha256_file(lifetime_path),
+        seam_relative: v2_preflight.sha256_file(seam_path),
+    }
+    source_files = {
+        relative: {
+            "path": relative,
+            "sha256": blob,
+            "git_blob_sha256": blob,
+            "required_in_base_commit": relative == lifetime_relative,
+            "required_in_source_commit": True,
+        }
+        for relative, blob in source_blobs.items()
+    }
+    source = {
+        "base_commit": base_commit,
+        "source_commit": source_commit,
+        "clean_tree_required": True,
+        "clean_tree_observed": True,
+        "source_files": source_files,
+    }
+    base_blob_calls: list[str] = []
+
+    monkeypatch.setattr(v2_preflight, "_git_commit_exists", lambda *_args: True)
+    monkeypatch.setattr(v2_preflight, "_git_head", lambda _root: freeze_commit)
+    monkeypatch.setattr(v2_preflight, "_git_is_ancestor", lambda *_args: True)
+    monkeypatch.setattr(v2_preflight, "_git_diff_paths", lambda *_args: [])
+    monkeypatch.setattr(v2_preflight, "_git_worktree_clean", lambda *_args, **_kwargs: True)
+
+    def git_blob(_root: Path, commit: str, relative: str) -> str | None:
+        if commit == base_commit:
+            base_blob_calls.append(relative)
+            return "0" * 64
+        return source_blobs.get(relative)
+
+    monkeypatch.setattr(v2_preflight, "_git_blob_sha256", git_blob)
+
+    reasons = v2_preflight._validate_source_provenance(source, tmp_path, freeze_commit=freeze_commit)
+
+    assert f"SOURCE_BASE_GIT_BLOB_HASH_MISMATCH:{lifetime_relative}" in reasons
+    assert not any(seam_relative in reason for reason in reasons)
+    assert base_blob_calls == [lifetime_relative]
+
+
+def _v5_source_provenance_contract() -> dict[str, Any]:
+    paths = {
+        "bars": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+        "lifetimes": "data/historical/equity_entity_lifetimes_full_v5.csv",
+        "corporate_actions": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+        "bars_manifest": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+        "corporate_actions_manifest": "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json",
+        "seam": "scripts/run_symmetric_v5_validation.py",
+    }
+    external = {"bars", "corporate_actions", "bars_manifest", "corporate_actions_manifest"}
+    dependencies: dict[str, Any] = {
+        "schema_version": "r46-incumbent-data-contract-v1",
+        "historical_cutoff": "2026-07-31T23:59:59Z",
+    }
+    source_files: dict[str, Any] = {}
+    for key, path in paths.items():
+        spec = {
+            "path": path,
+            "required_in_base_commit": key == "lifetimes",
+            "required_in_source_commit": key in {"lifetimes", "seam"},
+            "git_blob_sha256": None if key in external else "a" * 64,
+        }
+        dependencies[key] = dict(spec)
+        if key not in external:
+            source_files[path] = dict(spec)
+    return {"incumbent_dependencies": dependencies, "source_files": source_files}
+
+
+def test_v2_v5_incumbent_policy_accepts_exact_contract() -> None:
+    assert v2_preflight._validate_v5_incumbent_policy(_v5_source_provenance_contract()) == []
+
+
+def test_v2_v5_incumbent_policy_rejects_lifetime_base_requirement_downgrade() -> None:
+    source = _v5_source_provenance_contract()
+    source["incumbent_dependencies"]["lifetimes"]["required_in_base_commit"] = False
+    source["source_files"]["data/historical/equity_entity_lifetimes_full_v5.csv"][
+        "required_in_base_commit"
+    ] = False
+
+    reasons = v2_preflight._validate_v5_incumbent_policy(source)
+
+    assert "INCUMBENT_DATA_BASE_COMMIT_REQUIREMENT:lifetimes" in reasons
+
+
+def test_v2_v5_incumbent_policy_rejects_seam_path_substitution() -> None:
+    source = _v5_source_provenance_contract()
+    seam_path = "scripts/run_symmetric_v5_validation.py"
+    substituted_path = "scripts/run_symmetric_v5_validation_tampered.py"
+    source["incumbent_dependencies"]["seam"]["path"] = substituted_path
+    seam_spec = source["source_files"].pop(seam_path)
+    seam_spec["path"] = substituted_path
+    source["source_files"][substituted_path] = seam_spec
+
+    reasons = v2_preflight._validate_v5_incumbent_policy(source)
+
+    assert "INCUMBENT_DATA_PATH_MISMATCH:seam" in reasons
+    assert "INCUMBENT_DATA_SOURCE_PIN:seam" in reasons
+
+
+def test_v2_v5_incumbent_policy_rejects_external_flag_and_blob_tampering() -> None:
+    source = _v5_source_provenance_contract()
+    bars = source["incumbent_dependencies"]["bars"]
+    bars["required_in_base_commit"] = True
+    bars["required_in_source_commit"] = True
+    bars["git_blob_sha256"] = "b" * 64
+
+    reasons = v2_preflight._validate_v5_incumbent_policy(source)
+
+    assert "INCUMBENT_DATA_BASE_COMMIT_REQUIREMENT:bars" in reasons
+    assert "INCUMBENT_DATA_SOURCE_COMMIT_REQUIREMENT:bars" in reasons
+    assert "INCUMBENT_DATA_EXTERNAL_BLOB_FORBIDDEN:bars" in reasons

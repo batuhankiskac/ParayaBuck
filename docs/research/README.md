@@ -21,6 +21,19 @@ economic promotion decision and does not make a candidate PAPER-eligible.
 - `docs/archive/**` and `data/research/archive/**` — immutable historical
   lineage.
 
+### Research-script lifecycle
+
+- Active work uses `scripts/research/<mission>.py` and its focused current
+  contract.
+- Closing a mission does not rewrite its evidence: manifests, receipts,
+  reports, result files, datasets, and exact path or identity pins remain
+  immutable.
+- A minimal final verifier may remain with a closed campaign; an unpinned
+  runner may be archived, while redundant intermediate or scratch scripts may
+  be deleted when no retained consumer or unique invariant depends on them.
+- Immutable evidence is the historical record; every old executable need not
+  remain in the active script surface.
+
 ## Test lifecycle
 
 `pytest` is the active regression suite: it includes production/current
@@ -111,8 +124,8 @@ acceptance.
 **Status:** `superseded` — archived blocked R1 attempt, preserved for lineage.
 
 [Manifest](../../data/research_manifests/equity_profit_protection_2026_09.json) ·
-[runner](../../scripts/research/equity_profit_protection_2026_09.py) ·
-[test](../../tests/research/test_equity_profit_protection_2026_09.py) ·
+[superseded runner](research_script_lifecycle_audit_2026_09_11.md) ·
+[historical test](historical_root_test_compaction_2026_09_11.md) ·
 [human report](equity_profit_protection_2026_09.md)
 
 ### `equity_profit_protection_2026_09_r2`

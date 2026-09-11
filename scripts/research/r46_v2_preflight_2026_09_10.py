@@ -173,6 +173,7 @@ V5_EXTERNAL_CONTENT_KEYS = frozenset({"bars", "corporate_actions", "bars_manifes
 V5_BASE_REQUIRED_CONTENT_KEYS = frozenset({"lifetimes"})
 V5_SOURCE_REQUIRED_CONTENT_KEYS = frozenset({"lifetimes", "seam"})
 V5_EXTERNAL_CONTENT_PATHS = frozenset(V5_INCUMBENT_PATHS[key] for key in V5_EXTERNAL_CONTENT_KEYS)
+V5_LIFETIMES_RELATIVE_PATH = V5_INCUMBENT_PATHS["lifetimes"]
 # C_src may be followed by a freeze-only commit containing immutable,
 # outcome-free evidence and governance artifacts.  Runtime source/config/lock
 # changes are never permitted in that interval; all outcome-relevant source is
@@ -1228,6 +1229,39 @@ def _runtime_environment() -> dict[str, str]:
     }
 
 
+def _strict_crlf_to_lf(value: bytes) -> bytes | None:
+    """Normalize only well-formed CRLF sequences, rejecting bare carriage returns."""
+
+    if b"\r" not in value:
+        return value
+    normalized = bytearray()
+    index = 0
+    while index < len(value):
+        byte = value[index]
+        if byte == 0x0D:
+            if index + 1 >= len(value) or value[index + 1] != 0x0A:
+                return None
+            normalized.append(0x0A)
+            index += 2
+            continue
+        normalized.append(byte)
+        index += 1
+    return bytes(normalized)
+
+
+def _source_bytes_match_git_blob(relative: str, current: bytes, source_blob_sha256: str) -> bool:
+    """Allow checkout line-ending translation only for the pinned V5 lifetime table."""
+
+    if (
+        relative != V5_LIFETIMES_RELATIVE_PATH
+        or not isinstance(source_blob_sha256, str)
+        or not HEX64_RE.fullmatch(source_blob_sha256)
+    ):
+        return False
+    normalized = _strict_crlf_to_lf(current)
+    return normalized is not None and hashlib.sha256(normalized).hexdigest() == source_blob_sha256
+
+
 def _validate_declared_source_file(
     source: Mapping[str, Any],
     root: Path,
@@ -1243,10 +1277,11 @@ def _validate_declared_source_file(
     except ValueError:
         reasons.append(f"SOURCE_FILE_MISSING:{label}")
         return
+    current_sha256 = sha256_file(path)
     declared = spec.get("sha256")
     if not isinstance(declared, str) or not HEX64_RE.fullmatch(declared):
         reasons.append(f"SOURCE_PIN_PLACEHOLDER:{label}")
-    elif sha256_file(path) != declared:
+    elif current_sha256 != declared:
         reasons.append(f"SOURCE_HASH_MISMATCH:{label}")
     if name in V5_EXTERNAL_CONTENT_PATHS:
         if (
@@ -1266,8 +1301,10 @@ def _validate_declared_source_file(
             reasons.append(f"SOURCE_FILE_NOT_IN_COMMIT:{label}")
         elif blob_actual != blob_declared:
             reasons.append(f"SOURCE_GIT_BLOB_HASH_MISMATCH:{label}")
-        elif sha256_file(path) != blob_actual:
-            reasons.append(f"SOURCE_CURRENT_BYTES_NOT_SOURCE_COMMIT:{label}")
+        elif current_sha256 != blob_actual:
+            current_bytes = path.read_bytes()
+            if not _source_bytes_match_git_blob(name, current_bytes, blob_actual):
+                reasons.append(f"SOURCE_CURRENT_BYTES_NOT_SOURCE_COMMIT:{label}")
 
 
 V5_INCUMBENT_DEPENDENCY_KEYS = (

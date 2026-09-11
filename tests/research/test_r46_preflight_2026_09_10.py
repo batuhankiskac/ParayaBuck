@@ -9,6 +9,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import scripts.research.r46_v2_preflight_2026_09_10 as v2_preflight
 from scripts.research.r46_preflight_2026_09_10 import verify_r46_manifest
 from scripts.research.r46_treasury_auction_readiness_2026_09_10 import CUTOFF_UTC
@@ -661,6 +663,63 @@ def test_v2_source_provenance_base_validation_skips_source_only_seam_but_checks_
     assert f"SOURCE_BASE_GIT_BLOB_HASH_MISMATCH:{lifetime_relative}" in reasons
     assert not any(seam_relative in reason for reason in reasons)
     assert base_blob_calls == [lifetime_relative]
+
+
+def test_v2_lifetime_source_pin_accepts_strict_crlf_normalization() -> None:
+    source_bytes = b"header\nrow\n"
+    current_bytes = source_bytes.replace(b"\n", b"\r\n")
+    source_hash = _hash_bytes(source_bytes)
+
+    assert v2_preflight._source_bytes_match_git_blob(
+        v2_preflight.V5_INCUMBENT_PATHS["lifetimes"], current_bytes, source_hash
+    ) is True
+
+
+def test_v2_source_validation_applies_crlf_exception_only_to_lifetimes(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    source_bytes = b"header\nrow\n"
+    current_bytes = source_bytes.replace(b"\n", b"\r\n")
+    source_hash = _hash_bytes(source_bytes)
+    monkeypatch.setattr(v2_preflight, "_git_blob_sha256", lambda *_args: source_hash)
+
+    for key, accepted in (("lifetimes", True), ("seam", False)):
+        relative = v2_preflight.V5_INCUMBENT_PATHS[key]
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(current_bytes)
+        reasons: list[str] = []
+        v2_preflight._validate_declared_source_file(
+            {},
+            tmp_path,
+            name=relative,
+            spec={"sha256": _hash_bytes(current_bytes), "git_blob_sha256": source_hash},
+            commit="c" * 40,
+            label=relative,
+            reasons=reasons,
+        )
+        current_mismatch = f"SOURCE_CURRENT_BYTES_NOT_SOURCE_COMMIT:{relative}"
+        assert (current_mismatch not in reasons) is accepted
+
+
+@pytest.mark.parametrize("current_bytes", [b"header\r\nchanged\r\n", b"header\r\nrow\rbare\n"])
+def test_v2_lifetime_source_pin_rejects_content_or_bare_cr(
+    current_bytes: bytes,
+) -> None:
+    source_bytes = b"header\nrow\n"
+
+    assert v2_preflight._source_bytes_match_git_blob(
+        v2_preflight.V5_INCUMBENT_PATHS["lifetimes"], current_bytes, _hash_bytes(source_bytes)
+    ) is False
+
+
+def test_v2_other_source_paths_still_require_byte_identity() -> None:
+    source_bytes = b"header\nrow\n"
+    current_bytes = source_bytes.replace(b"\n", b"\r\n")
+
+    assert v2_preflight._source_bytes_match_git_blob(
+        v2_preflight.V5_INCUMBENT_PATHS["seam"], current_bytes, _hash_bytes(source_bytes)
+    ) is False
 
 
 def _v5_source_provenance_contract() -> dict[str, Any]:

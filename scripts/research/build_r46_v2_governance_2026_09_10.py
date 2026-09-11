@@ -442,6 +442,9 @@ def _pin_source_files(source: dict[str, Any], *, repo_root: Path, source_commit:
         if marker in seen:
             continue
         seen.add(marker)
+        # source_files are keyed by relative path; retain the same path in
+        # each declaration so preflight can cross-link the key and value.
+        spec["path"] = relative
         path = repo_root / relative
         spec["required_in_base_commit"] = False
         spec["sha256"] = sha256_file(path) if path.is_file() else None

@@ -10,6 +10,8 @@ from typing import Any, cast
 
 import pytest
 
+import scripts.research.r46_v2_preflight_2026_09_10 as preflight
+
 REPO = Path(__file__).resolve().parents[2]
 BUILDER = REPO / "scripts/research/build_r46_v2_governance_2026_09_10.py"
 PREFLIGHT = REPO / "scripts/research/r46_v2_preflight_2026_09_10.py"
@@ -125,6 +127,61 @@ def test_v2_builder_freezes_disclosed_child_contract_without_human_signatures(tm
     assert one_shot["rerun_forbidden"] is True
     assert one_shot["reservation_owner"] == "execution"
     assert one_shot["reservation_state"] == "UNRESERVED"
+
+
+def test_v2_builder_emits_explicit_v5_source_file_paths_for_preflight(tmp_path: Path) -> None:
+    from scripts.research import build_r46_v2_governance_2026_09_10 as builder
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    paths = builder.build_v2_bundle(
+        repo_root=REPO,
+        output_root=tmp_path,
+        source_commit=commit,
+        base_commit=commit,
+    )
+    manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    source = manifest["source_provenance"]
+    dependencies = source["incumbent_dependencies"]
+    source_files = source["source_files"]
+
+    for key in ("lifetimes", "seam"):
+        relative = dependencies[key]["path"]
+        assert relative == builder.V5_INCUMBENT_PATHS[key]
+        assert source_files[relative]["path"] == relative
+
+    reasons = preflight._validate_v5_incumbent_policy(source)
+    assert not any(
+        reason.startswith(("INCUMBENT_DATA_PATH_MISMATCH:", "INCUMBENT_DATA_SOURCE_CROSSLINK:"))
+        for reason in reasons
+    )
+
+
+def test_v2_builder_canonicalizes_conflicting_v5_source_override_path(tmp_path: Path) -> None:
+    from scripts.research import build_r46_v2_governance_2026_09_10 as builder
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    lifetime_path = builder.V5_INCUMBENT_PATHS["lifetimes"]
+    seam_path = builder.V5_INCUMBENT_PATHS["seam"]
+    paths = builder.build_v2_bundle(
+        repo_root=REPO,
+        output_root=tmp_path,
+        source_commit=commit,
+        base_commit=commit,
+        source_overrides={"source_files": {lifetime_path: {"path": seam_path}}},
+    )
+    source = json.loads(paths["manifest"].read_text(encoding="utf-8"))["source_provenance"]
+
+    assert source["source_files"][lifetime_path]["path"] == lifetime_path
+    assert source["incumbent_dependencies"]["lifetimes"]["path"] == lifetime_path
+    reasons = preflight._validate_v5_incumbent_policy(source)
+    assert not any(
+        reason.startswith(("INCUMBENT_DATA_PATH_MISMATCH:", "INCUMBENT_DATA_SOURCE_CROSSLINK:"))
+        for reason in reasons
+    )
 
 
 def test_v2_builder_is_atomic_no_overwrite(tmp_path: Path) -> None:

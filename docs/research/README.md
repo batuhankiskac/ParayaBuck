@@ -14,7 +14,9 @@ economic promotion decision and does not make a candidate PAPER-eligible.
 - `data/research/<research-id>/**` — only manifest-required, hash-pinned full
   results.
 - `scripts/research/<research-id>.py` — retained runner implementation.
-- `tests/research/test_<research-id>.py` — mission and regression contract.
+- `tests/research/test_<research-id>.py` — focused mission and regression
+  contract while research is active; redundant intermediate modules may be
+  compacted after a canonical frozen closure.
 - `research_runs/<run-id>/**` — ignored, generated, resumable local bundle.
 - `docs/archive/**` and `data/research/archive/**` — immutable historical
   lineage.
@@ -37,6 +39,12 @@ paths and are still runnable without moving or rewriting their evidence:
 pytest --include-historical-research -m historical_research
 pytest --include-historical-research tests/research/test_x.py
 ```
+
+Active research keeps its focused tests. Once a campaign has a canonical frozen
+closure, redundant intermediate modules may be compacted: the canonical
+manifests, receipts, reports, result records, and data remain immutable, while
+one final closure/verifier contract may replace many intermediate regression
+modules. Deleted implementations remain recoverable from Git history.
 
 The classification is maintained in `tests/conftest.py`. The current allowlist
 covers the reusable research platform, the P0/P1 execution-cost contracts,

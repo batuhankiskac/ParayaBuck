@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 from parayabuck.backtest.portfolio_engine import TargetPortfolio, TargetWeight
-from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine, TerminalInfo
-from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
-from parayabuck.core.models import Bar, Market
+from parayabuck.backtest.terminal_aware_engine import TerminalAwareResearchEngine
+from parayabuck.core.models import Market
 from parayabuck.portfolio.base import PortfolioContext, PortfolioStrategy
+from tests.research_testkit import bar_series, pit_universe, terminal_info
+from tests.research_testkit import snapshot as pit_snapshot
 
 
 # Minimal strategy mock
@@ -76,28 +77,25 @@ class DummyPolicy:
         return True
 
 
-def make_bar(symbol, ts, close):
-    return Bar(
-        timestamp=ts,
-        symbol=symbol,
-        timeframe="1Day",
-        open=close,
-        high=close * 1.01,
-        low=close * 0.99,
-        close=close,
-        volume=1_000_000,
-        market=Market.EQUITY,
-    )
-
-
 def test_terminal_removes_position_and_cash():
     # Create bars for AAA that ends early
     start = datetime(2020, 1, 1, tzinfo=UTC)
-    bars = [make_bar("AAA", start + timedelta(days=i), 10 + i * 0.1) for i in range(5)]
+    closes = [10 + i * 0.1 for i in range(5)]
+    bars = list(
+        bar_series(
+            "AAA",
+            closes,
+            start=start,
+            timeframe="1Day",
+            highs=[close * 1.01 for close in closes],
+            lows=[close * 0.99 for close in closes],
+            volume=1_000_000,
+        )
+    )
     # Last bar is 2020-01-05
     last_ts = bars[-1].timestamp
     # Terminal info for AAA
-    info = TerminalInfo(
+    info = terminal_info(
         entity_id="id_aaa",
         symbol="AAA",
         display_symbol="AAA",
@@ -138,9 +136,19 @@ def test_terminal_removes_position_and_cash():
 
 def test_t0_stale_no_removal():
     start = datetime(2020, 1, 1, tzinfo=UTC)
-    bars = [make_bar("AAA", start + timedelta(days=i), 10) for i in range(5)]
+    bars = list(
+        bar_series(
+            "AAA",
+            [10.0] * 5,
+            start=start,
+            timeframe="1Day",
+            highs=[10.1] * 5,
+            lows=[9.9] * 5,
+            volume=1_000_000,
+        )
+    )
     last_ts = bars[-1].timestamp
-    info = TerminalInfo(
+    info = terminal_info(
         entity_id="id_aaa",
         symbol="AAA",
         display_symbol="AAA",
@@ -163,9 +171,20 @@ def test_t0_stale_no_removal():
 
 def test_terminal_cancels_flat_final_bar_pending_entry():
     start = datetime(2020, 1, 1, tzinfo=UTC)
-    bars = [make_bar("AAA", start + timedelta(days=i), 10 + i * 0.1) for i in range(5)]
+    closes = [10 + i * 0.1 for i in range(5)]
+    bars = list(
+        bar_series(
+            "AAA",
+            closes,
+            start=start,
+            timeframe="1Day",
+            highs=[close * 1.01 for close in closes],
+            lows=[close * 0.99 for close in closes],
+            volume=1_000_000,
+        )
+    )
     final_bar = bars[-1].timestamp
-    info = TerminalInfo(
+    info = terminal_info(
         entity_id="id_aaa",
         symbol="AAA",
         display_symbol="AAA",
@@ -193,15 +212,17 @@ def test_terminal_cancels_flat_final_bar_pending_entry():
 
 def test_terminal_snapshot_pin_expires_only_after_last_bar():
     last_bar = datetime(2020, 1, 5, tzinfo=UTC)
-    snapshot = UniverseSnapshot(
+    snapshot = pit_snapshot(
         effective_at=last_bar - timedelta(days=5),
         symbols=frozenset({"AAA", "BBB", "SPY"}),
         observation_set=("SPY", "AAA", "BBB"),
         maximum_stream_symbols=2,
         pinned_symbols=("SPY", "AAA"),
+        scanner_version="",
+        config_digest="",
     )
-    universe = PointInTimeUniverse(Market.EQUITY, (snapshot,), "test")
-    info = TerminalInfo(
+    universe = pit_universe(Market.EQUITY, (snapshot,), methodology="test")
+    info = terminal_info(
         entity_id="id_aaa",
         symbol="AAA",
         display_symbol="AAA",

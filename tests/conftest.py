@@ -34,18 +34,22 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Research tests are deliberately classified here instead of by directory:
 # ``tests/research/`` contains both current contracts and closed mission
-# records. New tests in that directory are historical by default until their
-# research status is reviewed and added to the current allowlist.
+# records. Every module is registered explicitly so a new module fails
+# collection until it is deliberately classified as current or historical.
 _PRODUCT = "product"
 _CURRENT_RESEARCH = "current_research"
 _HISTORICAL_RESEARCH = "historical_research"
+_UNCLASSIFIED_RESEARCH = "unclassified_research"
 
 _CURRENT_RESEARCH_TEST_PATHS = (
     "tests/test_equity_v3_current_parity_control.py",
     "tests/test_full_survivorship_terminal.py",
     "tests/test_normalized_hash.py",
     "tests/test_research_experiment.py",
+    "tests/test_research_policy.py",
+    "tests/test_research_performance.py",
     "tests/test_research_runner.py",
+    "tests/test_research_testkit.py",
     "tests/test_terminal_aware_engine.py",
     "tests/research/test_equity_profit_protection_2026_09_r2.py",
     "tests/research/test_execution_cost_transferability_p0_2026_09.py",
@@ -66,6 +70,34 @@ _CURRENT_RESEARCH_TEST_PATHS = (
 )
 
 _HISTORICAL_RESEARCH_TEST_PATHS = (
+    "tests/research/test_all_34_closure_2026_09_09.py",
+    "tests/research/test_crypto_max_return_economic_2026_09.py",
+    "tests/research/test_crypto_max_return_novelty_2026_09.py",
+    "tests/research/test_crypto_queue_causal_adapters_2026_09_08.py",
+    "tests/research/test_crypto_secondary_causal_gate_2026_09_08.py",
+    "tests/research/test_crypto_signed_risk_economic_2026_09.py",
+    "tests/research/test_crypto_signed_risk_novelty_2026_09.py",
+    "tests/research/test_equity_h01_h16_max_testing_verdict_2026_09_09.py",
+    "tests/research/test_equity_h01_h16_protocol_2026_09_09.py",
+    "tests/research/test_equity_h06_local_normalization_2026_09_09.py",
+    "tests/research/test_equity_h14c_posthoc_2026_09_09.py",
+    "tests/research/test_equity_local_diagnostics_2026_09_09.py",
+    "tests/research/test_equity_low_beta_candidate_2026_09.py",
+    "tests/research/test_equity_secondary_causal_gate_2026_09_08.py",
+    "tests/research/test_equity_secondary_local_normalization_2026_09_09.py",
+    "tests/research/test_execution_model_robustness_backtest_2026_09.py",
+    "tests/research/test_h11_nport_snapshot_2026_09_09.py",
+    "tests/research/test_h14_v3_daily_nav_comparability_2026_09_09.py",
+    "tests/research/test_high_proximity364_history_fixed_runner_2026_09_05.py",
+    "tests/research/test_high_proximity364_trace_2026_09_05.py",
+    "tests/research/test_immediate_candidate_freeze_2026_09_09.py",
+    "tests/research/test_immediate_candidates_economic_2026_09_09.py",
+    "tests/research/test_immediate_candidates_invalidation_2026_09_10.py",
+    "tests/research/test_k11_signed_flow_candidate_2026_09_08.py",
+    "tests/research/test_portfolio_expansion_crypto_screen_2026_09.py",
+    "tests/research/test_zero_wait_final_decision_2026_09_10.py",
+    "tests/research/test_zero_wait_overlay_economic_2026_09_10.py",
+    "tests/research/test_zero_wait_overlay_freeze_2026_09_10.py",
     "tests/test_candidate_observation_parity_receipts.py",
     "tests/test_m3_iwm_acquisition.py",
     "tests/test_research_equity_m3_candidate_ocp.py",
@@ -419,6 +451,10 @@ _R46_PIN_ALWAYS = "R46_PIN_ALWAYS"
 _R46_DEEP_CHANGE_SENSITIVE = "R46_DEEP_CHANGE_SENSITIVE"
 _R46_DEEP_PERIODIC = "R46_DEEP_PERIODIC"
 _R46_DEEP_TIERS = frozenset({_R46_DEEP_CHANGE_SENSITIVE, _R46_DEEP_PERIODIC})
+_R46_DEEP_REASON = {
+    _R46_DEEP_CHANGE_SENSITIVE: "R46 provenance, package, acquisition, and integration contracts are change-sensitive.",
+    _R46_DEEP_PERIODIC: "R46 strict native replay and file-backed integration contracts are periodic assurance.",
+}
 
 _R46_DEFAULT_TIER_BY_MODULE = {
     "tests/research/test_r46_frozen_source_pins_2026_09_12.py": _R46_PIN_ALWAYS,
@@ -697,9 +733,15 @@ def _validate_research_classification() -> None:
     root_research_tests = {
         path.relative_to(_REPO_ROOT).as_posix() for path in (_REPO_ROOT / "tests").glob("test_research_*.py")
     }
-    unclassified = sorted(root_research_tests - (_CURRENT_RESEARCH_TESTS | _HISTORICAL_RESEARCH_TESTS))
+    nested_research_tests = {
+        path.relative_to(_REPO_ROOT).as_posix() for path in (_REPO_ROOT / "tests" / "research").rglob("test_*.py")
+    }
+    registered_research = _CURRENT_RESEARCH_TESTS | _HISTORICAL_RESEARCH_TESTS
+    unclassified = sorted((root_research_tests | nested_research_tests) - registered_research)
     if unclassified:
-        errors.append(f"unclassified root research tests: {', '.join(unclassified)}")
+        errors.append(
+            "unclassified research tests (register each as current or historical): " + ", ".join(unclassified)
+        )
 
     missing_r46_files = sorted(path for path in _R46_TEST_FILES if not (_REPO_ROOT / path).is_file())
     if missing_r46_files:
@@ -719,14 +761,49 @@ def _classify_test_path(path: Path) -> str:
 
     if relative in _CURRENT_RESEARCH_TESTS:
         return _CURRENT_RESEARCH
-    if relative in _HISTORICAL_RESEARCH_TESTS or relative.startswith("tests/research/"):
+    if relative in _HISTORICAL_RESEARCH_TESTS:
         return _HISTORICAL_RESEARCH
+    if relative.startswith("tests/research/"):
+        return _UNCLASSIFIED_RESEARCH
     return _PRODUCT
 
 
 def _r46_base_nodeid(nodeid: str) -> str:
     """Normalize parametrized nodeids to the externally registered test function."""
     return nodeid.split("[", 1)[0]
+
+
+def _research_deep_markers(item):
+    """Return explicit deep marks without relying on marker registration internals."""
+    return tuple(item.iter_markers("research_deep"))
+
+
+def _validate_research_lifecycle_markers(item, classification: str) -> list[str]:
+    """Reject explicit lifecycle marks that contradict path classification."""
+    has_research = bool(tuple(item.iter_markers("research")))
+    has_historical = bool(tuple(item.iter_markers("historical_research")))
+    if classification == _PRODUCT and (has_research or has_historical):
+        return [f"product test cannot be marked research or historical_research: {item.nodeid}"]
+    if classification == _CURRENT_RESEARCH and has_historical:
+        return [f"current research cannot be marked historical_research: {item.nodeid}"]
+    return []
+
+
+def _validate_research_deep_marker(item, classification: str, *, r46_tier: str | None = None) -> list[str]:
+    """Validate explicit deep rationale and preserve the frozen R46 pin tier."""
+    errors = []
+    marks = _research_deep_markers(item)
+    if classification == _HISTORICAL_RESEARCH and marks:
+        errors.append(f"historical research cannot be research_deep: {item.nodeid}")
+    elif classification != _CURRENT_RESEARCH and marks:
+        errors.append(f"non-current research cannot be research_deep: {item.nodeid}")
+    if r46_tier == _R46_PIN_ALWAYS and marks:
+        errors.append(f"R46 PIN_ALWAYS test cannot be research_deep: {item.nodeid}")
+    for mark in marks:
+        reason = mark.kwargs.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"research_deep requires a non-empty reason: {item.nodeid}")
+    return errors
 
 
 def _r46_is_broad_collection(config) -> bool:
@@ -784,7 +861,26 @@ def _apply_r46_tiers_and_validate(config, items) -> None:
             continue
         collected_selectors.add(selector)
         if tier in _R46_DEEP_TIERS:
+            item.add_marker(pytest.mark.research_deep(reason=_R46_DEEP_REASON[tier]))
             item.add_marker("r46_deep")
+
+        errors.extend(_validate_research_deep_marker(item, _CURRENT_RESEARCH, r46_tier=tier))
+
+    for item in items:
+        item_path = getattr(item, "path", None) or item.fspath
+        try:
+            relative_path = Path(str(item_path)).resolve().relative_to(_REPO_ROOT).as_posix()
+        except ValueError:
+            relative_path = ""
+        # R46 items were validated in the tier loop above, including their
+        # pin/deep compatibility rules.  Do not report those marker errors a
+        # second time during the generic classification pass.
+        if relative_path in _R46_TEST_FILES:
+            continue
+        classification = _classify_test_path(Path(str(item_path)))
+        if classification == _UNCLASSIFIED_RESEARCH:
+            errors.append(f"unclassified research test collected: {item.nodeid}")
+        errors.extend(_validate_research_deep_marker(item, classification))
 
     if _r46_is_broad_collection(config):
         stale = sorted(_R46_TEST_NODEIDS - collected_selectors)
@@ -818,14 +914,18 @@ def pytest_ignore_collect(collection_path: Path, config) -> bool:
 
 def pytest_collection_modifyitems(config, items):
     """Mark research items after only the allowed modules have been collected."""
+    errors = []
     for item in items:
         item_path = getattr(item, "path", None) or item.fspath
         classification = _classify_test_path(Path(str(item_path)))
+        errors.extend(_validate_research_lifecycle_markers(item, classification))
         if classification == _CURRENT_RESEARCH:
             item.add_marker("research")
         elif classification == _HISTORICAL_RESEARCH:
             item.add_marker("research")
             item.add_marker("historical_research")
+    if errors:
+        raise pytest.UsageError("Invalid research lifecycle markers:\n" + "\n".join(f"- {error}" for error in errors))
     _apply_r46_tiers_and_validate(config, items)
 
 

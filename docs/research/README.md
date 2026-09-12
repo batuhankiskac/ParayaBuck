@@ -48,16 +48,17 @@ pytest -m "research and not historical_research"
 For ordinary iteration, use the fast current-research tier:
 
 ```bash
-pytest -m "research and not historical_research and not r46_deep"
+pytest -m "research and not historical_research and not research_deep"
 ```
 
 This retains the standalone R46 frozen-source pin guard and the cheap
 `R46_FAST_ALWAYS`/`R46_PIN_ALWAYS` contracts. The full command above remains
-the complete current-research suite and still runs every R46 test. The
-externally registered `r46_deep` tests run on R46-relevant changes and on the
-scheduled or manual deep workflow; tier metadata is maintained in
-`tests/conftest.py`, and full/default collection fails if a registered R46
-selector becomes stale.
+the complete current-research suite and still runs every R46 test. R46 deep
+tiers also receive the generic `research_deep` marker; `r46_deep` remains a
+compatibility marker for existing selectors. Future deep tests must use an
+explicit `pytest.mark.research_deep(reason="...")` and remain in the current
+allowlist. Missing rationale, historical overlap, unknown selectors, and stale
+registrations fail broad collection closed.
 
 Closed, superseded, and retrospective research tests remain in their original
 paths and are still runnable without moving or rewriting their evidence:
@@ -86,11 +87,61 @@ Normal directory collection skips historical modules before Python import, so
 they do not appear as deselected items.
 
 CI runs `pytest -m "not research"` on Python 3.12, 3.13, and 3.14, then runs
-the fast current-research command once on Python 3.13. The separate Deep R46
-workflow runs the marked change-sensitive and periodic contracts for
-R46-relevant pushes or pull requests and on its weekly/manual triggers. Deep
-verification is deferred, not deleted; the immutable manifests, receipts,
-reports, and archived result files remain available for full reproduction.
+the fast current-research command once on Python 3.13 with advisory visibility
+for the 20 slowest tests at or above one second, plus an always-on frozen R46
+pin guard. These duration flags do not change pass/fail behavior. The separate deep research workflow runs
+`research and research_deep` for research-relevant pushes or pull requests and
+on weekly/manual triggers. Deep verification is deferred, not deleted; the
+immutable manifests, receipts, reports, and archived result files remain
+available for full reproduction.
+
+Research contracts should use the shared deterministic helpers in
+`tests/research_testkit/` and write only under `tmp_path`. Each unit or contract
+test should prove one invariant with the smallest sufficient deterministic
+fixture; do not use multi-year datasets, full historical loads, or production
+replays for that logic. Extend the testkit only when an actual consumer needs a
+new helper. Avoid production-duration sleeps and wall-clock thresholds; inject
+a clock or use an event-driven scheduler instead. Before research closure, run
+the complete current suite plus each relevant deep and frozen-pin assurance
+selector. The complete closure verifier for the frozen 34-candidate program is:
+
+```bash
+python scripts/research/verify_all_34_closure_2026_09_09.py --verify
+```
+
+When adding a research contract, register its path in exactly one of
+`_CURRENT_RESEARCH_TEST_PATHS` or `_HISTORICAL_RESEARCH_TEST_PATHS` in
+`tests/conftest.py`. An unregistered root or `tests/research/` module fails
+collection. A deferred active contract stays current and carries an explicit
+reason:
+
+```python
+pytestmark = pytest.mark.research_deep(reason="file-backed provenance contract is change-sensitive")
+```
+
+Timing output is advisory. A captured run can be summarized without turning
+duration into a correctness gate:
+
+```bash
+pytest -m "research and not historical_research and not research_deep" \
+  --durations=0 --durations-min=0 > /tmp/research-fast.txt 2>&1
+research_pytest_status=$?
+python scripts/research/report_test_performance.py /tmp/research-fast.txt \
+  --exit-code "$research_pytest_status" --repo-root . --output-json /tmp/research-fast.json
+```
+
+Duration thresholds and findings are advisory; the reporter preserves the
+captured pytest exit code so a failed run remains failed. The manual reporter
+can emit richer JSON and compare against a prior report with `--baseline` when
+you need stable slow-test and category-crossing review.
+
+The reporter does not infer lifecycle from file paths. Without explicit
+`--category-rules`, its category field is `unclassified`; pytest's registry
+still controls the actual suite. Rules are a JSON list such as
+`[{"pattern": "tests/*", "category": "fast"}]` for a fast-only log. For mixed
+logs, supply the appropriate deep selectors as rules to exclude them from
+fast-fixture source hints. Source hints are heuristic file/line clues, not a
+runtime audit of dataset reads.
 
 ## Lifecycle
 

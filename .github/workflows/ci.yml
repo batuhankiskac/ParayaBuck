@@ -40,7 +40,14 @@ jobs:
         run: pytest -m "not research"
       - name: Current research pytest suite (Python 3.13)
         if: ${{ always() && matrix.python-version == '3.13' }}
-        run: pytest -m "research and not historical_research and not r46_deep"
+        run: >-
+          pytest -m "research and not historical_research and not research_deep"
+          --durations=20 --durations-min=1
+      - name: Frozen research boundary pins (Python 3.13)
+        if: ${{ always() && matrix.python-version == '3.13' }}
+        run: >-
+          pytest -q --strict-markers
+          tests/research/test_r46_frozen_source_pins_2026_09_12.py
       - name: Verify production files untouched (isolation gate)
         if: always()
         run: python scripts/check_production_isolation.py --verify /tmp/before.json

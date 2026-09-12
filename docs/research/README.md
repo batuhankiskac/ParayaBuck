@@ -77,11 +77,12 @@ modules. Deleted implementations remain recoverable from Git history.
 The classification is maintained in `tests/conftest.py`. The current allowlist
 covers the reusable research platform, the P0/P1 execution-cost contracts,
 profit-protection R2, the canonical terminal-engine guards, and the active R46
-contract. Other mission-specific tests under `tests/research/` default to
-historical until their status is reviewed. The explicit option is required for
-marker-based historical collection so those modules can remain excluded before
-import. Use it with an explicit path when a path-oriented invocation is clearer;
-a directly named test file is also an explicit pytest request.
+contract. All mission-specific tests under `tests/research/` must be explicitly
+registered as current or historical; unregistered modules fail collection. The
+explicit option is required for marker-based historical collection so those
+modules can remain excluded before import. Use it with an explicit path when a
+path-oriented invocation is clearer; a directly named test file is also an
+explicit pytest request.
 
 Normal directory collection skips historical modules before Python import, so
 they do not appear as deselected items.

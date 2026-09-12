@@ -45,6 +45,20 @@ so they can be selected explicitly with:
 pytest -m "research and not historical_research"
 ```
 
+For ordinary iteration, use the fast current-research tier:
+
+```bash
+pytest -m "research and not historical_research and not r46_deep"
+```
+
+This retains the standalone R46 frozen-source pin guard and the cheap
+`R46_FAST_ALWAYS`/`R46_PIN_ALWAYS` contracts. The full command above remains
+the complete current-research suite and still runs every R46 test. The
+externally registered `r46_deep` tests run on R46-relevant changes and on the
+scheduled or manual deep workflow; tier metadata is maintained in
+`tests/conftest.py`, and full/default collection fails if a registered R46
+selector becomes stale.
+
 Closed, superseded, and retrospective research tests remain in their original
 paths and are still runnable without moving or rewriting their evidence:
 
@@ -72,9 +86,11 @@ Normal directory collection skips historical modules before Python import, so
 they do not appear as deselected items.
 
 CI runs `pytest -m "not research"` on Python 3.12, 3.13, and 3.14, then runs
-`pytest -m "research and not historical_research"` once on Python 3.13. The
-immutable manifests, receipts, reports, and archived result files are retained
-for manual reproduction.
+the fast current-research command once on Python 3.13. The separate Deep R46
+workflow runs the marked change-sensitive and periodic contracts for
+R46-relevant pushes or pull requests and on its weekly/manual triggers. Deep
+verification is deferred, not deleted; the immutable manifests, receipts,
+reports, and archived result files remain available for full reproduction.
 
 ## Lifecycle
 

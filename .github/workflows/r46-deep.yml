@@ -1,0 +1,101 @@
+name: Deep R46 validation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/r46-deep.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "requirements*.lock"
+      - ".gitignore"
+      - "config/settings.yaml"
+      - "data/historical/equity_**"
+      - "data/research_manifests/r46_**"
+      - "data/research_receipts/r46_**"
+      - "data/research/r46_**"
+      - "data/research/**/r46_**"
+      - "docs/research/*r46*"
+      - "scripts/research/acquire_r46_**"
+      - "scripts/research/build_r46_**"
+      - "scripts/research/r46_**"
+      - "scripts/research/validate_r46_**"
+      - "scripts/research/verify_r46_**"
+      - "scripts/run_symmetric_v5_validation.py"
+      - "src/parayabuck/backtest/**"
+      - "src/parayabuck/config.py"
+      - "src/parayabuck/core/models.py"
+      - "src/parayabuck/data/adjustment.py"
+      - "src/parayabuck/data/market_dataset.py"
+      - "src/parayabuck/execution/portfolio.py"
+      - "src/parayabuck/features/**"
+      - "src/parayabuck/logger.py"
+      - "src/parayabuck/markets/**"
+      - "src/parayabuck/monitoring/events.py"
+      - "src/parayabuck/portfolio/**"
+      - "src/parayabuck/universe/**"
+      - "src/parayabuck/utils/io.py"
+      - "tests/conftest.py"
+      - "tests/research/test_r46_**"
+  pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/r46-deep.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "requirements*.lock"
+      - ".gitignore"
+      - "config/settings.yaml"
+      - "data/historical/equity_**"
+      - "data/research_manifests/r46_**"
+      - "data/research_receipts/r46_**"
+      - "data/research/r46_**"
+      - "data/research/**/r46_**"
+      - "docs/research/*r46*"
+      - "scripts/research/acquire_r46_**"
+      - "scripts/research/build_r46_**"
+      - "scripts/research/r46_**"
+      - "scripts/research/validate_r46_**"
+      - "scripts/research/verify_r46_**"
+      - "scripts/run_symmetric_v5_validation.py"
+      - "src/parayabuck/backtest/**"
+      - "src/parayabuck/config.py"
+      - "src/parayabuck/core/models.py"
+      - "src/parayabuck/data/adjustment.py"
+      - "src/parayabuck/data/market_dataset.py"
+      - "src/parayabuck/execution/portfolio.py"
+      - "src/parayabuck/features/**"
+      - "src/parayabuck/logger.py"
+      - "src/parayabuck/markets/**"
+      - "src/parayabuck/monitoring/events.py"
+      - "src/parayabuck/portfolio/**"
+      - "src/parayabuck/universe/**"
+      - "src/parayabuck/utils/io.py"
+      - "tests/conftest.py"
+      - "tests/research/test_r46_**"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deep-r46:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.lock .
+      - name: Verify frozen R46 source pins
+        run: >-
+          pytest -q --strict-markers
+          tests/research/test_r46_frozen_source_pins_2026_09_12.py
+      - name: Run deep R46 contracts
+        run: pytest -q --strict-markers -m "research and r46_deep"

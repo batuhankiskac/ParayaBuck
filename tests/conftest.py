@@ -60,6 +60,7 @@ _CURRENT_RESEARCH_TEST_PATHS = (
     "tests/research/test_r46_treasury_xml_v2_2026_09_10.py",
     "tests/research/test_r46_v2_data_package_2026_09_10.py",
     "tests/research/test_r46_v2_execution_2026_09_10.py",
+    "tests/research/test_r46_frozen_source_pins_2026_09_12.py",
     "tests/research/test_r46_v2_governance_2026_09_10.py",
     "tests/research/test_r46_v3_oracle_2026_09_11.py",
 )

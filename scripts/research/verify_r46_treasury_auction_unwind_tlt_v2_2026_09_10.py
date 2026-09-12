@@ -2586,130 +2586,6 @@ def _strict_expected_decision_clock(
     return tuple(expected)
 
 
-class _StrictReplayStateCursor:
-    """Advance trusted replay state once for chronological decision queries."""
-
-    def __init__(
-        self,
-        *,
-        inner: Mapping[str, Any],
-        replay: Mapping[str, Any],
-        bars: Mapping[tuple[str, datetime], Any],
-        marker_timestamps: set[datetime],
-        ordered_bars: Sequence[Any] | None,
-    ) -> None:
-        self._inner = inner
-        self._replay = replay
-        self._marker_timestamps = marker_timestamps
-        self._ordered_bars = tuple(ordered_bars) if ordered_bars is not None else tuple(
-            sorted(bars.values(), key=lambda bar: (bar.timestamp, str(bar.symbol)))
-        )
-        self._state_history = replay.get("state_history", ())
-        self._state_index = 0
-        self._bar_index = 0
-        self._cash: float | None = None
-        self._holdings: dict[str, dict[str, Any]] = {}
-        self._marks: dict[str, float] = {}
-        self._real_tlt_reference: float | None = None
-        self._last_timestamp: datetime | None = None
-        self._snapshots: dict[
-            datetime, tuple[float, dict[str, dict[str, Any]], dict[str, float], float, float | None]
-        ] = {}
-
-    @staticmethod
-    def _copy_snapshot(
-        snapshot: tuple[float, dict[str, dict[str, Any]], dict[str, float], float, float | None]
-    ) -> tuple[float, dict[str, dict[str, Any]], dict[str, float], float, float | None]:
-        cash, holdings, marks, equity, real_tlt_reference = snapshot
-        return cash, {symbol: dict(position) for symbol, position in holdings.items()}, dict(marks), equity, real_tlt_reference
-
-    def at(
-        self, timestamp: datetime
-    ) -> tuple[float, dict[str, dict[str, Any]], dict[str, float], float, float | None]:
-        cached = self._snapshots.get(timestamp)
-        if cached is not None:
-            return self._copy_snapshot(cached)
-        if self._last_timestamp is not None and timestamp < self._last_timestamp:
-            return _strict_replay_state_at(
-                inner=self._inner,
-                replay=self._replay,
-                bars={},
-                timestamp=timestamp,
-                marker_timestamps=self._marker_timestamps,
-                ordered_bars=self._ordered_bars,
-            )
-        if self._cash is None:
-            self._cash = _number(self._inner.get("initial_cash"), "strict_decision_initial_cash")
-        while self._state_index < len(self._state_history):
-            raw_state = self._state_history[self._state_index]
-            if not isinstance(raw_state, (tuple, list)) or len(raw_state) != 4:
-                raise ValueError("strict_decision_state_history")
-            state_timestamp = _timestamp(raw_state[0], "strict_decision_state_timestamp")
-            if state_timestamp > timestamp:
-                break
-            self._cash = _number(raw_state[1], "strict_decision_state_cash")
-            self._holdings = {
-                str(symbol): dict(_mapping(position, "strict_decision_state_position"))
-                for symbol, position in _mapping(raw_state[2], "strict_decision_state_holdings").items()
-            }
-            self._state_index += 1
-        while (
-            self._bar_index < len(self._ordered_bars)
-            and self._ordered_bars[self._bar_index].timestamp <= timestamp
-        ):
-            source_bar = self._ordered_bars[self._bar_index]
-            if not (str(source_bar.symbol) == "TLT" and source_bar.timestamp in self._marker_timestamps):
-                symbol = str(source_bar.symbol)
-                self._marks[symbol] = float(source_bar.close)
-                if symbol == "TLT":
-                    self._real_tlt_reference = float(source_bar.close)
-            self._bar_index += 1
-        equity = self._cash + sum(
-            float(position["qty"]) * self._marks.get(symbol, float(position["avg_price"]))
-            for symbol, position in self._holdings.items()
-        )
-        snapshot = (
-            self._cash,
-            {symbol: dict(position) for symbol, position in self._holdings.items()},
-            dict(self._marks),
-            equity,
-            self._real_tlt_reference,
-        )
-        self._snapshots[timestamp] = snapshot
-        self._last_timestamp = timestamp
-        return self._copy_snapshot(snapshot)
-
-
-class _StrictReplayRiskCursor:
-    """Advance the independently reconstructed risk history chronologically."""
-
-    def __init__(self, replay: Mapping[str, Any]) -> None:
-        self._history = tuple(_sequence(replay.get("risk_history", ()), "strict_decision_risk_history"))
-        self._index = 0
-        self._selected: Mapping[str, Any] | None = None
-        self._last_timestamp: datetime | None = None
-        self._snapshots: dict[datetime, Mapping[str, Any]] = {}
-
-    def at(self, timestamp: datetime) -> Mapping[str, Any]:
-        cached = self._snapshots.get(timestamp)
-        if cached is not None:
-            return cached
-        if self._last_timestamp is not None and timestamp < self._last_timestamp:
-            return _strict_replay_risk_at({}, timestamp, risk_cursor=None, risk_history=self._history)
-        while self._index < len(self._history):
-            state = _mapping(self._history[self._index], "strict_decision_risk_state")
-            state_timestamp = _timestamp(state.get("timestamp"), "strict_decision_risk_timestamp")
-            if state_timestamp > timestamp:
-                break
-            self._selected = state
-            self._index += 1
-        if self._selected is None:
-            raise ValueError("strict_decision_risk_state_missing")
-        self._snapshots[timestamp] = self._selected
-        self._last_timestamp = timestamp
-        return self._selected
-
-
 def _strict_replay_state_at(
     *,
     inner: Mapping[str, Any],
@@ -2718,12 +2594,8 @@ def _strict_replay_state_at(
     timestamp: datetime,
     marker_timestamps: set[datetime],
     ordered_bars: Sequence[Any] | None = None,
-    state_cursor: _StrictReplayStateCursor | None = None,
 ) -> tuple[float, dict[str, dict[str, Any]], dict[str, float], float, float | None]:
     """Return trusted cash, holdings, marks, equity, and real TLT reference."""
-
-    if state_cursor is not None:
-        return state_cursor.at(timestamp)
 
     cash = _number(inner.get("initial_cash"), "strict_decision_initial_cash")
     holdings: dict[str, dict[str, Any]] = {}
@@ -2762,22 +2634,12 @@ def _strict_replay_state_at(
 
 
 def _strict_replay_risk_at(
-    replay: Mapping[str, Any],
-    timestamp: datetime,
-    *,
-    risk_cursor: _StrictReplayRiskCursor | None = None,
-    risk_history: Sequence[object] | None = None,
+    replay: Mapping[str, Any], timestamp: datetime
 ) -> Mapping[str, Any]:
     """Return the independently reconstructed per-bar risk state at ``timestamp``."""
 
-    if risk_cursor is not None:
-        return risk_cursor.at(timestamp)
-
     selected: Mapping[str, Any] | None = None
-    for raw_state in _sequence(
-        replay.get("risk_history", ()) if risk_history is None else risk_history,
-        "strict_decision_risk_history",
-    ):
+    for raw_state in _sequence(replay.get("risk_history", ()), "strict_decision_risk_history"):
         state = _mapping(raw_state, "strict_decision_risk_state")
         state_timestamp = _timestamp(state.get("timestamp"), "strict_decision_risk_timestamp")
         if state_timestamp > timestamp:
@@ -2870,11 +2732,6 @@ def _strict_validate_rebalance_details(
         if oracle_contract is not None
         else None
     )
-    replay_state_cursor = (
-        cast(_StrictReplayStateCursor | None, oracle_contract.get("replay_state_cursor"))
-        if oracle_contract is not None
-        else None
-    )
     fills_by_decision: dict[datetime, list[Mapping[str, Any]]] = {}
     for fill in fills:
         decision_timestamp = _timestamp(fill.get("decision_timestamp"), "strict_rebalance_fill_decision")
@@ -2898,7 +2755,6 @@ def _strict_validate_rebalance_details(
             timestamp=timestamp,
             marker_timestamps=marker_timestamps,
             ordered_bars=cast(Sequence[Any] | None, oracle_ordered_bars),
-            state_cursor=replay_state_cursor,
         )
         if full_equity <= 0:
             raise ValueError("strict_rebalance_equity")
@@ -3157,8 +3013,6 @@ def _strict_validate_decision_clock(
     oracle_ordered_bars: Sequence[Any] | None = None
     oracle_maximum_allocation = 0.55
     oracle_pending: PendingOrderLedger | None = None
-    replay_state_cursor: _StrictReplayStateCursor | None = None
-    replay_risk_cursor: _StrictReplayRiskCursor | None = None
     if oracle_context is not None:
         try:
             oracle_session = CachedV3TargetOracle(
@@ -3195,14 +3049,6 @@ def _strict_validate_decision_clock(
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("strict_v3_oracle_context") from exc
-        replay_state_cursor = _StrictReplayStateCursor(
-            inner=inner,
-            replay=replay,
-            bars=bars,
-            marker_timestamps=marker_timestamps,
-            ordered_bars=oracle_ordered_bars,
-        )
-        replay_risk_cursor = _StrictReplayRiskCursor(replay)
     schedule_by_id = {str(getattr(schedule, "event_id")): schedule for schedule in oracle_schedules}
 
     def oracle_expected(
@@ -3226,7 +3072,6 @@ def _strict_validate_decision_clock(
                         timestamp=timestamp,
                         marker_timestamps=marker_timestamps,
                         ordered_bars=oracle_ordered_bars,
-                        state_cursor=replay_state_cursor,
                     )
                 return state_snapshot
 
@@ -3289,11 +3134,7 @@ def _strict_validate_decision_clock(
                 active = False
             desired = add_overlay_weight(base, "TLT", _STRICT_CANDIDATE_WEIGHT) if candidate and active else base
             state_cash, state_holdings, state_marks, state_equity, _reference = state_at_timestamp()
-            risk_snapshot = _strict_replay_risk_at(
-                replay,
-                timestamp,
-                risk_cursor=replay_risk_cursor,
-            )
+            risk_snapshot = _strict_replay_risk_at(replay, timestamp)
             risk_state = {
                 "cash": state_cash,
                 "holdings": state_holdings,
@@ -3535,7 +3376,6 @@ def _strict_validate_decision_clock(
         "oracle_target_maps": oracle_target_maps,
         "oracle_desired_target_maps": oracle_desired_target_maps,
         "oracle_ordered_bars": oracle_ordered_bars,
-        "replay_state_cursor": replay_state_cursor,
         "oracle_accepted_event_ids": tuple(sorted(oracle_accepted_ids)),
     }
 
@@ -3556,11 +3396,6 @@ def _strict_validate_event_contract(
     schedules = list(getattr(package_inputs, "schedules", ()))
     oracle_ordered_bars = (
         oracle_contract.get("oracle_ordered_bars")
-        if oracle_contract is not None
-        else None
-    )
-    replay_state_cursor = (
-        cast(_StrictReplayStateCursor | None, oracle_contract.get("replay_state_cursor"))
         if oracle_contract is not None
         else None
     )
@@ -3749,7 +3584,6 @@ def _strict_validate_event_contract(
                     timestamp=schedule.entry_decision,
                     marker_timestamps=marker_timestamps,
                     ordered_bars=cast(Sequence[Any] | None, oracle_ordered_bars),
-                    state_cursor=replay_state_cursor,
                 )
                 base_map = {symbol: weight for symbol, weight in target_map.items() if symbol != "TLT" and weight > _EPS}
                 projected = set(holdings) | set(base_map) | {"TLT"}
@@ -3857,7 +3691,6 @@ def _strict_validate_event_contract(
             timestamp=schedule.entry_decision,
             marker_timestamps=marker_timestamps,
             ordered_bars=cast(Sequence[Any] | None, oracle_ordered_bars),
-            state_cursor=replay_state_cursor,
         )
         if tlt_reference is None or tlt_reference <= 0:
             raise ValueError("strict_event_reference_missing")
@@ -3879,7 +3712,6 @@ def _strict_validate_event_contract(
             timestamp=schedule.exit_decision,
             marker_timestamps=marker_timestamps,
             ordered_bars=cast(Sequence[Any] | None, oracle_ordered_bars),
-            state_cursor=replay_state_cursor,
         )
         if exit_reference is None or exit_reference <= 0:
             raise ValueError("strict_event_exit_reference_missing")

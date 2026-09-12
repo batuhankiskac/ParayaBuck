@@ -14,7 +14,6 @@ from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -60,10 +59,6 @@ from scripts.research.r46_treasury_auction_unwind_tlt_v2_2026_09_10 import (
     schedule_r46_holding,
 )
 from scripts.research.verify_r46_treasury_auction_unwind_tlt_v2_2026_09_10 import (
-    _strict_replay_risk_at,
-    _strict_replay_state_at,
-    _StrictReplayRiskCursor,
-    _StrictReplayStateCursor,
     _verify_economic_structural,
     verify_attestation,
     verify_payload,
@@ -72,66 +67,6 @@ from scripts.research.verify_r46_treasury_auction_unwind_tlt_v2_2026_09_10 impor
 TS = datetime(2025, 1, 15, 21, 0, tzinfo=UTC)
 TS2 = datetime(2025, 1, 16, 21, 0, tzinfo=UTC)
 REPO = Path(__file__).resolve().parents[2]
-
-
-def test_strict_replay_cursors_match_reference_for_forward_and_backward_queries() -> None:
-    timestamps = tuple(TS + timedelta(days=offset) for offset in range(4))
-    bars_list = [
-        SimpleNamespace(symbol=symbol, timestamp=timestamp, close=close)
-        for timestamp, values in zip(
-            timestamps,
-            ((100.0, 90.0, 80.0), (101.0, 91.0, 81.0), (102.0, 92.0, 82.0), (103.0, 93.0, 83.0)),
-            strict=True,
-        )
-        for symbol, close in zip(("SPY", "AAA", "TLT"), values, strict=True)
-    ]
-    bars = {(bar.symbol, bar.timestamp): bar for bar in bars_list}
-    ordered_bars = tuple(sorted(bars.values(), key=lambda bar: (bar.timestamp, str(bar.symbol))))
-    inner = {"initial_cash": 100_000.0}
-    replay = {
-        "state_history": [
-            (timestamps[0].isoformat(), 100_000.0, {}, 0.0),
-            (timestamps[1].isoformat(), 99_800.0, {"AAA": {"qty": 2.0, "avg_price": 100.0}}, 0.0),
-            (timestamps[2].isoformat(), 99_600.0, {"AAA": {"qty": 1.0, "avg_price": 101.0}}, 0.0),
-        ],
-        "risk_history": [
-            {"timestamp": timestamp.isoformat(), "daily_pnl": float(index)}
-            for index, timestamp in enumerate(timestamps)
-        ],
-    }
-    marker_timestamps = {timestamps[1]}
-    state_cursor = _StrictReplayStateCursor(
-        inner=inner,
-        replay=replay,
-        bars=bars,
-        marker_timestamps=marker_timestamps,
-        ordered_bars=ordered_bars,
-    )
-    for timestamp in (timestamps[0], timestamps[2], timestamps[2], timestamps[3], timestamps[1]):
-        expected = _strict_replay_state_at(
-            inner=inner,
-            replay=replay,
-            bars=bars,
-            timestamp=timestamp,
-            marker_timestamps=marker_timestamps,
-            ordered_bars=ordered_bars,
-        )
-        actual = _strict_replay_state_at(
-            inner=inner,
-            replay=replay,
-            bars=bars,
-            timestamp=timestamp,
-            marker_timestamps=marker_timestamps,
-            ordered_bars=ordered_bars,
-            state_cursor=state_cursor,
-        )
-        assert actual == expected
-
-    risk_cursor = _StrictReplayRiskCursor(replay)
-    for timestamp in (timestamps[0], timestamps[2], timestamps[2], timestamps[3], timestamps[1]):
-        expected_risk = _strict_replay_risk_at(replay, timestamp)
-        actual_risk = _strict_replay_risk_at(replay, timestamp, risk_cursor=risk_cursor)
-        assert actual_risk == expected_risk
 
 
 def _canonical(value: Mapping[str, Any], field: str) -> str:

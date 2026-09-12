@@ -112,13 +112,14 @@ class AlpacaBarStream:
                 subscribe_updated(crypto_updated_handler, *crypto_symbols)
 
     def update_subscriptions(self, stock_symbols: list[str], crypto_symbols: list[str]) -> dict[str, tuple[str, ...]]:
-        """Atomically converge running streams on a newly approved symbol set.
+        """Converge running streams on a newly approved symbol set with rollback.
 
         Stock and crypto memberships are applied in order. If the second
         operation fails, the first is rolled back (re-subscribing the removed
         symbols and unsubscribing the added ones) before the error propagates,
-        so socket membership and local bookkeeping never diverge and callers
-        can safely assume "the subscription call raised -> nothing changed".
+        retaining the previous local bookkeeping on failure. If any rollback
+        leg fails, ``rollback_failed`` signals unknown socket membership;
+        callers must halt entries and reconnect rather than assume no change.
         """
         desired_stock = set(stock_symbols)
         desired_crypto = set(crypto_symbols)
@@ -180,8 +181,8 @@ class AlpacaBarStream:
             "removed_crypto": removed_crypto,
         }
 
-    @staticmethod
     def _update_market_subscription(
+        self,
         stream: Any,
         added: tuple[str, ...],
         removed: tuple[str, ...],
@@ -218,21 +219,25 @@ class AlpacaBarStream:
                 try:
                     stream.unsubscribe_bars(*added)
                 except Exception:
+                    self._rollback_failed = True
                     log.exception("Rollback of a partial subscription failed")
                 if unsubscribe_updated is not None:
                     try:
                         unsubscribe_updated(*added)
                     except Exception:
+                        self._rollback_failed = True
                         log.exception("Rollback of a partial updated subscription failed")
             if plain_removed:
                 try:
                     stream.subscribe_bars(handler, *removed)
                 except Exception:
+                    self._rollback_failed = True
                     log.exception("Rollback of a partial unsubscription failed")
                 if subscribe_updated is not None:
                     try:
                         subscribe_updated(updated_handler, *removed)
                     except Exception:
+                        self._rollback_failed = True
                         log.exception("Rollback of a partial updated unsubscription failed")
             raise
 
@@ -243,5 +248,7 @@ class AlpacaBarStream:
         self.crypto.run()
 
     def stop(self) -> None:
-        self.stock.stop()
-        self.crypto.stop()
+        try:
+            self.stock.stop()
+        finally:
+            self.crypto.stop()

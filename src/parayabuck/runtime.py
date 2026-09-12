@@ -7,6 +7,7 @@ import os
 import queue
 import threading
 import time
+from _thread import LockType
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -1926,7 +1927,7 @@ class EngineRuntime:
         log.info("Engine runtime stopped")
         return True
 
-    def _account_snapshot_guard(self):
+    def _account_snapshot_guard(self) -> LockType:
         """Return the narrow lock protecting the account cache metadata."""
         lock = getattr(self, "_account_snapshot_lock", None)
         if lock is None:
@@ -2063,9 +2064,7 @@ class EngineRuntime:
             # Invalidation after _fresh_account_snapshot returned but before
             # metadata was captured: reacquire against the new generation.
             return self._fresh_account_snapshot_lease(_allow_retry=False)
-        raise RuntimeError(
-            "Account snapshot invalidated between fetch return and decision lease"
-        )
+        raise RuntimeError("Account snapshot invalidated between fetch return and decision lease")
 
     def _account_snapshot_lease_is_current(self, lease: _AccountSnapshotLease) -> bool:
         """Atomically validate a decision lease immediately before use."""
@@ -2077,10 +2076,7 @@ class EngineRuntime:
                 int(getattr(self, "_account_snapshot_generation", 0)) == lease.generation
                 and getattr(self, "_last_account_snapshot", None) is lease.snapshot
                 and getattr(self, "_last_account_snapshot_at", None) is not None
-                and (
-                    not getattr(self, "_account_snapshot_invalidation_pending", False)
-                    or id(lease) in active
-                )
+                and (not getattr(self, "_account_snapshot_invalidation_pending", False) or id(lease) in active)
             )
 
     def _claim_account_snapshot_lease(self, lease: _AccountSnapshotLease) -> bool:
@@ -2118,9 +2114,7 @@ class EngineRuntime:
                 return
             active.remove(id(lease))
             if not active and getattr(self, "_account_snapshot_invalidation_pending", False):
-                self._account_snapshot_generation = int(
-                    getattr(self, "_account_snapshot_generation", 0)
-                ) + 1
+                self._account_snapshot_generation = int(getattr(self, "_account_snapshot_generation", 0)) + 1
                 self._last_account_snapshot_at = None
                 self._account_snapshot_invalidation_pending = False
 

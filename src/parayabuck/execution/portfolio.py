@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
@@ -290,11 +291,7 @@ class PortfolioRiskOverlay:
         for symbol in open_order_symbols:
             order_market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
             open_order_slots.add((order_market, canonical_symbol(symbol, order_market)))
-        fixed_slots = {
-            slot
-            for slot in account_slots
-            if slot[0] != market
-        }
+        fixed_slots = {slot for slot in account_slots if slot[0] != market}
         fixed_slots.update(reserved_slots)
         fixed_slots.update(open_order_slots)
         fixed_slots.update(
@@ -302,16 +299,9 @@ class PortfolioRiskOverlay:
             for position in account.positions
             if not position.is_flat
             and position.market == market
-            and (
-                canonical_symbol(position.symbol, position.market) not in approved
-                or position.external_qty > 1e-12
-            )
+            and (canonical_symbol(position.symbol, position.market) not in approved or position.external_qty > 1e-12)
         )
-        fixed_current_symbols = {
-            symbol
-            for fixed_market, symbol in fixed_slots
-            if fixed_market == market
-        }
+        fixed_current_symbols = {symbol for fixed_market, symbol in fixed_slots if fixed_market == market}
         mandatory_symbols = set(desired) & fixed_current_symbols
         available_global_slots = max(0, self.limits.maximum_positions - len(fixed_slots))
         available_market_slots = max(0, market_position_limit - len(fixed_current_symbols))
@@ -446,7 +436,7 @@ class TargetToOrderPlanner:
         rules: dict[str, AssetTradingRules],
         approved_symbols: tuple[str, ...],
         open_order_symbols: set[str] | None = None,
-        open_order_sides: dict[str, set[str] | frozenset[str]] | None = None,
+        open_order_sides: Mapping[str, set[str] | frozenset[str]] | None = None,
         decision_id: str | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.

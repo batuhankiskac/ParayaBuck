@@ -4,6 +4,7 @@ import errno
 import math
 import os
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -82,9 +83,10 @@ def backup_database(
 
     stamp = now or datetime.now(UTC)
     destination = _backup_path(target_dir, stamp)
-    source_connection = sqlite3.connect(source)
-    destination_connection = sqlite3.connect(destination)
-    try:
+    with (
+        closing(sqlite3.connect(source)) as source_connection,
+        closing(sqlite3.connect(destination)) as destination_connection,
+    ):
         source_connection.execute("PRAGMA busy_timeout=5000")
         destination_connection.execute("PRAGMA busy_timeout=5000")
         # Online backup: copies a consistent snapshot, retrying on transient
@@ -99,9 +101,6 @@ def backup_database(
         # Ensure the destination is fsynced and not WAL: a standalone file
         # with no sidecars survives a crash without needing WAL recovery.
         destination_connection.commit()
-    finally:
-        destination_connection.close()
-        source_connection.close()
     # Durability: fsync file and directory.
     # - File fsync failure means the snapshot is NOT durable: remove the new
     #   file (and sidecars), preserve previous verified backups, do NOT prune,
@@ -169,7 +168,7 @@ def backup_database(
 def verify_backup(path: str | Path) -> bool:
     """Run ``PRAGMA integrity_check`` on a backup; True when it reads cleanly."""
     try:
-        connection = sqlite3.connect(f"file:{Path(path).resolve()}?mode=ro", uri=True)
+        connection = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
     except sqlite3.Error:
         return False
     try:

@@ -72,69 +72,54 @@ class SQLiteStore:
             self.connection = sqlite3.connect(self.path, check_same_thread=False)
         except sqlite3.Error as exc:
             raise StorageInitializationError(f"Cannot open SQLite database at {self.path}: {exc}") from exc
-        # Also handle the case where the parent exists but the file cannot be
-        # created due to permissions: ensure we can write the file itself.
+        # Setup and read-back verification share one cleanup boundary: a
+        # partially initialized store must never retain an open connection.
         try:
             # WAL must be set before any other pragma that depends on it.
             self.connection.execute("PRAGMA journal_mode=WAL")
             self.connection.execute("PRAGMA synchronous=NORMAL")
             self.connection.execute("PRAGMA foreign_keys=ON")
             self.connection.execute("PRAGMA busy_timeout=5000")
-        except sqlite3.Error as exc:
+            journal_mode = self.connection.execute("PRAGMA journal_mode").fetchone()
+            if journal_mode is None or str(journal_mode[0]).lower() != "wal":
+                raise StorageInitializationError(
+                    f"SQLite journal_mode is {journal_mode[0] if journal_mode else None!r}, expected WAL"
+                )
+            foreign_keys = self.connection.execute("PRAGMA foreign_keys").fetchone()
+            try:
+                fk_val = int(foreign_keys[0]) if foreign_keys is not None else 0
+            except Exception:
+                fk_val = 0
+            if fk_val != 1:
+                raise StorageInitializationError(f"SQLite foreign_keys is {fk_val}, expected ON (1)")
+            busy = self.connection.execute("PRAGMA busy_timeout").fetchone()
+            try:
+                busy_val = int(busy[0]) if busy is not None else 0
+            except Exception:
+                busy_val = 0
+            if busy_val < 5000:
+                raise StorageInitializationError(f"SQLite busy_timeout is {busy_val}, expected >= 5000")
+            sync = self.connection.execute("PRAGMA synchronous").fetchone()
+            raw_sync = sync[0] if sync is not None else None
+            # Normalize: SQLite may return int (0|1|2|3) or string ("NORMAL").
+            if isinstance(raw_sync, str):
+                sync_ok = raw_sync.lower() == "normal" or raw_sync.strip() == "1"
+            else:
+                try:
+                    sync_ok = int(raw_sync) == 1  # type: ignore[arg-type]
+                except Exception:
+                    sync_ok = False
+            if not sync_ok:
+                raise StorageInitializationError(f"SQLite synchronous is {raw_sync!r}, expected NORMAL (1)")
+        except BaseException as exc:
+            # Cleanup also runs on interruption; never mask the original cause.
             try:
                 self.connection.close()
             except Exception:
                 pass
-            raise StorageInitializationError(f"Failed to configure SQLite pragmas: {exc}") from exc
-        # Verify every critical pragma actually took effect — previously silent
-        # pass at line 67 meant a VFS mismatch or read-only FS kept DELETE mode.
-        journal_mode = self.connection.execute("PRAGMA journal_mode").fetchone()
-        if journal_mode is None or str(journal_mode[0]).lower() != "wal":
-            try:
-                self.connection.close()
-            except Exception:
-                pass
-            raise StorageInitializationError(
-                f"SQLite journal_mode is {journal_mode[0] if journal_mode else None!r}, expected WAL"
-            )
-        foreign_keys = self.connection.execute("PRAGMA foreign_keys").fetchone()
-        try:
-            fk_val = int(foreign_keys[0]) if foreign_keys is not None else 0
-        except Exception:
-            fk_val = 0
-        if fk_val != 1:
-            try:
-                self.connection.close()
-            except Exception:
-                pass
-            raise StorageInitializationError(f"SQLite foreign_keys is {fk_val}, expected ON (1)")
-        busy = self.connection.execute("PRAGMA busy_timeout").fetchone()
-        try:
-            busy_val = int(busy[0]) if busy is not None else 0
-        except Exception:
-            busy_val = 0
-        if busy_val < 5000:
-            try:
-                self.connection.close()
-            except Exception:
-                pass
-            raise StorageInitializationError(f"SQLite busy_timeout is {busy_val}, expected >= 5000")
-        sync = self.connection.execute("PRAGMA synchronous").fetchone()
-        raw_sync = sync[0] if sync is not None else None
-        # Normalize: SQLite may return int (0|1|2|3) or string ("NORMAL").
-        if isinstance(raw_sync, str):
-            sync_ok = raw_sync.lower() == "normal" or raw_sync.strip() == "1"
-        else:
-            try:
-                sync_ok = int(raw_sync) == 1  # type: ignore[arg-type]
-            except Exception:
-                sync_ok = False
-        if not sync_ok:
-            try:
-                self.connection.close()
-            except Exception:
-                pass
-            raise StorageInitializationError(f"SQLite synchronous is {raw_sync!r}, expected NORMAL (1)")
+            if isinstance(exc, sqlite3.Error):
+                raise StorageInitializationError(f"Failed to configure SQLite pragmas: {exc}") from exc
+            raise
         self.lock = threading.RLock()
         self._references = 0
         self._closed = False
@@ -151,10 +136,10 @@ class SQLiteStore:
         with self.lock:
             if self._references <= 0:
                 return
-            self._references -= 1
-            if self._references == 0 and not self._closed:
+            if self._references == 1 and not self._closed:
                 self.connection.close()
                 self._closed = True
+            self._references -= 1
 
 
 def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,7 +64,7 @@ class LiveOperatorApproval:
             raise ValueError("Operator approval identity must not be empty")
         if not self.configuration_digests or len(set(self.configuration_digests)) != len(self.configuration_digests):
             raise ValueError("Operator approval requires unique configuration digests")
-        if self.maximum_dollar_exposure <= 0:
+        if not math.isfinite(self.maximum_dollar_exposure) or self.maximum_dollar_exposure <= 0:
             raise ValueError("Operator approval requires a positive dollar cap")
         if self.approved_at.tzinfo is None or self.expires_at.tzinfo is None:
             raise ValueError("Operator approval timestamps must be timezone-aware")
@@ -129,7 +130,10 @@ class LiveOperatorApproval:
             raise LiveApprovalError("Live operator approval account does not match")
         if set(approval.configuration_digests) != set(configuration_digests):
             raise LiveApprovalError("Live operator approval configuration does not match")
-        if approval.expires_at <= (now or datetime.now(UTC)):
+        current = now or datetime.now(UTC)
+        if approval.approved_at > current:
+            raise LiveApprovalError("Live operator approval is not yet valid")
+        if approval.expires_at <= current:
             raise LiveApprovalError("Live operator approval has expired")
         return approval
 

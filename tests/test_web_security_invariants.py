@@ -92,8 +92,10 @@ def test_trusted_browser_origin_strict():
     assert not trusted_browser_origin("http://192.168.1.1")
 
 
-def test_origin_middleware_allows_non_browser_then_checks_token():
+def test_origin_middleware_allows_non_browser_then_checks_token(monkeypatch):
     app, mgr, _ = _app_with_fake_manager()
+    started = []
+    monkeypatch.setattr(mgr, "start_engine", lambda: started.append(True))
     client = TestClient(app, raise_server_exceptions=False)
     # No Origin -> non-browser (curl) -> middleware allows to token check
     # Without token, mutating must be 403 Invalid token, not 403 Origin
@@ -106,6 +108,7 @@ def test_origin_middleware_allows_non_browser_then_checks_token():
         headers={"Host": "testserver", "X-Parayabuck-Control-Token": mgr.control_token},
     )
     assert r2.status_code != 403 or "Untrusted browser origin" not in r2.text
+    assert started == [True]
 
 
 def test_origin_middleware_rejects_untrusted_browser_origin_for_mutating():
@@ -185,7 +188,7 @@ def test_control_token_not_in_observability_or_error_payloads():
 
 
 def test_ws_ticket_single_use_scope_and_ttl():
-    store = WebSocketTicketStore(ttl_seconds=1.0)
+    store = WebSocketTicketStore(ttl_seconds=0.01)
     t_stream = store.issue("stream")
     t_logs = store.issue("logs")
     assert t_stream != t_logs
@@ -202,7 +205,7 @@ def test_ws_ticket_single_use_scope_and_ttl():
     assert store.consume(t2, "logs") is True
     # TTL expiry
     t3 = store.issue("stream")
-    time.sleep(1.1)
+    time.sleep(0.02)
     assert store.consume(t3, "stream") is False
 
 

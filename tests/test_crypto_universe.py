@@ -287,7 +287,12 @@ class _ExitClient:
         return SimpleNamespace(id="target-id")
 
 
-def _broker(ledger: ExecutionLedger, client: Any) -> AlpacaBroker:
+def _broker(
+    ledger: ExecutionLedger,
+    client: Any,
+    *,
+    stop_cancel_timeout_seconds: float | None = None,
+) -> AlpacaBroker:
     broker = AlpacaBroker.__new__(AlpacaBroker)
     broker.ledger = ledger
     broker._account_id = "acct"
@@ -300,6 +305,8 @@ def _broker(ledger: ExecutionLedger, client: Any) -> AlpacaBroker:
     }
     broker._symbol_exit_locks = {}
     broker.crypto_emergency_exit_bps = 75
+    if stop_cancel_timeout_seconds is not None:
+        broker.crypto_stop_cancel_timeout_seconds = stop_cancel_timeout_seconds
     return broker
 
 
@@ -332,7 +339,7 @@ def test_stop_fill_during_target_cancel_never_submits_duplicate_sell(
 def test_unconfirmed_stop_cancel_halts_without_target_order(tmp_path: Path) -> None:
     ledger, _order = _managed_crypto_ledger(tmp_path)
     client = _ExitClient(stop_status="accepted")
-    broker = _broker(ledger, client)
+    broker = _broker(ledger, client, stop_cancel_timeout_seconds=0.03)
     with pytest.raises(AmbiguousOrderState, match="unconfirmed"):
         broker.process_crypto_price(CryptoPriceObservation("BTC/USD", 111, 109, "one_minute_bar", datetime.now(UTC)))
     assert client.submitted == []

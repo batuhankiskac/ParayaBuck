@@ -502,6 +502,11 @@ def test_first_transient_fails_second_succeeds(monkeypatch: Any) -> None:
     flaky = _FlakyRuntime(failures=1)
     manager = _manager_with(monkeypatch, flaky)
 
+    async def _no_wait(_delay: float) -> None:
+        await _REAL_SLEEP(0)
+
+    monkeypatch.setattr(server.asyncio, "sleep", _no_wait)
+
     asyncio.run(manager.auto_start_engine())
 
     assert flaky.start_calls == 2

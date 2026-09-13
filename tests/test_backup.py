@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from parayabuck.backup import BackupDurabilityError, backup_database, prune_backups, verify_backup
+from parayabuck.backup import (
+    BackupDurabilityError,
+    backup_database,
+    latest_verified_backup,
+    prune_backups,
+    verify_backup,
+)
 from parayabuck.storage import SQLiteStore
 
 
@@ -50,6 +56,7 @@ def test_backup_produces_valid_restorable_database(tmp_path: Path) -> None:
     assert backup_path.name.startswith("parayabuck-")
     assert backup_path.name.endswith(".sqlite3")
     assert verify_backup(backup_path) is True
+    assert latest_verified_backup(backup_path.parent) == backup_path
     # The snapshot is normalized to a standalone rollback-journal database:
     # no -wal/-shm sidecars, restorable read-only without extra files.
     assert not Path(f"{backup_path}-wal").exists()
@@ -169,6 +176,110 @@ def test_verify_backup_rejects_corrupt_file(tmp_path: Path) -> None:
     corrupt.write_bytes(b"this is not a sqlite database" * 8)
     assert verify_backup(corrupt) is False
     assert verify_backup(tmp_path / "missing.sqlite3") is False
+
+
+def test_verify_backup_rejects_zero_byte_file(tmp_path: Path) -> None:
+    empty = tmp_path / "parayabuck-empty.sqlite3"
+    empty.touch()
+
+    assert verify_backup(empty) is False
+
+
+def test_latest_verified_backup_skips_newer_empty_file(tmp_path: Path) -> None:
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    backup_dir = tmp_path / "backups"
+    try:
+        genuine = backup_database(source, backup_dir, retention_days=7)
+        invalid = backup_dir / "parayabuck-newer.sqlite3"
+        invalid.touch()
+        newer = genuine.stat().st_mtime + 1
+        os.utime(invalid, (newer, newer))
+
+        assert latest_verified_backup(backup_dir) == genuine
+    finally:
+        store.release()
+
+
+def test_failed_online_backup_leaves_no_discoverable_artifact_and_does_not_prune(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    backup_dir = tmp_path / "backups"
+    try:
+        previous = backup_database(source, backup_dir, retention_days=7)
+        expired = backup_dir / "parayabuck-19990101T000000000000Z.sqlite3"
+        shutil.copy(previous, expired)
+        old = datetime.now(UTC).timestamp() - 20 * 86_400
+        os.utime(expired, (old, old))
+        before = set(backup_dir.glob("parayabuck-*.sqlite3"))
+
+        real_connect = sqlite3.connect
+
+        class FailingSourceConnection:
+            def __init__(self, connection: sqlite3.Connection) -> None:
+                self.connection = connection
+
+            def execute(self, *args: object, **kwargs: object) -> sqlite3.Cursor:
+                return self.connection.execute(*args, **kwargs)
+
+            def backup(self, destination: sqlite3.Connection) -> None:
+                destination.execute("CREATE TABLE incomplete (id INTEGER)")
+                destination.commit()
+                raise sqlite3.OperationalError("forced backup failure")
+
+            def close(self) -> None:
+                self.connection.close()
+
+        def failing_connect(database: object, *args: object, **kwargs: object) -> sqlite3.Connection:
+            connection = real_connect(database, *args, **kwargs)
+            if Path(database) == source:
+                return FailingSourceConnection(connection)  # type: ignore[return-value]
+            return connection
+
+        monkeypatch.setattr("parayabuck.backup.sqlite3.connect", failing_connect)
+
+        with pytest.raises(sqlite3.OperationalError, match="forced backup failure"):
+            backup_database(source, backup_dir, retention_days=7)
+
+        assert set(backup_dir.glob("parayabuck-*.sqlite3")) == before
+        assert not list(backup_dir.glob(".parayabuck-stage-*"))
+        assert previous.exists()
+        assert expired.exists()
+    finally:
+        store.release()
+
+
+def test_backup_publication_does_not_overwrite_concurrent_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "runtime.sqlite3"
+    store = _make_runtime_db(source)
+    backup_dir = tmp_path / "backups"
+    stamp = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+    real_link = os.link
+    collided: Path | None = None
+
+    def collide_once(source_path: str | Path, destination_path: str | Path) -> None:
+        nonlocal collided
+        if collided is None:
+            collided = Path(destination_path)
+            shutil.copyfile(source_path, collided)
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), collided)
+        real_link(source_path, destination_path)
+
+    try:
+        monkeypatch.setattr(os, "link", collide_once)
+        published = backup_database(source, backup_dir, retention_days=7, now=stamp)
+    finally:
+        store.release()
+
+    assert collided is not None
+    assert published != collided
+    assert published.name.endswith("-1.sqlite3")
+    assert verify_backup(collided)
+    assert verify_backup(published)
 
 
 def test_prune_backups_missing_directory_is_noop(tmp_path: Path) -> None:

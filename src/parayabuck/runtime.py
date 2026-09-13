@@ -1791,6 +1791,8 @@ class EngineRuntime:
     def stop(self) -> bool:
         self._startup_cleanup_attempted = True
         alive: list[str] = []
+        cleanup_errors: list[str] = []
+        storage_errors: list[str] = []
         previous_state = getattr(self, "_state", None)
         breaker_at_stop = getattr(self, "_circuit_breaker_reason", None)
         if getattr(self, "_running", False):
@@ -1830,10 +1832,14 @@ class EngineRuntime:
         for stream in (getattr(self, "stream", None), getattr(self, "trading_updates", None)):
             if stream is None:
                 continue
+            stop_stream = getattr(stream, "stop", None)
+            if not callable(stop_stream):
+                continue
             try:
-                stream.stop()
+                stop_stream()
             except Exception as exc:
                 log.warning("Stream stop warning: %s", exc)
+                cleanup_errors.append(f"stream:{type(exc).__name__}")
         # The join phase runs on EVERY stop attempt, not only the first: a
         # prior attempt may have timed out (stop_failed) with workers still
         # finishing. Re-running it guarantees storage below is closed only
@@ -1878,6 +1884,7 @@ class EngineRuntime:
                 close()
             except Exception as exc:
                 log.warning("Session close warning during stop: %s", exc)
+                cleanup_errors.append(f"session:{type(exc).__name__}")
         # A stop from a halted/error state (or while a circuit breaker is
         # active) is an unexpected shutdown: alert and record the session as
         # such. Graceful stops just close the session row.
@@ -1903,19 +1910,32 @@ class EngineRuntime:
                 )
             except Exception as exc:
                 log.warning("Runtime session end failed: %s", exc)
-            self._runtime_session_id = None
+                storage_errors.append(f"runtime_session:{type(exc).__name__}")
+            else:
+                self._runtime_session_id = None
         if not getattr(self, "_storage_closed", False):
-            try:
-                for runtime in getattr(self, "_portfolio_runtimes", ()):
+            for runtime in getattr(self, "_portfolio_runtimes", ()):
+                try:
                     runtime.close("stopped")
-                # Give in-flight stream-thread writes a moment to land before
-                # the SQLite connections below are released.
+                except Exception as exc:
+                    storage_errors.append(f"portfolio:{type(exc).__name__}")
+                    log.exception("Portfolio runtime storage close failed: %s", exc)
+            # Give in-flight stream-thread writes a moment to land before the
+            # SQLite connection below is released.  The ledger owns the final
+            # reference to the store used by these session-finalization writes.
+            close_ledger = getattr(ledger, "close", None)
+            if callable(close_ledger) and not storage_errors:
                 time.sleep(0.25)
-                if ledger is not None:
-                    ledger.close()
-            except Exception as exc:
-                log.exception("Runtime storage close failed: %s", exc)
-            self._storage_closed = True
+                try:
+                    close_ledger()
+                except Exception as exc:
+                    storage_errors.append(f"ledger:{type(exc).__name__}")
+                    log.exception("Execution ledger close failed: %s", exc)
+            cleanup_errors.extend(storage_errors)
+            # Session finalization and ledger release share one SQLite store.
+            # Defer the final release after any write failure so a later stop
+            # can retry those writes on a live connection.
+            self._storage_closed = not storage_errors
         # Preserve a pre-commit safety halt/error for operator visibility;
         # transient and ordinary setup failures return to the reusable
         # stopped state after their attempt-owned resources are closed.
@@ -1924,6 +1944,10 @@ class EngineRuntime:
         else:
             self._state = "stopped"
         self._startup_committed = False
+        if cleanup_errors:
+            self._state = "stop_failed"
+            log.error("Runtime cleanup did not complete: %s", ", ".join(cleanup_errors))
+            return False
         log.info("Engine runtime stopped")
         return True
 

@@ -874,3 +874,147 @@ def test_stream_worker_restart_limit_alerts_once_not_per_retry(monkeypatch: Any)
     assert runtime._market_entry_halts[Market.EQUITY] == "pb-stocks_restart_limit"
     assert emitted == ["circuit_breaker"]
     assert recorded == ["circuit_breaker"]
+
+
+def test_stop_attempts_independent_storage_cleanup_after_portfolio_close_failure(
+    monkeypatch: Any,
+) -> None:
+    """A failed session-finalization write must not leak the ledger/store.
+
+    This is the shutdown analogue of persist-before-submit: independent
+    session writes all get an attempt, their shared store remains available
+    for retry, and the runtime must not report a clean stop after a failure.
+    """
+
+    class CloseSpy:
+        def __init__(self, *, fails: bool = False) -> None:
+            self.calls = 0
+            self.fails = fails
+
+        def close(self, *_args: object) -> None:
+            self.calls += 1
+            if self.fails:
+                raise RuntimeError("injected close failure")
+
+    failed_portfolio = CloseSpy(fails=True)
+    later_portfolio = CloseSpy()
+    ledger = CloseSpy()
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = False
+    runtime._state = "stopped"
+    runtime._startup_committed = False
+    runtime._startup_cleanup_attempted = False
+    runtime._storage_closed = False
+    runtime._runtime_session_id = None
+    runtime._threads = []
+    runtime._portfolio_runtimes = (failed_portfolio, later_portfolio)
+    runtime.ledger = ledger
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _seconds: None)
+
+    assert runtime.stop() is False
+
+    assert failed_portfolio.calls == 1
+    assert later_portfolio.calls == 1
+    # The ledger owns the final shared-store release.  It must be deferred
+    # until store-backed session writes succeed or a retry would target a
+    # closed SQLite connection.
+    assert ledger.calls == 0
+    assert runtime._storage_closed is False
+    assert runtime._state == "stop_failed"
+
+    failed_portfolio.fails = False
+    assert runtime.stop() is True
+    assert failed_portfolio.calls == 2
+    assert later_portfolio.calls == 2
+    assert ledger.calls == 1
+    assert runtime._storage_closed is True
+    assert runtime._state == "stopped"
+
+
+def test_stop_retries_runtime_session_finalization_before_ledger_release(
+    monkeypatch: Any,
+) -> None:
+    """A transient session-row write failure retains its retry identity."""
+
+    class Ledger:
+        def __init__(self) -> None:
+            self.end_calls = 0
+            self.close_calls = 0
+            self.fail_end = True
+
+        def end_runtime_session(self, session_id: str, state: str) -> None:
+            assert session_id == "session-1"
+            assert state in {"stopped", "unexpected"}
+            self.end_calls += 1
+            if self.fail_end:
+                raise RuntimeError("injected session write failure")
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    ledger = Ledger()
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = False
+    runtime._state = "stopped"
+    runtime._startup_committed = True
+    runtime._startup_cleanup_attempted = False
+    runtime._storage_closed = False
+    runtime._runtime_session_id = "session-1"
+    runtime._threads = []
+    runtime._portfolio_runtimes = ()
+    runtime.ledger = ledger
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _seconds: None)
+
+    assert runtime.stop() is False
+    assert runtime._runtime_session_id == "session-1"
+    assert ledger.end_calls == 1
+    assert ledger.close_calls == 0
+
+    ledger.fail_end = False
+    assert runtime.stop() is True
+    assert runtime._runtime_session_id is None
+    assert ledger.end_calls == 2
+    assert ledger.close_calls == 1
+
+
+def test_stop_reports_stream_and_session_cleanup_failures_but_continues(
+    monkeypatch: Any,
+) -> None:
+    """Stream/session failures stay visible without short-circuiting peers."""
+
+    calls: list[str] = []
+
+    class Resource:
+        def __init__(self, name: str, *, fails: bool = False) -> None:
+            self.name = name
+            self.fails = fails
+
+        def stop(self) -> None:
+            calls.append(f"stop:{self.name}")
+            if self.fails:
+                raise RuntimeError("injected stream failure")
+
+        def close(self) -> None:
+            calls.append(f"close:{self.name}")
+            if self.fails:
+                raise RuntimeError("injected session failure")
+
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    runtime._running = False
+    runtime._state = "stopped"
+    runtime._startup_committed = False
+    runtime._startup_cleanup_attempted = False
+    runtime._storage_closed = True
+    runtime._runtime_session_id = None
+    runtime._threads = []
+    runtime._portfolio_runtimes = ()
+    runtime.stream = Resource("bars", fails=True)
+    runtime.trading_updates = Resource("updates")
+    runtime.broker = Resource("broker", fails=True)
+    runtime._historical = Resource("history")
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _seconds: None)
+
+    assert runtime.stop() is False
+
+    assert calls == ["stop:bars", "stop:updates", "close:broker", "close:history"]
+    assert runtime._state == "stop_failed"

@@ -80,14 +80,22 @@ def _expected_digests(config_path: Path) -> tuple[str, ...]:
     return tuple(digests)
 
 
-def _write_approval(root: Path, *, account_id: str, key: str, digests: tuple[str, ...]) -> None:
+def _write_approval(
+    root: Path,
+    *,
+    account_id: str,
+    key: str,
+    digests: tuple[str, ...],
+    approved_at: datetime | None = None,
+) -> None:
+    approval_time = approved_at or datetime.now(UTC) - timedelta(minutes=1)
     approval = LiveOperatorApproval(
         operator_id="operator-1",
         account_id=account_id,
         configuration_digests=digests,
         maximum_dollar_exposure=1000,
-        approved_at=datetime.now(UTC) - timedelta(minutes=1),
-        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        approved_at=approval_time,
+        expires_at=approval_time + timedelta(hours=1),
         nonce="n" * 16,
     ).signed(key)
     atomic_write(
@@ -253,6 +261,27 @@ def test_live_prerequisites_binding_verified_when_account_and_digests_match(tmp_
     # Everything is ready except the in-session phrase confirmation.
     unmet = [entry["id"] for entry in result["items"] if not entry["satisfied"]]
     assert unmet == ["web_arm_token"]
+
+
+def test_live_prerequisites_rejects_future_approval(tmp_path: Path, monkeypatch: Any) -> None:
+    root = tmp_path
+    _live_config(root)
+    key = "k" * 40
+    _write_approval(
+        root,
+        account_id="acct-live-1",
+        key=key,
+        digests=("digest",),
+        approved_at=datetime(2099, 1, 1, tzinfo=UTC),
+    )
+    monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
+    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)
+    monkeypatch.setattr(alpaca_module, "AlpacaBroker", _UnreachableBroker)
+
+    result = _manager(root).live_prerequisites()
+    by_id = {entry["id"]: entry for entry in result["items"]}
+    assert by_id["approval_signature"]["satisfied"] is False
+    assert "not yet valid" in by_id["approval_signature"]["missing"]
 
 
 def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkeypatch: Any) -> None:

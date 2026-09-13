@@ -1112,9 +1112,12 @@ class EngineManager:
                     signature=str(parsed.get("signature", "")),
                 )
                 expected = approval.calculated_signature(hmac_key)
+                current = datetime.now(UTC)
                 if not hmac.compare_digest(approval.signature, expected):
                     approval_error = "approval file signature does not match the operator approval key"
-                elif approval.expires_at <= datetime.now(UTC):
+                elif approval.approved_at > current:
+                    approval_error = "approval file is not yet valid"
+                elif approval.expires_at <= current:
                     approval_error = "approval file has expired"
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 approval_error = f"approval file is unreadable or invalid: {exc}"

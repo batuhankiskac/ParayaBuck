@@ -278,3 +278,7 @@ data/quarantine/
 **/warmup.sqlite3-*
 **/*.sqlite3-wal
 **/*.sqlite3-shm
+
+data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.reserved.json
+data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.consumed.json
+data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.aborted_consumed.json

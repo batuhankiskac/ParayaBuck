@@ -1,0 +1,100 @@
+{
+  "$id": "parayabuck://research/r46-v3-recovery-execution-authorization",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorized": {
+      "const": true
+    },
+    "authorization_nonce": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "candidate_id": {
+      "const": "R46"
+    },
+    "economic_execution_authorized": {
+      "const": true
+    },
+    "execution_contract_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "freeze_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "authorization_sha256"
+      ],
+      "type": "object"
+    },
+    "issued_for_output_directory": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "parameter_change_authorized": {
+      "const": false
+    },
+    "preflight_receipt_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "promotion_authorized": {
+      "const": false
+    },
+    "recovery_generation": {
+      "const": 1
+    },
+    "research_id": {
+      "const": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
+    },
+    "rerun_authorized": {
+      "const": false
+    },
+    "schema_version": {
+      "const": "r46-v3-recovery-execution-authorization-v1"
+    },
+    "source_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "v2_reservation_physical_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "v3_state_canonical_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "research_id",
+    "recovery_generation",
+    "authorized",
+    "economic_execution_authorized",
+    "preflight_receipt_sha256",
+    "execution_contract_sha256",
+    "source_commit",
+    "freeze_commit",
+    "v3_state_canonical_sha256",
+    "v2_reservation_physical_sha256",
+    "authorization_nonce",
+    "issued_for_output_directory",
+    "rerun_authorized",
+    "parameter_change_authorized",
+    "promotion_authorized",
+    "integrity"
+  ],
+  "type": "object"
+}

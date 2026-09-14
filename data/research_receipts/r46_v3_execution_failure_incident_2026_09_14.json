@@ -1,0 +1,77 @@
+{
+  "schema_version": "r46-v3-execution-failure-incident-v1",
+  "candidate_id": "R46",
+  "v3_research_id": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14",
+  "accepted_commits": {
+    "C_SRC": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
+    "C_FREEZE": "d762770cdc3a7d9717600b49110d5bcfd7309e58",
+    "C_GATE": "093be49158d2d9a0af10a770e0317761a44f80db",
+    "C_AUTH": "e209fa3343ad6a2376efb2860e1b25923d407b9f",
+    "C_RESULT": "6d01cade2e284905b13a2cb6e1ef4b325b3134a6"
+  },
+  "execution": {
+    "runner_invocation_count": 1,
+    "runner_exit_code": 1,
+    "terminal_error": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+    "runner_invocation_proven": true,
+    "execution_began_after_reservation": true,
+    "persisted_economic_completion": false,
+    "human_economic_result_evidence": "NONE_PERSISTED_OR_REPORTED",
+    "nonpersisted_historical_processing": "OCCURRED_BEFORE_TECHNICAL_FAILURE",
+    "economic_data_processing_claim": "REAL_EXECUTION_ENTERED; DO NOT CLAIM NO ECONOMIC DATA WAS PROCESSED",
+    "sample_mutation_claim": "DO NOT CLAIM SAMPLE REMAINED UNTOUCHED"
+  },
+  "v3_base_state": {
+    "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json",
+    "physical_sha256": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+    "canonical_sha256": "0165ea19b68a5e913927cb5016a703ccc9d2be73ba01a7515372727b0bdb9421",
+    "status": "SEALED_UNUSED"
+  },
+  "v3_reservation": {
+    "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.reserved.json",
+    "physical_sha256": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+    "transition_canonical_sha256": "4f852d9cda349c05782142c6289e0da00f1a501948bcb23d26308283e6faa964",
+    "status": "RESERVED"
+  },
+  "v3_authorization": {
+    "path": "data/research_receipts/r46_v3_execution_authorization_2026_09_14.json",
+    "physical_sha256": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+    "canonical_sha256": "dce81fa5d154dd50912a56790313166b0031f940a3471d4aa8de7c5cb34e47ac"
+  },
+  "v3_preflight": {
+    "path": "data/research_receipts/r46_v3_recovery_preflight_2026_09_14.json",
+    "physical_sha256": "0b172ac5a94bc7bb4335d5700387a89c64deb8c275577815a0fb039c8c540a7f",
+    "canonical_sha256": "630eddde21325321576dd1830a1741c6a57cf5b0b835cc132c38f1bfa6b202b6"
+  },
+  "v3_execution_contract": {
+    "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_execution_contract.json",
+    "physical_sha256": "98114b212997f86b72cf0b3b3de6841ef990050ce6401b771b81225ee3d8e825",
+    "canonical_sha256": "95b18f4f14673448dc584ae614587e9a095b698206a8f2868ad9bef8ff502e58"
+  },
+  "v2_reservation": {
+    "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json",
+    "physical_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+    "transition_canonical_sha256": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405",
+    "status": "RESERVED"
+  },
+  "persisted_outputs": {
+    "output_directory": "data/research/runs/r46_treasury_auction_unwind_tlt_v3_recovery_final_2026_09_14",
+    "output_directory_found": false,
+    "results_json_found": false,
+    "ledger_json_found": false,
+    "report_json_found": false,
+    "run_receipt_json_found": false,
+    "v3_consumed_sidecar_found": false,
+    "v3_aborted_sidecar_found": false
+  },
+  "governance": {
+    "confirmatory_claim_forbidden": true,
+    "v3_rerun_forbidden": true,
+    "v3_reservation_must_be_preserved": true,
+    "new_governance_generation_required": true
+  },
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators, ensure_ascii=false; hash with integrity.incident_sha256 set to PENDING",
+    "incident_sha256": "b2b3e4fb320b954cce1914e1bd09e9379a2f6d7d68331bf1e7a126f0c29a48f9"
+  }
+}

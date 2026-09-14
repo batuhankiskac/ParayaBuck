@@ -1,0 +1,682 @@
+{
+  "candidate_id": "R46",
+  "failure_boundary": {
+    "event_before_fifth_future_open": true,
+    "event_before_first_native_target": false,
+    "event_boundaries_in_same_supported_no_prior_target_window": [],
+    "event_boundary_count_in_window": 0,
+    "failing_event_id": "2017-02-09:912810RV2",
+    "failing_event_role": "ENTRY",
+    "failing_event_timestamp": "2017-02-10T05:00:00Z",
+    "first_r46_event_boundary_where_v3_support_true": "2017-02-10T05:00:00Z",
+    "observed_missing_cached_incumbent_target": true,
+    "observed_terminal_error": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+    "spy_history_count_at_failing_event": 280
+  },
+  "initial_account_state": {
+    "cash_weight": 1.0,
+    "incumbent_orders_before_first_target": 0,
+    "initial_account_is_all_cash": true,
+    "non_tlt_positions": 0,
+    "pre_first_incumbent_target_base": "CASH",
+    "proof_basis": [
+      "PortfolioBacktestEngine initializes an empty position map when no persisted state is supplied",
+      "PortfolioBacktestEngine initializes cash to starting_equity when state.cash is absent",
+      "V3 production contract fixes starting_equity at 100000.0",
+      "The V3 base state is SEALED_UNUSED and its persisted output set is absent"
+    ],
+    "starting_equity": 100000.0
+  },
+  "integrity": {
+    "diagnosis_sha256": "b118cdc7223e00028b54ba001ab8242a1d017ae185d2c3f5a21cf535ad25f5c0"
+  },
+  "method": {
+    "economic_execution": false,
+    "event_boundary": "schedule.entry_decision=available_at; schedule.exit_decision=fifth_future_open",
+    "metadata_columns": [
+      "timestamp",
+      "symbol",
+      "timeframe",
+      "market"
+    ],
+    "minimum_history_bars": 274,
+    "native_cadence": "weekly_first_bar_of_iso_week",
+    "portfolio_engine_invoked": false,
+    "prices_read": false,
+    "returns_read": false,
+    "runner_invoked": false,
+    "scope": "OUTCOME_FREE_EVENT_DRIVEN_STATE_DIAGNOSIS"
+  },
+  "root_cause": {
+    "classification": "ROOT_CAUSE_NOT_PROVEN",
+    "economic_outcome_used": false,
+    "new_v3_alpha_decision_at_failing_event": false,
+    "non_tlt_incumbent_position_can_exist_before_first_target": false,
+    "proof": [
+      "history support is structurally available before the first failing event boundary",
+      "the first native weekly cadence target is structurally feasible at 2017-02-06T05:00:00Z",
+      "the first support-valid R46 ENTRY boundary is 2017-02-10T05:00:00Z, after that native cadence",
+      "the observed error therefore does not prove the suspected pre-first-target ordering"
+    ],
+    "proven": false,
+    "repair_classification": null
+  },
+  "schema_version": "r46-v3-incumbent-base-failure-diagnosis-v1",
+  "source_pins": {
+    "event_count": 127,
+    "incumbent_bars_path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "incumbent_bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "package_canonical_sha256": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6",
+    "package_path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_data_package.json",
+    "schedule_digest": "83a9d63e834dbbbb0a92249235bca25953483ee9f96cc851e9ca01304a00d7e4"
+  },
+  "timeline": {
+    "first_dataset_signal_timestamp": "2016-01-04T05:00:00Z",
+    "first_incumbent_signal_timestamp": "2016-01-04T05:00:00Z",
+    "first_native_target_definition": "first native weekly cadence with history support and the pinned no-economic-score feasibility metadata",
+    "first_native_weekly_cadence_target_materialization_timestamp": "2017-02-06T05:00:00Z",
+    "first_supported_spy_history_count": 274,
+    "first_timestamp_supports_could_become_true_from_history_count_alone": "2017-02-02T05:00:00Z",
+    "first_tlt_signal_timestamp": "2016-01-04T14:30:00Z",
+    "native_weekly_cadence_decisions": [
+      {
+        "iso_week": [
+          2016,
+          1
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 1,
+        "supports_from_history_count": false,
+        "timestamp": "2016-01-04T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          2
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 6,
+        "supports_from_history_count": false,
+        "timestamp": "2016-01-11T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          3
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 11,
+        "supports_from_history_count": false,
+        "timestamp": "2016-01-19T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          4
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 15,
+        "supports_from_history_count": false,
+        "timestamp": "2016-01-25T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          5
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 20,
+        "supports_from_history_count": false,
+        "timestamp": "2016-02-01T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          6
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 25,
+        "supports_from_history_count": false,
+        "timestamp": "2016-02-08T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          7
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 30,
+        "supports_from_history_count": false,
+        "timestamp": "2016-02-16T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          8
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 34,
+        "supports_from_history_count": false,
+        "timestamp": "2016-02-22T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          9
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 39,
+        "supports_from_history_count": false,
+        "timestamp": "2016-02-29T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          10
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 44,
+        "supports_from_history_count": false,
+        "timestamp": "2016-03-07T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          11
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 49,
+        "supports_from_history_count": false,
+        "timestamp": "2016-03-14T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          12
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 54,
+        "supports_from_history_count": false,
+        "timestamp": "2016-03-21T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          13
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 58,
+        "supports_from_history_count": false,
+        "timestamp": "2016-03-28T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          14
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 63,
+        "supports_from_history_count": false,
+        "timestamp": "2016-04-04T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          15
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 68,
+        "supports_from_history_count": false,
+        "timestamp": "2016-04-11T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          16
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 73,
+        "supports_from_history_count": false,
+        "timestamp": "2016-04-18T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          17
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 78,
+        "supports_from_history_count": false,
+        "timestamp": "2016-04-25T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          18
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 83,
+        "supports_from_history_count": false,
+        "timestamp": "2016-05-02T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          19
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 88,
+        "supports_from_history_count": false,
+        "timestamp": "2016-05-09T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          20
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 93,
+        "supports_from_history_count": false,
+        "timestamp": "2016-05-16T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          21
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 98,
+        "supports_from_history_count": false,
+        "timestamp": "2016-05-23T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          22
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 103,
+        "supports_from_history_count": false,
+        "timestamp": "2016-05-31T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          23
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 107,
+        "supports_from_history_count": false,
+        "timestamp": "2016-06-06T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          24
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 112,
+        "supports_from_history_count": false,
+        "timestamp": "2016-06-13T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          25
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 117,
+        "supports_from_history_count": false,
+        "timestamp": "2016-06-20T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          26
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 122,
+        "supports_from_history_count": false,
+        "timestamp": "2016-06-27T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          27
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 127,
+        "supports_from_history_count": false,
+        "timestamp": "2016-07-05T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          28
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 131,
+        "supports_from_history_count": false,
+        "timestamp": "2016-07-11T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          29
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 136,
+        "supports_from_history_count": false,
+        "timestamp": "2016-07-18T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          30
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 141,
+        "supports_from_history_count": false,
+        "timestamp": "2016-07-25T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          31
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 146,
+        "supports_from_history_count": false,
+        "timestamp": "2016-08-01T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          32
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 151,
+        "supports_from_history_count": false,
+        "timestamp": "2016-08-08T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          33
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 156,
+        "supports_from_history_count": false,
+        "timestamp": "2016-08-15T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          34
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 161,
+        "supports_from_history_count": false,
+        "timestamp": "2016-08-22T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          35
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 166,
+        "supports_from_history_count": false,
+        "timestamp": "2016-08-29T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          36
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 171,
+        "supports_from_history_count": false,
+        "timestamp": "2016-09-06T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          37
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 175,
+        "supports_from_history_count": false,
+        "timestamp": "2016-09-12T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          38
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 180,
+        "supports_from_history_count": false,
+        "timestamp": "2016-09-19T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          39
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 185,
+        "supports_from_history_count": false,
+        "timestamp": "2016-09-26T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          40
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 190,
+        "supports_from_history_count": false,
+        "timestamp": "2016-10-03T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          41
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 195,
+        "supports_from_history_count": false,
+        "timestamp": "2016-10-10T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          42
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 200,
+        "supports_from_history_count": false,
+        "timestamp": "2016-10-17T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          43
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 205,
+        "supports_from_history_count": false,
+        "timestamp": "2016-10-24T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          44
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 210,
+        "supports_from_history_count": false,
+        "timestamp": "2016-10-31T04:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          45
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 215,
+        "supports_from_history_count": false,
+        "timestamp": "2016-11-07T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          46
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 220,
+        "supports_from_history_count": false,
+        "timestamp": "2016-11-14T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          47
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 225,
+        "supports_from_history_count": false,
+        "timestamp": "2016-11-21T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          48
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 229,
+        "supports_from_history_count": false,
+        "timestamp": "2016-11-28T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          49
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 234,
+        "supports_from_history_count": false,
+        "timestamp": "2016-12-05T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          50
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 239,
+        "supports_from_history_count": false,
+        "timestamp": "2016-12-12T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          51
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 244,
+        "supports_from_history_count": false,
+        "timestamp": "2016-12-19T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2016,
+          52
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 249,
+        "supports_from_history_count": false,
+        "timestamp": "2016-12-27T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          1
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 253,
+        "supports_from_history_count": false,
+        "timestamp": "2017-01-03T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          2
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 257,
+        "supports_from_history_count": false,
+        "timestamp": "2017-01-09T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          3
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 262,
+        "supports_from_history_count": false,
+        "timestamp": "2017-01-17T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          4
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 266,
+        "supports_from_history_count": false,
+        "timestamp": "2017-01-23T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          5
+        ],
+        "role_in_failure_path": "pre_support_cadence",
+        "spy_history_count": 271,
+        "supports_from_history_count": false,
+        "timestamp": "2017-01-30T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          6
+        ],
+        "role_in_failure_path": "first_native_incumbent_target_materialization",
+        "spy_history_count": 276,
+        "supports_from_history_count": true,
+        "timestamp": "2017-02-06T05:00:00Z"
+      },
+      {
+        "iso_week": [
+          2017,
+          7
+        ],
+        "role_in_failure_path": "post_first_native_incumbent_target",
+        "spy_history_count": 281,
+        "supports_from_history_count": true,
+        "timestamp": "2017-02-13T05:00:00Z"
+      }
+    ],
+    "pinned_feasibility_metadata": {
+      "first_full_candidate_feasible_decision": "2017-02-06",
+      "m3_matrix_eligible_count": null,
+      "no_economic_scores": true,
+      "path": "data/research_receipts/equity_m3_data_gate_2026_09_r5.json"
+    },
+    "v3_minimum_history_bars": 274
+  },
+  "v3_research_id": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
+}

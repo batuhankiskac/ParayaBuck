@@ -1,0 +1,340 @@
+{
+  "boundaries": {
+    "economic_run": false,
+    "holdout_economics": false,
+    "live_changed": false,
+    "paper_changed": false,
+    "pnl_calculated": false,
+    "ranking_performed": false,
+    "registry_changed": false,
+    "returns_inspected": false,
+    "score_calculated": false,
+    "thresholds_tuned": false,
+    "v3_changed": false,
+    "v5_bytes_changed": false
+  },
+  "identity_probe": [
+    {
+      "accepted_at": null,
+      "accession": "0000320193-24-000123",
+      "active_cover_symbol": null,
+      "candidate_symbol": "AAPL",
+      "case": "COMMON_EQUITY_NO_SPLIT",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NASDAQ",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_MISSING",
+      "issuer_cik": "0000320193",
+      "market_cap_status": "BLOCKED_SECURITY_IDENTITY",
+      "reason": "Structural candidate selected from frozen V5; SEC body is not locally receipt-bound",
+      "split_actions": [],
+      "split_transformation": "local action interval factor=1; SEC share basis unavailable",
+      "transaction_security_title": null,
+      "v5": {
+        "canonical_symbol": "AAPL",
+        "entity_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+        "exchange": "NASDAQ",
+        "rename_chain": "",
+        "valid_from": "2016-01-04T05:00:00+00:00",
+        "valid_to": ""
+      },
+      "v5_candidate_count": 1
+    },
+    {
+      "accepted_at": null,
+      "accession": "0001045810-24-000144",
+      "active_cover_symbol": null,
+      "candidate_symbol": "NVDA",
+      "case": "FORWARD_SPLIT",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NASDAQ",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_MISSING",
+      "issuer_cik": "0001045810",
+      "market_cap_status": "BLOCKED_SPLIT_BASIS",
+      "reason": "Frozen corporate-action row is old_rate=1,new_rate=10; SEC body is not locally receipt-bound",
+      "split_actions": [
+        {
+          "action_type": "forward_splits",
+          "new_rate": "10",
+          "old_rate": "1"
+        }
+      ],
+      "split_transformation": "conditional local-data factor=10",
+      "transaction_security_title": null,
+      "v5": {
+        "canonical_symbol": "NVDA",
+        "entity_id": "4ce9353c-66d1-46c2-898f-fce867ab0247",
+        "exchange": "NASDAQ",
+        "rename_chain": "",
+        "valid_from": "2016-01-04T05:00:00+00:00",
+        "valid_to": ""
+      },
+      "v5_candidate_count": 1
+    },
+    {
+      "accepted_at": null,
+      "accession": "0001206774-21-001925",
+      "active_cover_symbol": null,
+      "candidate_symbol": "GE",
+      "case": "REVERSE_SPLIT",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NYSE",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_MISSING",
+      "issuer_cik": "0000040545",
+      "market_cap_status": "BLOCKED_SPLIT_BASIS",
+      "reason": "Frozen corporate-action row is old_rate=8,new_rate=1; exact V5 normalization horizon is unproved",
+      "split_actions": [
+        {
+          "action_type": "reverse_splits",
+          "new_rate": "1",
+          "old_rate": "8"
+        }
+      ],
+      "split_transformation": "conditional local-data factor=0.125",
+      "transaction_security_title": null,
+      "v5": {
+        "canonical_symbol": "GE",
+        "entity_id": "0116ac5c-90bc-47a2-8bb4-0f4551521dc6",
+        "exchange": "NYSE",
+        "rename_chain": "",
+        "valid_from": "2016-01-04T05:00:00Z",
+        "valid_to": ""
+      },
+      "v5_candidate_count": 1
+    },
+    {
+      "accepted_at": null,
+      "accession": "0001326801-22-000070",
+      "active_cover_symbol": null,
+      "candidate_symbol": "META",
+      "case": "SAME_CIK_TICKER_CHANGE",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NASDAQ",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_AMBIGUOUS",
+      "issuer_cik": "0001326801",
+      "market_cap_status": "BLOCKED_SECURITY_IDENTITY",
+      "old_symbol": "FB",
+      "reason": "V5 stores one META interval from 2016 with a hard-coded rename_chain, not exact old/new intervals",
+      "ticker_change_status": "IDENTITY_AMBIGUOUS",
+      "transaction_security_title": null,
+      "v5": {
+        "canonical_symbol": "META",
+        "entity_id": "fc6a5dcd-4a70-4b8d-b64f-d83a6dae9ba4",
+        "exchange": "NASDAQ",
+        "rename_chain": "[{\"symbol\":\"FB\",\"valid_to\":\"2022-06-08\"},{\"symbol\":\"META\",\"valid_from\":\"2022-06-09\"}]",
+        "valid_from": "2016-01-04T05:00:00Z",
+        "valid_to": ""
+      },
+      "v5_candidate_count": 1
+    },
+    {
+      "accepted_at": null,
+      "accession": "0001652044-25-000014",
+      "active_cover_symbol": null,
+      "candidate_symbol": "GOOGL/GOOG",
+      "case": "MULTIPLE_COMMON_CLASSES",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NASDAQ",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_MISSING",
+      "issuer_cik": "0001652044",
+      "market_cap_status": "BLOCKED_SHARES_CLASS_AMBIGUOUS",
+      "reason": "Frozen V5 has only GOOGL; SEC class/share contexts are not locally receipt-bound",
+      "shares_context": null,
+      "transaction_security_title": null,
+      "v5": [
+        {
+          "canonical_symbol": "GOOGL",
+          "entity_id": "69b15845-7c63-4586-b274-1cfdfe9df3d8",
+          "exchange": "NASDAQ",
+          "rename_chain": "",
+          "valid_from": "2016-01-04T05:00:00+00:00",
+          "valid_to": ""
+        },
+        null
+      ],
+      "v5_candidate_count": 1
+    },
+    {
+      "accepted_at": null,
+      "accession": "0001206774-21-001925",
+      "active_cover_symbol": null,
+      "candidate_symbol": "GE 25",
+      "case": "NON_COMMON_LISTED_SECURITY",
+      "class_status": "AMBIGUOUS_SECURITY_CLASS",
+      "cover_class": null,
+      "exchange": "NYSE",
+      "form4_symbol": null,
+      "identity_status": "IDENTITY_MISSING",
+      "issuer_cik": "0000040545",
+      "market_cap_status": "BLOCKED_SECURITY_IDENTITY",
+      "reason": "Candidate official URL was identified, but no local SHA-bound filing can prove the listed class",
+      "transaction_security_title": null,
+      "v5": null,
+      "v5_candidate_count": 0
+    }
+  ],
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted keys, compact separators, ensure_ascii=false; omit integrity.receipt_sha256",
+    "receipt_sha256": "d1d52e0c70b5556ce6cbb8c30b32f86b6b61d54a9cd4b9423176d153d76db89b"
+  },
+  "market_cap_probe": [
+    {
+      "accepted_at": null,
+      "case": "COMMON_EQUITY_NO_SPLIT",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SECURITY_IDENTITY",
+      "raw_shares": null,
+      "shares_accession": "0000320193-24-000123",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [],
+      "split_transformation": "local action interval factor=1; SEC share basis unavailable",
+      "transformed_shares": null
+    },
+    {
+      "accepted_at": null,
+      "case": "FORWARD_SPLIT",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SPLIT_BASIS",
+      "raw_shares": null,
+      "shares_accession": "0001045810-24-000144",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [
+        {
+          "action_type": "forward_splits",
+          "new_rate": "10",
+          "old_rate": "1"
+        }
+      ],
+      "split_transformation": "conditional local-data factor=10",
+      "transformed_shares": null
+    },
+    {
+      "accepted_at": null,
+      "case": "REVERSE_SPLIT",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SPLIT_BASIS",
+      "raw_shares": null,
+      "shares_accession": "0001206774-21-001925",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [
+        {
+          "action_type": "reverse_splits",
+          "new_rate": "1",
+          "old_rate": "8"
+        }
+      ],
+      "split_transformation": "conditional local-data factor=0.125",
+      "transformed_shares": null
+    },
+    {
+      "accepted_at": null,
+      "case": "SAME_CIK_TICKER_CHANGE",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SECURITY_IDENTITY",
+      "raw_shares": null,
+      "shares_accession": "0001326801-22-000070",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [],
+      "split_transformation": "not applicable",
+      "transformed_shares": null
+    },
+    {
+      "accepted_at": null,
+      "case": "MULTIPLE_COMMON_CLASSES",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SHARES_CLASS_AMBIGUOUS",
+      "raw_shares": null,
+      "shares_accession": "0001652044-25-000014",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [],
+      "split_transformation": "not applicable",
+      "transformed_shares": null
+    },
+    {
+      "accepted_at": null,
+      "case": "NON_COMMON_LISTED_SECURITY",
+      "context_class": null,
+      "fact_instant": null,
+      "final_basis_status": "BLOCKED_SECURITY_IDENTITY",
+      "raw_shares": null,
+      "shares_accession": "0001206774-21-001925",
+      "shares_status": "STRUCTURAL_ONLY_NOT_RECEIPT_BOUND",
+      "split_actions": [],
+      "split_transformation": "not applicable",
+      "transformed_shares": null
+    }
+  ],
+  "schema": "h06-identity-marketcap-probe-v1",
+  "selection_policy": "structural metadata only; no H06 outcome or post-event performance was inspected",
+  "sources": [
+    {
+      "accession": "0000320193-24-000123",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "common_no_split",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    },
+    {
+      "accession": "0001045810-24-000144",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "forward_split",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000144/nvda-20240607.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    },
+    {
+      "accession": "0001206774-21-001925",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "reverse_split",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/ge3936671-8k.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    },
+    {
+      "accession": "0001326801-22-000070",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "ticker_change",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000132680122000070/may312022-exhibit991.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    },
+    {
+      "accession": "0001652044-25-000014",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "multi_class",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000014/goog-20241231.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    },
+    {
+      "accession": "0001206774-21-001925",
+      "acquisition_status": "READABLE_NOT_REPRODUCIBLE_EVIDENCE",
+      "case": "non_common_listed",
+      "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/ge3936671-8k.htm",
+      "persisted": false,
+      "reason": "SEC_DIRECT_HTTP_403_BROWSER_CONTENT_NOT_PERSISTABLE",
+      "sha256": null
+    }
+  ],
+  "status": "H06_IDENTITY_MARKETCAP_BLOCKED"
+}

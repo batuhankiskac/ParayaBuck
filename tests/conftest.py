@@ -54,6 +54,7 @@ _CURRENT_RESEARCH_TEST_PATHS = (
     "tests/research/test_equity_profit_protection_2026_09_r2.py",
     "tests/research/test_execution_cost_transferability_p0_2026_09.py",
     "tests/research/test_execution_cost_transferability_p1_paper_observation_2026_09.py",
+    "tests/research/test_h06_identity_marketcap_bridge_2026_09_14.py",
     "tests/research/test_h06_source_feasibility_2026_09_14.py",
     "tests/research/test_r46_governance_contract_2026_09_10.py",
     "tests/research/test_r46_nyse_calendar_2026_09_10.py",

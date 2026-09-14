@@ -41,6 +41,7 @@ EVENT_IDS_SHA256 = "f726f27aaece6532de1581b5830e38cceba67c75ae02dfa79fedaffc0e9d
 TRANSITION_SCHEMA = "r46-recovery-one-shot-transition-v3"
 PREFLIGHT_SCHEMA = "r46-v3-recovery-preflight-receipt-v1"
 AUTHORIZATION_SCHEMA = "r46-v3-recovery-execution-authorization-v1"
+FREEZE_COMMIT_SENTINEL = "CURRENT_HEAD_AT_FREEZE"
 V2_NATIVE_ATTESTATION_REL = Path(
     "data/research_receipts/r46_treasury_auction_unwind_tlt_v2_2026_09_10_native_attestation.json"
 )
@@ -131,6 +132,16 @@ def _git_blob(root: Path, commit: str, relative: str) -> str:
     return _git(root, "rev-parse", f"{commit}:{relative}")
 
 
+def _resolved_freeze_commit(root: Path, contract: Mapping[str, Any]) -> str | None:
+    value = contract.get("freeze_commit")
+    if value == FREEZE_COMMIT_SENTINEL:
+        try:
+            return _git(root, "rev-parse", "HEAD")
+        except RuntimeError:
+            return None
+    return value if isinstance(value, str) else None
+
+
 def _environment() -> dict[str, str]:
     timezone = os.environ.get("TZ")
     if not timezone:
@@ -202,9 +213,13 @@ def _validate_contract(root: Path, identity_root: Path, blockers: list[str]) -> 
         or len(source_commit) != 40
         or set(source_commit) - _HEX64
         or not isinstance(freeze_commit, str)
-        or len(freeze_commit) != 40
-        or set(freeze_commit) - _HEX64
+        or (
+            freeze_commit != FREEZE_COMMIT_SENTINEL
+            and (len(freeze_commit) != 40 or set(freeze_commit) - _HEX64)
+        )
     ):
+        _add(blockers, "SOURCE_FREEZE_INVALID")
+    if freeze_commit == FREEZE_COMMIT_SENTINEL and contract.get("freeze_commit_binding") != "HEAD_AT_FREEZE":
         _add(blockers, "SOURCE_FREEZE_INVALID")
     for spec in contract.get("source_files", ()):
         if not isinstance(spec, Mapping):
@@ -239,7 +254,7 @@ def _validate_contract(root: Path, identity_root: Path, blockers: list[str]) -> 
 
 def _validate_lineage(root: Path, contract: Mapping[str, Any], blockers: list[str]) -> None:
     source = contract.get("source_commit")
-    freeze = contract.get("freeze_commit")
+    freeze = _resolved_freeze_commit(root, contract)
     if not isinstance(source, str) or not isinstance(freeze, str):
         return
     try:
@@ -467,7 +482,7 @@ def validate_execution_preflight(
         "authorization_path": str(V3_AUTHORIZATION_REL),
         "authorization_present": False,
         "source_commit": contract.get("source_commit") if isinstance(contract, Mapping) else None,
-        "freeze_commit": contract.get("freeze_commit") if isinstance(contract, Mapping) else None,
+        "freeze_commit": _resolved_freeze_commit(filesystem_root, contract) if isinstance(contract, Mapping) else None,
         "no_economic_outcomes_accessed": True,
         "no_economic_outputs_generated": True,
         "no_paper_live_activation": True,

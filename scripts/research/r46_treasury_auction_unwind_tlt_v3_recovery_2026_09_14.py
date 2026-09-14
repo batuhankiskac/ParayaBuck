@@ -76,6 +76,7 @@ AUTHORIZATION_SCHEMA = "r46-v3-recovery-execution-authorization-v1"
 PREFLIGHT_SCHEMA = "r46-v3-recovery-preflight-receipt-v1"
 ECONOMIC_RUN_SCHEMA = "r46-v3-recovery-economic-run-v1"
 ECONOMIC_LEDGER_STATUS = "R46_V3_RECOVERY_ECONOMIC_RUN"
+FREEZE_COMMIT_SENTINEL = "CURRENT_HEAD_AT_FREEZE"
 ONE_SHOT_RESERVED = "RESERVED"
 ONE_SHOT_CONSUMED = "CONSUMED"
 ONE_SHOT_ABORTED_CONSUMED = "ABORTED_CONSUMED"
@@ -121,6 +122,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _valid_hex64(value: object) -> bool:
     return isinstance(value, str) and len(value) == 64 and set(value) <= _HEX64
+
+
+def _valid_hex40(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 40 and set(value) <= _HEX64
 
 
 def _path(root: Path, relative: Path) -> Path:
@@ -412,10 +417,16 @@ def _validate_contract(root: Path) -> tuple[dict[str, Any], str]:
         raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
     if contract.get("parent_governance_commit") != PARENT_GOVERNANCE_COMMIT:
         raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
-    for key in ("source_commit", "freeze_commit"):
-        value = contract.get(key)
-        if not isinstance(value, str) or len(value) != 40 or set(value) - _HEX64:
-            raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
+    source_commit = contract.get("source_commit")
+    if not isinstance(source_commit, str) or len(source_commit) != 40 or set(source_commit) - _HEX64:
+        raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
+    freeze_commit = contract.get("freeze_commit")
+    if freeze_commit != FREEZE_COMMIT_SENTINEL and (
+        not isinstance(freeze_commit, str) or len(freeze_commit) != 40 or set(freeze_commit) - _HEX64
+    ):
+        raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
+    if freeze_commit == FREEZE_COMMIT_SENTINEL and contract.get("freeze_commit_binding") != "HEAD_AT_FREEZE":
+        raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
     if contract.get("v3_governance_canonical_sha256") != V3_GOVERNANCE_SHA256:
         raise RuntimeError("BLOCKED_V3_EXECUTION_CONTRACT")
     if contract.get("v2_package_canonical_sha256") != V2_PACKAGE_SHA256:
@@ -458,7 +469,9 @@ def _validate_preflight_receipt(path: Path, root: Path, contract: Mapping[str, A
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
     if receipt.get("future_output_directory") != str(_path(root, V3_OUTPUT_DIR_REL)):
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
-    if receipt.get("source_commit") != contract.get("source_commit") or receipt.get("freeze_commit") != contract.get(
+    if receipt.get("source_commit") != contract.get("source_commit") or not _valid_hex40(receipt.get("freeze_commit")):
+        raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
+    if contract.get("freeze_commit") != FREEZE_COMMIT_SENTINEL and receipt.get("freeze_commit") != contract.get(
         "freeze_commit"
     ):
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
@@ -485,7 +498,7 @@ def _validate_authorization(path: Path, root: Path, receipt: Mapping[str, Any], 
         and authorization.get("preflight_receipt_sha256") == receipt.get("integrity", {}).get("receipt_sha256")
         and authorization.get("execution_contract_sha256") == contract.get("integrity", {}).get("contract_sha256")
         and authorization.get("source_commit") == contract.get("source_commit")
-        and authorization.get("freeze_commit") == contract.get("freeze_commit")
+        and authorization.get("freeze_commit") == receipt.get("freeze_commit")
         and authorization.get("v3_state_canonical_sha256") == V3_STATE_CANONICAL_SHA256
         and authorization.get("v2_reservation_physical_sha256") == V2_RESERVED_SHA256
         and isinstance(authorization.get("authorization_nonce"), str)
@@ -1162,7 +1175,7 @@ def _run_production(
         governance_sha256=str(gate["governance_sha256"]),
         incident_sha256=incident_sha256,
         source_commit=str(contract["source_commit"]),
-        freeze_commit=str(contract["freeze_commit"]),
+        freeze_commit=str(gate["preflight"]["freeze_commit"]),
         statistics_pins=statistics_pins,
         config=config,
         test_only=False,
@@ -1179,7 +1192,7 @@ def _run_production(
         incident_sha256=incident_sha256,
         package_sha256=package.package_canonical_sha256,
         source_commit=str(contract["source_commit"]),
-        freeze_commit=str(contract["freeze_commit"]),
+        freeze_commit=str(gate["preflight"]["freeze_commit"]),
         test_only=False,
     )
     from scripts.research.verify_r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14 import (

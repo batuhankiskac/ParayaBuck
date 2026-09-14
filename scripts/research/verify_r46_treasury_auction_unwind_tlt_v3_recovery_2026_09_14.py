@@ -44,6 +44,7 @@ AUTHORIZATION_SCHEMA = "r46-v3-recovery-execution-authorization-v1"
 PREFLIGHT_SCHEMA = "r46-v3-recovery-preflight-receipt-v1"
 ECONOMIC_RUN_SCHEMA = "r46-v3-recovery-economic-run-v1"
 ECONOMIC_LEDGER_STATUS = "R46_V3_RECOVERY_ECONOMIC_RUN"
+FREEZE_COMMIT_SENTINEL = "CURRENT_HEAD_AT_FREEZE"
 V2_ECONOMIC_RUN_SCHEMA = "r46-v2-economic-run-v1"
 V2_ECONOMIC_LEDGER_STATUS = "R46_V2_ECONOMIC_RUN"
 V3_STATE_REL = Path("data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json")
@@ -399,7 +400,10 @@ def _verify_v3_provenance(
         not _valid_hex40(source_commit)
         or not _valid_hex40(freeze_commit)
         or contract.get("source_commit") != source_commit
-        or contract.get("freeze_commit") != freeze_commit
+        or (
+            contract.get("freeze_commit") != freeze_commit
+            and contract.get("freeze_commit") != FREEZE_COMMIT_SENTINEL
+        )
     ):
         raise ValueError("v3_source_freeze_provenance")
     _git(root, "cat-file", "-e", f"{PARENT_GOVERNANCE_COMMIT}^{{commit}}")

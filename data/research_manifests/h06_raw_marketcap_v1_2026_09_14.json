@@ -1,0 +1,44 @@
+{
+  "bounded_denominators": [
+    {
+      "case": "AAPL",
+      "decision_at": "2024-11-29T18:00:00Z",
+      "fact_instant": "2024-10-18",
+      "intervening_splits": [],
+      "label": "STRUCTURAL_MARKET_CAP_DENOMINATOR_ONLY_NOT_H06_SCORE",
+      "raw_close": "237.33",
+      "shares": "15115823000",
+      "status": "RAW_MARKET_CAP_BASIS_EXACT",
+      "structural_denominator": "3587438272590.00"
+    },
+    {
+      "case": "NVDA",
+      "decision_at": "2024-05-31T20:00:00Z",
+      "fact_instant": "2024-05-24",
+      "intervening_splits": [],
+      "label": "STRUCTURAL_MARKET_CAP_DENOMINATOR_ONLY_NOT_H06_SCORE",
+      "raw_close": "1096.33",
+      "shares": "2460000000",
+      "status": "RAW_MARKET_CAP_BASIS_EXACT",
+      "structural_denominator": "2696971800000.00"
+    }
+  ],
+  "decision_rule": "last supported NYSE month-end completed regular-session close",
+  "formula_compatibility": "H06_RAW_MARKETCAP_IS_FAITHFUL_IMPLEMENTATION_OF_FROZEN_FORMULA",
+  "future_split_normalization": "H06_FUTURE_SPLIT_NORMALIZATION_NOT_REQUIRED_FOR_DENOMINATOR",
+  "integrity": {
+    "manifest_sha256": "bc625ddf0020e810e120edcac550063d5c7d478e14e455a9a8482c10102f9805"
+  },
+  "intervening_split_gate": "any split between share fact instant and decision close blocks direct multiplication",
+  "price_protocol": "RAW_COMPLETED_SESSION_CLOSE_IS_PROTOCOL_COMPATIBLE",
+  "price_request": {
+    "adjustment": "raw",
+    "feed": "sip",
+    "provider": "Alpaca historical stock bars",
+    "timeframe": "1Day"
+  },
+  "schema": "h06-raw-marketcap-v1",
+  "shares_protocol": "LATEST_ACCEPTED_REPORTED_SHARES_IS_PROTOCOL_COMPATIBLE",
+  "status": "RAW_MARKET_CAP_BASIS_EXACT",
+  "v5_split_basis": "V5_SPLIT_BASIS_IRRELEVANT_TO_H06_DENOMINATOR"
+}

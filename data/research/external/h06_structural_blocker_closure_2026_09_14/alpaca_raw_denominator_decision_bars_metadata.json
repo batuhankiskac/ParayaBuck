@@ -1,0 +1,94 @@
+{
+  "schema": "h06-raw-denominator-decision-bars-evidence-v1",
+  "retrieval_completed_at": "2026-09-14T18:33:41Z",
+  "endpoint": "https://data.alpaca.markets/v2/stocks/bars",
+  "common_request_params": {
+    "timeframe": "1Day",
+    "feed": "sip",
+    "adjustment": "raw",
+    "sort": "asc",
+    "limit": 10000,
+    "asof": null,
+    "asof_reason": "not required for these stable-symbol bounded windows"
+  },
+  "authentication": {
+    "credential_source": ".env process environment",
+    "credentials_persisted": false,
+    "credentials_printed": false
+  },
+  "bars": [
+    {
+      "case": "AAPL_POST_2024_11_01_FILING",
+      "symbol": "AAPL",
+      "filing_date_context": "2024-11-01",
+      "decision_session_date": "2024-11-29",
+      "request": {
+        "symbols": "AAPL",
+        "start": "2024-11-27T00:00:00Z",
+        "end": "2024-12-03T00:00:00Z",
+        "timeframe": "1Day",
+        "feed": "sip",
+        "adjustment": "raw",
+        "sort": "asc",
+        "limit": 10000
+      },
+      "http_status": 200,
+      "response_path": "data/research/external/h06_structural_blocker_closure_2026_09_14/aapl_denominator_2024-11-29_raw.json",
+      "response_bytes": 385,
+      "response_sha256": "bf8f1aa5dff28f6d2c8404a13983a7b6878e9d1ce376145576d7b802252e88ef",
+      "completed_session_bar": {
+        "timestamp": "2024-11-29T05:00:00Z",
+        "open": 234.805,
+        "high": 237.81,
+        "low": 233.97,
+        "close": 237.33,
+        "volume": 28481377,
+        "status": "RAW_SIP_COMPLETED_REGULAR_SESSION_CLOSE_PRESENT"
+      }
+    },
+    {
+      "case": "NVDA_POST_2024_05_29_FILING_PRE_2024_06_10_SPLIT",
+      "symbol": "NVDA",
+      "filing_date_context": "2024-05-29",
+      "decision_session_date": "2024-05-31",
+      "split_effective_date_context": "2024-06-10",
+      "request": {
+        "symbols": "NVDA",
+        "start": "2024-05-29T00:00:00Z",
+        "end": "2024-06-04T00:00:00Z",
+        "timeframe": "1Day",
+        "feed": "sip",
+        "adjustment": "raw",
+        "sort": "asc",
+        "limit": 10000
+      },
+      "http_status": 200,
+      "response_path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda_denominator_2024-05-31_raw.json",
+      "response_bytes": 506,
+      "response_sha256": "a2c2fef93375ae8774dd9c5bb7fe3193d56c0ce86e8d2a8690b7d7a8d1792321",
+      "completed_session_bar": {
+        "timestamp": "2024-05-31T04:00:00Z",
+        "open": 1125.2,
+        "high": 1127.17,
+        "low": 1069.4,
+        "close": 1096.33,
+        "volume": 61326250,
+        "status": "RAW_SIP_COMPLETED_REGULAR_SESSION_CLOSE_PRESENT"
+      }
+    }
+  ],
+  "summary": {
+    "request_count": 2,
+    "http_200_count": 2,
+    "requested_decision_bars_present": 2,
+    "provider": "Alpaca historical stock bars",
+    "feed": "sip",
+    "adjustment": "raw",
+    "decision_price_semantics": "specified completed regular-session raw SIP daily close",
+    "shares_multiplied": false,
+    "market_cap_calculated": false,
+    "h06_score_calculated": false,
+    "returns_calculated": false,
+    "economic_run": false
+  }
+}

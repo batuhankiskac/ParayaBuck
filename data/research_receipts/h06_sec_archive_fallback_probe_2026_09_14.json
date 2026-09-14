@@ -1,0 +1,621 @@
+{
+  "cases": [
+    {
+      "accession": "0000320193-24-000123",
+      "case": "single_class_no_relevant_split",
+      "evidence": [
+        {
+          "accepted_at": "2024-11-01T10:01:36Z",
+          "accession": "0000320193-24-000123",
+          "bytes": 9759333,
+          "filing_date": "2024-11-01",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/0000320193-24-000123.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/aapl-0000320193-24-000123.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "347c28e05fd61467c0ce9f4c0b8a264670011b9afb07930e2233a46dbb73914b"
+        },
+        {
+          "accepted_at": "2024-11-01T10:01:36Z",
+          "accession": "0000320193-24-000123",
+          "bytes": 1503780,
+          "filing_date": "2024-11-01",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/aapl-20240928.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/aapl-20240928.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "24a830a0f1256e371d36a1f7f72e5e85a38037d1de2f6f966eb8457db42ff6d6"
+        },
+        {
+          "accepted_at": "2024-11-19T23:31:42Z",
+          "accession": "0000320193-24-000130",
+          "bytes": 9384,
+          "filing_date": "2024-11-19",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000130/0000320193-24-000130.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/aapl-form4-predecision-0000320193-24-000130.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "245c0d24fa4e287f4f6edea5fcd00fbec45f158751b16ef95eb68e184d601f49"
+        }
+      ],
+      "extracted_state": {
+        "case": "AAPL",
+        "cover": {
+          "context_id": "c-2",
+          "dimensions": [
+            {
+              "dimension": "us-gaap:StatementClassOfStockAxis",
+              "member": "us-gaap:CommonStockMember"
+            }
+          ],
+          "exchange": "The Nasdaq Stock Market LLC",
+          "source_sha256": "24a830a0f1256e371d36a1f7f72e5e85a38037d1de2f6f966eb8457db42ff6d6",
+          "symbol": "AAPL",
+          "title": "Common Stock, $0.00001 par value per share"
+        },
+        "denominator": {
+          "label": "STRUCTURAL_MARKET_CAP_DENOMINATOR_ONLY_NOT_H06_SCORE",
+          "raw_close": "237.33",
+          "shares": "15115823000",
+          "status": "RAW_MARKET_CAP_BASIS_EXACT",
+          "structural_denominator": "3587438272590.00"
+        },
+        "form4": {
+          "accepted_at": "2024-11-19T23:31:42Z",
+          "accession": "0000320193-24-000130",
+          "issuer_cik": "0000320193",
+          "source_sha256": "245c0d24fa4e287f4f6edea5fcd00fbec45f158751b16ef95eb68e184d601f49",
+          "symbol": "AAPL",
+          "transaction_title": "Common Stock"
+        },
+        "identity_status": "IDENTITY_EXACT",
+        "intervening_splits": [],
+        "issuer_cik": "0000320193",
+        "raw_price": {
+          "bar_timestamp": "2024-11-29T05:00:00Z",
+          "close": "237.33",
+          "decision_at": "2024-11-29T18:00:00Z",
+          "response_sha256": "bf8f1aa5dff28f6d2c8404a13983a7b6878e9d1ce376145576d7b802252e88ef",
+          "status": "RAW_COMPLETED_SESSION_CLOSE_EXACT"
+        },
+        "shares": {
+          "context_id": "c-12",
+          "decimals": "-3",
+          "dimensions": [],
+          "instant": "2024-10-18",
+          "lexical_value": "15,115,823,000",
+          "scale": "0",
+          "source_sha256": "24a830a0f1256e371d36a1f7f72e5e85a38037d1de2f6f966eb8457db42ff6d6",
+          "tag": "dei:EntityCommonStockSharesOutstanding",
+          "unit": "shares",
+          "value": "15115823000"
+        },
+        "shares_status": "SHARES_FACT_EXACT",
+        "submission": {
+          "accepted_at": "2024-11-01T10:01:36Z",
+          "accession": "0000320193-24-000123",
+          "primary_document": "aapl-20240928.htm",
+          "primary_sha256": "24a830a0f1256e371d36a1f7f72e5e85a38037d1de2f6f966eb8457db42ff6d6",
+          "source_sha256": "347c28e05fd61467c0ce9f4c0b8a264670011b9afb07930e2233a46dbb73914b"
+        },
+        "submission_inventory": {
+          "bytes": 164091,
+          "decision_at": "2024-11-29T18:00:00Z",
+          "eligible_visible_filing_count": 37,
+          "issuer_cik": "0000320193",
+          "later_visible_amendment": false,
+          "latest_visible_filing": {
+            "accepted_at": "2024-11-01T10:01:36Z",
+            "accession": "0000320193-24-000123",
+            "available_at": "2024-11-05T14:30:00Z",
+            "filing_date": "2024-11-01",
+            "form": "10-K",
+            "primary_document": "aapl-20240928.htm"
+          },
+          "official_url": "https://data.sec.gov/submissions/CIK0000320193.json",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/CIK0000320193-submissions.json",
+          "retrieved_at": "2026-09-14",
+          "sha256": "cb90ffafc5b6f997b60aa109e07008223ad35abe896ec7918fd43652b4057329",
+          "status": "LATEST_VISIBLE_ELIGIBLE_FILING_EXACT"
+        },
+        "v5": {
+          "canonical_symbol": "AAPL",
+          "entity_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+          "exchange": "NASDAQ",
+          "matching_lifetime_rows": 1,
+          "provider_asset_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+          "ticker_reuse_resolved": true,
+          "valid_from": "2016-01-04T05:00:00+00:00",
+          "valid_to": ""
+        }
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2024-11-01",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    },
+    {
+      "accession": "0001045810-24-000124",
+      "case": "forward_split_history",
+      "evidence": [
+        {
+          "accepted_at": "2024-05-29T20:36:32Z",
+          "accession": "0001045810-24-000124",
+          "bytes": 8507284,
+          "filing_date": "2024-05-29",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000124/0001045810-24-000124.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda-0001045810-24-000124.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "325cc1c81700543dbbbfdd520896f24f551aa3581fe34c62b1745492694a48c1"
+        },
+        {
+          "accepted_at": "2024-05-29T20:36:32Z",
+          "accession": "0001045810-24-000124",
+          "bytes": 1202535,
+          "filing_date": "2024-05-29",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000124/nvda-20240428.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda-20240428.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "0d5b058779ec2cbbc24b67ea9bbc8b5c455177b86ce972f3c203329b99fadde8"
+        },
+        {
+          "accepted_at": "2024-05-29T20:13:12Z",
+          "accession": "0001045810-24-000122",
+          "bytes": 10371,
+          "filing_date": "2024-05-29",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000122/0001045810-24-000122.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda-form4-predecision-0001045810-24-000122.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "13f77d251825b3157f5d978d279b8eb308ec7f986b5a14b416320f86ceab2c57"
+        },
+        {
+          "accepted_at": "2024-06-07T20:19:34Z",
+          "accession": "0001045810-24-000144",
+          "bytes": 166014,
+          "filing_date": "2024-06-07",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000144/0001045810-24-000144.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda-0001045810-24-000144.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "249aae37369da9451cc512733ffd65202e8d675cea56dc5e12ad2edf1c7fd010"
+        },
+        {
+          "accepted_at": "2024-06-07T20:19:34Z",
+          "accession": "0001045810-24-000144",
+          "bytes": 22990,
+          "filing_date": "2024-06-07",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000144/nvda-20240607.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/nvda-20240607.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "047c49a59b50dd6851111d580d8c68b33fcb3bca22d5ea219793568b1bf7b0a6"
+        }
+      ],
+      "extracted_state": {
+        "case": "NVDA",
+        "cover": {
+          "context_id": "c-1",
+          "dimensions": [],
+          "exchange": "The Nasdaq Global Select Market",
+          "source_sha256": "0d5b058779ec2cbbc24b67ea9bbc8b5c455177b86ce972f3c203329b99fadde8",
+          "symbol": "NVDA",
+          "title": "Common Stock, $0.001 par value per share"
+        },
+        "denominator": {
+          "label": "STRUCTURAL_MARKET_CAP_DENOMINATOR_ONLY_NOT_H06_SCORE",
+          "raw_close": "1096.33",
+          "shares": "2460000000",
+          "status": "RAW_MARKET_CAP_BASIS_EXACT",
+          "structural_denominator": "2696971800000.00"
+        },
+        "form4": {
+          "accepted_at": "2024-05-29T20:13:12Z",
+          "accession": "0001045810-24-000122",
+          "issuer_cik": "0001045810",
+          "source_sha256": "13f77d251825b3157f5d978d279b8eb308ec7f986b5a14b416320f86ceab2c57",
+          "symbol": "NVDA",
+          "transaction_title": "Common Stock"
+        },
+        "identity_status": "IDENTITY_EXACT",
+        "intervening_splits": [],
+        "issuer_cik": "0001045810",
+        "raw_price": {
+          "bar_timestamp": "2024-05-31T04:00:00Z",
+          "close": "1096.33",
+          "decision_at": "2024-05-31T20:00:00Z",
+          "response_sha256": "a2c2fef93375ae8774dd9c5bb7fe3193d56c0ce86e8d2a8690b7d7a8d1792321",
+          "status": "RAW_COMPLETED_SESSION_CLOSE_EXACT"
+        },
+        "shares": {
+          "context_id": "c-2",
+          "decimals": "-7",
+          "dimensions": [],
+          "instant": "2024-05-24",
+          "lexical_value": "2.46",
+          "scale": "9",
+          "source_sha256": "0d5b058779ec2cbbc24b67ea9bbc8b5c455177b86ce972f3c203329b99fadde8",
+          "tag": "dei:EntityCommonStockSharesOutstanding",
+          "unit": "shares",
+          "value": "2460000000"
+        },
+        "shares_status": "SHARES_FACT_EXACT",
+        "submission": {
+          "accepted_at": "2024-05-29T20:36:32Z",
+          "accession": "0001045810-24-000124",
+          "primary_document": "nvda-20240428.htm",
+          "primary_sha256": "0d5b058779ec2cbbc24b67ea9bbc8b5c455177b86ce972f3c203329b99fadde8",
+          "source_sha256": "325cc1c81700543dbbbfdd520896f24f551aa3581fe34c62b1745492694a48c1"
+        },
+        "submission_inventory": {
+          "bytes": 159883,
+          "decision_at": "2024-05-31T20:00:00Z",
+          "eligible_visible_filing_count": 16,
+          "issuer_cik": "0001045810",
+          "later_visible_amendment": false,
+          "latest_visible_filing": {
+            "accepted_at": "2024-05-29T20:36:32Z",
+            "accession": "0001045810-24-000124",
+            "available_at": "2024-05-31T13:30:00Z",
+            "filing_date": "2024-05-29",
+            "form": "10-Q",
+            "primary_document": "nvda-20240428.htm"
+          },
+          "official_url": "https://data.sec.gov/submissions/CIK0001045810.json",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/CIK0001045810-submissions.json",
+          "retrieved_at": "2026-09-14",
+          "sha256": "1ac0832ccf974a7d89388662552de76982b72ff1c930d38ddef9d761b31a688a",
+          "status": "LATEST_VISIBLE_ELIGIBLE_FILING_EXACT"
+        },
+        "v5": {
+          "canonical_symbol": "NVDA",
+          "entity_id": "4ce9353c-66d1-46c2-898f-fce867ab0247",
+          "exchange": "NASDAQ",
+          "matching_lifetime_rows": 1,
+          "provider_asset_id": "4ce9353c-66d1-46c2-898f-fce867ab0247",
+          "ticker_reuse_resolved": true,
+          "valid_from": "2016-01-04T05:00:00+00:00",
+          "valid_to": ""
+        }
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2024-05-29",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    },
+    {
+      "accession": "0000040545-21-000052",
+      "case": "reverse_split_history",
+      "evidence": [
+        {
+          "accepted_at": "2021-07-27T10:29:30Z",
+          "accession": "0000040545-21-000052",
+          "bytes": 18559394,
+          "filing_date": "2021-07-27",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000004054521000052/0000040545-21-000052.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge-0000040545-21-000052.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "b44fc2c4a076e5d53b7ebffbc77f1439e8b2c10403d843e5eefb7ffbcac488dc"
+        },
+        {
+          "accepted_at": "2021-07-27T10:29:30Z",
+          "accession": "0000040545-21-000052",
+          "bytes": 4538159,
+          "filing_date": "2021-07-27",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000004054521000052/ge-20210630.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge-20210630.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "ce04ed71a0380cd8b0feb1b7cc9fe78e56bf48ecc47176b41181986d53b1541c"
+        },
+        {
+          "accepted_at": "2026-07-28T20:05:59Z",
+          "accession": "0002052951-26-000007",
+          "bytes": 17753,
+          "filing_date": "2026-07-28",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000205295126000007/0002052951-26-000007.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge-form4-0002052951-26-000007.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "7d75eb396ade99503fa244d9695a633bb205ac96d0bd19269987e1889c7efbe9"
+        },
+        {
+          "accepted_at": "2021-07-30T20:19:49Z",
+          "accession": "0001206774-21-001925",
+          "bytes": 324058,
+          "filing_date": "2021-07-30",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/0001206774-21-001925.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge-0001206774-21-001925.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "2c2567a95a23a743dd4fa58f9dbe424ce1599777d458e1325c17a7c5789564a5"
+        },
+        {
+          "accepted_at": "2021-07-30T20:19:49Z",
+          "accession": "0001206774-21-001925",
+          "bytes": 50095,
+          "filing_date": "2021-07-30",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/ge3936671-8k.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge3936671-8k.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "cbc0be4711e1632fe2b7d05e8cb0e4a2bc352afbdad7341c021665f48749fb3f"
+        }
+      ],
+      "extracted_state": {
+        "accepted_at": "2021-07-27T10:29:30Z",
+        "cover_title": "Common stock",
+        "disposition": "EXCLUDED_FAIL_CLOSED",
+        "exchange": "NYSE",
+        "form4_accession": "0002052951-26-000007",
+        "identity_status": "IDENTITY_MISSING",
+        "issuer_cik": "0000040545",
+        "reason": "bounded Form 4 evidence is not decision-visible for the 2021 state",
+        "shares": {
+          "decimals": "0",
+          "dimensions": [],
+          "instant": "2021-06-30",
+          "scale": "0",
+          "tag": "dei:EntityCommonStockSharesOutstanding",
+          "unit": "shares",
+          "value": "8781303049"
+        },
+        "trading_symbol": "GE",
+        "transaction_title": "Common Stock"
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2021-07-27",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    },
+    {
+      "accession": "0001326801-22-000070",
+      "case": "same_cik_ticker_change",
+      "evidence": [
+        {
+          "accepted_at": "2022-05-31T20:18:52Z",
+          "accession": "0001326801-22-000070",
+          "bytes": 220133,
+          "filing_date": "2022-05-31",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000132680122000070/0001326801-22-000070.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/meta-0001326801-22-000070.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "508c7e9504b2c51a4cfad3aaa15ebffbc0f2786b14203af3ebb6b89893326e39"
+        },
+        {
+          "accepted_at": "2022-05-31T20:18:52Z",
+          "accession": "0001326801-22-000070",
+          "bytes": 36251,
+          "filing_date": "2022-05-31",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000132680122000070/fb-20220531.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/fb-20220531.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "144ee0ca8d9ba46b0f548501aae654265b3d6145b6ef14cd1077b6bc68644294"
+        },
+        {
+          "accepted_at": "2022-05-31T20:18:52Z",
+          "accession": "0001326801-22-000070",
+          "bytes": 4657,
+          "filing_date": "2022-05-31",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000132680122000070/may312022-exhibit991.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/may312022-exhibit991.htm",
+          "persisted": true,
+          "role": "ticker_change_exhibit",
+          "sha256": "d3ec72f5f72d852e7cbe8fe760cd27fb3f809bb9aeccac6be4e7234f4ae62cac"
+        },
+        {
+          "accepted_at": "2022-06-02T23:32:12Z",
+          "accession": "0000950103-22-010059",
+          "bytes": 4772,
+          "filing_date": "2022-06-02",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000095010322010059/0000950103-22-010059.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/fb-form4-0000950103-22-010059.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "8e3a3f952717099bd9516994441ae1225a03a8335e949d3e9f00f9b2df764d6d"
+        },
+        {
+          "accepted_at": "2026-07-29T22:17:17Z",
+          "accession": "0000950103-26-011342",
+          "bytes": 12344,
+          "filing_date": "2026-07-29",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1326801/000095010326011342/0000950103-26-011342.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/meta-form4-0000950103-26-011342.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "a68a6b9c3ae6a6d318230fd3e5cad491c665b84201cd977528cb8f403368c6ad"
+        }
+      ],
+      "extracted_state": {
+        "accepted_at": "2022-05-31T20:18:52Z",
+        "disposition": "EXCLUDED_FAIL_CLOSED",
+        "effective": "2022-06-09 before market open",
+        "identity_status": "IDENTITY_AMBIGUOUS",
+        "issuer_cik": "0001326801",
+        "new_symbol": "META",
+        "old_symbol": "FB",
+        "sec_chronology": "RECEIPT_BOUND_EXACT",
+        "v5_chronology": "single META interval"
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2022-05-31",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    },
+    {
+      "accession": "0001652044-25-000014",
+      "case": "multiple_common_classes",
+      "evidence": [
+        {
+          "accepted_at": "2025-02-05T01:41:40Z",
+          "accession": "0001652044-25-000014",
+          "bytes": 14773739,
+          "filing_date": "2025-02-04",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000014/0001652044-25-000014.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/goog-0001652044-25-000014.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "5f272086fbc10d11064f4805fa3328847f2108f61c366f0b9e0496b50f74150f"
+        },
+        {
+          "accepted_at": "2025-02-05T01:41:40Z",
+          "accession": "0001652044-25-000014",
+          "bytes": 2528344,
+          "filing_date": "2025-02-04",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000014/goog-20241231.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/goog-20241231.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "a70a2cc584744e7d678ec6c4fb669fa7c5c871861eb5820fb9de4357319db7d9"
+        },
+        {
+          "accepted_at": "2026-07-30T20:40:59Z",
+          "accession": "0001193125-26-326284",
+          "bytes": 8334,
+          "filing_date": "2026-07-30",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/1652044/000119312526326284/0001193125-26-326284.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/goog-form4-0001193125-26-326284.txt",
+          "persisted": true,
+          "role": "form4",
+          "sha256": "92aa40469ea8276d87fffe07158c99ab7d87bc1f756692b42b367acddc0cda65"
+        }
+      ],
+      "extracted_state": {
+        "accepted_at": "2025-02-05T01:41:40Z",
+        "classes": [
+          {
+            "member": "CommonClassAMember",
+            "shares": "5833000000",
+            "symbol": "GOOGL",
+            "title": "Class A Common Stock"
+          },
+          {
+            "shares": "860000000",
+            "symbol": null,
+            "title": "Class B Common Stock"
+          },
+          {
+            "member": "CapitalClassCMember",
+            "shares": "5497000000",
+            "symbol": "GOOG",
+            "title": "Class C Capital Stock"
+          }
+        ],
+        "disposition": "EXCLUDED_FAIL_CLOSED",
+        "form4_symbol": "GOOGL",
+        "identity_status": "MULTI_CLASS_SHARES_AMBIGUOUS",
+        "issuer_cik": "0001652044",
+        "transaction_title": "Class C Capital Stock"
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2025-02-04",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    },
+    {
+      "accession": "0001206774-21-001925",
+      "case": "non_common_listed_security",
+      "evidence": [
+        {
+          "accepted_at": "2021-07-30T20:19:49Z",
+          "accession": "0001206774-21-001925",
+          "bytes": 324058,
+          "filing_date": "2021-07-30",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/0001206774-21-001925.txt",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge-0001206774-21-001925.txt",
+          "persisted": true,
+          "role": "complete_submission",
+          "sha256": "2c2567a95a23a743dd4fa58f9dbe424ce1599777d458e1325c17a7c5789564a5"
+        },
+        {
+          "accepted_at": "2021-07-30T20:19:49Z",
+          "accession": "0001206774-21-001925",
+          "bytes": 50095,
+          "filing_date": "2021-07-30",
+          "official_url": "https://www.sec.gov/Archives/edgar/data/40545/000120677421001925/ge3936671-8k.htm",
+          "path": "data/research/external/h06_structural_blocker_closure_2026_09_14/ge3936671-8k.htm",
+          "persisted": true,
+          "role": "inline_xbrl",
+          "sha256": "cbc0be4711e1632fe2b7d05e8cb0e4a2bc352afbdad7341c021665f48749fb3f"
+        }
+      ],
+      "extracted_state": {
+        "classification": "NOTE_OR_DEBT",
+        "disposition": "EXCLUDED_FAIL_CLOSED",
+        "identity_status": "NON_COMMON_EQUITY",
+        "issuer_cik": "0000040545",
+        "security_title": "0.875% Notes due 2025"
+      },
+      "feed_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "filing_date": "2021-07-30",
+      "filing_specific_result": "HTTP_200_RECEIPT_BOUND",
+      "final_evidence_status": "SEC_RECEIPT_BOUND",
+      "official_source_route": "SEC_FILING_SPECIFIC_ARCHIVE",
+      "oldloads_fallback_result": "NOT_APPLICABLE_ROUTE_A_SUCCEEDED",
+      "retrieval_window_utc": {
+        "end": "2026-09-14T18:34:24Z",
+        "start": "2026-09-14T18:24:15Z"
+      }
+    }
+  ],
+  "documentation": {
+    "official_url": "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data",
+    "persisted": false,
+    "retrieved_at": "2026-09-14",
+    "semantic_fields": [
+      "current max request rate 10 requests/second",
+      "daily Feed tar/gzip archives",
+      "Oldloads concatenated submissions",
+      "daily/full index roles"
+    ]
+  },
+  "integrity": {
+    "receipt_sha256": "de1aa80c8779331a8332265644b4cc002e4e1f546b0b3eaaaae7ba058b91b5aa"
+  },
+  "retrieval_policy": {
+    "browser_only_evidence_admitted": false,
+    "rate_limit": "<=5 requests/second",
+    "route_order": [
+      "filing-specific",
+      "Feed",
+      "Oldloads"
+    ]
+  },
+  "schema": "h06-sec-archive-fallback-probe-v1",
+  "status": "SEC_AUTOMATED_RECEIPT_BINDING_AVAILABLE"
+}

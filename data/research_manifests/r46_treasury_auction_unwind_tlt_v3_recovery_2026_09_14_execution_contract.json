@@ -4,7 +4,7 @@
   "candidate_id": "R46",
   "recovery_generation": 1,
   "parent_governance_commit": "640097e30db857a011caa5d623e08541b2793cc8",
-  "source_commit": "04d93666e7d8d4f83d63b93a6b950c6306279abe",
+  "source_commit": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
   "freeze_commit": "CURRENT_HEAD_AT_FREEZE",
   "freeze_commit_binding": "HEAD_AT_FREEZE",
   "canonical_execution_root": "/Users/batuhankiskac/Desktop/ParayaBuck",
@@ -24,9 +24,9 @@
     "git_blob_sha256": "845209129914ff4c01397ac6bc4d20a025902bcd"
   },
   "source_files": [
-    {"path": "scripts/research/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py", "role": "v3_runner", "sha256": "dc1484dad179cb53474fdf803a0cc92f98b79fe49e4f3cd0793a9736cec3ce71", "git_blob_sha256": "d0657f22a80c3b3ae5815174ab7d29bac117209d"},
-    {"path": "scripts/research/verify_r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py", "role": "v3_independent_verifier", "sha256": "06174a6ec53757d4f188536a20f31d84ac5f12ef92711f3ecc45fc304336e1b7", "git_blob_sha256": "7c8a737c87dab881faabc4312193d80e9c75825e"},
-    {"path": "scripts/research/r46_v3_execution_preflight_2026_09_14.py", "role": "outcome_free_preflight", "sha256": "1abbdd5f8bb615a7a754650589d5bd9bc50a73767cccc2ec51ae1f7da804591e", "git_blob_sha256": "b3f1f75b22e213cdf4a9ca989c7414536c06b3c6"},
+    {"path": "scripts/research/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py", "role": "v3_runner", "sha256": "3612e080d74bc48137d7ae8600df1ea98eeedaa8c7d37e3d246c8b375c94f539", "git_blob_sha256": "db3a47d4e881a296c29a343f4e63ae53685974dd"},
+    {"path": "scripts/research/verify_r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py", "role": "v3_independent_verifier", "sha256": "8231db083153d8dee74392f8ab0112bcfc8ac30c512e1412f771a1a429522982", "git_blob_sha256": "70c6dc5ceb2377b6ba984344ab2f5e6e3f64ceed"},
+    {"path": "scripts/research/r46_v3_execution_preflight_2026_09_14.py", "role": "outcome_free_preflight", "sha256": "f87ba9a4def135c0fbd10e7cb306d921ddc26058bd1a74232b10ccc70a58a7eb", "git_blob_sha256": "c7d9fd01ce0461605089e328d8a9eef664b7df70"},
     {"path": "data/research_manifests/r46_v3_recovery_execution_authorization.schema.json", "role": "authorization_schema", "sha256": "aa700cf0581ce254fb7cd43830154364ea4000621689945009463a42a832ef23", "git_blob_sha256": "9312d28b8b0b87a19476e218fdb645ff0851cc14"},
     {"path": "scripts/research/r46_treasury_auction_unwind_tlt_v2_2026_09_10.py", "role": "frozen_v2_economic_runner", "sha256": "bc69bb84afeba3ecd4e0e0ae79754a83579e525b0f0441bb54b454248fcf4a6e", "git_blob_sha256": "d0da90331881c16287f80a081052cd7b7ba6cc4e"},
     {"path": "scripts/research/verify_r46_treasury_auction_unwind_tlt_v2_2026_09_10.py", "role": "frozen_v2_verifier", "sha256": "dbdcfb49476ced54ebda037efcc1766daeca38bbcc4d9ccd6b4bc3c7f5f545dd", "git_blob_sha256": "54898c10afc0ed14fc180c8dd7016a50ac147492"},
@@ -139,6 +139,6 @@
     "no_auto_promotion": true
   },
   "integrity": {
-    "contract_sha256": "425591fd892cb7985413b51b412e37f5fdabe3115e303e01294c9e3a5ed78b12"
+    "contract_sha256": "95b18f4f14673448dc584ae614587e9a095b698206a8f2868ad9bef8ff502e58"
   }
 }

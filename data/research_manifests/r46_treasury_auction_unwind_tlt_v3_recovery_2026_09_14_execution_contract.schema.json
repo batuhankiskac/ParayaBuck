@@ -1,6 +1,7 @@
 {
   "$id": "parayabuck://research/r46-v3-recovery-execution-contract",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Outcome-free R46 v3 execution contract schema frozen after the readiness source commit.",
   "additionalProperties": false,
   "properties": {
     "authorization": {

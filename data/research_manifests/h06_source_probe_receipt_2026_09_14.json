@@ -1,0 +1,152 @@
+{
+  "economic_runner_used": false,
+  "limitations": [
+    "bounded probe does not establish complete acquisition",
+    "conflicting explicit language is fail-closed: private-purchase language has exclusion precedence"
+  ],
+  "post_filing_market_data_accessed": false,
+  "retrieved_on": "2026-09-14",
+  "sample_findings": [
+    {
+      "accepted_at_sec_eastern": "20221230170149",
+      "accession": "0001104659-22-131398",
+      "coverage": [
+        "pre-compliance Form 4",
+        "direct ownership"
+      ],
+      "issuer_cik": "0001356576",
+      "owner_cik": "0001005544",
+      "ten_b5_1": "10B5_1_DISCLOSURE_NOT_REQUIRED_AT_THE_TIME"
+    },
+    {
+      "accepted_at_sec_eastern": "20260731165937",
+      "accession": "0001022408-26-000072",
+      "coverage": [
+        "July 2026",
+        "post-compliance checked",
+        "direct and indirect ownership"
+      ],
+      "issuer_cik": "0001022408",
+      "owner_cik": "0001444430",
+      "ten_b5_1": "EXCLUDE_10B5_1_CHECKED"
+    },
+    {
+      "accepted_at_sec_eastern": "20260731134855",
+      "accession": "0001090394-26-000005",
+      "coverage": [
+        "July 2026",
+        "post-compliance explicit false",
+        "indirect ownership"
+      ],
+      "issuer_cik": "0001004989",
+      "owner_cik": "0001090394",
+      "ten_b5_1": "PASS_POST_COMPLIANCE_EXPLICIT_FALSE"
+    },
+    {
+      "accepted_at_sec_eastern": "20260731170626",
+      "accession": "0001140361-26-030526",
+      "amendment": "later event; linkage requires original accession resolution",
+      "coverage": [
+        "July 2026",
+        "Form 4/A"
+      ],
+      "issuer_cik": "0001001171",
+      "owner_cik": "0002141683"
+    },
+    {
+      "accession": "0001437749-26-025180",
+      "coverage": [
+        "code P",
+        "explicit ownership form",
+        "no explicit open/private phrase"
+      ],
+      "open_private": "P_PURCHASE_AMBIGUOUS"
+    },
+    {
+      "accepted_at_sec_eastern": "20241206210640",
+      "accession": "0001040130-24-000124",
+      "evidence": "footnotes state open market purchase transactions through broker-dealer",
+      "issuer_cik": "0001040130",
+      "open_private": "OPEN_MARKET_EXPLICIT",
+      "owner_cik": "0001686078",
+      "ownership_form": "D",
+      "ten_b5_1": "PASS_POST_COMPLIANCE_EXPLICIT_FALSE",
+      "transaction_code": "P"
+    },
+    {
+      "accepted_at_sec_eastern": "20230814175052",
+      "accession": "0001104659-23-091553",
+      "evidence": "footnotes explicitly say private purchase; private classification wins despite also saying in open market",
+      "issuer_cik": "0001754170",
+      "open_private": "PRIVATE_PURCHASE_EXPLICIT",
+      "owner_cik": "0001382435",
+      "ownership_form": "D",
+      "ten_b5_1": "PASS_POST_COMPLIANCE_EXPLICIT_FALSE",
+      "transaction_code": "P"
+    }
+  ],
+  "schema": "h06-official-source-probe-v1",
+  "sources": [
+    {
+      "bytes": 7800,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1022408/000102240826000072/0001022408-26-000072.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/0001022408-26-000072.txt",
+      "sha256": "2a46f14b609cc15d836b025b4e72dc30e18e65b3d15024e45b07adb4f5902dc5"
+    },
+    {
+      "bytes": 7036,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1004989/000109039426000005/0001090394-26-000005.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/0001090394-26-000005.txt",
+      "sha256": "584c655b3ddb9fa1bc90b33014ce6fafe542b0837b59a0e7b6a393bfb62e0337"
+    },
+    {
+      "bytes": 4914,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1001171/000114036126030526/0001140361-26-030526.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/0001140361-26-030526.txt",
+      "sha256": "9dacf29b8392316f680a096652fe75352e3622defa35966f9aa8c839ad77326c"
+    },
+    {
+      "bytes": 5175,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/874015/000143774926025180/0001437749-26-025180.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/ambiguous_p_purchase.txt",
+      "sha256": "83a994141ed6db04692b82b28058c485b73828e48394e5f1fb3e97d033f5f38a"
+    },
+    {
+      "bytes": 419278,
+      "official_url": "https://www.sec.gov/files/form4.pdf",
+      "persisted": false,
+      "persistence_note": "Binary PDF omitted from Git; the official URL, retrieval byte count, and SHA-256 preserve the probe receipt without requiring binary-diff support.",
+      "sha256": "275cfc9188bc1c7b7a5b8c45abb03c799b64f9e1fe74c92a28e97598778abc2d"
+    },
+    {
+      "bytes": 131128,
+      "official_url": "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/insider_transactions_data_sets.html",
+      "sha256": "41e0b5223a403f56c6f0e3ee3530459af75617d4b2afa21bc0aca78d6026a0da"
+    },
+    {
+      "bytes": 523582,
+      "official_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/master.20260731.idx",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/master.20260731.idx",
+      "sha256": "445b534831b9b21b1b63d9ac70e72b6191ec82418ea00f63bb4f4012d8fb9d2d"
+    },
+    {
+      "bytes": 6707,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1005544/000110465922131398/0001104659-22-131398.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/pre_2023_form4.txt",
+      "sha256": "bb4628dc627fb7a127e340ab82034f0d5d178ecc308a33f67b1b61ee7fc6284c"
+    },
+    {
+      "bytes": 22991,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1040130/000104013024000124/0001040130-24-000124.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/explicit_open_market_p.txt",
+      "sha256": "08e255c2bf6370f0519ca975a80e2fb93bf47d7b0aa1889d8b3d0767fe37eb72"
+    },
+    {
+      "bytes": 6511,
+      "official_url": "https://www.sec.gov/Archives/edgar/data/1754170/000110465923091553/0001104659-23-091553.txt",
+      "path": "data/research/external/h06_official_source_probe_2026_09_14/explicit_private_purchase.txt",
+      "sha256": "a93b8ff378c284c4c9489e1beee4e2ba7110263dc277e7f798cd9dbf360fbb01"
+    }
+  ]
+}

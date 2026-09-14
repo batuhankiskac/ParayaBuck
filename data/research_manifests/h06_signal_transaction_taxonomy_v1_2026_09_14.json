@@ -1,0 +1,38 @@
+{
+  "all_required": {
+    "10b5_1": "policy PASS",
+    "accepted_at": "valid SEC header timestamp",
+    "acquired_disposed": "A",
+    "available_before_decision": true,
+    "derivative": false,
+    "identity_status": "IDENTITY_EXACT",
+    "lineage_status": [
+      "ORIGINAL_ACTIVE",
+      "AMENDED_VERSION_ACTIVE"
+    ],
+    "open_private": "OPEN_MARKET_EXPLICIT",
+    "owner_classification": "OPPORTUNISTIC",
+    "ownership_form": "D",
+    "shares": "finite and > 0",
+    "table": "Table I",
+    "transaction_code": "P",
+    "transaction_price": "finite and > 0"
+  },
+  "candidate": "H06",
+  "open_private_policy": {
+    "OPEN_MARKET_EXPLICIT": "admit gate when official filing text explicitly states open-market purchase",
+    "PRIVATE_PURCHASE_EXPLICIT": "exclude",
+    "P_PURCHASE_AMBIGUOUS": "exclude; code P alone means open-market or private purchase",
+    "price_proximity_inference_prohibited": true
+  },
+  "outcome_inference_prohibited": true,
+  "schema": "h06-signal-transaction-taxonomy-v1",
+  "self_sha256": "657ee8fb1cfcb4764b6070a4716f9a816d8cabe7da3f530fa46e063d4955c92a",
+  "ten_b5_1_policy": {
+    "compliance_date": "2023-04-01",
+    "post_compliance_explicit_false": "may pass",
+    "post_compliance_missing": "exclude",
+    "post_compliance_true": "exclude",
+    "pre_compliance_missing": "10B5_1_DISCLOSURE_NOT_REQUIRED_AT_THE_TIME; fail-closed unless strong official filing text explicitly establishes non-plan"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "attempts": [
+    {
+      "attempted_at": "2026-09-14T19:33:22Z",
+      "partial_browser_bytes_admitted": false,
+      "result": "HTTP_403_AND_INITIAL_BROWSER_DOWNLOAD_FAILED",
+      "source": "official SEC 2026 Q2 package",
+      "url": "https://www.sec.gov/files/datastandardsinnovation/data/insider-transactions-data-sets/2026q2_form345.zip"
+    },
+    {
+      "attempted_at": "2026-09-14T19:51:44Z",
+      "bytes": 11498860,
+      "result": "USER_COMPLETED_BROWSER_DOWNLOAD_VALIDATED",
+      "sha256": "11f1b2bbbdcbe6347a34437c02d04202fda0eca1dbb023726e4b56504b802e27",
+      "source": "official SEC 2026 Q2 package",
+      "url": "https://www.sec.gov/files/datastandardsinnovation/data/insider-transactions-data-sets/2026q2_form345.zip"
+    }
+  ],
+  "coverage": {
+    "files_acquired": 1,
+    "quarters_acquired": 1,
+    "quarters_expected": 30
+  },
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
+  "integrity": {
+    "self_sha256": "9ac9abec54da848cf4e7b8f6b6dffdd015594fea41a7e94471d7e4a85883d3f0"
+  },
+  "manifest_path": "data/research_manifests/h06_full_official_acquisition_2026_09_14.json",
+  "remaining_blockers": [
+    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
+    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
+    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+  ],
+  "schema": "h06_full_official_acquisition_v1",
+  "status": "H06_FULL_ACQUISITION_INCOMPLETE"
+}

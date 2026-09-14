@@ -1,0 +1,54 @@
+{
+  "classification_performed": false,
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
+  "integrity": {
+    "self_sha256": "eddd184835c5183517bd9679a820e238137ccc773efc2367f15779a503510337"
+  },
+  "remaining_blockers": [
+    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
+    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
+    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+  ],
+  "routine_history": {
+    "late_not_visible_exclusions": 0,
+    "p_rows": 0,
+    "qualifying_rows": 0,
+    "s_rows": 0,
+    "unresolved_lineage_exclusions": 0
+  },
+  "schema": "h06_owner_year_classification_v1",
+  "status": "H06_FULL_ACQUISITION_INCOMPLETE",
+  "years": {
+    "2022": {
+      "non_partitionable": 0,
+      "opportunistic": 0,
+      "owner_year_total": 0,
+      "routine": 0
+    },
+    "2023": {
+      "non_partitionable": 0,
+      "opportunistic": 0,
+      "owner_year_total": 0,
+      "routine": 0
+    },
+    "2024": {
+      "non_partitionable": 0,
+      "opportunistic": 0,
+      "owner_year_total": 0,
+      "routine": 0
+    },
+    "2025": {
+      "non_partitionable": 0,
+      "opportunistic": 0,
+      "owner_year_total": 0,
+      "routine": 0
+    },
+    "2026": {
+      "non_partitionable": 0,
+      "opportunistic": 0,
+      "owner_year_total": 0,
+      "routine": 0
+    }
+  }
+}

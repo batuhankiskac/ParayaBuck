@@ -1,0 +1,369 @@
+{
+  "acquired_form_4_a_count": 713,
+  "acquired_form_4_count": 49832,
+  "acquired_unique_issuer_ciks_nonadditive": 4508,
+  "acquired_unique_reporting_owner_ciks_nonadditive": 30423,
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
+  "fair_access": {
+    "bounded_backoff": true,
+    "cache_required": true,
+    "maximum_requests_per_second": 5
+  },
+  "integrity": {
+    "self_sha256": "d84618c8a5ddaabb091ba039ea29d40118f98fcb4388a32585ddc0dcdda30e66"
+  },
+  "july_2026": {
+    "daily_index_url_template": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/master.YYYYMMDD.idx",
+    "index_days_acquired": 0,
+    "index_days_expected": 22,
+    "reconciliation": "INCOMPLETE"
+  },
+  "local_root": "data/research/local/h06_full_acquisition_2026_09_14",
+  "official_inventory_created_before_download": true,
+  "quarter_sources": [
+    {
+      "bytes": null,
+      "coverage": "2019 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2019q1_form345.zip",
+      "period": "2019Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2019q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2019 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2019q2_form345.zip",
+      "period": "2019Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2019q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2019 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2019q3_form345.zip",
+      "period": "2019Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2019q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2019 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2019q4_form345.zip",
+      "period": "2019Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2019q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2020 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2020q1_form345.zip",
+      "period": "2020Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2020q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2020 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2020q2_form345.zip",
+      "period": "2020Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2020q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2020 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2020q3_form345.zip",
+      "period": "2020Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2020q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2020 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2020q4_form345.zip",
+      "period": "2020Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2020q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2021 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2021q1_form345.zip",
+      "period": "2021Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2021q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2021 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2021q2_form345.zip",
+      "period": "2021Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2021q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2021 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2021q3_form345.zip",
+      "period": "2021Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2021q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2021 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2021q4_form345.zip",
+      "period": "2021Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2021q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2022 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2022q1_form345.zip",
+      "period": "2022Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2022q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2022 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2022q2_form345.zip",
+      "period": "2022Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2022q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2022 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2022q3_form345.zip",
+      "period": "2022Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2022q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2022 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2022q4_form345.zip",
+      "period": "2022Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2022q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2023 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2023q1_form345.zip",
+      "period": "2023Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2023q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2023 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2023q2_form345.zip",
+      "period": "2023Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2023q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2023 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2023q3_form345.zip",
+      "period": "2023Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2023q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2023 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2023q4_form345.zip",
+      "period": "2023Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2023q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2024 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2024q1_form345.zip",
+      "period": "2024Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2024q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2024 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2024q2_form345.zip",
+      "period": "2024Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2024q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2024 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2024q3_form345.zip",
+      "period": "2024Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2024q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2024 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2024q4_form345.zip",
+      "period": "2024Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2024q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2025 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2025q1_form345.zip",
+      "period": "2025Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2025q1_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2025 Q2",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2025q2_form345.zip",
+      "period": "2025Q2",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2025q2_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2025 Q3",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2025q3_form345.zip",
+      "period": "2025Q3",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2025q3_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2025 Q4",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2025q4_form345.zip",
+      "period": "2025Q4",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2025q4_form345.zip"
+    },
+    {
+      "bytes": null,
+      "coverage": "2026 Q1",
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2026q1_form345.zip",
+      "period": "2026Q1",
+      "retrieval_status": "NOT_ACQUIRED",
+      "retrieved_at": null,
+      "sha256": null,
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "url": "https://www.sec.gov/files/structureddata/data/insider-transactions-data-sets/2026q1_form345.zip"
+    },
+    {
+      "bytes": 11498860,
+      "coverage": "2026 Q2",
+      "form_4_a_count": 713,
+      "form_4_count": 49832,
+      "local_path": "data/research/local/h06_full_acquisition_2026_09_14/sec_bulk/2026q2_form345.zip",
+      "period": "2026Q2",
+      "retrieval_status": "ACQUIRED_AND_VALIDATED",
+      "retrieved_at": "2026-09-14T19:51:44Z",
+      "sha256": "11f1b2bbbdcbe6347a34437c02d04202fda0eca1dbb023726e4b56504b802e27",
+      "source_role": "official_sec_insider_transactions_quarterly_package",
+      "unique_issuer_ciks": 4508,
+      "unique_reporting_owner_ciks": 30423,
+      "url": "https://www.sec.gov/files/datastandardsinnovation/data/insider-transactions-data-sets/2026q2_form345.zip"
+    }
+  ],
+  "quarters_acquired": 1,
+  "quarters_expected": 30,
+  "remaining_blockers": [
+    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
+    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
+    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+  ],
+  "schema": "h06_full_official_acquisition_v1",
+  "status": "H06_FULL_ACQUISITION_INCOMPLETE"
+}

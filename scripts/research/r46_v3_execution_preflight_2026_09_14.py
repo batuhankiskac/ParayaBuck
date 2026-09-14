@@ -14,7 +14,7 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
@@ -304,7 +304,9 @@ def _validate_lineage(root: Path, contract: Mapping[str, Any], blockers: list[st
 
 
 def _validate_parent_and_recovery(root: Path, identity_root: Path, blockers: list[str]) -> dict[str, Any]:
-    recovery = recovery_validator.validate_recovery(root, canonical_root=identity_root)
+    recovery = cast(
+        dict[str, Any], recovery_validator.validate_recovery(root, canonical_root=identity_root)
+    )
     if recovery.get("status") != "RECOVERY_GOVERNANCE_READY" or recovery.get("blockers") != []:
         _add(blockers, "RECOVERY_GOVERNANCE_BLOCKED")
         blockers.extend(str(value) for value in recovery.get("blockers", ()))

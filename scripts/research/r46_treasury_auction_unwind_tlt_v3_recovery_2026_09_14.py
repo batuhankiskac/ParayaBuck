@@ -526,7 +526,12 @@ def _validate_authorization(path: Path, root: Path, receipt: Mapping[str, Any], 
     )
     if not valid:
         raise RuntimeError("BLOCKED_V3_EXECUTION_AUTHORIZATION")
-    return authorization, str(integrity["authorization_sha256"])
+    if not isinstance(integrity, Mapping):
+        raise RuntimeError("BLOCKED_V3_EXECUTION_AUTHORIZATION")
+    authorization_hash = integrity.get("authorization_sha256")
+    if not isinstance(authorization_hash, str):
+        raise RuntimeError("BLOCKED_V3_EXECUTION_AUTHORIZATION")
+    return authorization, authorization_hash
 
 
 def validate_execution_gate(
@@ -1432,12 +1437,12 @@ def run_package_backed(
         raise RuntimeError("BLOCKED_V3_PRODUCTION_OVERRIDE")
     if output_dir is not None and Path(output_dir).resolve() != expected_output:
         raise RuntimeError("BLOCKED_V3_PRODUCTION_OVERRIDE")
-    gate = validate_execution_gate(
+    gate_payload = validate_execution_gate(
         _path(root, V3_PREFLIGHT_REL) if preflight_path is None else preflight_path,
         _path(root, V3_AUTHORIZATION_REL) if authorization_path is None else authorization_path,
         repo_root=root,
     )
-    return _run_production(gate=gate, repo_root=root)
+    return _run_production(gate=gate_payload, repo_root=root)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -16,7 +16,7 @@ import json
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scripts.research import verify_r46_treasury_auction_unwind_tlt_v2_2026_09_10 as frozen_verifier
 
@@ -190,7 +190,10 @@ def _verify_statistics_crosslink(results: Mapping[str, Any], report: Mapping[str
         raise ValueError("v3_primary_row_count")
     if rows:
         deltas = [float(row["delta"]) for row in rows if isinstance(row, Mapping) and "delta" in row]
-        if len(deltas) != len(rows) or abs(float(primary.get("equal_weight_delta")) - sum(deltas) / len(deltas)) > 1e-9:
+        equal_weight_delta = primary.get("equal_weight_delta")
+        if not isinstance(equal_weight_delta, (int, float)):
+            raise ValueError("v3_primary_statistic_formula")
+        if len(deltas) != len(rows) or abs(float(equal_weight_delta) - sum(deltas) / len(deltas)) > 1e-9:
             raise ValueError("v3_primary_statistic_formula")
 
 
@@ -405,10 +408,12 @@ def _verify_v3_provenance(
         raise ValueError("v3_incident_provenance")
     source_commit = results.get("source_commit")
     freeze_commit = results.get("freeze_commit")
+    if not _valid_hex40(source_commit) or not _valid_hex40(freeze_commit):
+        raise ValueError("v3_source_freeze_provenance")
+    assert isinstance(source_commit, str)
+    assert isinstance(freeze_commit, str)
     if (
-        not _valid_hex40(source_commit)
-        or not _valid_hex40(freeze_commit)
-        or contract.get("source_commit") != source_commit
+        contract.get("source_commit") != source_commit
         or (
             contract.get("freeze_commit") != freeze_commit
             and contract.get("freeze_commit") != FREEZE_COMMIT_SENTINEL
@@ -526,15 +531,18 @@ def _v2_structural_verify(
         outputs["bundle_sha256"] = bundle
         one_shot = normalized_receipt.get("one_shot")
         if isinstance(one_shot, dict):
-            one_shot["output_sha256"] = bundle
+            cast(dict[str, Any], one_shot)["output_sha256"] = bundle
         normalized_receipt["receipt_sha256"] = _canonical_hash(
             normalized_receipt, "receipt_sha256", nested=False
         )
-    return frozen_verifier.verify_economic_run(
-        normalized_results,
-        normalized_ledger,
-        normalized_report,
-        normalized_receipt,
+    return cast(
+        dict[str, object],
+        frozen_verifier.verify_economic_run(
+            normalized_results,
+            normalized_ledger,
+            normalized_report,
+            normalized_receipt,
+        ),
     )
 
 

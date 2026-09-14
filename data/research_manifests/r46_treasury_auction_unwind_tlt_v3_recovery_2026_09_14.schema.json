@@ -1,0 +1,476 @@
+{
+  "$id": "parayabuck://research/r46-treasury-auction-unwind-tlt-v3-recovery-governance",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "auto_promotion": {
+      "const": false
+    },
+    "candidate_id": {
+      "const": "R46"
+    },
+    "claim_policy": {
+      "const": "RETROSPECTIVE_DESCRIPTIVE_ONLY_ORIGIN_UNPROVEN"
+    },
+    "confirmatory_claim_forbidden": {
+      "const": true
+    },
+    "economic_execution": {
+      "const": false
+    },
+    "economic_run": {
+      "const": false
+    },
+    "frozen_v2_economic_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "availability_policy": {
+          "const": "official_XML_AuctionDate_plus_one_civil_day_midnight_America_New_York_for_all_results"
+        },
+        "availability_policy_unchanged": {
+          "const": true
+        },
+        "base_one_shot_state_canonical_sha256": {
+          "const": "b2977b5f516cd4371af2201a87cb84637beb47214e74cc3d0980bbc9eaf33fab"
+        },
+        "base_one_shot_state_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json"
+        },
+        "base_one_shot_state_physical_sha256": {
+          "const": "c69e6bd76964131f41a02b4a58a1a308af1a2a1a038c8e339b1512b097b2f412"
+        },
+        "caps": {
+          "additionalProperties": false,
+          "properties": {
+            "combined_cash_min": {
+              "const": 0.4
+            },
+            "combined_gross_max": {
+              "const": 0.6
+            },
+            "equity_gross_max": {
+              "const": 0.55
+            },
+            "total_positions_max": {
+              "const": 6
+            }
+          },
+          "required": [
+            "combined_cash_min",
+            "combined_gross_max",
+            "equity_gross_max",
+            "total_positions_max"
+          ],
+          "type": "object"
+        },
+        "caps_unchanged": {
+          "const": true
+        },
+        "cost_cells": {
+          "const": [
+            1,
+            2,
+            3
+          ]
+        },
+        "cost_cells_unchanged": {
+          "const": true
+        },
+        "desired_weight": {
+          "const": 0.025
+        },
+        "desired_weight_unchanged": {
+          "const": true
+        },
+        "direction": {
+          "const": "long-only TLT or cash"
+        },
+        "direction_unchanged": {
+          "const": true
+        },
+        "entry_rule": {
+          "const": "next regular-session TLT open after the qualifying event"
+        },
+        "entry_rule_unchanged": {
+          "const": true
+        },
+        "event_universe_count": {
+          "const": 127
+        },
+        "event_universe_ids_sha256": {
+          "const": "f726f27aaece6532de1581b5830e38cceba67c75ae02dfa79fedaffc0e9d4b0b"
+        },
+        "event_universe_unchanged": {
+          "const": true
+        },
+        "exit_rule": {
+          "const": "fifth regular-session open after entry, producing five open-to-open holding intervals"
+        },
+        "exit_rule_unchanged": {
+          "const": true
+        },
+        "family_registry_canonical_sha256": {
+          "const": "eeda04d795d099e7571bdbeae0ccaa2dc55141ec2f15d1f8afdc507d60b9acae"
+        },
+        "family_registry_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_family_registry.json"
+        },
+        "freeze_commit": {
+          "const": "ea8e86eabbf499977aadf8ebc81ccbb89502aab4"
+        },
+        "governance_manifest_canonical_sha256": {
+          "const": "92f7ecd5b7f6cdd2428ee221c3b4891f10d5d7ab6f16a5fcb2be952753557c35"
+        },
+        "governance_manifest_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10.json"
+        },
+        "historical_cutoff": {
+          "const": "2026-07-31T23:59:59Z"
+        },
+        "historical_cutoff_unchanged": {
+          "const": true
+        },
+        "incumbent_v3_unchanged": {
+          "const": true
+        },
+        "incident_receipt_canonical_sha256": {
+          "const": "bdd668747423960faddbb31982566e6c49fcc3b64fd32bb29c40775a621acb8b"
+        },
+        "incident_receipt_path": {
+          "const": "data/research_receipts/r46_v2_reservation_incident_2026_09_14.json"
+        },
+        "incident_receipt_physical_sha256": {
+          "const": "7be069ba5a29a79313bdf77b3355ff5d5fdf319b624a3d5b6da30291609d74c0"
+        },
+        "instrument": {
+          "const": "TLT"
+        },
+        "instrument_unchanged": {
+          "const": true
+        },
+        "missing_data_policy": {
+          "const": "Missing publication, completion, identity, eligibility, or capacity skips the event with no delayed catch-up trade."
+        },
+        "missing_data_policy_unchanged": {
+          "const": true
+        },
+        "multiplicity_family": {
+          "additionalProperties": false,
+          "properties": {
+            "family_size": {
+              "const": 7
+            },
+            "method": {
+              "const": "holm_step_down_for_descriptive_adjusted_p_values"
+            }
+          },
+          "required": [
+            "family_size",
+            "method"
+          ],
+          "type": "object"
+        },
+        "multiplicity_family_unchanged": {
+          "const": true
+        },
+        "overlap_policy": {
+          "const": "Overlapping signals do not pyramid or extend the first event's exit."
+        },
+        "overlap_policy_unchanged": {
+          "const": true
+        },
+        "package_canonical_sha256": {
+          "const": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6"
+        },
+        "package_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_data_package.json"
+        },
+        "preflight_checkpoint_commit": {
+          "const": "e39390dd9eab6e8f294c0a2c0166462e46280e8f"
+        },
+        "preflight_receipt_canonical_sha256": {
+          "const": "6307caa29e8a2179d36a5f2792573bb7307f22a317fa55071b348eb51ef2639c"
+        },
+        "preflight_receipt_path": {
+          "const": "data/research_receipts/r46_v2_preflight_2026_09_14.json"
+        },
+        "preflight_receipt_physical_sha256": {
+          "const": "b05afe121048291edce06d54ef001363470ea3cc2e16ce58eb44f35ab9d972bc"
+        },
+        "primary_estimand": {
+          "const": "initial_equity_portfolio_contribution"
+        },
+        "primary_estimand_unchanged": {
+          "const": true
+        },
+        "resampling_seeds": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrap_seed": {
+              "const": 4601
+            },
+            "permutation_seed": {
+              "const": 4602
+            },
+            "placebo_seed": {
+              "const": 4603
+            }
+          },
+          "required": [
+            "bootstrap_seed",
+            "permutation_seed",
+            "placebo_seed"
+          ],
+          "type": "object"
+        },
+        "resampling_seeds_unchanged": {
+          "const": true
+        },
+        "reserved_sidecar_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json"
+        },
+        "reserved_sidecar_physical_sha256": {
+          "const": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4"
+        },
+        "reserved_transition_sha256": {
+          "const": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405"
+        },
+        "source_commit": {
+          "const": "e10816ec08cc6b9c36000634c0e10a138d30f67e"
+        },
+        "statistics_plan_canonical_sha256": {
+          "const": "21ebb2e453bd3587388fa800919d5ca24eb9fab4d29b21c106d8e1ce8a015331"
+        },
+        "statistics_plan_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_statistics_plan.json"
+        },
+        "strategy_formula": {
+          "const": "S_j=1 only for an original nominal 30-year Treasury issue or reopening with both required original documents available by the frozen cutoff"
+        },
+        "strategy_formula_unchanged": {
+          "const": true
+        }
+      },
+      "required": [
+        "source_commit",
+        "freeze_commit",
+        "preflight_checkpoint_commit",
+        "package_path",
+        "package_canonical_sha256",
+        "statistics_plan_path",
+        "statistics_plan_canonical_sha256",
+        "family_registry_path",
+        "family_registry_canonical_sha256",
+        "preflight_receipt_path",
+        "preflight_receipt_physical_sha256",
+        "preflight_receipt_canonical_sha256",
+        "base_one_shot_state_path",
+        "base_one_shot_state_physical_sha256",
+        "base_one_shot_state_canonical_sha256",
+        "reserved_sidecar_path",
+        "reserved_sidecar_physical_sha256",
+        "reserved_transition_sha256",
+        "historical_cutoff",
+        "event_universe_count",
+        "event_universe_ids_sha256",
+        "event_universe_unchanged",
+        "strategy_formula",
+        "strategy_formula_unchanged",
+        "instrument",
+        "instrument_unchanged",
+        "direction",
+        "direction_unchanged",
+        "desired_weight",
+        "desired_weight_unchanged",
+        "governance_manifest_canonical_sha256",
+        "governance_manifest_path",
+        "incident_receipt_canonical_sha256",
+        "incident_receipt_path",
+        "incident_receipt_physical_sha256",
+        "entry_rule",
+        "entry_rule_unchanged",
+        "exit_rule",
+        "exit_rule_unchanged",
+        "overlap_policy",
+        "overlap_policy_unchanged",
+        "availability_policy",
+        "availability_policy_unchanged",
+        "missing_data_policy",
+        "missing_data_policy_unchanged",
+        "incumbent_v3_unchanged",
+        "cost_cells",
+        "cost_cells_unchanged",
+        "caps",
+        "caps_unchanged",
+        "primary_estimand",
+        "primary_estimand_unchanged",
+        "resampling_seeds",
+        "resampling_seeds_unchanged",
+        "multiplicity_family",
+        "multiplicity_family_unchanged"
+      ],
+      "type": "object"
+    },
+    "incident_receipt_canonical_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "incident_receipt_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "incident_receipt_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "integration_candidate": {
+      "const": false
+    },
+    "integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest_sha256"
+      ],
+      "type": "object"
+    },
+    "new_parameter_search_forbidden": {
+      "const": true
+    },
+    "no_auto_promotion": {
+      "const": true
+    },
+    "one_shot_state_path": {
+      "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json"
+    },
+    "one_shot_state_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "outcome_artifacts_present": {
+      "const": false
+    },
+    "paper_live_untouched": {
+      "const": true
+    },
+    "paper_or_live_activation": {
+      "const": false
+    },
+    "parameter_search_allowed": {
+      "const": false
+    },
+    "promotion": {
+      "const": false
+    },
+    "recovery_generation": {
+      "const": 1
+    },
+    "recovery_justification": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmatory_claim_forbidden": {
+          "const": true
+        },
+        "new_one_shot_is_infrastructure_recovery_not_outcome_selected_rerun": {
+          "const": true
+        },
+        "nonpersisted_outcome_exposure": {
+          "const": "UNPROVEN"
+        },
+        "persisted_economic_output_found": {
+          "const": false
+        },
+        "reason": {
+          "const": "V2_RESERVED_ORIGIN_UNPROVEN_WITHOUT_PERSISTED_ECONOMIC_COMPLETION"
+        },
+        "v2_execution_reuse_forbidden": {
+          "const": true
+        },
+        "v2_reservation_deleted": {
+          "const": false
+        },
+        "v2_reservation_invalidated": {
+          "const": false
+        },
+        "v2_reservation_valid": {
+          "const": true
+        }
+      },
+      "required": [
+        "reason",
+        "v2_reservation_valid",
+        "v2_reservation_deleted",
+        "v2_reservation_invalidated",
+        "v2_execution_reuse_forbidden",
+        "persisted_economic_output_found",
+        "nonpersisted_outcome_exposure",
+        "confirmatory_claim_forbidden",
+        "new_one_shot_is_infrastructure_recovery_not_outcome_selected_rerun"
+      ],
+      "type": "object"
+    },
+    "recovery_mode": {
+      "const": "EXECUTION_INCIDENT_RECOVERY"
+    },
+    "research_id": {
+      "const": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
+    },
+    "research_only": {
+      "const": true
+    },
+    "schema_version": {
+      "const": "r46-recovery-governance-v3"
+    },
+    "status": {
+      "const": "RECOVERY_FROZEN_PRE_OUTCOME"
+    },
+    "tuning_forbidden": {
+      "const": true
+    },
+    "v2_execution_reuse_forbidden": {
+      "const": true
+    },
+    "v2_reservation_preserved": {
+      "const": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "research_id",
+    "candidate_id",
+    "recovery_generation",
+    "status",
+    "recovery_mode",
+    "claim_policy",
+    "research_only",
+    "economic_execution",
+    "economic_run",
+    "outcome_artifacts_present",
+    "paper_live_untouched",
+    "paper_or_live_activation",
+    "promotion",
+    "integration_candidate",
+    "auto_promotion",
+    "no_auto_promotion",
+    "parameter_search_allowed",
+    "new_parameter_search_forbidden",
+    "tuning_forbidden",
+    "confirmatory_claim_forbidden",
+    "v2_reservation_preserved",
+    "v2_execution_reuse_forbidden",
+    "incident_receipt_path",
+    "incident_receipt_sha256",
+    "incident_receipt_canonical_sha256",
+    "one_shot_state_path",
+    "one_shot_state_sha256",
+    "frozen_v2_economic_identity",
+    "recovery_justification",
+    "integrity"
+  ],
+  "type": "object"
+}

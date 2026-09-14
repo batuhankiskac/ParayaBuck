@@ -1,0 +1,61 @@
+{
+  "aborted_sidecar_found": false,
+  "base_state_canonical_sha256": "b2977b5f516cd4371af2201a87cb84637beb47214e74cc3d0980bbc9eaf33fab",
+  "base_state_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json",
+  "base_state_physical_sha256": "c69e6bd76964131f41a02b4a58a1a308af1a2a1a038c8e339b1512b097b2f412",
+  "candidate_id": "R46",
+  "classification": "ORIGIN_UNPROVEN",
+  "consumed_sidecar_found": false,
+  "creator_command_status": "UNPROVEN",
+  "economic_outcome_claim": "FORBIDDEN",
+  "forensic_filename_patterns": [
+    "results.json",
+    "ledger.json",
+    "report.json",
+    "run_receipt.json"
+  ],
+  "forensic_search_roots": [
+    "/Users/batuhankiskac/Desktop/ParayaBuck/data/research/runs/",
+    "/Users/batuhankiskac/Desktop/ParayaBuck/data/research_runs/"
+  ],
+  "freeze_commit": "ea8e86eabbf499977aadf8ebc81ccbb89502aab4",
+  "governance_canonical_sha256": "92f7ecd5b7f6cdd2428ee221c3b4891f10d5d7ab6f16a5fcb2be952753557c35",
+  "incident_type": "RESERVED_WITHOUT_PERSISTED_COMPLETION",
+  "integrity": {
+    "incident_sha256": "bdd668747423960faddbb31982566e6c49fcc3b64fd32bb29c40775a621acb8b"
+  },
+  "nonpersisted_outcome_exposure_status": "UNPROVEN",
+  "package_canonical_sha256": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6",
+  "parent_research_id": "r46_treasury_auction_unwind_tlt_v2_2026_09_10",
+  "persisted_ledger_found": false,
+  "persisted_report_found": false,
+  "persisted_results_found": false,
+  "persisted_run_receipt_found": false,
+  "persisted_outcome_evidence_status": "NONE_FOUND_IN_DECLARED_SCOPE",
+  "preflight_receipt_canonical_sha256": "6307caa29e8a2179d36a5f2792573bb7307f22a317fa55071b348eb51ef2639c",
+  "preflight_receipt_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research_receipts/r46_v2_preflight_2026_09_14.json",
+  "preflight_receipt_physical_sha256": "b05afe121048291edce06d54ef001363470ea3cc2e16ce58eb44f35ab9d972bc",
+  "recovery_requires_new_governance_generation": true,
+  "reservation_payload": {
+    "gate_sha256": "6307caa29e8a2179d36a5f2792573bb7307f22a317fa55071b348eb51ef2639c",
+    "integrity": {
+      "transition_sha256": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405"
+    },
+    "manifest_sha256": "92f7ecd5b7f6cdd2428ee221c3b4891f10d5d7ab6f16a5fcb2be952753557c35",
+    "package_sha256": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6",
+    "schema_version": "r46-one-shot-transition-v2",
+    "state_canonical_sha256": "b2977b5f516cd4371af2201a87cb84637beb47214e74cc3d0980bbc9eaf33fab",
+    "state_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json",
+    "state_sha256": "c69e6bd76964131f41a02b4a58a1a308af1a2a1a038c8e339b1512b097b2f412",
+    "status": "RESERVED"
+  },
+  "reserved_sidecar_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json",
+  "reserved_sidecar_physical_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+  "reserved_transition_sha256": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405",
+  "runner_invocation_proven": false,
+  "schema_version": "r46-v2-reservation-incident-v1",
+  "source_commit": "e10816ec08cc6b9c36000634c0e10a138d30f67e",
+  "statistics_canonical_sha256": "21ebb2e453bd3587388fa800919d5ca24eb9fab4d29b21c106d8e1ce8a015331",
+  "v2_reservation_must_be_preserved": true,
+  "v2_rerun_forbidden": true
+}

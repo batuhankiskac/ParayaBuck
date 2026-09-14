@@ -1,0 +1,30 @@
+{
+  "candidate_id": "R46",
+  "confirmatory_claim_forbidden": true,
+  "incident_receipt_canonical_sha256": "bdd668747423960faddbb31982566e6c49fcc3b64fd32bb29c40775a621acb8b",
+  "incident_receipt_path": "data/research_receipts/r46_v2_reservation_incident_2026_09_14.json",
+  "incident_receipt_physical_sha256": "7be069ba5a29a79313bdf77b3355ff5d5fdf319b624a3d5b6da30291609d74c0",
+  "integrity": {
+    "artifact_sha256": "0165ea19b68a5e913927cb5016a703ccc9d2be73ba01a7515372727b0bdb9421"
+  },
+  "nonpersisted_outcome_exposure_unproven": true,
+  "origin_unproven_acknowledged": true,
+  "outcome_artifacts_present": false,
+  "parent_research_id": "r46_treasury_auction_unwind_tlt_v2_2026_09_10",
+  "parent_v2_reservation_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+  "parent_v2_reservation_transition_sha256": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405",
+  "recovery_generation": 1,
+  "release_count": 0,
+  "research_id": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14",
+  "reservation_owner": "execution",
+  "reservation_state": "UNRESERVED",
+  "rerun_forbidden": true,
+  "retrospective_descriptive_only": true,
+  "run_count": 0,
+  "same_sample_reuse_after_v3_result_forbidden": true,
+  "schema_version": "r46-recovery-one-shot-state-v3",
+  "status": "SEALED_UNUSED",
+  "tuning_forbidden": true,
+  "v2_reservation_preserved": true,
+  "v2_state_unchanged_required": true
+}

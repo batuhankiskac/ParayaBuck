@@ -282,6 +282,9 @@
       "pattern": "^[0-9a-f]{40}$",
       "type": "string"
     },
+    "v2_package_canonical_sha256": {
+      "const": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6"
+    },
     "source_files": {
       "items": {
         "additionalProperties": false,
@@ -331,6 +334,9 @@
     "v3_governance_path": {
       "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.json"
     },
+    "v3_governance_canonical_sha256": {
+      "const": "bc49ab40e00e21deb8b4ef305c18400665d4154d4c1077a8a31dbc7da452c3db"
+    },
     "v3_governance_sha256": {
       "const": "bc49ab40e00e21deb8b4ef305c18400665d4154d4c1077a8a31dbc7da452c3db"
     },
@@ -377,6 +383,7 @@
     "recovery_generation",
     "parent_governance_commit",
     "source_commit",
+    "v2_package_canonical_sha256",
     "freeze_commit",
     "freeze_commit_binding",
     "canonical_execution_root",
@@ -387,6 +394,7 @@
     "source_files",
     "recovery_governance",
     "v3_governance_path",
+    "v3_governance_canonical_sha256",
     "v3_governance_sha256",
     "v3_schema_path",
     "v3_schema_sha256",

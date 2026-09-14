@@ -1,0 +1,22 @@
+{
+  "authorization_nonce": "R46V3-20260914-ORCHESTRATOR-ONE-SHOT-001",
+  "authorized": true,
+  "candidate_id": "R46",
+  "economic_execution_authorized": true,
+  "execution_contract_sha256": "95b18f4f14673448dc584ae614587e9a095b698206a8f2868ad9bef8ff502e58",
+  "freeze_commit": "d762770cdc3a7d9717600b49110d5bcfd7309e58",
+  "integrity": {
+    "authorization_sha256": "dce81fa5d154dd50912a56790313166b0031f940a3471d4aa8de7c5cb34e47ac"
+  },
+  "issued_for_output_directory": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research/runs/r46_treasury_auction_unwind_tlt_v3_recovery_final_2026_09_14",
+  "parameter_change_authorized": false,
+  "preflight_receipt_sha256": "630eddde21325321576dd1830a1741c6a57cf5b0b835cc132c38f1bfa6b202b6",
+  "promotion_authorized": false,
+  "recovery_generation": 1,
+  "rerun_authorized": false,
+  "research_id": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14",
+  "schema_version": "r46-v3-recovery-execution-authorization-v1",
+  "source_commit": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
+  "v2_reservation_physical_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+  "v3_state_canonical_sha256": "0165ea19b68a5e913927cb5016a703ccc9d2be73ba01a7515372727b0bdb9421"
+}

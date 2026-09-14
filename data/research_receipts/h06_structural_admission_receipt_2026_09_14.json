@@ -3,13 +3,11 @@
   "cutoff": "2026-07-31T23:59:59Z",
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "integrity": {
-    "self_sha256": "f8267c677ef88e42291cb837718ade40c7ca7da6198ac73a1d89635ddc4fd3f9"
+    "self_sha256": "61cc4c9d64f4d551ed88ecd451ca690a57fdfcd91b004fab79a2b3747956cb81"
   },
   "local_artifacts": [],
   "reason": "upstream official SEC acquisition incomplete",
   "remaining_blockers": [
-    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
-    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
     "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
   ],
   "schema": "h06_structural_admission_receipt_v1",

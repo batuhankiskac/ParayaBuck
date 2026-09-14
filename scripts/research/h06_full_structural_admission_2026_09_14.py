@@ -223,11 +223,8 @@ def map_to_decisions(available_session: str, decisions: Iterable[dict[str, Any]]
 
 
 def blocked_artifacts() -> dict[Path, dict[str, Any]]:
-    blockers = [
-        "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
-        "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
-        "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED",
-    ]
+    acquisition = json.loads(ACQUISITION.read_text())
+    blockers = list(acquisition.get("remaining_blockers", []))
     base = {"status": STATUS, "cutoff": "2026-07-31T23:59:59Z", "remaining_blockers": blockers, "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS"}
     zero_years = {str(year): {"owner_year_total": 0, "routine": 0, "opportunistic": 0, "non_partitionable": 0} for year in range(2022, 2027)}
     zero_gates = {key: 0 for key in ("transaction_universe_2022_plus", "nonderivative", "purchase_code_p", "acquired_a", "direct_d", "valid_numeric", "opportunistic", "open_market_explicit", "ten_b5_pass", "identity_exact", "denominator_exact", "structurally_admitted")}

@@ -4,12 +4,10 @@
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "economics_accessed": false,
   "integrity": {
-    "self_sha256": "316760a33660fd6d914335127f84720f1f8ced0e951aa35c60bec952259bd0e8"
+    "self_sha256": "ae3a780e642eb1d8f734068fa828f1073b16b0df340cb8916f170e917b27cd51"
   },
   "outcome_fields_present": false,
   "remaining_blockers": [
-    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
-    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
     "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
   ],
   "schema": "h06_true_holdout_signal_custody_v1",

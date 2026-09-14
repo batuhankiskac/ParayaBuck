@@ -11,12 +11,10 @@
   },
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "integrity": {
-    "self_sha256": "49b9c21560493b80e28fb32926214bb52de73a192bf01767ce38cc624da7f93a"
+    "self_sha256": "efd1c6caa7dc92f4cc541f0531d16b0ec434aa1a5adb626a2598ba80eabd8da9"
   },
   "primary_exclusions": {},
   "remaining_blockers": [
-    "SEC_USER_AGENT_WITH_OPERATOR_APPROVED_CONTACT_NOT_AVAILABLE",
-    "SEC_OFFICIAL_QUARTERLY_PACKAGES_2019Q1_THROUGH_2026Q1_NOT_ACQUIRED",
     "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
   ],
   "schema": "h06_full_structural_admission_v1",

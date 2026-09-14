@@ -1,0 +1,24 @@
+{
+  "schema_version": "strategy-queue-transition-v1",
+  "transition_date": "2026-09-14",
+  "from_candidate": "R46",
+  "from_status": "CLOSED_NO_VALID_ECONOMIC_RESULT_EXECUTION_PROVENANCE_CONTRADICTION",
+  "to_candidate": "H06",
+  "to_status": "RESEARCH_NEXT",
+  "reason": "R46_CURRENT_LINEAGE_EXHAUSTED",
+  "r46_economic_result_available": false,
+  "r46_economically_rejected": false,
+  "r46_further_execution_forbidden": true,
+  "h06_execution_authorized": false,
+  "h06_research_authorized": false,
+  "paper_live_change": false,
+  "promotion": false,
+  "queue_order_only": true,
+  "authorization_effect": "This receipt records queue order only. It does not authorize H06 work or economics.",
+  "r46_closure_receipt": "data/research_receipts/r46_final_closure_2026_09_14.json",
+  "r46_closure_document": "docs/research/r46_final_closure_2026_09_14.md",
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators, ensure_ascii=false; hash with integrity.transition_sha256 set to PENDING",
+    "transition_sha256": "f5a4ed53a53840ede23059aa34d780f5e4eaa9ab88b528dc735acb24a0104f78"
+  }
+}

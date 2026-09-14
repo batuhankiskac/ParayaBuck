@@ -1,0 +1,237 @@
+{
+  "schema_version": "r46-final-closure-v1",
+  "closure_date": "2026-09-14",
+  "candidate_id": "R46",
+  "candidate_name": "Treasury auction unwind TLT",
+  "status": "CLOSED",
+  "closure_classification": "CLOSED_NO_VALID_ECONOMIC_RESULT_EXECUTION_PROVENANCE_CONTRADICTION",
+  "economic_result_status": "ECONOMIC_RESULT_NOT_AVAILABLE",
+  "economic_rejection_status": "NOT_ECONOMICALLY_REJECTED",
+  "mechanism_status": "MECHANISM_NOT_ADJUDICATED",
+  "current_lineage_rerun_policy": "PERMANENTLY_FORBIDDEN",
+  "rerun_policy": "CURRENT_R46_LINEAGE_PERMANENTLY_CLOSED_TO_FURTHER_EXECUTION",
+  "next_candidate": "H06",
+  "decision": "R46 is closed because no admissible economic result could be produced and the preserved execution state contradicts the deterministic reconstruction of all frozen persisted inputs.",
+  "lineage": {
+    "commits": {
+      "v2_source": "e10816ec08cc6b9c36000634c0e10a138d30f67e",
+      "v2_freeze": "ea8e86eabbf499977aadf8ebc81ccbb89502aab4",
+      "v2_preflight_seal": "e39390dd9eab6e8f294c0a2c0166462e46280e8f",
+      "recovery_governance": "640097e30db857a011caa5d623e08541b2793cc8",
+      "c_src": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
+      "c_freeze": "d762770cdc3a7d9717600b49110d5bcfd7309e58",
+      "c_gate": "093be49158d2d9a0af10a770e0317761a44f80db",
+      "c_auth": "e209fa3343ad6a2376efb2860e1b25923d407b9f",
+      "v3_execution_failure": "6d01cade2e284905b13a2cb6e1ef4b325b3134a6",
+      "gate_diagnosis": "9d2d055125c41cf6266613c9494c0b30bbede592",
+      "reconstruction": "1191bc36e3fa5e1e6ab391c14a3411cfae11283a"
+    },
+    "v2": {
+      "source_commit": "e10816ec08cc6b9c36000634c0e10a138d30f67e",
+      "freeze_commit": "ea8e86eabbf499977aadf8ebc81ccbb89502aab4",
+      "preflight_commit": "e39390dd9eab6e8f294c0a2c0166462e46280e8f",
+      "preflight_receipt": {
+        "path": "data/research_receipts/r46_v2_preflight_2026_09_14.json",
+        "physical_sha256": "b05afe121048291edce06d54ef001363470ea3cc2e16ce58eb44f35ab9d972bc",
+        "canonical_sha256": "6307caa29e8a2179d36a5f2792573bb7307f22a317fa55071b348eb51ef2639c"
+      },
+      "governance_manifest_canonical_sha256": "92f7ecd5b7f6cdd2428ee221c3b4891f10d5d7ab6f16a5fcb2be952753557c35",
+      "data_package_canonical_sha256": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6"
+    },
+    "v3": {
+      "source_commit": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
+      "freeze_commit": "d762770cdc3a7d9717600b49110d5bcfd7309e58",
+      "gate_commit": "093be49158d2d9a0af10a770e0317761a44f80db",
+      "authorization_commit": "e209fa3343ad6a2376efb2860e1b25923d407b9f",
+      "failure_commit": "6d01cade2e284905b13a2cb6e1ef4b325b3134a6",
+      "reconstruction_commit": "1191bc36e3fa5e1e6ab391c14a3411cfae11283a",
+      "recovery_governance_commit": "640097e30db857a011caa5d623e08541b2793cc8"
+    }
+  },
+  "preserved_evidence": {
+    "v2_reservation": {
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json",
+      "before_physical_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+      "after_physical_sha256": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+      "unchanged": true,
+      "status": "RESERVED",
+      "transition_canonical_sha256": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405"
+    },
+    "v2_base_state": {
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json",
+      "physical_sha256": "c69e6bd76964131f41a02b4a58a1a308af1a2a1a038c8e339b1512b097b2f412",
+      "canonical_sha256": "b2977b5f516cd4371af2201a87cb84637beb47214e74cc3d0980bbc9eaf33fab",
+      "status": "SEALED_UNUSED",
+      "reservation_state": "UNRESERVED"
+    },
+    "v2_reservation_incident": {
+      "path": "data/research_receipts/r46_v2_reservation_incident_2026_09_14.json",
+      "physical_sha256": "7be069ba5a29a79313bdf77b3355ff5d5fdf319b624a3d5b6da30291609d74c0",
+      "self_sha256": "bdd668747423960faddbb31982566e6c49fcc3b64fd32bb29c40775a621acb8b"
+    },
+    "v3_reservation": {
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.reserved.json",
+      "before_physical_sha256": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+      "after_physical_sha256": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+      "unchanged": true,
+      "status": "RESERVED",
+      "transition_canonical_sha256": "4f852d9cda349c05782142c6289e0da00f1a501948bcb23d26308283e6faa964"
+    },
+    "v3_base_state": {
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json",
+      "before_physical_sha256": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+      "after_physical_sha256": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+      "physical_sha256": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+      "canonical_sha256": "0165ea19b68a5e913927cb5016a703ccc9d2be73ba01a7515372727b0bdb9421",
+      "unchanged": true,
+      "status": "SEALED_UNUSED",
+      "reservation_state": "UNRESERVED"
+    },
+    "v3_authorization": {
+      "path": "data/research_receipts/r46_v3_execution_authorization_2026_09_14.json",
+      "before_physical_sha256": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+      "after_physical_sha256": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+      "physical_sha256": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+      "canonical_sha256": "dce81fa5d154dd50912a56790313166b0031f940a3471d4aa8de7c5cb34e47ac",
+      "unchanged": true
+    },
+    "v3_preflight": {
+      "path": "data/research_receipts/r46_v3_recovery_preflight_2026_09_14.json",
+      "physical_sha256": "0b172ac5a94bc7bb4335d5700387a89c64deb8c275577815a0fb039c8c540a7f",
+      "canonical_sha256": "630eddde21325321576dd1830a1741c6a57cf5b0b835cc132c38f1bfa6b202b6",
+      "preflight_script_sha256": "f87ba9a4def135c0fbd10e7cb306d921ddc26058bd1a74232b10ccc70a58a7eb"
+    },
+    "execution_contract": {
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_execution_contract.json",
+      "physical_sha256": "98114b212997f86b72cf0b3b3de6841ef990050ce6401b771b81225ee3d8e825",
+      "canonical_sha256": "95b18f4f14673448dc584ae614587e9a095b698206a8f2868ad9bef8ff502e58"
+    },
+    "v3_failure_incident": {
+      "path": "data/research_receipts/r46_v3_execution_failure_incident_2026_09_14.json",
+      "physical_sha256": "658a0ab3363087cb73387d4f2034bea24ad5992e6149ce9b460eb965ec1c40dd",
+      "self_sha256": "b2b3e4fb320b954cce1914e1bd09e9379a2f6d7d68331bf1e7a126f0c29a48f9"
+    },
+    "reconstruction": {
+      "path": "data/research_receipts/r46_v3_observation_snapshot_reconstruction_2026_09_14.json",
+      "before_physical_sha256": "c016041267c622138615d6b23812619a796aa94fa7ed64cbcfbfe60795b9126b",
+      "after_physical_sha256": "c016041267c622138615d6b23812619a796aa94fa7ed64cbcfbfe60795b9126b",
+      "physical_sha256": "c016041267c622138615d6b23812619a796aa94fa7ed64cbcfbfe60795b9126b",
+      "self_sha256": "6c7af7ae524261838202c8ac7e3568dd7377de5cad70265bd9ee88e799897b7a",
+      "classification": "DETERMINISTIC_RECONSTRUCTION_CONTRADICTS_OBSERVED_EXECUTION",
+      "unchanged": true
+    }
+  },
+  "execution_history": {
+    "v2_completed_economic_runs": 0,
+    "v3_runner_invocations": 1,
+    "v3_successful_runs": 0,
+    "v3_retries": 0,
+    "persisted_economic_results": 0,
+    "v3_consumed_transition": false,
+    "v3_aborted_transition": false,
+    "failure": "BLOCKED_R46_INCUMBENT_BASE_MISSING"
+  },
+  "economic_output_search": {
+    "canonical_result_found": false,
+    "searched_roots": [
+      "data/research_manifests",
+      "data/research_receipts",
+      "data/research_runs",
+      "data/research/runs"
+    ],
+    "searched_bundle_names": [
+      "results.json",
+      "ledger.json",
+      "report.json",
+      "run_receipt.json"
+    ],
+    "matched_r46_paths": [],
+    "v2": {
+      "results_json": false,
+      "ledger_json": false,
+      "report_json": false,
+      "run_receipt_json": false,
+      "consumed_transition": false,
+      "aborted_transition": false
+    },
+    "v3": {
+      "results_json": false,
+      "ledger_json": false,
+      "report_json": false,
+      "run_receipt_json": false,
+      "consumed_transition": false,
+      "aborted_transition": false
+    }
+  },
+  "reconstruction": {
+    "classification": "DETERMINISTIC_RECONSTRUCTION_CONTRADICTS_OBSERVED_EXECUTION",
+    "provenance_subclassification": "EXECUTION_STATE_INPUT_NOT_PERSISTED",
+    "universe_snapshot_count": 2658,
+    "universe_hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3",
+    "independent_hash_seeds": [
+      1,
+      777
+    ],
+    "structural_identities_byte_identical": true,
+    "direct_build_product_universe_parity": "PASS",
+    "feb06": {
+      "timestamp": "2017-02-06T05:00:00Z",
+      "selected_universe_count": 291,
+      "effective_observation_count": 30,
+      "current_complete_count": 30,
+      "missing_count": 0,
+      "stale_count": 0,
+      "support": "PASS",
+      "product_universe_guard": "PASS",
+      "completeness": "PASS",
+      "pre_decide_classification": "DECIDE_REACHED",
+      "target_could_materialize": true
+    },
+    "feb10": {
+      "timestamp": "2017-02-10T05:00:00Z",
+      "event_id": "2017-02-09:912810RV2",
+      "boundary_type": "ENTRY",
+      "native_weekly_scheduled": false,
+      "r46_extra_boundary_scheduled": true,
+      "support": "PASS",
+      "product_universe_guard": "PASS",
+      "completeness": "BYPASSED_R46_EVENT_BOUNDARY_OVERRIDE",
+      "pre_decide_classification": "DECIDE_REACHED",
+      "target_could_materialize": false,
+      "terminal_error": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}"
+    },
+    "first_native_target_materializable_timestamp": "2017-02-06T05:00:00Z"
+  },
+  "final_contradiction": "The deterministic reconstruction of all persisted frozen inputs implies that the 2017-02-06 native incumbent decision reached the normal non-event decision path and should have materialized _last_incumbent_target. The preserved real V3 execution proves that _last_incumbent_target was still None at the 2017-02-10 R46 event boundary. No persisted frozen input explains this difference.",
+  "root_classification": "DETERMINISTIC_RECONSTRUCTION_CONTRADICTS_OBSERVED_EXECUTION",
+  "provenance_subclassification": "EXECUTION_STATE_INPUT_NOT_PERSISTED",
+  "closure_boundaries": {
+    "further_recovery_allowed": false,
+    "further_execution_allowed": false,
+    "parameter_tuning_allowed": false,
+    "paper_live_activation": false,
+    "promotion": false,
+    "h06_execution_authorized": false,
+    "h06_research_authorized": false
+  },
+  "production_boundary": {
+    "parameters_unchanged": true,
+    "historical_data_unchanged": true,
+    "paper_unchanged": true,
+    "live_unchanged": true,
+    "strategy_registry_unchanged": true,
+    "v2_reservation_unchanged": true,
+    "v3_reservation_unchanged": true,
+    "v3_base_state_unchanged": true,
+    "no_source_code_changed": true
+  },
+  "artifacts": {
+    "closure_receipt": "data/research_receipts/r46_final_closure_2026_09_14.json",
+    "closure_document": "docs/research/r46_final_closure_2026_09_14.md",
+    "queue_transition_receipt": "data/research_receipts/strategy_queue_transition_r46_to_h06_2026_09_14.json"
+  },
+  "integrity": {
+    "canonicalization": "UTF-8 JSON, sorted object keys, compact separators, ensure_ascii=false; hash with integrity.closure_sha256 set to PENDING",
+    "closure_sha256": "0919e26efd9b56c9be1dee308104894f7386c394a79d86f01909da96ee64e085"
+  }
+}

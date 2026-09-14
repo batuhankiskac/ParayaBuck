@@ -34,6 +34,20 @@ its tested candidate is rejected or remains ineligible for PAPER.
 
 ## Current records
 
+### r46_final_closure_2026_09_14
+
+**Status:** CLOSED — current R46 lineage permanently closed<br>
+**Closure:** CLOSED_NO_VALID_ECONOMIC_RESULT_EXECUTION_PROVENANCE_CONTRADICTION<br>
+**Economic result:** ECONOMIC_RESULT_NOT_AVAILABLE<br>
+**Economic rejection:** NOT_ECONOMICALLY_REJECTED<br>
+**Mechanism:** MECHANISM_NOT_ADJUDICATED<br>
+**Further R46 execution:** forbidden<br>
+**Next candidate:** H06 — queue order only; H06 research and economics are not authorized
+
+[closure receipt](../../data/research_receipts/r46_final_closure_2026_09_14.json) ·
+[queue transition receipt](../../data/research_receipts/strategy_queue_transition_r46_to_h06_2026_09_14.json) ·
+[closure document](r46_final_closure_2026_09_14.md)
+
 ### `execution_cost_transferability_p0_2026_09`
 
 **Status:** `accepted` technical measurement record<br>

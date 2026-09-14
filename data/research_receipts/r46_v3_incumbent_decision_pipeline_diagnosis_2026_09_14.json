@@ -1,0 +1,1721 @@
+{
+  "account_state": {
+    "cash_only_state_proven": "NOT_PROVEN",
+    "prior_incumbent_orders_possible": "NOT_PROVEN",
+    "prior_incumbent_target_materialized": "NOT_PROVEN",
+    "proof_status": "ACCOUNT_STATE_NOT_PROVEN",
+    "strict_control_flow_evidence": "The failing event proves _last_incumbent_target was None immediately before event handling; the missing Feb 6 gate record prevents attributing that absence to a specific pre-decide gate."
+  },
+  "analyzed_window": {
+    "actual_processed_timestamp_count": 18,
+    "actual_processed_timestamps": [
+      "2017-02-01T05:00:00Z",
+      "2017-02-01T14:30:00Z",
+      "2017-02-02T05:00:00Z",
+      "2017-02-02T14:30:00Z",
+      "2017-02-03T05:00:00Z",
+      "2017-02-03T14:30:00Z",
+      "2017-02-06T05:00:00Z",
+      "2017-02-06T14:30:00Z",
+      "2017-02-07T05:00:00Z",
+      "2017-02-07T14:30:00Z",
+      "2017-02-08T05:00:00Z",
+      "2017-02-08T14:30:00Z",
+      "2017-02-09T05:00:00Z",
+      "2017-02-09T14:30:00Z",
+      "2017-02-10T05:00:00Z",
+      "2017-02-10T14:30:00Z",
+      "2017-02-13T05:00:00Z",
+      "2017-02-13T14:30:00Z"
+    ],
+    "end": "2017-02-13T23:59:59Z",
+    "event_boundaries": [
+      {
+        "boundary_type": "ENTRY",
+        "event_id": "2017-02-09:912810RV2",
+        "timestamp": "2017-02-10T05:00:00Z"
+      }
+    ],
+    "start": "2017-02-01T00:00:00Z",
+    "timestamp_sources": {
+      "event_marker_timestamps_in_window": 1,
+      "tlt_unique_regular_open_timestamps": 2659,
+      "v5_rows_read": 3915364,
+      "v5_unique_symbol_timestamp_pairs": 3915364
+    }
+  },
+  "candidate_id": "R46",
+  "execution_boundary": {
+    "orders_or_fills": false,
+    "paper_live_registry_changed": false,
+    "parameters_changed": false,
+    "performance_outcomes": false,
+    "real_engine_run": false,
+    "real_strategy_decision": false,
+    "repair_implemented": false,
+    "v2_v3_reservations_modified": false,
+    "v3_rerun": false,
+    "v4_runner": false
+  },
+  "feb06_deep_audit": {
+    "engine_previous_timestamp_after_cycle": "2017-02-06T05:00:00Z",
+    "final_decision": {
+      "enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "enum_status": "UNPROVEN_CATCH_ALL_NOT_A_GATE_ATTRIBUTION",
+      "exact_skip_reason": "ROOT_CAUSE_STILL_UNPROVEN_EXACT_R46_OBSERVATION_METADATA_MISSING",
+      "strategy_decide_invoked_by_diagnostic": false,
+      "target_could_materialize": null,
+      "would_reach_strategy_decide": null
+    },
+    "last_incumbent_target_remains_none": true,
+    "last_incumbent_target_state_proof": "NONE_PROVEN_BY_LATER_TERMINAL_FAILURE_AND_NO_RESET_PATH",
+    "observation_completeness": {
+      "complete_count": null,
+      "data_only_alignment_envelope": {
+        "all_feb03_symbols_present_feb06": true,
+        "feb03_minus_feb06_symbols": [],
+        "feb06_minus_feb03_symbols": [],
+        "not_substituted_for_exact_runtime_set": true
+      },
+      "expected_count": null,
+      "expected_observation_symbols": null,
+      "frozen_engine_warning": "NOT_PROVABLE_WITHOUT_EXACT_RUNTIME_OBSERVATION_SET",
+      "gate": "UNPROVEN_EXACT_EXPECTED_SET",
+      "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "missing_count": null,
+      "missing_symbols": null,
+      "selection_semantics": "references/pins are reserved first; strategy rank_candidates output is filtered by minimum history and benchmark latest alignment; scanner fallback is filtered by the same alignment; the exact result was not persisted",
+      "stale_count": null,
+      "stale_symbols": null
+    },
+    "product_universe": {
+      "effective_snapshot_membership": "UNAVAILABLE_EXACT_RUNTIME_SNAPSHOT",
+      "exact_snapshot_persisted": false,
+      "membership_count": null,
+      "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_membership_count": null,
+      "product_guard": "PASS",
+      "snapshot_effective_at_expected": "2017-02-06T05:00:00Z",
+      "strict_prior_data_timestamp_expected": "2017-02-03T05:00:00Z",
+      "universe_version": null
+    },
+    "scheduling": {
+      "native_weekly_scheduled": true,
+      "previous_timestamp": "2017-02-03T14:30:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "scheduled": true
+    },
+    "support": {
+      "exact_runtime_context_maximum": "NOT_PERSISTED",
+      "history_source_timestamp": "2017-02-06T05:00:00Z",
+      "known_pinned_symbol_checks": [
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 276,
+          "latest_completed_bar_timestamp": "2017-02-06T05:00:00Z",
+          "symbol": "SPY"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 224,
+          "latest_completed_bar_timestamp": "2017-02-06T05:00:00Z",
+          "symbol": "SH"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 276,
+          "latest_completed_bar_timestamp": "2017-02-06T05:00:00Z",
+          "symbol": "PSQ"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 276,
+          "latest_completed_bar_timestamp": "2017-02-06T05:00:00Z",
+          "symbol": "DOG"
+        }
+      ],
+      "maximum_observed_equity_history_length": 276,
+      "minimum_required_history": 274,
+      "spy_history_count": 276,
+      "supports": true
+    },
+    "timestamp": "2017-02-06T05:00:00Z"
+  },
+  "feb10_deep_audit": {
+    "boundary_type": "ENTRY",
+    "event_id": "2017-02-09:912810RV2",
+    "final_sequence": {
+      "incumbent_target_present_immediately_before_event": false,
+      "previous_timestamp_after_base_write": "2017-02-10T05:00:00Z",
+      "r46_restoration_reached": false,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "target_could_materialize": false,
+      "terminal_failure": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+      "why_farther_than_feb06": "The extra event boundary schedules the cycle and the R46 override returns no expected observation set; support and the product guard pass, so control flow reaches the event branch that requires _last_incumbent_target.",
+      "would_reach_strategy_decide": true
+    },
+    "observation_completeness": {
+      "effective_observation_symbols": null,
+      "engine_semantics": "R46 _effective_observation_symbols returns None at event timestamps, so the normal historical strategy batch completeness check does not run on the marker boundary.",
+      "expected_count": null,
+      "gate": "BYPASSED_R46_EVENT_BOUNDARY_OVERRIDE",
+      "missing_count": null,
+      "missing_symbols": null,
+      "source": "R46_EVENT_BOUNDARY_OVERRIDE",
+      "stale_count": null,
+      "stale_symbols": null
+    },
+    "product_universe": {
+      "effective_snapshot_membership": "NOT_REQUIRED_TO_EVENT_COMPLETENESS_OVERRIDE",
+      "exact_snapshot_persisted": false,
+      "membership_count": null,
+      "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_membership_count": null,
+      "product_guard": "PASS",
+      "snapshot_effective_at_expected": "2017-02-10T05:00:00Z",
+      "strict_prior_data_timestamp_expected": "2017-02-09T05:00:00Z",
+      "universe_version": null
+    },
+    "scheduling": {
+      "event_extra_scheduled": true,
+      "native_weekly_scheduled": false,
+      "previous_timestamp": "2017-02-09T14:30:00Z",
+      "scheduled": true
+    },
+    "support": {
+      "exact_runtime_context_maximum": "NOT_PERSISTED",
+      "history_source_timestamp": "2017-02-10T05:00:00Z",
+      "known_pinned_symbol_checks": [
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 280,
+          "latest_completed_bar_timestamp": "2017-02-10T05:00:00Z",
+          "symbol": "SPY"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 228,
+          "latest_completed_bar_timestamp": "2017-02-10T05:00:00Z",
+          "symbol": "SH"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 280,
+          "latest_completed_bar_timestamp": "2017-02-10T05:00:00Z",
+          "symbol": "PSQ"
+        },
+        {
+          "current_bar_at_timestamp": true,
+          "history_exists": true,
+          "history_length": 280,
+          "latest_completed_bar_timestamp": "2017-02-10T05:00:00Z",
+          "symbol": "DOG"
+        }
+      ],
+      "maximum_observed_equity_history_length": 280,
+      "minimum_required_history": 274,
+      "spy_history_count": 280,
+      "supports": true
+    },
+    "timestamp": "2017-02-10T05:00:00Z"
+  },
+  "frozen_semantics": {
+    "base_previous_timestamp_write": "write current timestamp before product/support/completeness gates",
+    "config": {
+      "inverse_trade_symbols": [
+        "SH",
+        "PSQ",
+        "DOG"
+      ],
+      "maximum_stream_symbols": 30,
+      "minimum_history_bars": 274,
+      "rebalance_policy": "weekly",
+      "reference_symbols": [
+        "SPY"
+      ],
+      "scanner_rebalance": "daily",
+      "semantic_checks": {
+        "beta_window_bars": true,
+        "inverse_trade_symbols": true,
+        "maximum_stream_symbols": true,
+        "rebalance_frequency": true,
+        "reference_symbols": true,
+        "scanner_rebalance": true,
+        "target_shortlist": true
+      },
+      "status": "FROZEN_TEXT_CONTRACT_MATCHED",
+      "strategy": "equity_residual_momentum_v3",
+      "strategy_timeframe": "1d",
+      "target_shortlist": 300
+    },
+    "minimum_history_bars": 274,
+    "native_weekly": "previous is None or ISO year/week differs from current",
+    "observation_selection": "build_observation_set reserves configured pins, then filters strategy ranker/fallback members by minimum history and benchmark latest timestamp",
+    "product_guard_order": "product guard before strategy.supports in PortfolioBacktestEngine._decide",
+    "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+    "r46_event_observation_override": "event decision timestamps return None from _effective_observation_symbols",
+    "r46_event_target_requirement": "event branch requires _last_incumbent_target before event handling"
+  },
+  "integrity": {
+    "diagnosis_sha256": "574ca69e95a9604b74a3bb7c2356e982342e629578cfaccf9f3ab82b12172f4d"
+  },
+  "preserved_evidence": {
+    "all_preserved_checks_pass": true,
+    "immutable_physical_pins": {
+      "v2_reservation": {
+        "actual": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+        "exists": true,
+        "expected": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4",
+        "matches": true,
+        "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json"
+      },
+      "v3_authorization": {
+        "actual": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+        "exists": true,
+        "expected": "7270806c0b17bfcd450fdd762c0dc7330849a631003a0e42abb97a0e8433de36",
+        "matches": true,
+        "path": "data/research_receipts/r46_v3_execution_authorization_2026_09_14.json"
+      },
+      "v3_base_state": {
+        "actual": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+        "exists": true,
+        "expected": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7",
+        "matches": true,
+        "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json"
+      },
+      "v3_execution_contract": {
+        "actual": "98114b212997f86b72cf0b3b3de6841ef990050ce6401b771b81225ee3d8e825",
+        "exists": true,
+        "expected": "98114b212997f86b72cf0b3b3de6841ef990050ce6401b771b81225ee3d8e825",
+        "matches": true,
+        "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_execution_contract.json"
+      },
+      "v3_preflight": {
+        "actual": "0b172ac5a94bc7bb4335d5700387a89c64deb8c275577815a0fb039c8c540a7f",
+        "exists": true,
+        "expected": "0b172ac5a94bc7bb4335d5700387a89c64deb8c275577815a0fb039c8c540a7f",
+        "matches": true,
+        "path": "data/research_receipts/r46_v3_recovery_preflight_2026_09_14.json"
+      },
+      "v3_reservation": {
+        "actual": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+        "exists": true,
+        "expected": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+        "matches": true,
+        "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json.reserved.json"
+      }
+    },
+    "incident_matches_failure_commit": true,
+    "incident_matches_terminal_error": true,
+    "incident_path": "data/research_receipts/r46_v3_execution_failure_incident_2026_09_14.json",
+    "incident_self_hash_matches": true,
+    "prior_diagnosis_keeps_root_cause_not_proven": true,
+    "prior_diagnosis_path": "data/research_receipts/r46_v3_incumbent_base_failure_diagnosis_2026_09_14.json",
+    "prior_diagnosis_self_hash_matches": true,
+    "prior_receipts_have_no_performance_metric_keys": true,
+    "v2_reservation_transition_hash_matches": true,
+    "v3_authorization_canonical_hash_matches": true,
+    "v3_base_state_canonical_hash_matches": true,
+    "v3_execution_contract_canonical_hash_matches": true,
+    "v3_preflight_canonical_hash_matches": true,
+    "v3_reservation_transition_hash_matches": true
+  },
+  "previous_timestamp_scheduling_trace": [
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-03T14:30:00Z",
+      "previous_before_scheduling": "2017-02-03T05:00:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-03T14:30:00Z"
+    },
+    {
+      "native_weekly_scheduled": true,
+      "previous_after_cycle": "2017-02-06T05:00:00Z",
+      "previous_before_scheduling": "2017-02-03T14:30:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": true,
+      "terminal_failure": null,
+      "timestamp": "2017-02-06T05:00:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-07T05:00:00Z",
+      "previous_before_scheduling": "2017-02-06T14:30:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-07T05:00:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-07T14:30:00Z",
+      "previous_before_scheduling": "2017-02-07T05:00:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-07T14:30:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-08T05:00:00Z",
+      "previous_before_scheduling": "2017-02-07T14:30:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-08T05:00:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-08T14:30:00Z",
+      "previous_before_scheduling": "2017-02-08T05:00:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-08T14:30:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-09T05:00:00Z",
+      "previous_before_scheduling": "2017-02-08T14:30:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-09T05:00:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-09T14:30:00Z",
+      "previous_before_scheduling": "2017-02-09T05:00:00Z",
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "terminal_failure": null,
+      "timestamp": "2017-02-09T14:30:00Z"
+    },
+    {
+      "native_weekly_scheduled": false,
+      "previous_after_cycle": "2017-02-10T05:00:00Z",
+      "previous_before_scheduling": "2017-02-09T14:30:00Z",
+      "r46_extra_boundary_scheduled": true,
+      "r46_restoration_reached": false,
+      "scheduled": true,
+      "terminal_failure": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+      "timestamp": "2017-02-10T05:00:00Z"
+    }
+  ],
+  "repair": {
+    "recommendation": "Repair design deferred to independent orchestrator review.",
+    "selected": false
+  },
+  "root_cause": {
+    "classification": "ROOT_CAUSE_STILL_UNPROVEN",
+    "evidence": [
+      "minimum history is supported on 2017-02-02T05:00:00Z before the apparent 2017-02-06 cadence",
+      "2017-02-06 is a native ISO-week boundary and its SPY history count is 276",
+      "the frozen product construction has a non-empty product universe and runtime hash before the engine run; the exact hash and membership were not persisted",
+      "exact streamed observation membership depends on the frozen strategy ranker output, which was not persisted and was not replayed",
+      "the M3 observation artifacts are not the R46 config contract and were not used as substitutes",
+      "2017-02-10 is an R46 extra boundary whose observation override bypasses the normal completeness set and reaches the missing-incumbent event branch",
+      "no persisted Feb 6 decision-gate trace or completeness warning identifies the skipped gate"
+    ],
+    "proven": false,
+    "rejected_hypothesis": "PRE_FIRST_NATIVE_INCUMBENT_TARGET_EVENT_BOUNDARY",
+    "repair_selected": false,
+    "subclassification": "EXACT_R46_RUNTIME_OBSERVATION_AND_UNIVERSE_SNAPSHOT_NOT_PERSISTED"
+  },
+  "schema_version": "r46-v3-incumbent-decision-pipeline-diagnosis-v1",
+  "scope": {
+    "alpha_scores_computed": false,
+    "classification": "OUTCOME_FREE_DECISION_GATE_DIAGNOSIS",
+    "economic_execution": false,
+    "engine_loop_invoked": false,
+    "performance_outcomes_computed": false,
+    "portfolio_weights_computed": false,
+    "real_historical_decision_path_replayed": false,
+    "strategy_decide_invoked": false
+  },
+  "source_commits": {
+    "C_AUTH": "e209fa3343ad6a2376efb2860e1b25923d407b9f",
+    "C_FREEZE": "d762770cdc3a7d9717600b49110d5bcfd7309e58",
+    "C_GATE": "093be49158d2d9a0af10a770e0317761a44f80db",
+    "C_RESULT": "6d01cade2e284905b13a2cb6e1ef4b325b3134a6",
+    "C_SRC": "5871c2e121891784107ec0f7d8103f4e73f54cc0",
+    "diagnostic_parent_commit": "d3a65ddbc535dfea86dcfbc26e0c5b94a1aa2c6e"
+  },
+  "source_hashes": {
+    "incumbent_v5": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "physical_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "source_files": {
+      "config/settings.yaml": {
+        "actual_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+        "expected_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+        "matches": true,
+        "role": "frozen_config"
+      },
+      "scripts/research/r46_treasury_auction_unwind_tlt_v2_2026_09_10.py": {
+        "actual_sha256": "bc69bb84afeba3ecd4e0e0ae79754a83579e525b0f0441bb54b454248fcf4a6e",
+        "expected_sha256": "bc69bb84afeba3ecd4e0e0ae79754a83579e525b0f0441bb54b454248fcf4a6e",
+        "matches": true,
+        "role": "frozen_v2_economic_runner"
+      },
+      "scripts/research/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py": {
+        "actual_sha256": "3612e080d74bc48137d7ae8600df1ea98eeedaa8c7d37e3d246c8b375c94f539",
+        "expected_sha256": "3612e080d74bc48137d7ae8600df1ea98eeedaa8c7d37e3d246c8b375c94f539",
+        "matches": true,
+        "role": "v3_runner"
+      },
+      "src/parayabuck/backtest/portfolio_engine.py": {
+        "actual_sha256": "7f6fb7a2e062212d4898c58e4fb0021b27d9655204b19efa179b39f26ba4c602",
+        "expected_sha256": "7f6fb7a2e062212d4898c58e4fb0021b27d9655204b19efa179b39f26ba4c602",
+        "matches": true,
+        "role": "portfolio_engine"
+      },
+      "src/parayabuck/backtest/product.py": {
+        "actual_sha256": "9eff2bd4b040be15c1d7d72f50b247d3767e407d741a011512d4d1470bdd1150",
+        "expected_sha256": "9eff2bd4b040be15c1d7d72f50b247d3767e407d741a011512d4d1470bdd1150",
+        "matches": true,
+        "role": "product_backtest_seam"
+      },
+      "src/parayabuck/backtest/universe.py": {
+        "actual_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0",
+        "expected_sha256": "a4edbdb5ff703bef3b5b637086b658c102eaa8dc0b173ab92e243473092666b0",
+        "matches": true,
+        "role": "pit_universe_support"
+      },
+      "src/parayabuck/portfolio/base.py": {
+        "actual_sha256": "547e716e9f1abc603e439d9eee7334e9e43964595b2ec534aea7c87f201f3900",
+        "expected_sha256": "547e716e9f1abc603e439d9eee7334e9e43964595b2ec534aea7c87f201f3900",
+        "matches": true,
+        "role": "strategy_base"
+      },
+      "src/parayabuck/portfolio/equity_residual_momentum.py": {
+        "actual_sha256": "64979afca3f0a72d019257395956d70578dda3779cac7f80bcbcfb046177fe0b",
+        "expected_sha256": "64979afca3f0a72d019257395956d70578dda3779cac7f80bcbcfb046177fe0b",
+        "matches": true,
+        "role": "incumbent_strategy_support"
+      },
+      "src/parayabuck/portfolio/equity_residual_momentum_v3.py": {
+        "actual_sha256": "b04de53026c715cf2c99205f50336c361dc8e1ac7b9f1eb2ff9b3a02cb26f9bc",
+        "expected_sha256": "b04de53026c715cf2c99205f50336c361dc8e1ac7b9f1eb2ff9b3a02cb26f9bc",
+        "matches": true,
+        "role": "unchanged_incumbent_strategy"
+      },
+      "src/parayabuck/portfolio/models.py": {
+        "actual_sha256": "e0314a4874f326cb73e5a8c12698983bc36d4c22422bf96cece6d5182ab3ac97",
+        "expected_sha256": "e0314a4874f326cb73e5a8c12698983bc36d4c22422bf96cece6d5182ab3ac97",
+        "matches": true,
+        "role": "portfolio_models"
+      },
+      "src/parayabuck/universe/observation_set.py": {
+        "actual_sha256": "157439ec02346ab2bfa7daf1a7b4f48b1e8d717fae8de6643c7266e5e1db466d",
+        "expected_sha256": "157439ec02346ab2bfa7daf1a7b4f48b1e8d717fae8de6643c7266e5e1db466d",
+        "matches": true,
+        "role": "observation_support"
+      }
+    },
+    "v2_package": {
+      "canonical_sha256": "83a9d63e834dbbbb0a92249235bca25953483ee9f96cc851e9ca01304a00d7e4",
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_data_package.json"
+    },
+    "v3_execution_contract": {
+      "canonical_sha256": "95b18f4f14673448dc584ae614587e9a095b698206a8f2868ad9bef8ff502e58",
+      "path": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_execution_contract.json",
+      "physical_sha256": "98114b212997f86b72cf0b3b3de6841ef990050ce6401b771b81225ee3d8e825"
+    },
+    "v3_failure_receipt": {
+      "canonical_sha256": "b2b3e4fb320b954cce1914e1bd09e9379a2f6d7d68331bf1e7a126f0c29a48f9",
+      "path": "data/research_receipts/r46_v3_execution_failure_incident_2026_09_14.json"
+    }
+  },
+  "status": "ROOT_CAUSE_STILL_UNPROVEN",
+  "systemic_scan": {
+    "materializable": null,
+    "other_pre_decide_skipped": null,
+    "pre_support_weekly_cadence_count": 57,
+    "r46_boundaries_before_first_actual_materializable_target": {
+      "count": 1,
+      "status": "UNPROVEN_FIRST_ACTUAL_TARGET_NOT_IDENTIFIED"
+    },
+    "r46_boundaries_in_window": 1,
+    "scope": "FULL_FROZEN_TIMESTAMP_UNION_AFTER_MINIMUM_HISTORY_SUPPORT",
+    "skipped_observation_completeness": null,
+    "skipped_product_universe": 0,
+    "skipped_support": 0,
+    "supported_weekly_cadence_count": 495,
+    "unresolved_supported_weekly_gate_count": 495,
+    "would_reach_strategy_decide": null
+  },
+  "timeline_conclusions": {
+    "feb03_to_feb06_data_alignment": {
+      "feb03_minus_feb06": [],
+      "feb03_symbol_count": 1722,
+      "feb06_minus_feb03": [],
+      "feb06_symbol_count": 1722,
+      "not_exact_runtime_observation_membership": true
+    },
+    "feb03_to_feb10_data_alignment": {
+      "feb03_minus_feb10": [],
+      "feb10_minus_feb03": [
+        "FBM",
+        "XMX"
+      ],
+      "feb10_symbol_count": 1724
+    },
+    "first_actual_materializable_native_incumbent_target_timestamp": null,
+    "first_actual_materializable_reason": "The exact R46 observation membership and runtime universe hash were not persisted; therefore a history-supported or apparent cadence timestamp cannot be promoted to an actual materializable target.",
+    "first_actual_materializable_status": "NOT_PROVABLE_FROM_PERSISTED_METADATA",
+    "first_apparent_native_weekly_cadence_timestamp": "2017-02-06T05:00:00Z",
+    "first_history_supported_spy_history_count": 274,
+    "first_history_supported_timestamp": "2017-02-02T05:00:00Z"
+  },
+  "timestamp_gate_trace": [
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-01T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-01-31T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-01T05:00:00Z",
+        "maximum_observed_equity_history_length": 273,
+        "minimum_required_history": 274,
+        "spy_history_count": 273
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-01T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-01-31T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": false,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-01T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-01T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-01T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-01T05:00:00Z",
+        "maximum_observed_equity_history_length": 273,
+        "minimum_required_history": 274,
+        "spy_history_count": 273
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-01T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-01T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": false,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-01T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-02T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-01T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-02T05:00:00Z",
+        "maximum_observed_equity_history_length": 274,
+        "minimum_required_history": 274,
+        "spy_history_count": 274
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-02T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-01T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-02T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-02T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-02T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-02T05:00:00Z",
+        "maximum_observed_equity_history_length": 274,
+        "minimum_required_history": 274,
+        "spy_history_count": 274
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-02T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-02T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-02T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-03T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-02T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-03T05:00:00Z",
+        "maximum_observed_equity_history_length": 275,
+        "minimum_required_history": 274,
+        "spy_history_count": 275
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-03T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-02T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-03T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-03T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-03T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-03T05:00:00Z",
+        "maximum_observed_equity_history_length": 275,
+        "minimum_required_history": 274,
+        "spy_history_count": 275
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        5
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-03T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-03T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-03T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "UNPROVEN_EXACT_EXPECTED_SET",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-06T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-03T14:30:00Z",
+      "exact_skip_reason": "ROOT_CAUSE_STILL_UNPROVEN_EXACT_R46_OBSERVATION_METADATA_MISSING",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-06T05:00:00Z",
+        "maximum_observed_equity_history_length": 276,
+        "minimum_required_history": 274,
+        "spy_history_count": 276
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "UNKNOWN",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": true,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "PASS",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-06T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-03T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": true,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": null,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-06T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": null
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-06T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-06T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-06T05:00:00Z",
+        "maximum_observed_equity_history_length": 276,
+        "minimum_required_history": 274,
+        "spy_history_count": 276
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-06T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-06T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-06T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-07T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-06T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-07T05:00:00Z",
+        "maximum_observed_equity_history_length": 277,
+        "minimum_required_history": 274,
+        "spy_history_count": 277
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-07T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-06T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-07T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-07T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-07T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-07T05:00:00Z",
+        "maximum_observed_equity_history_length": 277,
+        "minimum_required_history": 274,
+        "spy_history_count": 277
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-07T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-07T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-07T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-08T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-07T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-08T05:00:00Z",
+        "maximum_observed_equity_history_length": 278,
+        "minimum_required_history": 274,
+        "spy_history_count": 278
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-08T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-07T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-08T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-08T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-08T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-08T05:00:00Z",
+        "maximum_observed_equity_history_length": 278,
+        "minimum_required_history": 274,
+        "spy_history_count": 278
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-08T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-08T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-08T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-09T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-08T14:30:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-09T05:00:00Z",
+        "maximum_observed_equity_history_length": 279,
+        "minimum_required_history": 274,
+        "spy_history_count": 279
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-09T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-08T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-09T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-09T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-09T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-09T05:00:00Z",
+        "maximum_observed_equity_history_length": 279,
+        "minimum_required_history": 274,
+        "spy_history_count": 279
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "INITIAL_NONE_AND_NO_DECIDE_REACHED_BEFORE_FAILING_EVENT",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-09T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-09T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-09T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "BYPASSED_R46_EVENT_BOUNDARY_OVERRIDE",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-10T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-09T14:30:00Z",
+      "exact_skip_reason": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+      "final_decision_enum": "DECIDE_REACHED",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-10T05:00:00Z",
+        "maximum_observed_equity_history_length": 280,
+        "minimum_required_history": 274,
+        "spy_history_count": 280
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": true,
+      "last_incumbent_target_state_after_cycle": "NONE_PROVEN_BEFORE_EVENT",
+      "last_incumbent_target_state_proof": "NONE_PROVEN_BY_TERMINAL_FAILURE_AND_NO_RESET_PATH",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "R46_EVENT_BOUNDARY_NO_EXPECTED_SET",
+      "observation_symbol_source": "R46_EVENT_BOUNDARY_OVERRIDE",
+      "one_shot_execution_reached_timestamp": true,
+      "product_universe_available": true,
+      "product_universe_guard": "PASS",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-10T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-09T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": "ENTRY",
+      "r46_event_boundary": true,
+      "r46_extra_boundary_scheduled": true,
+      "r46_restoration_reached": false,
+      "scheduled": true,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}",
+      "timestamp": "2017-02-10T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP",
+        "R46_EVENT_MARKER_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": true
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-10T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-10T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-10T05:00:00Z",
+        "maximum_observed_equity_history_length": 280,
+        "minimum_required_history": 274,
+        "spy_history_count": 280
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        6
+      ],
+      "last_incumbent_target_remains_none": null,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "NOT_PROCESSED_AFTER_TERMINAL_FAILURE",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": false,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-10T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-10T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-10T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "UNPROVEN_EXACT_EXPECTED_SET",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-13T05:00:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-10T14:30:00Z",
+      "exact_skip_reason": "ROOT_CAUSE_STILL_UNPROVEN_EXACT_R46_OBSERVATION_METADATA_MISSING",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-13T05:00:00Z",
+        "maximum_observed_equity_history_length": 281,
+        "minimum_required_history": 274,
+        "spy_history_count": 281
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        7
+      ],
+      "last_incumbent_target_remains_none": null,
+      "last_incumbent_target_state_after_cycle": "UNKNOWN",
+      "last_incumbent_target_state_proof": "NOT_PROCESSED_AFTER_TERMINAL_FAILURE",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": true,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "one_shot_execution_reached_timestamp": false,
+      "product_universe_available": true,
+      "product_universe_guard": "PASS",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-13T05:00:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-10T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": true,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": null,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-13T05:00:00Z",
+      "timestamp_sources": [
+        "V5_INCUMBENT_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": null
+    },
+    {
+      "complete_observation_symbol_count": null,
+      "completeness_gate": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "current_observation_symbol_count": null,
+      "effective_observation_symbol_count": null,
+      "engine_previous_timestamp_after_cycle": "2017-02-13T14:30:00Z",
+      "engine_previous_timestamp_before_scheduling": "2017-02-13T05:00:00Z",
+      "exact_skip_reason": "NOT_SCHEDULED_NO_INTERMEDIATE_RISK_REBALANCE",
+      "final_decision_enum": "SKIPPED_OTHER_PRE_DECIDE_GATE",
+      "history_length_relevant_to_support": {
+        "exact_runtime_context_maximum": "NOT_PERSISTED",
+        "history_source_timestamp": "2017-02-13T05:00:00Z",
+        "maximum_observed_equity_history_length": 281,
+        "minimum_required_history": 274,
+        "spy_history_count": 281
+      },
+      "intermediate_risk_gate_matters": false,
+      "iso_week": [
+        2017,
+        7
+      ],
+      "last_incumbent_target_remains_none": null,
+      "last_incumbent_target_state_after_cycle": "NONE",
+      "last_incumbent_target_state_proof": "NOT_PROCESSED_AFTER_TERMINAL_FAILURE",
+      "missing_observation_symbol_count": null,
+      "missing_observation_symbols": null,
+      "native_weekly_scheduled": false,
+      "observation_metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+      "observation_symbol_source": "NOT_EVALUATED_NON_SCHEDULED_NO_INTERMEDIATE_RISK",
+      "one_shot_execution_reached_timestamp": false,
+      "product_universe_available": true,
+      "product_universe_guard": "NOT_EVALUATED_NON_SCHEDULED",
+      "product_universe_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "product_universe_snapshot": {
+        "exact_snapshot_persisted": false,
+        "membership_count": null,
+        "metadata_status": "UNAVAILABLE_EXACT_R46_RUNTIME_SNAPSHOT_NOT_PERSISTED",
+        "observation_membership_count": null,
+        "product_guard": "PASS_BY_FROZEN_CONSTRUCTION",
+        "snapshot_effective_at_expected": "2017-02-13T14:30:00Z",
+        "strict_prior_data_timestamp_expected": "2017-02-13T05:00:00Z",
+        "universe_version": null
+      },
+      "r46_boundary_type": null,
+      "r46_event_boundary": false,
+      "r46_extra_boundary_scheduled": false,
+      "r46_restoration_reached": null,
+      "scheduled": false,
+      "stale_observation_symbol_count": null,
+      "stale_observation_symbols": null,
+      "strategy_decide_invoked_by_diagnostic": false,
+      "strategy_supports": true,
+      "target_could_materialize": false,
+      "terminal_failure_observed_at_timestamp": null,
+      "timestamp": "2017-02-13T14:30:00Z",
+      "timestamp_sources": [
+        "TLT_REGULAR_OPEN_TIMESTAMP"
+      ],
+      "universe_version": null,
+      "universe_version_status": "RUNTIME_HASH_NOT_PERSISTED",
+      "would_reach_strategy_decide": false
+    }
+  ],
+  "v3_failure": {
+    "aborted_sidecar_present": false,
+    "consumed_sidecar_present": false,
+    "failure_commit": "6d01cade2e284905b13a2cb6e1ef4b325b3134a6",
+    "persisted_economic_outputs_present": false,
+    "rerun_performed": false,
+    "reserved_sidecar_physical_sha256": "5b20573007c76d3928d71c02c81756562db07293e52ccf523263efb81f54d3ed",
+    "reserved_transition_sha256": "4f852d9cda349c05782142c6289e0da00f1a501948bcb23d26308283e6faa964",
+    "runner_exit_code": 1,
+    "runner_invocation_count": 1,
+    "terminal_error": "{\"error\": \"BLOCKED_R46_INCUMBENT_BASE_MISSING\", \"status\": \"BLOCKED\"}"
+  },
+  "v3_research_id": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
+}

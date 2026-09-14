@@ -1,0 +1,402 @@
+{
+  "$id": "parayabuck://research/r46-v3-recovery-execution-contract",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "const": "data/research_receipts/r46_v3_execution_authorization_2026_09_14.json"
+        },
+        "present": {
+          "const": false
+        },
+        "schema": {
+          "const": "r46-v3-recovery-execution-authorization-v1"
+        }
+      },
+      "required": ["schema", "path", "present"],
+      "type": "object"
+    },
+    "boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "economic_outcomes_accessed": {
+          "const": false
+        },
+        "economic_run": {
+          "const": false
+        },
+        "no_auto_promotion": {
+          "const": true
+        },
+        "paper_live_untouched": {
+          "const": true
+        },
+        "promotion": {
+          "const": false
+        },
+        "research_only": {
+          "const": true
+        }
+      },
+      "required": [
+        "economic_outcomes_accessed",
+        "economic_run",
+        "research_only",
+        "paper_live_untouched",
+        "promotion",
+        "no_auto_promotion"
+      ],
+      "type": "object"
+    },
+    "candidate_id": {
+      "const": "R46"
+    },
+    "canonical_execution_root": {
+      "const": "/Users/batuhankiskac/Desktop/ParayaBuck"
+    },
+    "dependency_lock": {
+      "additionalProperties": false,
+      "properties": {
+        "git_blob_sha256": {
+          "pattern": "^[0-9a-f]{40}$",
+          "type": "string"
+        },
+        "path": {
+          "const": "uv.lock"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": ["path", "sha256", "git_blob_sha256"],
+      "type": "object"
+    },
+    "economic_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_weight": {
+          "const": 0.025
+        },
+        "caps": {
+          "additionalProperties": false,
+          "properties": {
+            "combined_cash_min": {
+              "const": 0.4
+            },
+            "combined_gross_max": {
+              "const": 0.6
+            },
+            "equity_gross_max": {
+              "const": 0.55
+            },
+            "total_positions_max": {
+              "const": 6
+            }
+          },
+          "required": [
+            "equity_gross_max",
+            "combined_gross_max",
+            "combined_cash_min",
+            "total_positions_max"
+          ],
+          "type": "object"
+        },
+        "cost_multipliers": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "event_count": {
+          "const": 127
+        },
+        "event_universe_digest": {
+          "const": "f726f27aaece6532de1581b5830e38cceba67c75ae02dfa79fedaffc0e9d4b0b"
+        },
+        "historical_cutoff": {
+          "const": "2026-07-31T23:59:59Z"
+        },
+        "no_parameter_search": {
+          "const": true
+        },
+        "primary_estimand": {
+          "const": "initial_equity_portfolio_contribution"
+        },
+        "resampling_seeds": {
+          "additionalProperties": false,
+          "properties": {
+            "bootstrap": {
+              "const": 4601
+            },
+            "permutation": {
+              "const": 4602
+            },
+            "placebo": {
+              "const": 4603
+            }
+          },
+          "required": ["bootstrap", "permutation", "placebo"],
+          "type": "object"
+        },
+        "v2_freeze_commit": {
+          "const": "ea8e86eabbf499977aadf8ebc81ccbb89502aab4"
+        },
+        "v2_source_commit": {
+          "const": "e10816ec08cc6b9c36000634c0e10a138d30f67e"
+        }
+      },
+      "required": [
+        "v2_source_commit",
+        "v2_freeze_commit",
+        "event_universe_digest",
+        "event_count",
+        "historical_cutoff",
+        "candidate_weight",
+        "cost_multipliers",
+        "caps",
+        "primary_estimand",
+        "resampling_seeds",
+        "no_parameter_search"
+      ],
+      "type": "object"
+    },
+    "execution_root": {
+      "const": "/Users/batuhankiskac/Desktop/ParayaBuck"
+    },
+    "freeze_commit": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "freeze_commit_binding": {
+      "const": "HEAD_AT_FREEZE"
+    },
+    "incident_receipt": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_sha256": {
+          "const": "bdd668747423960faddbb31982566e6c49fcc3b64fd32bb29c40775a621acb8b"
+        },
+        "path": {
+          "const": "data/research_receipts/r46_v2_reservation_incident_2026_09_14.json"
+        },
+        "physical_sha256": {
+          "const": "7be069ba5a29a79313bdf77b3355ff5d5fdf319b624a3d5b6da30291609d74c0"
+        }
+      },
+      "required": ["path", "physical_sha256", "canonical_sha256"],
+      "type": "object"
+    },
+    "integrity": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": ["contract_sha256"],
+      "type": "object"
+    },
+    "parent_governance_commit": {
+      "const": "640097e30db857a011caa5d623e08541b2793cc8"
+    },
+    "parent_v2_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "family_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_family_registry.json"
+        },
+        "family_sha256": {
+          "const": "eeda04d795d099e7571bdbeae0ccaa2dc55141ec2f15d1f8afdc507d60b9acae"
+        },
+        "governance_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10.json"
+        },
+        "governance_sha256": {
+          "const": "92f7ecd5b7f6cdd2428ee221c3b4891f10d5d7ab6f16a5fcb2be952753557c35"
+        },
+        "package_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_data_package.json"
+        },
+        "package_sha256": {
+          "const": "c67cfdfeebc4cbc0847d5e2e6fbdebdf6928e04b3e5103606eb8bd0c3d03f6c6"
+        },
+        "reservation_physical_sha256": {
+          "const": "434b5ef71015d132516474a11078c4e5866d3c91e7d265a7f7c3b20d655141e4"
+        },
+        "reservation_transition_sha256": {
+          "const": "040d13dcba81e3d52e7d105aea9250a3c565e7b87e9b6af5c44e83b0dec28405"
+        },
+        "reservation_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json"
+        },
+        "statistics_path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_statistics_plan.json"
+        },
+        "statistics_sha256": {
+          "const": "21ebb2e453bd3587388fa800919d5ca24eb9fab4d29b21c106d8e1ce8a015331"
+        }
+      },
+      "required": [
+        "governance_path",
+        "governance_sha256",
+        "package_path",
+        "package_sha256",
+        "statistics_path",
+        "statistics_sha256",
+        "family_path",
+        "family_sha256",
+        "reservation_path",
+        "reservation_physical_sha256",
+        "reservation_transition_sha256"
+      ],
+      "type": "object"
+    },
+    "recovery_generation": {
+      "const": 1
+    },
+    "recovery_governance": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_sha256": {
+          "const": "bc49ab40e00e21deb8b4ef305c18400665d4154d4c1077a8a31dbc7da452c3db"
+        },
+        "path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.json"
+        }
+      },
+      "required": ["path", "canonical_sha256"],
+      "type": "object"
+    },
+    "research_id": {
+      "const": "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
+    },
+    "schema_version": {
+      "const": "r46-v3-recovery-execution-contract-v1"
+    },
+    "source_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "source_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "git_blob_sha256": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": ["path", "role", "sha256", "git_blob_sha256"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "v3_state": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_sha256": {
+          "const": "0165ea19b68a5e913927cb5016a703ccc9d2be73ba01a7515372727b0bdb9421"
+        },
+        "path": {
+          "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14_one_shot_state.json"
+        },
+        "physical_sha256": {
+          "const": "59148f1e32af95ed52bbcea9db802470d7b9b5156a58ba7ffe25d8de824b6ac7"
+        },
+        "status": {
+          "const": "SEALED_UNUSED"
+        }
+      },
+      "required": ["path", "physical_sha256", "canonical_sha256", "status"],
+      "type": "object"
+    },
+    "v3_governance_path": {
+      "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.json"
+    },
+    "v3_governance_sha256": {
+      "const": "bc49ab40e00e21deb8b4ef305c18400665d4154d4c1077a8a31dbc7da452c3db"
+    },
+    "v3_schema_path": {
+      "const": "data/research_manifests/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.schema.json"
+    },
+    "v3_schema_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "const": "arm64"
+        },
+        "dependency_lock": {
+          "const": "uv.lock"
+        },
+        "locale": {
+          "const": "C.UTF-8"
+        },
+        "os": {
+          "const": "Darwin"
+        },
+        "python": {
+          "const": "3.13.12"
+        },
+        "timezone": {
+          "const": "Europe/Istanbul"
+        }
+      },
+      "required": ["os", "architecture", "python", "timezone", "locale", "dependency_lock"],
+      "type": "object"
+    },
+    "frozen_output_directory": {
+      "const": "/Users/batuhankiskac/Desktop/ParayaBuck/data/research/runs/r46_treasury_auction_unwind_tlt_v3_recovery_final_2026_09_14"
+    }
+  },
+  "required": [
+    "schema_version",
+    "research_id",
+    "candidate_id",
+    "recovery_generation",
+    "parent_governance_commit",
+    "source_commit",
+    "freeze_commit",
+    "freeze_commit_binding",
+    "canonical_execution_root",
+    "execution_root",
+    "frozen_output_directory",
+    "environment",
+    "dependency_lock",
+    "source_files",
+    "recovery_governance",
+    "v3_governance_path",
+    "v3_governance_sha256",
+    "v3_schema_path",
+    "v3_schema_sha256",
+    "v3_state",
+    "incident_receipt",
+    "parent_v2_evidence",
+    "economic_identity",
+    "authorization",
+    "boundary",
+    "integrity"
+  ],
+  "type": "object"
+}

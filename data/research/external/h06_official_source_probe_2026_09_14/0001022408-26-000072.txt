@@ -1,0 +1,218 @@
+<SEC-DOCUMENT>0001022408-26-000072.txt : 20260731
+<SEC-HEADER>0001022408-26-000072.hdr.sgml : 20260731
+<ACCEPTANCE-DATETIME>20260731165937
+ACCESSION NUMBER:		0001022408-26-000072
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20260729
+FILED AS OF DATE:		20260731
+DATE AS OF CHANGE:		20260731
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			Marion Elaine D
+		CENTRAL INDEX KEY:			0001444430
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-34167
+		FILM NUMBER:		261229337
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O EPLUS INC.
+		STREET 2:		13595 DULLES TECHNOLOGY DR
+		CITY:			HERNDON
+		STATE:			VA
+		ZIP:			20171
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			EPLUS INC
+		CENTRAL INDEX KEY:			0001022408
+		STANDARD INDUSTRIAL CLASSIFICATION:	WHOLESALE-COMPUTER & PERIPHERAL EQUIPMENT & SOFTWARE [5045]
+		ORGANIZATION NAME:           	07 Trade & Services
+		EIN:				541817218
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			0331
+
+	BUSINESS ADDRESS:	
+		STREET 1:		13595 DULLES TECHNOLOGY DRIVE
+		CITY:			HERNDON
+		STATE:			VA
+		ZIP:			20171-3413
+		BUSINESS PHONE:		7039848400
+
+	MAIL ADDRESS:	
+		STREET 1:		13595 DULLES TECHNOLOGY DRIVE
+		CITY:			HERNDON
+		STATE:			VA
+		ZIP:			20171-3413
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	MLC HOLDINGS INC
+		DATE OF NAME CHANGE:	19960906
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>form4.xml
+<DESCRIPTION>FORM 4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-07-29</periodOfReport>
+
+    <issuer>
+        <issuerCik>0001022408</issuerCik>
+        <issuerName>EPLUS INC</issuerName>
+        <issuerTradingSymbol>PLUS</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001444430</rptOwnerCik>
+            <rptOwnerName>Marion Elaine D</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>13595 DULLES TECHNOLOGY DRIVE</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>HERNDON</rptOwnerCity>
+            <rptOwnerState>VA</rptOwnerState>
+            <rptOwnerZipCode>20171-3413</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>true</isOfficer>
+            <isTenPercentOwner>false</isTenPercentOwner>
+            <isOther>false</isOther>
+            <officerTitle>CHIEF FINANCIAL OFFICER</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>true</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-07-29</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>2394</value>
+                    <footnoteId id="F1"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>95.2179</value>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>91441</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Elaine D. Marion Trust</value>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-07-29</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>false</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>424</value>
+                    <footnoteId id="F1"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>95.2473</value>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By IRA</value>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>34801</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">The transactions reported in this Form 4 were effected pursuant to a Rule 10b5-1 trading plan adopted by the reporting person on November 18, 2025.</footnote>
+        <footnote id="F2">The transaction was executed in multiple trades at prices ranging from $95.00 to $95.56 per share, inclusive. The price reported above reflects the weighted average purchase price. The reporting person hereby undertakes to provide upon request by the SEC staff, the issuer or a security holder of the issuer, full information regarding the number of shares purchased and prices at which the transaction was effected.</footnote>
+        <footnote id="F3">The shares are held in a revocable trust, of which the reporting person and her spouse are the sole trustees and beneficiaries.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Elaine D. Marion</signatureName>
+        <signatureDate>2026-07-31</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

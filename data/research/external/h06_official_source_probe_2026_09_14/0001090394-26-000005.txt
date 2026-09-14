@@ -1,0 +1,206 @@
+<SEC-DOCUMENT>0001090394-26-000005.txt : 20260731
+<SEC-HEADER>0001090394-26-000005.hdr.sgml : 20260731
+<ACCEPTANCE-DATETIME>20260731134855
+ACCESSION NUMBER:		0001090394-26-000005
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20260730
+FILED AS OF DATE:		20260731
+DATE AS OF CHANGE:		20260731
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			BROWN ROBERT G/
+		CENTRAL INDEX KEY:			0001090394
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	000-27408
+		FILM NUMBER:		261227630
+
+	FORMER NAME:	
+		FORMER CONFORMED NAME:	BROWN ROBERTG //
+		DATE OF NAME CHANGE:	19990713
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			SPAR Group, Inc.
+		CENTRAL INDEX KEY:			0001004989
+		STANDARD INDUSTRIAL CLASSIFICATION:	SERVICES-BUSINESS SERVICES, NEC [7389]
+		ORGANIZATION NAME:           	07 Trade & Services
+		EIN:				330684451
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		110 EAST BOULEVARD
+		STREET 2:		SUITE 1600
+		CITY:			CHARLOTTE
+		STATE:			NC
+		ZIP:			28203
+		BUSINESS PHONE:		704-837-1651
+
+	MAIL ADDRESS:	
+		STREET 1:		110 EAST BOULEVARD
+		STREET 2:		SUITE 1600
+		CITY:			CHARLOTTE
+		STATE:			NC
+		ZIP:			28203
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	SPAR GROUP INC
+		DATE OF NAME CHANGE:	19990713
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	PIA MERCHANDISING SERVICES INC
+		DATE OF NAME CHANGE:	19951220
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<DESCRIPTION>PRIMARY DOCUMENT
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-07-30</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001004989</issuerCik>
+        <issuerName>SPAR Group, Inc.</issuerName>
+        <issuerTradingSymbol>SGRP</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001090394</rptOwnerCik>
+            <rptOwnerName>BROWN ROBERT G/</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O SPAR GROUP, INC.</rptOwnerStreet1>
+            <rptOwnerStreet2>110 EAST BOULEVARD, SUITE 1600</rptOwnerStreet2>
+            <rptOwnerCity>CHARLOTTE</rptOwnerCity>
+            <rptOwnerState>NC</rptOwnerState>
+            <rptOwnerZipCode>28203</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock, $.01 par value</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-07-30</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>G</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness>
+                <value></value>
+            </transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>135000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F1"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>2742389</value>
+                    <footnoteId id="F2"/>
+                    <footnoteId id="F3"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock, $.01 par value</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>3000000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Innovative Global Technologies LLC.</value>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock, $.01 par value</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>538194</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By SPAR Business Services, Inc.</value>
+                    <footnoteId id="F5"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Not applicable.</footnote>
+        <footnote id="F2">Includes 45,000 shares owned by Jean Brown, the wife of Robert G. Brown, as to which Robert G. Brown disclaims any beneficial ownership.</footnote>
+        <footnote id="F3">Includes estimated shares deemed to be beneficially owned by Robert and Jean Brown in a defined benefit pension trust due to receiving a pension.</footnote>
+        <footnote id="F4">Robert G. Brown is a Manager of Innovative Global Technologies LLC.</footnote>
+        <footnote id="F5">Robert G. Brown is the controlling officer/director and a significant stockholder of SPAR Business Services, Inc. (SBS).</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>Robert G. Brown</signatureName>
+        <signatureDate>2026-07-31</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

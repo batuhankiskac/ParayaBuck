@@ -387,6 +387,15 @@ def _verify_v3_provenance(
     preflight = _load_json(preflight_path)
     if _canonical_file_hash(preflight_path, "receipt_sha256") != preflight.get("integrity", {}).get("receipt_sha256"):
         raise ValueError("v3_preflight_canonical_hash")
+    for path_field, hash_field, relative in (
+        ("runner_path", "runner_sha256", Path("scripts/research/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py")),
+        ("verifier_path", "verifier_sha256", Path("scripts/research/verify_r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py")),
+        ("preflight_path", "preflight_sha256", Path("scripts/research/r46_v3_execution_preflight_2026_09_14.py")),
+        ("dependency_lock_path", "dependency_lock_sha256", Path("uv.lock")),
+    ):
+        implementation_path = _resolve(root, str(relative), hash_field)
+        if preflight.get(path_field) != str(relative) or preflight.get(hash_field) != _sha256_file(implementation_path):
+            raise ValueError("v3_preflight_source_provenance")
     incident_path = _resolve(root, V3_INCIDENT_REL, "v2_incident")
     if (
         _sha256_file(incident_path) != V3_INCIDENT_PHYSICAL_SHA256

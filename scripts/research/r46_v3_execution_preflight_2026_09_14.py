@@ -5,18 +5,22 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import locale
 import os
 import platform
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.research import r46_v3_recovery_preflight_2026_09_14 as recovery_validator
-
 REPO = Path(__file__).resolve().parents[2]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+recovery_validator = importlib.import_module("scripts.research.r46_v3_recovery_preflight_2026_09_14")
 CANONICAL_EXECUTION_ROOT = Path("/Users/batuhankiskac/Desktop/ParayaBuck")
 V3_RESEARCH_ID = "r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14"
 CANDIDATE_ID = "R46"
@@ -55,6 +59,9 @@ V3_CONTRACT_SCHEMA_REL = Path(
 V3_PREFLIGHT_REL = Path("data/research_receipts/r46_v3_recovery_preflight_2026_09_14.json")
 V3_AUTHORIZATION_REL = Path("data/research_receipts/r46_v3_execution_authorization_2026_09_14.json")
 V3_OUTPUT_DIR_REL = Path("data/research/runs/r46_treasury_auction_unwind_tlt_v3_recovery_final_2026_09_14")
+V3_RUNNER_REL = Path("scripts/research/r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py")
+V3_VERIFIER_REL = Path("scripts/research/verify_r46_treasury_auction_unwind_tlt_v3_recovery_2026_09_14.py")
+V3_PREFLIGHT_IMPL_REL = Path("scripts/research/r46_v3_execution_preflight_2026_09_14.py")
 V2_STATE_REL = recovery_validator.V2_STATE_REL
 V2_RESERVED_REL = recovery_validator.V2_RESERVED_REL
 V2_CONSUMED_REL = recovery_validator.V2_CONSUMED_REL
@@ -187,6 +194,7 @@ def _validate_contract(root: Path, identity_root: Path, blockers: list[str]) -> 
     if (
         contract.get("canonical_execution_root") != str(CANONICAL_EXECUTION_ROOT)
         or contract.get("parent_governance_commit") != PARENT_GOVERNANCE_COMMIT
+        or contract.get("v2_package_canonical_sha256") != V2_PACKAGE_SHA256
         or contract.get("frozen_output_directory") != str(identity_root / V3_OUTPUT_DIR_REL)
         or contract.get("authorization", {}).get("schema") != AUTHORIZATION_SCHEMA
         or contract.get("authorization", {}).get("present") is not False
@@ -462,6 +470,22 @@ def validate_execution_preflight(
         "v3_state_physical_sha256": sha256_file(v3_state_path) if v3_state_path.is_file() else None,
         "v3_state_canonical_sha256": V3_STATE_CANONICAL_SHA256 if v3_state_path.is_file() else None,
         "v3_state_status": "SEALED_UNUSED" if v3_state_path.is_file() else None,
+        "runner_path": str(V3_RUNNER_REL),
+        "runner_sha256": sha256_file(filesystem_root / V3_RUNNER_REL)
+        if (filesystem_root / V3_RUNNER_REL).is_file()
+        else None,
+        "verifier_path": str(V3_VERIFIER_REL),
+        "verifier_sha256": sha256_file(filesystem_root / V3_VERIFIER_REL)
+        if (filesystem_root / V3_VERIFIER_REL).is_file()
+        else None,
+        "preflight_path": str(V3_PREFLIGHT_IMPL_REL),
+        "preflight_sha256": sha256_file(filesystem_root / V3_PREFLIGHT_IMPL_REL)
+        if (filesystem_root / V3_PREFLIGHT_IMPL_REL).is_file()
+        else None,
+        "dependency_lock_path": "uv.lock",
+        "dependency_lock_sha256": sha256_file(filesystem_root / "uv.lock")
+        if (filesystem_root / "uv.lock").is_file()
+        else None,
         "incident_receipt_path": str(V2_INCIDENT_REL),
         "incident_receipt_sha256": V3_INCIDENT_SHA256,
         "incident_receipt_physical_sha256": V2_INCIDENT_PHYSICAL_SHA256,

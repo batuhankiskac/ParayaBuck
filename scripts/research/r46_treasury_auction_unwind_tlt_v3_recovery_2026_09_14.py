@@ -469,6 +469,20 @@ def _validate_preflight_receipt(path: Path, root: Path, contract: Mapping[str, A
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
     if receipt.get("future_output_directory") != str(_path(root, V3_OUTPUT_DIR_REL)):
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
+    source_pins = (
+        ("runner_path", "runner_sha256", V3_RUNNER_REL),
+        ("verifier_path", "verifier_sha256", V3_VERIFIER_REL),
+        ("preflight_path", "preflight_sha256", V3_PREFLIGHT_IMPL_REL),
+        ("dependency_lock_path", "dependency_lock_sha256", Path("uv.lock")),
+    )
+    for path_field, hash_field, relative in source_pins:
+        path = root / relative
+        if (
+            receipt.get(path_field) != str(relative)
+            or not path.is_file()
+            or receipt.get(hash_field) != _sha256_file(path)
+        ):
+            raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
     if receipt.get("source_commit") != contract.get("source_commit") or not _valid_hex40(receipt.get("freeze_commit")):
         raise RuntimeError("BLOCKED_V3_EXECUTION_PREFLIGHT")
     if contract.get("freeze_commit") != FREEZE_COMMIT_SENTINEL and receipt.get("freeze_commit") != contract.get(

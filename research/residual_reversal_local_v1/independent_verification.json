@@ -1,0 +1,621 @@
+{
+  "checks": [
+    {
+      "name": "protocol hash",
+      "status": "PASS"
+    },
+    {
+      "name": "baseline hash",
+      "status": "PASS"
+    },
+    {
+      "name": "production V3 source hash",
+      "status": "PASS"
+    },
+    {
+      "name": "lifetime table hash",
+      "status": "PASS"
+    },
+    {
+      "name": "corporate-action hash",
+      "status": "PASS"
+    },
+    {
+      "name": "main branch identity",
+      "status": "PASS"
+    },
+    {
+      "details": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "name": "source panel exists",
+      "status": "PASS"
+    },
+    {
+      "name": "source panel SHA-256",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "duplicates": 0,
+        "invalid": 0,
+        "normalized": 11686832,
+        "out_of_order": 0,
+        "rows": 11686832
+      },
+      "name": "source row count",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "duplicates": 0,
+        "invalid": 0,
+        "normalized": 11686832,
+        "out_of_order": 0,
+        "rows": 11686832
+      },
+      "name": "source normalized row count",
+      "status": "PASS"
+    },
+    {
+      "details": 0,
+      "name": "source positive OHLC validity",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "duplicates": 0,
+        "invalid": 0,
+        "normalized": 11686832,
+        "out_of_order": 0,
+        "rows": 11686832,
+        "same_timestamp_resets": 2659
+      },
+      "name": "source duplicate/order invariants",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "dates": 2659,
+        "symbols": 9010
+      },
+      "name": "source symbol/date counts",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "first": "2016-01-04",
+        "last": "2026-07-30",
+        "rows": 2658
+      },
+      "name": "SPY coverage receipt",
+      "status": "PASS"
+    },
+    {
+      "name": "source timeframe/market normalization",
+      "status": "PASS"
+    },
+    {
+      "name": "source valid period receipt",
+      "status": "PASS"
+    },
+    {
+      "name": "manifest data identity",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "beta_window_bars": 273,
+        "exclude_symbols": [
+          "SPY"
+        ],
+        "formation_bars": 21,
+        "ivol_reject_quantile": 0.7,
+        "max_single_weight": 0.1,
+        "rebalance_frequency": "weekly",
+        "residual_vol_window": 63,
+        "skip_bars": 0,
+        "top_n": 6
+      },
+      "name": "frozen parameter tuple",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "expected": -0.19027213177874158,
+        "score": -0.1902721317787417
+      },
+      "name": "exact 21 completed returns and zero skip",
+      "status": "PASS"
+    },
+    {
+      "name": "no positive-score gate",
+      "status": "PASS"
+    },
+    {
+      "details": [
+        [
+          -0.2,
+          "NEGATIVE"
+        ],
+        [
+          0.1,
+          "POSITIVE"
+        ]
+      ],
+      "name": "negative residual performers rank first",
+      "status": "PASS"
+    },
+    {
+      "details": [
+        [
+          -0.09999999999999998,
+          0.10000000000000009
+        ],
+        [
+          0.020000000000000018,
+          0.009803921568627416
+        ]
+      ],
+      "name": "timestamp-inner-join residual alignment",
+      "status": "PASS"
+    },
+    {
+      "name": "v3_control.json exists",
+      "status": "PASS"
+    },
+    {
+      "name": "standalone_reversal.json exists",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment.json exists",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 1x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 2x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "v3 3x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 1x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 2x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "reversal 3x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 1x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 2x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x curve ordering/finite NAV",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x ending NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x return identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x summary identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x next-bar fill ordering",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x fill cost arithmetic",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x weekly decision cadence",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x target caps and sleeve allocation",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x non-negative cash",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x final state NAV identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x realized concentration metric finite",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment 3x validation boundary",
+      "status": "PASS"
+    },
+    {
+      "name": "fresh V3 control identity",
+      "status": "PASS"
+    },
+    {
+      "name": "fresh reversal identity",
+      "status": "PASS"
+    },
+    {
+      "name": "treatment allocation receipt",
+      "status": "PASS"
+    }
+  ],
+  "failure_count": 0,
+  "status": "PASS",
+  "verifier": "research/residual_reversal_local_v1/verify_results.py"
+}

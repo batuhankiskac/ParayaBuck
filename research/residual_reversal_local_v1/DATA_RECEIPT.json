@@ -1,0 +1,103 @@
+{
+  "acquisition_method": "reused compatible local v5 panel; no network download required",
+  "actual_valid_bar_period": {
+    "end": "2026-07-31T04:00:00+00:00",
+    "start": "2016-01-04T05:00:00+00:00"
+  },
+  "adjustment_mode": "split",
+  "corporate_actions": {
+    "action_counts": {
+      "cash_dividends": 141908,
+      "forward_splits": 270,
+      "reverse_splits": 1207,
+      "stock_dividends": 61
+    },
+    "cash_dividend_actions_loaded_through_end": 141905,
+    "non_cash_actions_not_applied": 1538,
+    "source_file_size_bytes": 14713370,
+    "source_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "source_rows": 143446,
+    "source_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "treatment": "cash dividends only; split/stock/merger actions are not applied to split-adjusted prices"
+  },
+  "data_quality_gate": {
+    "duplicate_symbol_timestamp": true,
+    "finite_values": true,
+    "future_leakage_in_loader": false,
+    "positive_prices": true,
+    "split_handling_sane": true,
+    "timestamps_ordered": true,
+    "valid_ohlc": true
+  },
+  "feed": "sip",
+  "lifetime_table": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+  "lifetime_table_pit_methodology": "provider-asset-identity entity lifetime metadata; active and inactive histories retained",
+  "lifetime_table_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "normalization": {
+    "duplicate_symbol_timestamp_rows": 0,
+    "invalid_positive_ohlc_rows": 0,
+    "market_aliases": {
+      "EQUITY": "equity",
+      "equity": "equity"
+    },
+    "out_of_order_rows": 0,
+    "same_timestamp_symbol_resets": 2659,
+    "timeframe_aliases": {
+      "1Day": "1d",
+      "1d": "1d"
+    },
+    "unsupported_rows": 0,
+    "zero_placeholder_rows": 0
+  },
+  "normalized_rows": 11686832,
+  "pit_universe": {
+    "average_observation_size": 27.32543265613243,
+    "average_pool_size": 286.5500376222724,
+    "observation_strategy": {
+      "display_name": "Residual Momentum v3 (MH-RAW consensus)",
+      "market": "equity",
+      "minimum_history_bars": 274,
+      "name": "equity_residual_momentum_v3",
+      "primary_timeframe": "1d",
+      "rebalance_policy": "weekly",
+      "required_timeframes": [],
+      "supported_timeframes": [
+        "1d"
+      ],
+      "version": "3.0.0"
+    },
+    "scanner_methodology": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+    "snapshot_count": 2658,
+    "universe_hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3"
+  },
+  "provider": "Alpaca historical equity panel (local provider-identity reconstruction)",
+  "requested_period": {
+    "end": "2026-07-31",
+    "start": "2016-01-01"
+  },
+  "signal_and_execution_representation": "same split-adjusted OHLCV prices; explicit cash dividends; no split actions reapplied",
+  "source_file_size_bytes": 882354549,
+  "source_market_counts": {
+    "EQUITY": 7771468,
+    "equity": 3915364
+  },
+  "source_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+  "source_rows": 11686832,
+  "source_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "source_timeframe_counts": {
+    "1Day": 7771468,
+    "1d": 3915364
+  },
+  "spy_coverage": {
+    "first_date": "2016-01-04",
+    "last_date": "2026-07-30",
+    "missing_panel_date_examples": [
+      "2026-07-31"
+    ],
+    "missing_panel_dates": 1,
+    "valid_rows": 2658
+  },
+  "survivorship_limitations": "Broad provider-supported active/inactive coverage is not proof of complete exchange-wide delisting capture; the scanner is PIT within the supplied panel and lifetime metadata.",
+  "unique_dates": 2659,
+  "unique_symbols": 9010
+}

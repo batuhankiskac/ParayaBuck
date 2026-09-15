@@ -1,0 +1,51 @@
+{
+  "baseline_sha256": "585f063dad2a0a4547a319041363c21f142990ce3757631c432574492a611357",
+  "branch": "research/residual-reversal-local-v1",
+  "campaign": "equity_short_term_residual_reversal_v1",
+  "candidate_parameters": {
+    "beta_window_bars": 273,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "formation_bars": 21,
+    "ivol_reject_quantile": 0.7,
+    "max_single_weight": 0.1,
+    "rebalance_frequency": "weekly",
+    "residual_vol_window": 63,
+    "skip_bars": 0,
+    "top_n": 6
+  },
+  "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "cost_multipliers": [
+    1,
+    2,
+    3
+  ],
+  "data_source_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "elapsed_seconds": 253.5038559436798,
+  "engine_bar_count": 1087280,
+  "engine_stream_symbol_count": 448,
+  "head_sha_at_run": "8123694a71d8fbb0e520f13b4e1692e932754e97",
+  "lifetime_table_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "main_sha": "8123694a71d8fbb0e520f13b4e1692e932754e97",
+  "production_source": "src/parayabuck/portfolio/equity_residual_momentum_v3.py",
+  "production_source_sha256": "408de47f8a0e0ac20d926ed3e7d96f01b5747c5db8863ad5e35c146a3cc6b1bc",
+  "protocol_sha256": "bf8a47c20d35835920fb15ac2e75eaf0ea5ebaec3a4f79a0c62e9aa515bf442a",
+  "runner_started_at_utc": "2026-09-15T20:07:53.352194+00:00",
+  "treatment_allocation": {
+    "cash_remainder": 0.45,
+    "reversal": 0.1375,
+    "total": 0.55,
+    "v3": 0.4125
+  },
+  "universe_hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3",
+  "verdict": "RESEARCH_REJECT",
+  "windows": {
+    "development_end": "2021-12-31T23:59:59+00:00",
+    "development_start": "2017-01-03T00:00:00+00:00",
+    "full_end": "2026-07-31T23:59:59+00:00",
+    "full_start": "2017-01-03T00:00:00+00:00",
+    "validation_end": "2026-07-31T23:59:59+00:00",
+    "validation_start": "2022-01-03T00:00:00+00:00"
+  }
+}

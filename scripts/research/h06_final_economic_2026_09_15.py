@@ -148,8 +148,13 @@ def preflight() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     state = json.loads(STATE.read_text(encoding="utf-8"))
     for value in (auth, protocol, structural, state):
         verify_seal(value)
-    if head != auth["authorization_commit"]:
-        raise RuntimeError("HEAD_NOT_AUTHORIZATION_COMMIT")
+    parent = subprocess.run(["git", "rev-parse", "HEAD^"], cwd=REPO, check=True, capture_output=True, text=True).stdout.strip()
+    if parent != auth["freeze_commit"]:
+        raise RuntimeError("AUTHORIZATION_PARENT_NOT_FREEZE_COMMIT")
+    auth_diff = subprocess.run(["git", "diff", "--name-only", f"{auth['freeze_commit']}..{head}"], cwd=REPO,
+                               check=True, capture_output=True, text=True).stdout.splitlines()
+    if auth_diff != [str(AUTH.relative_to(REPO))]:
+        raise RuntimeError("AUTHORIZATION_COMMIT_SCOPE_INVALID")
     if structural["status"] != "H06_FULL_STRUCTURAL_ADMISSION_READY":
         raise RuntimeError("STRUCTURAL_NOT_READY")
     if state["status"] != "SEALED_UNUSED" or state["outcomes_accessed"] or state["reservation_state"] != "UNRESERVED":

@@ -35,11 +35,11 @@
   },
   "input_pins": {
     "calendar_sha256": "6ae0dc6611729c060e703cd34ee86c84b67249a981b1490df79e1e4fadf155ec",
-    "runner_sha256": "247d51349ef3c3e62248fe6ff87a6a60023459c143da079101c8f6294b8c1f73",
+    "runner_sha256": "0901ab2b4e3c8d74e54bd8b9a5c8df4029e6d4ee139705551fa08b3b176993f5",
     "verifier_sha256": "83f7a8ba5dda2320bced8d75c9faee30fad83f46904337dc91d11f790ed7d55e"
   },
   "integrity": {
-    "self_sha256": "fcafb3a34b67857696bef261749895cfd39b985c57874dbcce2db2a6b44baa17"
+    "self_sha256": "ea5087aba7686f5f9e2b32b6260c3d86a37adaec8912b96bb47bfea7c98fa457"
   },
   "monthly_decisions": [
     {

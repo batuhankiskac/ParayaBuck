@@ -13,4 +13,4 @@ This protocol was frozen before any post-decision H06 return was read or calcula
 - Statistics: 10,000 moving-block bootstrap draws (21 sessions, seed 20260909), 10,000 paired sign draws (seed 20260910), fixed +7-session placebo.
 - One shot: no tuning, no rerun, no automatic promotion, no PAPER/LIVE/registry change.
 
-Protocol self-hash: `fcafb3a34b67857696bef261749895cfd39b985c57874dbcce2db2a6b44baa17`.
+Protocol self-hash: `ea5087aba7686f5f9e2b32b6260c3d86a37adaec8912b96bb47bfea7c98fa457`.

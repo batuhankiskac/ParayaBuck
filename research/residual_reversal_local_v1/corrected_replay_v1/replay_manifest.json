@@ -1,0 +1,109 @@
+{
+  "branch": "research/residual-reversal-local-v1",
+  "campaign": "equity_short_term_residual_reversal_v1",
+  "candidate_parameters": {
+    "beta_window_bars": 273,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "formation_bars": 21,
+    "ivol_reject_quantile": 0.7,
+    "max_single_weight": 0.1,
+    "rebalance_frequency": "weekly",
+    "residual_vol_window": 63,
+    "skip_bars": 0,
+    "top_n": 6
+  },
+  "corporate_actions_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+  "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+  "corrected_replay_spec_sha256": "5981801f9b44c70eb77d0cba55ed7336bdf7d3840ce639651898753fe9d197f7",
+  "cost_multipliers": [
+    1,
+    2,
+    3
+  ],
+  "decision": "RESEARCH_REJECT",
+  "economic_results_generated": true,
+  "elapsed_seconds_before_verification": 618.3049688339233,
+  "engine_bar_count": 1286547,
+  "execution_policy": {
+    "commission": 0,
+    "minimum_order_notional": 10,
+    "rebalance_band_pct": 0.005,
+    "slippage_bps": 2,
+    "spread_bps": 2
+  },
+  "finalization_mode": "serialized-results-only; no economic replay",
+  "forensic_parent_commit": "633c11448387f291d20a8a1aa0ed1286e2e94b34",
+  "head_sha_at_replay_start": "cb980ff784f8b9512ec486eb9bb145f38fdc74ee",
+  "lifetime_table_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+  "lifetime_table_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+  "loaded_bar_count": 11686832,
+  "main_sha": "8123694a71d8fbb0e520f13b4e1692e932754e97",
+  "maximum_allocation": 0.55,
+  "mechanics_frozen_before_outcomes": true,
+  "original_artifact_sha256": {
+    "FINAL_REPORT.md": "3a901e17fa3708f6a05ac8a19cc46091b0cd312668b279f753e00ff111b6be75",
+    "FORENSIC_AUDIT.json": "5c0720968eae183df46df22b0579a992b4891b7c0f2197ba3221db624b631c73",
+    "FORENSIC_AUDIT.md": "b123679302f8794d38be33b0ea630c47b37c46d25a24d94b444416d153de00d2",
+    "FROZEN_PROTOCOL.md": "bf8a47c20d35835920fb15ac2e75eaf0ea5ebaec3a4f79a0c62e9aa515bf442a",
+    "cost_stress.json": "dc6d076866b2f549912e159db9079a62ff4a10251d25dfe2d5954af7ffec1ba9",
+    "decision.json": "c73b79e651125a9adcf532d16844c187b99e8fee4c60be70573312c7fc69cc97",
+    "execution_audit.json": "5298a46f64381737ffd0f6f8c87080df1c2ca58182b6ce70afc8ca9afa8e6ffd",
+    "gate_table.json": "a67e060bf14c487e0da20eb3b76f819a65be1e8980b22f4bbe8be6d1c1512bfa",
+    "independent_verification.json": "fe37c96b988eb34dbde50beb174dbd4221458ddf2895eab1226b03475400d0bd",
+    "standalone_reversal.json": "f2f27d515da1107aca888b90325fa20788c003937cfd2717673c0fa2ea2d89ba",
+    "treatment.json": "0715cf988e2e50cd7bebf0951b1900ba3fc98fe6e090ccd1ff236abd03711a85",
+    "v3_control.json": "237002292665854f48514508d0f65be87914e5998a789a19f9ec3b9a89042fd4"
+  },
+  "price_data_path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+  "price_data_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+  "protocol_sha256": "bf8a47c20d35835920fb15ac2e75eaf0ea5ebaec3a4f79a0c62e9aa515bf442a",
+  "replay": "corrected_replay_v1",
+  "replay_validity": "CORRECTED_REPLAY_VALID",
+  "risk_limits": {
+    "cash_buffer_pct": 0.4,
+    "daily_loss_limit_pct": 0.005,
+    "max_drawdown_pct": 0.05,
+    "max_gross_exposure_pct": 0.6,
+    "max_position_pct": 0.1,
+    "maximum_positions": 6,
+    "maximum_single_weight": 0.1
+  },
+  "stream_symbol_count": 542,
+  "treatment_allocation": {
+    "cash_remainder": 0.45,
+    "reversal": 0.1375,
+    "total": 0.55,
+    "v3": 0.41250000000000003
+  },
+  "universe_hashes": {
+    "reversal": "87b2c9b362915f904be07a1b9dbdb78fe0855f76512cc29323c30fa74d39db59",
+    "treatment": "03adba521edf2314e2d389be1f6cbd9ff87eaa0239516c2b8317cac59dd340e6",
+    "v3": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3"
+  },
+  "v3_parameters": {
+    "beta_window_bars": 273,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "formation_bars": 252,
+    "ivol_reject_quantile": 0.7,
+    "max_single_weight": 0.1,
+    "rebalance_frequency": "weekly",
+    "residual_vol_window": 63,
+    "skip_bars": 21,
+    "top_n": 8
+  },
+  "v3_source_path": "/Users/batuhankiskac/Desktop/ParayaBuck/src/parayabuck/portfolio/equity_residual_momentum_v3.py",
+  "v3_source_sha256": "408de47f8a0e0ac20d926ed3e7d96f01b5747c5db8863ad5e35c146a3cc6b1bc",
+  "verification_status": "CORRECTED_REPLAY_VALID",
+  "windows": {
+    "development_end": "2021-12-31T23:59:59+00:00",
+    "development_start": "2017-01-03T00:00:00+00:00",
+    "full_end": "2026-07-31T23:59:59+00:00",
+    "full_start": "2017-01-03T00:00:00+00:00",
+    "validation_end": "2026-07-31T23:59:59+00:00",
+    "validation_start": "2022-01-03T00:00:00+00:00"
+  }
+}

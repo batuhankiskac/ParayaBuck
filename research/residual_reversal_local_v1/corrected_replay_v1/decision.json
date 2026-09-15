@@ -1,0 +1,95 @@
+{
+  "decision": "RESEARCH_REJECT",
+  "gates": [
+    {
+      "evidence": {
+        "full_cagr": 0.06843688103205103,
+        "validation_return": 0.188826269386277
+      },
+      "gate": 1,
+      "name": "standalone viability",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "2x_net_return": 0.7234679922914791,
+        "3x_net_return": 0.5746776334130668
+      },
+      "gate": 2,
+      "name": "cost robustness",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "daily_correlation": 0.47613295408360073
+      },
+      "gate": 3,
+      "name": "diversification",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "improvements": {
+          "cagr": false,
+          "calmar": true,
+          "sharpe": false,
+          "sortino": false
+        },
+        "non_improving_metrics_within_2pp": false
+      },
+      "gate": 4,
+      "name": "capital-neutral portfolio contribution",
+      "status": "FAIL"
+    },
+    {
+      "evidence": {
+        "control_max_drawdown": 0.20435850553058274,
+        "treatment_max_drawdown": 0.08600528946039925
+      },
+      "gate": 5,
+      "name": "drawdown",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "control_validation": {
+          "cagr": 0.046546521357007764,
+          "max_drawdown": 0.18959250492510563,
+          "sharpe": 0.4740490862395633
+        },
+        "treatment_validation": {
+          "cagr": 0.029880104612926228,
+          "max_drawdown": 0.06170547176070254,
+          "sharpe": 0.56837345761963
+        }
+      },
+      "gate": 6,
+      "name": "validation contribution",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "control_cost_drag": 0.10932306551741089,
+        "control_turnover": 168.46128789996362,
+        "treatment_cost_drag": 0.04948230395299169,
+        "treatment_turnover": 110.56373206621083
+      },
+      "gate": 7,
+      "name": "turnover economics",
+      "status": "PASS"
+    },
+    {
+      "evidence": {
+        "interpretation": "qualitative gate operationalized by breadth, contribution share, and leave-one diagnostic",
+        "largest_absolute_symbol_share": 0.02159630031358127,
+        "leave_one_approximate_return": 0.35888641676885835,
+        "maximum_realized_weight_concentration": 0.09336249858926353,
+        "unique_filled_symbols": 354
+      },
+      "gate": 8,
+      "name": "concentration",
+      "status": "PASS"
+    }
+  ],
+  "replay_validity": "CORRECTED_REPLAY_VALID"
+}

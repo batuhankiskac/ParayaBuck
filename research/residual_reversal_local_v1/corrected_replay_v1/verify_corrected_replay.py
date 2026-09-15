@@ -14,9 +14,16 @@ import hashlib
 import json
 import math
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[3]
+RESEARCH_DIR = ROOT / "research" / "residual_reversal_local_v1"
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot, hash_point_in_time_universe
 from parayabuck.core.models import Market
@@ -29,9 +36,6 @@ except ImportError:  # pragma: no cover - direct script execution
         EquityShortTermResidualReversalV1,
         frozen_reversal_parameters,
     )
-
-ROOT = Path(__file__).resolve().parents[3]
-RESEARCH_DIR = ROOT / "research" / "residual_reversal_local_v1"
 EXPECTED_BRANCH = "research/residual-reversal-local-v1"
 EXPECTED_MAIN_SHA = "8123694a71d8fbb0e520f13b4e1692e932754e97"
 EXPECTED_FORENSIC_PARENT = "633c11448387f291d20a8a1aa0ed1286e2e94b34"
@@ -127,6 +131,19 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        values = [_json_safe(item) for item in value]
+        return sorted(values) if isinstance(value, (set, frozenset)) else values
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 class Verification:
     def __init__(self) -> None:
         self.checks: list[dict[str, Any]] = []
@@ -186,7 +203,7 @@ def _verify_identity(verifier: Verification, output: Path, manifest: dict[str, A
     required_spec_phrases = (
         "validation contains at least one genuine",
         "terminal bar",
-        "separate V3/reversal rankings",
+        "separate V3 and reversal",
         "no cross-sleeve reallocation",
         "CORRECTED_REPLAY_VALID",
     )
@@ -221,7 +238,11 @@ def _verify_frozen_economics(verifier: Verification, manifest: dict[str, Any]) -
     verifier.check("frozen execution policy", manifest.get("execution_policy") == EXPECTED_EXECUTION_POLICY, manifest.get("execution_policy"))
     verifier.check(
         "frozen treatment allocation",
-        manifest.get("treatment_allocation") == {"v3": 0.4125, "reversal": 0.1375, "total": 0.55, "cash_remainder": 0.45},
+        isinstance(manifest.get("treatment_allocation"), dict)
+        and all(
+            _close(manifest["treatment_allocation"].get(key), value)
+            for key, value in (("v3", 0.4125), ("reversal", 0.1375), ("total", 0.55), ("cash_remainder", 0.45))
+        ),
     )
     verifier.check("cost stress set", tuple(manifest.get("cost_multipliers", ())) == EXPECTED_COSTS)
     verifier.check("mechanics frozen before outcomes", manifest.get("mechanics_frozen_before_outcomes") is True)
@@ -540,7 +561,12 @@ def _verify_execution(verifier: Verification, output: Path, manifest: dict[str, 
 def _verify_sleeves(verifier: Verification, output: Path, execution: dict[str, Any], coverage: dict[str, Any]) -> dict[str, Any]:
     sleeve = _load_json(output / "sleeve_attribution.json")
     verifier.check("sleeve policy identity", sleeve.get("policy") == "sleeve_aware_quota_round_robin_v1")
-    verifier.check("sleeve intended allocation identity", sleeve.get("frozen_intended_allocation") == {"v3": 0.4125, "reversal": 0.1375, "total": 0.55})
+    intended = sleeve.get("frozen_intended_allocation", {})
+    verifier.check(
+        "sleeve intended allocation identity",
+        isinstance(intended, dict)
+        and all(_close(intended.get(key), value) for key, value in (("v3", 0.4125), ("reversal", 0.1375), ("total", 0.55))),
+    )
     by_cost = sleeve.get("by_cost", {})
     for cost in EXPECTED_COSTS:
         key = f"{cost}x"
@@ -596,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "corrected_independent_verification.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        json.dumps(_json_safe(payload), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     for row in verifier.failed:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -213,3 +214,22 @@ def test_true_holdout_economics_inaccessible() -> None:
 def test_all_tracked_structural_artifacts_are_self_hashed() -> None:
     for path in (subject.MANIFEST, subject.OWNER_MANIFEST, subject.RECEIPT, subject.HOLDOUT):
         subject.verify_seal(json.loads(path.read_text()))
+
+
+def test_source_complete_and_population_pending_are_separate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    acquisition = tmp_path / "acquisition.json"
+    acquisition.write_text(json.dumps({"status": "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE"}))
+    monkeypatch.setattr(subject, "ACQUISITION", acquisition)
+    artifacts = subject.blocked_artifacts()
+    structural = artifacts[subject.MANIFEST]
+    owner = artifacts[subject.OWNER_MANIFEST]
+    holdout = artifacts[subject.HOLDOUT]
+    assert structural["status"] == owner["status"] == "H06_POPULATION_BUILD_PENDING"
+    assert structural["upstream_acquisition_status"] == "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE"
+    assert structural["signal_gate_counts"] == "NOT_BUILT"
+    assert owner["years"] == "NOT_BUILT"
+    assert holdout["custody_status"] == "TRUE_HOLDOUT_SIGNAL_SIDE_PENDING_NO_ECONOMIC_ACCESS"
+    assert holdout["signal_side_rows_processed"] is None
+    assert holdout["economics_accessed"] is False

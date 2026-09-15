@@ -1,9 +1,6 @@
 {
   "cutoff": "2026-07-31T23:59:59Z",
-  "decision_map": {
-    "mappings": 0,
-    "monthly_decisions": 0
-  },
+  "decision_map": "NOT_BUILT",
   "deterministic_outputs": {
     "decision_map": null,
     "owner_classification": null,
@@ -11,28 +8,15 @@
   },
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "integrity": {
-    "self_sha256": "efd1c6caa7dc92f4cc541f0531d16b0ec434aa1a5adb626a2598ba80eabd8da9"
+    "self_sha256": "b1286e83dba802cd2d568ba6ff9aa3f97d497e4ddb1e471c4aa0ecf465da73b0"
   },
-  "primary_exclusions": {},
+  "primary_exclusions": "NOT_BUILT",
   "remaining_blockers": [
-    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+    "H06_POPULATION_BUILD_PENDING"
   ],
   "schema": "h06_full_structural_admission_v1",
-  "signal_gate_counts": {
-    "acquired_a": 0,
-    "denominator_exact": 0,
-    "direct_d": 0,
-    "identity_exact": 0,
-    "nonderivative": 0,
-    "open_market_explicit": 0,
-    "opportunistic": 0,
-    "purchase_code_p": 0,
-    "structurally_admitted": 0,
-    "ten_b5_pass": 0,
-    "transaction_universe_2022_plus": 0,
-    "valid_numeric": 0
-  },
-  "status": "H06_FULL_ACQUISITION_INCOMPLETE",
+  "signal_gate_counts": "NOT_BUILT",
+  "status": "H06_POPULATION_BUILD_PENDING",
   "structural_admission_performed": false,
-  "upstream_acquisition_status": "H06_FULL_ACQUISITION_INCOMPLETE"
+  "upstream_acquisition_status": "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE"
 }

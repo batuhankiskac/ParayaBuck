@@ -23,7 +23,8 @@ MANIFEST = REPO / "data/research_manifests/h06_full_structural_admission_2026_09
 OWNER_MANIFEST = REPO / "data/research_manifests/h06_owner_year_classification_2026_09_14.json"
 RECEIPT = REPO / "data/research_receipts/h06_structural_admission_receipt_2026_09_14.json"
 HOLDOUT = REPO / "data/research_receipts/h06_true_holdout_signal_custody_2026_09_14.json"
-STATUS = "H06_FULL_ACQUISITION_INCOMPLETE"
+SOURCE_COMPLETE_STATUS = "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE"
+STATUS = "H06_POPULATION_BUILD_PENDING"
 
 
 def canonical(value: Any) -> bytes:
@@ -224,15 +225,15 @@ def map_to_decisions(available_session: str, decisions: Iterable[dict[str, Any]]
 
 def blocked_artifacts() -> dict[Path, dict[str, Any]]:
     acquisition = json.loads(ACQUISITION.read_text())
-    blockers = list(acquisition.get("remaining_blockers", []))
+    if acquisition.get("status") != SOURCE_COMPLETE_STATUS:
+        raise ValueError("official_source_coverage_not_complete")
+    blockers = [STATUS]
     base = {"status": STATUS, "cutoff": "2026-07-31T23:59:59Z", "remaining_blockers": blockers, "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS"}
-    zero_years = {str(year): {"owner_year_total": 0, "routine": 0, "opportunistic": 0, "non_partitionable": 0} for year in range(2022, 2027)}
-    zero_gates = {key: 0 for key in ("transaction_universe_2022_plus", "nonderivative", "purchase_code_p", "acquired_a", "direct_d", "valid_numeric", "opportunistic", "open_market_explicit", "ten_b5_pass", "identity_exact", "denominator_exact", "structurally_admitted")}
     return {
-        MANIFEST: seal({**base, "schema": "h06_full_structural_admission_v1", "upstream_acquisition_status": STATUS, "structural_admission_performed": False, "signal_gate_counts": zero_gates, "primary_exclusions": {}, "decision_map": {"monthly_decisions": 0, "mappings": 0}, "deterministic_outputs": {"owner_classification": None, "structural_admission": None, "decision_map": None}}),
-        OWNER_MANIFEST: seal({**base, "schema": "h06_owner_year_classification_v1", "classification_performed": False, "years": zero_years, "routine_history": {"p_rows": 0, "s_rows": 0, "qualifying_rows": 0, "late_not_visible_exclusions": 0, "unresolved_lineage_exclusions": 0}}),
-        RECEIPT: seal({**base, "schema": "h06_structural_admission_receipt_v1", "admission_rows": 0, "local_artifacts": [], "reason": "upstream official SEC acquisition incomplete"}),
-        HOLDOUT: seal({**base, "schema": "h06_true_holdout_signal_custody_v1", "custody_status": "TRUE_HOLDOUT_SIGNAL_SIDE_BLOCKED_NO_ECONOMIC_ACCESS", "signal_side_rows_processed": 0, "economics_accessed": False, "outcome_fields_present": False}),
+        MANIFEST: seal({**base, "schema": "h06_full_structural_admission_v1", "upstream_acquisition_status": SOURCE_COMPLETE_STATUS, "structural_admission_performed": False, "signal_gate_counts": "NOT_BUILT", "primary_exclusions": "NOT_BUILT", "decision_map": "NOT_BUILT", "deterministic_outputs": {"owner_classification": None, "structural_admission": None, "decision_map": None}}),
+        OWNER_MANIFEST: seal({**base, "schema": "h06_owner_year_classification_v1", "classification_performed": False, "years": "NOT_BUILT", "routine_history": "NOT_BUILT"}),
+        RECEIPT: seal({**base, "schema": "h06_structural_admission_receipt_v1", "admission_rows": None, "local_artifacts": [], "reason": "official source coverage complete; population build not started"}),
+        HOLDOUT: seal({**base, "schema": "h06_true_holdout_signal_custody_v1", "custody_status": "TRUE_HOLDOUT_SIGNAL_SIDE_PENDING_NO_ECONOMIC_ACCESS", "signal_side_rows_processed": None, "economics_accessed": False, "outcome_fields_present": False}),
     }
 
 
@@ -245,7 +246,7 @@ def write_blocked_artifacts() -> None:
 def verify_tracked_artifacts() -> None:
     acquisition = json.loads(ACQUISITION.read_text())
     verify_seal(acquisition)
-    if acquisition["status"] != STATUS:
+    if acquisition["status"] != SOURCE_COMPLETE_STATUS:
         raise ValueError("unexpected_upstream_status")
     for path in (MANIFEST, OWNER_MANIFEST, RECEIPT, HOLDOUT):
         value = json.loads(path.read_text())

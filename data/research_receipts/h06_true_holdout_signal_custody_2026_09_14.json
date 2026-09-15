@@ -1,16 +1,16 @@
 {
-  "custody_status": "TRUE_HOLDOUT_SIGNAL_SIDE_BLOCKED_NO_ECONOMIC_ACCESS",
+  "custody_status": "TRUE_HOLDOUT_SIGNAL_SIDE_PENDING_NO_ECONOMIC_ACCESS",
   "cutoff": "2026-07-31T23:59:59Z",
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "economics_accessed": false,
   "integrity": {
-    "self_sha256": "ae3a780e642eb1d8f734068fa828f1073b16b0df340cb8916f170e917b27cd51"
+    "self_sha256": "09ca2c0bf965f247a503e29e0668b90ad21e3d1e394e9e0b11cd6866d3429d13"
   },
   "outcome_fields_present": false,
   "remaining_blockers": [
-    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+    "H06_POPULATION_BUILD_PENDING"
   ],
   "schema": "h06_true_holdout_signal_custody_v1",
-  "signal_side_rows_processed": 0,
-  "status": "H06_FULL_ACQUISITION_INCOMPLETE"
+  "signal_side_rows_processed": null,
+  "status": "H06_POPULATION_BUILD_PENDING"
 }

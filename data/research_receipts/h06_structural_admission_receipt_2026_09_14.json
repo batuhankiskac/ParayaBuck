@@ -1,15 +1,15 @@
 {
-  "admission_rows": 0,
+  "admission_rows": null,
   "cutoff": "2026-07-31T23:59:59Z",
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
   "integrity": {
-    "self_sha256": "61cc4c9d64f4d551ed88ecd451ca690a57fdfcd91b004fab79a2b3747956cb81"
+    "self_sha256": "894938cef563e1e80b3637cbe58cd0630ae05ec9d2297898fa59f078cbd3e8ac"
   },
   "local_artifacts": [],
-  "reason": "upstream official SEC acquisition incomplete",
+  "reason": "official source coverage complete; population build not started",
   "remaining_blockers": [
-    "JULY_2026_OFFICIAL_INDEX_AND_ARCHIVE_RECONCILIATION_NOT_ACQUIRED"
+    "H06_POPULATION_BUILD_PENDING"
   ],
   "schema": "h06_structural_admission_receipt_v1",
-  "status": "H06_FULL_ACQUISITION_INCOMPLETE"
+  "status": "H06_POPULATION_BUILD_PENDING"
 }

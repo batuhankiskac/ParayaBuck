@@ -31,6 +31,7 @@
   "production_source": "src/parayabuck/portfolio/equity_residual_momentum_v3.py",
   "production_source_sha256": "408de47f8a0e0ac20d926ed3e7d96f01b5747c5db8863ad5e35c146a3cc6b1bc",
   "protocol_sha256": "bf8a47c20d35835920fb15ac2e75eaf0ea5ebaec3a4f79a0c62e9aa515bf442a",
+  "campaign_artifact_commit": "4b6dd3c",
   "runner_started_at_utc": "2026-09-15T20:07:53.352194+00:00",
   "treatment_allocation": {
     "cash_remainder": 0.45,

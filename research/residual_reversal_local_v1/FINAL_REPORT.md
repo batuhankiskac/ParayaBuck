@@ -6,7 +6,7 @@
 
 ## Baseline
 
-Current local `main` SHA: `8123694a71d8fbb0e520f13b4e1692e932754e97`. Research branch: `research/residual-reversal-local-v1`. Final research commit: `pending-uncommitted-research-branch`.
+Current local `main` SHA: `8123694a71d8fbb0e520f13b4e1692e932754e97`. Research branch: `research/residual-reversal-local-v1`. Campaign artifact commit: `4b6dd3c` (the final branch handoff commit is reported in the task handoff).
 The incumbent is `equity_residual_momentum_v3`, daily signal, weekly rebalance, 0.55 maximum equity allocation, 252/21 formation/skip, 273-bar beta window, 63-bar residual-vol window, top_n=8, ivol q=0.70, inverse-vol sizing, 0.10 position cap, and SPY benchmark. Current risk is gross 0.60, cash buffer 0.40, six positions, 0.5% daily loss and 5% drawdown limits; LIVE is disabled.
 
 ## Frozen candidate

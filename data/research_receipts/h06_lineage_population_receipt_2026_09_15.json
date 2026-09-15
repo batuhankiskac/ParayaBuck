@@ -1,0 +1,41 @@
+{
+  "amendments": 5942,
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_run": false,
+  "integrity": {
+    "self_sha256": "03a23580a13bb435e44f4cc5831982edb457664ccdb06cd3b0bce4f5275adcab"
+  },
+  "logical_table": {
+    "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+    "logical_sha256": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+    "row_count": 395310,
+    "schema": [
+      "accession",
+      "form",
+      "original_accession",
+      "candidate_original_accessions",
+      "issuer_cik",
+      "reporting_owner_ciks",
+      "original_filing_date",
+      "available_at",
+      "version_start",
+      "version_end",
+      "lineage_status",
+      "lineage_resolved",
+      "transaction_fingerprint_sha256",
+      "explanation"
+    ],
+    "sort_key": [
+      "accession"
+    ]
+  },
+  "network_used": false,
+  "originals": 389368,
+  "outcomes_accessed": false,
+  "resolved_amendments": 519,
+  "schema": "h06-lineage-population-receipt-v1",
+  "status": "H06_OFFLINE_CORE_POPULATION_READY",
+  "superseded_versions": 511,
+  "unresolved_amendments": 5423,
+  "unresolved_policy": "fail closed at and after plausible amendment visibility; preserve earlier original visibility"
+}

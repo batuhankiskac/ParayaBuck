@@ -1,15 +1,60 @@
 {
-  "classification_performed": false,
+  "classification_performed": true,
   "cutoff": "2026-07-31T23:59:59Z",
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
+  "economic_run": false,
   "integrity": {
-    "self_sha256": "1cff4b94d0aba4aaa9ce3d2b13c102a4921d5c722ac6a1a032108beac8a8110a"
+    "self_sha256": "78591aee0d726e8b7086754d97eb216b9407c8c06052a00b193c1e4283d7a684"
   },
+  "network_used": false,
+  "outcomes_accessed": false,
+  "owner_year_logical_sha256": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
   "remaining_blockers": [
-    "H06_POPULATION_BUILD_PENDING"
+    "final cover/security-class enrichment",
+    "exact shares-fact enrichment",
+    "raw SIP denominator-price enrichment",
+    "final identity/denominator admission"
   ],
-  "routine_history": "NOT_BUILT",
+  "routine_history": {
+    "P": 306504,
+    "S": 788592,
+    "late_or_not_visible": 24576,
+    "lineage_excluded": 18404,
+    "logical_sha256": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+    "qualifying": 1095096
+  },
   "schema": "h06_owner_year_classification_v1",
-  "status": "H06_POPULATION_BUILD_PENDING",
-  "years": "NOT_BUILT"
+  "status": "H06_OFFLINE_CORE_POPULATION_READY",
+  "years": {
+    "2022": {
+      "non_partitionable": 58336,
+      "opportunistic": 4803,
+      "routine": 2389,
+      "total": 65528
+    },
+    "2023": {
+      "non_partitionable": 58974,
+      "opportunistic": 4261,
+      "routine": 2293,
+      "total": 65528
+    },
+    "2024": {
+      "non_partitionable": 58876,
+      "opportunistic": 4209,
+      "routine": 2443,
+      "total": 65528
+    },
+    "2025": {
+      "non_partitionable": 59011,
+      "opportunistic": 4031,
+      "routine": 2486,
+      "total": 65528
+    },
+    "2026": {
+      "non_partitionable": 58903,
+      "opportunistic": 3973,
+      "routine": 2652,
+      "total": 65528
+    }
+  }
 }

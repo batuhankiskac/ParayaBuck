@@ -1,0 +1,182 @@
+{
+  "canaries": [
+    {
+      "accession": "0001493152-19-004321",
+      "referenced_ids": [
+        "F1"
+      ],
+      "resolved_ids": [
+        "F1"
+      ],
+      "source_transaction_id": "386216"
+    },
+    {
+      "accession": "0001493152-19-004320",
+      "referenced_ids": [
+        "F1"
+      ],
+      "resolved_ids": [
+        "F1"
+      ],
+      "source_transaction_id": "430761"
+    },
+    {
+      "accession": "0001493152-19-004319",
+      "referenced_ids": [
+        "F2"
+      ],
+      "resolved_ids": [
+        "F2"
+      ],
+      "source_transaction_id": "428648"
+    },
+    {
+      "accession": "0001493152-19-004319",
+      "referenced_ids": [
+        "F1"
+      ],
+      "resolved_ids": [
+        "F1"
+      ],
+      "source_transaction_id": "428647"
+    },
+    {
+      "accession": "0001593968-19-000872",
+      "referenced_ids": [
+        "F1",
+        "F3",
+        "F5"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F3",
+        "F5"
+      ],
+      "source_transaction_id": "672931"
+    },
+    {
+      "accession": "0001593968-19-000872",
+      "referenced_ids": [
+        "F1",
+        "F2",
+        "F3"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F2",
+        "F3"
+      ],
+      "source_transaction_id": "672929"
+    },
+    {
+      "accession": "0001593968-19-000872",
+      "referenced_ids": [
+        "F1",
+        "F3",
+        "F4"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F3",
+        "F4"
+      ],
+      "source_transaction_id": "672930"
+    },
+    {
+      "accession": "0000950142-19-000666",
+      "referenced_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "source_transaction_id": "769216"
+    },
+    {
+      "accession": "0000950142-19-000666",
+      "referenced_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "source_transaction_id": "769218"
+    },
+    {
+      "accession": "0000950142-19-000666",
+      "referenced_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "source_transaction_id": "769217"
+    },
+    {
+      "accession": "0001567619-19-007879",
+      "referenced_ids": [
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "resolved_ids": [
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "source_transaction_id": "674822"
+    },
+    {
+      "accession": "0001567619-19-007879",
+      "referenced_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "resolved_ids": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5"
+      ],
+      "source_transaction_id": "674821"
+    }
+  ],
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_run": false,
+  "integrity": {
+    "self_sha256": "6c9e200060d6883b617e6d85ca32152cabb8b15ca6d9db5089c02be49db95e36"
+  },
+  "mapping_rule": "exact accession plus *_FN field-specific footnote IDs",
+  "network_used": false,
+  "outcomes_accessed": false,
+  "schema": "h06-footnote-linkage-receipt-v1",
+  "status": "SEC_BULK_TRANSACTION_FOOTNOTE_LINKAGE_PROVEN"
+}

@@ -1,0 +1,398 @@
+{
+  "cutoff": "2026-07-31T23:59:59Z",
+  "decision_map": {
+    "mapped_core_pass_rows": 85,
+    "mapping_rows": 88,
+    "monthly_decisions": 55,
+    "unmapped_window_exclusions": 0
+  },
+  "determinism": {
+    "all_match": true,
+    "run_a": {
+      "cover_enrichment_targets": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+      "lineage_versions": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+      "monthly_decisions": "e352ad2b9764102b1e88c4140dac824574ade40b42dc176a943856f97a65c611",
+      "normalized_relevant_transactions": "21d6b17b7f62e437f9cf3d7d09ba056ca885e9af6d4f14ebf7964d3ca6d368d3",
+      "owner_year_classification": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
+      "raw_sip_targets": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+      "routine_history": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+      "signal_core_gates": "442059d6bb335ed10c40dc0714387a7e82067deeed1688ca69e9b1e2476d138f",
+      "transaction_decision_map": "ecb75dd2d7f685974ca8566a281e611fa8111fe4beacb14e01b7341825a0574f"
+    },
+    "run_b": {
+      "cover_enrichment_targets": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+      "lineage_versions": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+      "monthly_decisions": "e352ad2b9764102b1e88c4140dac824574ade40b42dc176a943856f97a65c611",
+      "normalized_relevant_transactions": "21d6b17b7f62e437f9cf3d7d09ba056ca885e9af6d4f14ebf7964d3ca6d368d3",
+      "owner_year_classification": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
+      "raw_sip_targets": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+      "routine_history": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+      "signal_core_gates": "442059d6bb335ed10c40dc0714387a7e82067deeed1688ca69e9b1e2476d138f",
+      "transaction_decision_map": "ecb75dd2d7f685974ca8566a281e611fa8111fe4beacb14e01b7341825a0574f"
+    }
+  },
+  "economic_boundary": {
+    "final_identity_enrichment": false,
+    "h06_score": false,
+    "issuer_purchase_aggregation": false,
+    "network_access": false,
+    "outcomes_or_pnl": false,
+    "parameter_tuning": false,
+    "percentile_or_decile": false,
+    "portfolio_backtest": false,
+    "ranking": false,
+    "raw_sip_acquisition": false
+  },
+  "economic_run": false,
+  "enrichment_targets": {
+    "candidate_cover_accessions": 10,
+    "cover_issuer_month_targets": 13,
+    "raw_sip_targets": 13,
+    "true_holdout_targets": 3,
+    "unique_issuers": 7
+  },
+  "footnote_linkage": "SEC_BULK_TRANSACTION_FOOTNOTE_LINKAGE_PROVEN",
+  "identity_precheck": {
+    "IDENTITY_PRECHECK_MISSING": 48,
+    "IDENTITY_PRECHECK_NON_COMMON": 3,
+    "IDENTITY_PRECHECK_UNIQUE_V5_SYMBOL": 34
+  },
+  "integrity": {
+    "self_sha256": "522685c1491d47c135f2504b59d425464d2d6cc68e3e307626bcf07d88222a66"
+  },
+  "joint_owner_semantics": "JOINT_OWNER_TRANSACTION_EXPANSION_PROVEN",
+  "lineage": {
+    "amendments": 5942,
+    "originals": 389368,
+    "resolved_amendments": 519,
+    "superseded_versions": 511,
+    "unresolved_amendments": 5423
+  },
+  "logical_tables": {
+    "cover_enrichment_targets": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+      "row_count": 13,
+      "schema": [
+        "issuer_cik",
+        "form4_symbol",
+        "decision_timestamp",
+        "transaction_security_titles",
+        "v5_candidate_entity_id",
+        "identity_precheck",
+        "cover_accession",
+        "cover_primary_document",
+        "cover_form",
+        "cover_accepted_at",
+        "cover_available_at",
+        "originating_core_pass_row_count",
+        "true_holdout",
+        "target_reason"
+      ],
+      "sort_key": [
+        "issuer_cik",
+        "form4_symbol",
+        "decision_timestamp"
+      ]
+    },
+    "lineage_versions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+      "row_count": 395310,
+      "schema": [
+        "accession",
+        "form",
+        "original_accession",
+        "candidate_original_accessions",
+        "issuer_cik",
+        "reporting_owner_ciks",
+        "original_filing_date",
+        "available_at",
+        "version_start",
+        "version_end",
+        "lineage_status",
+        "lineage_resolved",
+        "transaction_fingerprint_sha256",
+        "explanation"
+      ],
+      "sort_key": [
+        "accession"
+      ]
+    },
+    "monthly_decisions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "e352ad2b9764102b1e88c4140dac824574ade40b42dc176a943856f97a65c611",
+      "row_count": 55,
+      "schema": [
+        "calendar_month",
+        "decision_session",
+        "decision_timestamp",
+        "prior_21_sessions"
+      ],
+      "sort_key": [
+        "decision_session"
+      ]
+    },
+    "normalized_relevant_transactions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "21d6b17b7f62e437f9cf3d7d09ba056ca885e9af6d4f14ebf7964d3ca6d368d3",
+      "row_count": 1357116,
+      "schema": [
+        "row_id",
+        "accession",
+        "source_transaction_id",
+        "reporting_owner_cik",
+        "reporting_owner_name",
+        "issuer_cik",
+        "issuer_symbol",
+        "form",
+        "filing_date",
+        "transaction_date",
+        "security_title",
+        "transaction_code",
+        "acquired_disposed",
+        "shares",
+        "price",
+        "ownership_form",
+        "post_transaction_shares",
+        "footnote_ids",
+        "linked_footnote_text",
+        "aff10b5one",
+        "accepted_at",
+        "available_at",
+        "acceptance_authority",
+        "source_kind",
+        "source_quarter",
+        "source_provenance",
+        "lineage_status",
+        "version_start",
+        "version_end"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "owner_year_classification": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
+      "row_count": 327640,
+      "schema": [
+        "reporting_owner_cik",
+        "classification_year",
+        "count_y3",
+        "count_y2",
+        "count_y1",
+        "months_y3",
+        "months_y2",
+        "months_y1",
+        "common_month_intersection",
+        "classification",
+        "input_row_ids",
+        "input_logical_sha256",
+        "classification_cutoff"
+      ],
+      "sort_key": [
+        "reporting_owner_cik",
+        "classification_year"
+      ]
+    },
+    "raw_sip_targets": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+      "row_count": 13,
+      "schema": [
+        "symbol",
+        "decision_session",
+        "timeframe",
+        "feed",
+        "adjustment",
+        "true_holdout"
+      ],
+      "sort_key": [
+        "symbol",
+        "decision_session"
+      ]
+    },
+    "routine_history": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+      "row_count": 1357116,
+      "schema": [
+        "row_id",
+        "reporting_owner_cik",
+        "issuer_cik",
+        "accession",
+        "transaction_date",
+        "transaction_month",
+        "transaction_code",
+        "available_at",
+        "lineage_status",
+        "version_start",
+        "version_end",
+        "source_provenance",
+        "qualifying",
+        "exclusion_status"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "signal_core_gates": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "442059d6bb335ed10c40dc0714387a7e82067deeed1688ca69e9b1e2476d138f",
+      "row_count": 689969,
+      "schema": [
+        "row_id",
+        "accession",
+        "reporting_owner_cik",
+        "issuer_cik",
+        "issuer_symbol",
+        "transaction_date",
+        "available_at",
+        "information_session",
+        "version_end",
+        "security_title",
+        "owner_classification",
+        "lineage_gate",
+        "nonderivative_gate",
+        "purchase_gate",
+        "acquired_gate",
+        "direct_gate",
+        "shares_gate",
+        "price_gate",
+        "opportunistic_gate",
+        "timing_gate",
+        "ten_b5_status",
+        "open_private_status",
+        "primary_exclusion",
+        "core_status",
+        "identity_precheck",
+        "v5_candidate_entity_id",
+        "true_holdout"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "transaction_decision_map": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "ecb75dd2d7f685974ca8566a281e611fa8111fe4beacb14e01b7341825a0574f",
+      "row_count": 88,
+      "schema": [
+        "row_id",
+        "decision_session",
+        "decision_timestamp",
+        "information_session"
+      ],
+      "sort_key": [
+        "row_id",
+        "decision_session"
+      ]
+    }
+  },
+  "network_used": false,
+  "normalization": {
+    "july_transaction_rows": 17920,
+    "normalized_nonderivative_transactions": 1043985,
+    "normalized_owners": 470170,
+    "normalized_submissions": 395310,
+    "normalized_transaction_owner_observations": 1357116,
+    "relevant_accessions": 395310
+  },
+  "outcomes_accessed": false,
+  "owner_year": {
+    "2022": {
+      "non_partitionable": 58336,
+      "opportunistic": 4803,
+      "routine": 2389,
+      "total": 65528
+    },
+    "2023": {
+      "non_partitionable": 58974,
+      "opportunistic": 4261,
+      "routine": 2293,
+      "total": 65528
+    },
+    "2024": {
+      "non_partitionable": 58876,
+      "opportunistic": 4209,
+      "routine": 2443,
+      "total": 65528
+    },
+    "2025": {
+      "non_partitionable": 59011,
+      "opportunistic": 4031,
+      "routine": 2486,
+      "total": 65528
+    },
+    "2026": {
+      "non_partitionable": 58903,
+      "opportunistic": 3973,
+      "routine": 2652,
+      "total": 65528
+    }
+  },
+  "remaining_blockers": [
+    "final cover/security-class enrichment",
+    "exact shares-fact enrichment",
+    "raw SIP denominator-price enrichment",
+    "final identity/denominator admission"
+  ],
+  "routine_history": {
+    "P": 306504,
+    "S": 788592,
+    "late_or_not_visible": 24576,
+    "lineage_excluded": 18404,
+    "qualifying": 1095096
+  },
+  "schema": "h06-offline-core-population-v1",
+  "signal_gate_counts": {
+    "funnel": {
+      "acquired": 259198,
+      "direct": 418674,
+      "nonderivative": 689969,
+      "open_market": 1442,
+      "opportunistic": 92011,
+      "population": 689969,
+      "price": 625207,
+      "purchase": 166403,
+      "shares": 688544,
+      "ten_b5": 306810,
+      "timing": 689969
+    },
+    "identity_precheck": {
+      "IDENTITY_PRECHECK_MISSING": 48,
+      "IDENTITY_PRECHECK_NON_COMMON": 3,
+      "IDENTITY_PRECHECK_UNIQUE_V5_SYMBOL": 34
+    },
+    "primary_exclusions": {
+      "CORE_PASS": 85,
+      "EXCLUDE_10B5_1": 3400,
+      "EXCLUDE_INDIRECT": 85056,
+      "EXCLUDE_INVALID_PRICE": 3333,
+      "EXCLUDE_INVALID_SHARES": 139,
+      "EXCLUDE_LINEAGE": 7813,
+      "EXCLUDE_NOT_ACQUIRED": 331,
+      "EXCLUDE_NOT_PURCHASE_CODE": 518700,
+      "EXCLUDE_OPEN_PRIVATE_AMBIGUOUS": 5353,
+      "EXCLUDE_OWNER_NON_PARTITIONABLE": 52761,
+      "EXCLUDE_OWNER_ROUTINE": 12993,
+      "EXCLUDE_PRIVATE": 5
+    }
+  },
+  "source_custody": {
+    "acceptance_map_rows": 395310,
+    "july_bodies": 11242,
+    "network_used": false,
+    "observed_sha256": {
+      "data/historical/equity_entity_lifetimes_full_v5.csv": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "data/research/local/h06_full_acquisition_2026_09_14/relevant_accession_acceptance_map.tsv": "21aadfcce06125b4ee4a3c391c4e9f92a206ef62598c35e18629640c38cec454",
+      "data/research/local/h06_full_acquisition_2026_09_14/relevant_accession_target.tsv": "9165d68b4000f20f3a3b64d523232709ddd5a5e6af1d58a9933f5b1ac1930757",
+      "data/research/local/h06_full_acquisition_2026_09_14/sec_submissions_bulk/submissions.zip": "d270adfe53bb27e64ea5c87ef6b84f6821c8abb736cd3c0b376daf342fc7b99f",
+      "data/research/r46_treasury_auction_unwind_tlt_v1_2026_09_10/nyse_calendar.jsonl": "6ae0dc6611729c060e703cd34ee86c84b67249a981b1490df79e1e4fadf155ec"
+    },
+    "quarter_sources": 30
+  },
+  "source_status": "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE",
+  "status": "H06_OFFLINE_CORE_POPULATION_READY"
+}

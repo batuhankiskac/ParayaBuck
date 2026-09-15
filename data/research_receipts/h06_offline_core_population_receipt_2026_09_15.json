@@ -1,0 +1,290 @@
+{
+  "cutoff": "2026-07-31T23:59:59Z",
+  "database": "data/research/local/h06_population_2026_09_15/h06_population.sqlite3",
+  "decision_map": {
+    "mapped_core_pass_rows": 85,
+    "mapping_rows": 88,
+    "monthly_decisions": 55,
+    "unmapped_window_exclusions": 0
+  },
+  "economic_run": false,
+  "enrichment": {
+    "candidate_cover_accessions": 10,
+    "cover_issuer_month_targets": 13,
+    "raw_sip_targets": 13,
+    "true_holdout_targets": 3,
+    "unique_issuers": 7
+  },
+  "integrity": {
+    "self_sha256": "bbf188ee98175249f287b8e4a52d04ea97c2c08421ab886774748219b3e2ca60"
+  },
+  "local_artifacts_staged": false,
+  "logical_tables": {
+    "cover_enrichment_targets": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+      "row_count": 13,
+      "schema": [
+        "issuer_cik",
+        "form4_symbol",
+        "decision_timestamp",
+        "transaction_security_titles",
+        "v5_candidate_entity_id",
+        "identity_precheck",
+        "cover_accession",
+        "cover_primary_document",
+        "cover_form",
+        "cover_accepted_at",
+        "cover_available_at",
+        "originating_core_pass_row_count",
+        "true_holdout",
+        "target_reason"
+      ],
+      "sort_key": [
+        "issuer_cik",
+        "form4_symbol",
+        "decision_timestamp"
+      ]
+    },
+    "lineage_versions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+      "row_count": 395310,
+      "schema": [
+        "accession",
+        "form",
+        "original_accession",
+        "candidate_original_accessions",
+        "issuer_cik",
+        "reporting_owner_ciks",
+        "original_filing_date",
+        "available_at",
+        "version_start",
+        "version_end",
+        "lineage_status",
+        "lineage_resolved",
+        "transaction_fingerprint_sha256",
+        "explanation"
+      ],
+      "sort_key": [
+        "accession"
+      ]
+    },
+    "monthly_decisions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "e352ad2b9764102b1e88c4140dac824574ade40b42dc176a943856f97a65c611",
+      "row_count": 55,
+      "schema": [
+        "calendar_month",
+        "decision_session",
+        "decision_timestamp",
+        "prior_21_sessions"
+      ],
+      "sort_key": [
+        "decision_session"
+      ]
+    },
+    "normalized_relevant_transactions": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "21d6b17b7f62e437f9cf3d7d09ba056ca885e9af6d4f14ebf7964d3ca6d368d3",
+      "row_count": 1357116,
+      "schema": [
+        "row_id",
+        "accession",
+        "source_transaction_id",
+        "reporting_owner_cik",
+        "reporting_owner_name",
+        "issuer_cik",
+        "issuer_symbol",
+        "form",
+        "filing_date",
+        "transaction_date",
+        "security_title",
+        "transaction_code",
+        "acquired_disposed",
+        "shares",
+        "price",
+        "ownership_form",
+        "post_transaction_shares",
+        "footnote_ids",
+        "linked_footnote_text",
+        "aff10b5one",
+        "accepted_at",
+        "available_at",
+        "acceptance_authority",
+        "source_kind",
+        "source_quarter",
+        "source_provenance",
+        "lineage_status",
+        "version_start",
+        "version_end"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "owner_year_classification": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
+      "row_count": 327640,
+      "schema": [
+        "reporting_owner_cik",
+        "classification_year",
+        "count_y3",
+        "count_y2",
+        "count_y1",
+        "months_y3",
+        "months_y2",
+        "months_y1",
+        "common_month_intersection",
+        "classification",
+        "input_row_ids",
+        "input_logical_sha256",
+        "classification_cutoff"
+      ],
+      "sort_key": [
+        "reporting_owner_cik",
+        "classification_year"
+      ]
+    },
+    "raw_sip_targets": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+      "row_count": 13,
+      "schema": [
+        "symbol",
+        "decision_session",
+        "timeframe",
+        "feed",
+        "adjustment",
+        "true_holdout"
+      ],
+      "sort_key": [
+        "symbol",
+        "decision_session"
+      ]
+    },
+    "routine_history": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+      "row_count": 1357116,
+      "schema": [
+        "row_id",
+        "reporting_owner_cik",
+        "issuer_cik",
+        "accession",
+        "transaction_date",
+        "transaction_month",
+        "transaction_code",
+        "available_at",
+        "lineage_status",
+        "version_start",
+        "version_end",
+        "source_provenance",
+        "qualifying",
+        "exclusion_status"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "signal_core_gates": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "442059d6bb335ed10c40dc0714387a7e82067deeed1688ca69e9b1e2476d138f",
+      "row_count": 689969,
+      "schema": [
+        "row_id",
+        "accession",
+        "reporting_owner_cik",
+        "issuer_cik",
+        "issuer_symbol",
+        "transaction_date",
+        "available_at",
+        "information_session",
+        "version_end",
+        "security_title",
+        "owner_classification",
+        "lineage_gate",
+        "nonderivative_gate",
+        "purchase_gate",
+        "acquired_gate",
+        "direct_gate",
+        "shares_gate",
+        "price_gate",
+        "opportunistic_gate",
+        "timing_gate",
+        "ten_b5_status",
+        "open_private_status",
+        "primary_exclusion",
+        "core_status",
+        "identity_precheck",
+        "v5_candidate_entity_id",
+        "true_holdout"
+      ],
+      "sort_key": [
+        "row_id"
+      ]
+    },
+    "transaction_decision_map": {
+      "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+      "logical_sha256": "ecb75dd2d7f685974ca8566a281e611fa8111fe4beacb14e01b7341825a0574f",
+      "row_count": 88,
+      "schema": [
+        "row_id",
+        "decision_session",
+        "decision_timestamp",
+        "information_session"
+      ],
+      "sort_key": [
+        "row_id",
+        "decision_session"
+      ]
+    }
+  },
+  "network_used": false,
+  "normalization": {
+    "july_transaction_rows": 17920,
+    "normalized_nonderivative_transactions": 1043985,
+    "normalized_owners": 470170,
+    "normalized_submissions": 395310,
+    "normalized_transaction_owner_observations": 1357116,
+    "relevant_accessions": 395310
+  },
+  "outcomes_accessed": false,
+  "schema": "h06-offline-core-population-receipt-v1",
+  "signal": {
+    "funnel": {
+      "acquired": 259198,
+      "direct": 418674,
+      "nonderivative": 689969,
+      "open_market": 1442,
+      "opportunistic": 92011,
+      "population": 689969,
+      "price": 625207,
+      "purchase": 166403,
+      "shares": 688544,
+      "ten_b5": 306810,
+      "timing": 689969
+    },
+    "identity_precheck": {
+      "IDENTITY_PRECHECK_MISSING": 48,
+      "IDENTITY_PRECHECK_NON_COMMON": 3,
+      "IDENTITY_PRECHECK_UNIQUE_V5_SYMBOL": 34
+    },
+    "primary_exclusions": {
+      "CORE_PASS": 85,
+      "EXCLUDE_10B5_1": 3400,
+      "EXCLUDE_INDIRECT": 85056,
+      "EXCLUDE_INVALID_PRICE": 3333,
+      "EXCLUDE_INVALID_SHARES": 139,
+      "EXCLUDE_LINEAGE": 7813,
+      "EXCLUDE_NOT_ACQUIRED": 331,
+      "EXCLUDE_NOT_PURCHASE_CODE": 518700,
+      "EXCLUDE_OPEN_PRIVATE_AMBIGUOUS": 5353,
+      "EXCLUDE_OWNER_NON_PARTITIONABLE": 52761,
+      "EXCLUDE_OWNER_ROUTINE": 12993,
+      "EXCLUDE_PRIVATE": 5
+    }
+  },
+  "status": "H06_OFFLINE_CORE_POPULATION_READY"
+}

@@ -1,0 +1,14 @@
+{
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_run": false,
+  "economics_accessed": false,
+  "integrity": {
+    "self_sha256": "15546a61933978e4035203c5838ef5f048f5aea72bf54e6c4e0479f67a9ebca8"
+  },
+  "network_used": false,
+  "outcome_fields_present": false,
+  "outcomes_accessed": false,
+  "schema": "h06-true-holdout-signal-custody-v1",
+  "signal_rows_processed": 28072,
+  "status": "TRUE_HOLDOUT_SIGNAL_SIDE_ONLY_NO_ECONOMIC_ACCESS"
+}

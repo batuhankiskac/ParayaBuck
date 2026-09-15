@@ -1,22 +1,86 @@
 {
+  "core_population_performed": true,
   "cutoff": "2026-07-31T23:59:59Z",
-  "decision_map": "NOT_BUILT",
+  "decision_map": {
+    "mapped_core_pass_rows": 85,
+    "mapping_rows": 88,
+    "monthly_decisions": 55,
+    "unmapped_window_exclusions": 0
+  },
   "deterministic_outputs": {
-    "decision_map": null,
-    "owner_classification": null,
-    "structural_admission": null
+    "cover_enrichment_targets": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+    "lineage_versions": "481d69a4dcf5e3fc5dbf88028af572c14a2f7b31b69b0f4a67b6416f0f84a8c8",
+    "monthly_decisions": "e352ad2b9764102b1e88c4140dac824574ade40b42dc176a943856f97a65c611",
+    "normalized_relevant_transactions": "21d6b17b7f62e437f9cf3d7d09ba056ca885e9af6d4f14ebf7964d3ca6d368d3",
+    "owner_year_classification": "2351916ba14538d52c8d48f2f3d131f5a10030ec58f110a5b82ec5275b7e28f0",
+    "raw_sip_targets": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+    "routine_history": "9481a165f616c070f0208eadd70ae57231253d76cbef21350c3aef0c92077da5",
+    "signal_core_gates": "442059d6bb335ed10c40dc0714387a7e82067deeed1688ca69e9b1e2476d138f",
+    "transaction_decision_map": "ecb75dd2d7f685974ca8566a281e611fa8111fe4beacb14e01b7341825a0574f"
   },
   "economic_boundary": "NO_H06_SCORE_OR_OUTCOME_ACCESS",
+  "economic_run": false,
   "integrity": {
-    "self_sha256": "b1286e83dba802cd2d568ba6ff9aa3f97d497e4ddb1e471c4aa0ecf465da73b0"
+    "self_sha256": "b641109c72680b6276f1ccff16ffedff8bbb713e357a199c3652a0c357af3cbf"
   },
-  "primary_exclusions": "NOT_BUILT",
+  "network_used": false,
+  "outcomes_accessed": false,
+  "primary_exclusions": {
+    "CORE_PASS": 85,
+    "EXCLUDE_10B5_1": 3400,
+    "EXCLUDE_INDIRECT": 85056,
+    "EXCLUDE_INVALID_PRICE": 3333,
+    "EXCLUDE_INVALID_SHARES": 139,
+    "EXCLUDE_LINEAGE": 7813,
+    "EXCLUDE_NOT_ACQUIRED": 331,
+    "EXCLUDE_NOT_PURCHASE_CODE": 518700,
+    "EXCLUDE_OPEN_PRIVATE_AMBIGUOUS": 5353,
+    "EXCLUDE_OWNER_NON_PARTITIONABLE": 52761,
+    "EXCLUDE_OWNER_ROUTINE": 12993,
+    "EXCLUDE_PRIVATE": 5
+  },
   "remaining_blockers": [
-    "H06_POPULATION_BUILD_PENDING"
+    "final cover/security-class enrichment",
+    "exact shares-fact enrichment",
+    "raw SIP denominator-price enrichment",
+    "final identity/denominator admission"
   ],
   "schema": "h06_full_structural_admission_v1",
-  "signal_gate_counts": "NOT_BUILT",
-  "status": "H06_POPULATION_BUILD_PENDING",
+  "signal_gate_counts": {
+    "funnel": {
+      "acquired": 259198,
+      "direct": 418674,
+      "nonderivative": 689969,
+      "open_market": 1442,
+      "opportunistic": 92011,
+      "population": 689969,
+      "price": 625207,
+      "purchase": 166403,
+      "shares": 688544,
+      "ten_b5": 306810,
+      "timing": 689969
+    },
+    "identity_precheck": {
+      "IDENTITY_PRECHECK_MISSING": 48,
+      "IDENTITY_PRECHECK_NON_COMMON": 3,
+      "IDENTITY_PRECHECK_UNIQUE_V5_SYMBOL": 34
+    },
+    "primary_exclusions": {
+      "CORE_PASS": 85,
+      "EXCLUDE_10B5_1": 3400,
+      "EXCLUDE_INDIRECT": 85056,
+      "EXCLUDE_INVALID_PRICE": 3333,
+      "EXCLUDE_INVALID_SHARES": 139,
+      "EXCLUDE_LINEAGE": 7813,
+      "EXCLUDE_NOT_ACQUIRED": 331,
+      "EXCLUDE_NOT_PURCHASE_CODE": 518700,
+      "EXCLUDE_OPEN_PRIVATE_AMBIGUOUS": 5353,
+      "EXCLUDE_OWNER_NON_PARTITIONABLE": 52761,
+      "EXCLUDE_OWNER_ROUTINE": 12993,
+      "EXCLUDE_PRIVATE": 5
+    }
+  },
+  "status": "H06_CORE_POPULATION_READY_LATE_ENRICHMENT_PENDING",
   "structural_admission_performed": false,
   "upstream_acquisition_status": "H06_OFFICIAL_SOURCE_COVERAGE_COMPLETE"
 }

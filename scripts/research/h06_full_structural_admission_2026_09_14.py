@@ -248,11 +248,17 @@ def verify_tracked_artifacts() -> None:
     verify_seal(acquisition)
     if acquisition["status"] != SOURCE_COMPLETE_STATUS:
         raise ValueError("unexpected_upstream_status")
-    for path in (MANIFEST, OWNER_MANIFEST, RECEIPT, HOLDOUT):
-        value = json.loads(path.read_text())
+    values = {path: json.loads(path.read_text()) for path in (MANIFEST, OWNER_MANIFEST, RECEIPT, HOLDOUT)}
+    for value in values.values():
         verify_seal(value)
-        if value["status"] != STATUS:
-            raise ValueError(f"status_drift:{path.name}")
+    manifest_status = values[MANIFEST]["status"]
+    if manifest_status == "H06_CORE_POPULATION_READY_LATE_ENRICHMENT_PENDING":
+        if values[OWNER_MANIFEST]["status"] != "H06_OFFLINE_CORE_POPULATION_READY":
+            raise ValueError("owner_population_status_drift")
+        print("H06_OFFLINE_CORE_POPULATION_TRACKED_ARTIFACTS_VERIFIED")
+        return
+    if any(value["status"] != STATUS for value in values.values()):
+        raise ValueError("structural_population_status_drift")
     print("H06_FULL_STRUCTURAL_ADMISSION_BLOCKER_VERIFIED")
 
 
@@ -260,13 +266,24 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write-blocker", action="store_true")
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--build-offline-core", action="store_true")
+    parser.add_argument("--determinism-runs", type=int, default=2)
     args = parser.parse_args()
+    if args.build_offline_core:
+        try:
+            from scripts.research.h06_offline_core_population_2026_09_15 import build
+        except ModuleNotFoundError:  # Direct script execution.
+            from h06_offline_core_population_2026_09_15 import build
+
+        result = build(determinism_runs=args.determinism_runs)
+        print(json.dumps({"status": result["status"], "determinism": result["determinism"]}, sort_keys=True))
+        return 0
     if args.write_blocker:
         write_blocked_artifacts()
     if args.verify:
         verify_tracked_artifacts()
-    if not args.write_blocker and not args.verify:
-        parser.error("choose --write-blocker or --verify")
+    if not args.write_blocker and not args.verify and not args.build_offline_core:
+        parser.error("choose --write-blocker, --build-offline-core, or --verify")
     return 0
 
 

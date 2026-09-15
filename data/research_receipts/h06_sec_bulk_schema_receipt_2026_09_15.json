@@ -1,0 +1,242 @@
+{
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_run": false,
+  "header_variant_counts": {
+    "FOOTNOTES.tsv": 1,
+    "NONDERIV_HOLDING.tsv": 1,
+    "NONDERIV_TRANS.tsv": 1,
+    "OWNER_SIGNATURE.tsv": 1,
+    "REPORTINGOWNER.tsv": 1,
+    "SUBMISSION.tsv": 2
+  },
+  "header_variants": {
+    "FOOTNOTES.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "FOOTNOTE_ID",
+        "FOOTNOTE_TXT"
+      ]
+    ],
+    "NONDERIV_HOLDING.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "NONDERIV_HOLDING_SK",
+        "SECURITY_TITLE",
+        "SECURITY_TITLE_FN",
+        "TRANS_FORM_TYPE",
+        "TRANS_FORM_TYPE_FN",
+        "SHRS_OWND_FOLWNG_TRANS",
+        "SHRS_OWND_FOLWNG_TRANS_FN",
+        "VALU_OWND_FOLWNG_TRANS",
+        "VALU_OWND_FOLWNG_TRANS_FN",
+        "DIRECT_INDIRECT_OWNERSHIP",
+        "DIRECT_INDIRECT_OWNERSHIP_FN",
+        "NATURE_OF_OWNERSHIP",
+        "NATURE_OF_OWNERSHIP_FN"
+      ]
+    ],
+    "NONDERIV_TRANS.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "NONDERIV_TRANS_SK",
+        "SECURITY_TITLE",
+        "SECURITY_TITLE_FN",
+        "TRANS_DATE",
+        "TRANS_DATE_FN",
+        "DEEMED_EXECUTION_DATE",
+        "DEEMED_EXECUTION_DATE_FN",
+        "TRANS_FORM_TYPE",
+        "TRANS_CODE",
+        "EQUITY_SWAP_INVOLVED",
+        "EQUITY_SWAP_TRANS_CD_FN",
+        "TRANS_TIMELINESS",
+        "TRANS_TIMELINESS_FN",
+        "TRANS_SHARES",
+        "TRANS_SHARES_FN",
+        "TRANS_PRICEPERSHARE",
+        "TRANS_PRICEPERSHARE_FN",
+        "TRANS_ACQUIRED_DISP_CD",
+        "TRANS_ACQUIRED_DISP_CD_FN",
+        "SHRS_OWND_FOLWNG_TRANS",
+        "SHRS_OWND_FOLWNG_TRANS_FN",
+        "VALU_OWND_FOLWNG_TRANS",
+        "VALU_OWND_FOLWNG_TRANS_FN",
+        "DIRECT_INDIRECT_OWNERSHIP",
+        "DIRECT_INDIRECT_OWNERSHIP_FN",
+        "NATURE_OF_OWNERSHIP",
+        "NATURE_OF_OWNERSHIP_FN"
+      ]
+    ],
+    "OWNER_SIGNATURE.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "OWNERSIGNATURENAME",
+        "OWNERSIGNATUREDATE"
+      ]
+    ],
+    "REPORTINGOWNER.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "RPTOWNERCIK",
+        "RPTOWNERNAME",
+        "RPTOWNER_RELATIONSHIP",
+        "RPTOWNER_TITLE",
+        "RPTOWNER_TXT",
+        "RPTOWNER_STREET1",
+        "RPTOWNER_STREET2",
+        "RPTOWNER_CITY",
+        "RPTOWNER_STATE",
+        "RPTOWNER_ZIPCODE",
+        "RPTOWNER_STATE_DESC",
+        "FILE_NUMBER"
+      ]
+    ],
+    "SUBMISSION.tsv": [
+      [
+        "ACCESSION_NUMBER",
+        "FILING_DATE",
+        "PERIOD_OF_REPORT",
+        "DATE_OF_ORIG_SUB",
+        "NO_SECURITIES_OWNED",
+        "NOT_SUBJECT_SEC16",
+        "FORM3_HOLDINGS_REPORTED",
+        "FORM4_TRANS_REPORTED",
+        "DOCUMENT_TYPE",
+        "ISSUERCIK",
+        "ISSUERNAME",
+        "ISSUERTRADINGSYMBOL",
+        "REMARKS"
+      ],
+      [
+        "ACCESSION_NUMBER",
+        "FILING_DATE",
+        "PERIOD_OF_REPORT",
+        "DATE_OF_ORIG_SUB",
+        "NO_SECURITIES_OWNED",
+        "NOT_SUBJECT_SEC16",
+        "FORM3_HOLDINGS_REPORTED",
+        "FORM4_TRANS_REPORTED",
+        "DOCUMENT_TYPE",
+        "ISSUERCIK",
+        "ISSUERNAME",
+        "ISSUERTRADINGSYMBOL",
+        "REMARKS",
+        "AFF10B5ONE"
+      ]
+    ]
+  },
+  "headers": {
+    "FOOTNOTES.tsv": [
+      "ACCESSION_NUMBER",
+      "FOOTNOTE_ID",
+      "FOOTNOTE_TXT"
+    ],
+    "NONDERIV_HOLDING.tsv": [
+      "ACCESSION_NUMBER",
+      "NONDERIV_HOLDING_SK",
+      "SECURITY_TITLE",
+      "SECURITY_TITLE_FN",
+      "TRANS_FORM_TYPE",
+      "TRANS_FORM_TYPE_FN",
+      "SHRS_OWND_FOLWNG_TRANS",
+      "SHRS_OWND_FOLWNG_TRANS_FN",
+      "VALU_OWND_FOLWNG_TRANS",
+      "VALU_OWND_FOLWNG_TRANS_FN",
+      "DIRECT_INDIRECT_OWNERSHIP",
+      "DIRECT_INDIRECT_OWNERSHIP_FN",
+      "NATURE_OF_OWNERSHIP",
+      "NATURE_OF_OWNERSHIP_FN"
+    ],
+    "NONDERIV_TRANS.tsv": [
+      "ACCESSION_NUMBER",
+      "NONDERIV_TRANS_SK",
+      "SECURITY_TITLE",
+      "SECURITY_TITLE_FN",
+      "TRANS_DATE",
+      "TRANS_DATE_FN",
+      "DEEMED_EXECUTION_DATE",
+      "DEEMED_EXECUTION_DATE_FN",
+      "TRANS_FORM_TYPE",
+      "TRANS_CODE",
+      "EQUITY_SWAP_INVOLVED",
+      "EQUITY_SWAP_TRANS_CD_FN",
+      "TRANS_TIMELINESS",
+      "TRANS_TIMELINESS_FN",
+      "TRANS_SHARES",
+      "TRANS_SHARES_FN",
+      "TRANS_PRICEPERSHARE",
+      "TRANS_PRICEPERSHARE_FN",
+      "TRANS_ACQUIRED_DISP_CD",
+      "TRANS_ACQUIRED_DISP_CD_FN",
+      "SHRS_OWND_FOLWNG_TRANS",
+      "SHRS_OWND_FOLWNG_TRANS_FN",
+      "VALU_OWND_FOLWNG_TRANS",
+      "VALU_OWND_FOLWNG_TRANS_FN",
+      "DIRECT_INDIRECT_OWNERSHIP",
+      "DIRECT_INDIRECT_OWNERSHIP_FN",
+      "NATURE_OF_OWNERSHIP",
+      "NATURE_OF_OWNERSHIP_FN"
+    ],
+    "OWNER_SIGNATURE.tsv": [
+      "ACCESSION_NUMBER",
+      "OWNERSIGNATURENAME",
+      "OWNERSIGNATUREDATE"
+    ],
+    "REPORTINGOWNER.tsv": [
+      "ACCESSION_NUMBER",
+      "RPTOWNERCIK",
+      "RPTOWNERNAME",
+      "RPTOWNER_RELATIONSHIP",
+      "RPTOWNER_TITLE",
+      "RPTOWNER_TXT",
+      "RPTOWNER_STREET1",
+      "RPTOWNER_STREET2",
+      "RPTOWNER_CITY",
+      "RPTOWNER_STATE",
+      "RPTOWNER_ZIPCODE",
+      "RPTOWNER_STATE_DESC",
+      "FILE_NUMBER"
+    ],
+    "SUBMISSION.tsv": [
+      "ACCESSION_NUMBER",
+      "FILING_DATE",
+      "PERIOD_OF_REPORT",
+      "DATE_OF_ORIG_SUB",
+      "NO_SECURITIES_OWNED",
+      "NOT_SUBJECT_SEC16",
+      "FORM3_HOLDINGS_REPORTED",
+      "FORM4_TRANS_REPORTED",
+      "DOCUMENT_TYPE",
+      "ISSUERCIK",
+      "ISSUERNAME",
+      "ISSUERTRADINGSYMBOL",
+      "REMARKS"
+    ]
+  },
+  "integrity": {
+    "self_sha256": "4f71f96f5971ca61e0740eb4081db907d898bcf9c4a1086068cf8118b058f21a"
+  },
+  "keys": {
+    "footnote": [
+      "ACCESSION_NUMBER",
+      "FOOTNOTE_ID"
+    ],
+    "reporting_owner": [
+      "ACCESSION_NUMBER",
+      "RPTOWNERCIK"
+    ],
+    "submission": [
+      "ACCESSION_NUMBER"
+    ],
+    "transaction": [
+      "ACCESSION_NUMBER",
+      "NONDERIV_TRANS_SK"
+    ],
+    "transaction_footnote_references": "all NONDERIV_TRANS *_FN fields, exact token join"
+  },
+  "network_used": false,
+  "outcomes_accessed": false,
+  "quarter_count": 30,
+  "schema": "h06-sec-bulk-schema-receipt-v1",
+  "status": "SEC_BULK_SCHEMA_KEYS_PROVEN"
+}

@@ -1,0 +1,72 @@
+{
+  "counts": {
+    "candidate_cover_accessions": 10,
+    "cover_issuer_month_targets": 13,
+    "raw_sip_targets": 13,
+    "true_holdout_targets": 3,
+    "unique_issuers": 7
+  },
+  "cover_targets": {
+    "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+    "logical_sha256": "2a54744e41ecb42c44971c850c42d39ea19fa20efca5393408ea13a43fac9c53",
+    "row_count": 13,
+    "schema": [
+      "issuer_cik",
+      "form4_symbol",
+      "decision_timestamp",
+      "transaction_security_titles",
+      "v5_candidate_entity_id",
+      "identity_precheck",
+      "cover_accession",
+      "cover_primary_document",
+      "cover_form",
+      "cover_accepted_at",
+      "cover_available_at",
+      "originating_core_pass_row_count",
+      "true_holdout",
+      "target_reason"
+    ],
+    "sort_key": [
+      "issuer_cik",
+      "form4_symbol",
+      "decision_timestamp"
+    ]
+  },
+  "cutoff": "2026-07-31T23:59:59Z",
+  "economic_run": false,
+  "integrity": {
+    "self_sha256": "b54a4475a7506b19a40039a6b4bc25d0c33ec37f41094802f4c67b982b5d7b57"
+  },
+  "network_used": false,
+  "outcomes_accessed": false,
+  "raw_sip_targets": {
+    "canonicalization": "compact UTF-8 JSON array per row; SQL NULL as JSON null; LF separator",
+    "logical_sha256": "9410cd967156ccc38e3b08dc999f6f2709522d96fbe9bc906141a1cd8b2e1ef8",
+    "row_count": 13,
+    "schema": [
+      "symbol",
+      "decision_session",
+      "timeframe",
+      "feed",
+      "adjustment",
+      "true_holdout"
+    ],
+    "sort_key": [
+      "symbol",
+      "decision_session"
+    ]
+  },
+  "remaining_work": [
+    "final cover/security-class enrichment",
+    "exact shares-fact enrichment",
+    "raw SIP denominator-price enrichment",
+    "final identity/denominator admission"
+  ],
+  "request_policy": {
+    "adjustment": "raw",
+    "feed": "SIP",
+    "timeframe": "1Day"
+  },
+  "schema": "h06-late-stage-enrichment-targets-v1",
+  "status": "H06_LATE_STAGE_ENRICHMENT_TARGETS_READY_NOT_ACQUIRED"
+}

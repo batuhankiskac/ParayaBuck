@@ -1,0 +1,27 @@
+{
+  "authorized": true,
+  "candidate": "H06",
+  "canonical_outcome_input_hashes": {
+    "data/historical/equity_entity_lifetimes_full_v5.csv": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.csv": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.csv": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "deterministic_nonce": "7b5a9b35ccba87ab4c9499346989653504f2570404b0ec57b8367eefeba09377",
+  "economic_execution_authorized": true,
+  "freeze_commit": "1677b201d2be8f5ef87cd4d9a7ff5d7c3fa3d4b8",
+  "integrity": {
+    "self_sha256": "67bb6788624521fce904cfb22eaa9e194a5243a05c82eaa66c2d6ce298a27bfa"
+  },
+  "one_shot_state_sha256": "62c021a3512c5d273b43b8530960626be10b3d7b996f1894f230704dd6173680",
+  "promotion_authorized": false,
+  "protocol_sha256": "a259444f3c68f677e8a9c36f7b43aee48020d7785a8db5638eb21ab92b98cd54",
+  "rerun_authorized": false,
+  "runner_sha256": "0901ab2b4e3c8d74e54bd8b9a5c8df4029e6d4ee139705551fa08b3b176993f5",
+  "schema": "h06-final-economic-authorization-v1",
+  "source_commit": "b9a136cb9d5bce725ba1e7b416653794c30be3c6",
+  "structural_commit": "890f79281188ca225acc04220d249cbf90ed1341",
+  "structural_manifest_sha256": "b503a1d99427cf1e5aeb62bb01f7bcfe18b72a15a04d89d9e86b25115e5951ed",
+  "tuning_authorized": false,
+  "v3_reference_sha256": "2c8b30eca960750a5bf31843d0577c087c835b6d822fa6a09cb6b61e161eab32",
+  "verifier_sha256": "83f7a8ba5dda2320bced8d75c9faee30fad83f46904337dc91d11f790ed7d55e"
+}

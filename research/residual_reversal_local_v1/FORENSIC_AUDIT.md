@@ -12,7 +12,7 @@ The original `RESEARCH_REJECT` is preserved as an immutable historical artifact,
 - Branch: `research/residual-reversal-local-v1`; origin matched the starting HEAD at audit start: `50938a3ac8b899a7528158bc0019808646a196e5`.
 - `main`: `8123694a71d8fbb0e520f13b4e1692e932754e97`.
 - Existing campaign artifact commit: `4b6dd3c`.
-- Forensic artifact commit: `pending`.
+- Forensic artifact commit: `7e63668`.
 - Economic rerun performed: **no**.
 
 Original campaign files were not overwritten. The audit reads the persisted run artifacts, the persisted universe snapshot, and the v5 lifetime table. It does not call `run_campaign.py`, `PortfolioBacktestEngine`, or any return-generating path.
@@ -176,4 +176,4 @@ The next step is an implementation-corrected replay of the same frozen candidate
 
 ## Commit SHA
 
-Forensic artifact commit: `pending`. The final branch tip is reported in the task handoff.
+Forensic artifact commit: `7e63668`. The final branch tip is reported in the task handoff.

@@ -1060,7 +1060,7 @@
     "branch": "research/residual-reversal-local-v1",
     "campaign": "equity_short_term_residual_reversal_v1",
     "campaign_artifact_commit": "4b6dd3c",
-    "current_head_at_audit": "50938a3ac8b899a7528158bc0019808646a196e5",
+    "current_head_at_audit": "7e6366817a68f4b7c323bfca134c977b653d31d1",
     "main_sha": "8123694a71d8fbb0e520f13b4e1692e932754e97",
     "origin_branch_head_at_audit": "50938a3ac8b899a7528158bc0019808646a196e5",
     "original_verdict": "RESEARCH_REJECT"

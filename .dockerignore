@@ -12,6 +12,5 @@ __pycache__
 build
 dist
 data
-research_runs/
 reports
 tests

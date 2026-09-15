@@ -6,11 +6,6 @@ __pycache__/
 # GPT Pro handoff artifacts (prompts/reports) — local, never committed
 gptpro/
 
-# Local Mission 3 experiment bundles are generated/local. Canonical evidence is
-# curated under data/research_manifests/, data/research_receipts/, data/research/
-# and docs/research/.
-/research_runs/
-
 # Local backup of project metadata; pyproject.toml is authoritative.
 /pyproject.toml.bak
 
@@ -162,11 +157,6 @@ activemq-data/
 .env
 data/runtime/
 data/cache/
-data/research/
-# R46 v2 one-shot transition journals are runtime evidence, not freeze inputs.
-data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.reserved.json
-data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.consumed.json
-data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.aborted_consumed.json
 data/backups/
 parayabuck.sqlite3
 parayabuck.sqlite3-*
@@ -243,10 +233,6 @@ reports/
 data/storage.sqlite*
 data/universe/
 
-# Per-run research JSON/JSONL outputs are generated locally.
-# Keep reports, tables, source snapshots, manifests, receipts, and fixtures visible.
-data/research_runs/**/*.json
-data/research_runs/**/*.jsonl
 data/historical/*_sample.csv
 data/historical/equity_1200_2019_2026.csv
 data/historical/crypto_18_1h_2024_2026.csv
@@ -262,15 +248,7 @@ data/historical/equity_survivorship_aware_full_2016_2026_v3.csv
 data/historical/equity_survivorship_aware_*.csv
 data/historical/equity_survivorship_full_corporate_actions_*.csv
 data/historical/equity_pit_symmetric_*.csv
-# Archive large generated artifacts (too large for GitHub, keep locally)
-data/research/archive/**/universe.json
-data/research/archive/**/*.csv
-data/research/archive/**/universe_history.csv
 data/runtime/paper_receipts/
-# M3 R3 local-only source and derived data (receipts/manifests/docs remain tracked)
-data/research/external/m3_iwm_raw_*/
-data/research/external/m3_iwm_raw_*.blocked.json
-data/research/generated/m3_data_gate_r3/
 data/historical/equity_m3_iwm_*.csv
 # Quarantine / local repair artifacts (huge sqlite dumps — never commit)
 data/quarantine/

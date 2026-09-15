@@ -303,7 +303,8 @@ if __name__ == "__main__":
     bench_peak(report)
     report.print_table(scale=1)
     # Write JSON artifact
-    artifact = Path("benchmarks/execution_boundary_mission8.json")
+    artifact = Path("reports/execution_boundary.json")
+    artifact.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "git_head": _git_head(),
         "python": platform.python_version(),

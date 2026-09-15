@@ -1,34 +1,31 @@
-"""Production-capable MH_RAW multi-horizon residual-momentum identity (v3).
+"""Production multi-horizon residual-momentum identity (v3).
 
-``EquityResidualMomentum1dV3`` implements EXACTLY the behavior validated by
-the 2026-08 MH_RAW promotion-validation mission:
+``EquityResidualMomentum1dV3`` implements the validated product behavior:
 
     positive 12-1 residual momentum gate
     -> multi-horizon rank consensus (6-1 / 9-1 / 12-1 months)
     -> ivol q=0.70 rejection -> top_n=8 -> inverse-vol sizing
     -> production risk overlay (unchanged)
 
-Semantics contract (frozen; see the validation manifest):
+Semantics contract (frozen):
 
 * ``_candidate_score`` stays the production DEFAULT 12-1 compounded
   residual (formation 252 / skip 21), so the positive-12m gate in
   ``_score_candidates`` runs BEFORE any cross-sectional re-scoring.
   A symbol whose 12-1 residual momentum is not positive is excluded and
-  never reaches the consensus — this is the frozen researched behavior
-  (``positive_12m_gate = true``), NOT an unrestricted 6/9/12 cross-section.
+  never reaches the consensus — this is the frozen product behavior, NOT an
+  unrestricted 6/9/12 cross-section.
 * ``_transform_cross_sectional_scores`` replaces the raw score with the
   equal mean of the per-horizon percentile ranks of raw (unstandardized)
   residual momentum at 6-1 / 9-1 / 12-1 months (126 / 189 / 252 residual
-  bars, skip 21, exactly like the research ``horizon_consensus_scores``
-  with ``standardized=False``).
+  bars, skip 21, using the validated raw-score consensus definition).
 * All other stages (idiosyncratic-vol rejection quantile 0.70, top_n 8,
   inverse-vol sizing capped at 0.10, SPY exclusion, weekly cadence, risk
   overlay) are inherited unchanged from the validated production base.
 
-This module has NO research-module dependency: the minimal consensus math
-is promoted here as pure, deterministic production code (bit-identical to
-the researched helper; parity is locked by tests). The strategy is selected
-for PAPER in ``config/settings.yaml``; LIVE remains disabled.
+This module contains the minimal deterministic consensus math used by the
+production strategy. The strategy is selected for PAPER in
+``config/settings.yaml``; LIVE remains disabled.
 """
 
 from __future__ import annotations
@@ -41,7 +38,7 @@ import numpy as np
 from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV2
 
 # Horizon lengths in RESIDUAL bars for the 6-1 / 9-1 / 12-1 consensus
-# (21 bars = 1 trading month). FROZEN by the MH_RAW promotion mission.
+# (21 bars = 1 trading month). Frozen as part of the v3 strategy contract.
 _DEFAULT_HORIZONS = (6 * 21, 9 * 21, 12 * 21)
 
 
@@ -50,7 +47,7 @@ def percentile_ranks(scores: Mapping[str, float]) -> dict[str, float]:
 
     ``pct(s) = (count strictly below + 0.5 * count equal) / N`` — always in
     (0, 1) for a non-empty sample, deterministic for any input order. This
-    is the same tie-averaged definition the research consensus uses.
+    uses a tie-averaged definition.
     """
     if not scores:
         return {}
@@ -105,9 +102,8 @@ def multi_horizon_consensus(
     For every horizon ``h`` the raw compounded residual-momentum score is
     computed over residual bars ``[-(h + skip), -skip)``, percentile-ranked
     cross-sectionally, and the three rank-normalized scores are averaged
-    with EQUAL weight. Mirrors research ``horizon_consensus_scores`` with
-    ``standardized=False``: identical windows, identical tie handling,
-    identical single-symbol-horizon degradation semantics. The last
+    with EQUAL weight using raw scores: identical windows, tie handling, and
+    single-symbol-horizon degradation semantics are explicit here. The last
     ``skip`` bars never enter any horizon window (no lookahead).
     """
     if not horizons or skip < 1 or skip >= min(horizons):
@@ -150,11 +146,10 @@ def multi_horizon_consensus(
 
 
 class EquityResidualMomentum1dV3(EquityResidualMomentum1dV2):
-    """MH_RAW consensus identity: 12-1 positive gate + 6/9/12 rank consensus.
+    """Multi-horizon consensus identity: 12-1 gate + 6/9/12 rank consensus.
 
-    Exact parity with the research MH_RAW variant is locked by
-    tests/test_equity_residual_momentum_v3.py — identical ranks, selected
-    names and target weights given identical ``PortfolioContext`` values.
+    Ranking, selection and target weights are locked by the production
+    contract tests for identical ``PortfolioContext`` values.
     """
 
     name = "equity_residual_momentum_v3"

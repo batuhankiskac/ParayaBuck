@@ -75,7 +75,6 @@
         <nav class="page-nav" aria-label="Ana bölümler">
             <a class="page-nav-link {% if request.url.path == '/' %}active{% endif %}" href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
             <a class="page-nav-link {% if request.url.path == '/tools' %}active{% endif %}" href="/tools" {% if request.url.path == '/tools' %}aria-current="page"{% endif %}>Araçlar</a>
-            <a class="page-nav-link {% if request.url.path == '/research' %}active{% endif %}" href="/research" {% if request.url.path == '/research' %}aria-current="page"{% endif %}>Araştırma</a>
         </nav>
 
         {% block content %}{% endblock %}

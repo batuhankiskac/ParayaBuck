@@ -1,6 +1,6 @@
 # Failure Semantics — Execution Boundary (Mission 7)
 
-This table is the contract for `src/parayabuck/execution/alpaca.py` failure handling. It is referenced by `docs/alpaca_broker_truth_matrix.md` and `docs/mission7_execution_boundary_report.md`.
+This table is the contract for `src/parayabuck/execution/alpaca.py` failure handling. It is referenced by `docs/alpaca_broker_truth_matrix.md`.
 
 ## Core Rule
 

@@ -3,9 +3,8 @@
 Validated ``Bar`` remains the canonical domain model. This module derives a
 read-only numerical cache (timestamps + closes) for the computational hot path
 (`equity_residual_momentum` residual scoring). The view is built **once per
-prepared dataset** (``_prepared_window``) and reused across N research trials,
-avoiding repeated per-decision ``list[Bar] → numpy`` conversions (the dominant
-bottleneck after Mission 1: ~2.26s of 4.97s profiler, 45% of run).
+prepared dataset** (``_prepared_window``) and reused across N optimization trials,
+avoiding repeated per-decision ``list[Bar] → numpy`` conversions.
 
 Design:
 

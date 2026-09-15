@@ -5,7 +5,7 @@ Produces machine-readable JSON for before/after comparison.
 
 Cases:
   A - single realistic equity run (large CSV if present, else synthetic)
-  B - repeated same-invariant runs (research usage, reuses prepared inputs)
+  B - repeated same-invariant runs (reuses prepared inputs)
   C - smaller CI-safe fixture (synthetic, no giant dataset required)
 
 Reports: total elapsed, engine-only elapsed, decisions, bars, bars/sec, decisions/sec, peak RSS
@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EQUITY_CSV = ROOT / "data" / "historical" / "equity_1200_2016_2026.csv"
 CONFIG = ROOT / "config" / "settings.yaml"
 
-# Windows matching research_acceleration benchmarks
+# Fixed benchmark windows
 EQUITY_START = datetime(2019, 1, 1, tzinfo=UTC)
 EQUITY_END = datetime(2021, 12, 31, tzinfo=UTC)
 
@@ -203,7 +203,7 @@ def _run_engine_benchmark(
     timing_product, _ = timeit(single_product, label=f"{label}_product", warmup=1, runs=repeats)
     timing_engine, _ = timeit(single_engine, label=f"{label}_engine", warmup=1, runs=repeats)
 
-    # Repeated same-invariant runs (research usage)
+    # Repeated same-invariant runs
     def batch_4():
         out = []
         for _ in range(4):
@@ -284,7 +284,7 @@ def main() -> int:
         output["cases"]["A_realistic_3y"] = metrics_a
 
         # Case B is essentially batch4 of A; also do smaller window for faster profiling
-        print("\n=== Case B: repeated 6m window (research) ===")
+        print("\n=== Case B: repeated 6m window ===")
         small_start = datetime(2019, 1, 1, tzinfo=UTC)
         small_end = datetime(2019, 6, 30, tzinfo=UTC)
         metrics_b = _run_engine_benchmark(bars, Market.EQUITY, small_start, small_end, label="equity_6m")

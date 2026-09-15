@@ -124,10 +124,9 @@ def test_production_selections_are_the_only_product_strategies(config: Config) -
     assert {config.strategy.equity.name, config.strategy.crypto.name} <= registered
 
 
-# Deleted/rejected families (implementations removed 2026-08-18; evidence in
-# docs/rejected_strategies.md). Construction must fail loudly — no silent
-# fallback, no automatic substitution.
-REJECTED_STRATEGY_NAMES = (
+# Historical unsupported identities remain non-constructible. Construction
+# must fail loudly — no silent fallback or automatic substitution.
+UNSUPPORTED_STRATEGY_NAMES = (
     "equity_dynamic_trend_1d_v1",
     "equity_long_horizon_momentum_1d_v2",
     "crypto_cross_sectional_momentum_1h_v1",
@@ -138,8 +137,8 @@ REJECTED_STRATEGY_NAMES = (
 )
 
 
-@pytest.mark.parametrize("name", REJECTED_STRATEGY_NAMES)
-def test_rejected_strategies_are_not_constructible(name: str) -> None:
+@pytest.mark.parametrize("name", UNSUPPORTED_STRATEGY_NAMES)
+def test_unsupported_strategies_are_not_constructible(name: str) -> None:
     with pytest.raises(ValueError, match=rf"Unsupported portfolio strategy: {re.escape(name)}"):
         portfolio_strategy_from(name)
 

@@ -153,7 +153,7 @@ class PortfolioRiskOverlay:
     ) -> RiskOverlayDecision:
         """Apply the portfolio risk overlay to a strategy target.
 
-        ``enforce_drawdown_halt``: when False (research backtests), a
+        ``enforce_drawdown_halt``: when False (offline backtests), a
         drawdown breach is a SHADOW event — the ``portfolio_drawdown_halt``
         reason is still recorded on the decision (where production would have
         halted) but the target is not capped, so the alpha curve keeps
@@ -183,7 +183,7 @@ class PortfolioRiskOverlay:
             and "portfolio_drawdown_halt" in halted_reasons
             and "daily_loss_limit" not in halted_reasons
         ):
-            # Research backtest: record the drawdown breach as a shadow event
+            # Offline backtest: record the drawdown breach as a shadow event
             # (production would have halted here) but keep the curve trading.
             # Daily-loss breaches are always enforced (session-scoped, they
             # self-recover; the drawdown peak does not).

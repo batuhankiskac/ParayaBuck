@@ -1,7 +1,7 @@
 # Strategy Architecture — Stable Trading-Layer Contract
 
 The product foundation (broker, execution, ownership, reconciliation,
-persistence, safety, Web app, PAPER/LIVE separation, research/runtime
+persistence, safety, Web app, PAPER/LIVE separation, offline/runtime
 separation) is FROZEN. This document defines the STABLE contract of the
 trading/strategy layer that may evolve: dynamic universe discovery,
 eligibility vs alpha, candidate pool vs observation stream, timeframe
@@ -182,21 +182,13 @@ portfolio/risk layer is the ONLY authority that:
 Strategies never see the account beyond `equity`/`holdings`/`prices` in the
 `PortfolioContext`; they never place orders.
 
-## 7. Research / runtime separation
+## 7. Offline tooling boundary
 
-Research tooling (`scripts/strategy_robustness.py`, the cadence-mission
-scripts `scripts/research_equity_cadence.py` / `research_crypto_cadence.py` /
-`research_robustness_audit.py` / `research_deployment_start.py` /
-`research_equity_staleness.py`, `scripts/combined_portfolio_validation.py`,
-`scripts/strategy_foundation.py`, shared helpers
-`scripts/research_helpers.py`) reuses the production strategy classes, the
-production historical engine, the production universe policy, the production
-cost model and the production risk policy. The runtime NEVER reads research
-reports or manifests. A human selects a strategy by normal configuration
-after reviewing evidence. There is no experiment registry, trial ledger,
-promotion database, holdout lock or GREEN/RED runtime gate. Rejected
-strategy families are archived (implementation removed) in
-`docs/rejected_strategies.md`.
+Backtest, optimization and diagnostics are finite, optional workflows. They
+reuse the production strategy, universe, cost and risk code but never write
+runtime state or authorize PAPER/LIVE. The runtime does not read generated
+reports or benchmark output; `config/settings.yaml` and the product factory
+are the strategy-selection authorities.
 
 ## 8. Strategy registry (as of the PAPER v3 release)
 
@@ -211,10 +203,8 @@ strategy families are archived (implementation removed) in
 | `crypto_low_variance_v1` | crypto | 1d | 1d | hours:168 | frozen historical baseline |
 | `crypto_low_variance_v2` | crypto | 1d | 1d | hours:96 | frozen prior PAPER selection (superseded 2026-08-26) |
 | `crypto_low_variance_hysteresis_v1` | crypto | 1d | 1d | hours:96 (retention rank 4, lookback 22, top2, alloc 0.05) | PAPER production selection (2026-08-26) |
-There are no research-only identities: rejected strategy families were
-removed from the runtime on 2026-08-18 and are archived in
-`docs/rejected_strategies.md`. `portfolio_strategy_from` rejects any other
-name with `Unsupported portfolio strategy: <name>`.
+Unknown strategy names are rejected with
+`Unsupported portfolio strategy: <name>`.
 
 Versioning: strategies are immutable once validated; a change to the signal
 specification is a NEW named strategy, never a silent parameter mutation.

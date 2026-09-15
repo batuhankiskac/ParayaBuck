@@ -142,8 +142,8 @@ The dashboard polls `/api/dashboard/overview` every 5 s; the existing
 
 The main dashboard is ordered for day-to-day portfolio monitoring: primary
 money metrics, secondary account metrics, the full-width performance chart,
-open positions, strategy cards, risk/health, execution and universe. Research
-and diagnostic workflows live on `/tools`: the Web backtest runner, raw
+open positions, strategy cards, risk/health, execution and universe. Diagnostic
+workflows live on `/tools`: the Web backtest runner, raw
 operations snapshot and live motor console. Both pages preserve the existing
 engine controls and no-store control-token behavior; `/tools` links back to the
 dashboard settings drawer for configuration changes.

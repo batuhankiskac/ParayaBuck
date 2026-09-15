@@ -1,9 +1,9 @@
-"""Golden parity reference: deterministic hash of canonical backtest outputs.
+"""Deterministic parity reference for canonical backtest outputs.
 
 Runs equity v2 (2019-2021 window) and crypto v2 (full) backtests on the local
 historical CSVs and hashes the authoritative outputs (equity curve, fills,
-targets, universe history, summary economics). The optimization tournament
-requires this hash to be UNCHANGED after Tier-1 optimizations.
+targets, universe history, summary economics). The reference hash is expected
+to remain stable when benchmarked code changes.
 
 Usage:
     python benchmarks/parity.py                # print hashes

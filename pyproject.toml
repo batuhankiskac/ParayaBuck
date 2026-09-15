@@ -71,9 +71,5 @@ exclude = [".venv/", "build/", "tests/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "research: current or historical research-contract tests",
-    "historical_research: closed, superseded, or retrospective research tests excluded from default runs",
-    "research_deep(reason): current research assurance reserved for change-sensitive or periodic validation; reason is required",
-    "r46_deep: R46 strict replay, provenance, package, and integration tests reserved for deep validation",
     "paper_chaos: deterministic paper-trading fault injection and recovery scenario",
 ]

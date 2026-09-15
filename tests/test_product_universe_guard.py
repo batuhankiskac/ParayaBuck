@@ -4,7 +4,7 @@ Dynamic product execution (PAPER backtest/runtime) must not treat
 ``universe=None`` as "every symbol is tradable". The permissive
 ``PortfolioContext.in_universe`` fallback (True when universe is None or
 lacks ``contains``) remains for explicitly declared static/non-product
-research contexts via ``allow_static_context=True``; product paths must
+static test contexts via ``allow_static_context=True``; product paths must
 raise.
 """
 

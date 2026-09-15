@@ -96,7 +96,6 @@ No circular imports. `repository` does not import `PortfolioRuntime`. `rebalance
 | High-water | `portfolio_high_water` | `account_id` PK (`equity`, `epoch`, `updated_at`) |
 | Warmup bars | `data/cache/warmup.sqlite3` (`bars`, `scope_meta`) | PK `(feed, symbol, market, timeframe, adjustment, timestamp)` |
 | Execution ledger | `ExecutionLedger` (`orders`, `fills`, `managed_positions`, `risk_state`) | SQLite WAL, `busy_timeout=5000` |
-| Research bundles | `research_runs/<date>_<slug>_<exp>_<run>/` (`manifest.json`, `summary.json`, `trials.jsonl`) | `experiment_id` deterministic, `run_id` |
 
 All SQLite DBs use WAL + `busy_timeout=5000`; repository uses `store.lock` + `with connection:` for atomic multi-table writes. `WarmupCache._migrate_legacy_schema` handles crash recovery (see below).
 
@@ -131,9 +130,11 @@ Distinct, not collapsed.
 
 - Hourly batched verification (`_SIGNAL_ADJUSTMENT_CHECK_SECONDS=3600`, lookback 14 days + 10 day margin) compares raw vs split-adjusted daily tails per symbol, verifies `adequate_coverage`, replaces `history` wholesale when provider rebased. Health field `signal_adjustment` reports coverage.
 
-## Historical Benchmark Labeling
+## Backtest artifacts
 
-See `benchmarks/BASELINE_LABELS.md`. Frozen baselines retain old strategy names / HEAD hashes and are labelled `frozen baseline` / `legacy parity fixture` — do not overwrite. Current baseline is `benchmarks/backtest_core_before.json` (Mission 3 final, 1.30s 3y).
+Backtest outputs are disposable diagnostics, not runtime state. The runtime
+uses the configured strategy and historical inputs directly; it never depends
+on generated reports or benchmark output.
 
 ## Rejected Abstractions
 

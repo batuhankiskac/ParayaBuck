@@ -19,13 +19,12 @@ correctness or safety defects.
    discovers/maintains its universe, ingests market data, runs enabled
    strategy logic on schedule, constructs portfolio targets, enforces risk,
    submits and reconciles orders, monitors positions, and recovers from
-   restart — including across the session-day boundary — without human or
-   research commands.
-2. **Research is optional support.** Backtest/optimize/diagnostics are
+   restart — including across the session-day boundary — without operator
+   intervention.
+2. **Offline tooling is optional support.** Backtest/optimize/diagnostics are
    finite, optional tooling. PAPER/LIVE runtime has ZERO dependency on
-   research artifacts: no experiment registry, trial ledger, promotion
-   state, validation status, or optimizer output is read at runtime.
-   Research backtests record drawdown breaches as shadow events
+   generated offline artifacts or optimizer output.
+   Offline backtests record drawdown breaches as shadow events
    (`drawdown_halt_shadow_events`) instead of freezing the alpha curve on
    the monotonic peak.
 3. **Same strategy semantics across backtest/paper/live.** One
@@ -34,7 +33,7 @@ correctness or safety defects.
    and the live broker path.
 4. **Execution/ownership/risk infrastructure is frozen** unless a genuine
    correctness or safety defect is discovered. Do not reopen architecture
-   because a new strategy is being researched.
+   because an experimental strategy is being evaluated.
 5. **Fail closed, self-heal bounded.** Permanent incidents (ownership drift,
    protection failure, ambiguous execution, …) persist across
    restart/midnight/reboot until a verified recovery (successful
@@ -65,13 +64,9 @@ correctness or safety defects.
 
 ## Verification summary
 
-- Quality gates: ruff, format, mypy (64 files), 426 pytest, build, paper
-  chaos (90 marked scenarios), pip-audit — all PASS.
-- Earlier PAPER lifecycle smoke verified process startup, universe scans,
-  `/readyz`, shutdown, and bind-conflict handling, but did not establish a
-  persisted v3/hysteresis decision. Product-universe composition is now
-  covered offline; controlled deployment must still prove one persisted
-  startup-catch-up decision per enabled market before forward validation is
-  called active.
-- Docker gate: NOT RUN — no daemon available on the audit machine.
-- Scorecard: PASS 20 · PARTIAL 0 · FAIL 0.
+The repository quality gates are ruff, format, mypy, the normal pytest suite,
+build, paper-chaos fault injection, and dependency auditing. Run them against
+the current checkout before release; this document records the product
+contract and is not a test receipt. Controlled PAPER operation must still
+establish persisted startup-catch-up and scheduled decisions before any live
+consideration.

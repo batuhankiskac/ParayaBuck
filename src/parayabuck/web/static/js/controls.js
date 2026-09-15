@@ -8,7 +8,7 @@
     const resetSafetyBtn = document.getElementById("resetSafetyBtn");
     const riskEpochBtn = document.getElementById("riskEpochBtn");
     const settingsBtn = document.getElementById("settingsBtn");
-    if (!modeChip) return; // not on research/tools without these controls? still safe
+    if (!modeChip) return; // not on tools without these controls? still safe
     const byId = function(id){ return document.getElementById(id); };
     const api = global.PBApi;
     let isPaperMode = true;

@@ -112,7 +112,7 @@ def _bars() -> list[Bar]:
     return bars
 
 
-def test_paper_runtime_needs_no_research_manifest_and_is_idempotent(tmp_path) -> None:
+def test_paper_runtime_is_idempotent_without_external_artifacts(tmp_path) -> None:
     broker = _Broker()
     runtime = _runtime(tmp_path, broker)
     result = runtime.process_closed_bars(_bars())

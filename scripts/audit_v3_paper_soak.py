@@ -62,7 +62,6 @@ REQUIRED_PORTFOLIO_TABLES = (
     "portfolio_rebalance_executions",
     "portfolio_ownership_adjustments",
 )
-SHADOW_REFERENCE_PATH = ROOT / "data" / "research" / "mh_raw_shadow_2026_08" / "shadow_log.json"
 
 
 def _utc_now() -> str:
@@ -1190,42 +1189,6 @@ def _audit_database(db_path: Path, config: object | None) -> dict[str, object]:
         connection.close()
 
 
-def _offline_shadow_reference() -> dict[str, object]:
-    report: dict[str, object] = {
-        "path": str(SHADOW_REFERENCE_PATH),
-        "available": False,
-        "is_paper_observation": False,
-        "reason": "historical offline shadow reference is absent",
-    }
-    if not SHADOW_REFERENCE_PATH.is_file():
-        return report
-    try:
-        raw = json.loads(SHADOW_REFERENCE_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        report["reason"] = f"could not read historical shadow reference: {exc}"
-        return report
-    if not isinstance(raw, dict):
-        report["reason"] = "historical shadow reference is not a JSON object"
-        return report
-    report.update(
-        {
-            "available": True,
-            "reason": None,
-            "observation_status": "historical_offline_reference_not_soak_data",
-            "mission": raw.get("mission"),
-            "executable_strategy": raw.get("executable_strategy"),
-            "shadow_strategy": raw.get("shadow_strategy"),
-            "implementation_commit": raw.get("implementation_commit"),
-            "research_commit": raw.get("research_commit"),
-            "config_digest_sha256": raw.get("config_digest_sha256"),
-            "generated_at": raw.get("generated_at"),
-            "summary": raw.get("summary"),
-            "note": ("This reference is not counted as PAPER soak observations and never authorizes orders."),
-        }
-    )
-    return report
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default=None, help="runtime SQLite path (default: config)")
@@ -1263,7 +1226,6 @@ def main() -> int:
         "frozen_semantics": _expected_frozen_semantics(),
         "configuration": configuration,
         "database": database,
-        "offline_shadow_reference": _offline_shadow_reference(),
         "promotion_interpretation": {
             "status": "report_only",
             "no_data_is_not_a_pass": True,

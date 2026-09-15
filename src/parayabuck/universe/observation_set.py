@@ -6,7 +6,7 @@ batch historical data, and the top ``maximum_stream_symbols`` plus pinned
 symbols become the streamed OBSERVATION SET. Managed positions and open
 managed orders stay pinned regardless of ranking.
 
-Research-free runtime path: the builder is pure code, no manifests.
+Runtime path: the builder is pure code and has no external artifact dependency.
 
 Fail-closed universe note: :func:`build_observation_set` ranks the *pool*
 itself (``pool_symbols``) and intentionally builds a permissive

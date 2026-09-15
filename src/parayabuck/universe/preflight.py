@@ -549,7 +549,7 @@ def _refresh_crypto_universe_with_clients(
 ) -> CryptoScannerResult:
     universe = config.universe.crypto
     # Paper candidate-pool parity: the authoritative alpha-search pool is the
-    # configured trade_symbols (22-pair researched universe). The broker's
+    # configured trade_symbols (the supported configured universe). The broker's
     # currently supported active/tradable assets are an intersection, not a
     # replacement. Unconfigured broker symbols (e.g. FOO/USD) must never enter
     # the alpha candidate pool, and a configured symbol that the broker reports

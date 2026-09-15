@@ -288,9 +288,9 @@ class EngineRuntime:
                 raise ValueError(f"Configured {market.value} strategy has the wrong market")
             # The strategy owns its signal timeframe; the configured value must
             # match one of its validated timeframes (never silently
-            # reinterpreted). product_strategy_from already enforces product
-            # boundary, and validate_strategy_timeframe keeps the invariant
-            # explicit. Research harness may still use portfolio_strategy_from.
+            # reinterpreted). product_strategy_from already enforces the
+            # product boundary, and validate_strategy_timeframe keeps the
+            # invariant explicit. Generic callers may use portfolio_strategy_from.
             validate_strategy_timeframe(strategy, selection.timeframe or strategy.timeframe)
             strategy_specs.append((strategy, tuple(symbols), selection.maximum_allocation))
         self._strategy_specs = tuple(strategy_specs)
@@ -4637,7 +4637,7 @@ class EngineRuntime:
         EQUITY symbols are fetched on TWO explicit bases: RAW seeds the
         execution-side market state (as-traded stream truth), SPLITS seeds
         the portfolio runtimes' strategy signal history (the same basis as
-        backtest research data; bridged across live splits by
+        backtest historical data; bridged across live splits by
         ``data/adjustment.py``). Crypto has no corporate actions: one RAW
         fetch feeds both consumers.
 

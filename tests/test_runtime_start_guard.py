@@ -25,7 +25,7 @@ def test_runtime_start_refused_when_disabled() -> None:
         runtime.start()
 
 
-def test_paper_runtime_needs_no_research_approval() -> None:
+def test_paper_runtime_starts_without_external_approval() -> None:
     class FakeBroker:
         def reconcile(self) -> None:
             raise RuntimeError("reached broker reconcile")

@@ -1,4 +1,4 @@
-"""Mission 2 parity tests for NumericHistoryView.
+"""Parity tests for NumericHistoryView.
 
 Covers:
 - aligned returns inner-join correctness vs legacy Bar path

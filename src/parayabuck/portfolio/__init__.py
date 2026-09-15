@@ -23,17 +23,15 @@ from parayabuck.portfolio.models import (
 _PORTFOLIO_STRATEGY_FACTORIES: dict[str, type[PortfolioStrategy]] = {
     EquityResidualMomentum1dV1.name: EquityResidualMomentum1dV1,
     EquityResidualMomentum1dV2.name: EquityResidualMomentum1dV2,
-    # v3 (MH_RAW consensus) is the frozen 2026-08 PAPER promotion identity.
+    # v3 (multi-horizon consensus) is the frozen PAPER production identity.
     EquityResidualMomentum1dV3.name: EquityResidualMomentum1dV3,
     CryptoLowVariance1dV1.name: CryptoLowVariance1dV1,
     CryptoLowVariance1dV2.name: CryptoLowVariance1dV2,
     CryptoLowVarianceHysteresis1dV1.name: CryptoLowVarianceHysteresis1dV1,
 }
 
-# The PRODUCT strategy surface: the identities the PAPER product supports
-# (current validated selections plus frozen historical baselines). Rejected
-# strategy families are archived in docs/rejected_strategies.md and are NOT
-# constructible at runtime.
+# The PRODUCT strategy surface: current selections plus frozen historical
+# baselines. Unknown strategy names are not constructible at runtime.
 PRODUCT_STRATEGY_NAMES: tuple[str, ...] = (
     "equity_residual_momentum_v1",
     "equity_residual_momentum_v2",
@@ -87,8 +85,8 @@ def product_strategy_from(
 
     Validates ``name`` against ``PRODUCT_STRATEGY_NAMES`` (the PAPER product
     surface) then delegates to ``portfolio_strategy_from`` for construction.
-    Research-only factories (e.g. hysteresis_v1 before promotion) remain
-    constructible via ``portfolio_strategy_from`` but are rejected here.
+    Generic factories may construct strategy classes for backtests, while this
+    product-gated factory accepts only the supported product identities.
     """
     if name not in PRODUCT_STRATEGY_NAMES:
         raise ValueError(

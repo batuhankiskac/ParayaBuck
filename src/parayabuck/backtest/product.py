@@ -27,7 +27,6 @@ from parayabuck.execution.portfolio import (
 )
 from parayabuck.markets.timeframes import is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
-from parayabuck.portfolio.base import PortfolioStrategy
 
 try:
     from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history
@@ -120,25 +119,19 @@ def build_product_universe(
     market: Market,
     end: datetime | None = None,
     timeframe: str | None = None,
-    observation_strategy_override: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
     """Build the point-in-time scanner universe for a product backtest.
 
     Eligible-pool membership depends on the bar set and scanner policy. Its
     streamed observation membership is ranked by the configured product
-    strategy, matching PAPER preflight. Optimizer trials deliberately reuse
-    that deployed/configured observation basis rather than letting each
-    research parameter arm redefine what PAPER would have streamed.
+    strategy, matching the product runtime. Optimizer trials deliberately
+    reuse that configured observation basis rather than letting each parameter
+    arm redefine the streamed universe.
 
     ``timeframe`` defaults to the configured strategy's timeframe and must be
-    passed when a run overrides the strategy. ``observation_strategy_override``
-    is an explicit research/testing hook: when supplied, it replaces only the
-    alpha ranker used to build the streamed observation set. Scanner
-    eligibility, pins, capacity, costs, risk and execution remain owned by the
-    configured product policy. The override must be a
-    :class:`PortfolioStrategy` for the requested market and the selected
-    backtest timeframe. ``None`` preserves the configured-product behavior
-    byte-for-byte.
+    passed when a run overrides the strategy. Scanner eligibility, pins,
+    capacity, costs, risk and execution remain owned by the configured product
+    policy.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(
@@ -152,21 +145,7 @@ def build_product_universe(
         timeframe=selection.timeframe,
     )
     selected_timeframe = timeframe or strategy.timeframe
-    if observation_strategy_override is not None:
-        if not isinstance(observation_strategy_override, PortfolioStrategy):
-            raise TypeError("observation_strategy_override must be a PortfolioStrategy")
-        if observation_strategy_override.market != market:
-            raise ValueError(f"observation_strategy_override market must match the requested market ({market.value})")
-        if observation_strategy_override.timeframe != selected_timeframe:
-            raise ValueError(
-                "observation_strategy_override timeframe must match the selected backtest timeframe "
-                f"({selected_timeframe})"
-            )
-    # An explicit override is a semantic choice, not a truthiness fallback.
-    # PortfolioStrategy implementations may intentionally define ``__bool__``
-    # (for example, to expose readiness), so ``or`` could silently replace a
-    # valid candidate-owned observer with the configured product strategy.
-    observation_strategy = observation_strategy_override if observation_strategy_override is not None else strategy
+    observation_strategy = strategy
     available = [
         bar
         for bar in bars
@@ -230,7 +209,8 @@ def run_product_backtest(
         raise ValueError("cost_multiplier must be positive")
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     # Explicit None-check: {} means "use requested strategy defaults", None means "use configured selection"
-    # This allows Case B research (different strategy identity) to pass {} and not leak selection params.
+    # This keeps an explicitly requested strategy's defaults from inheriting
+    # the configured selection parameters.
     strategy = portfolio_strategy_from(
         strategy_name or selection.name,
         parameters if parameters is not None else selection.parameters,
@@ -366,7 +346,7 @@ def run_product_backtest(
                     else None
                 ),
                 "note": (
-                    "Research backtest: entries were NOT blocked at these "
+                    "Offline backtest: entries were NOT blocked at these "
                     "points (the curve kept trading). Under the production "
                     "drawdown policy each event is a halt until an operator "
                     "starts a new risk epoch."

@@ -56,8 +56,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     observation set (stream limit != opportunity universe) is selected by the
     same alpha the strategy trades.
 
-    Research hooks (defaults preserve production math exactly; the 2026-08
-    alpha-optimization mission subclasses them):
+    Strategy extension hooks (defaults preserve production math exactly):
         ``_transform_cross_sectional_scores`` — once-per-decision re-scoring
             of the eligible pool (blend / multi-horizon consensus);
         ``_transform_cross_sectional_scores_with_context`` — same hook with
@@ -438,7 +437,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     def _candidate_score(self, residuals: list[float], *, formation: int, skip: int) -> float:
         """Ranking score over the formation window (skip excluded).
 
-        Default: compounded residual return. Research variants may
+        Default: compounded residual return. Strategy variants may
         standardize (score / residual stdev) by overriding ONLY this hook so
         every variant shares the exact beta/residual/filter pipeline.
         """
@@ -455,7 +454,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """Eligibility gate after shared beta/residual math.
 
         The default is the frozen V1/V2/V3 positive formation-score gate.
-        Research-only variants may replace the gate while retaining the
+        Variants may replace the gate while retaining the
         timestamp alignment, beta, residual-volatility, and IVOL pipeline.
         """
         del residuals, formation, skip
@@ -486,7 +485,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         formation: int,
         skip: int,
     ) -> list[tuple[float, str]]:
-        """Cross-sectional research scoring hook (see ``_score_candidates``).
+        """Cross-sectional scoring hook (see ``_score_candidates``).
 
         Runs once per decision over the eligible pool with every symbol's
         residual series and 63-bar annualized residual vols available, so
@@ -510,7 +509,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
 
         The default delegates to the established hook, keeping existing
         variants and the production V3 score path byte-for-byte equivalent.
-        Research may use completed-bar context for an orthogonal feature.
+        A variant may use completed-bar context for an orthogonal feature.
         """
         del context
         return self._transform_cross_sectional_scores(
@@ -530,7 +529,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
     ) -> tuple[str, ...]:
         """Position-selection hook (see ``decide``) — ranking unchanged.
 
-        Default: the best ``top_n`` scores. Research may override to encode
+        Default: the best ``top_n`` scores. A variant may override to encode
         hysteresis around the selection boundary without touching math: the
         overlay's per-position/rank caps remain in force on the result.
         """
@@ -544,7 +543,7 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
         """Post-sizing hook running AFTER alpha target weights are set and
         BEFORE the engine risk overlay sees them.
 
-        Default: pass-through. Research variants may scale the allocation
+        Default: pass-through. Variants may scale the allocation
         (e.g. market-regime exposure derating) here; existing per-position
         and gross-exposure caps are then applied on the scaled targets.
         """
@@ -810,12 +809,12 @@ def _volatility(residuals: list[float]) -> float:
 class EquityResidualMomentum1dV2(EquityResidualMomentum1dV1):
     """Weekly-cadence identity of the validated residual-momentum alpha.
 
-    RESEARCH-validated cadence variant (2026-08-18 cadence mission): identical
+    Validated cadence variant: identical
     signal math and parameters to ``equity_residual_momentum_v1``; only the
     rebalance cadence differs (weekly vs monthly). The cadence rides in the
     strategy parameters (``rebalance_frequency``) so the configuration digest,
-    persisted decisions and dashboard identity are distinct from v1 — v1 stays
-    the frozen production selection until an operator promotes v2.
+    persisted decisions and dashboard identity are distinct from v1. Both
+    remain available as named frozen baselines.
     """
 
     name = "equity_residual_momentum_v2"

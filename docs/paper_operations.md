@@ -73,9 +73,8 @@ behavior**, **execution quality**, **cost assumptions**, **operational
 reliability**, and **out-of-backtest behavior** — not single-period PnL.
 
 An **economic modification** (alpha, parameters, cost model, or any
-assumption that changes what or how the strategies trade) requires a
-**separate research mission** — it is never made reactively from PAPER
-results.
+assumption that changes what or how the strategies trade) requires separate
+validation and approval — it is never made reactively from PAPER results.
 
 Reporting windows are **7 / 30 / 90 days**. These windows are **reporting
 only, NOT approval gates**: a report that lands inside a window triggers
@@ -104,13 +103,3 @@ behavior):
 
 `scripts/execution_quality_report.py` prints the report; it exits 0 even
 against an empty or missing database.
-
-## P1 natural-PAPER observation (planned)
-
-The planned P1 record is documented in
-[`docs/research/execution_cost_transferability_p1_paper_observation_2026_09.md`](research/execution_cost_transferability_p1_paper_observation_2026_09.md).
-Its report runner is read-only and requires a committed sample epoch, local
-executable bars, a configuration digest, an anonymized account identity, and a
-first eligible session ID. It reports 7/30/90-day review windows only; it
-cannot start PAPER, call a broker/data API, calibrate costs, or approve a
-promotion.

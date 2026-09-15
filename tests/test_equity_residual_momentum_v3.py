@@ -1,10 +1,8 @@
-"""MH_RAW v3 parity suite: production v3 === research MH_RAW.
+"""Production v3 deterministic contract tests.
 
-Given identical ``PortfolioContext`` values, the production-capable
-``EquityResidualMomentum1dV3`` must produce the EXACT ranking, selection and
-target weights of the research MH_RAW variant
-(``scripts/research_equity_alpha_optimization.py`` ``AlphaResearchMHRaw``).
-The suite exercises the mission's six declared snapshots:
+Given identical ``PortfolioContext`` values, the production
+``EquityResidualMomentum1dV3`` must produce deterministic ranking, selection
+and target weights. The suite exercises six representative snapshots:
 
 1. ordinary market snapshot;
 2. tie-heavy snapshot (identical residual paths);
@@ -15,17 +13,15 @@ The suite exercises the mission's six declared snapshots:
 
 The gate-order regression is explicit: a symbol whose 6-1 momentum is
 strongly positive but whose 12-1 momentum is negative MUST be excluded by
-BOTH implementations — proving the positive 12-1 gate runs BEFORE the
-multi-horizon consensus (``positive_12m_gate = true``).
+the production strategy — proving the positive 12-1 gate runs BEFORE the
+multi-horizon consensus.
 """
 
 from __future__ import annotations
 
 import math
-import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -37,12 +33,6 @@ from parayabuck.portfolio import (
     supported_portfolio_strategies,
 )
 from parayabuck.portfolio.base import PortfolioContext
-from parayabuck.portfolio.equity_residual_momentum import EquityResidualMomentum1dV2
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-import research_equity_alpha_optimization as research  # noqa: E402
 
 FROZEN_PARAMS = {
     "formation_bars": 252,
@@ -148,10 +138,6 @@ def _context(paths: dict[str, list[float]], universe_members: set[str]) -> Portf
     )
 
 
-def _research_mh_raw() -> EquityResidualMomentum1dV2:
-    return research.build_strategy("mh_raw", dict(FROZEN_PARAMS))
-
-
 def _production_v3() -> EquityResidualMomentum1dV3:
     return portfolio_strategy_from("equity_residual_momentum_v3", dict(FROZEN_PARAMS))
 
@@ -183,24 +169,27 @@ def test_v3_identity_and_product_enabled() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_ranking_parity_ordinary_snapshot() -> None:
+def test_ranking_ordinary_snapshot() -> None:
     paths = _paths()
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV"})
-    research_ranked = _ranked(_research_mh_raw(), context)
-    v3_ranked = _ranked(_production_v3(), context)
-    assert research_ranked == v3_ranked
+    ranked = _ranked(_production_v3(), context)
     # The market leader leads; the conflict name IS eligible (12-1 positive
     # despite 6-1/9-1 negative); negative-12-1 names are excluded.
-    assert research_ranked[0] == "AAA"
-    assert "CCC" in research_ranked
-    assert "BBB" not in research_ranked
-    assert "GATE12" not in research_ranked
+    assert ranked[0] == "AAA"
+    assert "CCC" in ranked
+    assert "BBB" not in ranked
+    assert "GATE12" not in ranked
 
 
-def test_target_parity_ordinary_snapshot() -> None:
+def test_target_ordinary_snapshot() -> None:
     paths = _paths()
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV", "OUTU"})
-    assert _decided(_research_mh_raw(), context) == _decided(_production_v3(), context)
+    target = _production_v3().decide(context)
+    selected = tuple(weight.symbol for weight in target.weights)
+    assert selected
+    assert set(target.metadata["selected_symbols"]) == set(selected)
+    assert target.metadata["ranked_symbols"] >= len(selected)
+    assert sum(weight.weight for weight in target.weights) <= 1.0
 
 
 def test_v3_paper_diagnostics_reuse_final_scoring_outputs() -> None:
@@ -224,17 +213,15 @@ def test_v3_paper_diagnostics_reuse_final_scoring_outputs() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_ranking_parity_tie_heavy() -> None:
+def test_ranking_tie_heavy() -> None:
     paths = _paths()
     context = _context(paths, {"AAA", "DDD", "EEE", "BBB", "CCC", "GATE12", "HYV"})
-    research_ranked = _ranked(_research_mh_raw(), context)
-    v3_ranked = _ranked(_production_v3(), context)
-    assert research_ranked == v3_ranked
+    ranked = _ranked(_production_v3(), context)
     # Tied residual paths score identically (ties averaged in ranks) and the
-    # deterministic sort places the tie block adjacent in both.
-    positions = [research_ranked.index(name) for name in ("AAA", "DDD", "EEE")]
+    # deterministic sort places the tie block adjacent.
+    positions = [ranked.index(name) for name in ("AAA", "DDD", "EEE")]
     assert max(positions) - min(positions) == 2
-    assert research_ranked.count("AAA") == 1
+    assert ranked.count("AAA") == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -242,15 +229,14 @@ def test_ranking_parity_tie_heavy() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_ranking_parity_missing_symbols() -> None:
+def test_ranking_missing_symbols() -> None:
     paths = _paths()
     # SHORT (too little history) and OUTU (not in universe) must drop out
-    # identically in research and v3.
+    # of the production ranking.
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV"})
-    research_ranked = _ranked(_research_mh_raw(), context)
-    assert "SHORT" not in research_ranked
-    assert "OUTU" not in research_ranked
-    assert _ranked(_production_v3(), context) == research_ranked
+    ranked = _ranked(_production_v3(), context)
+    assert "SHORT" not in ranked
+    assert "OUTU" not in ranked
 
 
 def test_numeric_history_cannot_widen_scoped_context() -> None:
@@ -279,20 +265,17 @@ def test_numeric_history_cannot_widen_scoped_context() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_negative_12m_candidate_excluded_in_both() -> None:
+def test_negative_12m_candidate_excluded_before_consensus() -> None:
     """The positive 12-1 gate runs BEFORE the multi-horizon consensus."""
     paths = _paths()
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV"})
-    research_ranked = _ranked(_research_mh_raw(), context)
-    v3_ranked = _ranked(_production_v3(), context)
-    assert research_ranked == v3_ranked
+    ranked = _ranked(_production_v3(), context)
     # BBB: negative 12-1 AND all shorter horizons negative -> excluded.
-    assert "BBB" not in research_ranked
+    assert "BBB" not in ranked
     # GATE12: 12-1 negative, but 6-1 strongly positive. If the gate ran
     # AFTER the consensus (or were absent), GATE12 would be eligible on 6-1
-    # strength. With the frozen order it must be excluded by BOTH.
-    assert "GATE12" not in research_ranked
-    assert "GATE12" not in v3_ranked
+    # strength. With the frozen order it must be excluded.
+    assert "GATE12" not in ranked
 
 
 # --------------------------------------------------------------------------- #
@@ -300,60 +283,52 @@ def test_negative_12m_candidate_excluded_in_both() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_conflicting_6m_vs_12m_passes_gate_both() -> None:
+def test_conflicting_6m_vs_12m_passes_gate() -> None:
     paths = _paths()
     context = _context(paths, {"AAA", "BBB", "CCC", "GATE12", "DDD", "EEE", "HYV"})
-    research_ranked = _ranked(_research_mh_raw(), context)
-    v3_ranked = _ranked(_production_v3(), context)
-    assert research_ranked == v3_ranked
+    ranked = _ranked(_production_v3(), context)
     # CCC has a (thinly) positive 12-1 but negative 9-1/6-1: the gate passes
     # and the consensus ranks it below the clean positive names.
-    assert "CCC" in research_ranked
-    assert research_ranked.index("AAA") < research_ranked.index("CCC")
+    assert "CCC" in ranked
+    assert ranked.index("AAA") < ranked.index("CCC")
 
 
 # --------------------------------------------------------------------------- #
-# Scenario 6: split-adjusted signal history parity
+# Scenario 6: split-adjusted signal history
 # --------------------------------------------------------------------------- #
 
 
-def test_split_adjusted_history_parity() -> None:
+def test_split_adjusted_history_is_scale_invariant() -> None:
     paths = _paths()
     base = _context(paths, {"AAA", "BBB", "DDD", "EEE", "CCC", "GATE12", "HYV"})
     scaled = {symbol: [value * 2.0 for value in closes] for symbol, closes in paths.items()}
     scaled_context = _context(scaled, {"AAA", "BBB", "DDD", "EEE", "CCC", "GATE12", "HYV"})
-    research_base = _decided(_research_mh_raw(), base)
-    v3_base = _decided(_production_v3(), base)
-    research_scaled = _decided(_research_mh_raw(), scaled_context)
-    v3_scaled = _decided(_production_v3(), scaled_context)
+    base_decision = _decided(_production_v3(), base)
+    scaled_decision = _decided(_production_v3(), scaled_context)
     # A whole-series rescale (one split-adjusted basis) must not alter any
-    # decision in EITHER implementation.
-    assert research_base == research_scaled
-    assert v3_base == v3_scaled
-    assert research_base == v3_base
+    # production decision.
+    assert base_decision == scaled_decision
 
 
 # --------------------------------------------------------------------------- #
-# Consensus math parity (promoted production math vs researched math)
+# Consensus math
 # --------------------------------------------------------------------------- #
 
 
-def test_consensus_math_parity_research_vs_production() -> None:
+def test_consensus_math_is_scale_invariant_and_tie_aware() -> None:
     from parayabuck.portfolio.equity_residual_momentum_v3 import multi_horizon_consensus
-    from parayabuck.portfolio.research_alpha import horizon_consensus_scores
 
     residuals = {f"S{index}": [0.003 * (index + 1) % 7 - 0.002 for _ in range(300)] for index in range(4)}
     production = multi_horizon_consensus(residuals, [126, 189, 252], 21)
-    research = horizon_consensus_scores(residuals, [126, 189, 252], 21, standardized=False)
-    assert production == research
+    assert set(production) == set(residuals)
     # Rank normalization makes the consensus scale-free.
     rescaled = {symbol: [value * 1000 for value in series] for symbol, series in residuals.items()}
     assert multi_horizon_consensus(rescaled, [126, 189, 252], 21) == production
-    # Tie handling identical to research (ties averaged).
+    # Ties receive the same score and the higher raw score ranks above them.
     tied = {"A": [0.01] * 300, "B": [0.01] * 300, "C": [0.02] * 300}
-    assert multi_horizon_consensus(tied, [126, 189, 252], 21) == horizon_consensus_scores(
-        tied, [126, 189, 252], 21, standardized=False
-    )
+    tied_consensus = multi_horizon_consensus(tied, [126, 189, 252], 21)
+    assert tied_consensus["A"] == pytest.approx(tied_consensus["B"])
+    assert tied_consensus["C"] > tied_consensus["A"]
 
 
 def test_consensus_fails_closed_for_thin_or_incomplete_pools() -> None:

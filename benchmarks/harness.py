@@ -1,6 +1,6 @@
-"""Deterministic timing/memory harness for the ParayaBuck optimization tournament.
+"""Deterministic timing/memory harness for ParayaBuck benchmarks.
 
-Methodology (from the tournament rules):
+Methodology:
 - fast operations: warmup runs + >= 10 measured runs
 - expensive operations (backtests): >= 3 measured runs
 - report median, p95, min, max, variance on the SAME machine/process where possible

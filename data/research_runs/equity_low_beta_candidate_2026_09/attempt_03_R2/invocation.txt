@@ -1,1 +1,0 @@
-.venv/bin/python -c "from pathlib import Path; from scripts.research.equity_low_beta_candidate_2026_09 import run_economic; run_economic(Path(\"data/research_manifests/equity_low_beta_candidate_2026_09_r2.json\"))"

@@ -35,7 +35,7 @@ _EPS = 1e-9
 
 # Frozen validated specs (docs/validated_strategies.md, strategy freeze).
 # v1/v2 = historical baselines; production selection is v3 (same weekly
-# cadence, frozen MH_RAW scoring identity).
+# cadence, frozen multi-horizon scoring identity).
 _FROZEN_EQUITY_PARAMETERS = {
     "formation_bars": 252,
     "skip_bars": 21,

@@ -185,7 +185,7 @@ class PortfolioBacktestResult:
     # Every sell is a realized-PnL event. Full-close events separately carry
     # the complete lifetime PnL of positions that reached zero quantity.
     closed_position_events: tuple[tuple[datetime, str, float], ...] = ()
-    # Research backtests record drawdown breaches as SHADOW events (where
+    # Offline backtests record drawdown breaches as SHADOW events (where
     # production would have halted) instead of halting the curve; each entry
     # is (decision timestamp, "portfolio_drawdown_halt").
     drawdown_halt_shadow_events: tuple[tuple[datetime, str], ...] = ()
@@ -336,7 +336,7 @@ class PortfolioBacktestEngine:
         self.cash_rate_annualized = float(cash_rate_annualized)
         self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
         self.maximum_allocation = maximum_allocation
-        # Research backtests default to SHADOW drawdown halts (the alpha curve
+        # Offline backtests default to SHADOW drawdown halts (the alpha curve
         # keeps trading; breaches are recorded as events). Production-policy
         # simulations opt into real enforcement plus an operator-reset policy
         # through ``_risk_epoch_policy``.
@@ -914,7 +914,7 @@ class PortfolioBacktestEngine:
         self._pending = remaining
 
     def _decide(self, timestamp: datetime) -> None:
-        # Production-policy hook (no-op in research runs): a simulation
+        # Production-policy hook (no-op in standard runs): a simulation
         # subclass may rebase the drawdown peak here to model an operator
         # risk-epoch reset BEFORE this cycle's overlay evaluation.
         self._risk_epoch_policy(timestamp)
@@ -937,12 +937,12 @@ class PortfolioBacktestEngine:
         # Fail-closed product universe guard: a missing or version-less PIT
         # universe must halt the decision instead of silently treating every
         # symbol as in-universe via the permissive PortfolioContext.in_universe
-        # fallback. Static/non-product research contexts explicitly opt in via
+        # fallback. Static/non-product test contexts explicitly opt in via
         # ``allow_static_universe=True`` on the engine or bypass the guard
-        # when the strategy is not a PRODUCT strategy (synthetic research
-        # strategies). Product backtests run with the default fail-closed guard.
+        # when the strategy is not a PRODUCT strategy (synthetic strategies).
+        # Product backtests run with the default fail-closed guard.
         if not self.allow_static_universe:
-            # Only enforce for dynamic product strategies; synthetic research
+            # Only enforce for dynamic product strategies; synthetic
             # strategies (not in PRODUCT_STRATEGY_NAMES) retain permissive
             # behaviour without an explicit opt-in.
             try:
@@ -1016,7 +1016,7 @@ class PortfolioBacktestEngine:
                 approved_symbols=tuple(context.history),
                 maximum_allocation=self.maximum_allocation,
                 mode="backtest",
-                # Research backtests record drawdown breaches as shadow
+                # Offline backtests record drawdown breaches as shadow
                 # events instead of halting: the peak is monotonic, so an
                 # enforced halt would freeze the alpha curve permanently.
                 # Production-policy simulations set the ctor flag to enforce.
@@ -1054,9 +1054,9 @@ class PortfolioBacktestEngine:
         """
 
     def reset_peak_equity(self) -> float:
-        """Research mirror of the runtime's operator risk-epoch reset: rebase
+        """Simulation mirror of the runtime's operator risk-epoch reset: rebase
         the drawdown peak to the current equity so a latched drawdown halt
-        can clear. Never called in default research runs."""
+        can clear. Never called in the default backtest path."""
         self._peak_equity = self._equity()
         return self._peak_equity
 
@@ -1356,13 +1356,13 @@ class PortfolioBacktestEngine:
         if len(reserved) > capacity:
             raise RuntimeError("Managed pins and references exceed the historical stream capacity")
         base = observation or tuple(sorted(symbol for symbol in snapshot.symbols if is_active(symbol)))
-        # TerminalAwareResearchEngine supplies a PIT lifecycle map for
-        # inactive entities.  Once an entity has reached its final observed
+        # An optional PIT lifecycle map can identify inactive entities. Once
+        # an entity has reached its final observed
         # bar, the live broker would no longer report it as an active
         # stream member; retaining it in the historical completeness gate
         # would wedge every later decision on a bar that can never arrive.
-        # Keep the symbol on its terminal bar (the terminal wrapper closes a
-        # held position after that cycle), then remove it for later cycles.
+        # Keep the symbol on its terminal bar (the caller may close a held
+        # position after that cycle), then remove it for later cycles.
         # Equity runtime stores active membership as a set and restores it in
         # deterministic symbol order when managed pins are applied. Crypto's
         # observation ordering remains configuration/alpha ordered.

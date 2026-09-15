@@ -294,7 +294,7 @@ class PortfolioRuntime:
         if strategy.name in PRODUCT_STRATEGY_NAMES and not allow_static_universe:
             # Composition invariant: reject a missing/invalid PIT universe
             # BEFORE repository.begin_session creates a misleading running
-            # session. Static research must opt in explicitly.
+            # session. Static test contexts must opt in explicitly.
             require_product_universe_dependency(universe, universe_version)
         self.strategy = strategy
         self.market = strategy.market
@@ -924,7 +924,7 @@ class PortfolioRuntime:
         # strategies must execute against a PIT universe that exposes
         # ``contains`` and carries a non-empty ``universe_version``.
         # A missing universe would otherwise make in_universe() return True
-        # for every symbol (permissive fallback). Static/non-product research
+        # for every symbol (permissive fallback). Static/non-product test
         # contexts explicitly opt in via ``allow_static_universe=True`` on the
         # runtime or are synthetic non-PRODUCT strategies that retain
         # permissive behaviour; PAPER product execution never opts in.

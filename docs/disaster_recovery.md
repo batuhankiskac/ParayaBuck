@@ -22,12 +22,10 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
 | **Warmup cache** | `data/cache/` (historical bars, `scope_meta` with `config_digest`), `data/historical/` CSVs | **RECONSTRUCTIBLE** | NO | NO — refetched via `AlpacaHistoricalData` with `config_digest` validation; digest mismatch → full refetch (fail-closed) | Missing → bounded single retry, then fail-closed; never serves wrong-config bars | No — cache is provider-derived |
 | **Config** | `config/settings.yaml` (+ `config/experiments/` overlays) | **CRITICAL** | **YES** — deployment tarball (`tar czf ... config/ .env data/runtime/active_*_universe.json`) | YES — versioned in git; restore tarball, `diff` vs HEAD, `parayabuck doctor --strict` | Invalid/missing → `StorageInitializationError` at startup; `doctor` CRITICAL; `backup.retention_days` validated `>0 finite` | No — config defines universe, strategy, allocation, retention |
 | **.env (secrets)** | `.env` (mode 600, `EnvironmentFile` in systemd) `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `PARAYABUCK_OPERATOR_APPROVAL_KEY`, `PARAYABUCK_ALERT_WEBHOOK_URL` | **CRITICAL** | **YES** (operator tarball, minus git) | YES — restore from vault/tarball; never commit | Missing → startup fails (paper needs keys); wrong keys → `auth_invalid` / `401` non-retryable | No — secrets are operator-supplied |
-| **Receipts** | `data/runtime/paper_receipts/`, `data/runtime/ai_decisions/paper/`, `baseline_receipt_2026_08_27.md` | **EPHEMERAL** (audit trail) | NO (but durable on disk; include in host backup if required) | Optional — not needed for trading; forensic only | Missing → no impact on runtime | No |
+| **Receipts** | `data/runtime/paper_receipts/`, `data/runtime/ai_decisions/paper/` | **EPHEMERAL** (audit trail) | NO (but durable on disk; include in host backup if required) | Optional — not needed for trading; forensic only | Missing → no impact on runtime | No |
 | **Backups** | `data/backups/parayabuck-*.sqlite3` (rollback-journal, no sidecars) | **CRITICAL** | SELF (are the backups) | Source for DB restore; `latest_verified_backup()` scans `mtime` + `verify_backup()` | Partial file from crash → `verify_backup() == False` → deleted, previous backups preserved, `BackupVerificationError` | No |
 | **Health snapshot** | `data/runtime/health_snapshot.json` (atomic `temp+replace`, 30s cadence, ~2KB) | **EPHEMERAL** | NO | NO — regenerated every `snapshot_interval_seconds` (30s) | Missing/stale → `ops status` UNKNOWN, `snapshot_age_seconds`; `doctor` UNKNOWN; trading still runs if process alive | No — derived from in-memory health |
-| **Reports** | `reports/` (backtest curves: `equity_final_oos/`, `crypto_baseline_*/`, `robustness/`, `portfolio_research/`) | **RECONSTRUCTIBLE** | NO | Regenerate via `run_product_backtest` + `research_helpers` (deterministic, PIT dataset pinned) | Missing → no runtime impact | No |
-| **Local generated experiment bundles** | `research_runs/` | **GENERATED LOCAL / RECONSTRUCTIBLE FOR RUNTIME PURPOSES** | **NO** — not part of product runtime backup; operator may preserve locally | Optional local restoration; not required for trading | Missing → no runtime impact | No |
-| **Canonical and historical research evidence** | `data/research_manifests/`, `data/research_receipts/`, manifest-required tracked `data/research/`, `docs/research/`, `docs/archive/research_2026_08/`, tracked `data/research/archive/` | **VERSIONED EVIDENCE / NOT RUNTIME STATE** | **YES** — versioned in Git or an approved archival backup | Restore from the pinned Git revision or approved archival backup; do not assume the bytes can be regenerated equivalently | Missing or corrupt → audit/reproducibility gap; no runtime impact | No |
+| **Reports** | `reports/` (generated backtest and diagnostic outputs) | **RECONSTRUCTIBLE** | NO | Regenerate with the current backtest/report commands | Missing → no runtime impact | No |
 
 **Backup coverage — what IS included vs what is NOT:**
 
@@ -37,7 +35,6 @@ All paths are relative to `WorkingDirectory` (repo root / `/opt/parayabuck`). `c
   - Config + secrets (`config/`, `.env`) — via same tarball (operator-managed, host backup recommended).
 - **NOT included** (reconstructed or ephemeral):
   - `observability.sqlite3`, `health_snapshot.json`, `data/cache/`, `data/historical/` cache, and `reports/` — all regenerable.
-  - `research_runs/` — generated local bundles, not runtime backup; canonical and historical research evidence is restored from its pinned Git revision or approved archive.
   - `active_*_universe.json` — rescanned; history `.jsonl` is append-only log for forensics, not required for restart.
 
 ---
@@ -379,7 +376,7 @@ sqlite3 data/runtime/parayabuck.sqlite3 "PRAGMA integrity_check;" 2>&1
 **Operator action**:
 ```bash
 sudo journalctl --vacuum-size=500M
-rm -rf reports/research/*  # only derived hash dirs, retain reports/robustness canonical
+# Remove only confirmed-derived report outputs after checking retention needs.
 # Reduce retention if needed:
 parayabuck backup --retention-days 7
 python3 -c "from parayabuck.backup import prune_backups; print(prune_backups('data/backups', retention_days=7.0))"

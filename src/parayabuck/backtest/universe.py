@@ -285,7 +285,7 @@ def build_trailing_point_in_time_universe(
                     minimum_median_dollar_volume=max(minimum_dollar_volume, 1.0),
                 ),
             )
-            # Research ↔ PAPER parity: the configured trade_symbols are the
+            # Backtest ↔ PAPER parity: the configured trade_symbols are the
             # authoritative candidate pool for crypto. Only symbols that are
             # both configured and have bars at this PIT window enter the
             # scanner. This mirrors PAPER's configured ∩ broker_active

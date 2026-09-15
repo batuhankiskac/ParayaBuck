@@ -1,4 +1,4 @@
-// Technical operations and research tools page.
+// Technical operations page.
 document.addEventListener('DOMContentLoaded', () => {
     let controlToken = document.querySelector('meta[name="parayabuck-control-token"]').content;
     const byId = (id) => document.getElementById(id);

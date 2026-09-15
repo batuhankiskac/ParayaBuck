@@ -74,7 +74,7 @@ class ActiveProductUniverse:
         """Build an explicit static/fallback membership snapshot.
 
         This is still a real, fail-closed ``contains`` adapter; it is not the
-        permissive ``allow_static_universe`` guard bypass used by research.
+        permissive ``allow_static_universe`` guard bypass used by static tests.
         Runtime entry halts continue to decide whether a fallback may open
         new positions.
         """

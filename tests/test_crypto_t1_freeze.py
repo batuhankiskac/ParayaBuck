@@ -2,8 +2,7 @@
 
 Frozen economics: variance_lookback_days=22, top_n=2, rebalance_hours=96,
 RETENTION_RANK=4, equal weights, same _score_candidates as v2.
-Decide parity with CryptoTournamentT1Hysteresis in
-scripts/research_crypto_candidate_tournament.py.
+Validate the frozen hysteresis behavior of the product strategy.
 """
 
 from __future__ import annotations
@@ -101,7 +100,7 @@ def test_retention_rank_constant_is_four() -> None:
 
 
 def test_hysteresis_should_retain_pure_helper_defaults_to_four() -> None:
-    # default retention_rank=4 matches tournament
+    # The default retention rank is fixed at 4.
     assert hysteresis_should_retain(1, True) is True
     assert hysteresis_should_retain(4, True) is True
     assert hysteresis_should_retain(5, True) is False

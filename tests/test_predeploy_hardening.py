@@ -625,10 +625,10 @@ def test_settings_concurrency_409(tmp_path, monkeypatch):
 
 
 def test_product_gate_rejects_non_product():
-    # Use a known research-only name (if any) or fake name
+    # Use a deliberately unsupported name.
     with pytest.raises(ValueError, match="Unsupported"):
         product_strategy_from("nonexistent_strategy_xyz", {})
-    # Research harness generic should still work for known strategies via portfolio_strategy_from
+    # Generic construction remains available for known strategy classes.
     strat = portfolio_strategy_from(
         "equity_residual_momentum_v3",
         {

@@ -4,7 +4,6 @@ Extracted from web/server.py lines 1560-1583. Serves:
 
 * GET /      -> templates/index.html  (context: is_paper, control_token)
 * GET /tools -> templates/tools.html (context: control_token)
-* GET /research -> templates/research.html (if present)
 
 Both responses carry ``Cache-Control: no-store`` so a stale control_token
 is never cached. Token and is_paper are resolved lazily per-request from
@@ -96,17 +95,6 @@ async def serve_index(request: Request) -> HTMLResponse:
 async def serve_tools(request: Request) -> HTMLResponse:
     response = templates.TemplateResponse(
         request=request, name="tools.html", context={"control_token": _control_token()}
-    )
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-@router.get("/research", response_class=HTMLResponse)
-async def serve_research(request: Request) -> HTMLResponse:
-    response = templates.TemplateResponse(
-        request=request,
-        name="research.html",
-        context={"control_token": _control_token(), "is_paper": _is_paper()},
     )
     response.headers["Cache-Control"] = "no-store"
     return response

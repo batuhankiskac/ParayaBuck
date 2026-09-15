@@ -45,10 +45,10 @@ class PortfolioContext:
         return [bar.close for bar in bars]
 
     def in_universe(self, symbol: str) -> bool:
-        """Permissive membership probe (research-compatible).
+        """Permissive membership probe for static contexts.
 
         Returns ``True`` when ``universe`` is ``None`` or lacks a callable
-        ``contains`` — this keeps static/non-product research contexts
+        ``contains`` — this keeps static/non-product test contexts
         usable without a PIT universe. **Dynamic product execution (PAPER
         backtest/runtime) MUST NOT rely on this fallback**: callers on the
         product path must invoke :func:`require_product_universe` before
@@ -77,7 +77,7 @@ def require_product_universe(
     silently treating every symbol as tradable.
 
     Call this BEFORE ``strategy.decide()`` or ``strategy.rank_candidates()``
-    on the PAPER / backtest product path. Static or non-product research
+    on the PAPER / backtest product path. Static or non-product test
     contexts that intentionally operate without a PIT universe may pass
     ``allow_static_context=True`` to retain the permissive
     :meth:`PortfolioContext.in_universe` behaviour. That opt-in must be

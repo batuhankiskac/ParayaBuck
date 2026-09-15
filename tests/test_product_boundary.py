@@ -9,7 +9,7 @@ from parayabuck import load_config
 from parayabuck.portfolio import PRODUCT_STRATEGY_NAMES, portfolio_strategy_from, product_strategy_from
 
 
-def test_generic_factory_can_construct_research_only() -> None:
+def test_generic_factory_constructs_product_strategy() -> None:
     # Post-promotion hysteresis IS product (added to PRODUCT_STRATEGY_NAMES).
     # Generic factory can construct it, and product factory also now accepts it.
     assert "crypto_low_variance_hysteresis_v1" in PRODUCT_STRATEGY_NAMES
@@ -18,12 +18,10 @@ def test_generic_factory_can_construct_research_only() -> None:
     assert strategy.timeframe == "1d"
 
 
-def test_product_factory_rejects_research_only() -> None:
-    # Post-promotion hysteresis is product, so test rejection with a true research-only
-    # tournament identity that remains outside PRODUCT (not in factory nor product).
-    # Use a fake research name that is not in product.
+def test_product_factory_rejects_unsupported_strategy() -> None:
+    # Use a fake strategy name that is not in the product surface.
     with pytest.raises(ValueError, match="Unsupported product strategy"):
-        product_strategy_from("crypto_tournament_t1_hysteresis")
+        product_strategy_from("unsupported_strategy_name")
 
     # Product surface members are still constructible via product factory
     for name in PRODUCT_STRATEGY_NAMES:
@@ -40,7 +38,7 @@ def test_product_factory_delegates_parameters_and_timeframe() -> None:
         product_strategy_from("crypto_low_variance_v2", timeframe="4h")
 
 
-def test_config_loader_rejects_research_only_strategy_identity(tmp_path: Path) -> None:
+def test_config_loader_rejects_unsupported_strategy_identity(tmp_path: Path) -> None:
     raw: dict[str, object] = {
         "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
         "runtime": {"mode": "paper"},
@@ -52,7 +50,7 @@ def test_config_loader_rejects_research_only_strategy_identity(tmp_path: Path) -
             "crypto": {"enabled": True, "trade_symbols": ["BTC/USD"]},
         },
         "strategy": {
-            "crypto": {"enabled": True, "name": "crypto_tournament_t1_hysteresis", "maximum_allocation": 0.05},
+            "crypto": {"enabled": True, "name": "unsupported_strategy_name", "maximum_allocation": 0.05},
         },
     }
     path = tmp_path / "settings.yaml"
@@ -61,8 +59,8 @@ def test_config_loader_rejects_research_only_strategy_identity(tmp_path: Path) -
         load_config(str(path))
 
 
-def test_config_loader_rejects_research_only_equity_identity(tmp_path: Path) -> None:
-    # Generic factory would allow hysteresis on crypto only; test equity research rejection if ever added
+def test_config_loader_rejects_unsupported_equity_identity(tmp_path: Path) -> None:
+    # The product loader must reject an unsupported identity on either market.
     # Here we test that crypto hysteresis is rejected even when equity also present
     raw: dict[str, object] = {
         "app": {"host": "127.0.0.1", "port": 8000, "log_level": "INFO"},
@@ -76,7 +74,7 @@ def test_config_loader_rejects_research_only_equity_identity(tmp_path: Path) -> 
         },
         "strategy": {
             "equity": {"enabled": True, "name": "equity_residual_momentum_v3", "maximum_allocation": 0.55},
-            "crypto": {"enabled": True, "name": "crypto_tournament_t1_hysteresis", "maximum_allocation": 0.05},
+            "crypto": {"enabled": True, "name": "unsupported_strategy_name", "maximum_allocation": 0.05},
         },
     }
     path = tmp_path / "settings.yaml"

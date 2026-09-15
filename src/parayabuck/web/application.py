@@ -61,7 +61,6 @@ def create_app(state: WebState | None = None) -> FastAPI:
     from parayabuck.web.routers.health import router as health_router
     from parayabuck.web.routers.ops import router as ops_router
     from parayabuck.web.routers.pages import router as pages_router
-    from parayabuck.web.routers.research import router as research_router
     from parayabuck.web.routers.safety import router as safety_router
     from parayabuck.web.routers.settings import router as settings_router
     from parayabuck.web.routers.status import router as status_router
@@ -77,7 +76,6 @@ def create_app(state: WebState | None = None) -> FastAPI:
     app.include_router(backtest_router)
     app.include_router(dashboard_router)
     app.include_router(ops_router)
-    app.include_router(research_router)
     app.include_router(ws_router)
 
     # Compatibility: tests iterate app.routes and expect direct Route objects,

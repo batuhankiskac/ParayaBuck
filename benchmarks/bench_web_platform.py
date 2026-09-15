@@ -1,6 +1,6 @@
 """Web platform benchmarks — import, endpoint latency, backtest mutual exclusion.
 
-Measures the Mission 6 refactor does not regress:
+Measures current web-platform behavior:
 * import time for parayabuck.web.server (should be <200ms, no broker network)
 * TestClient endpoint latency for /healthz, /readyz, /api/status, /api/ops/status
 * Backtest manager start/status latency

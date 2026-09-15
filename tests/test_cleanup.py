@@ -20,7 +20,6 @@ LEGACY_MODULES = (
     "parayabuck.strategies.crypto_trend",
     "parayabuck.strategies.crypto_range",
     "parayabuck.strategies.specs",
-    "parayabuck.backtest.research",
     "parayabuck.backtest.sweep",
     "parayabuck.backtest.challengers",
 )

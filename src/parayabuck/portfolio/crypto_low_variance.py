@@ -164,7 +164,7 @@ class CryptoLowVariance1dV1(PortfolioStrategy):
 class CryptoLowVariance1dV2(CryptoLowVariance1dV1):
     """96h-cadence identity of the validated low-variance alpha.
 
-    RESEARCH-validated cadence variant (2026-08-18 cadence mission): identical
+    Validated cadence variant: identical
     signal math and parameters to ``crypto_low_variance_v1`` (lookback 22,
     top_n 2); only ``rebalance_hours`` differs (96 vs 168). The cadence is a
     validated strategy parameter, so the configuration digest and persisted

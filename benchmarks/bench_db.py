@@ -1,7 +1,7 @@
 """Database baseline: portfolio-state repository and ledger hot operations.
 
 Seeds a fresh runtime DB and times the canonical write/read operations on the
-decision path (Wave 4/5 of the tournament). Uses production classes against a
+decision path persistence operations. Uses production classes against a
 tmp DB so absolute numbers reflect real schema/index behavior.
 """
 

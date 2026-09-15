@@ -1,9 +1,0 @@
-{
-  "blocked_reason": "stale_receipt_binding:runner adapter reads DATA_PREFLIGHT_RECEIPT R1 path; R2 receipt exists only at attempt_03_R2/data_preflight_r2.json",
-  "cells_completed": 0,
-  "command": ".venv/bin/python -c run_economic(R2_manifest)",
-  "manifest_sha256": "99ef7db9ab640b5d9770acc701aafa3295b4f82189765b8f5b6a7419007e8fb0",
-  "note": "Stopped before economic cell; process interrupted while building large universe after stale R1 receipt passed hash-only checks.",
-  "phase": "PIT_universe_bootstrap",
-  "status": "BLOCKED"
-}

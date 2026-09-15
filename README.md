@@ -1,14 +1,10 @@
 # ParayaBuck
 
-> **Project status — 2026-08-29 (PAPER composition repair)**
+> **Project status — production-only surface**
 >
-> - **Equity:** V3 frozen (`equity_residual_momentum_v3` MH_RAW: 12-1 gate → 6/9/12 rank consensus → ivol 0.70 → top8 → inv-vol 0.10, weekly) — historical validation complete, **symmetric PIT validated** (9010 symbols, 11.6M bars), **PAPER runtime composition repaired; persisted forward sample pending controlled deployment acceptance**, **LIVE disabled**
-> - **Dataset:** `data/historical/equity_pit_symmetric_2016_2026_v5.csv` SHA `bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139` + CA `a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23` — manifests committed, large CSVs gitignored
-> - **Historical result (canonical):** `SYMMETRIC_FULL_T1` +113.6% total / 7.44% CAGR / Sharpe 0.639 / maxDD 22.7% (10.5y, $100k, T1 last-close minus costs, 6 terminal events, `docs/v3_historical_validation_final.md`); `OLD_T0` +172% is survivor-biased reference, `T2/T3` are severe-loss bounds
-> - **Research:** historical V3 cycle closed and archived (`docs/archive/research_2026_08/`, `data/research/archive/2026_08/`), single canonical runner `scripts/run_symmetric_v5_validation.py` (`scripts/research/run_v3_canonical_validation.py` shim)
-> - **Operational-parity note (2026-08-31):** the frozen `SYMMETRIC_FULL_T1` result above remains the historical reference. A separate current-policy comparator using runtime-sized observation context (`0.55` allocation, through `2026-07-30`) recorded `+76.4538%` total / Sharpe `0.571342`; it does not rewrite the frozen receipt or imply performance decay.
-> - **Current-parity receipt:** the clean deterministic R1 control and component hashes are tracked in `docs/equity_v3_current_parity_control_2026_08.md`.
-> - **Next:** operational PAPER reliability, execution observability, crypto research, infrastructure/deployment — no V4 or parameter sweep on the frozen lineage
+> - **Equity:** `equity_residual_momentum_v3` — 1d signal, weekly rebalance, 0.55 allocation; positive 12-1 gate, multi-horizon consensus, inverse-vol sizing, **LIVE disabled**
+> - **Crypto:** `crypto_low_variance_hysteresis_v1` — 1d signal, 96h rebalance, 0.05 allocation; validated low-variance hysteresis product identity
+> - **Dataset:** point-in-time historical manifests and corporate-action data remain under `data/historical/`; large provider datasets are local/ignored
 
 Automated multi-market Alpaca trading bot: dynamic universe discovery,
 validated portfolio strategies, strict risk overlay, and deterministic
@@ -19,16 +15,19 @@ enable it (see [Enabling live safely](#enabling-live-safely)).
 
 ## Current PAPER strategies (2026-08-26)
 
-The PAPER product runs two validated identities (see `docs/validated_strategies.md`, `docs/v3_historical_validation_final.md`, `docs/capital_utilization_cadence_verdict.md`):
+The PAPER product runs two validated identities (see `docs/validated_strategies.md`):
 
 | Market | Strategy | Signal | Rebalance | Allocation |
 |---|---|---|---|---|
 | Equity | Residual Momentum v3 (`equity_residual_momentum_v3`) | 1d | weekly | 0.55 |
 | Crypto | Low Realized Variance Hysteresis v1 (`crypto_low_variance_hysteresis_v1`) — retention rank 4, lookback 22, top2, 96h | 1d | 96h | 0.05 |
 
-Historical baselines `equity_residual_momentum_v1` (monthly) and `equity_residual_momentum_v2` (weekly) and `crypto_low_variance_v1` (168h) remain constructible for comparison — v3 evidence is defined relative to them and to the frozen PIT dataset above.
+Historical baselines `equity_residual_momentum_v1` (monthly),
+`equity_residual_momentum_v2` (weekly), and `crypto_low_variance_v1` (168h)
+remain constructible for controlled backtests.
 
-Known caveats (disclosed, not blockers): the equity weekly edge is partly ASX-driven and a 2024-01..2025-06 sub-window favored monthly; the crypto 96h edge is thin, with a mixed walk-forward (7/10 positive folds) and slightly worse 3x-cost economics. Backtest economics do not imply forward live returns; PAPER forward validation is the next gate.
+Backtest economics do not imply forward live returns; controlled PAPER
+operation remains the gate before any live consideration.
 
 ## Architecture
 
@@ -144,14 +143,11 @@ live.
 
 - `docs/product_foundation.md` — frozen product principles
 - `docs/validated_strategies.md` — validated specs: v1 baselines + v2/v3 identities
-- `docs/v3_historical_validation_final.md` — **canonical V3 historical validation (frozen, 2026-08-26)**
-- `docs/repository_cleanup_inventory_2026_08.md` — pre-cleanup file classification (A/B/C/D)
-- `docs/research/README.md` — current research-record index and lifecycle policy
-- `docs/archive/research_2026_08/README.md` — archived superseded experiments index
 - `docs/strategy_architecture.md` — universe/scanner/strategy/risk contract
 - `docs/paper_operations.md` — PAPER runtime contract and forward rules
 - `docs/operations.md` — state, backup/restore, Docker, incident reconciliation
 - `docs/deployment.md` — systemd on Google Cloud, update + rollback
 - `docs/dashboard.md` / `docs/alerting.md` — operator surfaces
 - `benchmarks/parity_guard.json` — machine-readable freeze (head + SHAs + parity hashes)
-- `benchmarks/post_research_runtime_baseline.json` — measured runtime baseline + optimization report
+- `docs/deferred_refactor_seams.md` — intentionally deferred architecture seams
+- `docs/alpaca_broker_truth_matrix.md` — broker/execution truth matrix

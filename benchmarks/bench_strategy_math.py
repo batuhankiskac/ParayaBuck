@@ -1,4 +1,4 @@
-"""Strategy-math isolated microbenchmark for Mission 2.
+"""Strategy-math isolated microbenchmark.
 
 Isolates 150 symbols, 273-bar beta window, SPY benchmark, 26 decisions
 as requested in spec 26. Reports per-component times.

@@ -124,14 +124,9 @@ try:
 
     serve_index = _serve_index
     serve_tools = _serve_tools
-    # also expose research page
-    from parayabuck.web.routers.pages import serve_research as _serve_research  # noqa: F401
-
-    serve_research = _serve_research
 except Exception:
     serve_index = None
     serve_tools = None
-    serve_research = None
 
 
 async def get_control_token() -> Any:
@@ -535,7 +530,6 @@ __all__ = [
     "readyz",
     "serve_index",
     "serve_tools",
-    "serve_research",
     "get_control_token",
     "get_status",
     "get_account",

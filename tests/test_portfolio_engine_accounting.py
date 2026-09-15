@@ -660,7 +660,7 @@ def test_daily_loss_limit_triggers_on_single_day_drop() -> None:
 
 def test_high_water_between_rebalances_feeds_later_drawdown() -> None:
     """Equity that peaks between scheduled rebalances feeds the drawdown
-    measurement; in a research backtest the breach is a SHADOW event (the
+    measurement; in an offline backtest the breach is a SHADOW event (the
     reason is recorded where production would have halted) and the curve
     keeps trading instead of freezing on the monotonic peak."""
     epoch = datetime(2024, 1, 1, tzinfo=UTC)

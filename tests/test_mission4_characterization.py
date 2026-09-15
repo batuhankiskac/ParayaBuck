@@ -223,7 +223,7 @@ class TestProductUniverseFailClosed:
         )
         # With allow_static_context True, should NOT raise
         require_product_universe(ctx2, allow_static_context=True)  # no raise
-        # research opt-in via PortfolioRuntime.allow_static_universe=True
+        # Explicit static-test opt-in via PortfolioRuntime.allow_static_universe=True
         PortfolioRuntime(
             strat,
             ("BTC/USD",),

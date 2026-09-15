@@ -794,7 +794,7 @@ def cost_calibration(
             "measurement_quality": "legacy_close_reference_only",
             "policy": (
                 "REPORT ONLY: observed costs never adjust any configured "
-                "assumption; a cost-model change requires a separate research mission."
+                "assumption; a cost-model change requires separate validation and approval."
             ),
             "asof": _iso_now(),
         }

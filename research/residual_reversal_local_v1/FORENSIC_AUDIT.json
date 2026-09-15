@@ -1,0 +1,1090 @@
+{
+  "economic_rerun_performed": false,
+  "finding_1_validation_coverage": {
+    "coverage": {
+      "reversal": {
+        "annual": [
+          {
+            "coverage_pct": 100.0,
+            "fills": 241,
+            "recorded_decisions": 47,
+            "scheduled_weeks": 47,
+            "strategy": "reversal",
+            "year": 2017
+          },
+          {
+            "coverage_pct": 98.11320754716981,
+            "fills": 266,
+            "recorded_decisions": 52,
+            "scheduled_weeks": 53,
+            "strategy": "reversal",
+            "year": 2018
+          },
+          {
+            "coverage_pct": 98.07692307692308,
+            "fills": 315,
+            "recorded_decisions": 51,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2019
+          },
+          {
+            "coverage_pct": 100.0,
+            "fills": 278,
+            "recorded_decisions": 52,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2020
+          },
+          {
+            "coverage_pct": 96.15384615384616,
+            "fills": 260,
+            "recorded_decisions": 50,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2021
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2022
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2023
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 53,
+            "strategy": "reversal",
+            "year": 2024
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "reversal",
+            "year": 2025
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 30,
+            "strategy": "reversal",
+            "year": 2026
+          }
+        ],
+        "development": {
+          "coverage_pct": 98.4375,
+          "fills": 1360,
+          "last_decision": "2021-12-13T05:00:00+00:00",
+          "last_fill": "2021-12-14T05:00:00+00:00",
+          "recorded_decisions": 252,
+          "scheduled_weeks": 256
+        },
+        "fill_by_year": {
+          "2017": 241,
+          "2018": 266,
+          "2019": 315,
+          "2020": 278,
+          "2021": 260
+        },
+        "fill_count": 1360,
+        "first_fill": "2017-02-07T05:00:00+00:00",
+        "first_rebalance": "2017-02-06T05:00:00+00:00",
+        "last_fill": "2021-12-14T05:00:00+00:00",
+        "last_rebalance": "2021-12-13T05:00:00+00:00",
+        "rebalance_by_year": {
+          "2017": 47,
+          "2018": 52,
+          "2019": 51,
+          "2020": 52,
+          "2021": 50
+        },
+        "rebalance_count": 252,
+        "strategy": "reversal",
+        "validation": {
+          "coverage_pct": 0.0,
+          "fills": 0,
+          "last_decision": null,
+          "last_fill": null,
+          "recorded_decisions": 0,
+          "scheduled_weeks": 239
+        }
+      },
+      "treatment": {
+        "annual": [
+          {
+            "coverage_pct": 100.0,
+            "fills": 237,
+            "recorded_decisions": 47,
+            "scheduled_weeks": 47,
+            "strategy": "treatment",
+            "year": 2017
+          },
+          {
+            "coverage_pct": 94.33962264150944,
+            "fills": 222,
+            "recorded_decisions": 50,
+            "scheduled_weeks": 53,
+            "strategy": "treatment",
+            "year": 2018
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2019
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2020
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2021
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2022
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2023
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 53,
+            "strategy": "treatment",
+            "year": 2024
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "treatment",
+            "year": 2025
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 30,
+            "strategy": "treatment",
+            "year": 2026
+          }
+        ],
+        "development": {
+          "coverage_pct": 37.890625,
+          "fills": 459,
+          "last_decision": "2018-12-17T05:00:00+00:00",
+          "last_fill": "2018-12-18T05:00:00+00:00",
+          "recorded_decisions": 97,
+          "scheduled_weeks": 256
+        },
+        "fill_by_year": {
+          "2017": 237,
+          "2018": 222
+        },
+        "fill_count": 459,
+        "first_fill": "2017-02-07T05:00:00+00:00",
+        "first_rebalance": "2017-02-06T05:00:00+00:00",
+        "last_fill": "2018-12-18T05:00:00+00:00",
+        "last_rebalance": "2018-12-17T05:00:00+00:00",
+        "rebalance_by_year": {
+          "2017": 47,
+          "2018": 50
+        },
+        "rebalance_count": 97,
+        "strategy": "treatment",
+        "validation": {
+          "coverage_pct": 0.0,
+          "fills": 0,
+          "last_decision": null,
+          "last_fill": null,
+          "recorded_decisions": 0,
+          "scheduled_weeks": 239
+        }
+      },
+      "v3": {
+        "annual": [
+          {
+            "coverage_pct": 100.0,
+            "fills": 219,
+            "recorded_decisions": 47,
+            "scheduled_weeks": 47,
+            "strategy": "v3",
+            "year": 2017
+          },
+          {
+            "coverage_pct": 94.33962264150944,
+            "fills": 173,
+            "recorded_decisions": 50,
+            "scheduled_weeks": 53,
+            "strategy": "v3",
+            "year": 2018
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2019
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2020
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2021
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2022
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2023
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 53,
+            "strategy": "v3",
+            "year": 2024
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 52,
+            "strategy": "v3",
+            "year": 2025
+          },
+          {
+            "coverage_pct": 0.0,
+            "fills": 0,
+            "recorded_decisions": 0,
+            "scheduled_weeks": 30,
+            "strategy": "v3",
+            "year": 2026
+          }
+        ],
+        "development": {
+          "coverage_pct": 37.890625,
+          "fills": 392,
+          "last_decision": "2018-12-17T05:00:00+00:00",
+          "last_fill": "2018-12-18T05:00:00+00:00",
+          "recorded_decisions": 97,
+          "scheduled_weeks": 256
+        },
+        "fill_by_year": {
+          "2017": 219,
+          "2018": 173
+        },
+        "fill_count": 392,
+        "first_fill": "2017-02-07T05:00:00+00:00",
+        "first_rebalance": "2017-02-06T05:00:00+00:00",
+        "last_fill": "2018-12-18T05:00:00+00:00",
+        "last_rebalance": "2018-12-17T05:00:00+00:00",
+        "rebalance_by_year": {
+          "2017": 47,
+          "2018": 50
+        },
+        "rebalance_count": 97,
+        "strategy": "v3",
+        "validation": {
+          "coverage_pct": 0.0,
+          "fills": 0,
+          "last_decision": null,
+          "last_fill": null,
+          "recorded_decisions": 0,
+          "scheduled_weeks": 239
+        }
+      }
+    },
+    "full_curve_end": "2026-07-31T04:00:00+00:00",
+    "full_curve_start": "2017-01-03T05:00:00+00:00",
+    "interpretation": {
+      "active_strategy_return": "No active strategy decisions or decision-driven fills occurred in validation.",
+      "admissibility": "A no-decision interval cannot be described as valid out-of-sample strategy validation.",
+      "dividends": "The engine applied dividends to held positions; the artifacts persist full-run dividend totals but not a validation-period dividend ledger.",
+      "passive_mark_to_market": "The existing daily curve continued marking positions held from the last development decision.",
+      "terminal_liquidation": "liquidate_at_end mutated the final curve point after the last bar; this is not a validation-period strategy decision."
+    },
+    "normal_scheduled_decision_after_validation_start": false,
+    "reported_validation_metrics": {
+      "reversal": {
+        "annualized_volatility": 0.060663308552478305,
+        "average_exposure_at_decision": 0.0,
+        "cagr": 0.04792288534577316,
+        "calmar": 0.3915990616600524,
+        "cost_total": 20.88970598640043,
+        "duration_days": 1669,
+        "end": "2026-07-31T04:00:00+00:00",
+        "ending_equity": 165109.46053351075,
+        "fill_count": 0,
+        "max_drawdown": 0.12237742639785758,
+        "maximum_target_concentration": 0.0,
+        "profit_factor": null,
+        "sharpe": 0.8020328346903866,
+        "sortino": 1.112387523826768,
+        "start": "2022-01-03T05:00:00+00:00",
+        "starting_equity": 133295.05297914473,
+        "total_return": 0.2386765813382712,
+        "trade_count": 3,
+        "turnover": 0.0
+      },
+      "treatment": {
+        "annualized_volatility": 0.030850850405415867,
+        "average_exposure_at_decision": 0.0,
+        "cagr": 0.006436581166965771,
+        "calmar": 0.06820768104311649,
+        "cost_total": 4.774967076553329,
+        "duration_days": 1669,
+        "end": "2026-07-31T04:00:00+00:00",
+        "ending_equity": 117834.72984172232,
+        "fill_count": 0,
+        "max_drawdown": 0.09436739482312821,
+        "maximum_target_concentration": 0.0,
+        "profit_factor": null,
+        "sharpe": 0.22342150267837346,
+        "sortino": 0.2517374275407972,
+        "start": "2022-01-03T05:00:00+00:00",
+        "starting_equity": 114427.95780279691,
+        "total_return": 0.029772199944322786,
+        "trade_count": 2,
+        "turnover": 0.0
+      },
+      "v3": {
+        "annualized_volatility": 0.06976854117558386,
+        "average_exposure_at_decision": 0.0,
+        "cagr": 0.021200004425627528,
+        "calmar": 0.11258572796836347,
+        "cost_total": 12.56077992073,
+        "duration_days": 1669,
+        "end": "2026-07-31T04:00:00+00:00",
+        "ending_equity": 121717.89038146674,
+        "fill_count": 0,
+        "max_drawdown": 0.18830099345793383,
+        "maximum_target_concentration": 0.0,
+        "profit_factor": null,
+        "sharpe": 0.3356973007790247,
+        "sortino": 0.39646919569710587,
+        "start": "2022-01-03T05:00:00+00:00",
+        "starting_equity": 110584.51329397224,
+        "total_return": 0.10067754295665354,
+        "trade_count": 3,
+        "turnover": 0.0
+      }
+    },
+    "schedule_basis": "first completed bar of each ISO week on the persisted full curve, after common 274-bar warmup",
+    "strategy_ready_schedule_start": "2017-02-06T05:00:00+00:00",
+    "validation_start": "2022-01-03T00:00:00+00:00"
+  },
+  "finding_2_terminal_lifecycle": {
+    "reconstruction": {
+      "engine_terminal_map_assignment_present": false,
+      "engine_terminal_map_read_default": true,
+      "findings": [
+        {
+          "explanation": "The final-bar liquidation events identify the last available bar, but they are emitted only after the entire curve has been processed.",
+          "first_permanent_skipped_opportunity": "2018-12-24T05:00:00+00:00",
+          "last_decision": "2018-12-17T05:00:00+00:00",
+          "last_target_symbols": [
+            "BSX",
+            "DVMT",
+            "ESRX",
+            "FOX",
+            "FOXA"
+          ],
+          "stale_managed_symbols": [
+            {
+              "entity_status": "inactive",
+              "entity_valid_to": "2018-12-27T05:00:00+00:00",
+              "first_missing_opportunity": "2018-12-31T05:00:00+00:00",
+              "last_available_bar": "2018-12-27T05:00:00+00:00",
+              "last_target_weight": 0.09393852189216251,
+              "missing_at_first_permanent_opportunity": false,
+              "symbol": "DVMT",
+              "terminal_event_class": "POSSIBLE_DELISTING"
+            },
+            {
+              "entity_status": "inactive",
+              "entity_valid_to": "2018-12-20T05:00:00+00:00",
+              "first_missing_opportunity": "2018-12-24T05:00:00+00:00",
+              "last_available_bar": "2018-12-20T05:00:00+00:00",
+              "last_target_weight": 0.09218134988542755,
+              "missing_at_first_permanent_opportunity": true,
+              "symbol": "ESRX",
+              "terminal_event_class": "POSSIBLE_DELISTING"
+            }
+          ],
+          "strategy": "v3",
+          "terminal_events_in_artifact": [
+            {
+              "cash_after": 74688.35461959676,
+              "cash_before": 64438.08268649454,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.22540066614323045,
+              "fill_price": 92.302301,
+              "last_close": 92.33,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 10250.271933102224,
+              "quantity": 111.05354062374204,
+              "slippage_cost": 2.0507146811580204,
+              "spread_cost": 1.0253573405790102,
+              "symbol": "ESRX",
+              "timestamp": "2018-12-20T05:00:00+00:00"
+            },
+            {
+              "cash_after": 86165.92856920182,
+              "cash_before": 74688.35461959676,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.280211549147625,
+              "fill_price": 51.924418,
+              "last_close": 51.94,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 11477.57394960506,
+              "quantity": 221.04925973660804,
+              "slippage_cost": 2.296259710143884,
+              "spread_cost": 1.148129855071942,
+              "symbol": "FOX",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 99606.7359630931,
+              "cash_before": 86165.92856920182,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.3226049901956307,
+              "fill_price": 58.212531,
+              "last_close": 58.23,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 13440.807393891286,
+              "quantity": 230.89753645794033,
+              "slippage_cost": 2.6890327095891733,
+              "spread_cost": 1.3445163547945866,
+              "symbol": "FOXA",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 113394.1223598875,
+              "cash_before": 99606.73596309309,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.34246482532330474,
+              "fill_price": 46.715981,
+              "last_close": 46.73,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 13787.386396794398,
+              "quantity": 295.1394483532246,
+              "slippage_cost": 2.758373284309237,
+              "spread_cost": 1.3791866421546184,
+              "symbol": "BSX",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 121717.89038146674,
+              "cash_before": 113394.1223598875,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.18469141649819487,
+              "fill_price": 79.976,
+              "last_close": 80.0,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 8323.768021579248,
+              "quantity": 104.08063310237755,
+              "slippage_cost": 1.665290129638041,
+              "spread_cost": 0.8326450648190205,
+              "symbol": "DVMT",
+              "timestamp": "2018-12-27T05:00:00+00:00"
+            }
+          ]
+        },
+        {
+          "explanation": "The final-bar liquidation events identify the last available bar, but they are emitted only after the entire curve has been processed.",
+          "first_permanent_skipped_opportunity": "2021-12-20T05:00:00+00:00",
+          "last_decision": "2021-12-13T05:00:00+00:00",
+          "last_target_symbols": [
+            "BAC",
+            "BNY",
+            "KSU",
+            "PNC"
+          ],
+          "stale_managed_symbols": [
+            {
+              "entity_status": "inactive",
+              "entity_valid_to": "2021-12-13T05:00:00+00:00",
+              "first_missing_opportunity": "2021-12-20T05:00:00+00:00",
+              "last_available_bar": "2021-12-13T05:00:00+00:00",
+              "last_target_weight": 0.09029938817458838,
+              "missing_at_first_permanent_opportunity": true,
+              "symbol": "KSU",
+              "terminal_event_class": "POSSIBLE_DELISTING"
+            }
+          ],
+          "strategy": "reversal",
+          "terminal_events_in_artifact": [
+            {
+              "cash_after": 103436.54321738753,
+              "cash_before": 88335.9175775102,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.32304930769881796,
+              "fill_price": 249.795039,
+              "last_close": 249.87,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 15100.625639877322,
+              "quantity": 60.453357078821014,
+              "slippage_cost": 3.0210960666570017,
+              "spread_cost": 1.5105480333285008,
+              "symbol": "PNC",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 119866.8021858097,
+              "cash_before": 103436.54321738753,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.39118879166124765,
+              "fill_price": 61.711481,
+              "last_close": 61.73,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 16430.258968422175,
+              "quantity": 266.24948698304354,
+              "slippage_cost": 3.2871161662926554,
+              "spread_cost": 1.6435580831463277,
+              "symbol": "BAC",
+              "timestamp": "2026-07-30T04:00:00+00:00"
+            },
+            {
+              "cash_after": 153141.17314537047,
+              "cash_before": 119866.8021858097,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.7276243048863639,
+              "fill_price": 156.28310100000002,
+              "last_close": 156.33,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 33274.37095956077,
+              "quantity": 212.9155255491485,
+              "slippage_cost": 6.657016821819678,
+              "spread_cost": 3.328508410909839,
+              "symbol": "BNY",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 165109.46053351075,
+              "cash_before": 153141.17314537047,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.06589115609842928,
+              "fill_price": 293.501923,
+              "last_close": 293.59,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 11968.287388140281,
+              "quantity": 40.77776784888861,
+              "slippage_cost": 2.3943889725510408,
+              "spread_cost": 1.1971944862755204,
+              "symbol": "KSU",
+              "timestamp": "2021-12-13T05:00:00+00:00"
+            }
+          ]
+        },
+        {
+          "explanation": "The final-bar liquidation events identify the last available bar, but they are emitted only after the entire curve has been processed.",
+          "first_permanent_skipped_opportunity": "2018-12-24T05:00:00+00:00",
+          "last_decision": "2018-12-17T05:00:00+00:00",
+          "last_target_symbols": [
+            "BSX",
+            "DVMT",
+            "ESRX",
+            "FOX"
+          ],
+          "stale_managed_symbols": [
+            {
+              "entity_status": "inactive",
+              "entity_valid_to": "2018-12-27T05:00:00+00:00",
+              "first_missing_opportunity": "2018-12-31T05:00:00+00:00",
+              "last_available_bar": "2018-12-27T05:00:00+00:00",
+              "last_target_weight": 0.05232377966038318,
+              "missing_at_first_permanent_opportunity": false,
+              "symbol": "DVMT",
+              "terminal_event_class": "POSSIBLE_DELISTING"
+            },
+            {
+              "entity_status": "inactive",
+              "entity_valid_to": "2018-12-20T05:00:00+00:00",
+              "first_missing_opportunity": "2018-12-24T05:00:00+00:00",
+              "last_available_bar": "2018-12-20T05:00:00+00:00",
+              "last_target_weight": 0.051048971216300996,
+              "missing_at_first_permanent_opportunity": true,
+              "symbol": "ESRX",
+              "terminal_event_class": "POSSIBLE_DELISTING"
+            }
+          ],
+          "strategy": "treatment",
+          "terminal_events_in_artifact": [
+            {
+              "cash_after": 100444.31482304267,
+              "cash_before": 92786.23148194402,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.1902190957910939,
+              "fill_price": 46.715981,
+              "last_close": 46.73,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 7658.083341098649,
+              "quantity": 163.93262854085071,
+              "slippage_cost": 1.5321143463427906,
+              "spread_cost": 0.7660571731713953,
+              "symbol": "BSX",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 107490.53255739085,
+              "cash_before": 100444.31482304267,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.17202516800522205,
+              "fill_price": 51.924418,
+              "last_close": 51.94,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 7046.2177343481735,
+              "quantity": 135.70474221812518,
+              "slippage_cost": 1.4097008621618843,
+              "spread_cost": 0.7048504310809421,
+              "symbol": "FOX",
+              "timestamp": "2026-07-31T04:00:00+00:00"
+            },
+            {
+              "cash_after": 113170.28867959265,
+              "cash_before": 107490.53255739085,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.1248962780529785,
+              "fill_price": 92.302301,
+              "last_close": 92.33,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 5679.756122201798,
+              "quantity": 61.535638407105914,
+              "slippage_cost": 1.1363170988256177,
+              "spread_cost": 0.5681585494128089,
+              "symbol": "ESRX",
+              "timestamp": "2018-12-20T05:00:00+00:00"
+            },
+            {
+              "cash_after": 117834.72984172232,
+              "cash_before": 113170.28867959265,
+              "effective_policy": "FINAL_BAR",
+              "fee": 0.10349666679475394,
+              "fill_price": 79.976,
+              "last_close": 80.0,
+              "policy": "FINAL_BAR",
+              "position_removed": true,
+              "proceeds": 4664.441162129674,
+              "quantity": 58.32430552661385,
+              "slippage_cost": 0.9331888884258216,
+              "spread_cost": 0.4665944442129108,
+              "symbol": "DVMT",
+              "timestamp": "2018-12-27T05:00:00+00:00"
+            }
+          ]
+        }
+      ],
+      "runner_lifetime_metadata_used_for_hash_only": true
+    },
+    "source_proof": {
+      "engine_assigns_terminal_map": false,
+      "engine_reads_optional_terminal_map": true,
+      "merged_targets_set_rank_zero": true,
+      "overlay_has_unranked_weight_sort": true,
+      "runner_hashes_lifetime_file": true,
+      "runner_mentions_terminal_map": false
+    }
+  },
+  "finding_3_treatment_cap": {
+    "historical_examples": [
+      {
+        "decision": "2017-02-06T05:00:00+00:00",
+        "overlay_reasons": [
+          "position_count_limit"
+        ],
+        "post_cap_invested": 0.37812500000000004,
+        "post_cap_names": [
+          "FFIV",
+          "GD",
+          "JPM",
+          "LNC",
+          "SCHW",
+          "STT"
+        ],
+        "target_weights": [
+          [
+            "FFIV",
+            0.07447916666666668
+          ],
+          [
+            "GD",
+            0.051562500000000004
+          ],
+          [
+            "JPM",
+            0.051562500000000004
+          ],
+          [
+            "LNC",
+            0.051562500000000004
+          ],
+          [
+            "SCHW",
+            0.07447916666666668
+          ],
+          [
+            "STT",
+            0.07447916666666668
+          ]
+        ]
+      },
+      {
+        "decision": "2018-04-02T04:00:00+00:00",
+        "overlay_reasons": [
+          "daily_loss_limit",
+          "position_count_limit"
+        ],
+        "post_cap_invested": 0.21436053982868378,
+        "post_cap_names": [
+          "ADBE",
+          "CME",
+          "EL",
+          "PVH",
+          "RHT"
+        ],
+        "target_weights": [
+          [
+            "ADBE",
+            0.05001700584964777
+          ],
+          [
+            "CME",
+            0.011948193341176984
+          ],
+          [
+            "EL",
+            0.051562500000000004
+          ],
+          [
+            "PVH",
+            0.051562500000000004
+          ],
+          [
+            "RHT",
+            0.04927034063785901
+          ]
+        ]
+      },
+      {
+        "decision": "2018-12-17T05:00:00+00:00",
+        "overlay_reasons": [
+          "daily_loss_limit",
+          "position_count_limit"
+        ],
+        "post_cap_invested": 0.20361311804103926,
+        "post_cap_names": [
+          "BSX",
+          "DVMT",
+          "ESRX",
+          "FOX"
+        ],
+        "target_weights": [
+          [
+            "BSX",
+            0.04791658750397191
+          ],
+          [
+            "DVMT",
+            0.05232377966038318
+          ],
+          [
+            "ESRX",
+            0.051048971216300996
+          ],
+          [
+            "FOX",
+            0.05232377966038318
+          ]
+        ]
+      }
+    ],
+    "historical_raw_attribution_reason": "_rebalance_dict persists only merged target weights and overlay results; the raw V3 target, raw reversal target, overlap, source ranks and pre-cap merged set are not serialized.",
+    "historical_raw_sleeve_attribution_persisted": false,
+    "overlay_reason_counts": {
+      "daily_loss_limit": 8,
+      "position_count_limit": 97
+    },
+    "position_count_limit_decisions": 97,
+    "post_cap_invested_exposure": {
+      "maximum": 0.4239583333333334,
+      "mean": 0.34741017068849783,
+      "mean_unused_vs_0.55": 0.2025898293115022,
+      "minimum": 0.20361311804103926
+    },
+    "post_cap_target_count_distribution": {
+      "4": 4,
+      "5": 3,
+      "6": 90
+    },
+    "synthetic_probe": {
+      "effective_reversal_exposure": 0,
+      "effective_v3_exposure": 0.309375,
+      "fixture": "8 V3 names at 0.55/8 and 6 reversal names at 0.55/6",
+      "merged_count": 14,
+      "merged_names": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "V0",
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "merged_ranks": [
+        0
+      ],
+      "overlap": [],
+      "overlay_reasons": [
+        "position_count_limit"
+      ],
+      "post_cap_names": [
+        "V0",
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5"
+      ],
+      "post_cap_weights": [
+        [
+          "V0",
+          0.051562500000000004
+        ],
+        [
+          "V1",
+          0.051562500000000004
+        ],
+        [
+          "V2",
+          0.051562500000000004
+        ],
+        [
+          "V3",
+          0.051562500000000004
+        ],
+        [
+          "V4",
+          0.051562500000000004
+        ],
+        [
+          "V5",
+          0.051562500000000004
+        ]
+      ],
+      "pre_cap_reversal_names": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5"
+      ],
+      "pre_cap_v3_names": [
+        "V0",
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "proof": "The composed targets all have rank=0, so the production overlay's unranked branch sorts by target weight and keeps the six larger V3 weights.",
+      "unused_intended_sleeve": 0.24062500000000003
+    }
+  },
+  "finding_4_observation_sets": {
+    "reversal_observation_set_actual": {
+      "conforms_to_broad_pool_contract": false,
+      "method": "the same universe_obj and snapshot.observation_set passed to run_one(reversal)",
+      "own_alpha_ranker_used": false,
+      "violation": "HIDDEN_V3_ALPHA_PREFILTER_CONFIRMED"
+    },
+    "scanner_eligible_pool": {
+      "average_pool_size": 286.5500376222724,
+      "conforms_to_broad_pool_contract": true,
+      "method": "daily production scanner policy on trailing 60d metrics; inputs strictly precede snapshot; Stage-A shortlist capped at 300 symbols by trailing median dollar volume; historical spread and broad sector/tradability metadata unavailable and explicitly degraded",
+      "target_shortlist": 300
+    },
+    "source_proof": {
+      "product_builder_constructs_configured_observation_strategy": true,
+      "product_builder_passes_configured_observation_strategy": true,
+      "runner_builds_one_universe": true,
+      "runner_passes_same_universe_to_all_runs": true,
+      "universe_builder_ranks_observation_set": true
+    },
+    "treatment_observation_set_actual": {
+      "conforms_to_broad_pool_contract": false,
+      "method": "the same V3 observation set; both component decisions receive that context",
+      "own_alpha_ranker_used": false,
+      "predeclared_union_policy_used": false,
+      "violation": "shared V3 observation contamination"
+    },
+    "v3_observation_set": {
+      "conforms_to_broad_pool_contract": true,
+      "maximum_stream_symbols": [
+        30
+      ],
+      "method": "build_observation_set(V3 alpha, scanner-selected pool, pinned references)",
+      "strategy_names": [
+        "equity_residual_momentum_v3"
+      ],
+      "strategy_versions": [
+        "3.0.0"
+      ]
+    }
+  },
+  "finding_5_verifier_gaps": {
+    "checks_observed": {
+      "validation_boundary_only": true,
+      "weekly_uniqueness_only": true
+    },
+    "important_invariants_not_checked": [
+      {
+        "invariant": "minimum or expected weekly opportunity count",
+        "why_missing": "No schedule is reconstructed and no expected count is compared with recorded decisions."
+      },
+      {
+        "invariant": "decision continuity through validation",
+        "why_missing": "The verifier only checks uniqueness of recorded weeks, so an empty multi-year tail passes."
+      },
+      {
+        "invariant": "last decision date near the data end",
+        "why_missing": "No recency or maximum-gap assertion exists."
+      },
+      {
+        "invariant": "nonzero validation rebalance activity",
+        "why_missing": "Validation boundary checks reported dates, not decision or fill counts."
+      },
+      {
+        "invariant": "observation completeness skip rate",
+        "why_missing": "Skipped decisions are not persisted as attempts or counted."
+      },
+      {
+        "invariant": "terminal lifecycle correctness",
+        "why_missing": "The verifier hashes the lifetime file but never checks engine wiring or inactive managed pins."
+      },
+      {
+        "invariant": "realized sleeve attribution after position truncation",
+        "why_missing": "Only merged target caps and aggregate exposure are checked; source ownership is absent."
+      },
+      {
+        "invariant": "strategy-specific observation-set identity",
+        "why_missing": "No assertion compares the run strategy with the persisted observation_strategy_name."
+      }
+    ],
+    "why_original_verifier_passed": "The artifact identities, signal unit probe, unique-week condition, next-bar fill arithmetic, target caps, NAV identity and validation date bounds all passed. None of those checks requires a positive number of validation decisions, a live terminal map, sleeve attribution, or a strategy-owned observation set."
+  },
+  "forensic_verdict": "EXPERIMENT_INVALID_IMPLEMENTATION",
+  "identity": {
+    "audit_start_head": "50938a3ac8b899a7528158bc0019808646a196e5",
+    "branch": "research/residual-reversal-local-v1",
+    "campaign": "equity_short_term_residual_reversal_v1",
+    "campaign_artifact_commit": "4b6dd3c",
+    "current_head_at_audit": "50938a3ac8b899a7528158bc0019808646a196e5",
+    "main_sha": "8123694a71d8fbb0e520f13b4e1692e932754e97",
+    "origin_branch_head_at_audit": "50938a3ac8b899a7528158bc0019808646a196e5",
+    "original_verdict": "RESEARCH_REJECT"
+  },
+  "preserved_original_evidence": [
+    "FROZEN_PROTOCOL.md",
+    "DATA_RECEIPT.json",
+    "run_manifest.json",
+    "v3_control.json",
+    "standalone_reversal.json",
+    "treatment.json",
+    "execution_audit.json",
+    "independent_verification.json",
+    "FINAL_REPORT.md",
+    "decision.json",
+    "gate_table.json"
+  ],
+  "repair_specification": [
+    "Wire the hashed v5 lifetime table into the engine's terminal/lifecycle map and persist an explicit terminal close/removal event before a managed inactive symbol can block completeness.",
+    "Add fail-fast coverage assertions for expected weekly opportunities, minimum coverage, maximum unexplained gaps, and real validation decisions/fills; classify passive carry separately from active validation.",
+    "Persist raw V3 and reversal target names, ranks, overlap, merged pre-cap targets, post-cap survivors, sleeve exposures and unused intended sleeve on every treatment decision.",
+    "Make the shared six-position policy sleeve-aware and deterministic, preserving source strategy identity/rank or another predeclared account-level allocation rule so 75/25 cannot be silently converted into target-weight selection.",
+    "Build strategy-specific observation sets: V3 ranked by V3, reversal ranked by reversal, and treatment using a predeclared combined/union policy.",
+    "Extend independent verification to enforce lifecycle wiring, observation identity, decision continuity, coverage, and sleeve attribution before any corrected replay is accepted.",
+    "Replay the same frozen candidate only after these implementation corrections; do not retune parameters or modify the frozen gates."
+  ]
+}

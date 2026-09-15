@@ -24,6 +24,7 @@
   ],
   "decision": "RESEARCH_REJECT",
   "economic_results_generated": true,
+  "result_artifact_commit": "a96efd1f8e2c1f900091e90f072301a34665719a",
   "elapsed_seconds_before_verification": 618.3049688339233,
   "engine_bar_count": 1286547,
   "execution_policy": {

@@ -153,4 +153,4 @@ Replay validity is `CORRECTED_REPLAY_VALID` and the final economic decision is `
 
 ## Final branch SHA
 
-`pending-uncommitted-research-branch`
+`a96efd1f8e2c1f900091e90f072301a34665719a` (serialized result/artifact commit)

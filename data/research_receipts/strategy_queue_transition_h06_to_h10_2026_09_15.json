@@ -1,0 +1,12 @@
+{
+  "from_candidate": "H06",
+  "h06_status": "COMPLETE_CLOSED_FOR_FROZEN_RESEARCH_CYCLE_TERMINAL_ONE_SHOT_FAILURE",
+  "integrity": {
+    "self_sha256": "4bf0c9ae03d6dbfde07ce55d7fbe1fbe4365a352feb9969b0803c845bd5d7ab5"
+  },
+  "promotion_authorized": false,
+  "schema": "strategy-queue-transition-h06-to-h10-v1",
+  "to_candidate": "H10",
+  "to_candidate_economic_authorized": false,
+  "to_candidate_research_authorized": false
+}

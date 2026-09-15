@@ -1,0 +1,34 @@
+{
+  "accounting_status": "INVALID_CAP_CONSTRAINT",
+  "candidate": "H06",
+  "failure": "independent_verifier:overlay_cap_violation",
+  "first_violation_session": "2024-06-03",
+  "independent_verifier_result": "H06_FINAL_RESULT_INVALID",
+  "integrity": {
+    "self_sha256": "68b0f9fc5205e8ff9b8d1e44f8fae08010f2b1c5c5c214db151be71378e57fdb"
+  },
+  "last_violation_session": "2024-06-28",
+  "max_observed_equity_exposure": 0.5508181227160708,
+  "max_observed_positions": 7,
+  "no_rerun_policy_applied": true,
+  "outcomes_accessed": true,
+  "result_bundle_preserved": true,
+  "source_hashes": {
+    "bars": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "lifetimes": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "v3_reference": "2c8b30eca960750a5bf31843d0577c087c835b6d822fa6a09cb6b61e161eab32"
+  },
+  "production_runtime_hashes_unchanged": {
+    "data/cache/warmup.sqlite3": "a151b64b32bbe13608c5e5204409591e5b843a8a7bcb8594b0cbc990c99bec01",
+    "data/runtime/health_snapshot.json": "97c32168f3716d2ac911bd2bfee7a48511c386d7a8f125effab78d67450f122d",
+    "data/runtime/observability.sqlite3": "9e29d014dc6db96a78b90b5861dd910733517ef6e6f5d1d5c1e3c4fe228bdcf9",
+    "data/runtime/parayabuck.sqlite3": "7785f6d3cfa84d0adc93c8986a912bbc368569ff40654ae2d8a5ed881adae5c5",
+    "data/runtime/portfolio_holdout_registry.json": "2658fba683cf0cd41ffae0234e8816ec6ba6b5bc126b4ad5f6db26352adccf0f"
+  },
+  "run_count": 1,
+  "schema": "h06-final-verification-v1",
+  "status": "H06_FINAL_ONE_SHOT_EXECUTION_FAILED",
+  "violating_daily_rows": 57,
+  "violating_rows_per_cost_cell": 19
+}

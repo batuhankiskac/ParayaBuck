@@ -57,6 +57,7 @@ _CURRENT_RESEARCH_TEST_PATHS = (
     "tests/research/test_h06_identity_marketcap_bridge_2026_09_14.py",
     "tests/research/test_h06_full_official_acquisition_2026_09_14.py",
     "tests/research/test_h06_full_structural_admission_2026_09_14.py",
+    "tests/research/test_h06_final_economic_2026_09_15.py",
     "tests/research/test_h06_offline_core_population_2026_09_15.py",
     "tests/research/test_h06_source_feasibility_2026_09_14.py",
     "tests/research/test_h06_structural_blocker_closure_2026_09_14.py",

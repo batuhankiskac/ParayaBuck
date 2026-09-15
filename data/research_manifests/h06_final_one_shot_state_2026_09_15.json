@@ -1,0 +1,17 @@
+{
+  "candidate": "H06",
+  "economic_run": false,
+  "integrity": {
+    "self_sha256": "4b60c1da8ef1a9c196f0ac8dce58eaf21f969174ac6aaf13bc69e1058327d3bf"
+  },
+  "outcomes_accessed": false,
+  "protocol_sha256": "1abef98294ee0762435b282a4f4ae9662255f8ea66d2db795ed852b3def9dc87",
+  "rerun_allowed": false,
+  "reservation_state": "UNRESERVED",
+  "run_count": 0,
+  "schema": "h06-final-one-shot-state-v1",
+  "source_commit": "b9a136cb9d5bce725ba1e7b416653794c30be3c6",
+  "status": "SEALED_UNUSED",
+  "structural_commit": "890f79281188ca225acc04220d249cbf90ed1341",
+  "tuning_allowed": false
+}

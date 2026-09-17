@@ -29,13 +29,13 @@ def test_bar_schema_parses_only_real_source_rows(tmp_path: Path) -> None:
     path = _write(
         tmp_path / "bars.csv",
         "timestamp,symbol,timeframe,open,high,low,close,volume,market\n"
-        "2024-11-07T05:00:00+00:00,SH,1d,40,41,39,40.5,1000,equity\n"
-        "2024-11-07T05:00:00+00:00,SPY,1d,590,592,588,591,2000,equity\n",
+        "2024-11-07T05:00:00+00:00,SPY,1Day,590,592,588,591,2000,EQUITY\n"
+        "2024-11-07T05:00:00+00:00,SH,1d,40,41,39,40.5,1000,equity\n",
     )
 
     bars = load_bars_csv(path, symbols={"SPY", "SH"})
 
-    assert [(bar.symbol, bar.close) for bar in bars] == [("SH", 40.5), ("SPY", 591.0)]
+    assert [(bar.symbol, bar.close) for bar in bars] == [("SPY", 591.0), ("SH", 40.5)]
     with pytest.raises(ValueError, match="Requested symbols have no real bars"):
         load_bars_csv(path, symbols={"SPY", "SH", "FAKE_SH"})
 

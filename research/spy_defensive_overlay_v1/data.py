@@ -93,7 +93,8 @@ def _require_columns(reader: csv.DictReader[str], required: set[str], label: str
 def load_bars_csv(path: str | Path, *, symbols: set[str] | None = None) -> list[Bar]:
     wanted = {canonical_symbol(symbol, Market.EQUITY) for symbol in symbols} if symbols is not None else None
     bars: list[Bar] = []
-    previous_key: tuple[datetime, str] | None = None
+    previous_timestamp: datetime | None = None
+    symbols_at_timestamp: set[str] = set()
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         _require_columns(
@@ -106,7 +107,7 @@ def load_bars_csv(path: str | Path, *, symbols: set[str] | None = None) -> list[
             if wanted is not None and symbol not in wanted:
                 continue
             timestamp = _aware_datetime(str(row["timestamp"]), field="bar timestamp")
-            if row["timeframe"] != "1d" or row["market"].lower() != Market.EQUITY.value:
+            if str(row["timeframe"]).lower() not in {"1d", "1day"} or row["market"].lower() != Market.EQUITY.value:
                 raise ValueError(f"Unexpected bar market/timeframe for {symbol}")
             prices = tuple(float(row[name]) for name in ("open", "high", "low", "close"))
             volume = float(row["volume"])
@@ -119,10 +120,14 @@ def load_bars_csv(path: str | Path, *, symbols: set[str] | None = None) -> list[
                 raise ValueError(f"Non-finite bar row for {symbol} at {timestamp.isoformat()}")
             if any(value <= 0 for value in prices) or volume < 0:
                 raise ValueError(f"Invalid non-placeholder bar row for {symbol} at {timestamp.isoformat()}")
-            key = (timestamp, symbol)
-            if previous_key is not None and key <= previous_key:
-                raise ValueError("Bar rows must be unique and ordered by timestamp, symbol")
-            previous_key = key
+            if previous_timestamp is not None and timestamp < previous_timestamp:
+                raise ValueError("Bar rows must be ordered by timestamp")
+            if previous_timestamp is None or timestamp != previous_timestamp:
+                previous_timestamp = timestamp
+                symbols_at_timestamp.clear()
+            if symbol in symbols_at_timestamp:
+                raise ValueError(f"Duplicate bar row for {symbol} at {timestamp.isoformat()}")
+            symbols_at_timestamp.add(symbol)
             bars.append(
                 Bar(
                     timestamp=timestamp,

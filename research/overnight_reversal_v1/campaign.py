@@ -121,8 +121,12 @@ def _write_json(path: Path, payload: object) -> None:
 
 
 def _write_json_gz(path: Path, payload: object) -> None:
-    with gzip.open(path, "wt", encoding="utf-8", newline="") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
+    # Universe snapshots contain the full scanner exclusion map. Compact JSON
+    # and low compression keep this provenance artifact lossless without
+    # turning the pre-P&L receipt phase into a multi-minute serialization hot
+    # spot.
+    with gzip.open(path, "wt", encoding="utf-8", newline="", compresslevel=1) as handle:
+        json.dump(payload, handle, separators=(",", ":"), sort_keys=True, allow_nan=False)
         handle.write("\n")
 
 
@@ -473,7 +477,13 @@ def _audit_signal_rows(dataset: NormalizedDataset, universe: PointInTimeUniverse
                     row = signal_from_bars("SPY", decision_day, prior_day, spy_by_day, spy_by_day)
                     row = replace(row, eligibility="reference_only", reason="reference_only")
                 else:
-                    stock_by_day = {session_date(bar.timestamp): bar for bar in dataset.bars_by_symbol.get(symbol, ())}
+                    current = dataset.bar_for(symbol, decision_day)
+                    prior = dataset.bar_for(symbol, prior_day) if prior_day is not None else None
+                    stock_by_day = {
+                        day: bar
+                        for day, bar in ((decision_day, current), (prior_day, prior))
+                        if day is not None and bar is not None
+                    }
                     row = signal_from_bars(symbol, decision_day, prior_day, stock_by_day, spy_by_day)
                 rows.append(row)
             valid = sorted(

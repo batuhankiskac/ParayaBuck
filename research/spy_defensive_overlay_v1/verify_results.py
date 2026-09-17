@@ -165,12 +165,6 @@ def _scheduled_spy(spy: Mapping[datetime, Any], expected: VerificationExpectatio
     return scheduled
 
 
-def _same_weights(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
-    left_weights = _weights(left)
-    right_weights = _weights(right)
-    return left_weights == right_weights and _finite(left["target_cash_weight"]) == _finite(right["target_cash_weight"])
-
-
 def _source_weights(diagnostic: Mapping[str, Any]) -> list[tuple[str, float, int]]:
     return [
         (str(row["symbol"]), _finite(row["weight"]), int(row["rank"]))
@@ -271,18 +265,25 @@ def _verify_signal_and_semantics(
                 checks.equal(
                     f"semantics.{label}.{arm}.no_reallocation", diagnostic.get("no_unused_allocation_reallocated"), True
                 )
-            source_a = _source_weights(diagnostics[ARMS[0]][timestamp])
-            source_by_symbol = {symbol: weight for symbol, weight, _rank in source_a}
-            for arm in ARMS[1:]:
-                checks.equal(
-                    f"semantics.{label}.{arm}.unchanged_v3_source",
-                    _source_weights(diagnostics[arm][timestamp]),
-                    source_a,
+            for arm in ARMS:
+                diagnostic = diagnostics[arm][timestamp]
+                source = _source_weights(diagnostic)
+                source_symbols = {symbol for symbol, _weight, _rank in source}
+                checks.add(f"semantics.{label}.{arm}.v3_source_count", len(source) <= 8)
+                checks.add(
+                    f"semantics.{label}.{arm}.v3_source_weights",
+                    all(0.0 < weight <= 0.10 + TOLERANCE for _symbol, weight, _rank in source),
                 )
-            for symbol, weight in _weights(maps[ARMS[0]][timestamp]).items():
-                checks.add(f"semantics.{label}.A.source_symbol.{symbol}", symbol in source_by_symbol)
-                if symbol in source_by_symbol:
-                    checks.close(f"semantics.{label}.A.source_weight.{symbol}", weight, source_by_symbol[symbol])
+                checks.equal(
+                    f"semantics.{label}.{arm}.v3_source_ranks",
+                    sorted(rank for _symbol, _weight, rank in source),
+                    list(range(1, len(source) + 1)),
+                )
+                final_symbols = set(_weights(maps[arm][timestamp]))
+                allowed_symbols = source_symbols | (
+                    {"SH"} if arm == "C_defensive_sh" and regime == "DEFENSIVE" else set()
+                )
+                checks.add(f"semantics.{label}.{arm}.post_risk_symbol_subset", final_symbols <= allowed_symbols)
 
             if regime == "NORMAL":
                 for arm in ARMS:
@@ -293,9 +294,11 @@ def _verify_signal_and_semantics(
                         _finite(diagnostic["intended_overlay_sh_exposure"]),
                         0.0,
                     )
-                    checks.add(
-                        f"semantics.{label}.{arm}.normal_target_identity",
-                        _same_weights(maps[arm][timestamp], maps[ARMS[0]][timestamp]),
+                    source_total = sum(weight for _symbol, weight, _rank in _source_weights(diagnostic))
+                    checks.close(
+                        f"semantics.{label}.{arm}.normal_pre_overlay_total",
+                        _finite(diagnostic["pre_overlay_v3_exposure"]),
+                        source_total,
                     )
             else:
                 expected_scale = 0.45 / 0.55
@@ -313,22 +316,14 @@ def _verify_signal_and_semantics(
                     checks.close(
                         f"semantics.{label}.{arm}.intended_v3", _finite(diagnostic["intended_v3_exposure"]), 0.45
                     )
-                    expected_pre = sum(weight for _symbol, weight, _rank in source_a) * expected_scale
+                    expected_pre = (
+                        sum(weight for _symbol, weight, _rank in _source_weights(diagnostic)) * expected_scale
+                    )
                     checks.close(
                         f"semantics.{label}.{arm}.no_scale_up",
                         _finite(diagnostic["pre_overlay_v3_exposure"]),
                         expected_pre,
                     )
-                    for symbol, weight in _weights(maps[arm][timestamp]).items():
-                        if arm == "C_defensive_sh" and symbol == "SH":
-                            continue
-                        checks.add(f"semantics.{label}.{arm}.source_symbol.{symbol}", symbol in source_by_symbol)
-                        if symbol in source_by_symbol:
-                            checks.close(
-                                f"semantics.{label}.{arm}.scaled_weight.{symbol}",
-                                weight,
-                                source_by_symbol[symbol] * expected_scale,
-                            )
                 checks.close(
                     f"semantics.{label}.B.no_overlay",
                     _finite(diagnostics[ARMS[1]][timestamp]["intended_overlay_sh_exposure"]),

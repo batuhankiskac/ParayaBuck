@@ -447,6 +447,7 @@ def _audit_signal_rows(dataset: NormalizedDataset, universe: PointInTimeUniverse
         "score",
         "eligibility",
         "reason",
+        "eligible_pool_rank",
         "rank",
         "observation_rank",
         "observation_member",

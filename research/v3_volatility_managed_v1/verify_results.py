@@ -54,6 +54,31 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _universe_hash(receipt: dict[str, object]) -> str:
+    digest = hashlib.sha256()
+    digest.update(str(receipt["market"]).encode())
+    digest.update("|".join(str(receipt["methodology"]).split()).encode())
+    snapshots = sorted(receipt["snapshots"], key=lambda item: _iso(item["effective_at"]))
+    for snapshot in snapshots:
+        digest.update(str(snapshot["effective_at"]).encode())
+        digest.update(b"\n")
+        digest.update("|".join(sorted(str(value) for value in snapshot["symbols"])).encode())
+        digest.update(b"\n")
+        digest.update("|".join(str(value) for value in snapshot["observation_set"]).encode())
+        digest.update(b"\n")
+        digest.update(str(snapshot["maximum_stream_symbols"]).encode())
+        digest.update(b"\n")
+        digest.update("|".join(str(value) for value in snapshot["pinned_symbols"]).encode())
+        digest.update(b"\n")
+        digest.update(str(snapshot["observation_strategy_name"]).encode())
+        digest.update(b"\n")
+        digest.update(str(snapshot["observation_strategy_version"]).encode())
+        digest.update(b"\n")
+        digest.update(str(snapshot["scanner_version"]).encode())
+        digest.update(str(snapshot["config_digest"]).encode())
+    return digest.hexdigest()
+
+
 def _git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -510,6 +535,7 @@ def main() -> int:
         receipt = _load("DATA_RECEIPT.json")
         schedule_rows = _load("scaler_time_series.json")
         static_freeze = _load("STATIC_COMPARATOR_FREEZE.json")
+        universe_receipt = _load("universe_snapshot.json")
         if _git("rev-parse", "main") != EXPECTED_MAIN_SHA or _git("rev-parse", "origin/main") != EXPECTED_MAIN_SHA:
             errors.append("main or origin/main does not match frozen baseline")
         checks["repository_identity"] = {
@@ -535,6 +561,15 @@ def main() -> int:
             if not path.exists() or _sha256(path) != expected:
                 errors.append(f"source hash mismatch: {relative}")
         checks["protocol_and_data_hashes"] = not errors
+        recomputed_universe_hash = _universe_hash(universe_receipt)
+        expected_universe_hash = str(receipt["universe"]["hash"])
+        if recomputed_universe_hash != expected_universe_hash or recomputed_universe_hash != str(manifest["universe_hash"]):
+            errors.append("point-in-time universe hash mismatch")
+        checks["universe_hash_replay"] = {
+            "recomputed": recomputed_universe_hash,
+            "expected": expected_universe_hash,
+            "snapshot_count": len(universe_receipt["snapshots"]),
+        }
 
         scaler_check = _check_scaler(errors)
         checks["scaler_replay"] = scaler_check

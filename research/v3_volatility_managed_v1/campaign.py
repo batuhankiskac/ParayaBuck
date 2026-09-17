@@ -140,6 +140,34 @@ def _snapshot_at(universe: object, timestamp: datetime) -> object | None:
     return snapshots[index] if index >= 0 else None
 
 
+def _compact_universe_receipt(universe: object) -> dict[str, object]:
+    """Persist the hash-bearing PIT fields without scanner debug bulk."""
+    raw = universe.to_dict()
+    snapshots = []
+    for snapshot in raw["snapshots"]:
+        snapshots.append(
+            {
+                "effective_at": snapshot["effective_at"],
+                "symbols": snapshot["symbols"],
+                "observation_set": snapshot["observation_set"],
+                "maximum_stream_symbols": snapshot["maximum_stream_symbols"],
+                "pinned_symbols": snapshot["pinned_symbols"],
+                "observation_strategy_name": snapshot["observation_strategy_name"],
+                "observation_strategy_version": snapshot["observation_strategy_version"],
+                "scanner_version": snapshot["scanner_version"],
+                "config_digest": snapshot["config_digest"],
+                "candidate_count": snapshot["candidate_count"],
+                "sector_metadata_coverage": snapshot["sector_metadata_coverage"],
+            }
+        )
+    return {
+        "market": raw["market"],
+        "methodology": raw["methodology"],
+        "sector_metadata_coverage": raw["sector_metadata_coverage"],
+        "snapshots": snapshots,
+    }
+
+
 def weekly_decision_timestamps(bars: Sequence[Bar], start: datetime, end: datetime) -> tuple[datetime, ...]:
     """Mirror the engine's first-observed-bar-per-ISO-week rule."""
 
@@ -922,7 +950,7 @@ def main() -> int:
         observation_strategy=base_strategy,
     )
     universe_hash = hash_point_in_time_universe(universe)
-    _write_json(RESEARCH_DIR / "universe_snapshot.json", universe.to_dict())
+    _write_json(RESEARCH_DIR / "universe_snapshot.json", _compact_universe_receipt(universe))
 
     print("PREPARE ENGINE INPUTS", flush=True)
     prepared = _prepared_window(bars, Market.EQUITY, "1d", FULL_START, FULL_END)

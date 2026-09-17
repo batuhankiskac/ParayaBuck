@@ -454,10 +454,13 @@ def _independent_gates(
     a_dev = metrics["A_control"]["development"]
     b_dev = metrics["B_treatment"]["development"]
     c_dev = metrics["C_static_comparator"]["development"]
+    a_full = metrics["A_control"]["full"]
+    b_full = metrics["B_treatment"]["full"]
+    c_full = metrics["C_static_comparator"]["full"]
     a_val = metrics["A_control"]["validation"]
     b_val = metrics["B_treatment"]["validation"]
-    improvements_a = {metric: float(b_dev[metric]) - float(a_dev[metric]) for metric in RISK_METRICS}
-    improvements_c = {metric: float(b_dev[metric]) - float(c_dev[metric]) for metric in RISK_METRICS}
+    improvements_a = {metric: float(b_full[metric]) - float(a_full[metric]) for metric in RISK_METRICS}
+    improvements_c = {metric: float(b_full[metric]) - float(c_full[metric]) for metric in RISK_METRICS}
     a_2x = stress["A_control"]["2x"]["metrics"]["full"]
     b_1x = metrics["B_treatment"]["full"]
     b_2x = stress["B_treatment"]["2x"]["metrics"]["full"]
@@ -470,13 +473,13 @@ def _independent_gates(
             and all(value >= -0.03 for value in improvements_a.values())
         },
         "gate_3": {
-            "pass": float(b_dev["max_drawdown"]) <= float(a_dev["max_drawdown"]) - 0.02
-            and float(b_dev["max_drawdown"]) <= float(a_dev["max_drawdown"]) * 0.90
+            "pass": float(b_full["max_drawdown"]) <= float(a_full["max_drawdown"]) - 0.02
+            and float(b_full["max_drawdown"]) <= float(a_full["max_drawdown"]) * 0.90
         },
-        "gate_4": {"pass": float(a_dev["cagr"]) - float(b_dev["cagr"]) <= 0.01},
+        "gate_4": {"pass": float(a_full["cagr"]) - float(b_full["cagr"]) <= 0.01},
         "gate_5": {
             "pass": sum(value > 0 for value in improvements_c.values()) >= 2
-            and float(c_dev["cagr"]) - float(b_dev["cagr"]) <= 0.005
+            and float(c_full["cagr"]) - float(b_full["cagr"]) <= 0.005
         },
         "gate_6": {
             "pass": float(b_val["max_drawdown"]) < float(a_val["max_drawdown"])
@@ -486,6 +489,7 @@ def _independent_gates(
         },
         "gate_7": {
             "pass": all(math.isfinite(float(b_2x[metric])) for metric in RISK_METRICS)
+            and float(b_2x["net_total_return"]) > 0.0
             and all(float(b_1x[metric]) <= 0 or float(b_2x[metric]) >= 0 for metric in RISK_METRICS)
             and not all(
                 float(b_2x[metric]) < float(a_2x[metric]) and float(b_2x[metric]) < float(c_2x[metric])

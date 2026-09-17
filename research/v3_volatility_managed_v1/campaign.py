@@ -547,19 +547,39 @@ def _scale_diagnostics(rows: Sequence[dict[str, object]]) -> dict[str, object]:
     fallback = [row for row in rows if str(row["status"]).endswith("normal_v3")]
     eligible = [row for row in rows if bool(row["eligible"])]
     eligible_scales = [float(row["scale"]) for row in eligible]
+    reduced_flags = [float(row["scale"]) < 1.0 - 1e-12 for row in eligible]
+    episode_count = 0
+    longest_episode = 0
+    current_episode = 0
+    for reduced in reduced_flags:
+        if reduced:
+            if current_episode == 0:
+                episode_count += 1
+            current_episode += 1
+            longest_episode = max(longest_episode, current_episode)
+        else:
+            current_episode = 0
     return {
         "decision_count": len(rows),
         "eligible_decision_count": len(eligible),
         "scaled_decision_count": len(scaled),
         "scaled_fraction": len(scaled) / len(eligible) if eligible else 0.0,
+        "scale_one_fraction": sum(not reduced for reduced in reduced_flags) / len(eligible) if eligible else 0.0,
+        "below_0_75_fraction": sum(scale < 0.75 for scale in eligible_scales) / len(eligible) if eligible else 0.0,
+        "below_0_50_fraction": sum(scale < 0.50 for scale in eligible_scales) / len(eligible) if eligible else 0.0,
+        "below_0_25_fraction": sum(scale < 0.25 for scale in eligible_scales) / len(eligible) if eligible else 0.0,
         "fallback_decision_count": len(fallback),
-        "min_scale": min(scales, default=1.0),
-        "median_scale": statistics.median(scales) if scales else 1.0,
-        "mean_scale": statistics.fmean(scales) if scales else 1.0,
-        "p10_scale": _linear_percentile(scales, 10.0),
-        "p90_scale": _linear_percentile(scales, 90.0),
+        "min_scale": min(eligible_scales, default=1.0),
+        "median_scale": statistics.median(eligible_scales) if eligible_scales else 1.0,
+        "mean_scale": statistics.fmean(eligible_scales) if eligible_scales else 1.0,
+        "p10_scale": _linear_percentile(eligible_scales, 10.0),
+        "p25_scale": _linear_percentile(eligible_scales, 25.0),
+        "p75_scale": _linear_percentile(eligible_scales, 75.0),
+        "p90_scale": _linear_percentile(eligible_scales, 90.0),
         "eligible_mean_scale": statistics.fmean(eligible_scales) if eligible_scales else 1.0,
         "eligible_median_scale": statistics.median(eligible_scales) if eligible_scales else 1.0,
+        "reduced_exposure_episode_count": episode_count,
+        "longest_reduced_exposure_episode_weeks": longest_episode,
         "status_counts": {
             status: sum(1 for row in rows if row["status"] == status)
             for status in sorted({str(row["status"]) for row in rows})
@@ -580,6 +600,28 @@ def _linear_percentile(values: Sequence[float], percentile: float) -> float:
     return ordered[lower] + fraction * (ordered[upper] - ordered[lower])
 
 
+def _augment_audit_rows(payload: dict[str, object]) -> None:
+    """Join strategy audit rows to post-risk and post-fill engine records."""
+    records = {
+        str(record["decision_timestamp"]): record
+        for record in payload["execution"]["rebalances"]
+    }
+    augmented: list[dict[str, object]] = []
+    for row in payload["audit_rows"]:
+        enriched = dict(row)
+        record = records.get(str(row["decision_timestamp"]))
+        if record is not None:
+            target_weights = {str(symbol): float(weight) for symbol, weight in record["target_weights"]}
+            actual_weights = {str(symbol): float(weight) for symbol, weight in record["post_fill_actual_weights"]}
+            enriched["post_risk_target_weights"] = target_weights
+            enriched["post_risk_target_exposure"] = sum(target_weights.values())
+            enriched["post_fill_actual_weights"] = actual_weights
+            enriched["post_fill_actual_exposure"] = sum(actual_weights.values())
+            enriched["risk_overlay_reasons"] = list(record["risk_overlay_reasons"])
+        augmented.append(enriched)
+    payload["audit_rows"] = augmented
+
+
 def _gate_table(
     metrics_by_arm: dict[str, dict[str, object]],
     stress: dict[str, dict[str, dict[str, object]]],
@@ -589,6 +631,9 @@ def _gate_table(
     a_dev = metrics_by_arm["A_control"]["development"]
     b_dev = metrics_by_arm["B_treatment"]["development"]
     c_dev = metrics_by_arm["C_static_comparator"]["development"]
+    a_full = metrics_by_arm["A_control"]["full"]
+    b_full = metrics_by_arm["B_treatment"]["full"]
+    c_full = metrics_by_arm["C_static_comparator"]["full"]
     a_val = metrics_by_arm["A_control"]["validation"]
     b_val = metrics_by_arm["B_treatment"]["validation"]
     a_2x = stress["A_control"]["2x"]["metrics"]["full"]
@@ -597,8 +642,8 @@ def _gate_table(
     c_2x = stress["C_static_comparator"]["2x"]["metrics"]["full"]
     b_3x = stress["B_treatment"]["3x"]["metrics"]["full"]
 
-    improvements_a = {metric: float(b_dev[metric]) - float(a_dev[metric]) for metric in RISK_METRICS}
-    improvements_c = {metric: float(b_dev[metric]) - float(c_dev[metric]) for metric in RISK_METRICS}
+    improvements_a = {metric: float(b_full[metric]) - float(a_full[metric]) for metric in RISK_METRICS}
+    improvements_c = {metric: float(b_full[metric]) - float(c_full[metric]) for metric in RISK_METRICS}
     gate_1_coverage = all(bool(item["pass"]) for item in coverage.values())
     gate_1 = bool(verification.get("research_run_valid")) and gate_1_coverage and bool(
         verification.get("structural_valid", False)
@@ -608,13 +653,13 @@ def _gate_table(
         and all(value >= -0.03 for value in improvements_a.values())
     )
     gate_3 = (
-        float(b_dev["max_drawdown"]) <= float(a_dev["max_drawdown"]) - 0.02
-        and float(b_dev["max_drawdown"]) <= float(a_dev["max_drawdown"]) * 0.90
+        float(b_full["max_drawdown"]) <= float(a_full["max_drawdown"]) - 0.02
+        and float(b_full["max_drawdown"]) <= float(a_full["max_drawdown"]) * 0.90
     )
-    gate_4 = float(a_dev["cagr"]) - float(b_dev["cagr"]) <= 0.01
+    gate_4 = float(a_full["cagr"]) - float(b_full["cagr"]) <= 0.01
     gate_5 = (
         sum(value > 0.0 for value in improvements_c.values()) >= 2
-        and float(c_dev["cagr"]) - float(b_dev["cagr"]) <= 0.005
+        and float(c_full["cagr"]) - float(b_full["cagr"]) <= 0.005
     )
     gate_6 = (
         float(b_val["max_drawdown"]) < float(a_val["max_drawdown"])
@@ -624,6 +669,7 @@ def _gate_table(
     )
     gate_7 = (
         all(math.isfinite(float(b_2x[metric])) for metric in RISK_METRICS)
+        and float(b_2x["net_total_return"]) > 0.0
         and all(float(b_1x[metric]) <= 0 or float(b_2x[metric]) >= 0 for metric in RISK_METRICS)
         and not all(
             float(b_2x[metric]) < float(a_2x[metric]) and float(b_2x[metric]) < float(c_2x[metric])
@@ -641,24 +687,24 @@ def _gate_table(
             "verifier_valid": bool(verification.get("research_run_valid")),
             "structural_valid": bool(verification.get("structural_valid", False)),
         },
-        "gate_2": {"pass": gate_2, "development_risk_improvements": improvements_a},
+        "gate_2": {"pass": gate_2, "full_period_risk_improvements": improvements_a},
         "gate_3": {
             "pass": gate_3,
-            "control_max_drawdown": a_dev["max_drawdown"],
-            "treatment_max_drawdown": b_dev["max_drawdown"],
-            "absolute_improvement": float(a_dev["max_drawdown"]) - float(b_dev["max_drawdown"]),
+            "control_max_drawdown": a_full["max_drawdown"],
+            "treatment_max_drawdown": b_full["max_drawdown"],
+            "absolute_improvement": float(a_full["max_drawdown"]) - float(b_full["max_drawdown"]),
             "relative_improvement": (
-                1.0 - float(b_dev["max_drawdown"]) / float(a_dev["max_drawdown"])
-                if float(a_dev["max_drawdown"]) > 0
+                1.0 - float(b_full["max_drawdown"]) / float(a_full["max_drawdown"])
+                if float(a_full["max_drawdown"]) > 0
                 else 0.0
             ),
         },
         "gate_4": {
             "pass": gate_4,
-            "cagr_drag": float(a_dev["cagr"]) - float(b_dev["cagr"]),
+            "cagr_drag": float(a_full["cagr"]) - float(b_full["cagr"]),
             "threshold": 0.01,
         },
-        "gate_5": {"pass": gate_5, "development_risk_improvements_vs_static": improvements_c},
+        "gate_5": {"pass": gate_5, "full_period_risk_improvements_vs_static": improvements_c},
         "gate_6": {
             "pass": gate_6,
             "validation_risk_metrics": {
@@ -1022,6 +1068,7 @@ def main() -> int:
             cost_multiplier=1.0,
             include_context=True,
         )
+        _augment_audit_rows(payload)
         arm_one_x[arm] = payload
         metrics_by_arm[arm] = payload["metrics"]
         strategy_audits[arm] = payload["audit_rows"]

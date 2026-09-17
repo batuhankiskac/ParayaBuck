@@ -557,7 +557,7 @@ def _audit_signal_rows(dataset: NormalizedDataset, universe: PointInTimeUniverse
 class FeeScaledPortfolioBacktestEngine(PortfolioBacktestEngine):
     """Research-only engine shim that scales effective-dated fees too."""
 
-    def __init__(self, *args: object, fee_multiplier: float, **kwargs: object) -> None:
+    def __init__(self, *args: Any, fee_multiplier: float, **kwargs: Any) -> None:
         if fee_multiplier <= 0 or not math.isfinite(fee_multiplier):
             raise ValueError("fee_multiplier must be positive and finite")
         self.fee_multiplier = fee_multiplier
@@ -621,7 +621,7 @@ def _case_payload(
     drawdowns: list[dict[str, object]] = []
     peak = result.starting_equity
     for point in curves:
-        equity = float(point["equity"])
+        equity = cast(float, point["equity"])
         peak = max(peak, equity)
         drawdowns.append({"timestamp": point["timestamp"], "drawdown": (peak - equity) / peak if peak > 0 else 0.0})
     benchmark = [{"timestamp": bar.timestamp.isoformat(), "close": bar.close} for bar in result.benchmark_bars]

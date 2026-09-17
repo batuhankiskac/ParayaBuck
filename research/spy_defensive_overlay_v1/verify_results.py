@@ -310,6 +310,22 @@ def _verify_signal_and_semantics(
                 )
                 for arm in ARMS[1:]:
                     diagnostic = diagnostics[arm][timestamp]
+                    source = _source_weights(diagnostic)
+                    ranked_source = sorted(source, key=lambda row: (row[2] or math.inf, row[0]))
+                    baseline_six = sum(weight for _symbol, weight, _rank in ranked_source[:6])
+                    capacity_reference = baseline_six
+                    if arm == "C_defensive_sh":
+                        source_sh = next((row for row in ranked_source if row[0] == "SH"), None)
+                        c_survivors = [row for row in ranked_source if row[0] != "SH"][:5]
+                        if source_sh is not None:
+                            c_survivors.append(source_sh)
+                        capacity_reference = max(
+                            capacity_reference, sum(weight for _symbol, weight, _rank in c_survivors)
+                        )
+                    expected_scale = min(
+                        0.45 / 0.55,
+                        0.45 / capacity_reference if capacity_reference > 0 else 1.0,
+                    )
                     checks.close(
                         f"semantics.{label}.{arm}.fixed_scale", _finite(diagnostic["v3_scale"]), expected_scale
                     )
@@ -323,6 +339,15 @@ def _verify_signal_and_semantics(
                         f"semantics.{label}.{arm}.no_scale_up",
                         _finite(diagnostic["pre_overlay_v3_exposure"]),
                         expected_pre,
+                    )
+                    final_v3_exposure = sum(
+                        _weights(maps[arm][timestamp]).get(symbol, 0.0) for symbol, _weight, _rank in source
+                    )
+                    if arm == "C_defensive_sh" and any(symbol == "SH" for symbol, _weight, _rank in source):
+                        final_v3_exposure -= _finite(diagnostic["realized_overlay_sh_exposure"])
+                    checks.add(
+                        f"semantics.{label}.{arm}.v3_allocation_cap",
+                        final_v3_exposure <= 0.45 + TOLERANCE,
                     )
                 checks.close(
                     f"semantics.{label}.B.no_overlay",

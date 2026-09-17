@@ -146,7 +146,7 @@ def test_incumbent_and_normal_arms_preserve_exact_v3_target_before_risk() -> Non
         assert diagnostics["total_positions"] == 8
 
 
-def test_defensive_cash_applies_fixed_045_over_055_scale_to_every_v3_name() -> None:
+def test_defensive_cash_caps_six_slot_v3_exposure_at_045() -> None:
     source = _v3_target([(f"S{rank}", 0.10, rank) for rank in range(1, 9)])
     target = compose_overlay_target(
         source,
@@ -155,9 +155,10 @@ def test_defensive_cash_applies_fixed_045_over_055_scale_to_every_v3_name() -> N
         trend_return=-0.05,
     )
     assert len(target.weights) == 8
-    assert all(weight == pytest.approx(0.10 * 0.45 / 0.55) for weight in _weights(target).values())
+    assert all(weight == pytest.approx(0.075) for weight in _weights(target).values())
     assert "SH" not in _weights(target)
-    assert target.cash_weight == pytest.approx(1.0 - 0.8 * 0.45 / 0.55)
+    assert target.cash_weight == pytest.approx(0.40)
+    assert sum(weight.weight for weight in _risk_target(target).weights) == pytest.approx(0.45)
     diagnostics = _diagnostics(target)
     assert diagnostics["intended_overlay_sh_exposure"] == 0.0
     assert diagnostics["realized_overlay_sh_exposure"] == 0.0
@@ -181,7 +182,8 @@ def test_defensive_treatment_reserves_real_sh_slot_and_five_v3_names() -> None:
     assert post_risk.weight_for("SH", Market.EQUITY) == pytest.approx(0.10)
     assert sum(weight.symbol != "SH" for weight in post_risk.weights) == 5
     diagnostics = _diagnostics(target)
-    assert diagnostics["pre_overlay_v3_exposure"] == pytest.approx(0.8 * 0.45 / 0.55)
+    assert diagnostics["pre_overlay_v3_exposure"] == pytest.approx(0.60)
+    assert sum(weight.weight for weight in post_risk.weights if weight.symbol != "SH") == pytest.approx(0.375)
     assert diagnostics["realized_overlay_sh_exposure"] == pytest.approx(0.10)
     assert diagnostics["sh_slot_reserved"] is True
 
@@ -198,8 +200,8 @@ def test_v3_owned_sh_is_merged_capped_and_overlay_shortfall_stays_cash() -> None
     diagnostics = _diagnostics(target)
     assert len(weights) == 8
     assert weights["SH"] == pytest.approx(0.10)
-    assert diagnostics["v3_owned_sh"] == pytest.approx(0.10 * 0.45 / 0.55)
-    assert diagnostics["realized_overlay_sh_exposure"] == pytest.approx(0.10 - 0.10 * 0.45 / 0.55)
+    assert diagnostics["v3_owned_sh"] == pytest.approx(0.075)
+    assert diagnostics["realized_overlay_sh_exposure"] == pytest.approx(0.025)
     assert "sh_overlap_per_asset_cap" in diagnostics["capacity_loss_reasons"]
     assert _risk_target(target).weight_for("SH", Market.EQUITY) == pytest.approx(0.10)
 

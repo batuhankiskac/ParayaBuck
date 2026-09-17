@@ -85,11 +85,20 @@ def compose_overlay_target(
     intended_v3 = (
         FROZEN_DEFENSIVE_V3_ALLOCATION if defensive and arm != OverlayArm.INCUMBENT else FROZEN_NORMAL_V3_ALLOCATION
     )
-    scale = (
-        FROZEN_DEFENSIVE_V3_ALLOCATION / FROZEN_NORMAL_V3_ALLOCATION
-        if defensive and arm != OverlayArm.INCUMBENT
-        else 1.0
-    )
+    source_by_rank = sorted(v3_target.weights, key=lambda weight: (weight.rank or math.inf, weight.symbol))
+    baseline_six_exposure = sum(weight.weight for weight in source_by_rank[:FROZEN_MAX_POSITIONS])
+    capacity_reference = baseline_six_exposure
+    if defensive and arm == OverlayArm.DEFENSIVE_SH:
+        source_sh = next((weight for weight in source_by_rank if weight.symbol == "SH"), None)
+        c_v3_survivors = [weight for weight in source_by_rank if weight.symbol != "SH"][: FROZEN_MAX_POSITIONS - 1]
+        if source_sh is not None:
+            c_v3_survivors.append(source_sh)
+        capacity_reference = max(capacity_reference, sum(weight.weight for weight in c_v3_survivors))
+    scale = 1.0
+    if defensive and arm != OverlayArm.INCUMBENT:
+        proportional_derating = FROZEN_DEFENSIVE_V3_ALLOCATION / FROZEN_NORMAL_V3_ALLOCATION
+        exposure_cap_scale = FROZEN_DEFENSIVE_V3_ALLOCATION / capacity_reference if capacity_reference > 0 else 1.0
+        scale = min(proportional_derating, exposure_cap_scale)
     scaled_v3 = tuple(replace(weight, weight=weight.weight * scale) for weight in v3_target.weights)
     v3_by_symbol = {weight.symbol: weight for weight in scaled_v3}
     source_sh = v3_by_symbol.get("SH")
@@ -146,6 +155,7 @@ def compose_overlay_target(
         "capacity_loss_reasons": loss_reasons,
         "dropped_v3_symbols": [],
         "v3_scale": scale,
+        "v3_capacity_reference_exposure": capacity_reference,
         "source_v3_weights": source_weights,
         "production_maximum_positions": FROZEN_MAX_POSITIONS,
         "production_maximum_single_weight": FROZEN_MAX_SINGLE_WEIGHT,

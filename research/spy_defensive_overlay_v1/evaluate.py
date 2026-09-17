@@ -77,6 +77,10 @@ def _at_most(value: float, threshold: float) -> bool:
     return value <= threshold + EPSILON
 
 
+def _opposite_sign(left: float, right: float) -> bool:
+    return (left > EPSILON and right < -EPSILON) or (left < -EPSILON and right > EPSILON)
+
+
 def _core_gates(results: dict[str, Any], deltas: dict[str, Any], cost: int) -> dict[int, dict[str, Any]]:
     cost_delta = deltas[f"{cost}x"]
     full_ca = cost_delta["full"]["C_minus_A"]
@@ -113,11 +117,12 @@ def _core_gates(results: dict[str, Any], deltas: dict[str, Any], cost: int) -> d
     gate5 = bool(validated_directions) and _at_most(-float(full_cb["cagr"]), 0.01)
 
     qualifying_validation_metrics = [metric for metric in RISK_METRICS if _at_least(float(validation_ca[metric]), 0.05)]
-    drawdown_opposite = (
-        float(development_ca["max_drawdown_reduction"]) * float(validation_ca["max_drawdown_reduction"]) < 0
+    drawdown_opposite = _opposite_sign(
+        float(development_ca["max_drawdown_reduction"]),
+        float(validation_ca["max_drawdown_reduction"]),
     )
     direction_consistent = any(
-        not (drawdown_opposite and float(development_ca[metric]) * float(validation_ca[metric]) < 0)
+        not (drawdown_opposite and _opposite_sign(float(development_ca[metric]), float(validation_ca[metric])))
         for metric in qualifying_validation_metrics
     )
     gate6 = (

@@ -1,0 +1,226 @@
+{
+  "backtest_run_before_run": false,
+  "config": {
+    "backtest": {
+      "commission": 0,
+      "crypto_taker_fee_bps": 25,
+      "equity_cat_per_share": 3e-06,
+      "equity_sec_fee_rate": 2.06e-05,
+      "equity_taf_cap": 9.79,
+      "equity_taf_per_share": 0.000195,
+      "equity_use_effective_dated_fees": true,
+      "initial_cash": 100000,
+      "output_dir": "reports",
+      "ranking_metric": "risk_adjusted",
+      "scanner_rebalance": "daily",
+      "slippage_bps": 2,
+      "spread_bps": 2
+    },
+    "equity_strategy": {
+      "maximum_allocation": 0.55,
+      "name": "equity_residual_momentum_v3",
+      "parameters": {
+        "beta_window_bars": 273,
+        "exclude_symbols": [
+          "SPY"
+        ],
+        "formation_bars": 252,
+        "ivol_reject_quantile": 0.7,
+        "max_single_weight": 0.1,
+        "rebalance_frequency": "weekly",
+        "residual_vol_window": 63,
+        "skip_bars": 21,
+        "top_n": 8
+      },
+      "timeframe": "1d"
+    },
+    "execution": {
+      "minimum_order_notional": 10,
+      "rebalance_band_pct": 0.005
+    },
+    "live_enabled": false,
+    "live_hard_cap": 0,
+    "path": "/Users/batuhankiskac/Desktop/ParayaBuck/config/settings.yaml",
+    "production_change_guard": {
+      "config_changed": false,
+      "live_changed": false,
+      "paper_changed": false,
+      "registry_changed": false
+    },
+    "risk": {
+      "cash_buffer_pct": 0.4,
+      "daily_loss_limit_pct": 0.005,
+      "max_crypto_exposure_pct": 0.1,
+      "max_crypto_position_pct": 0.05,
+      "max_crypto_positions": 2,
+      "max_drawdown_pct": 0.05,
+      "max_gross_exposure_pct": 0.6,
+      "max_position_pct": 0.1,
+      "max_positions": 6
+    },
+    "runtime_mode": "paper",
+    "scanner": {
+      "inverse_trade_symbols": [
+        "SH",
+        "PSQ",
+        "DOG"
+      ],
+      "maximum_atr_pct": 0.12,
+      "maximum_per_sector": 5,
+      "maximum_stream_symbols": 30,
+      "minimum_atr_pct": 0.005,
+      "minimum_data_completeness": 0.95,
+      "minimum_median_dollar_volume": 20000000,
+      "minimum_price": 5,
+      "reference_symbols": [
+        "SPY"
+      ],
+      "spread_quality_ceiling_bps": 50,
+      "supported_exchanges": [
+        "NASDAQ",
+        "NYSE",
+        "ARCA",
+        "AMEX",
+        "BATS"
+      ],
+      "target_shortlist": 300
+    },
+    "sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353"
+  },
+  "data": {
+    "bars": {
+      "byte_size": 882354549,
+      "conflicting_duplicate_rows": 0,
+      "duplicate_symbol_session_rows": 0,
+      "first_session_date": "2016-01-04",
+      "invalid_close_count": 0,
+      "invalid_open_count": 0,
+      "last_session_date": "2026-07-31",
+      "nonfinite_rows": 0,
+      "nonpositive_close_count": 0,
+      "nonpositive_open_count": 0,
+      "normalized_market": "equity",
+      "normalized_timeframe": "1d",
+      "order_violations": 0,
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "raw_market_values": {
+        "EQUITY": 7771468,
+        "equity": 3915364
+      },
+      "raw_order_violations": 2659,
+      "raw_timeframe_values": {
+        "1Day": 7771468,
+        "1d": 3915364
+      },
+      "rows": 11686832,
+      "session_dates": 2659,
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "unique_symbols": 9010
+    },
+    "corporate_actions": {
+      "action_type_counts": {
+        "cash_dividends": 141908,
+        "forward_splits": 270,
+        "reverse_splits": 1207,
+        "stock_dividends": 61
+      },
+      "applied_action_rows": 141908,
+      "cash_dividend_rows": 141908,
+      "invalid_rows": 0,
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "rows": 143446,
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "split_action_rows": 1477,
+      "split_actions_applied": false,
+      "stock_dividend_rows": 61
+    },
+    "evaluation_end": "2026-07-30",
+    "lifecycle": {
+      "invalid_rows": 0,
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+      "pit_quality": "valid_from_valid_to_join",
+      "rows": 9010,
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "symbol_count": 9010
+    },
+    "price_rule": "split-adjusted bars; dividend cash actions only; split actions not applied",
+    "session_rule": "America/New_York derived session date; explicit common SPY session join",
+    "spy": {
+      "bars": 2658,
+      "dataset_session_date_coverage_pct": 99.962392,
+      "first_session_date": "2016-01-04",
+      "last_session_date": "2026-07-30",
+      "session_dates": 2658
+    }
+  },
+  "data_paths": {
+    "bars": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "corporate_actions": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "lifetimes": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv"
+  },
+  "design_artifacts": {
+    "CANDIDATE_DESIGN.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/CANDIDATE_DESIGN.md",
+      "sha256": "0a9fb68d891dd049caa5efcb375fc70ffb4e2cc31e500419b446c5b103504930"
+    },
+    "CAUSALITY_AUDIT.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/CAUSALITY_AUDIT.md",
+      "sha256": "56e4080b91665fae0f8ff2fb7fc007dabe7e0f0198866b464135eccc7e5c25f4"
+    },
+    "CURRENT_CAPABILITY_AUDIT.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/CURRENT_CAPABILITY_AUDIT.md",
+      "sha256": "086a30f36449599c7972daba58de04c93d7c9b23b0ae2eb55648dcc2885085c5"
+    },
+    "DATA_FEASIBILITY.json": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/DATA_FEASIBILITY.json",
+      "sha256": "35beb7593aec129af531bdcebbbeaac0cfd3d42c86936f3303f16c52e575d693"
+    },
+    "DESIGN_DECISION.json": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/DESIGN_DECISION.json",
+      "sha256": "c0979ce4d9925f302cbd9e66ef39b86ba6c9fedb102541cdd95a16f58ae1869a"
+    },
+    "DESIGN_RED_TEAM.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/DESIGN_RED_TEAM.md",
+      "sha256": "cc938e21d6720e0262a979c16a2f4ee52e917d4e746fd13c10fbf1ebea8eddd8"
+    },
+    "FINAL_DESIGN_REPORT.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/FINAL_DESIGN_REPORT.md",
+      "sha256": "4059849b267ff8c227aa9afd696f28ab55609e0493a8ba7aa17933691b11973a"
+    },
+    "FUTURE_TEST_PROTOCOL.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/FUTURE_TEST_PROTOCOL.md",
+      "sha256": "342c21f606e1a0247b81cca19e68379837f96aa58b134ca8cc987d9480fa4aea"
+    },
+    "LITERATURE_REVIEW.md": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/overnight_intraday_design_v1/LITERATURE_REVIEW.md",
+      "sha256": "f77bf86981d4398507540e2300c2d029c2cef014677063960ff8c050b0b3b0d3"
+    }
+  },
+  "design_branch": "research/overnight-intraday-design-v1",
+  "design_branch_sha": "7ec53efecc4d37cab17d0d96f194389b4513a69b",
+  "economic_branch": "research/overnight-reversal-v1",
+  "economic_branch_parent": "7ec53efecc4d37cab17d0d96f194389b4513a69b",
+  "economic_outcomes_inspected_before_run": false,
+  "frozen_candidate": {
+    "decision": "after completed regular daily bar d",
+    "fill": "next tradable daily-bar provider-open proxy Open(n(d))",
+    "formula": "score = -(Open_i,d / Close_i,p(d) - 1 - (Open_SPY,d / Close_SPY,p(d) - 1))",
+    "name": "equity_overnight_reversal_v1",
+    "parameters": {
+      "exclude_symbols": [
+        "SPY"
+      ],
+      "max_single_weight": 0.1,
+      "maximum_allocation": 0.55,
+      "per_name_weight": 0.09166666666666667,
+      "rebalance_frequency": "daily",
+      "top_n": 6
+    },
+    "version": "1.0.0-research"
+  },
+  "main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "origin_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "repo_root": "/Users/batuhankiskac/Desktop/ParayaBuck",
+  "result_artifacts_present_before_run": false,
+  "status": "FROZEN_INPUTS_RECEIVED"
+}

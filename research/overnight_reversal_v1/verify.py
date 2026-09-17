@@ -301,12 +301,27 @@ def _verify_case(name: str, case: dict[str, Any], config: Any) -> list[str]:
                 errors.append(f"{name}: SPY is a candidate target")
             if not _finite(weight) or weight < -EPSILON or weight > 0.10 + EPSILON:
                 errors.append(f"{name}: target weight cap violation")
-            if arm == "B" and not math.isclose(weight, FIXED_PER_NAME_WEIGHT, rel_tol=0.0, abs_tol=1e-12):
-                errors.append(f"{name}: candidate target is not fixed 0.55/6")
         if len(target_symbols) != len(weights):
             errors.append(f"{name}: duplicate target symbol")
         if arm == "B" and float(record.get("target_cash_weight", -1.0)) < 1.0 - 0.55 - EPSILON:
             errors.append(f"{name}: candidate cash below the unused-allocation floor")
+    raw_targets = case.get("raw_targets", [])
+    if arm == "B":
+        if not isinstance(raw_targets, list) or len(raw_targets) != len(rebalances):
+            errors.append(f"{name}: raw candidate target count does not match decisions")
+        elif isinstance(raw_targets, list):
+            for target in raw_targets:
+                weights = target.get("weights", [])
+                if not isinstance(weights, list) or len(weights) > TOP_N:
+                    errors.append(f"{name}: raw candidate target exceeds top_n")
+                    continue
+                if float(target.get("cash_weight", -1.0)) < 1.0 - 0.55 - EPSILON:
+                    errors.append(f"{name}: raw candidate target cash below unused allocation")
+                for item in weights:
+                    if str(item.get("symbol")) == "SPY" or not math.isclose(
+                        float(item.get("weight", -1.0)), FIXED_PER_NAME_WEIGHT, rel_tol=0.0, abs_tol=1e-12
+                    ):
+                        errors.append(f"{name}: raw candidate target violates fixed six-name sizing")
     period_keys = {day.isocalendar()[:2] if arm == "A" else day for day in decision_days}
     if len(period_keys) != len(decision_days):
         errors.append(f"{name}: more than one rebalance in a scheduled period")

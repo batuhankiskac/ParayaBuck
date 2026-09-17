@@ -6,12 +6,17 @@ import itertools
 import json
 import math
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, PortfolioBacktestResult
+from parayabuck.backtest.portfolio_engine import (
+    PortfolioBacktestEngine,
+    PortfolioBacktestResult,
+    TerminalLifecycle,
+)
 from parayabuck.backtest.portfolio_report import PortfolioReport, build_portfolio_report
 from parayabuck.backtest.universe import (
     PointInTimeUniverse,
@@ -26,7 +31,7 @@ from parayabuck.execution.portfolio import (
     portfolio_risk_limits_from_config,
 )
 from parayabuck.markets.timeframes import is_regular_equity_time
-from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
 
 try:
     from parayabuck.backtest.numeric_history import NumericHistoryView, build_numeric_history
@@ -119,6 +124,7 @@ def build_product_universe(
     market: Market,
     end: datetime | None = None,
     timeframe: str | None = None,
+    observation_strategy: PortfolioStrategy | None = None,
 ) -> PointInTimeUniverse:
     """Build the point-in-time scanner universe for a product backtest.
 
@@ -129,9 +135,10 @@ def build_product_universe(
     arm redefine the streamed universe.
 
     ``timeframe`` defaults to the configured strategy's timeframe and must be
-    passed when a run overrides the strategy. Scanner eligibility, pins,
-    capacity, costs, risk and execution remain owned by the configured product
-    policy.
+    passed when a run overrides the strategy. ``observation_strategy`` may
+    supply that already-resolved requested strategy; it changes only the
+    observation-set ranker. Scanner eligibility, pins, capacity, costs, risk
+    and execution remain owned by the configured product policy.
     """
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     strategy = portfolio_strategy_from(
@@ -145,7 +152,15 @@ def build_product_universe(
         timeframe=selection.timeframe,
     )
     selected_timeframe = timeframe or strategy.timeframe
-    observation_strategy = strategy
+    if observation_strategy is not None:
+        if observation_strategy.market != market:
+            raise ValueError(f"observation_strategy market must match the requested market ({market.value})")
+        if observation_strategy.timeframe != selected_timeframe:
+            raise ValueError(
+                f"observation_strategy timeframe must match the selected backtest timeframe ({selected_timeframe})"
+            )
+    else:
+        observation_strategy = strategy
     available = [
         bar
         for bar in bars
@@ -204,6 +219,7 @@ def run_product_backtest(
     data_feed: str | None = None,
     prepared_inputs: tuple[list[Bar], list[Bar], tuple[list[Bar], list[Bar]]] | None = None,
     numeric_history: object | None = None,
+    terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
 ) -> ProductBacktestResult:
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -227,7 +243,14 @@ def run_product_backtest(
             raise ValueError(f"No {market.value} {strategy.timeframe} bars in the requested period")
         warmup = [bar for bar in available if start is not None and bar.timestamp < start]
         if universe is None:
-            universe = build_product_universe(config, bars, market=market, end=end, timeframe=strategy.timeframe)
+            universe = build_product_universe(
+                config,
+                bars,
+                market=market,
+                end=end,
+                timeframe=strategy.timeframe,
+                observation_strategy=strategy,
+            )
         prepared = None
         # Build numeric view once for this trial (will be reused if caller builds prepared)
         if numeric_history is None and build_numeric_history is not None:
@@ -277,6 +300,7 @@ def run_product_backtest(
             rebalance_band_pct=config.execution.rebalance_band_pct,
             minimum_order_notional=config.execution.minimum_order_notional,
         ),
+        terminal_lifecycles=terminal_lifecycles,
     )
     result = engine.run(
         filtered,
@@ -400,15 +424,22 @@ def optimize_grid(
     selection = config.strategy.equity if market == Market.EQUITY else config.strategy.crypto
     baseline = dict(base_parameters or selection.parameters)
     keys = tuple(sorted(grid))
-    # The eligible pool and deployed/configured observation basis are
+    observation_strategy = portfolio_strategy_from(
+        strategy_name or selection.name,
+        parameters=baseline,
+        timeframe=selection.timeframe,
+    )
+    strategy_timeframe = observation_strategy.timeframe
+    # The eligible pool and requested baseline observation basis are
     # trial-invariant: build them once per window and reuse them so candidate
-    # parameters cannot silently redefine the PAPER stream membership.
-    train_universe = build_product_universe(config, bars, market=market, end=train_end)
-    # Resolve the signal timeframe exactly like run_product_backtest does
-    # (deprecated strategy.timeframe key may be None in production config:
-    # the strategy owns its primary signal timeframe).
-    strategy_timeframe = (
-        selection.timeframe or portfolio_strategy_from(strategy_name or selection.name, parameters=baseline).timeframe
+    # parameters cannot silently redefine streamed membership between trials.
+    train_universe = build_product_universe(
+        config,
+        bars,
+        market=market,
+        end=train_end,
+        timeframe=strategy_timeframe,
+        observation_strategy=observation_strategy,
     )
     # The per-trial bar preprocessing (window filter, dedup, sort) is likewise
     # trial-invariant: prepare it once per window and reuse it.
@@ -458,7 +489,14 @@ def optimize_grid(
         best_parameters = best["parameters"]
         if not isinstance(best_parameters, dict):
             raise TypeError("Optimization parameters must be a mapping")
-        oos_universe = build_product_universe(config, bars, market=market, end=oos_end)
+        oos_universe = build_product_universe(
+            config,
+            bars,
+            market=market,
+            end=oos_end,
+            timeframe=strategy_timeframe,
+            observation_strategy=observation_strategy,
+        )
         oos_prepared = _prepared_window(bars, market, strategy_timeframe, oos_start, oos_end)
         oos = run_product_backtest(
             config,

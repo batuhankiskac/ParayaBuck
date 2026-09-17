@@ -558,9 +558,7 @@ def test_pending_buy_reserves_position_slot_across_new_decision_cycle(tmp_path) 
 
     strategy._targets = second_targets
     next_month = first.orders[0].decision_timestamp + timedelta(days=31)
-    second = runtime.process_closed_bars(
-        _bars(tuple(sorted(first_targets | second_targets)), day=next_month)
-    )
+    second = runtime.process_closed_bars(_bars(tuple(sorted(first_targets | second_targets)), day=next_month))
 
     assert second.status == "submitted"
     assert second.orders == ()

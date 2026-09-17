@@ -214,9 +214,7 @@ def test_overlay_counts_deduplicated_broker_open_slots_across_markets() -> None:
 
 
 def test_overlay_broker_only_order_consumes_last_account_slot() -> None:
-    account = _account(
-        tuple(_position(f"HELD{index}", 100, 100, ownership="external") for index in range(5))
-    )
+    account = _account(tuple(_position(f"HELD{index}", 100, 100, ownership="external") for index in range(5)))
     limits = PortfolioRiskLimits(
         maximum_gross=1.0,
         maximum_equity=1.0,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from bisect import bisect_right
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -125,6 +126,14 @@ class SymbolContribution:
     realized_pnl: float
     fees: float
     final_weight: float
+
+
+@dataclass(frozen=True)
+class TerminalLifecycle:
+    """Point-in-time evidence for an entity's final real market-data bar."""
+
+    last_bar: datetime
+    event_class: str
 
 
 @dataclass(frozen=True)
@@ -277,6 +286,7 @@ class PortfolioBacktestEngine:
         maximum_allocation: float = 1.0,
         enforce_drawdown_halt: bool = False,
         allow_static_universe: bool = False,
+        terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -332,6 +342,7 @@ class PortfolioBacktestEngine:
             EQUITY_UNIVERSE_VERSION if strategy.market == Market.EQUITY else CRYPTO_UNIVERSE_VERSION
         )
         self.allow_static_universe = bool(allow_static_universe)
+        self.terminal_lifecycles = self._validated_terminal_lifecycles(terminal_lifecycles)
         self.state_path = Path(state_path) if state_path else None
         self.cash_rate_annualized = float(cash_rate_annualized)
         self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
@@ -512,6 +523,7 @@ class PortfolioBacktestEngine:
             while j < n and ordered[j].timestamp == ts:
                 j += 1
             cycle = ordered[i:j]
+            self._fail_on_overdue_terminal_inventory(ts)
             for bar in cycle:
                 _ingest_exec(bar)
             while decision_index < len(decision_bars) and decision_bars[decision_index].timestamp <= ts:
@@ -525,6 +537,7 @@ class PortfolioBacktestEngine:
                 _last_price[bar.symbol] = bar.close
             _update_risk(ts)
             _decide(ts)
+            self._apply_terminal_lifecycles(ts, cycle)
             curve.append(_equity())
             curve_timestamps.append(ts)
             _record_holdings(ts)
@@ -1327,14 +1340,12 @@ class PortfolioBacktestEngine:
         if index == 0:
             return None
         snapshot = snapshots[index - 1]
-        terminal_map = getattr(self, "terminal_map", {}) or {}
 
         def is_active(symbol: str) -> bool:
-            terminal = terminal_map.get(symbol)
+            terminal = self.terminal_lifecycles.get(symbol)
             if terminal is None:
                 return True
-            last_bar = terminal.get("last_bar") if isinstance(terminal, dict) else getattr(terminal, "last_bar", None)
-            return last_bar is None or last_bar >= timestamp
+            return terminal.last_bar >= timestamp
 
         observation = tuple(symbol for symbol in (getattr(snapshot, "observation_set", ()) or ()) if is_active(symbol))
         capacity = int(getattr(snapshot, "maximum_stream_symbols", 0) or 0)
@@ -1368,6 +1379,70 @@ class PortfolioBacktestEngine:
         # observation ordering remains configuration/alpha ordered.
         tail = tuple(sorted(base)) if self.strategy.market == Market.EQUITY and managed else base
         return tuple(dict.fromkeys((*reserved, *tail)))[:capacity]
+
+    def _validated_terminal_lifecycles(
+        self,
+        lifecycles: Mapping[str, TerminalLifecycle] | None,
+    ) -> dict[str, TerminalLifecycle]:
+        if lifecycles is not None and not isinstance(lifecycles, Mapping):
+            raise TypeError("terminal_lifecycles must be a mapping")
+        validated: dict[str, TerminalLifecycle] = {}
+        for raw_symbol, lifecycle in (lifecycles or {}).items():
+            if not isinstance(lifecycle, TerminalLifecycle):
+                raise TypeError("terminal_lifecycles values must be TerminalLifecycle instances")
+            if not isinstance(lifecycle.last_bar, datetime):
+                raise TypeError("Terminal lifecycle last_bar must be a datetime")
+            if lifecycle.last_bar.tzinfo is None or lifecycle.last_bar.utcoffset() is None:
+                raise ValueError("Terminal lifecycle timestamps must be timezone-aware")
+            if not isinstance(lifecycle.event_class, str):
+                raise TypeError("Terminal lifecycle event_class must be a string")
+            if not lifecycle.event_class.strip():
+                raise ValueError("Terminal lifecycle event_class must not be empty")
+            symbol = canonical_symbol(raw_symbol, self.strategy.market)
+            if symbol in validated:
+                raise ValueError(f"Duplicate terminal lifecycle for canonical symbol {symbol}")
+            validated[symbol] = lifecycle
+        return validated
+
+    def _fail_on_overdue_terminal_inventory(self, timestamp: datetime) -> None:
+        managed = {symbol for symbol, position in self._positions.items() if position.qty > 0}
+        managed.update(order.symbol for order in self._pending)
+        overdue = sorted(
+            symbol
+            for symbol in managed
+            if symbol in self.terminal_lifecycles and self.terminal_lifecycles[symbol].last_bar < timestamp
+        )
+        if overdue:
+            raise RuntimeError("Terminal lifecycle bar was not processed for managed inventory: " + ", ".join(overdue))
+
+    def _apply_terminal_lifecycles(self, timestamp: datetime, cycle: list[Bar]) -> None:
+        due = {
+            symbol: lifecycle
+            for symbol, lifecycle in self.terminal_lifecycles.items()
+            if lifecycle.last_bar == timestamp
+        }
+        if not due:
+            return
+        self._pending = [order for order in self._pending if order.symbol not in due]
+        bars = {
+            canonical_symbol(bar.symbol, bar.market): bar
+            for bar in cycle
+            if bar.market == self.strategy.market and bar.timeframe == self.strategy.timeframe
+        }
+        for position in list(self._positions.values()):
+            lifecycle = due.get(position.symbol)
+            if lifecycle is None or position.qty <= 0:
+                continue
+            bar = bars.get(position.symbol)
+            if bar is None:
+                raise RuntimeError(
+                    f"Terminal lifecycle requires a real final execution bar: {position.symbol} {timestamp.isoformat()}"
+                )
+            self._close_position(position, bar)
+            event = self._liquidation_events[-1]
+            event["policy"] = "TERMINAL_BAR"
+            event["effective_policy"] = "TERMINAL_BAR"
+            event["terminal_event_class"] = lifecycle.event_class
 
     def _close_position(self, position: _Position, bar: Bar) -> None:
         if position.qty <= 0:
@@ -1761,4 +1836,5 @@ __all__ = [
     "PortfolioFill",
     "RebalanceRecord",
     "SymbolContribution",
+    "TerminalLifecycle",
 ]

@@ -214,8 +214,7 @@ def _ranked_target(
         strategy_version="1.0.0",
         decision_timestamp=timestamp,
         weights=tuple(
-            TargetWeight(symbol, weight, "test", rank=index)
-            for index, (symbol, weight) in enumerate(weights, start=1)
+            TargetWeight(symbol, weight, "test", rank=index) for index, (symbol, weight) in enumerate(weights, start=1)
         ),
         cash_weight=max(0.0, 1.0 - sum(weight for _symbol, weight in weights)),
         universe_version="test",
@@ -454,9 +453,7 @@ def test_engine_coordinates_crypto_before_equity_for_global_slots() -> None:
     assert tuple(weight.symbol for weight in crypto_runtime.last_target.weights) == ("BTC/USD", "ETH/USD")
     assert tuple(weight.symbol for weight in equity_runtime.last_target.weights) == equity_symbols[:4]
     assert crypto_runtime.reservations == [()]
-    assert equity_runtime.reservations == [
-        ((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))
-    ]
+    assert equity_runtime.reservations == [((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))]
 
 
 def test_engine_startup_catch_up_coordinates_crypto_before_equity() -> None:
@@ -501,9 +498,7 @@ def test_engine_startup_catch_up_coordinates_crypto_before_equity() -> None:
     assert tuple(weight.symbol for weight in crypto_runtime.last_target.weights) == ("BTC/USD", "ETH/USD")
     assert tuple(weight.symbol for weight in equity_runtime.last_target.weights) == equity_symbols[:4]
     assert crypto_runtime.reservations == [()]
-    assert equity_runtime.reservations == [
-        ((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))
-    ]
+    assert equity_runtime.reservations == [((Market.CRYPTO, "BTC/USD"), (Market.CRYPTO, "ETH/USD"))]
     assert crypto_runtime.accounts_seen == [account]
     assert equity_runtime.accounts_seen == [account]
 

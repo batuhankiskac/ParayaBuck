@@ -1481,10 +1481,7 @@ class PortfolioRuntime:
         place; this separate set reserves the account-level slot even when the
         next decision selects a different symbol.
         """
-        slots = {
-            (market, canonical_symbol(symbol, market))
-            for market, symbol in same_cycle_keys
-        }
+        slots = {(market, canonical_symbol(symbol, market)) for market, symbol in same_cycle_keys}
         slots.update(
             (order.market, canonical_symbol(order.symbol, order.market))
             for order in self.repository.open_orders(self.account_id)

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import parayabuck.cli as cli_module
-from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine
+from parayabuck.backtest.portfolio_engine import PortfolioBacktestEngine, TerminalLifecycle
 from parayabuck.backtest.product import build_product_universe, optimize_grid, ranking_score, run_product_backtest
 from parayabuck.backtest.universe import PointInTimeUniverse, UniverseSnapshot
 from parayabuck.config import Config, StrategyConfig
@@ -116,6 +116,41 @@ def test_product_universe_observation_uses_configured_strategy_alpha(tmp_path) -
     assert snapshot.observation_set[: len(direct.observation_set)] == direct.observation_set
 
 
+def test_requested_strategy_identity_owns_direct_backtest_observation_set(tmp_path) -> None:
+    config = _config(tmp_path)
+
+    run = run_product_backtest(
+        config,
+        _bars(),
+        market=Market.EQUITY,
+        strategy_name="equity_residual_momentum_v1",
+    )
+
+    assert run.report.summary["strategy_name"] == "equity_residual_momentum_v1"
+    assert {snapshot.observation_strategy_name for snapshot in run.universe.snapshots} == {
+        "equity_residual_momentum_v1"
+    }
+    assert {snapshot.observation_strategy_version for snapshot in run.universe.snapshots} == {"1.0.0"}
+
+
+def test_product_runner_applies_typed_terminal_lifecycle(tmp_path) -> None:
+    terminal = datetime(2023, 1, 1, tzinfo=UTC) + timedelta(days=350)
+    terminal_lifecycles = {"FFF": TerminalLifecycle(terminal, "POSSIBLE_DELISTING")}
+
+    run = run_product_backtest(
+        _config(tmp_path),
+        _bars(),
+        market=Market.EQUITY,
+        persist=False,
+        persist_artifacts=False,
+        terminal_lifecycles=terminal_lifecycles,
+    )
+
+    terminal_events = [event for event in run.result.terminal_events if event["policy"] == "TERMINAL_BAR"]
+    assert [(event["symbol"], event["timestamp"]) for event in terminal_events] == [("FFF", terminal.isoformat())]
+    assert terminal_events[0]["terminal_event_class"] == "POSSIBLE_DELISTING"
+
+
 def test_backtest_context_pins_managed_symbol_within_observation_capacity(tmp_path) -> None:
     config = _config(tmp_path)
     strategy = portfolio_strategy_from(
@@ -181,9 +216,8 @@ def test_grid_optimizer_ranks_train_and_evaluates_oos_once(tmp_path) -> None:
 
 
 def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) -> None:
-    """The point-in-time universe depends only on the bar set and scanner
-    policy, never on strategy parameters: the optimizer must build it once
-    per window and reuse it for every combination."""
+    """The optimizer builds one requested-strategy universe per window and
+    reuses it across every parameter combination."""
     import parayabuck.backtest.product as product_module
 
     config = _config(tmp_path)
@@ -191,10 +225,18 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
     bars = _bars()
     real_build = product_module.build_product_universe
     builds: list[str] = []
+    identities: list[set[tuple[str, str]]] = []
 
     def counting_build(*args, **kwargs):
         builds.append(kwargs.get("end").isoformat())
-        return real_build(*args, **kwargs)
+        universe = real_build(*args, **kwargs)
+        identities.append(
+            {
+                (snapshot.observation_strategy_name, snapshot.observation_strategy_version)
+                for snapshot in universe.snapshots
+            }
+        )
+        return universe
 
     monkeypatch.setattr(product_module, "build_product_universe", counting_build)
 
@@ -203,6 +245,7 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
         bars,
         market=Market.EQUITY,
         grid={"formation_bars": [60, 66, 72]},
+        strategy_name="equity_residual_momentum_v1",
         train_start=start + timedelta(days=100),
         train_end=start + timedelta(days=299),
         oos_start=start + timedelta(days=300),
@@ -213,6 +256,10 @@ def test_optimizer_reuses_one_universe_across_all_trials(tmp_path, monkeypatch) 
     assert builds == [
         (start + timedelta(days=299)).isoformat(),
         (start + timedelta(days=419)).isoformat(),
+    ]
+    assert identities == [
+        {("equity_residual_momentum_v1", "1.0.0")},
+        {("equity_residual_momentum_v1", "1.0.0")},
     ]
 
 

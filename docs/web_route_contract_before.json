@@ -1,0 +1,383 @@
+{
+  "generated_from": "parayabuck.web.server:app",
+  "routes": [
+    {
+      "path": "/",
+      "methods": [
+        "GET"
+      ],
+      "name": "serve_index",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "pages"
+    },
+    {
+      "path": "/api/account",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_account",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "account"
+    },
+    {
+      "path": "/api/backtest/run",
+      "methods": [
+        "POST"
+      ],
+      "name": "run_backtest",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "backtest"
+    },
+    {
+      "path": "/api/backtest/status",
+      "methods": [
+        "GET"
+      ],
+      "name": "backtest_status",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "backtest"
+    },
+    {
+      "path": "/api/control-token",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_control_token",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "control"
+    },
+    {
+      "path": "/api/crypto",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_crypto",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/dashboard/overview",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_overview",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/engine/reset-safety-lock",
+      "methods": [
+        "POST"
+      ],
+      "name": "reset_safety_lock",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "engine"
+    },
+    {
+      "path": "/api/engine/start",
+      "methods": [
+        "POST"
+      ],
+      "name": "start_engine",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "engine"
+    },
+    {
+      "path": "/api/engine/stop",
+      "methods": [
+        "POST"
+      ],
+      "name": "stop_engine",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "engine"
+    },
+    {
+      "path": "/api/equity",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_equity",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/execution",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_execution",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/explanations",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_explanations",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/health",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_health",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/live/arming/confirm",
+      "methods": [
+        "POST"
+      ],
+      "name": "confirm_live_arming",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "safety"
+    },
+    {
+      "path": "/api/live/arming/request",
+      "methods": [
+        "POST"
+      ],
+      "name": "request_live_arming",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "safety"
+    },
+    {
+      "path": "/api/live/prerequisites",
+      "methods": [
+        "GET"
+      ],
+      "name": "live_prerequisites",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "safety"
+    },
+    {
+      "path": "/api/metrics",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_metrics",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/mode",
+      "methods": [
+        "POST"
+      ],
+      "name": "toggle_mode",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "safety"
+    },
+    {
+      "path": "/api/ops/status",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_ops_status",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "ops"
+    },
+    {
+      "path": "/api/risk",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_risk",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/safety/risk-epoch",
+      "methods": [
+        "POST"
+      ],
+      "name": "start_new_risk_epoch",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "safety"
+    },
+    {
+      "path": "/api/settings",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_settings",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "settings"
+    },
+    {
+      "path": "/api/settings",
+      "methods": [
+        "PATCH"
+      ],
+      "name": "patch_settings",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "settings"
+    },
+    {
+      "path": "/api/settings",
+      "methods": [
+        "POST"
+      ],
+      "name": "save_settings",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "settings"
+    },
+    {
+      "path": "/api/status",
+      "methods": [
+        "GET"
+      ],
+      "name": "get_status",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "status"
+    },
+    {
+      "path": "/api/universe",
+      "methods": [
+        "GET"
+      ],
+      "name": "dashboard_universe",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "dashboard"
+    },
+    {
+      "path": "/api/ws-ticket",
+      "methods": [
+        "POST"
+      ],
+      "name": "websocket_ticket",
+      "cls": "APIRoute",
+      "mutating": true,
+      "category": "websocket"
+    },
+    {
+      "path": "/docs",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "swagger_ui_html",
+      "cls": "Route",
+      "mutating": false,
+      "category": "infra"
+    },
+    {
+      "path": "/docs/oauth2-redirect",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "swagger_ui_redirect",
+      "cls": "Route",
+      "mutating": false,
+      "category": "infra"
+    },
+    {
+      "path": "/healthz",
+      "methods": [
+        "GET"
+      ],
+      "name": "healthz",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "health/readiness"
+    },
+    {
+      "path": "/openapi.json",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "openapi",
+      "cls": "Route",
+      "mutating": false,
+      "category": "infra"
+    },
+    {
+      "path": "/readyz",
+      "methods": [
+        "GET"
+      ],
+      "name": "readyz",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "health/readiness"
+    },
+    {
+      "path": "/redoc",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "name": "redoc_html",
+      "cls": "Route",
+      "mutating": false,
+      "category": "infra"
+    },
+    {
+      "path": "/static",
+      "methods": null,
+      "name": "static",
+      "cls": "Mount",
+      "mutating": false,
+      "category": "infra"
+    },
+    {
+      "path": "/tools",
+      "methods": [
+        "GET"
+      ],
+      "name": "serve_tools",
+      "cls": "APIRoute",
+      "mutating": false,
+      "category": "pages"
+    },
+    {
+      "path": "/ws/logs",
+      "methods": null,
+      "name": "websocket_logs",
+      "cls": "APIWebSocketRoute",
+      "mutating": false,
+      "category": "websocket"
+    },
+    {
+      "path": "/ws/stream",
+      "methods": null,
+      "name": "websocket_stream",
+      "cls": "APIWebSocketRoute",
+      "mutating": false,
+      "category": "websocket"
+    }
+  ]
+}

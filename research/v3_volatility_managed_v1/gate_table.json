@@ -1,0 +1,186 @@
+{
+  "all_mandatory_gates_pass": false,
+  "gate_1": {
+    "coverage": {
+      "A_control": {
+        "coverage_ratio": 0.9899598393574297,
+        "development": {
+          "coverage_ratio": 0.9806949806949807,
+          "eligible_weeks": 259,
+          "first_observed": "2017-02-06T05:00:00+00:00",
+          "last_observed": "2021-12-27T05:00:00+00:00",
+          "observed_decisions": 254
+        },
+        "eligible_weeks": 498,
+        "longest_unexplained_gap_weeks": 5,
+        "missing_eligible_decisions": [
+          "2017-01-03T05:00:00+00:00",
+          "2017-01-09T05:00:00+00:00",
+          "2017-01-17T05:00:00+00:00",
+          "2017-01-23T05:00:00+00:00",
+          "2017-01-30T05:00:00+00:00"
+        ],
+        "observed_decisions": 493,
+        "pass": true,
+        "schedule_weeks": 500,
+        "unexpected_decisions": [],
+        "validation": {
+          "coverage_ratio": 1.0,
+          "eligible_weeks": 239,
+          "first_observed": "2022-01-03T05:00:00+00:00",
+          "last_observed": "2026-07-27T04:00:00+00:00",
+          "observed_decisions": 239
+        }
+      },
+      "B_treatment": {
+        "coverage_ratio": 0.9899598393574297,
+        "development": {
+          "coverage_ratio": 0.9806949806949807,
+          "eligible_weeks": 259,
+          "first_observed": "2017-02-06T05:00:00+00:00",
+          "last_observed": "2021-12-27T05:00:00+00:00",
+          "observed_decisions": 254
+        },
+        "eligible_weeks": 498,
+        "longest_unexplained_gap_weeks": 5,
+        "missing_eligible_decisions": [
+          "2017-01-03T05:00:00+00:00",
+          "2017-01-09T05:00:00+00:00",
+          "2017-01-17T05:00:00+00:00",
+          "2017-01-23T05:00:00+00:00",
+          "2017-01-30T05:00:00+00:00"
+        ],
+        "observed_decisions": 493,
+        "pass": true,
+        "schedule_weeks": 500,
+        "unexpected_decisions": [],
+        "validation": {
+          "coverage_ratio": 1.0,
+          "eligible_weeks": 239,
+          "first_observed": "2022-01-03T05:00:00+00:00",
+          "last_observed": "2026-07-27T04:00:00+00:00",
+          "observed_decisions": 239
+        }
+      },
+      "C_static_comparator": {
+        "coverage_ratio": 0.9899598393574297,
+        "development": {
+          "coverage_ratio": 0.9806949806949807,
+          "eligible_weeks": 259,
+          "first_observed": "2017-02-06T05:00:00+00:00",
+          "last_observed": "2021-12-27T05:00:00+00:00",
+          "observed_decisions": 254
+        },
+        "eligible_weeks": 498,
+        "longest_unexplained_gap_weeks": 5,
+        "missing_eligible_decisions": [
+          "2017-01-03T05:00:00+00:00",
+          "2017-01-09T05:00:00+00:00",
+          "2017-01-17T05:00:00+00:00",
+          "2017-01-23T05:00:00+00:00",
+          "2017-01-30T05:00:00+00:00"
+        ],
+        "observed_decisions": 493,
+        "pass": true,
+        "schedule_weeks": 500,
+        "unexpected_decisions": [],
+        "validation": {
+          "coverage_ratio": 1.0,
+          "eligible_weeks": 239,
+          "first_observed": "2022-01-03T05:00:00+00:00",
+          "last_observed": "2026-07-27T04:00:00+00:00",
+          "observed_decisions": 239
+        }
+      }
+    },
+    "pass": true,
+    "structural_valid": true,
+    "verifier_valid": true
+  },
+  "gate_2": {
+    "full_period_risk_improvements": {
+      "calmar": -0.05473998039479794,
+      "sharpe": -0.016373076761055927,
+      "sortino": -0.020243463250769977
+    },
+    "pass": false
+  },
+  "gate_3": {
+    "absolute_improvement": 0.008017449773570412,
+    "control_max_drawdown": 0.2012938646305677,
+    "pass": false,
+    "relative_improvement": 0.03982957845379309,
+    "treatment_max_drawdown": 0.1932764148569973
+  },
+  "gate_4": {
+    "cagr_drag": 0.013447816984543115,
+    "pass": false,
+    "threshold": 0.01
+  },
+  "gate_5": {
+    "full_period_risk_improvements_vs_static": {
+      "calmar": -0.049692353818725055,
+      "sharpe": -0.0061287722018064095,
+      "sortino": -0.010414837815752032
+    },
+    "pass": false
+  },
+  "gate_6": {
+    "coverage_pass": true,
+    "pass": false,
+    "validation_risk_metrics": {
+      "calmar": {
+        "control": 0.29678567384267274,
+        "treatment": 0.29113851202330826
+      },
+      "sharpe": {
+        "control": 0.5083081995616008,
+        "treatment": 0.4828868155687912
+      },
+      "sortino": {
+        "control": 0.7024507916529235,
+        "treatment": 0.6649489572020464
+      }
+    }
+  },
+  "gate_7": {
+    "pass": false,
+    "treatment_2x_risk_metrics": {
+      "calmar": 0.2658248875072128,
+      "sharpe": 0.6169313766295407,
+      "sortino": 0.7939340776665899
+    },
+    "treatment_3x_net_total_return": 0.5725744341277366
+  },
+  "gate_8": {
+    "no_new_instruments_or_slots": true,
+    "no_promotion_changes": true,
+    "pass": true
+  },
+  "independent_gate_table": {
+    "gate_1": {
+      "pass": true
+    },
+    "gate_2": {
+      "pass": false
+    },
+    "gate_3": {
+      "pass": false
+    },
+    "gate_4": {
+      "pass": false
+    },
+    "gate_5": {
+      "pass": false
+    },
+    "gate_6": {
+      "pass": false
+    },
+    "gate_7": {
+      "pass": false
+    },
+    "gate_8": {
+      "pass": true
+    }
+  }
+}

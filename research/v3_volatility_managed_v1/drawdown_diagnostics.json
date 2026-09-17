@@ -1,0 +1,476 @@
+{
+  "A_control": {
+    "development": [
+      {
+        "last_timestamp": "2020-07-02T04:00:00+00:00",
+        "maximum_drawdown": 0.15538342319437262,
+        "peak_equity": 134901.1064533286,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-06T04:00:00+00:00",
+        "trough_equity": 113939.71073990193,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2021-12-31T05:00:00+00:00",
+        "maximum_drawdown": 0.13680664962710307,
+        "peak_equity": 162548.94370833668,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": false,
+        "recovery_timestamp": null,
+        "trough_equity": 140311.16731917456,
+        "trough_timestamp": "2021-03-08T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-11-26T05:00:00+00:00",
+        "maximum_drawdown": 0.11323648368865159,
+        "peak_equity": 126324.3313587583,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-11-27T05:00:00+00:00",
+        "trough_equity": 112019.80827137244,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-10-09T04:00:00+00:00",
+        "maximum_drawdown": 0.06814512009728725,
+        "peak_equity": 146022.91514399767,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-10-12T04:00:00+00:00",
+        "trough_equity": 136072.16605455396,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2018-08-23T04:00:00+00:00",
+        "maximum_drawdown": 0.05199950481484701,
+        "peak_equity": 124466.85624731996,
+        "peak_timestamp": "2018-06-18T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2018-08-24T04:00:00+00:00",
+        "trough_equity": 117994.64135659857,
+        "trough_timestamp": "2018-06-27T04:00:00+00:00"
+      }
+    ],
+    "full": [
+      {
+        "last_timestamp": "2024-02-06T05:00:00+00:00",
+        "maximum_drawdown": 0.2012938646305677,
+        "peak_equity": 162548.94370833668,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2024-02-07T05:00:00+00:00",
+        "trough_equity": 129828.83863766899,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-07-02T04:00:00+00:00",
+        "maximum_drawdown": 0.15538342319437262,
+        "peak_equity": 134901.1064533286,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-06T04:00:00+00:00",
+        "trough_equity": 113939.71073990193,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-11-26T05:00:00+00:00",
+        "maximum_drawdown": 0.11323648368865159,
+        "peak_equity": 126324.3313587583,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-11-27T05:00:00+00:00",
+        "trough_equity": 112019.80827137244,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-07-15T04:00:00+00:00",
+        "maximum_drawdown": 0.08731632928011669,
+        "peak_equity": 180084.94468453748,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-07-16T04:00:00+00:00",
+        "trough_equity": 164360.5883560708,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-10-09T04:00:00+00:00",
+        "maximum_drawdown": 0.06814512009728725,
+        "peak_equity": 146022.91514399767,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-10-12T04:00:00+00:00",
+        "trough_equity": 136072.16605455396,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      }
+    ],
+    "validation": [
+      {
+        "last_timestamp": "2024-01-11T05:00:00+00:00",
+        "maximum_drawdown": 0.16716259545204068,
+        "peak_equity": 155887.37721036488,
+        "peak_timestamp": "2021-12-31T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2024-01-12T05:00:00+00:00",
+        "trough_equity": 129828.83863766899,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-07-15T04:00:00+00:00",
+        "maximum_drawdown": 0.08731632928011669,
+        "peak_equity": 180084.94468453748,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-07-16T04:00:00+00:00",
+        "trough_equity": 164360.5883560708,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-04-21T04:00:00+00:00",
+        "maximum_drawdown": 0.055152787447614676,
+        "peak_equity": 189291.8264485483,
+        "peak_timestamp": "2026-02-25T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-04-22T04:00:00+00:00",
+        "trough_equity": 178851.85457886074,
+        "trough_timestamp": "2026-03-30T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-07-13T04:00:00+00:00",
+        "maximum_drawdown": 0.04504729400833573,
+        "peak_equity": 195050.80686347297,
+        "peak_timestamp": "2026-05-14T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-07-14T04:00:00+00:00",
+        "trough_equity": 186264.295820131,
+        "trough_timestamp": "2026-06-05T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-01-14T05:00:00+00:00",
+        "maximum_drawdown": 0.038766284222832036,
+        "peak_equity": 185717.66746801286,
+        "peak_timestamp": "2025-12-11T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-01-15T05:00:00+00:00",
+        "trough_equity": 178518.08358574647,
+        "trough_timestamp": "2025-12-17T05:00:00+00:00"
+      }
+    ]
+  },
+  "B_treatment": {
+    "development": [
+      {
+        "last_timestamp": "2021-12-31T05:00:00+00:00",
+        "maximum_drawdown": 0.13680664956490882,
+        "peak_equity": 152952.38740920828,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": false,
+        "recovery_timestamp": null,
+        "trough_equity": 132027.48374480056,
+        "trough_timestamp": "2021-03-08T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-10-22T04:00:00+00:00",
+        "maximum_drawdown": 0.08618530123975898,
+        "peak_equity": 122792.03018106442,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-10-23T04:00:00+00:00",
+        "trough_equity": 112209.1620700678,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-12-04T05:00:00+00:00",
+        "maximum_drawdown": 0.06813905143432965,
+        "peak_equity": 140140.35099121474,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-12-07T05:00:00+00:00",
+        "trough_equity": 130591.32040699935,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-07-08T04:00:00+00:00",
+        "maximum_drawdown": 0.06415141369701524,
+        "peak_equity": 132059.7595624198,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-09T04:00:00+00:00",
+        "trough_equity": 123587.93929400263,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2018-08-23T04:00:00+00:00",
+        "maximum_drawdown": 0.04839260934926535,
+        "peak_equity": 120932.58607987172,
+        "peak_timestamp": "2018-01-26T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2018-08-24T04:00:00+00:00",
+        "trough_equity": 115080.34268411208,
+        "trough_timestamp": "2018-06-27T04:00:00+00:00"
+      }
+    ],
+    "full": [
+      {
+        "last_timestamp": "2024-02-01T05:00:00+00:00",
+        "maximum_drawdown": 0.1932764148569973,
+        "peak_equity": 152952.38740920828,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2024-02-02T05:00:00+00:00",
+        "trough_equity": 123390.29832693798,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-10-22T04:00:00+00:00",
+        "maximum_drawdown": 0.08618530123975898,
+        "peak_equity": 122792.03018106442,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-10-23T04:00:00+00:00",
+        "trough_equity": 112209.1620700678,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-12-04T05:00:00+00:00",
+        "maximum_drawdown": 0.06813905143432965,
+        "peak_equity": 140140.35099121474,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-12-07T05:00:00+00:00",
+        "trough_equity": 130591.32040699935,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-10-29T04:00:00+00:00",
+        "maximum_drawdown": 0.06498263968940801,
+        "peak_equity": 166106.1743028338,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-10-30T04:00:00+00:00",
+        "trough_equity": 155312.15662792674,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-07-08T04:00:00+00:00",
+        "maximum_drawdown": 0.06415141369701524,
+        "peak_equity": 132059.7595624198,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-09T04:00:00+00:00",
+        "trough_equity": 123587.93929400263,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      }
+    ],
+    "validation": [
+      {
+        "last_timestamp": "2023-11-21T05:00:00+00:00",
+        "maximum_drawdown": 0.1403588217472058,
+        "peak_equity": 143536.97967066517,
+        "peak_timestamp": "2021-12-31T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2023-11-22T05:00:00+00:00",
+        "trough_equity": 123390.29832693798,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-10-29T04:00:00+00:00",
+        "maximum_drawdown": 0.06498263968940801,
+        "peak_equity": 166106.1743028338,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-10-30T04:00:00+00:00",
+        "trough_equity": 155312.15662792674,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-05-05T04:00:00+00:00",
+        "maximum_drawdown": 0.05288827142725982,
+        "peak_equity": 171392.8861366737,
+        "peak_timestamp": "2026-02-25T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-05-06T04:00:00+00:00",
+        "trough_equity": 162328.21265397588,
+        "trough_timestamp": "2026-03-30T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-07-20T04:00:00+00:00",
+        "maximum_drawdown": 0.045048730303151,
+        "peak_equity": 174297.4484679505,
+        "peak_timestamp": "2026-05-14T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-07-21T04:00:00+00:00",
+        "trough_equity": 166445.56971939045,
+        "trough_timestamp": "2026-06-05T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-12-10T05:00:00+00:00",
+        "maximum_drawdown": 0.03853554279766135,
+        "peak_equity": 167143.42288533,
+        "peak_timestamp": "2025-11-12T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-12-11T05:00:00+00:00",
+        "trough_equity": 160702.46035938474,
+        "trough_timestamp": "2025-11-20T05:00:00+00:00"
+      }
+    ]
+  },
+  "C_static_comparator": {
+    "development": [
+      {
+        "last_timestamp": "2020-07-01T04:00:00+00:00",
+        "maximum_drawdown": 0.13082308039077817,
+        "peak_equity": 130178.42091893952,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-02T04:00:00+00:00",
+        "trough_equity": 113148.07889391654,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2021-12-31T05:00:00+00:00",
+        "maximum_drawdown": 0.11442189193937659,
+        "peak_equity": 152693.68402192695,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": false,
+        "recovery_timestamp": null,
+        "trough_equity": 135222.1838089447,
+        "trough_timestamp": "2021-03-08T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-11-26T05:00:00+00:00",
+        "maximum_drawdown": 0.09974454103289239,
+        "peak_equity": 123117.55534789393,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-11-27T05:00:00+00:00",
+        "trough_equity": 110837.25129662652,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-10-09T04:00:00+00:00",
+        "maximum_drawdown": 0.057248396562534165,
+        "peak_equity": 140030.4544066001,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-10-12T04:00:00+00:00",
+        "trough_equity": 132013.9354218992,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2018-08-24T04:00:00+00:00",
+        "maximum_drawdown": 0.04751199675653497,
+        "peak_equity": 121776.87786277322,
+        "peak_timestamp": "2018-06-18T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2018-08-27T04:00:00+00:00",
+        "trough_equity": 115991.01523673619,
+        "trough_timestamp": "2018-06-27T04:00:00+00:00"
+      }
+    ],
+    "full": [
+      {
+        "last_timestamp": "2024-02-07T05:00:00+00:00",
+        "maximum_drawdown": 0.17468113093751056,
+        "peak_equity": 152693.68402192695,
+        "peak_timestamp": "2021-02-12T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2024-02-08T05:00:00+00:00",
+        "trough_equity": 126020.97860996187,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-07-01T04:00:00+00:00",
+        "maximum_drawdown": 0.13082308039077817,
+        "peak_equity": 130178.42091893952,
+        "peak_timestamp": "2020-02-14T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-07-02T04:00:00+00:00",
+        "trough_equity": 113148.07889391654,
+        "trough_timestamp": "2020-03-23T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2019-11-26T05:00:00+00:00",
+        "maximum_drawdown": 0.09974454103289239,
+        "peak_equity": 123117.55534789393,
+        "peak_timestamp": "2018-09-04T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2019-11-27T05:00:00+00:00",
+        "trough_equity": 110837.25129662652,
+        "trough_timestamp": "2019-01-03T05:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-09-17T04:00:00+00:00",
+        "maximum_drawdown": 0.07883819624165485,
+        "peak_equity": 165342.6741809399,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-09-18T04:00:00+00:00",
+        "trough_equity": 152307.35598674297,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2020-10-09T04:00:00+00:00",
+        "maximum_drawdown": 0.057248396562534165,
+        "peak_equity": 140030.4544066001,
+        "peak_timestamp": "2020-09-02T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2020-10-12T04:00:00+00:00",
+        "trough_equity": 132013.9354218992,
+        "trough_timestamp": "2020-09-08T04:00:00+00:00"
+      }
+    ],
+    "validation": [
+      {
+        "last_timestamp": "2024-01-18T05:00:00+00:00",
+        "maximum_drawdown": 0.14441402915518026,
+        "peak_equity": 147292.011445123,
+        "peak_timestamp": "2021-12-31T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2024-01-19T05:00:00+00:00",
+        "trough_equity": 126020.97860996187,
+        "trough_timestamp": "2023-03-17T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-09-17T04:00:00+00:00",
+        "maximum_drawdown": 0.07883819624165485,
+        "peak_equity": 165342.6741809399,
+        "peak_timestamp": "2025-02-13T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-09-18T04:00:00+00:00",
+        "trough_equity": 152307.35598674297,
+        "trough_timestamp": "2025-04-08T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-04-21T04:00:00+00:00",
+        "maximum_drawdown": 0.046895793771006986,
+        "peak_equity": 172749.5127089683,
+        "peak_timestamp": "2026-02-25T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-04-22T04:00:00+00:00",
+        "trough_equity": 164648.28718692658,
+        "trough_timestamp": "2026-03-30T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2026-07-13T04:00:00+00:00",
+        "maximum_drawdown": 0.037851009139797144,
+        "peak_equity": 177509.57472593914,
+        "peak_timestamp": "2026-05-14T04:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2026-07-14T04:00:00+00:00",
+        "trough_equity": 170790.6581905861,
+        "trough_timestamp": "2026-06-05T04:00:00+00:00"
+      },
+      {
+        "last_timestamp": "2025-12-10T05:00:00+00:00",
+        "maximum_drawdown": 0.03440819586819971,
+        "peak_equity": 168409.15393906803,
+        "peak_timestamp": "2025-11-12T05:00:00+00:00",
+        "recovered": true,
+        "recovery_timestamp": "2025-12-11T05:00:00+00:00",
+        "trough_equity": 162614.49878433478,
+        "trough_timestamp": "2025-11-20T05:00:00+00:00"
+      }
+    ]
+  }
+}

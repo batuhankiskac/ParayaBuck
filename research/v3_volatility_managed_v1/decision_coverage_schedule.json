@@ -1,0 +1,4506 @@
+[
+  {
+    "decision_timestamp": "2017-01-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 4,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b34f5d060576ee081ac53796b10554a8b2a885891d78121b4b8f43cd1e0c87e5"
+  },
+  {
+    "decision_timestamp": "2017-01-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 4,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b34f5d060576ee081ac53796b10554a8b2a885891d78121b4b8f43cd1e0c87e5"
+  },
+  {
+    "decision_timestamp": "2017-01-17T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 4,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b34f5d060576ee081ac53796b10554a8b2a885891d78121b4b8f43cd1e0c87e5"
+  },
+  {
+    "decision_timestamp": "2017-01-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 4,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b34f5d060576ee081ac53796b10554a8b2a885891d78121b4b8f43cd1e0c87e5"
+  },
+  {
+    "decision_timestamp": "2017-01-30T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 4,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b34f5d060576ee081ac53796b10554a8b2a885891d78121b4b8f43cd1e0c87e5"
+  },
+  {
+    "decision_timestamp": "2017-02-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "33d91bdfc4fa170b9831b059d352eda04d1abdd7f8d0375d48e092f1411bc134"
+  },
+  {
+    "decision_timestamp": "2017-02-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4fe43d922f09174ff9237e090fe0ace74c6c1ff0ffdec0104da832ba38510fe1"
+  },
+  {
+    "decision_timestamp": "2017-02-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e32736f295e2c3f345f3b9e34dfa5600ddb951d26d0d7762abac07508cd17b03"
+  },
+  {
+    "decision_timestamp": "2017-02-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "592bd50a64ad365a39b226d97deb0f076599f843ac2958a9e500ec6c937fd2bd"
+  },
+  {
+    "decision_timestamp": "2017-03-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "37200515cb43c223014bb0961241ccce089e09d1bf0eb53292043d57d1b87a39"
+  },
+  {
+    "decision_timestamp": "2017-03-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4b92b35e1dd0e34cd01d1bf6cd8b58cf06d2390ba16f64327770e80658102f6f"
+  },
+  {
+    "decision_timestamp": "2017-03-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "68586d556e8220c0bf8d9daab4e57a35e4ba349c191aefbe3f98127fc1677c0a"
+  },
+  {
+    "decision_timestamp": "2017-03-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "552e67f0ba037da6783fb24c9084da140d3afa007b7c8171d751f35d44f7ceec"
+  },
+  {
+    "decision_timestamp": "2017-04-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7c5c9c9ae8e05820a3dd9e0e5f0dee8651a403375de9f8a8aaebbd6a4bc0ecba"
+  },
+  {
+    "decision_timestamp": "2017-04-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b0548930ca867446913e72160acaba4720668249bd2e1adb5189c319f1afa349"
+  },
+  {
+    "decision_timestamp": "2017-04-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "085bcd5c3cc1d1d11eca0a84a370556e7fe52697cb379cfe00776e0cb84d8890"
+  },
+  {
+    "decision_timestamp": "2017-04-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3b516515f97bada0a3c9a6b79c1bdf280fd14a6879e82dd9c250432431e6e707"
+  },
+  {
+    "decision_timestamp": "2017-05-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "32136fd8c7408f70bf9511306efd9a4bf4ad3fed420fb10b8d4b7198427dbffd"
+  },
+  {
+    "decision_timestamp": "2017-05-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f51b014c5e47c907c924cd3ac6a6a541686e516c5f8ea0881d9399a04770d4c0"
+  },
+  {
+    "decision_timestamp": "2017-05-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a5b5adfb47b891b15e6b7b6c67c2257abba3955923408d58a6ff512e70d6c771"
+  },
+  {
+    "decision_timestamp": "2017-05-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "805dd64ff8d2111d637495aec22fbdfe31d4e5e70733c8251923e252e7be3654"
+  },
+  {
+    "decision_timestamp": "2017-05-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fe9ba61f24f141424f3c076c8366c4ceee90539d5e9a3decbc8e47b7c3838eac"
+  },
+  {
+    "decision_timestamp": "2017-06-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1cb6476d471b8abeef849507f108922d5f8f4e4e8b5d1475b96611c18a282c98"
+  },
+  {
+    "decision_timestamp": "2017-06-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ce4604163d990597bb2c510a77b4c1c85007c132a6440eccbecfe060f69385a0"
+  },
+  {
+    "decision_timestamp": "2017-06-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6b37f75c5feab2a189a917b81e1f296be1968ac82a1cf0bf8f6ab876920f05f4"
+  },
+  {
+    "decision_timestamp": "2017-06-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d0a0d2f6f238d96e7c96168888c6a12ee5506c14cb0393d8387dbcfd19b7ef15"
+  },
+  {
+    "decision_timestamp": "2017-07-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "53ecd9f1c320b89ba57cc01d04b224e1883e995224e41743bcc1f6d1c764c19e"
+  },
+  {
+    "decision_timestamp": "2017-07-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a5456d6286867af434e4197d602cd1e4c8852d1baf880e57471ce5383eb45a1"
+  },
+  {
+    "decision_timestamp": "2017-07-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bfb1d6d6f5d74b230cd68d2b0474e556e57a306a468fe09db285b33d4dae19f3"
+  },
+  {
+    "decision_timestamp": "2017-07-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5e98309320b57b7c62fe01b2f9ef85180b6a6da3fb4dd7a8d224e6582781cb84"
+  },
+  {
+    "decision_timestamp": "2017-07-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9f94ddad5eb13016e7a2c819a32099804f8e634df2423f1c99964890476e923d"
+  },
+  {
+    "decision_timestamp": "2017-08-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "264fc17ce50ee8b3b2c2c551ff3f7f833a5a7f28663371faa59e4f76b580565f"
+  },
+  {
+    "decision_timestamp": "2017-08-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8c372fb3d3fd67b5a0fb75793893c7c1bf0616950e5c6cebc2cf88bf14555e56"
+  },
+  {
+    "decision_timestamp": "2017-08-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "36393266a81272b53dcdb91d563ead32fb9555f3bf40197724a4999294656e2f"
+  },
+  {
+    "decision_timestamp": "2017-08-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bbff8950758c901c92b27bd8b2c5533416e5f845228f0397c50f13233ed9b5e6"
+  },
+  {
+    "decision_timestamp": "2017-09-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f81f72535db13e41ff1db54ca71b1c11b667d23d4ec7caaab3baf784e95ac0c2"
+  },
+  {
+    "decision_timestamp": "2017-09-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f74d1b38f37f0974918fc6667a0a3bae9c864d09886c1a2e810b1d564beffcce"
+  },
+  {
+    "decision_timestamp": "2017-09-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d9a0c3bd545e26c3a5123ab39647fa2f9f4ddc9698904df2bb565e816514e3b9"
+  },
+  {
+    "decision_timestamp": "2017-09-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9c96b0ff1adccd4f5011b93ebf8da29be254bde4612d48218ddfc5f3b8d449ff"
+  },
+  {
+    "decision_timestamp": "2017-10-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "915922a5dca4fe44e9568280d29648d33c0e1f571946e502a3bda5d8ad9d375e"
+  },
+  {
+    "decision_timestamp": "2017-10-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1d8658c5ef6cff21d5d5c332051da36efa80e0e90d25d73da82d37296d81bd26"
+  },
+  {
+    "decision_timestamp": "2017-10-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4980fb00d1a6993c59df12f3af9fb0b25fe2bb5120fde52193e92ec1ac13d39d"
+  },
+  {
+    "decision_timestamp": "2017-10-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6928dd5c18e37ffb327aca078e6eb4b7bfe6a19dc5b6f0f431f6f39079e43e45"
+  },
+  {
+    "decision_timestamp": "2017-10-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d05bbf503cb47e89be9e31876d81dea30115a53b8eb7b522fc3fa781a85f7c94"
+  },
+  {
+    "decision_timestamp": "2017-11-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "baa8e93d26453451c5eee41540fb6ad400a126b8517898b68ebc5346fa7c5766"
+  },
+  {
+    "decision_timestamp": "2017-11-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c57820fd822055f9409d8982a907e7b22b834bb12629b10e480763b14970e80a"
+  },
+  {
+    "decision_timestamp": "2017-11-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ef9434736237696d3c9466afb34279a957eee1eb907a0344806a38f6f381a0c0"
+  },
+  {
+    "decision_timestamp": "2017-11-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "38ab10448275bddc3ebba42f9f083801b6b9cb36f314d0079493d32901c3a28b"
+  },
+  {
+    "decision_timestamp": "2017-12-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "380bdf7f7681464733bfad64d8201898b393df2cfd9f14d0b956b0d77c3f393c"
+  },
+  {
+    "decision_timestamp": "2017-12-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4dad67697281f244fc97df14734527d22bb6cdb64e4eb2e6c25e6949b8336e78"
+  },
+  {
+    "decision_timestamp": "2017-12-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "206aff178af6b367f30af18f8869fbdcf4aed6654b008672c2b5b1b8d03298c9"
+  },
+  {
+    "decision_timestamp": "2017-12-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e1eddaf0d60240dd7adafd4b61f870eb1d319ba624a88f6a7008ee57d8edc07d"
+  },
+  {
+    "decision_timestamp": "2018-01-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cbf7ea5341846252fa207d2839e4d520e47e46da0e452e82f9f8d8eacb771acd"
+  },
+  {
+    "decision_timestamp": "2018-01-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f6de50d4ecf4222cfd73ad959500e70635579b9691cfc80c627de625726c9cfa"
+  },
+  {
+    "decision_timestamp": "2018-01-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "53f223210fc3665067e67dd8d88c2e1573b968ae6e674bab82f0063aa1c398ea"
+  },
+  {
+    "decision_timestamp": "2018-01-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "549954ee6ff33cf1e8e4755da6b8d32bf003669e189c97e8a502b2d1f4a9a9f1"
+  },
+  {
+    "decision_timestamp": "2018-01-29T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1700ded47b19815db51868dee09821a497d24172efab7629a10c8cecfea97853"
+  },
+  {
+    "decision_timestamp": "2018-02-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "78b3bcb6797d6e0d75c3016b638a6eb9f5dbf138be77b0c3be5a023e0fd5f549"
+  },
+  {
+    "decision_timestamp": "2018-02-12T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5e7ed0448c7c6c0bebbd1691fc168d820c8bbc1b8961830564ae65592f255787"
+  },
+  {
+    "decision_timestamp": "2018-02-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "17083facc92580503e1f08c0a444a861579a7f03788c713f067c715742826ece"
+  },
+  {
+    "decision_timestamp": "2018-02-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "81b671ac5e99b72c8c1079312d01a8081664c884b9cc1eee8da5e3a8d91cd928"
+  },
+  {
+    "decision_timestamp": "2018-03-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "356bc538541a9b2a0a7ac2482fe67ae8a493b44a72d29234eb0ad0160a977e5e"
+  },
+  {
+    "decision_timestamp": "2018-03-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3920a74056e88657ca7fea7679b39920d9e73d3f16bde9b9be7ec0cf9173b57f"
+  },
+  {
+    "decision_timestamp": "2018-03-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c9e0565c6b858186d0a7159c68195fc3612def958a8a410f30a7da419ac31892"
+  },
+  {
+    "decision_timestamp": "2018-03-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "247fdf6b06bf0ab10c7fca1c7b29d43447806d6abcfbf0a5da83ef01bf29431a"
+  },
+  {
+    "decision_timestamp": "2018-04-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0cbecae4afd610537dbf061d8f7c73fa1720802e6aabc3042c66e74484c710b1"
+  },
+  {
+    "decision_timestamp": "2018-04-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b8f357c99a87e750b1deddb0d9b3fcd04d3960fe01eb879ec5472fe6faae9919"
+  },
+  {
+    "decision_timestamp": "2018-04-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cefabde6b453baca49565dc8fdec89f44a98db26c0283b36a0c1342004f9805d"
+  },
+  {
+    "decision_timestamp": "2018-04-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e0a1e569f7a900e21aee26be8adfdffe771cfaef633a54808a2e1e0b4ef1050d"
+  },
+  {
+    "decision_timestamp": "2018-04-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "85a68c2952209b363364adbcf0552d49bc033078761439100dc9c91768644f83"
+  },
+  {
+    "decision_timestamp": "2018-05-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "50961d0b0dfd4bd06c0cb5ec21e17de9cdda4744abeec95fe665f340420a9061"
+  },
+  {
+    "decision_timestamp": "2018-05-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2cf11368adaeb232a201ed7a85c578e2e91bbcdd67b30316e86ced4cbbeac0e5"
+  },
+  {
+    "decision_timestamp": "2018-05-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4f9f2fdc3bb06d17533529caa95bac8ec1aea64e4d9561281241b10e3a0fcaeb"
+  },
+  {
+    "decision_timestamp": "2018-05-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2162373f39abc43b05a91dd1c91c304157f243e95f724e5520736eae23c946d3"
+  },
+  {
+    "decision_timestamp": "2018-06-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7be8b51421eef38d5cd01c2a01eaa568a3e09842f5b13caf5f6a55d65af8e71f"
+  },
+  {
+    "decision_timestamp": "2018-06-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a6fe6885cb5d4993eee4c39cb5f3b572c11674715767a7f3aac0bf4f8cb5f77b"
+  },
+  {
+    "decision_timestamp": "2018-06-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "96861e499c3fce6aa3ac750bad412b5b22da28f89a6004fd0d61e9c563d631e5"
+  },
+  {
+    "decision_timestamp": "2018-06-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9485aff88b5b417c521cfb4bfe2b92266ed02f679eebc2f52ac9c0e49b964c54"
+  },
+  {
+    "decision_timestamp": "2018-07-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "176caaa6f6387abfb88273067b92bf5468f97c5d10b6a6cd11b6f87e01bfdfad"
+  },
+  {
+    "decision_timestamp": "2018-07-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7cb211bda98f6edc55fc8fb85abaf19e6813529934ca10f97b13093414c9bf23"
+  },
+  {
+    "decision_timestamp": "2018-07-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "40b1d30a37ac3d3cb3feaae127c522ccda976326b50131c4c4caca5aed88a024"
+  },
+  {
+    "decision_timestamp": "2018-07-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "37daead350d6c4630ddfae79137bca11667bf8b5cea17093226f45d7f33e35de"
+  },
+  {
+    "decision_timestamp": "2018-07-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7b366cb433e79124cd0ff6efcb9dcf458666fa9782c10984e5044d298abae58d"
+  },
+  {
+    "decision_timestamp": "2018-08-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "57659662ce787c31918a6acdbab25b444e7be5e04e5985208af2bedac4f979be"
+  },
+  {
+    "decision_timestamp": "2018-08-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f74c45a64f39d7dd09f7a8f71e5c3268584f8638d59c6619b715218e9f1a83de"
+  },
+  {
+    "decision_timestamp": "2018-08-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f47a19f6d9fd269af163c74c0f984c1aac85b08cac0dc16194f9b870f6b4fcdc"
+  },
+  {
+    "decision_timestamp": "2018-08-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "21d4604a51ee72bc2e0d4a7543ff304f5b1f0eb4a03f61fceaba2b9ae35dba1b"
+  },
+  {
+    "decision_timestamp": "2018-09-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1f9fd6ff0e565805effbc588743cdfd5b9dc811c4815a86822d6e9b31a09a6a6"
+  },
+  {
+    "decision_timestamp": "2018-09-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "af06932e7c3aac56bdb05a3926d7c7521de693afe870b84d8a6da3e2be967088"
+  },
+  {
+    "decision_timestamp": "2018-09-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b52d4ad6c7a5b8668c741615d2d38bebce3de0094fdfdd20586bcc4b66ef774b"
+  },
+  {
+    "decision_timestamp": "2018-09-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "183e7d7a81d27de3c5b8eaf6a41d6dfa005beb24205505d0877e20fee61f90ad"
+  },
+  {
+    "decision_timestamp": "2018-10-01T04:00:00+00:00",
+    "eligible": false,
+    "expected_symbol_count": 30,
+    "missing_symbols": [
+      "ANDV"
+    ],
+    "period": "development",
+    "reason": "missing_completed_observation_bar",
+    "universe_observation_set_hash": "89b82944cbd0ee9c4b8cfd5567b9790df5006e60045f283257e501475ad10b20"
+  },
+  {
+    "decision_timestamp": "2018-10-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0841c25ae908c874609d233ff58a0f8d55101ea806349595b81063a69d63a02f"
+  },
+  {
+    "decision_timestamp": "2018-10-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ac323a1d22eceef830d67e7eb6f699b427f703fc9bb3c61e9b539c748e53f0a2"
+  },
+  {
+    "decision_timestamp": "2018-10-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b627a3443e5c087a25a38becfdeda6be1f796784339a074e7dbc8d9e91e82ccf"
+  },
+  {
+    "decision_timestamp": "2018-10-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8e6814d68268582192b30077b251be0f21448d4389dbcfb6dc28bca57e33eddd"
+  },
+  {
+    "decision_timestamp": "2018-11-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ccd5759c1c205c62a798e7bf30d8c6b2724a51fdf954b5b555c06bb56e7a35b8"
+  },
+  {
+    "decision_timestamp": "2018-11-12T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "df57fd4dccc521cce1e3c3a7342ab77f82ca36179e19d456646ab936b109c14c"
+  },
+  {
+    "decision_timestamp": "2018-11-19T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "54e97e5fd0e8c3df13698a87cf3cf34e43f7960038ce280872fca157af0cbc00"
+  },
+  {
+    "decision_timestamp": "2018-11-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "09e82b6826cca1d3802abb8ca5cee75cbcc01bd569828994f6dca3cd7fa91325"
+  },
+  {
+    "decision_timestamp": "2018-12-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a32a448694b2bcbf01d686ac6e12fc019e2ae1c69b6e47dc3ff3705ec5d80e6"
+  },
+  {
+    "decision_timestamp": "2018-12-10T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9ccb4ba3ddee7267f26aef845564fea2e688160c7b3d0f32c219efcfe7094755"
+  },
+  {
+    "decision_timestamp": "2018-12-17T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6aeda85dadcc4f47fd17c3fad15202e38fa60184a12a80cf3346692be6865c3c"
+  },
+  {
+    "decision_timestamp": "2018-12-24T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "43aeb3f6d7fe635be1c9ac3d9ede6f06245c77b40e2aa77c9b5f208821f64ac6"
+  },
+  {
+    "decision_timestamp": "2018-12-31T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0954f818eb4b96156021e50714b006bce07157f9c861630231b2008e8c9f9d44"
+  },
+  {
+    "decision_timestamp": "2019-01-07T05:00:00+00:00",
+    "eligible": false,
+    "expected_symbol_count": 30,
+    "missing_symbols": [
+      "SHPG"
+    ],
+    "period": "development",
+    "reason": "missing_completed_observation_bar",
+    "universe_observation_set_hash": "9b790a88394bda563e3d431d4b8c14402f232cf61bd097aabb36b91dcc24c7b2"
+  },
+  {
+    "decision_timestamp": "2019-01-14T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7196cb431afa01c734a3ef93448b1631cbc54fce94b5ef4d8f0b532217eade7c"
+  },
+  {
+    "decision_timestamp": "2019-01-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7e827718819daaa045ff8eaefcf6f551f31d53ab1298c7a5e7c5f8734c1cf23e"
+  },
+  {
+    "decision_timestamp": "2019-01-28T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "40a8078bd1d9bc9a79d353ef9e36c9f8f3ff5b4c1427ec728334cf37488257f8"
+  },
+  {
+    "decision_timestamp": "2019-02-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3b14fd0d284f111d819723a1c7112ea420f0a1f3b2734478469c75a59f541a25"
+  },
+  {
+    "decision_timestamp": "2019-02-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "99cf80e3fc91ee65396b4b6b9cab436019098bb10431826e5e8b255e5ebd7fe3"
+  },
+  {
+    "decision_timestamp": "2019-02-19T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bf8c2217bfb698cd9cc81b4f00562cc8ca6ea6b4bbc9b9bd7dba6c16dbd26d1c"
+  },
+  {
+    "decision_timestamp": "2019-02-25T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "21dc3434941059ae2503ad6f9b55a92191f9251c0bd646be89022598fc4da3de"
+  },
+  {
+    "decision_timestamp": "2019-03-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "53b10e00bfe39d21c54214995f04809c8a03a446a909b433de1293e3213f331c"
+  },
+  {
+    "decision_timestamp": "2019-03-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cb7937ae90420fffcfcd97667543b017c8bfa464321abc4bc668d0acc831946a"
+  },
+  {
+    "decision_timestamp": "2019-03-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "28186a63516b5ca4b06153457f56e0c9ce1c38a9beb82fa70b81481337424e26"
+  },
+  {
+    "decision_timestamp": "2019-03-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "11f69b5d17af892788ea9ece59813eab4c9e8260065307af3846e86b5a5a3040"
+  },
+  {
+    "decision_timestamp": "2019-04-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a32a203d86cc0c6aba82e8b7f17dbf9b90c2e6b153cb008cc5094e0690b8726"
+  },
+  {
+    "decision_timestamp": "2019-04-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "87f631b6bffab58a203c845b01fb3beb0cfb01e07aaa0350133e1d8e7e07a76f"
+  },
+  {
+    "decision_timestamp": "2019-04-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "095fde3040427a427da283c7d4f14766f7700da3b01a36ab64f6d507efc2c361"
+  },
+  {
+    "decision_timestamp": "2019-04-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a0609b32491c27fb32e63cf6371ce21a63cb3d36ffe4a4b8c07680c3eff91d1"
+  },
+  {
+    "decision_timestamp": "2019-04-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a26fa41afa329785c32fc0a172982b2d8c731cfe595b865496b1bc076106d7b6"
+  },
+  {
+    "decision_timestamp": "2019-05-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "45162993f9a50f6a7b518df2dae2cd574d5cd40cc1fda62743cc67f436e6391b"
+  },
+  {
+    "decision_timestamp": "2019-05-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1b8a8deb05f26a60946ec614d124feb6a308438a9d36d712f081f7205144d276"
+  },
+  {
+    "decision_timestamp": "2019-05-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9f1a1e689f9ccffc272e8ff3a7b1a41936b0c0bf7bff997a66a2363186ddb57d"
+  },
+  {
+    "decision_timestamp": "2019-05-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7166524c6850236676e39d86266411ef57929d718d5fe386f4ec88113aac5182"
+  },
+  {
+    "decision_timestamp": "2019-06-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6be6eb595ef49453e1c3bf8872f7413bfefe4087ab44600b54bf0a35d5439c90"
+  },
+  {
+    "decision_timestamp": "2019-06-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bfb32405ce846e936fd41b48f9857ab1ae1b39bd119fce5ef2bce3fc570cc17e"
+  },
+  {
+    "decision_timestamp": "2019-06-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3894640c7b56c0d450fbe8aab1fa82e5faa61ff4f3c66bb365c6aaaa3ef11d9d"
+  },
+  {
+    "decision_timestamp": "2019-06-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "98c3bce1e2301f8c522781551df5a91b7684cf5ce0a1646edbf5247112a4c6c6"
+  },
+  {
+    "decision_timestamp": "2019-07-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a0e88c9d3820d793864efbf5beafccf0829564ce22fbc751bafeded01734e423"
+  },
+  {
+    "decision_timestamp": "2019-07-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5445cb5679d27891ee9c45d810130895e1190b219add141303146827a61033d3"
+  },
+  {
+    "decision_timestamp": "2019-07-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "884bf7e939d4616ad314c4c58f6dcc295eeda43f04ccbb1b273c18cb47c7cc12"
+  },
+  {
+    "decision_timestamp": "2019-07-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f78d07a12b268230a0cea84e078c662988dc473813131900ba97242c180132eb"
+  },
+  {
+    "decision_timestamp": "2019-07-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c2d51bc4d0c70e4e7a903059e9dc0aeefe301cbafa6384dae83ca90f077c3af7"
+  },
+  {
+    "decision_timestamp": "2019-08-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "48fb57b1aacc307deedc0ff9582f3501a2849f90e0560256a017fe650f038f9f"
+  },
+  {
+    "decision_timestamp": "2019-08-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a3312e416cee5262af8bd493fc581ea8136393e65b96568894f3ecb9d6f41a9d"
+  },
+  {
+    "decision_timestamp": "2019-08-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fdacb0a99cbae83145f1e564215d957b101a486df25f54f3637193db0551d9d7"
+  },
+  {
+    "decision_timestamp": "2019-08-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5d5b020e7840ed80dca111b405c42df00cba4954e9f42bc938fa96c0bbfee257"
+  },
+  {
+    "decision_timestamp": "2019-09-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a03cef21049501dcc136e39edeaf7376afe399c9ff23ba45ce6427fd2ed0c0b7"
+  },
+  {
+    "decision_timestamp": "2019-09-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "13c890f07251a9ea4453d85aea8856da4e0392cc73bfa6e9bc61e5bdcd810cc6"
+  },
+  {
+    "decision_timestamp": "2019-09-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "98c4aaeaf49edd153c94eaf70e20d2d36c34162396ebcec3469a30f5d000433e"
+  },
+  {
+    "decision_timestamp": "2019-09-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1ebb2cc21fc0448673f91f5f515d53d65b28a5201f538ac52ed554c8967fe009"
+  },
+  {
+    "decision_timestamp": "2019-09-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3685bcc64b44593f135fa00252fdd3cd09d75bbcb74386c7d4d2f76f32e333e5"
+  },
+  {
+    "decision_timestamp": "2019-10-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "05fd8897733e8ebc520fb947f88b09ef42088d44bea40ae743ef0448b6b6d4f6"
+  },
+  {
+    "decision_timestamp": "2019-10-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "16d6135313bfbeadb012f7ca93f72c78ab7a207e22e9a0810c5f809d6998ec48"
+  },
+  {
+    "decision_timestamp": "2019-10-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "98cc8fa970a5cacb8b95ced9bd81c181e858bbc25bf44dd24dff5b21cfe81e12"
+  },
+  {
+    "decision_timestamp": "2019-10-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "485801afdc5e2acda9228118f0dbd53a2420f60d43c3c8a60511aae6d311c75a"
+  },
+  {
+    "decision_timestamp": "2019-11-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3206fe403f8fcb9f10146fd90f01db34cc90769cbf44cb3e91dc043ba7c1d979"
+  },
+  {
+    "decision_timestamp": "2019-11-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e84580edeba71cc3c53d803bc91a55bf4a95361373080be22dc4be41a117f40c"
+  },
+  {
+    "decision_timestamp": "2019-11-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "002373b45246ad1dad732fe1f77fbfbd0c6a430583022e1ff1beedb46e326e78"
+  },
+  {
+    "decision_timestamp": "2019-11-25T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "31538d362578197f6e70f89acbdbf7c7ac816cbe23148a75c63d05dd559bad28"
+  },
+  {
+    "decision_timestamp": "2019-12-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0f8e7c7831a3a5d648374d85ea524bf21211b52567ed383ba719a7d6318c5f82"
+  },
+  {
+    "decision_timestamp": "2019-12-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5e45514239c4490e6f3f07d9d199a0b2548cb45d167e3c1370426601fd10774a"
+  },
+  {
+    "decision_timestamp": "2019-12-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c59447ff9dc6a5abddd370f7cbff65fd716bd6060be0bf5a1fe24bfb64bdd634"
+  },
+  {
+    "decision_timestamp": "2019-12-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fddf5a73d57ef10c38ced1f935cc6292f8e99df82ae365435bb00b7b1b6a7004"
+  },
+  {
+    "decision_timestamp": "2019-12-30T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c0a68dc6c2f5508d83c772061430bb4d5240b6d37f85f69dea85df7a16f78058"
+  },
+  {
+    "decision_timestamp": "2020-01-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bad3d1c67122861d9ba271a37f65a3ae5401e02b28e9faf16b1097afe104481c"
+  },
+  {
+    "decision_timestamp": "2020-01-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7feede01cdb4f59007e68d50eb2575174faedf00524b243e7c351569f8eaf7ca"
+  },
+  {
+    "decision_timestamp": "2020-01-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4a0e96edbae5c2facacff587bd35ddfbd8e404371a7f6aa9dd6bb6308d64c73e"
+  },
+  {
+    "decision_timestamp": "2020-01-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "46c65101bb8e477b609cca5f913bf25b16b11efe38f10c7ea7b38178f300fb6e"
+  },
+  {
+    "decision_timestamp": "2020-02-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f051b89498fd2dff184baa4c6cbae6be708a2ecb39aafbf9be397f875f60c543"
+  },
+  {
+    "decision_timestamp": "2020-02-10T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "38b850ff1d78dc29b16610d45c6f253fada10d47979868dd11f1accd762913d6"
+  },
+  {
+    "decision_timestamp": "2020-02-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "29a41aac60d60e9a3ec73fd6a5ba3ba079a62bf1eb06a0c4a9ce424bf7d67ecd"
+  },
+  {
+    "decision_timestamp": "2020-02-24T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6fb553f79b611b2acb67e757db535368b92b8d66eb8f877a26d047618c00983d"
+  },
+  {
+    "decision_timestamp": "2020-03-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1d260c2076c934552e54a2ff592a8627e851a6bc484f62b36f4868cf4a523de8"
+  },
+  {
+    "decision_timestamp": "2020-03-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d72f0c8afa962b72d98bc37f9ec5169ee659d8d98666a2ad3c0108275ab7a9c7"
+  },
+  {
+    "decision_timestamp": "2020-03-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "63e68c90dbf0c7571de5dbeaf2326d75f913ff7954d0aa37c86edc56f1d13463"
+  },
+  {
+    "decision_timestamp": "2020-03-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "71871af429eb697fed5599696832dee7ff731c3e63744d64399883c728c318ff"
+  },
+  {
+    "decision_timestamp": "2020-03-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "32537dc64c66d77b03c99c3d671a3cfad39a55438fa1774e1c3b89f31aec522c"
+  },
+  {
+    "decision_timestamp": "2020-04-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4001e38543cf0712100d42f3926605063fcfee47e1ced0089c9ec138151e338e"
+  },
+  {
+    "decision_timestamp": "2020-04-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "60a19e844abd23da71846367b5ece193f9946ca2760c1b57165aab9d8ff36cb9"
+  },
+  {
+    "decision_timestamp": "2020-04-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cf19a7096155da3dd66cb498c2d6b217ef0650030b1ad35d565de641b5c8b0a5"
+  },
+  {
+    "decision_timestamp": "2020-04-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9a665dd1d4e6841ee9ac62a71342cbca64dee5386c71c14675927d7aa3dc5dbf"
+  },
+  {
+    "decision_timestamp": "2020-05-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "71561d02a93fa04c0fb5a4d9b53cb7ca796c6b39daca531a8ab44ad54cba443c"
+  },
+  {
+    "decision_timestamp": "2020-05-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2ee0cd5c6b7b14e9057b71fe63b9d03a0fe5195a541d26c65676e8910e90d03f"
+  },
+  {
+    "decision_timestamp": "2020-05-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a46b237ded47ae9173694e773caddf5b23cc4442773c8365ccd0044e9721c059"
+  },
+  {
+    "decision_timestamp": "2020-05-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c3546ea6c6045d344939042cee1c48503fa22702360bfb8e2dd46e9a5bb08acb"
+  },
+  {
+    "decision_timestamp": "2020-06-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5e402b2a90ff8ef30765ac62e1a208b4009453ab4331c4aa6ba74346aa62245b"
+  },
+  {
+    "decision_timestamp": "2020-06-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6fcfd04d93745585a7c90d36c5409fceb66750ffdf9b0bef3a6b7c8e5ea5d011"
+  },
+  {
+    "decision_timestamp": "2020-06-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c51ee5f63f4473e777c790648d9a2ad18688a6f0c498447cdc453013d846cb72"
+  },
+  {
+    "decision_timestamp": "2020-06-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4cbdd2522bc20d8aeff71adb6a341b3a8a5fcb24f5476baa8e1b7c830fb18d91"
+  },
+  {
+    "decision_timestamp": "2020-06-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cebb6da5f91a6ff3c35c75c2ddf1fd64697f89a9bb970550175a39b4bb99beae"
+  },
+  {
+    "decision_timestamp": "2020-07-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f037d5e6bdeb1833ae2e684c2835bf475a1731204af541a3a44d20c37fd0ebe4"
+  },
+  {
+    "decision_timestamp": "2020-07-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d6fa5289fbcde12f26642a7281b89d3d827181cb6aef22c03b56f07b7a6c5210"
+  },
+  {
+    "decision_timestamp": "2020-07-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "81fa2692e61bb679a3d7ebbbeeced545974cb989c5fecf165758e1f221de7730"
+  },
+  {
+    "decision_timestamp": "2020-07-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "790522e1d7f1fe70780785fdce8c59b748ee58b42887ee98bbfdf22dfff3422e"
+  },
+  {
+    "decision_timestamp": "2020-08-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c660a84a2de9c6d86a2d839c8674ab5f824fd15bbc2a2864b465d3bcae153e10"
+  },
+  {
+    "decision_timestamp": "2020-08-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8b9af3778ef8be43c08762f7eec7f7a469454e3d5fd522546c4a24c92878929d"
+  },
+  {
+    "decision_timestamp": "2020-08-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "99632d872b6e45f4155d0f293e6143d6e0735ca2cdaf777fd7d97675a7d4853f"
+  },
+  {
+    "decision_timestamp": "2020-08-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "26f05ea28ecb915e1dad7354f3a5f8878ac0c42a9003a06b56fd40cab0572002"
+  },
+  {
+    "decision_timestamp": "2020-08-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1ed0347eedf196a73df56456ddea799ff10e149618d9882243ab9f26e968b71a"
+  },
+  {
+    "decision_timestamp": "2020-09-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4e8b6283e0972c14708a57bc7107c55b8788ad51ab8ee601fef91bfa56cdf72c"
+  },
+  {
+    "decision_timestamp": "2020-09-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "44c41f39af21aadde02020bfef43e074ed2655511b9073cd61f009d3b771dacb"
+  },
+  {
+    "decision_timestamp": "2020-09-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "458f2e0d2d716b7a1eae799db580e64eca8fa6e6e90499beb23599e703badebf"
+  },
+  {
+    "decision_timestamp": "2020-09-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "96caf5c4ab1c589bc4ce6cafb76e795878003f9ebe6249929a02857728424c07"
+  },
+  {
+    "decision_timestamp": "2020-10-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c869bb2a0637003913cb4bad503d96e63fe3254e063552edd6018ace077af171"
+  },
+  {
+    "decision_timestamp": "2020-10-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7072bb4d79d37cb84fc9865a74230205724103db8147a0a8664df8af676f05eb"
+  },
+  {
+    "decision_timestamp": "2020-10-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7474498d2e77d2329beb3bd1f866a5d6bd0157465bed2234ab8f6b6dcf78d21c"
+  },
+  {
+    "decision_timestamp": "2020-10-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b7060d51033b5dfe8ac5da0f830910bdfcc69466368c81c31db42ac0e81e3c24"
+  },
+  {
+    "decision_timestamp": "2020-11-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8d86a947089da740ac116f7104d6fe144e00d78328d94189a359bb85bb2794e3"
+  },
+  {
+    "decision_timestamp": "2020-11-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4c3bb8920d4646d99aa9d5307389c19d6a3cd45161da15282fb63963dc4afd0b"
+  },
+  {
+    "decision_timestamp": "2020-11-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ddbef7b598f6b56ff8b273f3ff87892a0dfe0ad2a0adf63d9f2fcd88e2e8368b"
+  },
+  {
+    "decision_timestamp": "2020-11-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e6c4a65f79eeec20cc13717a65602e38838baf66d775ab47ba177673ecb41224"
+  },
+  {
+    "decision_timestamp": "2020-11-30T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ebe3bbe727cf5e758b0d83f19f07f483a23ac558906d580f147e42fe5144317f"
+  },
+  {
+    "decision_timestamp": "2020-12-07T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "022f37214c870e9e00817186162224f436d936b25c0b42aa7ebca5c2f628b305"
+  },
+  {
+    "decision_timestamp": "2020-12-14T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cb4f92fa9f11f301d42298a906a4f9fe4b78c5ebb057df4ad69faa619d93176b"
+  },
+  {
+    "decision_timestamp": "2020-12-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9e48f13680fdebf4059802bae18be1feb429e1a3c2229d2dc33872a4f4409af9"
+  },
+  {
+    "decision_timestamp": "2020-12-28T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "dd5844b08bfc4e8fb92fd74d59371dcd432ccd58365f194f76cf3d39cc3ee0a2"
+  },
+  {
+    "decision_timestamp": "2021-01-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0e5356e2f45c6283e6d12152038f73b64bf592d5fba4dfc883a67e8bff59efa7"
+  },
+  {
+    "decision_timestamp": "2021-01-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "aeba42fdcf265f5cff23e140e4ea7de02a9f754e36923ab4d0c5cd0c169545f8"
+  },
+  {
+    "decision_timestamp": "2021-01-19T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "db856e3e7cb779db3eee254ba910c1bb8e0620bdaa197552e58301ceab8efcfd"
+  },
+  {
+    "decision_timestamp": "2021-01-25T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ca3f5a9893866edce1807d5f1890b56712e76b876c9a58bbd4d1a0b08162dc28"
+  },
+  {
+    "decision_timestamp": "2021-02-01T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bfb985b9f0d64655b4586606379e4642d6971fb4f77810de077cc1fba091bee7"
+  },
+  {
+    "decision_timestamp": "2021-02-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bfe4dd2dfb34b85669ec8567a9ce69727a50a4326b6c41613abf6453efbe1d4a"
+  },
+  {
+    "decision_timestamp": "2021-02-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c300f66dfc86a572a14e26a22f46472ef933010f5d6020bcf9a008d180c70c92"
+  },
+  {
+    "decision_timestamp": "2021-02-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f696ec44ea4db3d33b1f1df837fc17dccf2bb2b6866b3158b54912413bcd8c54"
+  },
+  {
+    "decision_timestamp": "2021-03-01T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1dfab99fbc207a666236d776e4a925002b746f5fe893b19b64937fe5edd935a7"
+  },
+  {
+    "decision_timestamp": "2021-03-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a4637b0920342d41aec22bf5391b837ac3550958cbe2b3793882dc3ee0c91df7"
+  },
+  {
+    "decision_timestamp": "2021-03-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "606c4b1e615ef146ba5b3567b8af88273253db162df8b68f5d8e1b61e0bc803d"
+  },
+  {
+    "decision_timestamp": "2021-03-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "871273afe36044014a094c4d98e424635ac9bfabc7607223a951e87b2ee042fe"
+  },
+  {
+    "decision_timestamp": "2021-03-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "294dcd07cd58248316c191765d6a90c0e628b078f4bb9dd19f55488554490ae0"
+  },
+  {
+    "decision_timestamp": "2021-04-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "76c25bdcf0f8375e93d9a00422c5a896b4bc5b31b75759063528d2bc1d510076"
+  },
+  {
+    "decision_timestamp": "2021-04-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b70dd3d7936c5bdc7aa722cbc9718ccab6aa0b02a0eef66fbf8d4a475a4b2013"
+  },
+  {
+    "decision_timestamp": "2021-04-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7903e7187f5d223d099c4047397471425ffa203e45cd505816e34deb76700d51"
+  },
+  {
+    "decision_timestamp": "2021-04-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d61d2e4e33b5cf6f2b9afa8fc91a6e1d03a4e8a8f1de63b089ffeec1f26c377c"
+  },
+  {
+    "decision_timestamp": "2021-05-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4e56bbbc8e962cbdc94396a153b73f8ff115fff83cb05dfae8bfd25fa753afd4"
+  },
+  {
+    "decision_timestamp": "2021-05-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8d0ad6806d26b9b06eef10dbb50a32587676736296e8ef47eb2da580dd692093"
+  },
+  {
+    "decision_timestamp": "2021-05-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "698c41f056898368fa63283ba6b2e5b8f194bf0f8b95715d715cdb147c8200b5"
+  },
+  {
+    "decision_timestamp": "2021-05-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c08741dffb6dc94eb4a70bad3fd76b03ce21d1a9c14fc02c5019506f2cf5e8da"
+  },
+  {
+    "decision_timestamp": "2021-06-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "24d232af0774a211d200ad69b4f94be282c9763ed64aafb4cd172d00e91d7176"
+  },
+  {
+    "decision_timestamp": "2021-06-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6edc9f9ab1c95ab34a5bea559f107f86f6d815bf04a4f2b3429fd27d81af1f49"
+  },
+  {
+    "decision_timestamp": "2021-06-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "22367f08544d15cefc326fd2310f40912aa5e663837fca67c711b9d8bbdf5934"
+  },
+  {
+    "decision_timestamp": "2021-06-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6200f61799a3d2ac57dd0cc75b27603f1115d5ee549d2f7fd51cd254f5a27b52"
+  },
+  {
+    "decision_timestamp": "2021-06-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7bf0c9eac7072c29935dc3e12e753b659dc6ea716308544bf2ab7f5bb2ab5691"
+  },
+  {
+    "decision_timestamp": "2021-07-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6ee648dd27688e86ee599db438057392ee3240322f953d26cd7ab28807043d30"
+  },
+  {
+    "decision_timestamp": "2021-07-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b7add0d757caae6c34720cd623b003cceeb9cccd0f09860e38d20b882d9f1a74"
+  },
+  {
+    "decision_timestamp": "2021-07-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c146af76aa7401884a2cb4d0cecaedd5324688152beb8d7e35b203c2f138cfff"
+  },
+  {
+    "decision_timestamp": "2021-07-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6ac5b18dd717c8439808f4b4325123bd2b92e5c8649759fa3c4fc5e45f65cb42"
+  },
+  {
+    "decision_timestamp": "2021-08-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d87c792ac753408c217a4160092692ddf61ae1a9b27c6457c3783a05e4bcaa0b"
+  },
+  {
+    "decision_timestamp": "2021-08-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4839262e854d7bead3afd42eda0c46e5e8bc34ac9835f4d35da070ddd88598e0"
+  },
+  {
+    "decision_timestamp": "2021-08-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "46687dea8d3c76882d58cbf0fcfd1a322b7b460bad9a904bba8dbdc777a4e452"
+  },
+  {
+    "decision_timestamp": "2021-08-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "427034f305656090d177acdf034e04c14fc1b2e2545384fc9c6d21c3bbf647b2"
+  },
+  {
+    "decision_timestamp": "2021-08-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c097ed20dc88b8a217ee3d72e0ada95f1a7fa976382a930f43923f3e0d850d58"
+  },
+  {
+    "decision_timestamp": "2021-09-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b3a197810bce26b92b23f75a831fb7fbe07afdf8934615d54c2234ec2a57e53e"
+  },
+  {
+    "decision_timestamp": "2021-09-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a1530e9c61d45ad15409cb2bd6f10122398fe11b9ada7901bfdc2506d29dd32"
+  },
+  {
+    "decision_timestamp": "2021-09-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "77d36f827ffb1e1dcd14e3ce1a0bd6581c5609cad0f405c86ecc19b90e708ea2"
+  },
+  {
+    "decision_timestamp": "2021-09-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a242870ae446bc0772d62cbafd04a68b7017fc9365c10bb8ac5353579a332d09"
+  },
+  {
+    "decision_timestamp": "2021-10-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5ae6e14a660fc69d9f832c6bb44505c0c5800d5910f19bcfb323e71349f48e44"
+  },
+  {
+    "decision_timestamp": "2021-10-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2b221f559ce6ab275fa562d9d3fe5d7d494639e12f17cab290c5ac6c6c737eac"
+  },
+  {
+    "decision_timestamp": "2021-10-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5954f29ed922b0bf834756d1bbdec7da7fd82a7457166a948a095e43a08b7cd7"
+  },
+  {
+    "decision_timestamp": "2021-10-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "02d30a61b1cecd5b0dede5eb662ddb8466da67d09f090079e5c7b63e970fd27a"
+  },
+  {
+    "decision_timestamp": "2021-11-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ca6d195cbd3e4e813bad3093552caa8657bcc8c5551482814113813584518ef0"
+  },
+  {
+    "decision_timestamp": "2021-11-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5774132f024eab807a0c99020dd3c38e37f0e793fe18c8571afaaf71b73fc734"
+  },
+  {
+    "decision_timestamp": "2021-11-15T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cf10d308f4d87b5a92eed372675e308ca8290ab2f22f22c6f8df1dd59538e026"
+  },
+  {
+    "decision_timestamp": "2021-11-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0adc66db93159afb30de35157cd16d609c80d286d3689f55f9ede55bf505bbd6"
+  },
+  {
+    "decision_timestamp": "2021-11-29T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fefa2427a5d2fc6d75795ecefb2c94cef20e18dee8f0edc47213512deaf29cf9"
+  },
+  {
+    "decision_timestamp": "2021-12-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "858934e70c849df62f575b21a383ce2d557fb7590f8de6b7f32aeaa59435fc58"
+  },
+  {
+    "decision_timestamp": "2021-12-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cf024603ef5b2e8bed8a8d698ef80ab1bebd3721faf30327335a1b1dc09a5170"
+  },
+  {
+    "decision_timestamp": "2021-12-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2d5ab2c4a138e099d7d4ca32173b9aa22e6ae92b18ecfc0651d3508d23827b26"
+  },
+  {
+    "decision_timestamp": "2021-12-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "development",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7fd9af9966c2b624637a879053b48ba8c4303b6ef23a2bb9330892208485673d"
+  },
+  {
+    "decision_timestamp": "2022-01-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0043ad29dd701155c1520f964a7a6c1377a07f1765653632c15309414cfc26de"
+  },
+  {
+    "decision_timestamp": "2022-01-10T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2539a1767ba6c0ee9312862998f943f86f19d684feed769f799d3a8c6713f24b"
+  },
+  {
+    "decision_timestamp": "2022-01-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f03081a0b88f6e4a8f9e6bf5cd9f1370c916648c3e1b138305458f3c9ab8a76b"
+  },
+  {
+    "decision_timestamp": "2022-01-24T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b18184cd39a750203e885c661fe82bbb18c1fdf4b04ae1fc8b968b34e3a16bb6"
+  },
+  {
+    "decision_timestamp": "2022-01-31T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "21557e9f3cc097ee50143f7205da2b00aeff9ec2b0a119dc2b19d9c8a5a9beb9"
+  },
+  {
+    "decision_timestamp": "2022-02-07T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "74eaf0563b62d68a0a82fbccac00c4773674e3f52bc3e71d43ddbb1ff711d404"
+  },
+  {
+    "decision_timestamp": "2022-02-14T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e9776ea7d1b0fec333b5fdf4e4389025e2fdb0f83e88bc986f0d6dd98f968463"
+  },
+  {
+    "decision_timestamp": "2022-02-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "aa21c1d138f8e8479ab1c2251f8ab096ed5d7c182aed1594d9a437c8de47faf4"
+  },
+  {
+    "decision_timestamp": "2022-02-28T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c32998221cadc16f74650692cd9d4b56f8095696856d5f4f010919a2f68e3a11"
+  },
+  {
+    "decision_timestamp": "2022-03-07T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4530ebb3cd06e0dba246508da85c9236a6765f1c1c4625efe302108cab3fdcfc"
+  },
+  {
+    "decision_timestamp": "2022-03-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "370fb00a775d4a034f5505b9fb6c9833da2aa5762eb04bc27cc1bbf1f4a345e0"
+  },
+  {
+    "decision_timestamp": "2022-03-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ac3ae7dea81cff8cdd3e6bdd34f560e57d670f7d755ad98e45118d91518f508b"
+  },
+  {
+    "decision_timestamp": "2022-03-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9cfc99e793c391f65411926c9e634947157db45ea77ac7caa1acb88c7c175c0c"
+  },
+  {
+    "decision_timestamp": "2022-04-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a39b5f8a3b24cd2f763197c6915aec81dab7f1d6219d00e763a183067d2fbba8"
+  },
+  {
+    "decision_timestamp": "2022-04-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c7958bcddb89a4ab40a650dcf556eb62a504bba4f5e6d7c602ab1fd595ca8094"
+  },
+  {
+    "decision_timestamp": "2022-04-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8b87482f89aa52a6830068da24c44736b43924bc62fa12f1104d7b52131d1efa"
+  },
+  {
+    "decision_timestamp": "2022-04-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "da247a9d53b49119247df85d4c8b9becd5263883d5e6daffd9379ef0a13c3f2e"
+  },
+  {
+    "decision_timestamp": "2022-05-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d12d8039975263bf0823dc904703f4ba1a7ebf0d4ea1f02a76f28fb1cd3d1f28"
+  },
+  {
+    "decision_timestamp": "2022-05-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3176de14a997042f7e5d27fdc3d19bec41a95b52afc0f8c22ccdfffec1b59c4d"
+  },
+  {
+    "decision_timestamp": "2022-05-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c9cfaffb7531b15f57d065c0708bc0255d48fce0cb981a1ebb90b311ed01fbb2"
+  },
+  {
+    "decision_timestamp": "2022-05-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e02e7113d4698888ae9949832ac2990e73cc5f1ff2d58b59d706c71919e940e7"
+  },
+  {
+    "decision_timestamp": "2022-05-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1996e0471f22aac22158060da2a583a3a613aeb4fc2dbd3f75d0e06864cf1c08"
+  },
+  {
+    "decision_timestamp": "2022-06-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8f1ec430b5784888101106049d66777af1285233d232df6b8338cce6947fec8e"
+  },
+  {
+    "decision_timestamp": "2022-06-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d36d4b12aa2961bb26af777f80555299d8b8c548a2a9a05ddb3b889876ead7c3"
+  },
+  {
+    "decision_timestamp": "2022-06-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "733613eac38b8b0e4c290d6b7207256adb9606baf56fa14da48200ff99f4effb"
+  },
+  {
+    "decision_timestamp": "2022-06-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "db5bd0ea2db7567041720ce5004d5938d856caa862b07536623eed619631f358"
+  },
+  {
+    "decision_timestamp": "2022-07-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "06053e582145a776155da19ef25dcc9a3a0a9509b25a0a14be717b6ffdb57c63"
+  },
+  {
+    "decision_timestamp": "2022-07-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "121e1cdd67d97f04d4f7bf7606d1f25126756b3ea7337fc91b4f5a35c33f717b"
+  },
+  {
+    "decision_timestamp": "2022-07-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ca3af2cdb44b678e440f1e3336ff896639a7947bb91fc5a13b4f11412019ba5a"
+  },
+  {
+    "decision_timestamp": "2022-07-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "30a615722ceb5ddef740f99ed27b61dcdc3c8c41f76c52b2f013cd22c4b47fb5"
+  },
+  {
+    "decision_timestamp": "2022-08-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5b7a46ce74022520b164e7c6efc558c4fc48c10fea1c82189690ce1df52340e2"
+  },
+  {
+    "decision_timestamp": "2022-08-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ca8f3a84e1da3b1c397138eab551fa285b6c223d42cf082a7770d17884432671"
+  },
+  {
+    "decision_timestamp": "2022-08-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f44ba695411c179615d7d7d47d96a7dbe3d02541f1c55e4eba88ee56c0bfb251"
+  },
+  {
+    "decision_timestamp": "2022-08-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7f91de3caf0385fdbb9f5be70104cdea831013a87fda3eed990224a0ae9e33db"
+  },
+  {
+    "decision_timestamp": "2022-08-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d6e69d8e94dc5280b2787d434c1f300867c29d6c8b750d3154e8a9dfdbf9f98d"
+  },
+  {
+    "decision_timestamp": "2022-09-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "772c2d80f8c1cfd1144acc040d697d0aa62762f80ffc69ce11c2d1dcda9b6589"
+  },
+  {
+    "decision_timestamp": "2022-09-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a3e05c1153e034a7ac918d466dad57f77248f876cae814c78a39693a1e8e84ea"
+  },
+  {
+    "decision_timestamp": "2022-09-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4fea9bd299de043e535c5b3ec7c27a335b87da8c841423c2305831e9a193b627"
+  },
+  {
+    "decision_timestamp": "2022-09-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "39ffed1ab6bb3b3ec0f0efbde3a1c72963842a4c7ac3b5e73cc302f5521844eb"
+  },
+  {
+    "decision_timestamp": "2022-10-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c49a99a010c96135cdfa8773d358f46cca24e3b76bbfd46d6e6a6a998924e323"
+  },
+  {
+    "decision_timestamp": "2022-10-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ad856fbf01c142cf5c37cf756e82681eb71b352de2ad6fd8f42bf3cb9b3de316"
+  },
+  {
+    "decision_timestamp": "2022-10-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "21a59b3cf905904da635b5c871d08ed39c603910541a7fd22b0a378eef29209f"
+  },
+  {
+    "decision_timestamp": "2022-10-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bb91c4bc7c3f46b04eebbccda17496e462f07ed89cdb4a243a8a9c001b939c18"
+  },
+  {
+    "decision_timestamp": "2022-10-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5021d019a8885c153752ca7f7586e100edbce52d56294fec9baa723a39708d53"
+  },
+  {
+    "decision_timestamp": "2022-11-07T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "51a05541e1cfbc557f9697424db0159a84ea3e631e37bef44c01758cb15c9fea"
+  },
+  {
+    "decision_timestamp": "2022-11-14T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "da19e6bbbbac4c79186346ad7c28e7e8fd43fff7770300d64469987d88e21f99"
+  },
+  {
+    "decision_timestamp": "2022-11-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "78242b0396ebf6c5373b3323e2e757b1ab91c49226c65db3c0a6d6601af7206e"
+  },
+  {
+    "decision_timestamp": "2022-11-28T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "133460848a1bc9584f93da87f8f6bd176f3596ee1eee79ea5f6418fdb816f3ce"
+  },
+  {
+    "decision_timestamp": "2022-12-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8381409bf4fb16822560ca1beef381137bc3a9a7f61177c98a87082325835977"
+  },
+  {
+    "decision_timestamp": "2022-12-12T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9b75d67f9db07d792989508613d0eeeddefdfc9802fe02bea13aeab5da1ce8e8"
+  },
+  {
+    "decision_timestamp": "2022-12-19T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a75026685f772ffa22c6026aa18e95216b0113c90b3704dea2341d62d3843688"
+  },
+  {
+    "decision_timestamp": "2022-12-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b573da5228f52bfe9f81ffa9b4a0637e72004c102a43cbc8d997aeaa832a88bd"
+  },
+  {
+    "decision_timestamp": "2023-01-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e5d6f9ddf861cd5c1ab68df25a20fa66a90058517295a7989549c866aa8dc074"
+  },
+  {
+    "decision_timestamp": "2023-01-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "55a053f197e6b8e5ec74432e2085079a17f5d69d33f2a64650472163bd7f2dbd"
+  },
+  {
+    "decision_timestamp": "2023-01-17T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2f73e165af6c33d58b3e3eff54843cb73d24aee59f13d191f72ec4ddf215541a"
+  },
+  {
+    "decision_timestamp": "2023-01-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "dce5a2f55a76c68a716da8212d337f5e0ea72efd3269069c26766c5c50b98dbc"
+  },
+  {
+    "decision_timestamp": "2023-01-30T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "173addb0033d3c6a3ec87e92e3e9b710af8011595b17fc62fbd14ba540baa706"
+  },
+  {
+    "decision_timestamp": "2023-02-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a7aa4af7fc1b6004c2626bb78f1964512b7eec24248ae66cae57ee123d730b21"
+  },
+  {
+    "decision_timestamp": "2023-02-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9295dc22f15207e2ab0e8e670c31f025d7118731e86aa3f7a89a314732c78585"
+  },
+  {
+    "decision_timestamp": "2023-02-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "447c3b2828b8639d3ba30e5a968478f75d85113066f4cfd3ac1c7b83a4c30fa3"
+  },
+  {
+    "decision_timestamp": "2023-02-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ffafc1057076dfa9673552247f594cebd57afa040af3cc9b29b8bfd9ed65aa1b"
+  },
+  {
+    "decision_timestamp": "2023-03-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f9a5d763a84e09d2db780364a523972357e5151b5cb87fdd6cb493e3f7964aae"
+  },
+  {
+    "decision_timestamp": "2023-03-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6ebf6d7a8b4fda8d04baff07a29935a81c00fd331c97e2a4282dc9b5fd4283d5"
+  },
+  {
+    "decision_timestamp": "2023-03-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fc685b67c8d2cb13316bc5ed1d5c49770f04dd91f36df49bc002b510278923e8"
+  },
+  {
+    "decision_timestamp": "2023-03-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ae2dc4669ffb726e8337f53778dbb62c996b8b5af9ca64b94bafa863a0ecf587"
+  },
+  {
+    "decision_timestamp": "2023-04-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "587c72ce8405837e90b595aa96a26e9b70f634e84bb62ecdd2e5b44f4f7e658f"
+  },
+  {
+    "decision_timestamp": "2023-04-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "da3f500205fa8a9d8d0d4521c2c6f92bc10d233b1c2904a6e84b45ca8d4d1292"
+  },
+  {
+    "decision_timestamp": "2023-04-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5c02efe89c9279e2d8a25f42ad5bb7ab9f81f610ba92efbaec45f16a53ff150b"
+  },
+  {
+    "decision_timestamp": "2023-04-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "eaf3081954789077b613b5a14c552725b62bf6802438dcf634044bd112b57255"
+  },
+  {
+    "decision_timestamp": "2023-05-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "aaf4ad35915ff46aeb8ed6da2ea98ef892ec9596dce24a7fa12803af0e08ebe0"
+  },
+  {
+    "decision_timestamp": "2023-05-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8d1c2afd90f8c4d4798cccdf51fa0b5b22fbd7219154b265b91aaad987c80e5c"
+  },
+  {
+    "decision_timestamp": "2023-05-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "eff241fd3f48d2a48b9b7da2f8ad8e376526ead6a38af04502eda49aca8bb3e3"
+  },
+  {
+    "decision_timestamp": "2023-05-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f7f7c0798b498ebb2c1ff3987470723db1030624f87edc671d91d947ff98efe0"
+  },
+  {
+    "decision_timestamp": "2023-05-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1158ea99ecf09b23fc87efd8491da4d5231eae4f0f2a7baa8ba8271c4727fc68"
+  },
+  {
+    "decision_timestamp": "2023-06-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f3904797f09290551a1f44eb9c63bec6744678ae0247802b462b019f3ee498bb"
+  },
+  {
+    "decision_timestamp": "2023-06-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f59fd2cc7fe17ce00b66f822cb3aaad9fa2107c9a46e389fa1fd98344e5e1f1a"
+  },
+  {
+    "decision_timestamp": "2023-06-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b4454fe0064b76b1b6c7d6dee36dc993d24f8dcab6b66f308d8a3f6fd2e4d4e8"
+  },
+  {
+    "decision_timestamp": "2023-06-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "45f84b1a9d94a7fb94f42a84b85280ec0cfa4cbe12a29451ef5f4a8b119cf600"
+  },
+  {
+    "decision_timestamp": "2023-07-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7062f5f0da271009c016e6528135fddc15c3870776985a47e4281b7b917c9dca"
+  },
+  {
+    "decision_timestamp": "2023-07-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9320bc329da0d6b9e53db4c1263293792120bc1bfddcc2f16e0def59f24126fb"
+  },
+  {
+    "decision_timestamp": "2023-07-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3fa3cc15f47c5c7d7f5bc285d6d0eeb4aec6aa5b4f5846d415d0d2fda7a6f612"
+  },
+  {
+    "decision_timestamp": "2023-07-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "213144b292e3e6993f8e3774920bf06cbe5be646fa6b9f7046738ba28aec3adf"
+  },
+  {
+    "decision_timestamp": "2023-07-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7bf849708db3ee4d273701758c9c73d00411164a5be4238c72b4d00660f66397"
+  },
+  {
+    "decision_timestamp": "2023-08-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "34bb1549152a4a6e6805862623b84fee9e01d424985d84d8fe6ccef0b0b91dda"
+  },
+  {
+    "decision_timestamp": "2023-08-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "231942e98a21d2038991d3a60249fbd2e3211d29b2400fae46b78c6b7b5b0b0d"
+  },
+  {
+    "decision_timestamp": "2023-08-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7ddf448d787184c88a47f39c68df273425fc9c034b1b2f5579c98dbd690e33aa"
+  },
+  {
+    "decision_timestamp": "2023-08-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b51895f2e78f9d9a92f2fcca91016a7346206e93d5569a21b65ca561c69b994a"
+  },
+  {
+    "decision_timestamp": "2023-09-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fcfa794ab82a81cba9b8be8acdc917bec518ab6b3c9ffbf6063673a5723b66d3"
+  },
+  {
+    "decision_timestamp": "2023-09-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d426395d8dda188a973952f9a8982b17393bd334bd15aa76beb6da111b6ceddc"
+  },
+  {
+    "decision_timestamp": "2023-09-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fd3a9cbb500d542a6dec9cbda1c83f8033027978069f55e002b427cc1c04bf61"
+  },
+  {
+    "decision_timestamp": "2023-09-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4097d647467ec2f1849f186d20d1d558aff1bac1c502cfab2f3f54cc11797dbc"
+  },
+  {
+    "decision_timestamp": "2023-10-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e9c63f677866ac93d1ef69a4f3e3288a7ad7a44b30dc7219435384d852b186c1"
+  },
+  {
+    "decision_timestamp": "2023-10-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fe722256a3c770d649ef2d595afc6fe8c89b68eaed88a79546a0cd77adafb7b1"
+  },
+  {
+    "decision_timestamp": "2023-10-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5afe1379fa523573c743aeb74a0ad78e35c83a7273680c29fcc586675c51a645"
+  },
+  {
+    "decision_timestamp": "2023-10-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ef007c00c59ac88cc9e7cb8e283a9edbdc05986bfe1ca9f2e4aca1702884ebf2"
+  },
+  {
+    "decision_timestamp": "2023-10-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "873bf7456c042585fe2e685da06a0a36711f8ff3c995a7a65c3561628a917eae"
+  },
+  {
+    "decision_timestamp": "2023-11-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "484e838dd38b261d0c0f82b9a73ee71c8702a29c064e12fc245786e41708ece5"
+  },
+  {
+    "decision_timestamp": "2023-11-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "04c637f1a18e3107051921032dd68ea75d3835332da5a66e7f7f56ee97715d9b"
+  },
+  {
+    "decision_timestamp": "2023-11-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "603ebc8816f6fb4920c56727b5f35c3fc7e9007c453d06b2c1071ef4b733492c"
+  },
+  {
+    "decision_timestamp": "2023-11-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "27e16ef2dbb5e3e1d9f1fbf2e6a586c38af412a8518e0fc87f0d59e4238b344e"
+  },
+  {
+    "decision_timestamp": "2023-12-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "aa41b2ec02492e229e0bccdb9418cb451eaf27ba3a963a6942df983474ca590f"
+  },
+  {
+    "decision_timestamp": "2023-12-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a65424ff71c17f14cb387682ce4facd9cde22e309a11b372db64403f194359d7"
+  },
+  {
+    "decision_timestamp": "2023-12-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a2c346e7b9d7bd8992f3c1f5afa821d4bdd52fccd7db236cf293c2678d043f81"
+  },
+  {
+    "decision_timestamp": "2023-12-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6fb161f326939938d13e8f4302960c442ac80d509df12d6cf61fe37f1c7bd1fa"
+  },
+  {
+    "decision_timestamp": "2024-01-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "87ea0862dc8a897f933096c45fe643e1d4dd63854a2a49e2a2e9425c36de712c"
+  },
+  {
+    "decision_timestamp": "2024-01-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "25da0d6c878c04d5be3330ef53e4647fb8ba3eeb837efb095b7aa46e11366563"
+  },
+  {
+    "decision_timestamp": "2024-01-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a8adae7e053c48d4ae24869a3738b80608b061c995330db6e877429ae98b8819"
+  },
+  {
+    "decision_timestamp": "2024-01-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "af850805ca76f47f866969ff07d37538ccc3e6f3bd672482ba990e4426cec9c5"
+  },
+  {
+    "decision_timestamp": "2024-01-29T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cc8f1e418fc0d4743d7d6be30cfdedf120a9cbf20691213fcabb9772d03e4259"
+  },
+  {
+    "decision_timestamp": "2024-02-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fa9d8a1f47cb3f32a1e4862ec5182b49c10a878e9bca5780384fedfa751615d9"
+  },
+  {
+    "decision_timestamp": "2024-02-12T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8928d2b7cf4c65be387f72cc8179fbd1a999aed12ea643f85e3d54ad67d8842f"
+  },
+  {
+    "decision_timestamp": "2024-02-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "35c33b73ff76f6378c5db9d72d2491040a483121e3dd32b75d8496b74fe1fa9a"
+  },
+  {
+    "decision_timestamp": "2024-02-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d68269b23063cdc23873c8e0f5836b5829fdfeff825bb32d997141f0a9f2a726"
+  },
+  {
+    "decision_timestamp": "2024-03-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "84a58a57ca9be9dd6aa591bceb0dbb6a7199546e932fac3e5f72055b90f3a553"
+  },
+  {
+    "decision_timestamp": "2024-03-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "898573fa007cde055eec2139ac553f133cbcc57ff2f9ebd42002a8dc6c125a68"
+  },
+  {
+    "decision_timestamp": "2024-03-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "eea1d3cb1f78a6f380b1df3809cab2dde2430438e342d536bed66739f1060a84"
+  },
+  {
+    "decision_timestamp": "2024-03-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6f1f4ddbbcf2cd1123446fe8706674fac5b656ac102896de719ccf3818df38e0"
+  },
+  {
+    "decision_timestamp": "2024-04-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ac0128ed53177b8096ca067532cfc7c92f24cedf7f3ed6d79934ffb1944948c2"
+  },
+  {
+    "decision_timestamp": "2024-04-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1040227bd518acbdd8e812342f745cd96a005a331f6ee4e32b669072ffc74e0c"
+  },
+  {
+    "decision_timestamp": "2024-04-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6416f15af67661b2fb13b2956ce009efb909a16d98a6447107196f4115937837"
+  },
+  {
+    "decision_timestamp": "2024-04-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a5d955e9c0482de9bc14ca17d4f6e520b0d3903c0d7e03d294c22c4860701e11"
+  },
+  {
+    "decision_timestamp": "2024-04-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e0af7e4dd33b43bdda9554d2eb8ea63dc0d1ee5c6b88cf2fd6f6887995dff64e"
+  },
+  {
+    "decision_timestamp": "2024-05-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "24789cfb86678309ad5f3c27ed7f14fa2b294cb1a6392ccaa5bcbb71cb507fc2"
+  },
+  {
+    "decision_timestamp": "2024-05-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6b8c45afa5b4014a422211d6ca3f95c721b71ce323f66e1c5721c02ecb9085a9"
+  },
+  {
+    "decision_timestamp": "2024-05-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e7cfc1fb566da025074f44fdb47bd8ad5f14345b63c158960043241079a34a53"
+  },
+  {
+    "decision_timestamp": "2024-05-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "112034ed9595da5e32827b7e2a475759293b0822aaf364edcf7b73935b7b3904"
+  },
+  {
+    "decision_timestamp": "2024-06-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "001c4288eb8b5ad6f3b69183aab1b004a41fbfe6529e06aebb569531317fa4e0"
+  },
+  {
+    "decision_timestamp": "2024-06-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a1013e420086c34420d772d6870a0a8b0da9ba601356334a803b547d7f77e2fa"
+  },
+  {
+    "decision_timestamp": "2024-06-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0846461b3ea7f1f01d4848f95c6eb205888c9aabb6b339ed0c0dc8b83dc795b3"
+  },
+  {
+    "decision_timestamp": "2024-06-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c79a44a83a6be5697eacdd0e4c6208c2e097cf86cbde924ebbbb91e95b34f600"
+  },
+  {
+    "decision_timestamp": "2024-07-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "301c27d7f959948cff06d7364ff3866f4feb3842b753f28a05a91ff53dc0a0c1"
+  },
+  {
+    "decision_timestamp": "2024-07-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cad1fdd780ad2db58d402f9846cf7e79edb4aac11243101600529c59b30f5193"
+  },
+  {
+    "decision_timestamp": "2024-07-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "39ae74a3a7eedded65a3be1337fb5612b25854c643d2dd11c9f65eecc9bfcc75"
+  },
+  {
+    "decision_timestamp": "2024-07-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9beaad3c2b288e6919bbb7ee120ad7dc0f137364e6dc978983d4de476a2ecd9f"
+  },
+  {
+    "decision_timestamp": "2024-07-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a892ba5809a918f17bab1a2a02037656c8bf1b5985a36109931f61a124a035ce"
+  },
+  {
+    "decision_timestamp": "2024-08-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "68d7a5b83f99c83bc08d52a465fd0a08bb75342c5953575736c0740479efa02c"
+  },
+  {
+    "decision_timestamp": "2024-08-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d0ceb8ebb17aaaa5595551237ea269a5aeb594a641a235a3b84049d3d2a90f2a"
+  },
+  {
+    "decision_timestamp": "2024-08-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8b5032ff48c61a84517f03fe35b8bdda3512892eb5d576f8e709869bdb85ee1d"
+  },
+  {
+    "decision_timestamp": "2024-08-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4fee19bf70c6576f3fd65b324d8190b394d8d48d12107d77f28f6d3313947f81"
+  },
+  {
+    "decision_timestamp": "2024-09-03T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f90287e91506ec07d37aafad6eebfdb99abfd3bffcc5b494271401b2a91b11e6"
+  },
+  {
+    "decision_timestamp": "2024-09-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7cbd596cb5e9a716d072af7d24af396ffa75653d89a1147fc9022083cd382043"
+  },
+  {
+    "decision_timestamp": "2024-09-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c045fcad4c3026e804be73775fd79d0ce7c00144d782ec009aef8773747624c1"
+  },
+  {
+    "decision_timestamp": "2024-09-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4a511e433e84a77c7459c6bd088fc4e36aac8c9f29f137f47360ebea2c946a6d"
+  },
+  {
+    "decision_timestamp": "2024-09-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f21d1cc34c3010436dfd098e59531cbdbea82188d2ac6acf1376b1b9d3bc80a6"
+  },
+  {
+    "decision_timestamp": "2024-10-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "26e9bdb962cc95e8b0dd7f5d35adfda50dde10f4b1061b4aeae0580b4724e0dd"
+  },
+  {
+    "decision_timestamp": "2024-10-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c711ad4d99c3f732301c9120747b656342c46123f70a501d646a6b24370f60e9"
+  },
+  {
+    "decision_timestamp": "2024-10-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "280c4636007e18553df2054881047f6afc2e08d658c10c87b450c2041e8b1119"
+  },
+  {
+    "decision_timestamp": "2024-10-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fc499d93fceb69e03f362c15f20ad1e300475ff33022b336814a3c397e8d4b43"
+  },
+  {
+    "decision_timestamp": "2024-11-04T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8a88ff331fc12253049957e48840ba10a7b39916b8fa1d6e09f69d290457d5bc"
+  },
+  {
+    "decision_timestamp": "2024-11-11T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "12d060305eb83a69556f00e91a30c8960666cff118e3c4255525668e20c8bec4"
+  },
+  {
+    "decision_timestamp": "2024-11-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "48ee92553a34d049724d5ca5808e21af04132e0ef38fafd3197ef522074c4753"
+  },
+  {
+    "decision_timestamp": "2024-11-25T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3c0fa757050f159647df2d3ec7bdc95b49ab453aecc8dfb3d60e2cfc4d3ea457"
+  },
+  {
+    "decision_timestamp": "2024-12-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ed3db53af4563d2b69f9b4e5fa8b2cb04c8587c742244d8c6c2887d193bce44b"
+  },
+  {
+    "decision_timestamp": "2024-12-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b733cc5fadeea577227e17ed8d05b54bdfc5eb0da254eb72da207fd324d7232f"
+  },
+  {
+    "decision_timestamp": "2024-12-16T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fcb4ee5d2c878d7a5e3e7d9fe283754c02f767f2e05e185fc493589762dc4d94"
+  },
+  {
+    "decision_timestamp": "2024-12-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f2326fc2e1d6aeffd002500695376b22ae2cbcc878ba881951909d8a7bb42143"
+  },
+  {
+    "decision_timestamp": "2024-12-30T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8e8887769cbce50764cea0087a7addceba7b39546e29a0a02ad589afe7c3e3a4"
+  },
+  {
+    "decision_timestamp": "2025-01-06T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4cef88617999a1f7b15eafc7ff40804be3ae8d43e4d27032a570428c386b7730"
+  },
+  {
+    "decision_timestamp": "2025-01-13T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a6ae6f114fde58f12e57b00ad01adf1d352a3aa3f5fe689e6fdc5c31b624796f"
+  },
+  {
+    "decision_timestamp": "2025-01-21T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "fc64c75909927b5d59115d3731edf07f5f348086e930bf4bc12e3b26628a14ae"
+  },
+  {
+    "decision_timestamp": "2025-01-27T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "98f085f0c85f8825675f59745ea73f4e2bdfbb16658762f19d9c1d090b0cca59"
+  },
+  {
+    "decision_timestamp": "2025-02-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "002348cc9ab504be308b69ea44ab271d876a7e37c37a094e28831161c7f30271"
+  },
+  {
+    "decision_timestamp": "2025-02-10T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1a47cf832a347324b153f0b9cedb7198616e1aeb7480c89ca6a9a3036d2e7ece"
+  },
+  {
+    "decision_timestamp": "2025-02-18T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d37351c82e1a2fed247c5a8408b631ed931c1a01e92500d8c005db015bac026b"
+  },
+  {
+    "decision_timestamp": "2025-02-24T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a49ba54effad08d69b5a182a4a2578fa312250522b8e1615bca5d62a74a5b00f"
+  },
+  {
+    "decision_timestamp": "2025-03-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5fca8ef32d04390f5d8df3e85df85df1a0b6997b2388d210b78c9419030d00e2"
+  },
+  {
+    "decision_timestamp": "2025-03-10T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8185ea08aea3c760a6e9238f6d35fc48ca2221d337786fcc32580be1bceed8cf"
+  },
+  {
+    "decision_timestamp": "2025-03-17T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6dcfcad82a418721bb36382639a74784919fd08f85a33cdd12f863e931ebfa0a"
+  },
+  {
+    "decision_timestamp": "2025-03-24T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0b43b1cd423809812326d96770257d5a3b486ad5b21a9f89fea5b3010e57c402"
+  },
+  {
+    "decision_timestamp": "2025-03-31T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "025b15e61e8a8c7e8e1afa774cfb4f9791ee75add007fbfc0b714386130be8cc"
+  },
+  {
+    "decision_timestamp": "2025-04-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a1e3470484ba83deb9a7f746c8d46eeb35f847b8bf81e57b3a700c9e66c21c71"
+  },
+  {
+    "decision_timestamp": "2025-04-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8e8a58b25346b2544d1447539782f765f1eb9572ce2a3fe97bb5901e09faf3e9"
+  },
+  {
+    "decision_timestamp": "2025-04-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b25850c01f61e47f292c2e4aad43e6582cfc1beb66f0dda01b5af2d526f2661a"
+  },
+  {
+    "decision_timestamp": "2025-04-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "acb2e1e1197a77b5271b644a278e2770bce23506fed90733c4bf73b0ed62b9e5"
+  },
+  {
+    "decision_timestamp": "2025-05-05T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "da102015a5c7c7b63a546098be0a37af2fd1830e0d964cf2bf16ce9fe6d2d641"
+  },
+  {
+    "decision_timestamp": "2025-05-12T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f6fb275fd6fb9ec080627ddf60b63aec3e68429caf4121414d04f7d5fbee5fe9"
+  },
+  {
+    "decision_timestamp": "2025-05-19T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f8a670d92910c48cfdcfdc1ae5e9eaffcfef0c29a709d42261faa3e5a7cc439d"
+  },
+  {
+    "decision_timestamp": "2025-05-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "45e515cb7abda8a96378e741d2dbb5d200720e6f81bf6a0c21d24b29368c725a"
+  },
+  {
+    "decision_timestamp": "2025-06-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c7abb6d976782caea2dbc76d383490b8bfa4145532025ce535802b54be930b8e"
+  },
+  {
+    "decision_timestamp": "2025-06-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "8505d7f8b62cf029fd4b813924ca60a8b46a6139c17d02f1d4e7f050388619d9"
+  },
+  {
+    "decision_timestamp": "2025-06-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "55630bc8dce4863c8dc77784253a059c94aa65e9229c3c0de1d9a54b637ae13e"
+  },
+  {
+    "decision_timestamp": "2025-06-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "9182e26718c9ae92aa52edf6e99b5c0cbcbb636efe3dde1cb25b03fda5c7a5c8"
+  },
+  {
+    "decision_timestamp": "2025-06-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "e74ef2df512aa6e9f0f1b41846a0fc10ef0b9c87c2295c3a30f0ca2248daa94c"
+  },
+  {
+    "decision_timestamp": "2025-07-07T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3168c9143fead74f8521232dab877bd8433bf394b849b8a339694789e8687ebd"
+  },
+  {
+    "decision_timestamp": "2025-07-14T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4f9f584917b28326cf8e2aa91f445385f11db6fdda7bb0cc204a0a83ef486c5f"
+  },
+  {
+    "decision_timestamp": "2025-07-21T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d108805dc3b106048c20cdd090140f146ee8541d68b4190b21863b19a33f84f6"
+  },
+  {
+    "decision_timestamp": "2025-07-28T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3ce905462fe5dcc55f17fb5b0771fadd240bacfb1c14c5612c36f7fe49866847"
+  },
+  {
+    "decision_timestamp": "2025-08-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0923846137ab223887c3588373dec9f0727a9dcf69c9a90ebc569bf28193ec10"
+  },
+  {
+    "decision_timestamp": "2025-08-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6bcd031baa2442a4643a716aa5dce29abbc9e72217d8d02027862aa9d923c207"
+  },
+  {
+    "decision_timestamp": "2025-08-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d57ebd99c9047b8171f34dc4fccef4dc9173a3f0965f49224adeede0a63efb8c"
+  },
+  {
+    "decision_timestamp": "2025-08-25T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "415d0a221bc2413feb8ea07622e632c89d40d047b1f0e220f17f4accc5e114ba"
+  },
+  {
+    "decision_timestamp": "2025-09-02T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b503304a1f7d81e0283a404e8216747289c195be23730ef8ea21a6c60e89efe0"
+  },
+  {
+    "decision_timestamp": "2025-09-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "009e36d76b12a966266e9660bc89d36ba11ccbcd22c7dde358e7761392877c77"
+  },
+  {
+    "decision_timestamp": "2025-09-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b833242e66f3984508e74012738d9fbfb39ca50fcefeb5f5d9a6ed63ad3c5c85"
+  },
+  {
+    "decision_timestamp": "2025-09-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "53890ba53622402ad2cb18d7cb75f3bb1b7b49acce798e6b521fbed7e550b4f3"
+  },
+  {
+    "decision_timestamp": "2025-09-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "146ee0923f00f6cd583ad30220b375af365f8c7461c8b6c724682e9444a95bef"
+  },
+  {
+    "decision_timestamp": "2025-10-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b716b6819ae1a60dccce793e18573fa3a5f7a37061d66e2e8cc345fe7bb7c24d"
+  },
+  {
+    "decision_timestamp": "2025-10-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4bc6bc264a65f1d1629fd64ad2b88fa8ce26e5667108859e907aa55d299edb0e"
+  },
+  {
+    "decision_timestamp": "2025-10-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2e99aa4e6592966e56cf06d402ded1a8ec9573c39a5dc402f05fc466d1949c4a"
+  },
+  {
+    "decision_timestamp": "2025-10-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7801f9e9e28514b2831d96b9bdf41424345783746bc1718cf4f32d87d10b1d15"
+  },
+  {
+    "decision_timestamp": "2025-11-03T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "1c3f72a39950fb93829aa1dcc5801017244efcbaad2498b0520c8c9cd2716555"
+  },
+  {
+    "decision_timestamp": "2025-11-10T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f5b78c4087914c61a7d835e7496b957fcc7d9456ae2ddcac5c27e23dd92cc8ba"
+  },
+  {
+    "decision_timestamp": "2025-11-17T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d96c77ce885be362a7d252d74953156aa0a7d7bea6a273010eeca992f5696db3"
+  },
+  {
+    "decision_timestamp": "2025-11-24T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "4a26a69baf41c96328ec2c25c02a3244bc8bb53323f8fe9a75992cfa5915bf22"
+  },
+  {
+    "decision_timestamp": "2025-12-01T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "06fc54541fcb202619b66b4d7cdc9d6b1652c6663b64e1081bda0e9e9ce48124"
+  },
+  {
+    "decision_timestamp": "2025-12-08T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b2ba91ffa7344291bc10f5310f550c10f42671a706979f1a2a0b3dcd53465ff9"
+  },
+  {
+    "decision_timestamp": "2025-12-15T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cffa0c5a76db8af1f3c667e587cee75b53686457a3c6c6bd89711a7b3012bf2b"
+  },
+  {
+    "decision_timestamp": "2025-12-22T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "7adee6091a04544e170b4407ce976879b2dd20603b3df02f32cb1733ad5c78af"
+  },
+  {
+    "decision_timestamp": "2025-12-29T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "2c74a52d362e07c728d2a873e9150cc1d20f5116899911226f800961b8ba0ff5"
+  },
+  {
+    "decision_timestamp": "2026-01-05T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bdd3f3ee4552e6555f51bb9851e68f99bf321e793bb63134d379c1277c86c664"
+  },
+  {
+    "decision_timestamp": "2026-01-12T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "54c4d09728d1a8baad400ef2081dacab799321350ef056182fd8c4d10c2dc93a"
+  },
+  {
+    "decision_timestamp": "2026-01-20T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d88591ba95dcaefa185ac113c003e1baa1236cba179fd49d9a23afed23d36e0a"
+  },
+  {
+    "decision_timestamp": "2026-01-26T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "85362bf3444e34770ec8708a4bc825dd21762a8d0402e91ae1fd8fc2ad5a604b"
+  },
+  {
+    "decision_timestamp": "2026-02-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "64d3c6ac865b6b29be947dd19e7957c37082b778eabe12548f9c3dc170f84e3a"
+  },
+  {
+    "decision_timestamp": "2026-02-09T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "b63469a087c2971246e102c3c2471977bc14271fd57315a69fee97600ef0d7ed"
+  },
+  {
+    "decision_timestamp": "2026-02-17T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "3575efc183fdc6beafa8ad472939fbfca45cda963fb4c33ea91ca318e257f5bc"
+  },
+  {
+    "decision_timestamp": "2026-02-23T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "58791da286cbb946b811320465d4ed49007cba85eea72b754b23dda540f1a146"
+  },
+  {
+    "decision_timestamp": "2026-03-02T05:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6b5b964fa3f4ac1644051030cd968bb3b6d3327af4b09775eebf50c6594f6195"
+  },
+  {
+    "decision_timestamp": "2026-03-09T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f99d5f15f046b1c5ec7df56291cbbd882c9faf7b2cfa4e6bc25ebb79e9c4a90e"
+  },
+  {
+    "decision_timestamp": "2026-03-16T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "d5ac91babdfc03d46c28991511a821788c3270cd1a4389cfb6a01e311ac4cbd0"
+  },
+  {
+    "decision_timestamp": "2026-03-23T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "5dd56fd5404634a205760ac1ab1480dcc548d960a987bffba22432c9f6e6d3df"
+  },
+  {
+    "decision_timestamp": "2026-03-30T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cac3501314aa3a43ce1e316f277ec5feb09cc85e722198e0ae4035050bd32c09"
+  },
+  {
+    "decision_timestamp": "2026-04-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "6195b2cbb2def1ba8b337a3cd57aaf8b4e82858807867c885356ed9ac89ce18a"
+  },
+  {
+    "decision_timestamp": "2026-04-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a82aa79da68e2142f2ba0fd4291a07aadb5f7d9e8e7d4178e0642c3bff9f5951"
+  },
+  {
+    "decision_timestamp": "2026-04-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cde7d0b42ce5b768fc3d608bb3dc4f3eba44d3cd2448b73c004df1ff6cc06c8d"
+  },
+  {
+    "decision_timestamp": "2026-04-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0c29d999d93438e70489e6d2eaf3c4dedb4dd4cfc628163e1cc7748f205a187f"
+  },
+  {
+    "decision_timestamp": "2026-05-04T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "cfc56446306af40d35170409a68a13fbaac19dd0e967dceca9c036387198ac82"
+  },
+  {
+    "decision_timestamp": "2026-05-11T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "28b8726b820806e311afae181bdbabc11bc4b9df25c33320e78e30052e9ae86b"
+  },
+  {
+    "decision_timestamp": "2026-05-18T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "ff839ec5fab0d0f739c279224375b4c4a86a17d5c8dd82f158b72b3b2542e07b"
+  },
+  {
+    "decision_timestamp": "2026-05-26T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "756da899fc29a7924be4308b9baa569da2b77af3e5624c0d9b053256131685f4"
+  },
+  {
+    "decision_timestamp": "2026-06-01T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "49c10deb028f7033db971b2694a62c13a55f99c73873a1d8dadabdc7cdd3b241"
+  },
+  {
+    "decision_timestamp": "2026-06-08T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bb3bafd9322a0bb9f98e648bed687c7f8f0a91ffd29c9a0cd49afa63fb9ad71e"
+  },
+  {
+    "decision_timestamp": "2026-06-15T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0652e243fd59cf526bb6ef7e85ed42ca7c6f28905d29d4ed290486ed2e0c79c1"
+  },
+  {
+    "decision_timestamp": "2026-06-22T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "0afa2ad9e896b1c39d4049c959def16032946fd63f7fd0cb8a7ecfa36242b521"
+  },
+  {
+    "decision_timestamp": "2026-06-29T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "a4187a07a8adb41c7a6e8528673a980ed5aaa0bedab63fdafa67262445a1b6e7"
+  },
+  {
+    "decision_timestamp": "2026-07-06T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c2a2045247bdea710298b5dfd37779e09f3e849e50f631fda8b8ca4525cfc2da"
+  },
+  {
+    "decision_timestamp": "2026-07-13T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "bdaf42812bed1b55452f3794df9d2544f774db98837d3b36a451f45dd3ec23bf"
+  },
+  {
+    "decision_timestamp": "2026-07-20T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "f3c44dba3a526e70507fc5be89e7a7cc76a3ada7594c44e9055247c484b1c8b3"
+  },
+  {
+    "decision_timestamp": "2026-07-27T04:00:00+00:00",
+    "eligible": true,
+    "expected_symbol_count": 30,
+    "missing_symbols": [],
+    "period": "validation",
+    "reason": "eligible",
+    "universe_observation_set_hash": "c137d95ca38731869cfea390fac6b05249b6221998f7c7e95db1b80a9f2a3be7"
+  }
+]

@@ -1,0 +1,103 @@
+{
+  "adjustment_and_pit": {
+    "actions_ignored": "splits and stock actions",
+    "actions_used": "cash_dividends only",
+    "execution": "next strictly later tradable bar open",
+    "prices": "split-adjusted",
+    "signal_watermark": "completed bars at or before decision timestamp"
+  },
+  "bars": {
+    "byte_size": 882354549,
+    "manifest": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "stats": {
+      "first_timestamp": "2016-01-04T05:00:00+00:00",
+      "last_timestamp": "2026-07-31T04:00:00+00:00",
+      "normalization": {
+        "1Day": "1d",
+        "EQUITY": "equity"
+      },
+      "raw_market_values": {
+        "EQUITY": 7771468,
+        "equity": 3915364
+      },
+      "raw_timeframe_values": {
+        "1Day": 7771468,
+        "1d": 3915364
+      },
+      "row_count": 11686832,
+      "spy_bar_count": 2658,
+      "symbol_count": 9010
+    }
+  },
+  "candidate": "equity_v3_volatility_managed_v1",
+  "corporate_actions": {
+    "byte_size": 14713370,
+    "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "stats": {
+      "ignored_action_types": [
+        "forward_splits",
+        "reverse_splits",
+        "stock_dividends",
+        "unit_splits",
+        "stock_mergers",
+        "cash_mergers",
+        "spinoffs",
+        "name_changes"
+      ],
+      "raw_action_type_counts": {
+        "cash_dividends": 141908,
+        "forward_splits": 270,
+        "reverse_splits": 1207,
+        "stock_dividends": 61
+      },
+      "used_action_count": 141905,
+      "used_action_type_counts": {
+        "cash_dividends": 141905
+      },
+      "used_first_ex_date": "2016-01-04",
+      "used_last_ex_date": "2026-07-30"
+    }
+  },
+  "economic_outcomes_started": true,
+  "lifecycles": {
+    "byte_size": 2329186,
+    "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+    "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "stats": {
+      "evidence_counts": {
+        "FINAL_SURVIVOR": 6859,
+        "POSSIBLE_DELISTING": 2151
+      },
+      "row_count": 9010,
+      "status_counts": {
+        "active": 6858,
+        "inactive": 2152
+      },
+      "terminal_lifecycle_count": 2152
+    },
+    "terminal_last_bar_identity_check": "exact latest bar per inactive symbol"
+  },
+  "preparation": {
+    "decision_bar_count": 10840190,
+    "numeric_history_symbol_count": 9010,
+    "ordered_bar_count": 10840190,
+    "warmup_bar_count": 846642
+  },
+  "spy": {
+    "bar_count": 2658,
+    "first_bar": "2016-01-04T05:00:00+00:00",
+    "first_volatility_timestamp": "2016-02-03T05:00:00+00:00",
+    "last_bar": "2026-07-30T04:00:00+00:00",
+    "last_volatility_timestamp": "2026-07-30T04:00:00+00:00",
+    "signal_bars_path": "/Users/batuhankiskac/Desktop/ParayaBuck/research/v3_volatility_managed_v1/spy_signal_bars.json",
+    "signal_bars_sha256": "48d069ea44e1bb00b45bbfe0937d19639fd87561be1426bdcc3b852d02707753",
+    "volatility_observation_count": 2637
+  },
+  "universe": {
+    "hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3",
+    "snapshot_count": 2658
+  }
+}

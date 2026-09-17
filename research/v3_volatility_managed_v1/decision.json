@@ -1,0 +1,12 @@
+{
+  "all_mandatory_gates_pass": false,
+  "candidate": "equity_v3_volatility_managed_v1",
+  "gate_table_sha256": "30520890ca19dd38f57d10f034862bde1ab5202565b0d46952553f27c6b986bd",
+  "independent_verification_sha256": "b303b6f6f7147d13a8a9782f5e61090796429d22aad81a997798279e4d839ce0",
+  "paper_live_configuration_changed": false,
+  "promotion_performed": false,
+  "protocol_sha256": "dbe944d3cbf0d9dd78aa256e1b280e13a96bcd4f276c5c3550a52ef24577f0cd",
+  "reason": "At least one mandatory frozen gate failed.",
+  "research_run_valid": true,
+  "verdict": "RESEARCH_REJECT"
+}

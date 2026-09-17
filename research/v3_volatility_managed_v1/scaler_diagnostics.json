@@ -1,0 +1,27 @@
+{
+  "below_0_25_fraction": 0.014056224899598393,
+  "below_0_50_fraction": 0.09839357429718876,
+  "below_0_75_fraction": 0.24899598393574296,
+  "decision_count": 500,
+  "eligible_decision_count": 498,
+  "eligible_mean_scale": 0.8549175352782468,
+  "eligible_median_scale": 1.0,
+  "fallback_decision_count": 5,
+  "longest_reduced_exposure_episode_weeks": 36,
+  "mean_scale": 0.8549175352782468,
+  "median_scale": 1.0,
+  "min_scale": 0.13735366538184748,
+  "p10_scale": 0.5041362841279872,
+  "p25_scale": 0.7528051669110979,
+  "p75_scale": 1.0,
+  "p90_scale": 1.0,
+  "reduced_exposure_episode_count": 32,
+  "scale_one_fraction": 0.5381526104417671,
+  "scaled_decision_count": 231,
+  "scaled_fraction": 0.463855421686747,
+  "status_counts": {
+    "insufficient_history_normal_v3": 5,
+    "normal_or_low_vol": 264,
+    "scaled": 231
+  }
+}

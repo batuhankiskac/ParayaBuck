@@ -1,0 +1,4522 @@
+{
+  "control_vs_static_full": {
+    "control_average_exposure": 0.5010717138353551,
+    "static_average_exposure": 0.4343628101633936
+  },
+  "scaler": {
+    "below_0_25_fraction": 0.014056224899598393,
+    "below_0_50_fraction": 0.09839357429718876,
+    "below_0_75_fraction": 0.24899598393574296,
+    "decision_count": 500,
+    "eligible_decision_count": 498,
+    "eligible_mean_scale": 0.8549175352782468,
+    "eligible_median_scale": 1.0,
+    "fallback_decision_count": 5,
+    "longest_reduced_exposure_episode_weeks": 36,
+    "mean_scale": 0.8549175352782468,
+    "median_scale": 1.0,
+    "min_scale": 0.13735366538184748,
+    "p10_scale": 0.5041362841279872,
+    "p25_scale": 0.7528051669110979,
+    "p75_scale": 1.0,
+    "p90_scale": 1.0,
+    "reduced_exposure_episode_count": 32,
+    "scale_one_fraction": 0.5381526104417671,
+    "scaled_decision_count": 231,
+    "scaled_fraction": 0.463855421686747,
+    "status_counts": {
+      "insufficient_history_normal_v3": 5,
+      "normal_or_low_vol": 264,
+      "scaled": 231
+    }
+  },
+  "timing": {
+    "elevated_vol_reduced_exposure": {
+      "count": 231,
+      "mean_control_return": 0.0016493517428780417,
+      "mean_delta_on_negative_control_weeks": 0.003977639168991163,
+      "mean_treatment_minus_control": -0.0005934601795417984,
+      "negative_control_count": 93
+    },
+    "normal_or_low_vol": {
+      "count": 264,
+      "mean_control_return": 0.0012795427535240746,
+      "mean_treatment_minus_control": -5.498193178895684e-07
+    },
+    "weekly_intervals": [
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.008421499437662794,
+        "decision_timestamp": "2017-02-06T05:00:00+00:00",
+        "next_decision_timestamp": "2017-02-13T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.008421499437662794
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.018149973083102955,
+        "decision_timestamp": "2017-02-13T05:00:00+00:00",
+        "next_decision_timestamp": "2017-02-21T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.018149973083102955
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.005738638681434982,
+        "decision_timestamp": "2017-02-21T05:00:00+00:00",
+        "next_decision_timestamp": "2017-02-27T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.005738638681434982
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004307841546275615,
+        "decision_timestamp": "2017-02-27T05:00:00+00:00",
+        "next_decision_timestamp": "2017-03-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.004307841546275615
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007004422399004229,
+        "decision_timestamp": "2017-03-06T05:00:00+00:00",
+        "next_decision_timestamp": "2017-03-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.007004422399004229
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.008215193265304843,
+        "decision_timestamp": "2017-03-13T04:00:00+00:00",
+        "next_decision_timestamp": "2017-03-20T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.008215193265304843
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.01771630942130442,
+        "decision_timestamp": "2017-03-20T04:00:00+00:00",
+        "next_decision_timestamp": "2017-03-27T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.01771630942130442
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005857415518618403,
+        "decision_timestamp": "2017-03-27T04:00:00+00:00",
+        "next_decision_timestamp": "2017-04-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.005857415518618403
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.00038240560063929063,
+        "decision_timestamp": "2017-04-03T04:00:00+00:00",
+        "next_decision_timestamp": "2017-04-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.00038240560063929063
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0052027892593831115,
+        "decision_timestamp": "2017-04-10T04:00:00+00:00",
+        "next_decision_timestamp": "2017-04-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.0052027892593831115
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.017035566938403912,
+        "decision_timestamp": "2017-04-17T04:00:00+00:00",
+        "next_decision_timestamp": "2017-04-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.017035566938403912
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007972529971373765,
+        "decision_timestamp": "2017-04-24T04:00:00+00:00",
+        "next_decision_timestamp": "2017-05-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.007972529971373765
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010244259967904457,
+        "decision_timestamp": "2017-05-01T04:00:00+00:00",
+        "next_decision_timestamp": "2017-05-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.010244259967904457
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00792947156208279,
+        "decision_timestamp": "2017-05-08T04:00:00+00:00",
+        "next_decision_timestamp": "2017-05-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.00792947156208279
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0044315971431816426,
+        "decision_timestamp": "2017-05-15T04:00:00+00:00",
+        "next_decision_timestamp": "2017-05-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0044315971431816426
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.003761347896764855,
+        "decision_timestamp": "2017-05-22T04:00:00+00:00",
+        "next_decision_timestamp": "2017-05-30T04:00:00+00:00",
+        "scale": 0.9264503062563126,
+        "treatment_minus_control": -0.00022533745947805883,
+        "treatment_return": 0.003536010437286796
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006005642674463685,
+        "decision_timestamp": "2017-05-30T04:00:00+00:00",
+        "next_decision_timestamp": "2017-06-05T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.32384148081988e-05,
+        "treatment_return": 0.005952404259655486
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.010661710016368064,
+        "decision_timestamp": "2017-06-05T04:00:00+00:00",
+        "next_decision_timestamp": "2017-06-12T04:00:00+00:00",
+        "scale": 0.9521216856665592,
+        "treatment_minus_control": 0.0004042248735395271,
+        "treatment_return": -0.010257485142828537
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.005875568522269559,
+        "decision_timestamp": "2017-06-12T04:00:00+00:00",
+        "next_decision_timestamp": "2017-06-19T04:00:00+00:00",
+        "scale": 0.9514361419881645,
+        "treatment_minus_control": -0.00028371192369403,
+        "treatment_return": 0.005591856598575529
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.003242302589205881,
+        "decision_timestamp": "2017-06-19T04:00:00+00:00",
+        "next_decision_timestamp": "2017-06-26T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -7.806280663147369e-05,
+        "treatment_return": -0.0033203653958373547
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.012772201610654843,
+        "decision_timestamp": "2017-06-26T04:00:00+00:00",
+        "next_decision_timestamp": "2017-07-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00015737713586561064,
+        "treatment_return": -0.012929578746520454
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.009115503045598494,
+        "decision_timestamp": "2017-07-03T04:00:00+00:00",
+        "next_decision_timestamp": "2017-07-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.345030129142117e-06,
+        "treatment_return": 0.009123848075727636
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.012614529733996127,
+        "decision_timestamp": "2017-07-10T04:00:00+00:00",
+        "next_decision_timestamp": "2017-07-17T04:00:00+00:00",
+        "scale": 0.925816695642858,
+        "treatment_minus_control": -0.0009305763501568087,
+        "treatment_return": 0.011683953383839318
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0011830266763218633,
+        "decision_timestamp": "2017-07-17T04:00:00+00:00",
+        "next_decision_timestamp": "2017-07-24T04:00:00+00:00",
+        "scale": 0.8843229573457057,
+        "treatment_minus_control": -0.0001597710411157527,
+        "treatment_return": -0.001342797717437616
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.005445930907641783,
+        "decision_timestamp": "2017-07-24T04:00:00+00:00",
+        "next_decision_timestamp": "2017-07-31T04:00:00+00:00",
+        "scale": 0.9933495451844578,
+        "treatment_minus_control": -0.0002686318375382246,
+        "treatment_return": 0.005177299070103558
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001380734961028418,
+        "decision_timestamp": "2017-07-31T04:00:00+00:00",
+        "next_decision_timestamp": "2017-08-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.6890286035353697e-05,
+        "treatment_return": 0.0013638446749930644
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006025009441234408,
+        "decision_timestamp": "2017-08-07T04:00:00+00:00",
+        "next_decision_timestamp": "2017-08-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.051171449941492e-06,
+        "treatment_return": 0.0060280606126843495
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0024817389749574037,
+        "decision_timestamp": "2017-08-14T04:00:00+00:00",
+        "next_decision_timestamp": "2017-08-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.006361686847981e-09,
+        "treatment_return": 0.002481734968595717
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004288414347481284,
+        "decision_timestamp": "2017-08-21T04:00:00+00:00",
+        "next_decision_timestamp": "2017-08-28T04:00:00+00:00",
+        "scale": 0.8599359150774152,
+        "treatment_minus_control": -0.0005443657240740141,
+        "treatment_return": 0.00374404862340727
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.006442834914675899,
+        "decision_timestamp": "2017-08-28T04:00:00+00:00",
+        "next_decision_timestamp": "2017-09-05T04:00:00+00:00",
+        "scale": 0.7957588838918225,
+        "treatment_minus_control": -0.0015201046923800643,
+        "treatment_return": 0.004922730222295835
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0026240843969123073,
+        "decision_timestamp": "2017-09-05T04:00:00+00:00",
+        "next_decision_timestamp": "2017-09-11T04:00:00+00:00",
+        "scale": 0.7497634564564992,
+        "treatment_minus_control": 0.00544165323745216,
+        "treatment_return": 0.008065737634364467
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.011016709674142477,
+        "decision_timestamp": "2017-09-11T04:00:00+00:00",
+        "next_decision_timestamp": "2017-09-18T04:00:00+00:00",
+        "scale": 0.8254435689033994,
+        "treatment_minus_control": 0.0024048869740671552,
+        "treatment_return": -0.008611822700075322
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.017630672456741436,
+        "decision_timestamp": "2017-09-18T04:00:00+00:00",
+        "next_decision_timestamp": "2017-09-25T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00024620205496128644,
+        "treatment_return": -0.017876874511702723
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006353215268945389,
+        "decision_timestamp": "2017-09-25T04:00:00+00:00",
+        "next_decision_timestamp": "2017-10-02T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.4311900364827324e-06,
+        "treatment_return": 0.006354646458981872
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012141729171099902,
+        "decision_timestamp": "2017-10-02T04:00:00+00:00",
+        "next_decision_timestamp": "2017-10-09T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.0527569511475932e-05,
+        "treatment_return": 0.012131201601588426
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.009718020608331823,
+        "decision_timestamp": "2017-10-09T04:00:00+00:00",
+        "next_decision_timestamp": "2017-10-16T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.484188002416232e-06,
+        "treatment_return": 0.00972050479633424
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01793893172461769,
+        "decision_timestamp": "2017-10-16T04:00:00+00:00",
+        "next_decision_timestamp": "2017-10-23T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.771086787558332e-05,
+        "treatment_return": 0.017891220856742107
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004069942411560001,
+        "decision_timestamp": "2017-10-23T04:00:00+00:00",
+        "next_decision_timestamp": "2017-10-30T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.6654519296999126e-06,
+        "treatment_return": 0.004071607863489701
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.009107242252821779,
+        "decision_timestamp": "2017-10-30T04:00:00+00:00",
+        "next_decision_timestamp": "2017-11-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1641879904544794e-08,
+        "treatment_return": 0.009107230610941874
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006420757474304262,
+        "decision_timestamp": "2017-11-06T05:00:00+00:00",
+        "next_decision_timestamp": "2017-11-13T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.0391500993023328e-09,
+        "treatment_return": 0.006420756435154162
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006742430474654615,
+        "decision_timestamp": "2017-11-13T05:00:00+00:00",
+        "next_decision_timestamp": "2017-11-20T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.2883916983573727e-12,
+        "treatment_return": 0.006742430472366223
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004373875947399464,
+        "decision_timestamp": "2017-11-20T05:00:00+00:00",
+        "next_decision_timestamp": "2017-11-27T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.439293542825908e-15,
+        "treatment_return": 0.004373875947405903
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004614450661320713,
+        "decision_timestamp": "2017-11-27T05:00:00+00:00",
+        "next_decision_timestamp": "2017-12-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.0046144506613206016
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0040795905620572,
+        "decision_timestamp": "2017-12-04T05:00:00+00:00",
+        "next_decision_timestamp": "2017-12-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.004079590562056978
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005745794202508092,
+        "decision_timestamp": "2017-12-11T05:00:00+00:00",
+        "next_decision_timestamp": "2017-12-18T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.005745794202508092
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0036292282986533086,
+        "decision_timestamp": "2017-12-18T05:00:00+00:00",
+        "next_decision_timestamp": "2017-12-26T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": -0.0036292282986530866
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004820732129608762,
+        "decision_timestamp": "2017-12-26T05:00:00+00:00",
+        "next_decision_timestamp": "2018-01-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.440892098500626e-16,
+        "treatment_return": 0.004820732129608318
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010875645780101806,
+        "decision_timestamp": "2018-01-02T05:00:00+00:00",
+        "next_decision_timestamp": "2018-01-08T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.010875645780102028
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0059652213156191625,
+        "decision_timestamp": "2018-01-08T05:00:00+00:00",
+        "next_decision_timestamp": "2018-01-16T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.00596522131561894
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010062312980013033,
+        "decision_timestamp": "2018-01-16T05:00:00+00:00",
+        "next_decision_timestamp": "2018-01-22T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.010062312980013033
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005861979918414972,
+        "decision_timestamp": "2018-01-22T05:00:00+00:00",
+        "next_decision_timestamp": "2018-01-29T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.005861979918415194
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.02404007141525455,
+        "decision_timestamp": "2018-01-29T05:00:00+00:00",
+        "next_decision_timestamp": "2018-02-05T05:00:00+00:00",
+        "scale": 0.8641501879348001,
+        "treatment_minus_control": 0.0007980091578364545,
+        "treatment_return": -0.023242062257418095
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.010589120295112608,
+        "decision_timestamp": "2018-02-05T05:00:00+00:00",
+        "next_decision_timestamp": "2018-02-12T05:00:00+00:00",
+        "scale": 0.34380746117780653,
+        "treatment_minus_control": 0.0023952686220735098,
+        "treatment_return": -0.008193851673039099
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.013688347258622446,
+        "decision_timestamp": "2018-02-12T05:00:00+00:00",
+        "next_decision_timestamp": "2018-02-20T05:00:00+00:00",
+        "scale": 0.2634987896243417,
+        "treatment_minus_control": -0.010194878362861148,
+        "treatment_return": 0.003493468895761298
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.015212463561975698,
+        "decision_timestamp": "2018-02-20T05:00:00+00:00",
+        "next_decision_timestamp": "2018-02-26T05:00:00+00:00",
+        "scale": 0.2625309076200891,
+        "treatment_minus_control": -0.010862459218244025,
+        "treatment_return": 0.004350004343731673
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.01568338537228109,
+        "decision_timestamp": "2018-02-26T05:00:00+00:00",
+        "next_decision_timestamp": "2018-03-05T05:00:00+00:00",
+        "scale": 0.25472018913499145,
+        "treatment_minus_control": 0.011199796334976253,
+        "treatment_return": -0.004483589037304836
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.014565602965133317,
+        "decision_timestamp": "2018-03-05T05:00:00+00:00",
+        "next_decision_timestamp": "2018-03-12T04:00:00+00:00",
+        "scale": 0.24919068856319837,
+        "treatment_minus_control": -0.010689248636157167,
+        "treatment_return": 0.0038763543289761504
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0011602913414191507,
+        "decision_timestamp": "2018-03-12T04:00:00+00:00",
+        "next_decision_timestamp": "2018-03-19T04:00:00+00:00",
+        "scale": 0.4472718404018741,
+        "treatment_minus_control": 0.00014616229759367716,
+        "treatment_return": -0.0010141290438254735
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.003770160979961412,
+        "decision_timestamp": "2018-03-19T04:00:00+00:00",
+        "next_decision_timestamp": "2018-03-26T04:00:00+00:00",
+        "scale": 0.4781036792756494,
+        "treatment_minus_control": -0.0020075467787448176,
+        "treatment_return": 0.0017626142012165946
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.012156248843165351,
+        "decision_timestamp": "2018-03-26T04:00:00+00:00",
+        "next_decision_timestamp": "2018-04-02T04:00:00+00:00",
+        "scale": 0.34863777728600465,
+        "treatment_minus_control": 0.00910569979827669,
+        "treatment_return": -0.003050549044888662
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.010450579162191165,
+        "decision_timestamp": "2018-04-02T04:00:00+00:00",
+        "next_decision_timestamp": "2018-04-09T04:00:00+00:00",
+        "scale": 0.32966047979089225,
+        "treatment_minus_control": -0.0076426697239031505,
+        "treatment_return": 0.0028079094382880143
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.015833877172434674,
+        "decision_timestamp": "2018-04-09T04:00:00+00:00",
+        "next_decision_timestamp": "2018-04-16T04:00:00+00:00",
+        "scale": 0.3032844154489705,
+        "treatment_minus_control": -0.010270773089610774,
+        "treatment_return": 0.0055631040828239
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.010249209449897378,
+        "decision_timestamp": "2018-04-16T04:00:00+00:00",
+        "next_decision_timestamp": "2018-04-23T04:00:00+00:00",
+        "scale": 0.2999570609869868,
+        "treatment_minus_control": -0.007169832899444062,
+        "treatment_return": 0.0030793765504533166
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005160071808233413,
+        "decision_timestamp": "2018-04-23T04:00:00+00:00",
+        "next_decision_timestamp": "2018-04-30T04:00:00+00:00",
+        "scale": 0.32373551951542834,
+        "treatment_minus_control": 0.0034048715176813182,
+        "treatment_return": -0.0017552002905520947
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.000406047680802879,
+        "decision_timestamp": "2018-04-30T04:00:00+00:00",
+        "next_decision_timestamp": "2018-05-07T04:00:00+00:00",
+        "scale": 0.4062653391280808,
+        "treatment_minus_control": -0.00017532748776938334,
+        "treatment_return": -0.0005813751685722623
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.007675733226089276,
+        "decision_timestamp": "2018-05-07T04:00:00+00:00",
+        "next_decision_timestamp": "2018-05-14T04:00:00+00:00",
+        "scale": 0.5898038081950578,
+        "treatment_minus_control": -0.0029715935609710975,
+        "treatment_return": 0.004704139665118179
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0029443920890075415,
+        "decision_timestamp": "2018-05-14T04:00:00+00:00",
+        "next_decision_timestamp": "2018-05-21T04:00:00+00:00",
+        "scale": 0.6681377532978366,
+        "treatment_minus_control": -0.0009372364016666523,
+        "treatment_return": 0.002007155687340889
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.00575856110732631,
+        "decision_timestamp": "2018-05-21T04:00:00+00:00",
+        "next_decision_timestamp": "2018-05-29T04:00:00+00:00",
+        "scale": 0.7324607273227112,
+        "treatment_minus_control": 0.0012653805985615163,
+        "treatment_return": -0.004493180508764794
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.008494831285958293,
+        "decision_timestamp": "2018-05-29T04:00:00+00:00",
+        "next_decision_timestamp": "2018-06-04T04:00:00+00:00",
+        "scale": 0.7838594410968404,
+        "treatment_minus_control": -0.002266242720193379,
+        "treatment_return": 0.006228588565764914
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.001505763551163275,
+        "decision_timestamp": "2018-06-04T04:00:00+00:00",
+        "next_decision_timestamp": "2018-06-11T04:00:00+00:00",
+        "scale": 0.7333306171876343,
+        "treatment_minus_control": -0.0004015128999819151,
+        "treatment_return": 0.00110425065118136
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01296318334828106,
+        "decision_timestamp": "2018-06-11T04:00:00+00:00",
+        "next_decision_timestamp": "2018-06-18T04:00:00+00:00",
+        "scale": 0.8357853024386157,
+        "treatment_minus_control": -0.0022251886104067697,
+        "treatment_return": 0.01073799473787429
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.036437415752402,
+        "decision_timestamp": "2018-06-18T04:00:00+00:00",
+        "next_decision_timestamp": "2018-06-25T04:00:00+00:00",
+        "scale": 0.8373716606278369,
+        "treatment_minus_control": 0.006219197905563689,
+        "treatment_return": -0.030218217846838313
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005138159892152938,
+        "decision_timestamp": "2018-06-25T04:00:00+00:00",
+        "next_decision_timestamp": "2018-07-02T04:00:00+00:00",
+        "scale": 0.7890908455704518,
+        "treatment_minus_control": 0.0010477181586898698,
+        "treatment_return": -0.004090441733463068
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01129671683860023,
+        "decision_timestamp": "2018-07-02T04:00:00+00:00",
+        "next_decision_timestamp": "2018-07-09T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0004880873744363967,
+        "treatment_return": 0.010808629464163833
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.013834272243017143,
+        "decision_timestamp": "2018-07-09T04:00:00+00:00",
+        "next_decision_timestamp": "2018-07-16T04:00:00+00:00",
+        "scale": 0.9558828663505,
+        "treatment_minus_control": -0.00043121519149202925,
+        "treatment_return": 0.013403057051525114
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0020547262283452383,
+        "decision_timestamp": "2018-07-16T04:00:00+00:00",
+        "next_decision_timestamp": "2018-07-23T04:00:00+00:00",
+        "scale": 0.9094486033107847,
+        "treatment_minus_control": -0.0003143553395781318,
+        "treatment_return": 0.0017403708887671065
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.022417426918664662,
+        "decision_timestamp": "2018-07-23T04:00:00+00:00",
+        "next_decision_timestamp": "2018-07-30T04:00:00+00:00",
+        "scale": 0.9846357755884968,
+        "treatment_minus_control": 0.0008840492714770054,
+        "treatment_return": -0.021533377647187657
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012534891902678202,
+        "decision_timestamp": "2018-07-30T04:00:00+00:00",
+        "next_decision_timestamp": "2018-08-06T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0006587677953979743,
+        "treatment_return": 0.011876124107280228
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.008929151980166194,
+        "decision_timestamp": "2018-08-06T04:00:00+00:00",
+        "next_decision_timestamp": "2018-08-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.480618466045193e-05,
+        "treatment_return": 0.008963958164826646
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0005043549934279357,
+        "decision_timestamp": "2018-08-13T04:00:00+00:00",
+        "next_decision_timestamp": "2018-08-20T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.3969103595543615e-05,
+        "treatment_return": -0.00047038588983239205
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.020626577276851243,
+        "decision_timestamp": "2018-08-20T04:00:00+00:00",
+        "next_decision_timestamp": "2018-08-27T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -7.177365135557778e-07,
+        "treatment_return": 0.020625859540337688
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.011536787430437956,
+        "decision_timestamp": "2018-08-27T04:00:00+00:00",
+        "next_decision_timestamp": "2018-09-04T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.371775625371498e-07,
+        "treatment_return": 0.011536450252875419
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.009379294574210606,
+        "decision_timestamp": "2018-09-04T04:00:00+00:00",
+        "next_decision_timestamp": "2018-09-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.52464797068086e-07,
+        "treatment_return": -0.009379042109413538
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.003684040831319124,
+        "decision_timestamp": "2018-09-10T04:00:00+00:00",
+        "next_decision_timestamp": "2018-09-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 9.241367338042039e-08,
+        "treatment_return": -0.0036839484176457438
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.002686783531693049,
+        "decision_timestamp": "2018-09-17T04:00:00+00:00",
+        "next_decision_timestamp": "2018-09-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.78857188241011e-08,
+        "treatment_return": 0.0026867156459742247
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.008024261843176284,
+        "decision_timestamp": "2018-09-24T04:00:00+00:00",
+        "next_decision_timestamp": "2018-10-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.6107894951211676e-07,
+        "treatment_return": 0.008024100764226771
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.024755615237858075,
+        "decision_timestamp": "2018-10-01T04:00:00+00:00",
+        "next_decision_timestamp": "2018-10-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.7234355248761943e-07,
+        "treatment_return": -0.024755342894305588
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.01030017175710507,
+        "decision_timestamp": "2018-10-08T04:00:00+00:00",
+        "next_decision_timestamp": "2018-10-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.3845257968169165e-07,
+        "treatment_return": -0.010299933304525388
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0019529449391089138,
+        "decision_timestamp": "2018-10-15T04:00:00+00:00",
+        "next_decision_timestamp": "2018-10-22T04:00:00+00:00",
+        "scale": 0.5396791014245509,
+        "treatment_minus_control": 0.002367226322056437,
+        "treatment_return": 0.00041428138294752337
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.05317510821476157,
+        "decision_timestamp": "2018-10-22T04:00:00+00:00",
+        "next_decision_timestamp": "2018-10-29T04:00:00+00:00",
+        "scale": 0.495948004736201,
+        "treatment_minus_control": 0.025601539002362395,
+        "treatment_return": -0.027573569212399174
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011130756435336453,
+        "decision_timestamp": "2018-10-29T04:00:00+00:00",
+        "next_decision_timestamp": "2018-11-05T05:00:00+00:00",
+        "scale": 0.4102386184861296,
+        "treatment_minus_control": -0.006310790270949607,
+        "treatment_return": 0.004819966164386846
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.008396353473431928,
+        "decision_timestamp": "2018-11-05T05:00:00+00:00",
+        "next_decision_timestamp": "2018-11-12T05:00:00+00:00",
+        "scale": 0.3808949246015547,
+        "treatment_minus_control": -0.005200177623202462,
+        "treatment_return": 0.0031961758502294657
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00279830071332432,
+        "decision_timestamp": "2018-11-12T05:00:00+00:00",
+        "next_decision_timestamp": "2018-11-19T05:00:00+00:00",
+        "scale": 0.41785037374759054,
+        "treatment_minus_control": -0.004368181182835884,
+        "treatment_return": -0.0015698804695115642
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.010412383077456067,
+        "decision_timestamp": "2018-11-19T05:00:00+00:00",
+        "next_decision_timestamp": "2018-11-26T05:00:00+00:00",
+        "scale": 0.4347433498195363,
+        "treatment_minus_control": -0.011020010149978221,
+        "treatment_return": -0.0006076270725221544
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.022928976430311554,
+        "decision_timestamp": "2018-11-26T05:00:00+00:00",
+        "next_decision_timestamp": "2018-12-03T05:00:00+00:00",
+        "scale": 0.48452030164648,
+        "treatment_minus_control": -0.01203806967869725,
+        "treatment_return": 0.010890906751614304
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.020126032054002985,
+        "decision_timestamp": "2018-12-03T05:00:00+00:00",
+        "next_decision_timestamp": "2018-12-10T05:00:00+00:00",
+        "scale": 0.5082085267516033,
+        "treatment_minus_control": 0.009980486915465936,
+        "treatment_return": -0.010145545138537049
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005491273318018908,
+        "decision_timestamp": "2018-12-10T05:00:00+00:00",
+        "next_decision_timestamp": "2018-12-17T05:00:00+00:00",
+        "scale": 0.45591146623790313,
+        "treatment_minus_control": 0.0030815633597655046,
+        "treatment_return": -0.002409709958253403
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.04535108974915836,
+        "decision_timestamp": "2018-12-17T05:00:00+00:00",
+        "next_decision_timestamp": "2018-12-24T05:00:00+00:00",
+        "scale": 0.462085802847954,
+        "treatment_minus_control": 0.019752438790345828,
+        "treatment_return": -0.02559865095881253
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0065027060303197715,
+        "decision_timestamp": "2018-12-24T05:00:00+00:00",
+        "next_decision_timestamp": "2018-12-31T05:00:00+00:00",
+        "scale": 0.4400399789361862,
+        "treatment_minus_control": -0.003437281598649866,
+        "treatment_return": 0.0030654244316699053
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0008909946605797359,
+        "decision_timestamp": "2018-12-31T05:00:00+00:00",
+        "next_decision_timestamp": "2019-01-07T05:00:00+00:00",
+        "scale": 0.38104264466155513,
+        "treatment_minus_control": -0.0006764659507143556,
+        "treatment_return": 0.0002145287098653803
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00893245580643165,
+        "decision_timestamp": "2019-01-07T05:00:00+00:00",
+        "next_decision_timestamp": "2019-01-14T05:00:00+00:00",
+        "scale": 0.37750378212376473,
+        "treatment_minus_control": -0.005526507265440017,
+        "treatment_return": 0.0034059485409916324
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011102613320956634,
+        "decision_timestamp": "2019-01-14T05:00:00+00:00",
+        "next_decision_timestamp": "2019-01-22T05:00:00+00:00",
+        "scale": 0.4540852992724301,
+        "treatment_minus_control": -0.006061178746493923,
+        "treatment_return": 0.005041434574462711
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0022265349968835224,
+        "decision_timestamp": "2019-01-22T05:00:00+00:00",
+        "next_decision_timestamp": "2019-01-28T05:00:00+00:00",
+        "scale": 0.506333733348989,
+        "treatment_minus_control": 0.0013133987824343052,
+        "treatment_return": -0.0009131362144492172
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00839098453946896,
+        "decision_timestamp": "2019-01-28T05:00:00+00:00",
+        "next_decision_timestamp": "2019-02-04T05:00:00+00:00",
+        "scale": 0.8333440757633213,
+        "treatment_minus_control": 0.007587482551525859,
+        "treatment_return": 0.01597846709099482
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004728859904420846,
+        "decision_timestamp": "2019-02-04T05:00:00+00:00",
+        "next_decision_timestamp": "2019-02-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00029006358419247924,
+        "treatment_return": 0.0044387963202283665
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007593212929295046,
+        "decision_timestamp": "2019-02-11T05:00:00+00:00",
+        "next_decision_timestamp": "2019-02-19T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.202589108081582e-06,
+        "treatment_return": 0.007584010340186964
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004226745195320847,
+        "decision_timestamp": "2019-02-19T05:00:00+00:00",
+        "next_decision_timestamp": "2019-02-25T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00011865715375170005,
+        "treatment_return": 0.004108088041569147
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0057932900862420755,
+        "decision_timestamp": "2019-02-25T05:00:00+00:00",
+        "next_decision_timestamp": "2019-03-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.00013450933234815388,
+        "treatment_return": 0.005927799418590229
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0067952224744827205,
+        "decision_timestamp": "2019-03-04T05:00:00+00:00",
+        "next_decision_timestamp": "2019-03-11T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 7.992315277927098e-06,
+        "treatment_return": -0.0067872301592047934
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0029206922347337905,
+        "decision_timestamp": "2019-03-11T04:00:00+00:00",
+        "next_decision_timestamp": "2019-03-18T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.485709314718591e-05,
+        "treatment_return": 0.0029855493278809764
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0284515125576581,
+        "decision_timestamp": "2019-03-18T04:00:00+00:00",
+        "next_decision_timestamp": "2019-03-25T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.773565343172635e-06,
+        "treatment_return": -0.02845428612300127
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004890492697322335,
+        "decision_timestamp": "2019-03-25T04:00:00+00:00",
+        "next_decision_timestamp": "2019-04-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -8.084314795375747e-08,
+        "treatment_return": 0.004890411854174381
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.004363240161856519,
+        "decision_timestamp": "2019-04-01T04:00:00+00:00",
+        "next_decision_timestamp": "2019-04-08T04:00:00+00:00",
+        "scale": 0.9173297283012202,
+        "treatment_minus_control": 0.0003978300391146439,
+        "treatment_return": -0.003965410122741875
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0005720247221827623,
+        "decision_timestamp": "2019-04-08T04:00:00+00:00",
+        "next_decision_timestamp": "2019-04-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.00025318543662966597,
+        "treatment_return": 0.0008252101588124283
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006845311804457799,
+        "decision_timestamp": "2019-04-15T04:00:00+00:00",
+        "next_decision_timestamp": "2019-04-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.910972735665652e-06,
+        "treatment_return": -0.006841400831722133
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010887052424004562,
+        "decision_timestamp": "2019-04-22T04:00:00+00:00",
+        "next_decision_timestamp": "2019-04-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.805209058960202e-08,
+        "treatment_return": 0.010887014371913972
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006190722442709795,
+        "decision_timestamp": "2019-04-29T04:00:00+00:00",
+        "next_decision_timestamp": "2019-05-06T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.0848811182739837e-08,
+        "treatment_return": 0.006190711593898612
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001071344553750464,
+        "decision_timestamp": "2019-05-06T04:00:00+00:00",
+        "next_decision_timestamp": "2019-05-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.328816055083507e-09,
+        "treatment_return": 0.001071339224934409
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.001415733328123725,
+        "decision_timestamp": "2019-05-13T04:00:00+00:00",
+        "next_decision_timestamp": "2019-05-20T04:00:00+00:00",
+        "scale": 0.8127080023884952,
+        "treatment_minus_control": 0.0003397193277061561,
+        "treatment_return": -0.001076014000417569
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0014083879493584917,
+        "decision_timestamp": "2019-05-20T04:00:00+00:00",
+        "next_decision_timestamp": "2019-05-28T04:00:00+00:00",
+        "scale": 0.7450470054736615,
+        "treatment_minus_control": 0.0006615676745581611,
+        "treatment_return": -0.0007468202748003305
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0013103599423331946,
+        "decision_timestamp": "2019-05-28T04:00:00+00:00",
+        "next_decision_timestamp": "2019-06-03T04:00:00+00:00",
+        "scale": 0.711166629729748,
+        "treatment_minus_control": 0.00020165355176182675,
+        "treatment_return": -0.0011087063905713679
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.03356303870565158,
+        "decision_timestamp": "2019-06-03T04:00:00+00:00",
+        "next_decision_timestamp": "2019-06-10T04:00:00+00:00",
+        "scale": 0.6966939581777509,
+        "treatment_minus_control": -0.009445749238085721,
+        "treatment_return": 0.02411728946756586
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0012464019468139131,
+        "decision_timestamp": "2019-06-10T04:00:00+00:00",
+        "next_decision_timestamp": "2019-06-17T04:00:00+00:00",
+        "scale": 0.6218101222819149,
+        "treatment_minus_control": 0.0007418046430901493,
+        "treatment_return": -0.0005045973037237639
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.007825634994092168,
+        "decision_timestamp": "2019-06-17T04:00:00+00:00",
+        "next_decision_timestamp": "2019-06-24T04:00:00+00:00",
+        "scale": 0.8090442794235306,
+        "treatment_minus_control": -0.0022059832518124267,
+        "treatment_return": 0.005619651742279741
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005240402305739855,
+        "decision_timestamp": "2019-06-24T04:00:00+00:00",
+        "next_decision_timestamp": "2019-07-01T04:00:00+00:00",
+        "scale": 0.8923297157277967,
+        "treatment_minus_control": 0.0002119158911056962,
+        "treatment_return": -0.005028486414634159
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00546195993020282,
+        "decision_timestamp": "2019-07-01T04:00:00+00:00",
+        "next_decision_timestamp": "2019-07-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.1533032251497275e-05,
+        "treatment_return": 0.005440426897951323
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.002752818305925553,
+        "decision_timestamp": "2019-07-08T04:00:00+00:00",
+        "next_decision_timestamp": "2019-07-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.192008094123679e-06,
+        "treatment_return": 0.002747626297831429
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.007437915991094557,
+        "decision_timestamp": "2019-07-15T04:00:00+00:00",
+        "next_decision_timestamp": "2019-07-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.094429384426945e-08,
+        "treatment_return": -0.007437956935388401
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007574649129358679,
+        "decision_timestamp": "2019-07-22T04:00:00+00:00",
+        "next_decision_timestamp": "2019-07-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.607611346964859e-09,
+        "treatment_return": 0.007574655736970026
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.011240068894508015,
+        "decision_timestamp": "2019-07-29T04:00:00+00:00",
+        "next_decision_timestamp": "2019-08-05T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 9.558570468470862e-08,
+        "treatment_return": -0.01123997330880333
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.02254520216374445,
+        "decision_timestamp": "2019-08-05T04:00:00+00:00",
+        "next_decision_timestamp": "2019-08-12T04:00:00+00:00",
+        "scale": 0.8715952982918652,
+        "treatment_minus_control": -0.0001930579650128994,
+        "treatment_return": 0.02235214419873155
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01738410511654198,
+        "decision_timestamp": "2019-08-12T04:00:00+00:00",
+        "next_decision_timestamp": "2019-08-19T04:00:00+00:00",
+        "scale": 0.7257055546207118,
+        "treatment_minus_control": -0.00493287695120892,
+        "treatment_return": 0.012451228165333061
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.006919293684362837,
+        "decision_timestamp": "2019-08-19T04:00:00+00:00",
+        "next_decision_timestamp": "2019-08-26T04:00:00+00:00",
+        "scale": 0.5669322509456225,
+        "treatment_minus_control": 0.0025162567389962476,
+        "treatment_return": -0.00440303694536659
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.010100495226945005,
+        "decision_timestamp": "2019-08-26T04:00:00+00:00",
+        "next_decision_timestamp": "2019-09-03T04:00:00+00:00",
+        "scale": 0.5346850090852391,
+        "treatment_minus_control": -0.004524800228202119,
+        "treatment_return": 0.005575694998742886
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.009958065723271181,
+        "decision_timestamp": "2019-09-03T04:00:00+00:00",
+        "next_decision_timestamp": "2019-09-09T04:00:00+00:00",
+        "scale": 0.5542555678130912,
+        "treatment_minus_control": 0.004295046497773014,
+        "treatment_return": -0.005663019225498167
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.010060275606652236,
+        "decision_timestamp": "2019-09-09T04:00:00+00:00",
+        "next_decision_timestamp": "2019-09-16T04:00:00+00:00",
+        "scale": 0.657871480438001,
+        "treatment_minus_control": 0.004471857778149402,
+        "treatment_return": -0.005588417828502834
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004235293515700622,
+        "decision_timestamp": "2019-09-16T04:00:00+00:00",
+        "next_decision_timestamp": "2019-09-23T04:00:00+00:00",
+        "scale": 0.8913264172991813,
+        "treatment_minus_control": -0.0004925622614218028,
+        "treatment_return": 0.0037427312542788194
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0024277998003401358,
+        "decision_timestamp": "2019-09-23T04:00:00+00:00",
+        "next_decision_timestamp": "2019-09-30T04:00:00+00:00",
+        "scale": 0.9814470907678222,
+        "treatment_minus_control": 5.6692149148496185e-05,
+        "treatment_return": 0.002484491949488632
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.002844745491989764,
+        "decision_timestamp": "2019-09-30T04:00:00+00:00",
+        "next_decision_timestamp": "2019-10-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.3416061579007987e-05,
+        "treatment_return": -0.002831329430410756
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005394022786926911,
+        "decision_timestamp": "2019-10-07T04:00:00+00:00",
+        "next_decision_timestamp": "2019-10-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.2905901559132644e-08,
+        "treatment_return": 0.00539405569282847
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.002398750048535403,
+        "decision_timestamp": "2019-10-14T04:00:00+00:00",
+        "next_decision_timestamp": "2019-10-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.836531341036789e-12,
+        "treatment_return": 0.0023987500416988716
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.001258299659813611,
+        "decision_timestamp": "2019-10-21T04:00:00+00:00",
+        "next_decision_timestamp": "2019-10-28T04:00:00+00:00",
+        "scale": 0.9913968020987338,
+        "treatment_minus_control": 3.2740967133015886e-05,
+        "treatment_return": 0.0012910406269466268
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0033094485653689665,
+        "decision_timestamp": "2019-10-28T04:00:00+00:00",
+        "next_decision_timestamp": "2019-11-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.0550390734498372e-05,
+        "treatment_return": -0.003298898174634468
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.007721131705611728,
+        "decision_timestamp": "2019-11-04T05:00:00+00:00",
+        "next_decision_timestamp": "2019-11-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 7.46222724671286e-05,
+        "treatment_return": -0.007646509433144599
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.014410049613599485,
+        "decision_timestamp": "2019-11-11T05:00:00+00:00",
+        "next_decision_timestamp": "2019-11-18T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 7.487799252348104e-05,
+        "treatment_return": 0.014484927606122966
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004491003486125855,
+        "decision_timestamp": "2019-11-18T05:00:00+00:00",
+        "next_decision_timestamp": "2019-11-25T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.093315842304321e-07,
+        "treatment_return": 0.004491112817710086
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0029353362326098864,
+        "decision_timestamp": "2019-11-25T05:00:00+00:00",
+        "next_decision_timestamp": "2019-12-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.666953545617858e-06,
+        "treatment_return": 0.0029306692790642686
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005218480414888926,
+        "decision_timestamp": "2019-12-02T05:00:00+00:00",
+        "next_decision_timestamp": "2019-12-09T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.707977857678955e-05,
+        "treatment_return": 0.005201400636312137
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012277226259849172,
+        "decision_timestamp": "2019-12-09T05:00:00+00:00",
+        "next_decision_timestamp": "2019-12-16T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -7.062836598903388e-06,
+        "treatment_return": 0.012270163423250269
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0033611657973158238,
+        "decision_timestamp": "2019-12-16T05:00:00+00:00",
+        "next_decision_timestamp": "2019-12-23T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.2860994018648597e-06,
+        "treatment_return": 0.003359879697913959
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005511248068940766,
+        "decision_timestamp": "2019-12-23T05:00:00+00:00",
+        "next_decision_timestamp": "2019-12-30T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.0683147416988845e-08,
+        "treatment_return": 0.005511227385793349
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00415767243177001,
+        "decision_timestamp": "2019-12-30T05:00:00+00:00",
+        "next_decision_timestamp": "2020-01-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.3572256086245034e-11,
+        "treatment_return": 0.004157672465342266
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012850956969216565,
+        "decision_timestamp": "2020-01-06T05:00:00+00:00",
+        "next_decision_timestamp": "2020-01-13T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 5.811240377795457e-11,
+        "treatment_return": 0.012850957027328969
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00339590370886933,
+        "decision_timestamp": "2020-01-13T05:00:00+00:00",
+        "next_decision_timestamp": "2020-01-21T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.75033345992415e-11,
+        "treatment_return": 0.0033959037563726646
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0038492573216220016,
+        "decision_timestamp": "2020-01-21T05:00:00+00:00",
+        "next_decision_timestamp": "2020-01-27T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.035438401686406e-11,
+        "treatment_return": -0.0038492573112676176
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004038321474196582,
+        "decision_timestamp": "2020-01-27T05:00:00+00:00",
+        "next_decision_timestamp": "2020-02-03T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.6770586575585185e-13,
+        "treatment_return": 0.004038321473828876
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.014797797717795325,
+        "decision_timestamp": "2020-02-03T05:00:00+00:00",
+        "next_decision_timestamp": "2020-02-10T05:00:00+00:00",
+        "scale": 0.8527388795770157,
+        "treatment_minus_control": -0.0015624037732855367,
+        "treatment_return": 0.013235393944509788
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0038840085039302252,
+        "decision_timestamp": "2020-02-10T05:00:00+00:00",
+        "next_decision_timestamp": "2020-02-18T05:00:00+00:00",
+        "scale": 0.7671942095561884,
+        "treatment_minus_control": -0.0006762420691850402,
+        "treatment_return": 0.003207766434745185
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.02739340245801225,
+        "decision_timestamp": "2020-02-18T05:00:00+00:00",
+        "next_decision_timestamp": "2020-02-24T05:00:00+00:00",
+        "scale": 0.7852939035832194,
+        "treatment_minus_control": 0.00660528008892225,
+        "treatment_return": -0.02078812236909
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0032291136662517816,
+        "decision_timestamp": "2020-02-24T05:00:00+00:00",
+        "next_decision_timestamp": "2020-03-02T05:00:00+00:00",
+        "scale": 0.5682435644871223,
+        "treatment_minus_control": 0.0013721921988871788,
+        "treatment_return": -0.0018569214673646028
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.059339972261012064,
+        "decision_timestamp": "2020-03-02T05:00:00+00:00",
+        "next_decision_timestamp": "2020-03-09T04:00:00+00:00",
+        "scale": 0.3553585240838189,
+        "treatment_minus_control": 0.038601140168532444,
+        "treatment_return": -0.02073883209247962
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.059008808159799475,
+        "decision_timestamp": "2020-03-09T04:00:00+00:00",
+        "next_decision_timestamp": "2020-03-16T04:00:00+00:00",
+        "scale": 0.2588503614456286,
+        "treatment_minus_control": 0.04125878412418349,
+        "treatment_return": -0.017750024035615986
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.012326961967114691,
+        "decision_timestamp": "2020-03-16T04:00:00+00:00",
+        "next_decision_timestamp": "2020-03-23T04:00:00+00:00",
+        "scale": 0.16735091894833237,
+        "treatment_minus_control": 0.010371154569624008,
+        "treatment_return": -0.001955807397490683
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.05784246173673657,
+        "decision_timestamp": "2020-03-23T04:00:00+00:00",
+        "next_decision_timestamp": "2020-03-30T04:00:00+00:00",
+        "scale": 0.15198139968533886,
+        "treatment_minus_control": -0.04836813124389372,
+        "treatment_return": 0.009474330492842853
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.005156102306214105,
+        "decision_timestamp": "2020-03-30T04:00:00+00:00",
+        "next_decision_timestamp": "2020-04-06T04:00:00+00:00",
+        "scale": 0.13735366538184748,
+        "treatment_minus_control": -0.004268898532352683,
+        "treatment_return": 0.0008872037738614225
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.020425783984290957,
+        "decision_timestamp": "2020-04-06T04:00:00+00:00",
+        "next_decision_timestamp": "2020-04-13T04:00:00+00:00",
+        "scale": 0.139463167074948,
+        "treatment_minus_control": -0.017258345827480204,
+        "treatment_return": 0.0031674381568107535
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.009287984712240238,
+        "decision_timestamp": "2020-04-13T04:00:00+00:00",
+        "next_decision_timestamp": "2020-04-20T04:00:00+00:00",
+        "scale": 0.1590101598067522,
+        "treatment_minus_control": -0.007759023390880415,
+        "treatment_return": 0.001528961321359823
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0005584065914329139,
+        "decision_timestamp": "2020-04-20T04:00:00+00:00",
+        "next_decision_timestamp": "2020-04-27T04:00:00+00:00",
+        "scale": 0.22982958567791836,
+        "treatment_minus_control": 0.0007278278137236027,
+        "treatment_return": 0.0001694212222906888
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00025106512403305636,
+        "decision_timestamp": "2020-04-27T04:00:00+00:00",
+        "next_decision_timestamp": "2020-05-04T04:00:00+00:00",
+        "scale": 0.310178731332816,
+        "treatment_minus_control": -0.0003132213273380202,
+        "treatment_return": -6.215620330496385e-05
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.02169018832239855,
+        "decision_timestamp": "2020-05-04T04:00:00+00:00",
+        "next_decision_timestamp": "2020-05-11T04:00:00+00:00",
+        "scale": 0.3553213031354183,
+        "treatment_minus_control": -0.014617000046299289,
+        "treatment_return": 0.007073188276099263
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.01109074980129765,
+        "decision_timestamp": "2020-05-11T04:00:00+00:00",
+        "next_decision_timestamp": "2020-05-18T04:00:00+00:00",
+        "scale": 0.4748094482784929,
+        "treatment_minus_control": 0.005783272393043215,
+        "treatment_return": -0.005307477408254435
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0006685950295937104,
+        "decision_timestamp": "2020-05-18T04:00:00+00:00",
+        "next_decision_timestamp": "2020-05-26T04:00:00+00:00",
+        "scale": 0.4860617106358771,
+        "treatment_minus_control": -0.0005568247313672003,
+        "treatment_return": 0.00011177029822651008
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.012361519067123572,
+        "decision_timestamp": "2020-05-26T04:00:00+00:00",
+        "next_decision_timestamp": "2020-06-01T04:00:00+00:00",
+        "scale": 0.5576176923033258,
+        "treatment_minus_control": -0.0036673457591096525,
+        "treatment_return": 0.00869417330801392
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.003615326629971438,
+        "decision_timestamp": "2020-06-01T04:00:00+00:00",
+        "next_decision_timestamp": "2020-06-08T04:00:00+00:00",
+        "scale": 0.6073299829052146,
+        "treatment_minus_control": -0.0019148465000038417,
+        "treatment_return": 0.0017004801299675965
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0028495596704434245,
+        "decision_timestamp": "2020-06-08T04:00:00+00:00",
+        "next_decision_timestamp": "2020-06-15T04:00:00+00:00",
+        "scale": 0.6513227650185214,
+        "treatment_minus_control": -0.0011049337230351064,
+        "treatment_return": 0.0017446259474083181
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.034406656901488475,
+        "decision_timestamp": "2020-06-15T04:00:00+00:00",
+        "next_decision_timestamp": "2020-06-22T04:00:00+00:00",
+        "scale": 0.47120107649536086,
+        "treatment_minus_control": -0.015395750449421541,
+        "treatment_return": 0.019010906452066934
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.008811511029091723,
+        "decision_timestamp": "2020-06-22T04:00:00+00:00",
+        "next_decision_timestamp": "2020-06-29T04:00:00+00:00",
+        "scale": 0.5023073065079553,
+        "treatment_minus_control": 0.004454335888378846,
+        "treatment_return": -0.004357175140712877
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.038320660453628363,
+        "decision_timestamp": "2020-06-29T04:00:00+00:00",
+        "next_decision_timestamp": "2020-07-06T04:00:00+00:00",
+        "scale": 0.46516047845779857,
+        "treatment_minus_control": -0.01981363248415091,
+        "treatment_return": 0.018507027969477452
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.003957913642636646,
+        "decision_timestamp": "2020-07-06T04:00:00+00:00",
+        "next_decision_timestamp": "2020-07-13T04:00:00+00:00",
+        "scale": 0.46074680466063384,
+        "treatment_minus_control": -0.002117950929467982,
+        "treatment_return": 0.0018399627131686636
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004154894376737772,
+        "decision_timestamp": "2020-07-13T04:00:00+00:00",
+        "next_decision_timestamp": "2020-07-20T04:00:00+00:00",
+        "scale": 0.7204769470522018,
+        "treatment_minus_control": -0.002172342032625396,
+        "treatment_return": 0.001982552344112376
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.01556822613052311,
+        "decision_timestamp": "2020-07-20T04:00:00+00:00",
+        "next_decision_timestamp": "2020-07-27T04:00:00+00:00",
+        "scale": 0.8298055667200855,
+        "treatment_minus_control": 0.0016525326833416454,
+        "treatment_return": -0.013915693447181465
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.021980374824901006,
+        "decision_timestamp": "2020-07-27T04:00:00+00:00",
+        "next_decision_timestamp": "2020-08-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0007803212708399343,
+        "treatment_return": 0.02276069609574094
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001161302209693238,
+        "decision_timestamp": "2020-08-03T04:00:00+00:00",
+        "next_decision_timestamp": "2020-08-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 5.4089831775794295e-06,
+        "treatment_return": 0.0011667111928708174
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01018848112650117,
+        "decision_timestamp": "2020-08-10T04:00:00+00:00",
+        "next_decision_timestamp": "2020-08-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.00015790515539193528,
+        "treatment_return": 0.010346386281893105
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.020914463422677887,
+        "decision_timestamp": "2020-08-17T04:00:00+00:00",
+        "next_decision_timestamp": "2020-08-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0001588817041451307,
+        "treatment_return": 0.020755581718532756
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.009457562147175969,
+        "decision_timestamp": "2020-08-24T04:00:00+00:00",
+        "next_decision_timestamp": "2020-08-31T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0003367732878598595,
+        "treatment_return": 0.009794335435035828
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.059053921142006804,
+        "decision_timestamp": "2020-08-31T04:00:00+00:00",
+        "next_decision_timestamp": "2020-09-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.999621585757065e-05,
+        "treatment_return": -0.058983924926149234
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01664916939229255,
+        "decision_timestamp": "2020-09-08T04:00:00+00:00",
+        "next_decision_timestamp": "2020-09-14T04:00:00+00:00",
+        "scale": 0.720591539497758,
+        "treatment_minus_control": -0.0007824540321017537,
+        "treatment_return": 0.015866715360190797
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.003402924526824669,
+        "decision_timestamp": "2020-09-14T04:00:00+00:00",
+        "next_decision_timestamp": "2020-09-21T04:00:00+00:00",
+        "scale": 0.6589578939786344,
+        "treatment_minus_control": 0.001989920513844279,
+        "treatment_return": -0.00141300401298039
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.016864965104646856,
+        "decision_timestamp": "2020-09-21T04:00:00+00:00",
+        "next_decision_timestamp": "2020-09-28T04:00:00+00:00",
+        "scale": 0.6272724085597023,
+        "treatment_minus_control": -0.005907728729558137,
+        "treatment_return": 0.01095723637508872
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.009709584417881612,
+        "decision_timestamp": "2020-09-28T04:00:00+00:00",
+        "next_decision_timestamp": "2020-10-05T04:00:00+00:00",
+        "scale": 0.5643653465005045,
+        "treatment_minus_control": -0.00418405572866587,
+        "treatment_return": 0.005525528689215742
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.03160290439626401,
+        "decision_timestamp": "2020-10-05T04:00:00+00:00",
+        "next_decision_timestamp": "2020-10-12T04:00:00+00:00",
+        "scale": 0.7496512631042316,
+        "treatment_minus_control": -0.007961581446747301,
+        "treatment_return": 0.023641322949516708
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.002764260519861561,
+        "decision_timestamp": "2020-10-12T04:00:00+00:00",
+        "next_decision_timestamp": "2020-10-19T04:00:00+00:00",
+        "scale": 0.9428878601507421,
+        "treatment_minus_control": -0.0006705574349906707,
+        "treatment_return": -0.0034348179548522317
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.011369236587877918,
+        "decision_timestamp": "2020-10-19T04:00:00+00:00",
+        "next_decision_timestamp": "2020-10-26T04:00:00+00:00",
+        "scale": 0.9863946908494676,
+        "treatment_minus_control": 0.0005450317655572023,
+        "treatment_return": -0.010824204822320715
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.027934841926934295,
+        "decision_timestamp": "2020-10-26T04:00:00+00:00",
+        "next_decision_timestamp": "2020-11-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0014059795651906182,
+        "treatment_return": -0.026528862361743677
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.026149115772673426,
+        "decision_timestamp": "2020-11-02T05:00:00+00:00",
+        "next_decision_timestamp": "2020-11-09T05:00:00+00:00",
+        "scale": 0.9327988720680136,
+        "treatment_minus_control": -0.003667977314381954,
+        "treatment_return": 0.022481138458291472
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0036156160352684985,
+        "decision_timestamp": "2020-11-09T05:00:00+00:00",
+        "next_decision_timestamp": "2020-11-16T05:00:00+00:00",
+        "scale": 0.9007805284770041,
+        "treatment_minus_control": 0.00031778592194342536,
+        "treatment_return": 0.003933401957211924
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0020260752924388115,
+        "decision_timestamp": "2020-11-16T05:00:00+00:00",
+        "next_decision_timestamp": "2020-11-23T05:00:00+00:00",
+        "scale": 0.9087906431087126,
+        "treatment_minus_control": 0.0009890929485993905,
+        "treatment_return": 0.003015168241038202
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.016918590607752027,
+        "decision_timestamp": "2020-11-23T05:00:00+00:00",
+        "next_decision_timestamp": "2020-11-30T05:00:00+00:00",
+        "scale": 0.9152825061181766,
+        "treatment_minus_control": -0.0014939804669820145,
+        "treatment_return": 0.015424610140770012
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01795747488382826,
+        "decision_timestamp": "2020-11-30T05:00:00+00:00",
+        "next_decision_timestamp": "2020-12-07T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0008448895655799316,
+        "treatment_return": 0.01711258531824833
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0009185549329081555,
+        "decision_timestamp": "2020-12-07T05:00:00+00:00",
+        "next_decision_timestamp": "2020-12-14T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.0382087065607948e-05,
+        "treatment_return": -0.0009289370199737634
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.014588645169383296,
+        "decision_timestamp": "2020-12-14T05:00:00+00:00",
+        "next_decision_timestamp": "2020-12-21T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.8290839609423912e-05,
+        "treatment_return": 0.01461693600899272
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.007521523087177795,
+        "decision_timestamp": "2020-12-21T05:00:00+00:00",
+        "next_decision_timestamp": "2020-12-28T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.835242692490809e-07,
+        "treatment_return": -0.007522506611447044
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005952620267245967,
+        "decision_timestamp": "2020-12-28T05:00:00+00:00",
+        "next_decision_timestamp": "2021-01-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.4608456888609567e-08,
+        "treatment_return": 0.0059526056587890785
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.031248546782765008,
+        "decision_timestamp": "2021-01-04T05:00:00+00:00",
+        "next_decision_timestamp": "2021-01-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.168048369137864e-08,
+        "treatment_return": 0.0312485584632487
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0021946264915770897,
+        "decision_timestamp": "2021-01-11T05:00:00+00:00",
+        "next_decision_timestamp": "2021-01-19T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.199437962983723e-09,
+        "treatment_return": -0.0021946202921391267
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.00041916077961479115,
+        "decision_timestamp": "2021-01-19T05:00:00+00:00",
+        "next_decision_timestamp": "2021-01-25T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.8127273015977607e-09,
+        "treatment_return": -0.00041915896688748955
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0056584709807389055,
+        "decision_timestamp": "2021-01-25T05:00:00+00:00",
+        "next_decision_timestamp": "2021-02-01T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.9069526220080206e-11,
+        "treatment_return": -0.005658470931669379
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.04730764213954952,
+        "decision_timestamp": "2021-02-01T05:00:00+00:00",
+        "next_decision_timestamp": "2021-02-08T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.350098142287152e-11,
+        "treatment_return": 0.04730764208604854
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0026015788525801664,
+        "decision_timestamp": "2021-02-08T05:00:00+00:00",
+        "next_decision_timestamp": "2021-02-16T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.0743407819500135e-11,
+        "treatment_return": 0.0026015788833235742
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.036442335915556345,
+        "decision_timestamp": "2021-02-16T05:00:00+00:00",
+        "next_decision_timestamp": "2021-02-22T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.7411738717498793e-11,
+        "treatment_return": -0.03644233589814461
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.016586503491309745,
+        "decision_timestamp": "2021-02-22T05:00:00+00:00",
+        "next_decision_timestamp": "2021-03-01T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.618772362467553e-12,
+        "treatment_return": -0.016586503482690973
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.08863760602831072,
+        "decision_timestamp": "2021-03-01T05:00:00+00:00",
+        "next_decision_timestamp": "2021-03-08T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.291933392546298e-11,
+        "treatment_return": -0.08863760599539139
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.057033395034445045,
+        "decision_timestamp": "2021-03-08T05:00:00+00:00",
+        "next_decision_timestamp": "2021-03-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1411094291702284e-11,
+        "treatment_return": 0.05703339502303395
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.005078433876158028,
+        "decision_timestamp": "2021-03-15T04:00:00+00:00",
+        "next_decision_timestamp": "2021-03-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.4841907964610073e-13,
+        "treatment_return": -0.005078433875709609
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.02645805890978037,
+        "decision_timestamp": "2021-03-22T04:00:00+00:00",
+        "next_decision_timestamp": "2021-03-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.0436096431476471e-14,
+        "treatment_return": -0.026458058909790805
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.019672413971184355,
+        "decision_timestamp": "2021-03-29T04:00:00+00:00",
+        "next_decision_timestamp": "2021-04-05T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.019672413971184577
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012342042614312376,
+        "decision_timestamp": "2021-04-05T04:00:00+00:00",
+        "next_decision_timestamp": "2021-04-12T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.012342042614312376
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0038735365267416055,
+        "decision_timestamp": "2021-04-12T04:00:00+00:00",
+        "next_decision_timestamp": "2021-04-19T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.3306690738754696e-16,
+        "treatment_return": -0.0038735365267419386
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0020207249651399417,
+        "decision_timestamp": "2021-04-19T04:00:00+00:00",
+        "next_decision_timestamp": "2021-04-26T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": -0.0020207249651401638
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001297369519448477,
+        "decision_timestamp": "2021-04-26T04:00:00+00:00",
+        "next_decision_timestamp": "2021-05-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.001297369519448699
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.015602037003445757,
+        "decision_timestamp": "2021-05-03T04:00:00+00:00",
+        "next_decision_timestamp": "2021-05-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.015602037003445757
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0008240011075413278,
+        "decision_timestamp": "2021-05-10T04:00:00+00:00",
+        "next_decision_timestamp": "2021-05-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.0008240011075412168
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006352712656305548,
+        "decision_timestamp": "2021-05-17T04:00:00+00:00",
+        "next_decision_timestamp": "2021-05-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.006352712656305548
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0045491295560902145,
+        "decision_timestamp": "2021-05-24T04:00:00+00:00",
+        "next_decision_timestamp": "2021-06-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.0045491295560899925
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.009620705700949528,
+        "decision_timestamp": "2021-06-01T04:00:00+00:00",
+        "next_decision_timestamp": "2021-06-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.3306690738754696e-16,
+        "treatment_return": -0.009620705700949195
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.016797338312685817,
+        "decision_timestamp": "2021-06-07T04:00:00+00:00",
+        "next_decision_timestamp": "2021-06-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.016797338312685817
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.00577696348272827,
+        "decision_timestamp": "2021-06-14T04:00:00+00:00",
+        "next_decision_timestamp": "2021-06-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.005776963482728381
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005810465668644849,
+        "decision_timestamp": "2021-06-21T04:00:00+00:00",
+        "next_decision_timestamp": "2021-06-28T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.005810465668644849
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004628319318797702,
+        "decision_timestamp": "2021-06-28T04:00:00+00:00",
+        "next_decision_timestamp": "2021-07-06T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.004628319318797591
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012363195578591224,
+        "decision_timestamp": "2021-07-06T04:00:00+00:00",
+        "next_decision_timestamp": "2021-07-12T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.012363195578591002
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.01956622526172802,
+        "decision_timestamp": "2021-07-12T04:00:00+00:00",
+        "next_decision_timestamp": "2021-07-19T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.01956622526172791
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.02708093955733637,
+        "decision_timestamp": "2021-07-19T04:00:00+00:00",
+        "next_decision_timestamp": "2021-07-26T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.02708093955733637
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0041922541597108065,
+        "decision_timestamp": "2021-07-26T04:00:00+00:00",
+        "next_decision_timestamp": "2021-08-02T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0041922541597108065
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01552891263962164,
+        "decision_timestamp": "2021-08-02T04:00:00+00:00",
+        "next_decision_timestamp": "2021-08-09T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.01552891263962164
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.013613739650907286,
+        "decision_timestamp": "2021-08-09T04:00:00+00:00",
+        "next_decision_timestamp": "2021-08-16T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.013613739650907286
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0017230435491246698,
+        "decision_timestamp": "2021-08-16T04:00:00+00:00",
+        "next_decision_timestamp": "2021-08-23T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.0017230435491247809
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010098006870089993,
+        "decision_timestamp": "2021-08-23T04:00:00+00:00",
+        "next_decision_timestamp": "2021-08-30T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.440892098500626e-16,
+        "treatment_return": 0.010098006870090437
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 4.473850405384283e-05,
+        "decision_timestamp": "2021-08-30T04:00:00+00:00",
+        "next_decision_timestamp": "2021-09-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 4.473850405384283e-05
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.007010741225151773,
+        "decision_timestamp": "2021-09-07T04:00:00+00:00",
+        "next_decision_timestamp": "2021-09-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": -0.007010741225151995
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006930426172001791,
+        "decision_timestamp": "2021-09-13T04:00:00+00:00",
+        "next_decision_timestamp": "2021-09-20T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.00693042617200168
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.005532215466577228,
+        "decision_timestamp": "2021-09-20T04:00:00+00:00",
+        "next_decision_timestamp": "2021-09-27T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 3.3306690738754696e-16,
+        "treatment_return": -0.005532215466576895
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.020174693451985415,
+        "decision_timestamp": "2021-09-27T04:00:00+00:00",
+        "next_decision_timestamp": "2021-10-04T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": -0.020174693451985637
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.014012043487425574,
+        "decision_timestamp": "2021-10-04T04:00:00+00:00",
+        "next_decision_timestamp": "2021-10-11T04:00:00+00:00",
+        "scale": 0.8352430586934562,
+        "treatment_minus_control": -0.0018951313336144082,
+        "treatment_return": 0.012116912153811166
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.018016032047859953,
+        "decision_timestamp": "2021-10-11T04:00:00+00:00",
+        "next_decision_timestamp": "2021-10-18T04:00:00+00:00",
+        "scale": 0.7720875481012356,
+        "treatment_minus_control": -0.003913993752943767,
+        "treatment_return": 0.014102038294916186
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.005337624848129607,
+        "decision_timestamp": "2021-10-18T04:00:00+00:00",
+        "next_decision_timestamp": "2021-10-25T04:00:00+00:00",
+        "scale": 0.7512436216065329,
+        "treatment_minus_control": -0.0015008801572145014,
+        "treatment_return": 0.003836744690915106
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0031810772927156616,
+        "decision_timestamp": "2021-10-25T04:00:00+00:00",
+        "next_decision_timestamp": "2021-11-01T04:00:00+00:00",
+        "scale": 0.8491847636346519,
+        "treatment_minus_control": -0.0005929231911008248,
+        "treatment_return": 0.002588154101614837
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0026856080768364876,
+        "decision_timestamp": "2021-11-01T04:00:00+00:00",
+        "next_decision_timestamp": "2021-11-08T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0012455202455440295,
+        "treatment_return": -0.001440087831292458
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006720399170049518,
+        "decision_timestamp": "2021-11-08T05:00:00+00:00",
+        "next_decision_timestamp": "2021-11-15T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.000836778622124501,
+        "treatment_return": -0.007557177792174019
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.01006590183853373,
+        "decision_timestamp": "2021-11-15T05:00:00+00:00",
+        "next_decision_timestamp": "2021-11-22T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.6419771845809237e-06,
+        "treatment_return": -0.010068543815718312
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.001274802403500419,
+        "decision_timestamp": "2021-11-22T05:00:00+00:00",
+        "next_decision_timestamp": "2021-11-29T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.8886507677784437e-06,
+        "treatment_return": -0.0012766910542681975
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.013056753456498371,
+        "decision_timestamp": "2021-11-29T05:00:00+00:00",
+        "next_decision_timestamp": "2021-12-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1173618696957988e-09,
+        "treatment_return": -0.013056752339136501
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.023876744277188777,
+        "decision_timestamp": "2021-12-06T05:00:00+00:00",
+        "next_decision_timestamp": "2021-12-13T05:00:00+00:00",
+        "scale": 0.7425447274069358,
+        "treatment_minus_control": -0.004663904276141828,
+        "treatment_return": 0.01921284000104695
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0017238062823842215,
+        "decision_timestamp": "2021-12-13T05:00:00+00:00",
+        "next_decision_timestamp": "2021-12-20T05:00:00+00:00",
+        "scale": 0.6481258529866752,
+        "treatment_minus_control": 0.0003262059311864851,
+        "treatment_return": -0.0013976003511977364
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.016840810992049482,
+        "decision_timestamp": "2021-12-20T05:00:00+00:00",
+        "next_decision_timestamp": "2021-12-27T05:00:00+00:00",
+        "scale": 0.5867204976353059,
+        "treatment_minus_control": -0.00672037888094823,
+        "treatment_return": 0.010120432111101252
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0030251818842025324,
+        "decision_timestamp": "2021-12-27T05:00:00+00:00",
+        "next_decision_timestamp": "2022-01-03T05:00:00+00:00",
+        "scale": 0.534762986926587,
+        "treatment_minus_control": 0.001389057576237751,
+        "treatment_return": -0.0016361243079647814
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0281190604976862,
+        "decision_timestamp": "2022-01-03T05:00:00+00:00",
+        "next_decision_timestamp": "2022-01-10T05:00:00+00:00",
+        "scale": 0.6963872686247669,
+        "treatment_minus_control": 0.013102949250914486,
+        "treatment_return": -0.015016111246771713
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.010028954761350128,
+        "decision_timestamp": "2022-01-10T05:00:00+00:00",
+        "next_decision_timestamp": "2022-01-18T05:00:00+00:00",
+        "scale": 0.7452862863958247,
+        "treatment_minus_control": -0.004546701071902692,
+        "treatment_return": -0.01457565583325282
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0007170831270366662,
+        "decision_timestamp": "2022-01-18T05:00:00+00:00",
+        "next_decision_timestamp": "2022-01-24T05:00:00+00:00",
+        "scale": 0.7576628935177819,
+        "treatment_minus_control": -0.0016368601302551022,
+        "treatment_return": -0.000919777003218436
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011923989131093826,
+        "decision_timestamp": "2022-01-24T05:00:00+00:00",
+        "next_decision_timestamp": "2022-01-31T05:00:00+00:00",
+        "scale": 0.845647793754835,
+        "treatment_minus_control": -0.0023031872093175476,
+        "treatment_return": 0.009620801921776279
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0035765279648831694,
+        "decision_timestamp": "2022-01-31T05:00:00+00:00",
+        "next_decision_timestamp": "2022-02-07T05:00:00+00:00",
+        "scale": 0.6957569438641772,
+        "treatment_minus_control": -0.0009903684701098037,
+        "treatment_return": 0.0025861594947733657
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.018084412279352313,
+        "decision_timestamp": "2022-02-07T05:00:00+00:00",
+        "next_decision_timestamp": "2022-02-14T05:00:00+00:00",
+        "scale": 0.650741921099491,
+        "treatment_minus_control": 0.006179165952646781,
+        "treatment_return": -0.011905246326705532
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.014124315240679253,
+        "decision_timestamp": "2022-02-14T05:00:00+00:00",
+        "next_decision_timestamp": "2022-02-22T05:00:00+00:00",
+        "scale": 0.5891440944593765,
+        "treatment_minus_control": 0.006131580252815905,
+        "treatment_return": -0.007992734987863348
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.002059250086283493,
+        "decision_timestamp": "2022-02-22T05:00:00+00:00",
+        "next_decision_timestamp": "2022-02-28T05:00:00+00:00",
+        "scale": 0.5835387568667983,
+        "treatment_minus_control": -0.0008560990689052694,
+        "treatment_return": 0.0012031510173782234
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00995485050036593,
+        "decision_timestamp": "2022-02-28T05:00:00+00:00",
+        "next_decision_timestamp": "2022-03-07T05:00:00+00:00",
+        "scale": 0.5278308014534123,
+        "treatment_minus_control": -0.0047469916858247085,
+        "treatment_return": 0.005207858814541222
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0034090460556892577,
+        "decision_timestamp": "2022-03-07T05:00:00+00:00",
+        "next_decision_timestamp": "2022-03-14T04:00:00+00:00",
+        "scale": 0.5429439440588579,
+        "treatment_minus_control": 0.0015214488531797299,
+        "treatment_return": -0.0018875972025095278
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.028220392423588647,
+        "decision_timestamp": "2022-03-14T04:00:00+00:00",
+        "next_decision_timestamp": "2022-03-21T04:00:00+00:00",
+        "scale": 0.526201545953863,
+        "treatment_minus_control": -0.013140629392512704,
+        "treatment_return": 0.015079763031075943
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.012450814347863215,
+        "decision_timestamp": "2022-03-21T04:00:00+00:00",
+        "next_decision_timestamp": "2022-03-28T04:00:00+00:00",
+        "scale": 0.5102917185494605,
+        "treatment_minus_control": -0.005885676640872806,
+        "treatment_return": 0.006565137706990409
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005555832412586392,
+        "decision_timestamp": "2022-03-28T04:00:00+00:00",
+        "next_decision_timestamp": "2022-04-04T04:00:00+00:00",
+        "scale": 0.5472274700226822,
+        "treatment_minus_control": 0.0025031524568612795,
+        "treatment_return": -0.0030526799557251127
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.010707227264017405,
+        "decision_timestamp": "2022-04-04T04:00:00+00:00",
+        "next_decision_timestamp": "2022-04-11T04:00:00+00:00",
+        "scale": 0.5617816066843216,
+        "treatment_minus_control": -0.0049362706715390114,
+        "treatment_return": 0.005770956592478393
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0036928750375024855,
+        "decision_timestamp": "2022-04-11T04:00:00+00:00",
+        "next_decision_timestamp": "2022-04-18T04:00:00+00:00",
+        "scale": 0.6988543488029637,
+        "treatment_minus_control": -0.0015352577978060555,
+        "treatment_return": 0.00215761723969643
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.016596410975839748,
+        "decision_timestamp": "2022-04-18T04:00:00+00:00",
+        "next_decision_timestamp": "2022-04-25T04:00:00+00:00",
+        "scale": 0.8346321970541496,
+        "treatment_minus_control": 0.0032648806763486693,
+        "treatment_return": -0.013331530299491079
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.024552012791790756,
+        "decision_timestamp": "2022-04-25T04:00:00+00:00",
+        "next_decision_timestamp": "2022-05-02T04:00:00+00:00",
+        "scale": 0.757489802824793,
+        "treatment_minus_control": 0.005701810089014159,
+        "treatment_return": -0.018850202702776597
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.019138640940837837,
+        "decision_timestamp": "2022-05-02T04:00:00+00:00",
+        "next_decision_timestamp": "2022-05-09T04:00:00+00:00",
+        "scale": 0.5668456835220376,
+        "treatment_minus_control": 0.007007296641215688,
+        "treatment_return": -0.012131344299622149
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.006114004466915679,
+        "decision_timestamp": "2022-05-09T04:00:00+00:00",
+        "next_decision_timestamp": "2022-05-16T04:00:00+00:00",
+        "scale": 0.45911323087539385,
+        "treatment_minus_control": -0.00282922636696048,
+        "treatment_return": 0.003284778099955199
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.029959337348079873,
+        "decision_timestamp": "2022-05-16T04:00:00+00:00",
+        "next_decision_timestamp": "2022-05-23T04:00:00+00:00",
+        "scale": 0.45298099336148673,
+        "treatment_minus_control": 0.015561634213099196,
+        "treatment_return": -0.014397703134980677
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.015173603934945268,
+        "decision_timestamp": "2022-05-23T04:00:00+00:00",
+        "next_decision_timestamp": "2022-05-31T04:00:00+00:00",
+        "scale": 0.4257720391340254,
+        "treatment_minus_control": -0.008862122014245744,
+        "treatment_return": 0.006311481920699524
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.003053187974803473,
+        "decision_timestamp": "2022-05-31T04:00:00+00:00",
+        "next_decision_timestamp": "2022-06-06T04:00:00+00:00",
+        "scale": 0.4759818196610844,
+        "treatment_minus_control": -0.0022356335279465345,
+        "treatment_return": 0.0008175544468569385
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.034670354034302964,
+        "decision_timestamp": "2022-06-06T04:00:00+00:00",
+        "next_decision_timestamp": "2022-06-13T04:00:00+00:00",
+        "scale": 0.5445044065823321,
+        "treatment_minus_control": 0.015241695255939769,
+        "treatment_return": -0.019428658778363195
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.005668311421419214,
+        "decision_timestamp": "2022-06-13T04:00:00+00:00",
+        "next_decision_timestamp": "2022-06-21T04:00:00+00:00",
+        "scale": 0.4897097448333994,
+        "treatment_minus_control": 0.0029384342280805997,
+        "treatment_return": -0.0027298771933386146
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.002206485074112363,
+        "decision_timestamp": "2022-06-21T04:00:00+00:00",
+        "next_decision_timestamp": "2022-06-27T04:00:00+00:00",
+        "scale": 0.5197705004244179,
+        "treatment_minus_control": -0.000931530617107601,
+        "treatment_return": 0.0012749544570047622
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.01587979058619482,
+        "decision_timestamp": "2022-06-27T04:00:00+00:00",
+        "next_decision_timestamp": "2022-07-05T04:00:00+00:00",
+        "scale": 0.5049201316794294,
+        "treatment_minus_control": 0.007710548968538289,
+        "treatment_return": -0.00816924161765653
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.001994754702275392,
+        "decision_timestamp": "2022-07-05T04:00:00+00:00",
+        "next_decision_timestamp": "2022-07-11T04:00:00+00:00",
+        "scale": 0.5671371554800164,
+        "treatment_minus_control": -0.0009781023408728107,
+        "treatment_return": 0.0010166523614025813
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.004898767193670328,
+        "decision_timestamp": "2022-07-11T04:00:00+00:00",
+        "next_decision_timestamp": "2022-07-18T04:00:00+00:00",
+        "scale": 0.5738921775039131,
+        "treatment_minus_control": 0.00214606120152272,
+        "treatment_return": -0.0027527059921476082
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.007808297374778395,
+        "decision_timestamp": "2022-07-18T04:00:00+00:00",
+        "next_decision_timestamp": "2022-07-25T04:00:00+00:00",
+        "scale": 0.7239768059948821,
+        "treatment_minus_control": 0.0021806824561227955,
+        "treatment_return": 0.00998897983090119
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.004909142749291884,
+        "decision_timestamp": "2022-07-25T04:00:00+00:00",
+        "next_decision_timestamp": "2022-08-01T04:00:00+00:00",
+        "scale": 0.8484980232516458,
+        "treatment_minus_control": 0.00036702721209525,
+        "treatment_return": -0.004542115537196634
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0009601760992774544,
+        "decision_timestamp": "2022-08-01T04:00:00+00:00",
+        "next_decision_timestamp": "2022-08-08T04:00:00+00:00",
+        "scale": 0.9731180307981463,
+        "treatment_minus_control": -0.0008586682495508313,
+        "treatment_return": 0.00010150784972662308
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01964009866133032,
+        "decision_timestamp": "2022-08-08T04:00:00+00:00",
+        "next_decision_timestamp": "2022-08-15T04:00:00+00:00",
+        "scale": 0.9723731743586871,
+        "treatment_minus_control": -0.0003643510149131668,
+        "treatment_return": 0.019275747646417152
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004313940991934273,
+        "decision_timestamp": "2022-08-15T04:00:00+00:00",
+        "next_decision_timestamp": "2022-08-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.729374674698587e-05,
+        "treatment_return": -0.004226647245187287
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.021386732402294162,
+        "decision_timestamp": "2022-08-22T04:00:00+00:00",
+        "next_decision_timestamp": "2022-08-29T04:00:00+00:00",
+        "scale": 0.9976342442364483,
+        "treatment_minus_control": 0.00012612672044154394,
+        "treatment_return": -0.021260605681852618
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.012370840972376618,
+        "decision_timestamp": "2022-08-29T04:00:00+00:00",
+        "next_decision_timestamp": "2022-09-06T04:00:00+00:00",
+        "scale": 0.9469411055539356,
+        "treatment_minus_control": 0.0004895642166462544,
+        "treatment_return": -0.011881276755730363
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.02140564801329048,
+        "decision_timestamp": "2022-09-06T04:00:00+00:00",
+        "next_decision_timestamp": "2022-09-12T04:00:00+00:00",
+        "scale": 0.9711087530548388,
+        "treatment_minus_control": -0.000562829920082164,
+        "treatment_return": 0.020842818093208315
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.024448979928718306,
+        "decision_timestamp": "2022-09-12T04:00:00+00:00",
+        "next_decision_timestamp": "2022-09-19T04:00:00+00:00",
+        "scale": 0.9186976556081404,
+        "treatment_minus_control": 0.0012235952351911106,
+        "treatment_return": -0.023225384693527196
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.01886040506656872,
+        "decision_timestamp": "2022-09-19T04:00:00+00:00",
+        "next_decision_timestamp": "2022-09-26T04:00:00+00:00",
+        "scale": 0.7771609048070898,
+        "treatment_minus_control": 0.0038394939369296166,
+        "treatment_return": -0.015020911129639103
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.023833036570074517,
+        "decision_timestamp": "2022-09-26T04:00:00+00:00",
+        "next_decision_timestamp": "2022-10-03T04:00:00+00:00",
+        "scale": 0.8237280690060583,
+        "treatment_minus_control": -0.004717376378733373,
+        "treatment_return": 0.019115660191341144
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.002230427983915151,
+        "decision_timestamp": "2022-10-03T04:00:00+00:00",
+        "next_decision_timestamp": "2022-10-10T04:00:00+00:00",
+        "scale": 0.7637260562967318,
+        "treatment_minus_control": -0.0002576620118255324,
+        "treatment_return": 0.0019727659720896185
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0007410248441984679,
+        "decision_timestamp": "2022-10-10T04:00:00+00:00",
+        "next_decision_timestamp": "2022-10-17T04:00:00+00:00",
+        "scale": 0.7208056075699667,
+        "treatment_minus_control": 0.00010299657375933968,
+        "treatment_return": -0.0006380282704391282
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.015885190600757326,
+        "decision_timestamp": "2022-10-17T04:00:00+00:00",
+        "next_decision_timestamp": "2022-10-24T04:00:00+00:00",
+        "scale": 0.7233218790877801,
+        "treatment_minus_control": -0.00443835184464203,
+        "treatment_return": 0.011446838756115296
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.020480428630316183,
+        "decision_timestamp": "2022-10-24T04:00:00+00:00",
+        "next_decision_timestamp": "2022-10-31T04:00:00+00:00",
+        "scale": 0.7218140303018872,
+        "treatment_minus_control": -0.005476210856230068,
+        "treatment_return": 0.015004217774086115
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004881959979933015,
+        "decision_timestamp": "2022-10-31T04:00:00+00:00",
+        "next_decision_timestamp": "2022-11-07T05:00:00+00:00",
+        "scale": 0.7755509792522439,
+        "treatment_minus_control": -0.0012218509486845441,
+        "treatment_return": 0.0036601090312484708
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.004782496040390272,
+        "decision_timestamp": "2022-11-07T05:00:00+00:00",
+        "next_decision_timestamp": "2022-11-14T05:00:00+00:00",
+        "scale": 0.8791179623250955,
+        "treatment_minus_control": 0.0005080687919362115,
+        "treatment_return": -0.00427442724845406
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.008255576765607398,
+        "decision_timestamp": "2022-11-14T05:00:00+00:00",
+        "next_decision_timestamp": "2022-11-21T05:00:00+00:00",
+        "scale": 0.7760616203770503,
+        "treatment_minus_control": -0.0017212170145159966,
+        "treatment_return": 0.006534359751091401
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0003814248232301143,
+        "decision_timestamp": "2022-11-21T05:00:00+00:00",
+        "next_decision_timestamp": "2022-11-28T05:00:00+00:00",
+        "scale": 0.8477826946826018,
+        "treatment_minus_control": -0.00017207071664948614,
+        "treatment_return": 0.00020935410658062814
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.003740964788623735,
+        "decision_timestamp": "2022-11-28T05:00:00+00:00",
+        "next_decision_timestamp": "2022-12-05T05:00:00+00:00",
+        "scale": 0.8514427139316818,
+        "treatment_minus_control": 0.0006130426632060537,
+        "treatment_return": -0.0031279221254176814
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.008083669574565522,
+        "decision_timestamp": "2022-12-05T05:00:00+00:00",
+        "next_decision_timestamp": "2022-12-12T05:00:00+00:00",
+        "scale": 0.8875760694244985,
+        "treatment_minus_control": -1.3728204124596743e-06,
+        "treatment_return": -0.008085042394977981
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.026899351950538497,
+        "decision_timestamp": "2022-12-12T05:00:00+00:00",
+        "next_decision_timestamp": "2022-12-19T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0019377996913433337,
+        "treatment_return": -0.024961552259195163
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01534939002622182,
+        "decision_timestamp": "2022-12-19T05:00:00+00:00",
+        "next_decision_timestamp": "2022-12-27T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.8695347842555563e-05,
+        "treatment_return": 0.015378085374064376
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.012483103148589358,
+        "decision_timestamp": "2022-12-27T05:00:00+00:00",
+        "next_decision_timestamp": "2023-01-03T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.2256654885755012e-07,
+        "treatment_return": -0.012482880582040501
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00010784318479317712,
+        "decision_timestamp": "2023-01-03T05:00:00+00:00",
+        "next_decision_timestamp": "2023-01-09T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.8564526364238674e-06,
+        "treatment_return": 0.00011069963742960098
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006378571333767624,
+        "decision_timestamp": "2023-01-09T05:00:00+00:00",
+        "next_decision_timestamp": "2023-01-17T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.0629499253521644e-05,
+        "treatment_return": 0.0063579418345141026
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.011355166624017698,
+        "decision_timestamp": "2023-01-17T05:00:00+00:00",
+        "next_decision_timestamp": "2023-01-23T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.992124456564383e-07,
+        "treatment_return": -0.011355565836463355
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0018569576540639066,
+        "decision_timestamp": "2023-01-23T05:00:00+00:00",
+        "next_decision_timestamp": "2023-01-30T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.107343487547155e-08,
+        "treatment_return": 0.001856998727498782
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0021234962263919632,
+        "decision_timestamp": "2023-01-30T05:00:00+00:00",
+        "next_decision_timestamp": "2023-02-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.6970906053545036e-08,
+        "treatment_return": -0.0021235431972980168
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00809432323289827,
+        "decision_timestamp": "2023-02-06T05:00:00+00:00",
+        "next_decision_timestamp": "2023-02-13T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.421464275405356e-09,
+        "treatment_return": 0.008094313811433995
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.02042932829109978,
+        "decision_timestamp": "2023-02-13T05:00:00+00:00",
+        "next_decision_timestamp": "2023-02-21T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.9742107948417242e-10,
+        "treatment_return": -0.02042932848852086
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.011507487820860307,
+        "decision_timestamp": "2023-02-21T05:00:00+00:00",
+        "next_decision_timestamp": "2023-02-27T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1498135776832896e-10,
+        "treatment_return": -0.011507487935841665
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010534374429602922,
+        "decision_timestamp": "2023-02-27T05:00:00+00:00",
+        "next_decision_timestamp": "2023-03-06T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -7.749134667278668e-12,
+        "treatment_return": 0.010534374421853787
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0178653875902941,
+        "decision_timestamp": "2023-03-06T05:00:00+00:00",
+        "next_decision_timestamp": "2023-03-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.177946629127291e-13,
+        "treatment_return": -0.017865387590411896
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0019224968949116406,
+        "decision_timestamp": "2023-03-13T04:00:00+00:00",
+        "next_decision_timestamp": "2023-03-20T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.4210854715202004e-14,
+        "treatment_return": 0.0019224968949258514
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005330595904186497,
+        "decision_timestamp": "2023-03-20T04:00:00+00:00",
+        "next_decision_timestamp": "2023-03-27T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.2212453270876722e-14,
+        "treatment_return": 0.0053305959041987094
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012931267721365991,
+        "decision_timestamp": "2023-03-27T04:00:00+00:00",
+        "next_decision_timestamp": "2023-04-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.012931267721365991
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004208616358156836,
+        "decision_timestamp": "2023-04-03T04:00:00+00:00",
+        "next_decision_timestamp": "2023-04-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.004208616358156947
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.014626257507894147,
+        "decision_timestamp": "2023-04-10T04:00:00+00:00",
+        "next_decision_timestamp": "2023-04-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.014626257507894369
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.013756703456342168,
+        "decision_timestamp": "2023-04-17T04:00:00+00:00",
+        "next_decision_timestamp": "2023-04-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.013756703456341945
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004569799993098811,
+        "decision_timestamp": "2023-04-24T04:00:00+00:00",
+        "next_decision_timestamp": "2023-05-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.0045697999930987
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004300836791522822,
+        "decision_timestamp": "2023-05-01T04:00:00+00:00",
+        "next_decision_timestamp": "2023-05-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.004300836791522933
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004951618667493829,
+        "decision_timestamp": "2023-05-08T04:00:00+00:00",
+        "next_decision_timestamp": "2023-05-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.004951618667493607
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00836866387194557,
+        "decision_timestamp": "2023-05-15T04:00:00+00:00",
+        "next_decision_timestamp": "2023-05-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.00836866387194557
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004433151631297427,
+        "decision_timestamp": "2023-05-22T04:00:00+00:00",
+        "next_decision_timestamp": "2023-05-30T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.004433151631297427
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005702576364265077,
+        "decision_timestamp": "2023-05-30T04:00:00+00:00",
+        "next_decision_timestamp": "2023-06-05T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.005702576364265077
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010331152321191528,
+        "decision_timestamp": "2023-06-05T04:00:00+00:00",
+        "next_decision_timestamp": "2023-06-12T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.010331152321191528
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00618713289334849,
+        "decision_timestamp": "2023-06-12T04:00:00+00:00",
+        "next_decision_timestamp": "2023-06-20T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.006187132893348268
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004583627097522802,
+        "decision_timestamp": "2023-06-20T04:00:00+00:00",
+        "next_decision_timestamp": "2023-06-26T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.004583627097522691
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.015526704753495046,
+        "decision_timestamp": "2023-06-26T04:00:00+00:00",
+        "next_decision_timestamp": "2023-07-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.015526704753495046
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001500084216222497,
+        "decision_timestamp": "2023-07-03T04:00:00+00:00",
+        "next_decision_timestamp": "2023-07-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.001500084216222719
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.013408178185480235,
+        "decision_timestamp": "2023-07-10T04:00:00+00:00",
+        "next_decision_timestamp": "2023-07-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.013408178185480013
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006712081969347139,
+        "decision_timestamp": "2023-07-17T04:00:00+00:00",
+        "next_decision_timestamp": "2023-07-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.006712081969347139
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0047546161221545535,
+        "decision_timestamp": "2023-07-24T04:00:00+00:00",
+        "next_decision_timestamp": "2023-07-31T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.0047546161221543315
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0031439131817514454,
+        "decision_timestamp": "2023-07-31T04:00:00+00:00",
+        "next_decision_timestamp": "2023-08-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0031439131817514454
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0007428889295082453,
+        "decision_timestamp": "2023-08-07T04:00:00+00:00",
+        "next_decision_timestamp": "2023-08-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0007428889295082453
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.019354924033668897,
+        "decision_timestamp": "2023-08-14T04:00:00+00:00",
+        "next_decision_timestamp": "2023-08-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.019354924033668786
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.008545959110742185,
+        "decision_timestamp": "2023-08-21T04:00:00+00:00",
+        "next_decision_timestamp": "2023-08-28T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.008545959110742185
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0025178296949890377,
+        "decision_timestamp": "2023-08-28T04:00:00+00:00",
+        "next_decision_timestamp": "2023-09-05T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0025178296949890377
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0030582246064398966,
+        "decision_timestamp": "2023-09-05T04:00:00+00:00",
+        "next_decision_timestamp": "2023-09-11T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.0030582246064398966
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.015379969201686716,
+        "decision_timestamp": "2023-09-11T04:00:00+00:00",
+        "next_decision_timestamp": "2023-09-18T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": -0.015379969201686716
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00026859183274630105,
+        "decision_timestamp": "2023-09-18T04:00:00+00:00",
+        "next_decision_timestamp": "2023-09-25T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.00026859183274630105
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.008113499033674199,
+        "decision_timestamp": "2023-09-25T04:00:00+00:00",
+        "next_decision_timestamp": "2023-10-02T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.00811349903367431
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01115745956518932,
+        "decision_timestamp": "2023-10-02T04:00:00+00:00",
+        "next_decision_timestamp": "2023-10-09T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.01115745956518932
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007214064266454656,
+        "decision_timestamp": "2023-10-09T04:00:00+00:00",
+        "next_decision_timestamp": "2023-10-16T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.007214064266454434
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.007615916325858785,
+        "decision_timestamp": "2023-10-16T04:00:00+00:00",
+        "next_decision_timestamp": "2023-10-23T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.007615916325858896
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006511477391627718,
+        "decision_timestamp": "2023-10-23T04:00:00+00:00",
+        "next_decision_timestamp": "2023-10-30T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.006511477391627607
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.025773642290849663,
+        "decision_timestamp": "2023-10-30T04:00:00+00:00",
+        "next_decision_timestamp": "2023-11-06T05:00:00+00:00",
+        "scale": 0.9920109414844236,
+        "treatment_minus_control": -0.00032421750354072465,
+        "treatment_return": 0.02544942478730894
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0219007678555021,
+        "decision_timestamp": "2023-11-06T05:00:00+00:00",
+        "next_decision_timestamp": "2023-11-13T05:00:00+00:00",
+        "scale": 0.9206291400534558,
+        "treatment_minus_control": -0.0018623822791183908,
+        "treatment_return": 0.02003838557638371
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.019940852663267394,
+        "decision_timestamp": "2023-11-13T05:00:00+00:00",
+        "next_decision_timestamp": "2023-11-20T05:00:00+00:00",
+        "scale": 0.8841016762798474,
+        "treatment_minus_control": -0.0019677952821450795,
+        "treatment_return": 0.017973057381122315
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0009705487906972454,
+        "decision_timestamp": "2023-11-20T05:00:00+00:00",
+        "next_decision_timestamp": "2023-11-27T05:00:00+00:00",
+        "scale": 0.9704390771595378,
+        "treatment_minus_control": 6.409824678588194e-06,
+        "treatment_return": 0.0009769586153758336
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.009279311944408453,
+        "decision_timestamp": "2023-11-27T05:00:00+00:00",
+        "next_decision_timestamp": "2023-12-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0005156624373074958,
+        "treatment_return": -0.008763649507100957
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004303790398969998,
+        "decision_timestamp": "2023-12-04T05:00:00+00:00",
+        "next_decision_timestamp": "2023-12-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00022233725868914256,
+        "treatment_return": 0.004081453140280855
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006967876864667044,
+        "decision_timestamp": "2023-12-11T05:00:00+00:00",
+        "next_decision_timestamp": "2023-12-18T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 5.29484811224723e-05,
+        "treatment_return": 0.0070208253457895164
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007657737690807576,
+        "decision_timestamp": "2023-12-18T05:00:00+00:00",
+        "next_decision_timestamp": "2023-12-26T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.1752688050380442e-05,
+        "treatment_return": 0.007679490378857956
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.012270156219852169,
+        "decision_timestamp": "2023-12-26T05:00:00+00:00",
+        "next_decision_timestamp": "2024-01-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.164548354444129e-06,
+        "treatment_return": -0.012267991671497724
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.011035143638362,
+        "decision_timestamp": "2024-01-02T05:00:00+00:00",
+        "next_decision_timestamp": "2024-01-08T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.332219044085207e-08,
+        "treatment_return": 0.011035090316171559
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01930223466632408,
+        "decision_timestamp": "2024-01-08T05:00:00+00:00",
+        "next_decision_timestamp": "2024-01-16T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.7917134442768656e-10,
+        "treatment_return": 0.019302234487152736
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012802662223401429,
+        "decision_timestamp": "2024-01-16T05:00:00+00:00",
+        "next_decision_timestamp": "2024-01-22T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.183236837628783e-09,
+        "treatment_return": 0.012802653040164591
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0024058550461931727,
+        "decision_timestamp": "2024-01-22T05:00:00+00:00",
+        "next_decision_timestamp": "2024-01-29T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.814119739104399e-09,
+        "treatment_return": 0.0024058452320734336
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.022468660465959855,
+        "decision_timestamp": "2024-01-29T05:00:00+00:00",
+        "next_decision_timestamp": "2024-02-05T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.089474831519112e-08,
+        "treatment_return": 0.02246862957121154
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.014700990635101663,
+        "decision_timestamp": "2024-02-05T05:00:00+00:00",
+        "next_decision_timestamp": "2024-02-12T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.8244099564412863e-09,
+        "treatment_return": 0.01470099245951162
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0018173799399848756,
+        "decision_timestamp": "2024-02-12T05:00:00+00:00",
+        "next_decision_timestamp": "2024-02-20T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.874444708453552e-09,
+        "treatment_return": -0.001817385814429584
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.012001657649780562,
+        "decision_timestamp": "2024-02-20T05:00:00+00:00",
+        "next_decision_timestamp": "2024-02-26T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.0518046433816153e-09,
+        "treatment_return": 0.012001658701585205
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0031801032598195444,
+        "decision_timestamp": "2024-02-26T05:00:00+00:00",
+        "next_decision_timestamp": "2024-03-04T05:00:00+00:00",
+        "scale": 0.8672682604540114,
+        "treatment_minus_control": -0.0007098797974967042,
+        "treatment_return": 0.0024702234623228403
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.013698970484194772,
+        "decision_timestamp": "2024-03-04T05:00:00+00:00",
+        "next_decision_timestamp": "2024-03-11T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.00046703966531180807,
+        "treatment_return": -0.013231930818882964
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.008179930807427738,
+        "decision_timestamp": "2024-03-11T04:00:00+00:00",
+        "next_decision_timestamp": "2024-03-18T04:00:00+00:00",
+        "scale": 0.9709022829778301,
+        "treatment_minus_control": -0.00017701259740432462,
+        "treatment_return": 0.008002918210023413
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.008047583350262233,
+        "decision_timestamp": "2024-03-18T04:00:00+00:00",
+        "next_decision_timestamp": "2024-03-25T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00014632165415506826,
+        "treatment_return": 0.007901261696107165
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0009595549114056467,
+        "decision_timestamp": "2024-03-25T04:00:00+00:00",
+        "next_decision_timestamp": "2024-04-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.7020675919975368e-05,
+        "treatment_return": -0.0009325342354856714
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.009057790960967593,
+        "decision_timestamp": "2024-04-01T04:00:00+00:00",
+        "next_decision_timestamp": "2024-04-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 6.686783569542776e-05,
+        "treatment_return": -0.008990923125272166
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.010516027089710334,
+        "decision_timestamp": "2024-04-08T04:00:00+00:00",
+        "next_decision_timestamp": "2024-04-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.8693901134468902e-05,
+        "treatment_return": -0.010487333188575865
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0033367775731185656,
+        "decision_timestamp": "2024-04-15T04:00:00+00:00",
+        "next_decision_timestamp": "2024-04-22T04:00:00+00:00",
+        "scale": 0.9636858955805646,
+        "treatment_minus_control": 0.00017364451692825078,
+        "treatment_return": -0.003163133056190315
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.018313116003677576,
+        "decision_timestamp": "2024-04-22T04:00:00+00:00",
+        "next_decision_timestamp": "2024-04-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0007184796647228264,
+        "treatment_return": 0.01759463633895475
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.012758162725269306,
+        "decision_timestamp": "2024-04-29T04:00:00+00:00",
+        "next_decision_timestamp": "2024-05-06T04:00:00+00:00",
+        "scale": 0.9229667027428891,
+        "treatment_minus_control": 0.0002182142352374905,
+        "treatment_return": -0.012539948490031816
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004629201211573841,
+        "decision_timestamp": "2024-05-06T04:00:00+00:00",
+        "next_decision_timestamp": "2024-05-13T04:00:00+00:00",
+        "scale": 0.8191388335325751,
+        "treatment_minus_control": -0.000723606217665651,
+        "treatment_return": 0.00390559499390819
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0002656549599668878,
+        "decision_timestamp": "2024-05-13T04:00:00+00:00",
+        "next_decision_timestamp": "2024-05-20T04:00:00+00:00",
+        "scale": 0.9225393911639729,
+        "treatment_minus_control": -9.424769170185421e-05,
+        "treatment_return": 0.0001714072682650336
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004251689729778518,
+        "decision_timestamp": "2024-05-20T04:00:00+00:00",
+        "next_decision_timestamp": "2024-05-28T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.077006011844354e-05,
+        "treatment_return": -0.004302459789896962
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0011342124879858417,
+        "decision_timestamp": "2024-05-28T04:00:00+00:00",
+        "next_decision_timestamp": "2024-06-03T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.8641805682895196e-05,
+        "treatment_return": 0.001152854293668737
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.003407646739026715,
+        "decision_timestamp": "2024-06-03T04:00:00+00:00",
+        "next_decision_timestamp": "2024-06-10T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.0656593533008305e-05,
+        "treatment_return": 0.003386990145493707
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0042759477239615595,
+        "decision_timestamp": "2024-06-10T04:00:00+00:00",
+        "next_decision_timestamp": "2024-06-17T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.4222220623991717e-06,
+        "treatment_return": 0.00427252550189916
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.002713503401217454,
+        "decision_timestamp": "2024-06-17T04:00:00+00:00",
+        "next_decision_timestamp": "2024-06-24T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.2580234076686736e-08,
+        "treatment_return": -0.0027134908209833775
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.004210054032584232,
+        "decision_timestamp": "2024-06-24T04:00:00+00:00",
+        "next_decision_timestamp": "2024-07-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.733049838838269e-10,
+        "treatment_return": -0.004210053159279248
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006700631943366231,
+        "decision_timestamp": "2024-07-01T04:00:00+00:00",
+        "next_decision_timestamp": "2024-07-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.5776270007327184e-11,
+        "treatment_return": 0.006700631917589961
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.005228293498652947,
+        "decision_timestamp": "2024-07-08T04:00:00+00:00",
+        "next_decision_timestamp": "2024-07-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -9.136047474100906e-11,
+        "treatment_return": 0.0052282934072924725
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0012619261574220442,
+        "decision_timestamp": "2024-07-15T04:00:00+00:00",
+        "next_decision_timestamp": "2024-07-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.867040104272746e-11,
+        "treatment_return": 0.0012619262060924452
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.01243978816970237,
+        "decision_timestamp": "2024-07-22T04:00:00+00:00",
+        "next_decision_timestamp": "2024-07-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.8859805090728514e-11,
+        "treatment_return": -0.012439788120842565
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0015390996483264363,
+        "decision_timestamp": "2024-07-29T04:00:00+00:00",
+        "next_decision_timestamp": "2024-08-05T04:00:00+00:00",
+        "scale": 0.8224133730368021,
+        "treatment_minus_control": 0.0004303515443185857,
+        "treatment_return": -0.0011087481040078506
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011045832820336221,
+        "decision_timestamp": "2024-08-05T04:00:00+00:00",
+        "next_decision_timestamp": "2024-08-12T04:00:00+00:00",
+        "scale": 0.5974225441163844,
+        "treatment_minus_control": -0.0032828594612910322,
+        "treatment_return": 0.007762973359045189
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011835563750628886,
+        "decision_timestamp": "2024-08-12T04:00:00+00:00",
+        "next_decision_timestamp": "2024-08-19T04:00:00+00:00",
+        "scale": 0.5525600589890177,
+        "treatment_minus_control": -0.005257267305295743,
+        "treatment_return": 0.006578296445333143
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.009089807193349175,
+        "decision_timestamp": "2024-08-19T04:00:00+00:00",
+        "next_decision_timestamp": "2024-08-26T04:00:00+00:00",
+        "scale": 0.5259091527497249,
+        "treatment_minus_control": -0.004131012578717286,
+        "treatment_return": 0.0049587946146318895
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0068491438835665,
+        "decision_timestamp": "2024-08-26T04:00:00+00:00",
+        "next_decision_timestamp": "2024-09-03T04:00:00+00:00",
+        "scale": 0.5782424374061673,
+        "treatment_minus_control": -0.003016956150054595,
+        "treatment_return": 0.0038321877335119048
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0031358401971585126,
+        "decision_timestamp": "2024-09-03T04:00:00+00:00",
+        "next_decision_timestamp": "2024-09-09T04:00:00+00:00",
+        "scale": 0.6089895188434211,
+        "treatment_minus_control": 0.001125546799994881,
+        "treatment_return": -0.0020102933971636316
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004564660547663024,
+        "decision_timestamp": "2024-09-09T04:00:00+00:00",
+        "next_decision_timestamp": "2024-09-16T04:00:00+00:00",
+        "scale": 0.7697694895941877,
+        "treatment_minus_control": -0.0011530099382806025,
+        "treatment_return": 0.0034116506093824217
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0007427646048859815,
+        "decision_timestamp": "2024-09-16T04:00:00+00:00",
+        "next_decision_timestamp": "2024-09-23T04:00:00+00:00",
+        "scale": 0.8546563970332566,
+        "treatment_minus_control": 0.0003887321856045345,
+        "treatment_return": -0.000354032419281447
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00020076926140744078,
+        "decision_timestamp": "2024-09-23T04:00:00+00:00",
+        "next_decision_timestamp": "2024-09-30T04:00:00+00:00",
+        "scale": 0.8176389738869927,
+        "treatment_minus_control": 4.8656070759101056e-05,
+        "treatment_return": 0.00024942533216654184
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.001605656758515539,
+        "decision_timestamp": "2024-09-30T04:00:00+00:00",
+        "next_decision_timestamp": "2024-10-07T04:00:00+00:00",
+        "scale": 0.8482027652385359,
+        "treatment_minus_control": 0.0004502643584721744,
+        "treatment_return": -0.0011553924000433646
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.011426302924476106,
+        "decision_timestamp": "2024-10-07T04:00:00+00:00",
+        "next_decision_timestamp": "2024-10-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00034207512720052513,
+        "treatment_return": 0.011084227797275581
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0007243517602019134,
+        "decision_timestamp": "2024-10-14T04:00:00+00:00",
+        "next_decision_timestamp": "2024-10-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.7344518057192957e-05,
+        "treatment_return": -0.0007516962782591063
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.013419422706837936,
+        "decision_timestamp": "2024-10-21T04:00:00+00:00",
+        "next_decision_timestamp": "2024-10-28T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0004196740734825344,
+        "treatment_return": -0.012999748633355401
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.017037798131790183,
+        "decision_timestamp": "2024-10-28T04:00:00+00:00",
+        "next_decision_timestamp": "2024-11-04T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.1006110778906155e-05,
+        "treatment_return": -0.01708880424256909
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.029788359627487937,
+        "decision_timestamp": "2024-11-04T05:00:00+00:00",
+        "next_decision_timestamp": "2024-11-11T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0001869173442443639,
+        "treatment_return": 0.0299752769717323
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.004614565165945939,
+        "decision_timestamp": "2024-11-11T05:00:00+00:00",
+        "next_decision_timestamp": "2024-11-18T05:00:00+00:00",
+        "scale": 0.8234979634660947,
+        "treatment_minus_control": 0.0006718392240778748,
+        "treatment_return": -0.003942725941868064
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00899702417704007,
+        "decision_timestamp": "2024-11-18T05:00:00+00:00",
+        "next_decision_timestamp": "2024-11-25T05:00:00+00:00",
+        "scale": 0.7910999483153984,
+        "treatment_minus_control": -0.0018479786011342814,
+        "treatment_return": 0.007149045575905788
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.004116511765630548,
+        "decision_timestamp": "2024-11-25T05:00:00+00:00",
+        "next_decision_timestamp": "2024-12-02T05:00:00+00:00",
+        "scale": 0.8102648527713219,
+        "treatment_minus_control": -0.0007272685624706288,
+        "treatment_return": 0.0033892432031599196
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.011381490169657615,
+        "decision_timestamp": "2024-12-02T05:00:00+00:00",
+        "next_decision_timestamp": "2024-12-09T05:00:00+00:00",
+        "scale": 0.9732329761655627,
+        "treatment_minus_control": 0.00040166781874839685,
+        "treatment_return": -0.010979822350909219
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.001117473135322511,
+        "decision_timestamp": "2024-12-09T05:00:00+00:00",
+        "next_decision_timestamp": "2024-12-16T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.857992119924106e-05,
+        "treatment_return": 0.0010488932141232699
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0016505843754395233,
+        "decision_timestamp": "2024-12-16T05:00:00+00:00",
+        "next_decision_timestamp": "2024-12-23T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00016859858694928676,
+        "treatment_return": -0.00181918296238881
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.003920647863449145,
+        "decision_timestamp": "2024-12-23T05:00:00+00:00",
+        "next_decision_timestamp": "2024-12-30T05:00:00+00:00",
+        "scale": 0.8857323015429801,
+        "treatment_minus_control": 0.00043491447859711485,
+        "treatment_return": -0.00348573338485203
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.001930566110109444,
+        "decision_timestamp": "2024-12-30T05:00:00+00:00",
+        "next_decision_timestamp": "2025-01-06T05:00:00+00:00",
+        "scale": 0.8059994469886469,
+        "treatment_minus_control": -0.00032532411831098784,
+        "treatment_return": 0.0016052419917984562
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.006419978245681746,
+        "decision_timestamp": "2025-01-06T05:00:00+00:00",
+        "next_decision_timestamp": "2025-01-13T05:00:00+00:00",
+        "scale": 0.7787617292502851,
+        "treatment_minus_control": 0.0017527201412875781,
+        "treatment_return": -0.0046672581043941674
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.042091050991391876,
+        "decision_timestamp": "2025-01-13T05:00:00+00:00",
+        "next_decision_timestamp": "2025-01-21T05:00:00+00:00",
+        "scale": 0.7262881187541862,
+        "treatment_minus_control": -0.011483009006750589,
+        "treatment_return": 0.030608041984641288
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.011429777606042357,
+        "decision_timestamp": "2025-01-21T05:00:00+00:00",
+        "next_decision_timestamp": "2025-01-27T05:00:00+00:00",
+        "scale": 0.6629954071042706,
+        "treatment_minus_control": 0.00310125333860789,
+        "treatment_return": -0.008328524267434467
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.015037632698373882,
+        "decision_timestamp": "2025-01-27T05:00:00+00:00",
+        "next_decision_timestamp": "2025-02-03T05:00:00+00:00",
+        "scale": 0.8006844053574531,
+        "treatment_minus_control": -0.0021360746333345393,
+        "treatment_return": 0.012901558065039342
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.011957053281328456,
+        "decision_timestamp": "2025-02-03T05:00:00+00:00",
+        "next_decision_timestamp": "2025-02-10T05:00:00+00:00",
+        "scale": 0.8672449153207666,
+        "treatment_minus_control": -0.0005503813008906899,
+        "treatment_return": 0.011406671980437766
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.0010016244505568483,
+        "decision_timestamp": "2025-02-10T05:00:00+00:00",
+        "next_decision_timestamp": "2025-02-18T05:00:00+00:00",
+        "scale": 0.9198917612983254,
+        "treatment_minus_control": -0.00010902231929599271,
+        "treatment_return": -0.001110646769852841
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.015871352333004074,
+        "decision_timestamp": "2025-02-18T05:00:00+00:00",
+        "next_decision_timestamp": "2025-02-24T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.993925287625881e-05,
+        "treatment_return": -0.015781413080127815
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0064115111653269,
+        "decision_timestamp": "2025-02-24T05:00:00+00:00",
+        "next_decision_timestamp": "2025-03-03T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.2076497029056554e-06,
+        "treatment_return": 0.006412718815029805
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.038015594669705166,
+        "decision_timestamp": "2025-03-03T05:00:00+00:00",
+        "next_decision_timestamp": "2025-03-10T04:00:00+00:00",
+        "scale": 0.8682061069006842,
+        "treatment_minus_control": 0.004152055025680612,
+        "treatment_return": -0.033863539644024554
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.006137682487907803,
+        "decision_timestamp": "2025-03-10T04:00:00+00:00",
+        "next_decision_timestamp": "2025-03-17T04:00:00+00:00",
+        "scale": 0.6892053946749184,
+        "treatment_minus_control": -0.0015182585868624976,
+        "treatment_return": 0.004619423901045305
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0037752320363690917,
+        "decision_timestamp": "2025-03-17T04:00:00+00:00",
+        "next_decision_timestamp": "2025-03-24T04:00:00+00:00",
+        "scale": 0.6299342312345441,
+        "treatment_minus_control": -0.0018855048971668786,
+        "treatment_return": 0.001889727139202213
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.00900663996556783,
+        "decision_timestamp": "2025-03-24T04:00:00+00:00",
+        "next_decision_timestamp": "2025-03-31T04:00:00+00:00",
+        "scale": 0.6030730214221769,
+        "treatment_minus_control": 0.003562510973422306,
+        "treatment_return": -0.005444128992145525
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.015986293170103028,
+        "decision_timestamp": "2025-03-31T04:00:00+00:00",
+        "next_decision_timestamp": "2025-04-07T04:00:00+00:00",
+        "scale": 0.6236812349816835,
+        "treatment_minus_control": 0.005648077222490611,
+        "treatment_return": -0.010338215947612417
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00971470108700978,
+        "decision_timestamp": "2025-04-07T04:00:00+00:00",
+        "next_decision_timestamp": "2025-04-14T04:00:00+00:00",
+        "scale": 0.4162352363512381,
+        "treatment_minus_control": -0.005451425318696357,
+        "treatment_return": 0.004263275768313424
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.017706415999750424,
+        "decision_timestamp": "2025-04-14T04:00:00+00:00",
+        "next_decision_timestamp": "2025-04-21T04:00:00+00:00",
+        "scale": 0.2671787483892159,
+        "treatment_minus_control": 0.013350011922865779,
+        "treatment_return": -0.004356404076884646
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.008888191642910659,
+        "decision_timestamp": "2025-04-21T04:00:00+00:00",
+        "next_decision_timestamp": "2025-04-28T04:00:00+00:00",
+        "scale": 0.2664441123558621,
+        "treatment_minus_control": -0.005028291867860135,
+        "treatment_return": 0.0038598997750505237
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.012681019747564193,
+        "decision_timestamp": "2025-04-28T04:00:00+00:00",
+        "next_decision_timestamp": "2025-05-05T04:00:00+00:00",
+        "scale": 0.26016197180349193,
+        "treatment_minus_control": -0.009460596948741573,
+        "treatment_return": 0.0032204227988226197
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01419505775557095,
+        "decision_timestamp": "2025-05-05T04:00:00+00:00",
+        "next_decision_timestamp": "2025-05-12T04:00:00+00:00",
+        "scale": 0.27996837804405245,
+        "treatment_minus_control": -0.010009993306231424,
+        "treatment_return": 0.004185064449339526
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.013112501235380547,
+        "decision_timestamp": "2025-05-12T04:00:00+00:00",
+        "next_decision_timestamp": "2025-05-19T04:00:00+00:00",
+        "scale": 0.6196927432897952,
+        "treatment_minus_control": -0.005526299384059241,
+        "treatment_return": 0.007586201851321306
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.007886215501332838,
+        "decision_timestamp": "2025-05-19T04:00:00+00:00",
+        "next_decision_timestamp": "2025-05-27T04:00:00+00:00",
+        "scale": 0.7218555224339597,
+        "treatment_minus_control": -0.002063459000228196,
+        "treatment_return": 0.005822756501104642
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.006420663448454933,
+        "decision_timestamp": "2025-05-27T04:00:00+00:00",
+        "next_decision_timestamp": "2025-06-02T04:00:00+00:00",
+        "scale": 0.8370617556293742,
+        "treatment_minus_control": -0.0011204244984988065,
+        "treatment_return": 0.005300238949956126
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.007886396006629881,
+        "decision_timestamp": "2025-06-02T04:00:00+00:00",
+        "next_decision_timestamp": "2025-06-09T04:00:00+00:00",
+        "scale": 0.8262936165240851,
+        "treatment_minus_control": 0.0012915390604398835,
+        "treatment_return": -0.0065948569461899975
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0021167024813049107,
+        "decision_timestamp": "2025-06-09T04:00:00+00:00",
+        "next_decision_timestamp": "2025-06-16T04:00:00+00:00",
+        "scale": 0.8757804466172916,
+        "treatment_minus_control": -0.0003023122805076994,
+        "treatment_return": 0.0018143902007972113
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00040449127630726167,
+        "decision_timestamp": "2025-06-16T04:00:00+00:00",
+        "next_decision_timestamp": "2025-06-23T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.3491742257660846e-05,
+        "treatment_return": 0.0003509995340496008
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.002497647055003327,
+        "decision_timestamp": "2025-06-23T04:00:00+00:00",
+        "next_decision_timestamp": "2025-06-30T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.555521816174135e-05,
+        "treatment_return": 0.0025432022731650683
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00423408597569308,
+        "decision_timestamp": "2025-06-30T04:00:00+00:00",
+        "next_decision_timestamp": "2025-07-07T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.6561050287839976e-08,
+        "treatment_return": 0.004234029414642793
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.010377982837929567,
+        "decision_timestamp": "2025-07-07T04:00:00+00:00",
+        "next_decision_timestamp": "2025-07-14T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.369722196249313e-10,
+        "treatment_return": 0.010377983074901787
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0024998123114190474,
+        "decision_timestamp": "2025-07-14T04:00:00+00:00",
+        "next_decision_timestamp": "2025-07-21T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.4059864383852982e-10,
+        "treatment_return": 0.0024998121708204035
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.015452350349910104,
+        "decision_timestamp": "2025-07-21T04:00:00+00:00",
+        "next_decision_timestamp": "2025-07-28T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.738893887359154e-10,
+        "treatment_return": -0.015452351023799493
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.006300208116838846,
+        "decision_timestamp": "2025-07-28T04:00:00+00:00",
+        "next_decision_timestamp": "2025-08-04T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.3942513810150103e-11,
+        "treatment_return": -0.006300208102896332
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00043355988058380035,
+        "decision_timestamp": "2025-08-04T04:00:00+00:00",
+        "next_decision_timestamp": "2025-08-11T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 7.993605777301127e-15,
+        "treatment_return": 0.00043355988059179396
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.005236371900697923,
+        "decision_timestamp": "2025-08-11T04:00:00+00:00",
+        "next_decision_timestamp": "2025-08-18T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.6653345369377348e-15,
+        "treatment_return": -0.005236371900699588
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0015782307667510098,
+        "decision_timestamp": "2025-08-18T04:00:00+00:00",
+        "next_decision_timestamp": "2025-08-25T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1102230246251565e-16,
+        "treatment_return": -0.0015782307667511208
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0008010153014288424,
+        "decision_timestamp": "2025-08-25T04:00:00+00:00",
+        "next_decision_timestamp": "2025-09-02T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.220446049250313e-16,
+        "treatment_return": 0.0008010153014290644
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.01512988461665099,
+        "decision_timestamp": "2025-09-02T04:00:00+00:00",
+        "next_decision_timestamp": "2025-09-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.015129884616650768
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007446433486178128,
+        "decision_timestamp": "2025-09-08T04:00:00+00:00",
+        "next_decision_timestamp": "2025-09-15T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 0.007446433486178128
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 3.0158166218763327e-05,
+        "decision_timestamp": "2025-09-15T04:00:00+00:00",
+        "next_decision_timestamp": "2025-09-22T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.0,
+        "treatment_return": 3.0158166218763327e-05
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.011615989082434774,
+        "decision_timestamp": "2025-09-22T04:00:00+00:00",
+        "next_decision_timestamp": "2025-09-29T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 1.1102230246251565e-16,
+        "treatment_return": -0.011615989082434663
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.006160462718503679,
+        "decision_timestamp": "2025-09-29T04:00:00+00:00",
+        "next_decision_timestamp": "2025-10-06T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.006160462718503457
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004144802812692472,
+        "decision_timestamp": "2025-10-06T04:00:00+00:00",
+        "next_decision_timestamp": "2025-10-13T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -2.220446049250313e-16,
+        "treatment_return": 0.00414480281269225
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.013273782411975965,
+        "decision_timestamp": "2025-10-13T04:00:00+00:00",
+        "next_decision_timestamp": "2025-10-20T04:00:00+00:00",
+        "scale": 0.9979334479230995,
+        "treatment_minus_control": -1.242487461583508e-05,
+        "treatment_return": 0.01326135753736013
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.008623272397537907,
+        "decision_timestamp": "2025-10-20T04:00:00+00:00",
+        "next_decision_timestamp": "2025-10-27T04:00:00+00:00",
+        "scale": 0.9604025394965665,
+        "treatment_minus_control": 0.0003246215915783113,
+        "treatment_return": -0.008298650805959595
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.01391263471110249,
+        "decision_timestamp": "2025-10-27T04:00:00+00:00",
+        "next_decision_timestamp": "2025-11-03T05:00:00+00:00",
+        "scale": 0.9445291169823455,
+        "treatment_minus_control": -0.0008760985432068047,
+        "treatment_return": 0.013036536167895685
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0035969334378767037,
+        "decision_timestamp": "2025-11-03T05:00:00+00:00",
+        "next_decision_timestamp": "2025-11-10T05:00:00+00:00",
+        "scale": 0.9147931066409779,
+        "treatment_minus_control": -0.0005473754009510667,
+        "treatment_return": 0.003049558036925637
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.019537588480324497,
+        "decision_timestamp": "2025-11-10T05:00:00+00:00",
+        "next_decision_timestamp": "2025-11-17T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.23583471085487e-05,
+        "treatment_return": -0.019599946827433046
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0022743776158788975,
+        "decision_timestamp": "2025-11-17T05:00:00+00:00",
+        "next_decision_timestamp": "2025-11-24T05:00:00+00:00",
+        "scale": 0.9943627586225746,
+        "treatment_minus_control": 4.075844126250061e-05,
+        "treatment_return": 0.002315136057141398
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.006191486781713884,
+        "decision_timestamp": "2025-11-24T05:00:00+00:00",
+        "next_decision_timestamp": "2025-12-01T05:00:00+00:00",
+        "scale": 0.8775503545108155,
+        "treatment_minus_control": -0.0007480399106982727,
+        "treatment_return": 0.005443446871015611
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.009743745531406445,
+        "decision_timestamp": "2025-12-01T05:00:00+00:00",
+        "next_decision_timestamp": "2025-12-08T05:00:00+00:00",
+        "scale": 0.8962447233217197,
+        "treatment_minus_control": -0.0012262257913131513,
+        "treatment_return": 0.008517519740093293
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.014076519262703813,
+        "decision_timestamp": "2025-12-08T05:00:00+00:00",
+        "next_decision_timestamp": "2025-12-15T05:00:00+00:00",
+        "scale": 0.9803293736238438,
+        "treatment_minus_control": 0.0003435972697555245,
+        "treatment_return": -0.013732921992948288
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.007790272837238543,
+        "decision_timestamp": "2025-12-15T05:00:00+00:00",
+        "next_decision_timestamp": "2025-12-22T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00019921621821694657,
+        "treatment_return": 0.007591056619021597
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.00832180768175772,
+        "decision_timestamp": "2025-12-22T05:00:00+00:00",
+        "next_decision_timestamp": "2025-12-29T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.00034449016274296085,
+        "treatment_return": 0.00797731751901476
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0004464866162910974,
+        "decision_timestamp": "2025-12-29T05:00:00+00:00",
+        "next_decision_timestamp": "2026-01-05T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 9.74931614561303e-06,
+        "treatment_return": -0.0004367373001454844
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004130332241739643,
+        "decision_timestamp": "2026-01-05T05:00:00+00:00",
+        "next_decision_timestamp": "2026-01-12T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -1.1310547788356828e-05,
+        "treatment_return": 0.004119021693951286
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0005194496875963184,
+        "decision_timestamp": "2026-01-12T05:00:00+00:00",
+        "next_decision_timestamp": "2026-01-20T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 4.0259115463570083e-07,
+        "treatment_return": -0.0005190470964416827
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.0008111720637014042,
+        "decision_timestamp": "2026-01-20T05:00:00+00:00",
+        "next_decision_timestamp": "2026-01-26T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.2674041250402297e-10,
+        "treatment_return": 0.0008111717369609917
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.00538497124933357,
+        "decision_timestamp": "2026-01-26T05:00:00+00:00",
+        "next_decision_timestamp": "2026-02-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -4.202219239246574e-09,
+        "treatment_return": -0.005384975451552809
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.018976519465230934,
+        "decision_timestamp": "2026-02-02T05:00:00+00:00",
+        "next_decision_timestamp": "2026-02-09T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 2.2226813722880934e-09,
+        "treatment_return": 0.018976521687912307
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.009526399815487752,
+        "decision_timestamp": "2026-02-09T05:00:00+00:00",
+        "next_decision_timestamp": "2026-02-17T05:00:00+00:00",
+        "scale": 0.9104533536313105,
+        "treatment_minus_control": 0.00036000149391446357,
+        "treatment_return": -0.009166398321573288
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.018516889766201583,
+        "decision_timestamp": "2026-02-17T05:00:00+00:00",
+        "next_decision_timestamp": "2026-02-23T05:00:00+00:00",
+        "scale": 0.8734452566139611,
+        "treatment_minus_control": -0.002372396470839755,
+        "treatment_return": 0.016144493295361828
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.003517926564944096,
+        "decision_timestamp": "2026-02-23T05:00:00+00:00",
+        "next_decision_timestamp": "2026-03-02T05:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 0.00025824601033508365,
+        "treatment_return": 0.0037761725752791797
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.024777174598096252,
+        "decision_timestamp": "2026-03-02T05:00:00+00:00",
+        "next_decision_timestamp": "2026-03-09T04:00:00+00:00",
+        "scale": 0.9875365995365479,
+        "treatment_minus_control": 0.00026649323499561284,
+        "treatment_return": -0.02451068136310064
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.007885670417435042,
+        "decision_timestamp": "2026-03-09T04:00:00+00:00",
+        "next_decision_timestamp": "2026-03-16T04:00:00+00:00",
+        "scale": 0.9433652048693894,
+        "treatment_minus_control": 0.00041499421736512776,
+        "treatment_return": -0.0074706762000699145
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.004896958256388029,
+        "decision_timestamp": "2026-03-16T04:00:00+00:00",
+        "next_decision_timestamp": "2026-03-23T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0002709011556192298,
+        "treatment_return": 0.004626057100768799
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.024907401538369456,
+        "decision_timestamp": "2026-03-23T04:00:00+00:00",
+        "next_decision_timestamp": "2026-03-30T04:00:00+00:00",
+        "scale": 0.879979510185359,
+        "treatment_minus_control": 0.0019023578659125295,
+        "treatment_return": -0.023005043672456926
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.02112854606075265,
+        "decision_timestamp": "2026-03-30T04:00:00+00:00",
+        "next_decision_timestamp": "2026-04-06T04:00:00+00:00",
+        "scale": 0.8300111591397703,
+        "treatment_minus_control": -0.002043896266203271,
+        "treatment_return": 0.01908464979454938
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.035958199883959985,
+        "decision_timestamp": "2026-04-06T04:00:00+00:00",
+        "next_decision_timestamp": "2026-04-13T04:00:00+00:00",
+        "scale": 0.6611580849360733,
+        "treatment_minus_control": -0.012097509111597349,
+        "treatment_return": 0.023860690772362636
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.003185573517480944,
+        "decision_timestamp": "2026-04-13T04:00:00+00:00",
+        "next_decision_timestamp": "2026-04-20T04:00:00+00:00",
+        "scale": 0.6295786858158903,
+        "treatment_minus_control": 0.0010337367932240493,
+        "treatment_return": -0.0021518367242568948
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.00856254250701527,
+        "decision_timestamp": "2026-04-20T04:00:00+00:00",
+        "next_decision_timestamp": "2026-04-27T04:00:00+00:00",
+        "scale": 0.6495425611982097,
+        "treatment_minus_control": -0.0024993737845153685,
+        "treatment_return": 0.006063168722499901
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.0022123902881654445,
+        "decision_timestamp": "2026-04-27T04:00:00+00:00",
+        "next_decision_timestamp": "2026-05-04T04:00:00+00:00",
+        "scale": 0.7675385864646282,
+        "treatment_minus_control": 0.000320979801888166,
+        "treatment_return": 0.0025333700900536105
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.015096698264578157,
+        "decision_timestamp": "2026-05-04T04:00:00+00:00",
+        "next_decision_timestamp": "2026-05-11T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0006546806676508421,
+        "treatment_return": 0.014442017596927315
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.019381565632919706,
+        "decision_timestamp": "2026-05-11T04:00:00+00:00",
+        "next_decision_timestamp": "2026-05-18T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.993569859972457e-05,
+        "treatment_return": -0.01942150133151943
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.002193783393894533,
+        "decision_timestamp": "2026-05-18T04:00:00+00:00",
+        "next_decision_timestamp": "2026-05-26T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": 8.934549633465849e-08,
+        "treatment_return": 0.0021938727393908675
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.015665250693724153,
+        "decision_timestamp": "2026-05-26T04:00:00+00:00",
+        "next_decision_timestamp": "2026-06-01T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -3.99662447359006e-07,
+        "treatment_return": -0.015665650356171512
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0005227915317569387,
+        "decision_timestamp": "2026-06-01T04:00:00+00:00",
+        "next_decision_timestamp": "2026-06-08T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -6.73510478499395e-08,
+        "treatment_return": -0.0005228588828047886
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.018801317168975595,
+        "decision_timestamp": "2026-06-08T04:00:00+00:00",
+        "next_decision_timestamp": "2026-06-15T04:00:00+00:00",
+        "scale": 0.9078323242133416,
+        "treatment_minus_control": -0.0014343231540121515,
+        "treatment_return": 0.017366994014963444
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.017121253688552995,
+        "decision_timestamp": "2026-06-15T04:00:00+00:00",
+        "next_decision_timestamp": "2026-06-22T04:00:00+00:00",
+        "scale": 0.7314708309295641,
+        "treatment_minus_control": -0.004693340225606413,
+        "treatment_return": 0.012427913462946583
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.015314551047890812,
+        "decision_timestamp": "2026-06-22T04:00:00+00:00",
+        "next_decision_timestamp": "2026-06-29T04:00:00+00:00",
+        "scale": 0.7366935035962089,
+        "treatment_minus_control": 0.004112126352053713,
+        "treatment_return": -0.011202424695837099
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.011405885661367132,
+        "decision_timestamp": "2026-06-29T04:00:00+00:00",
+        "next_decision_timestamp": "2026-07-06T04:00:00+00:00",
+        "scale": 0.6687928106372302,
+        "treatment_minus_control": 0.003906253720144526,
+        "treatment_return": -0.0074996319412226065
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": 0.024877557270604367,
+        "decision_timestamp": "2026-07-06T04:00:00+00:00",
+        "next_decision_timestamp": "2026-07-13T04:00:00+00:00",
+        "scale": 0.6614754223392603,
+        "treatment_minus_control": -0.008243225109148877,
+        "treatment_return": 0.01663433216145549
+      },
+      {
+        "classification": "reduced_exposure",
+        "control_return": -0.001990492294382973,
+        "decision_timestamp": "2026-07-13T04:00:00+00:00",
+        "next_decision_timestamp": "2026-07-20T04:00:00+00:00",
+        "scale": 0.8134895664108325,
+        "treatment_minus_control": -0.0008012104249200958,
+        "treatment_return": -0.0027917027193030686
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": 0.015009735404075908,
+        "decision_timestamp": "2026-07-20T04:00:00+00:00",
+        "next_decision_timestamp": "2026-07-27T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -0.0015444700460212069,
+        "treatment_return": 0.013465265358054701
+      },
+      {
+        "classification": "normal_or_low_vol",
+        "control_return": -0.0068461600822966595,
+        "decision_timestamp": "2026-07-27T04:00:00+00:00",
+        "next_decision_timestamp": "2026-07-31T04:00:00+00:00",
+        "scale": 1.0,
+        "treatment_minus_control": -5.513385676769733e-05,
+        "treatment_return": -0.006901293939064357
+      }
+    ]
+  },
+  "up_down_capture": {
+    "down_market": {
+      "control_mean_return": -0.0035257174000814812,
+      "mean_spy_return": -0.0076962287988723115,
+      "observations": 1076,
+      "treatment_mean_return": -0.002844681266748113,
+      "treatment_minus_control": 0.0006810361333333682,
+      "treatment_to_control_capture": 0.806837572030694
+    },
+    "up_market": {
+      "control_mean_return": 0.0033987089978075864,
+      "mean_spy_return": 0.007245308008862452,
+      "observations": 1329,
+      "treatment_mean_return": 0.002742523387371167,
+      "treatment_minus_control": -0.000656185610436419,
+      "treatment_to_control_capture": 0.8069309226357106
+    }
+  }
+}

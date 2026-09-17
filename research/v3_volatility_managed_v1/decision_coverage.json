@@ -1,0 +1,92 @@
+{
+  "A_control": {
+    "coverage_ratio": 0.9899598393574297,
+    "development": {
+      "coverage_ratio": 0.9806949806949807,
+      "eligible_weeks": 259,
+      "first_observed": "2017-02-06T05:00:00+00:00",
+      "last_observed": "2021-12-27T05:00:00+00:00",
+      "observed_decisions": 254
+    },
+    "eligible_weeks": 498,
+    "longest_unexplained_gap_weeks": 5,
+    "missing_eligible_decisions": [
+      "2017-01-03T05:00:00+00:00",
+      "2017-01-09T05:00:00+00:00",
+      "2017-01-17T05:00:00+00:00",
+      "2017-01-23T05:00:00+00:00",
+      "2017-01-30T05:00:00+00:00"
+    ],
+    "observed_decisions": 493,
+    "pass": true,
+    "schedule_weeks": 500,
+    "unexpected_decisions": [],
+    "validation": {
+      "coverage_ratio": 1.0,
+      "eligible_weeks": 239,
+      "first_observed": "2022-01-03T05:00:00+00:00",
+      "last_observed": "2026-07-27T04:00:00+00:00",
+      "observed_decisions": 239
+    }
+  },
+  "B_treatment": {
+    "coverage_ratio": 0.9899598393574297,
+    "development": {
+      "coverage_ratio": 0.9806949806949807,
+      "eligible_weeks": 259,
+      "first_observed": "2017-02-06T05:00:00+00:00",
+      "last_observed": "2021-12-27T05:00:00+00:00",
+      "observed_decisions": 254
+    },
+    "eligible_weeks": 498,
+    "longest_unexplained_gap_weeks": 5,
+    "missing_eligible_decisions": [
+      "2017-01-03T05:00:00+00:00",
+      "2017-01-09T05:00:00+00:00",
+      "2017-01-17T05:00:00+00:00",
+      "2017-01-23T05:00:00+00:00",
+      "2017-01-30T05:00:00+00:00"
+    ],
+    "observed_decisions": 493,
+    "pass": true,
+    "schedule_weeks": 500,
+    "unexpected_decisions": [],
+    "validation": {
+      "coverage_ratio": 1.0,
+      "eligible_weeks": 239,
+      "first_observed": "2022-01-03T05:00:00+00:00",
+      "last_observed": "2026-07-27T04:00:00+00:00",
+      "observed_decisions": 239
+    }
+  },
+  "C_static_comparator": {
+    "coverage_ratio": 0.9899598393574297,
+    "development": {
+      "coverage_ratio": 0.9806949806949807,
+      "eligible_weeks": 259,
+      "first_observed": "2017-02-06T05:00:00+00:00",
+      "last_observed": "2021-12-27T05:00:00+00:00",
+      "observed_decisions": 254
+    },
+    "eligible_weeks": 498,
+    "longest_unexplained_gap_weeks": 5,
+    "missing_eligible_decisions": [
+      "2017-01-03T05:00:00+00:00",
+      "2017-01-09T05:00:00+00:00",
+      "2017-01-17T05:00:00+00:00",
+      "2017-01-23T05:00:00+00:00",
+      "2017-01-30T05:00:00+00:00"
+    ],
+    "observed_decisions": 493,
+    "pass": true,
+    "schedule_weeks": 500,
+    "unexpected_decisions": [],
+    "validation": {
+      "coverage_ratio": 1.0,
+      "eligible_weeks": 239,
+      "first_observed": "2022-01-03T05:00:00+00:00",
+      "last_observed": "2026-07-27T04:00:00+00:00",
+      "observed_decisions": 239
+    }
+  }
+}

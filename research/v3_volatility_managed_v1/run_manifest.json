@@ -1,0 +1,51 @@
+{
+  "baseline_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "branch": "research/v3-volatility-managed-v1",
+  "branch_sha_at_verification": "bde5fb264a0bb24758e618093ff83c05a2b93c5c",
+  "branch_source_sha": "bde5fb264a0bb24758e618093ff83c05a2b93c5c",
+  "candidate": "equity_v3_volatility_managed_v1",
+  "completed_at": "2026-09-17T16:49:05.605257+00:00",
+  "config_path": "/Users/batuhankiskac/Desktop/ParayaBuck/config/settings.yaml",
+  "config_strategy": "equity_residual_momentum_v3",
+  "config_strategy_parameters": {
+    "beta_window_bars": 273,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "formation_bars": 252,
+    "ivol_reject_quantile": 0.7,
+    "max_single_weight": 0.1,
+    "rebalance_frequency": "weekly",
+    "residual_vol_window": 63,
+    "skip_bars": 21,
+    "top_n": 8
+  },
+  "data_hashes": {
+    "bars": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "corporate_actions": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "lifecycles": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+  },
+  "economic_outcomes_started": true,
+  "economic_outcomes_started_at": "2026-09-17T16:47:49.625458+00:00",
+  "old_research_artifacts_used": [],
+  "origin_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "protocol_sha256": "dbe944d3cbf0d9dd78aa256e1b280e13a96bcd4f276c5c3550a52ef24577f0cd",
+  "protocol_size": 10095,
+  "source_hashes": {
+    "research/v3_volatility_managed_v1/campaign.py": "09960bd94860aa23fe42cab872ab5aed436ae9006c0a7b4b7bc308aeeffdc60f",
+    "research/v3_volatility_managed_v1/candidate.py": "72c0aa15914bc40fe977c6510a68717b7b2a717f73383add7bfbdfdf6a4a8780",
+    "research/v3_volatility_managed_v1/data.py": "32eca6d87946c764b6296ef4db2b75ffad936cd2ee3705e14cab901aafe56dcf",
+    "research/v3_volatility_managed_v1/metrics.py": "f92ab2fd196e83ee34601cfc1b75111ea746cf834120bb425ec3f263b68d8c42",
+    "research/v3_volatility_managed_v1/verify_results.py": "7635f1c2a43067ac01d1caade1de102b70dcf4fe9a4e5da0eaae1b5649b5a10d"
+  },
+  "static_comparator_freeze": "/Users/batuhankiskac/Desktop/ParayaBuck/research/v3_volatility_managed_v1/STATIC_COMPARATOR_FREEZE.json",
+  "universe_hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3",
+  "verdict": "RESEARCH_REJECT",
+  "windows": {
+    "development_end": "2021-12-31T23:59:59.999999+00:00",
+    "development_start": "2017-01-03T00:00:00+00:00",
+    "validation_end": "2026-07-31T23:59:59.999999+00:00",
+    "validation_start": "2022-01-03T00:00:00+00:00",
+    "warmup_before": "2017-01-03T00:00:00+00:00"
+  }
+}

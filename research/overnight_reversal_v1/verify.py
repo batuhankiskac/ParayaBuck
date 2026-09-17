@@ -452,6 +452,7 @@ def _verify_signal_audit(
         for row in rows:
             symbol = str(row.get("symbol", ""))
             is_reference = symbol == "SPY"
+            is_eligible = symbol in snapshot.symbols
             is_observed = symbol in observation
             if row.get("decision_timestamp") != decision_timestamp:
                 errors.append(f"decision timestamp changed inside signal group: {decision_timestamp}")
@@ -463,7 +464,7 @@ def _verify_signal_audit(
                 _independent_signal_fields(dataset, "SPY", decision_day, prior_day)
                 if is_reference
                 else _independent_signal_fields(dataset, symbol, decision_day, prior_day)
-                if is_observed
+                if is_eligible
                 else {
                     "prior_date": prior_day.isoformat() if prior_day is not None else None,
                     "prior_close": None,
@@ -479,6 +480,8 @@ def _verify_signal_audit(
             if is_reference:
                 expected["eligibility"] = "reference_only"
                 expected["reason"] = "reference_only"
+            elif not is_eligible:
+                errors.append(f"signal row escapes eligible pool at {decision_timestamp}/{symbol}")
             for field in (
                 "prior_close",
                 "current_open",

@@ -1,0 +1,43 @@
+{
+  "decision": "DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "candidate_count": 1,
+  "candidate": {
+    "name": "equity_overnight_reversal_v1",
+    "mechanism": "overnight-to-following-session reversal",
+    "direction": "reversal",
+    "formation_horizon_regular_sessions": 1,
+    "market_adjustment": "ON_i,d - ON_SPY,d",
+    "ranking": "higher score is better; score = -(ON_i,d - ON_SPY,d)",
+    "decision": "after completed daily bar d",
+    "execution": "next tradable daily-bar open Open(n(d))",
+    "rebalance": "daily",
+    "selection_count": 6,
+    "weighting": "fixed equal target 0.55 / 6 per selected name, with unused balance in cash",
+    "position_cap": 0.10,
+    "equity_allocation_cap": 0.55,
+    "long_only": true
+  },
+  "execution_verdict": {
+    "same_session_open_trade_from_overnight_signal": false,
+    "frozen_lagged_candidate_supported_by_current_engine": true,
+    "provider_daily_open_is_official_auction_claimed": false,
+    "normalized_v5_ohlc_required": true,
+    "point_in_time_lifecycle_join_required": true,
+    "common_spy_session_join_required": true
+  },
+  "economic_test_authorized_now": false,
+  "paper_or_live_promotion": false,
+  "no_local_economic_outcomes_inspected": true,
+  "no_backtest_run": true,
+  "starting_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "starting_origin_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "design_branch_sha": "reported_at_handoff_after_final_commit_verification",
+  "future_protocol": "FUTURE_TEST_PROTOCOL.md",
+  "decision_basis": [
+    "External U.S. evidence is more coherent for cross-period reversal than continuation.",
+    "The simple SPY-excess score follows the opening-pressure/liquidity mechanism without importing V3 beta machinery.",
+    "The local data has open/close/SPY/PIT/lifecycle/corporate-action structure after a deterministic alias normalization.",
+    "The current engine can execute the explicitly lagged form at the next tradable open.",
+    "Cost, turnover, validation, drawdown, and concentration gates are frozen before any later outcome."
+  ]
+}

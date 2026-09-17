@@ -1,0 +1,163 @@
+{
+  "audit_scope": "structural_only",
+  "economic_outcomes_inspected": false,
+  "backtest_run": false,
+  "starting_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "starting_origin_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "dataset": {
+    "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+    "manifest_path": "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json",
+    "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "byte_size": 882354549,
+    "manifest_row_count": 11686832,
+    "observed_row_count": 11686832,
+    "unique_symbols": 9010,
+    "first_session_date": "2016-01-04",
+    "last_session_date": "2026-07-31",
+    "required_columns": [
+      "timestamp",
+      "symbol",
+      "timeframe",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "market"
+    ],
+    "raw_market_values": {
+      "EQUITY": 7771468,
+      "equity": 3915364
+    },
+    "raw_timeframe_values": {
+      "1Day": 7771468,
+      "1d": 3915364
+    },
+    "normalization_required": true,
+    "normalization_rule": {
+      "market_aliases": {
+        "EQUITY": "equity",
+        "equity": "equity"
+      },
+      "timeframe_aliases": {
+        "1Day": "1d",
+        "1d": "1d"
+      },
+      "session_date": "parse timezone-aware timestamp and convert to America/New_York before deriving the session date",
+      "deduplication_key": [
+        "canonical_symbol",
+        "session_date",
+        "market",
+        "timeframe"
+      ],
+      "conflict_policy": "fail closed if canonical duplicates disagree on any OHLCV field",
+      "observed_post_normalization_rows": 11686832,
+      "observed_post_normalization_duplicate_symbol_session_rows": 0
+    },
+    "price_quality": {
+      "valid_open_count": 11686832,
+      "valid_open_pct": 100.0,
+      "valid_close_count": 11686832,
+      "valid_close_pct": 100.0,
+      "finite_high_count": 11686832,
+      "finite_low_count": 11686832,
+      "finite_volume_count": 11686832,
+      "nonpositive_open_count": 0,
+      "nonpositive_close_count": 0,
+      "duplicate_symbol_session_date_rows": 0,
+      "market_counts_after_enum_normalization": {
+        "equity": 11686832
+      },
+      "timeframe_counts_after_alias_normalization": {
+        "1d": 11686832
+      }
+    },
+    "prior_close_pairing": {
+      "first_observation_rows_without_prior_close": 9010,
+      "non_first_rows": 11677822,
+      "non_first_rows_with_nonempty_prior_close": 11677822,
+      "missing_prior_close_on_non_first_rows": 0,
+      "adjacent_observation_pairing_pct": 100.0,
+      "warning": "Adjacent rows are not automatically adjacent exchange sessions; the future test must require the prior date to be the immediately previous SPY/NYSE session for the symbol.",
+      "symbol_observations_with_nonconsecutive_spy_session_gap": 5791,
+      "symbols_with_any_nonconsecutive_spy_session_gap": 5648
+    },
+    "history_counts": {
+      "symbols_with_ge_60_bars": 8568,
+      "symbols_with_ge_252_bars": 7572,
+      "symbols_with_ge_273_bars": 7437,
+      "symbols_with_ge_500_bars": 6460,
+      "candidate_minimum_signal_history_bars": 2,
+      "practical_scanner_lookback_bars": 60
+    }
+  },
+  "spy": {
+    "total_bars": 2658,
+    "first_session_date": "2016-01-04",
+    "last_session_date": "2026-07-30",
+    "distinct_trading_days": 2658,
+    "dataset_distinct_session_dates": 2659,
+    "dataset_session_dates_with_spy": 2658,
+    "dataset_session_date_coverage_pct": 99.962392,
+    "valid_open_pct": 100.0,
+    "valid_close_pct": 100.0,
+    "candidate_common_date_end": "2026-07-30"
+  },
+  "lifecycle_metadata": {
+    "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+    "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "rows": 9010,
+    "canonical_or_historical_symbol_count": 9010,
+    "pit_quality_tier_counts": {
+      "TIER_A_VERIFIED_PIT": 9010
+    },
+    "current_status_counts": {
+      "active": 6858,
+      "inactive": 2152
+    },
+    "future_join_rule": "Use provider-asset identity and valid_from/valid_to at every decision date; do not use current_status as a historical eligibility shortcut."
+  },
+  "corporate_actions": {
+    "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+    "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+    "rows": 143446,
+    "universe_symbol_count": 5683,
+    "action_type_counts": {
+      "cash_dividends": 141908,
+      "stock_dividends": 61,
+      "forward_splits": 270,
+      "reverse_splits": 1207
+    },
+    "split_action_rows": 1477,
+    "cash_dividend_rows": 141908,
+    "signal_rule": "Use the split-adjusted price series for the price-component signal; do not add dividend cash to the signal. Apply any explicit dividend cash flow exactly once only in the later P&L experiment."
+  },
+  "split_discontinuity_qc": {
+    "provider_adjustment": "split",
+    "material_split_factor_definition": "absolute price factor difference greater than 10 percent",
+    "material_split_event_keys": 1470,
+    "material_split_event_keys_with_current_bar": 1386,
+    "material_split_event_keys_with_prior_observation": 1364,
+    "event_pairs_with_adjacent_open_to_prior_close_ratio_near_unadjusted_split_factor_within_5pct": 0,
+    "interpretation": "Structural basis QC only. The zero count supports that material split factors were not left as raw price jumps. Final authority is the provider split-adjusted manifest plus src/parayabuck/data/adjustment.py and the product loader's refusal to apply split actions again.",
+    "price_gap_or_forward_return_analysis": false
+  },
+  "regular_session_and_feed": {
+    "regular_session_only": true,
+    "extended_hours_included": false,
+    "historical_feed": "SIP",
+    "timestamp_rule": "NYSE session date derived in America/New_York; holidays and missing symbol sessions are handled by an explicit common-session join.",
+    "daily_open_semantics": "Provider daily open is the first qualifying regular-sale trade included in the consolidated bar; it is not asserted to equal the official exchange opening-auction clearing price.",
+    "future_execution_label": "provider_daily_open_proxy",
+    "same_day_open_auction_execution_claim": false
+  },
+  "feasibility_status": "STRUCTURALLY_FEASIBLE_WITH_DECLARED_NORMALIZATION_AND_PROVIDER_OPEN_PROXY",
+  "future_test_prerequisites": [
+    "Materialize the deterministic alias-normalized 1d view and fail closed on canonical conflicts.",
+    "Join signal rows to the immediately previous common SPY/NYSE session, not merely the prior row.",
+    "Join each symbol to point-in-time lifecycle intervals before scanner eligibility.",
+    "Use split-adjusted OHLC without split-action application; keep dividend cash handling separate and single-counted.",
+    "Use next-tradable-open fills and label them as provider-open proxy fills.",
+    "Stop the common-period evaluation at 2026-07-30 unless SPY coverage is explicitly extended."
+  ]
+}

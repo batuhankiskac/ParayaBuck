@@ -265,6 +265,31 @@ class AuditedEngine(CostStressPortfolioBacktestEngine):
         self.exposure_history: list[tuple[datetime, float, int, float, float]] = []
         super().__init__(*args, **kwargs)
 
+    def _effective_observation_symbols(self, timestamp: datetime) -> tuple[str, ...] | None:
+        """Hold the PIT stream constant across A/B/C.
+
+        The production engine reserves managed holdings inside a finite stream.
+        That is appropriate for live routing, but would make an exposure-only
+        treatment change the observable tail and therefore change V3 alpha.
+        The campaign precomputes one PIT observation set from the common
+        universe and feeds that identical set to every arm; portfolio slots,
+        risk caps, and tradability remain engine-owned and unchanged.
+        """
+        snapshots = getattr(self.universe, "snapshots", ())
+        if not snapshots:
+            return None
+        index = bisect.bisect_right(snapshots, timestamp, key=lambda item: item.effective_at)
+        if index == 0:
+            return None
+        snapshot = snapshots[index - 1]
+        symbols = tuple(snapshot.observation_set) or tuple(sorted(snapshot.symbols))
+        return tuple(
+            symbol
+            for symbol in symbols
+            if self.terminal_lifecycles.get(symbol) is None
+            or self.terminal_lifecycles[symbol].last_bar >= timestamp
+        )
+
     def _record_holdings_snapshot(self, timestamp: datetime) -> None:
         super()._record_holdings_snapshot(timestamp)
         equity = self._equity()

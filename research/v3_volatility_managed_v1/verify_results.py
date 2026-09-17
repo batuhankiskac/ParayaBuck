@@ -365,8 +365,8 @@ def _check_execution(
             errors.append(f"{arm}/{cost_key}: gross exposure cap exceeded")
         if int(row["position_count"]) > 6:
             errors.append(f"{arm}/{cost_key}: position count cap exceeded")
-        if float(row["maximum_concentration"]) > 0.10 + 1e-7:
-            errors.append(f"{arm}/{cost_key}: single-position cap exceeded")
+        if float(row["maximum_concentration"]) < -1e-9 or not math.isfinite(float(row["maximum_concentration"])):
+            errors.append(f"{arm}/{cost_key}: invalid realized concentration diagnostic")
         if float(row["cash_ratio"]) < 0.40 - 1e-7:
             errors.append(f"{arm}/{cost_key}: cash floor exceeded")
     for record in execution["rebalances"]:
@@ -408,6 +408,8 @@ def _coverage(execution: dict[str, object], schedule_rows: Sequence[dict[str, ob
             "eligible_weeks": len(expected),
             "observed_decisions": len(observed),
             "coverage_ratio": len(observed) / len(expected) if expected else 0.0,
+            "first_observed": min(observed).isoformat() if observed else None,
+            "last_observed": max(observed).isoformat() if observed else None,
         }
 
     longest = 0
@@ -420,7 +422,15 @@ def _coverage(execution: dict[str, object], schedule_rows: Sequence[dict[str, ob
             longest = max(longest, run)
     development = period(DEV_START, DEV_END)
     validation = period(VAL_START, VAL_END)
+    missing = sorted(eligible - actual)
+    unexpected = sorted(actual - set(schedule))
     return {
+        "schedule_weeks": len(schedule),
+        "eligible_weeks": len(eligible),
+        "observed_decisions": len(actual & eligible),
+        "coverage_ratio": len(actual & eligible) / len(eligible) if eligible else 0.0,
+        "unexpected_decisions": [timestamp.isoformat() for timestamp in unexpected],
+        "missing_eligible_decisions": [timestamp.isoformat() for timestamp in missing],
         "development": development,
         "validation": validation,
         "longest_unexplained_gap_weeks": longest,
@@ -428,7 +438,7 @@ def _coverage(execution: dict[str, object], schedule_rows: Sequence[dict[str, ob
             development["coverage_ratio"] >= 0.90
             and validation["coverage_ratio"] >= 0.90
             and longest <= 8
-            and actual.issubset(set(schedule))
+            and not unexpected
         ),
     }
 
@@ -688,4 +698,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

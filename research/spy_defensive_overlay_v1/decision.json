@@ -1,0 +1,10 @@
+{
+  "all_gates_passed": false,
+  "campaign": "equity_spy_defensive_overlay_v1",
+  "failed_gates": [
+    3,
+    8
+  ],
+  "independent_verification": "PASS",
+  "verdict": "RESEARCH_REJECT"
+}

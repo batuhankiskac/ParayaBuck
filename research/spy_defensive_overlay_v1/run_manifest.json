@@ -1,0 +1,30 @@
+{
+  "branch": "research/spy-defensive-overlay-v1",
+  "campaign": "equity_spy_defensive_overlay_v1",
+  "cleaned_main_sha": "5175a58b2fb4084e5c5a00854d3c3c94b0e819a1",
+  "data_hashes": {
+    "data/historical/equity_entity_lifetimes_full_v5.csv": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.csv": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.csv": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "elapsed_seconds": 215.65326476097107,
+  "live_unchanged_disabled": true,
+  "paper_config_unchanged": true,
+  "protocol_sha256": "7c2be80ea9be03e2a75dedaa233ecdb5856bba333d11d41739dd44805d0b44ea",
+  "research_head_at_run": "ab36d4fb6c719495d44bbcb16f916edbc0bd20ab",
+  "universe_hash": "2051fe292cb35564afbe742ef5f83a7b304a676151133a2137210777e31dc1a3",
+  "v3_parameters": {
+    "beta_window_bars": 273,
+    "exclude_symbols": [
+      "SPY"
+    ],
+    "formation_bars": 252,
+    "ivol_reject_quantile": 0.7,
+    "max_single_weight": 0.1,
+    "rebalance_frequency": "weekly",
+    "residual_vol_window": 63,
+    "skip_bars": 21,
+    "top_n": 8
+  },
+  "v3_source_sha256": "408de47f8a0e0ac20d926ed3e7d96f01b5747c5db8863ad5e35c146a3cc6b1bc"
+}

@@ -569,12 +569,19 @@ def verify_campaign(
         checks.add("verification.completed_without_exception", False, f"{type(exc).__name__}: {exc}")
 
     failed = [row for row in checks.rows if row["status"] == "FAIL"]
+    category_summary: dict[str, dict[str, int]] = {}
+    for row in checks.rows:
+        category = str(row["name"]).partition(".")[0]
+        counts = category_summary.setdefault(category, {"checks": 0, "passed": 0, "failed": 0})
+        counts["checks"] += 1
+        counts["passed" if row["status"] == "PASS" else "failed"] += 1
     payload = {
         "campaign": expected.campaign,
         "verifier": "independent_spy_defensive_overlay_v1",
         "status": "PASS" if checks.rows and not failed else "FAIL",
         "summary": {"checks": len(checks.rows), "passed": len(checks.rows) - len(failed), "failed": len(failed)},
-        "checks": checks.rows,
+        "category_summary": category_summary,
+        "checks": failed,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "independent_verification.json").write_text(

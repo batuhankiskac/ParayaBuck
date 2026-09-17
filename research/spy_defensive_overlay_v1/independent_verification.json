@@ -1,0 +1,78 @@
+{
+  "campaign": "equity_spy_defensive_overlay_v1",
+  "category_summary": {
+    "allocation": {
+      "checks": 31824,
+      "failed": 0,
+      "passed": 31824
+    },
+    "capacity": {
+      "checks": 639,
+      "failed": 0,
+      "passed": 639
+    },
+    "costs": {
+      "checks": 27,
+      "failed": 0,
+      "passed": 27
+    },
+    "coverage": {
+      "checks": 90,
+      "failed": 0,
+      "passed": 90
+    },
+    "data": {
+      "checks": 230,
+      "failed": 0,
+      "passed": 230
+    },
+    "execution": {
+      "checks": 185239,
+      "failed": 0,
+      "passed": 185239
+    },
+    "identity": {
+      "checks": 11,
+      "failed": 0,
+      "passed": 11
+    },
+    "nav": {
+      "checks": 36,
+      "failed": 0,
+      "passed": 36
+    },
+    "schema": {
+      "checks": 2,
+      "failed": 0,
+      "passed": 2
+    },
+    "semantics": {
+      "checks": 41589,
+      "failed": 0,
+      "passed": 41589
+    },
+    "signal": {
+      "checks": 19305,
+      "failed": 0,
+      "passed": 19305
+    },
+    "state": {
+      "checks": 18,
+      "failed": 0,
+      "passed": 18
+    },
+    "terminal": {
+      "checks": 306,
+      "failed": 0,
+      "passed": 306
+    }
+  },
+  "checks": [],
+  "status": "PASS",
+  "summary": {
+    "checks": 279316,
+    "failed": 0,
+    "passed": 279316
+  },
+  "verifier": "independent_spy_defensive_overlay_v1"
+}

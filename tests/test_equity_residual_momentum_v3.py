@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from parayabuck.backtest.numeric_history import build_numeric_history
+from parayabuck.config import EquityUniverseConfig
 from parayabuck.core.models import Bar, Market
 from parayabuck.portfolio import (
     EquityResidualMomentum1dV3,
@@ -33,6 +34,7 @@ from parayabuck.portfolio import (
     supported_portfolio_strategies,
 )
 from parayabuck.portfolio.base import PortfolioContext
+from parayabuck.universe.observation_set import build_observation_set
 
 FROZEN_PARAMS = {
     "formation_bars": 252,
@@ -45,6 +47,8 @@ FROZEN_PARAMS = {
     "exclude_symbols": ["SPY"],
     "rebalance_frequency": "weekly",
 }
+
+RESERVED_EQUITY_ROLES = ("SPY", "SH", "PSQ", "DOG")
 
 START = datetime(2024, 1, 1, tzinfo=UTC)
 
@@ -190,6 +194,67 @@ def test_target_ordinary_snapshot() -> None:
     assert set(target.metadata["selected_symbols"]) == set(selected)
     assert target.metadata["ranked_symbols"] >= len(selected)
     assert sum(weight.weight for weight in target.weights) <= 1.0
+
+
+def test_reserved_roles_are_observable_but_not_ordinary_alpha_targets() -> None:
+    paths = _paths()
+    paths.update({symbol: list(paths["AAA"]) for symbol in ("SH", "PSQ", "DOG")})
+    members = set(paths) - {"SHORT", "OUTU"}
+    context = _context(paths, members)
+    strategy = _production_v3()
+
+    # The raw score pipeline is deliberately unchanged. The corrected role
+    # boundary is applied only after factual scoring, so ordinary candidates
+    # keep exactly their pre-fix scores and relative order.
+    old_scored, _old_vols = strategy._score_candidates(context)
+    corrected = replace(context, ordinary_alpha_excluded_symbols=RESERVED_EQUITY_ROLES)
+    corrected_scored, _corrected_vols = strategy._score_candidates(corrected)
+    assert corrected_scored == old_scored
+    expected_ordinary_rank = tuple(symbol for _score, symbol in old_scored if symbol not in RESERVED_EQUITY_ROLES)
+    assert strategy.rank_candidates(corrected) == expected_ordinary_rank
+
+    target = strategy.decide(replace(corrected, holdings={"SH": 10.0}))
+    assert all(weight.symbol not in RESERVED_EQUITY_ROLES for weight in target.weights)
+    assert "AAA" in {weight.symbol for weight in target.weights}
+    assert all(symbol in corrected.history for symbol in RESERVED_EQUITY_ROLES)
+
+
+def test_reserved_observation_pins_survive_alpha_role_filter() -> None:
+    paths = _paths()
+    paths.update({symbol: list(paths["AAA"]) for symbol in ("SH", "PSQ", "DOG")})
+    members = set(paths) - {"SHORT", "OUTU"}
+    context = _context(paths, members)
+    result = build_observation_set(
+        _production_v3(),
+        context.history,
+        tuple(sorted(members)),
+        market=Market.EQUITY,
+        timeframe="1d",
+        decision_timestamp=context.decision_timestamp,
+        maximum_stream_symbols=6,
+        pinned_symbols=RESERVED_EQUITY_ROLES,
+        ordinary_alpha_excluded_symbols=RESERVED_EQUITY_ROLES,
+    )
+    assert result.observation_set[:4] == RESERVED_EQUITY_ROLES
+    assert set(result.observation_set).issuperset(RESERVED_EQUITY_ROLES)
+    assert not set(result.ranked_pool).intersection(RESERVED_EQUITY_ROLES)
+    assert "AAA" in result.ranked_pool
+
+
+def test_role_boundary_is_configuration_derived_and_authorized_context_can_opt_in() -> None:
+    config = EquityUniverseConfig(
+        reference_symbols=("SPY",),
+        fallback_trade_symbols=("SH", "PSQ", "DOG"),
+        inverse_trade_symbols=("SH", "PSQ", "DOG"),
+    )
+    assert config.ordinary_alpha_excluded_symbols == RESERVED_EQUITY_ROLES
+
+    paths = _paths()
+    paths.update({symbol: list(paths["AAA"]) for symbol in ("SH", "PSQ", "DOG")})
+    members = set(paths) - {"SHORT", "OUTU"}
+    authorized_context = replace(_context(paths, members), ordinary_alpha_excluded_symbols=())
+    authorized_ranked = _production_v3().rank_candidates(authorized_context)
+    assert set(authorized_ranked).intersection({"SH", "PSQ", "DOG"})
 
 
 def test_v3_paper_diagnostics_reuse_final_scoring_outputs() -> None:

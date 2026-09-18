@@ -432,7 +432,10 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
 
     def rank_candidates(self, context: PortfolioContext) -> tuple[str, ...]:
         ranked, _vols = self._score_candidates(context)
-        return tuple(symbol for _score, symbol in ranked)
+        # Preserve the complete factual scoring/rank calculation above. Role
+        # isolation is a post-score eligibility boundary so removing a
+        # reference/hedge symbol cannot renormalize remaining V3 scores.
+        return tuple(symbol for _score, symbol in ranked if context.is_ordinary_alpha_eligible(symbol))
 
     def _candidate_score(self, residuals: list[float], *, formation: int, skip: int) -> float:
         """Ranking score over the formation window (skip excluded).
@@ -586,6 +589,11 @@ class EquityResidualMomentum1dV1(PortfolioStrategy):
             return self._cash_portfolio(context, "market_factor_unavailable")
 
         ranked, residual_vols = self._score_candidates(context)
+        # Reserved symbols remain observable and scoreable for shared context,
+        # but ordinary V3 target construction must not select them. The
+        # boundary is deliberately after scoring to preserve unchanged scores
+        # and ordering for every remaining ordinary candidate.
+        ranked = tuple((score, symbol) for score, symbol in ranked if context.is_ordinary_alpha_eligible(symbol))
         if not ranked:
             return self._cash_portfolio(context, "no_qualified_candidates")
         selected = self._select_names(ranked, residual_vols, context, top_n)

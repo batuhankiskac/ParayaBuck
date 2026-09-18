@@ -296,6 +296,9 @@ def run_product_backtest(
         universe_version=hash_point_in_time_universe(universe),
         risk_limits=risk,
         maximum_allocation=selection.maximum_allocation,
+        ordinary_alpha_excluded_symbols=(
+            config.universe.equity.ordinary_alpha_excluded_symbols if market == Market.EQUITY else ()
+        ),
         execution_policy=PortfolioExecutionPolicy(
             rebalance_band_pct=config.execution.rebalance_band_pct,
             minimum_order_notional=config.execution.minimum_order_notional,

@@ -492,6 +492,7 @@ def _equity_observation_set(
         decision_timestamp=data_timestamp,
         maximum_stream_symbols=universe.maximum_stream_symbols,
         pinned_symbols=(*universe.reference_symbols, *universe.inverse_trade_symbols),
+        ordinary_alpha_excluded_symbols=universe.ordinary_alpha_excluded_symbols,
         scanner_fallback=result.observation_set,
     )
     return replace(

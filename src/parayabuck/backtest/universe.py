@@ -235,6 +235,7 @@ def build_trailing_point_in_time_universe(
             default=timestamp - duration,
         )
         result: ScannerResult | CryptoScannerResult
+        ordinary_alpha_excluded_symbols: tuple[str, ...] = ()
         if market == Market.EQUITY:
             configured = equity_config or EquityUniverseConfig(
                 maximum_stream_symbols=maximum_symbols,
@@ -245,6 +246,7 @@ def build_trailing_point_in_time_universe(
                     minimum_data_completeness=minimum_history_ratio,
                 ),
             )
+            ordinary_alpha_excluded_symbols = configured.ordinary_alpha_excluded_symbols
             if target_shortlist is not None:
                 # Stage-A parity with the live pipeline: rank the trailing
                 # window by median dollar volume and admit only the top target
@@ -350,6 +352,7 @@ def build_trailing_point_in_time_universe(
                 decision_timestamp=data_timestamp,
                 maximum_stream_symbols=maximum_symbols,
                 pinned_symbols=tuple(symbol for symbol in pinned if symbol in by_symbol),
+                ordinary_alpha_excluded_symbols=ordinary_alpha_excluded_symbols,
                 scanner_fallback=raw_observation,
             )
             observation = ranked_observation.observation_set

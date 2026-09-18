@@ -978,6 +978,11 @@ class EngineRuntime:
                     universe_version=universe_version,
                     account_id=self.broker.account_id or "unknown",
                     live_dollar_cap=configured_live_cap,
+                    ordinary_alpha_excluded_symbols=(
+                        self.app_config.universe.equity.ordinary_alpha_excluded_symbols
+                        if strategy.market == Market.EQUITY
+                        else ()
+                    ),
                     execution_policy=PortfolioExecutionPolicy(
                         rebalance_band_pct=self.app_config.execution.rebalance_band_pct,
                         minimum_order_notional=self.app_config.execution.minimum_order_notional,

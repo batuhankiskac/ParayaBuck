@@ -464,6 +464,16 @@ class EquityUniverseConfig:
         references = set(self.reference_symbols)
         return tuple(item for item in self.fallback_trade_symbols if item not in references)
 
+    @property
+    def ordinary_alpha_excluded_symbols(self) -> tuple[str, ...]:
+        """Symbols reserved for reference/hedge roles, not ordinary alpha.
+
+        This is a role boundary, not a product-taxonomy blacklist. The
+        symbols remain in configured observation/history paths. An explicitly
+        authorized strategy can pass an empty boundary when it is composed.
+        """
+        return tuple(dict.fromkeys((*self.reference_symbols, *self.inverse_trade_symbols)))
+
 
 @dataclass(frozen=True)
 class CryptoScannerConfig:

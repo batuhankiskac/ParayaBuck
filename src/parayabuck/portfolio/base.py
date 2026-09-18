@@ -39,10 +39,19 @@ class PortfolioContext:
     # to ``history``. PAPER/LIVE contexts without prepared data will have
     # ``None`` and use the canonical path.
     numeric_history: Any | None = None
+    # Configuration-derived role boundary for ordinary-alpha strategies.
+    # Reserved symbols remain visible in ``history`` so benchmark, hedge, and
+    # managed-position paths can observe them; ordinary selection applies this
+    # boundary after its factual scoring pipeline.
+    ordinary_alpha_excluded_symbols: tuple[str, ...] = ()
 
     def closes(self, symbol: str) -> list[float]:
         bars = self.history.get(canonical_symbol(symbol, self.market), ())
         return [bar.close for bar in bars]
+
+    def is_ordinary_alpha_eligible(self, symbol: str) -> bool:
+        canonical = canonical_symbol(symbol, self.market)
+        return canonical not in {canonical_symbol(item, self.market) for item in self.ordinary_alpha_excluded_symbols}
 
     def in_universe(self, symbol: str) -> bool:
         """Permissive membership probe for static contexts.

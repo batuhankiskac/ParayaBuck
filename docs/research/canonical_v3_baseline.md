@@ -52,9 +52,9 @@ split/stock-dividend rows are not reapplied.
 
 - `SPY` is reference-only: it remains available for history and observation,
   but is not an ordinary V3 alpha target.
-- `SH`, `PSQ`, and `DOG` are approved inverse hedge/reference roles. They may
-  remain observable and available to explicitly authorized hedge paths, but
-  they are excluded from ordinary V3 alpha targeting.
+- `SH`, `PSQ`, and `DOG` are approved inverse hedge-only roles. They may remain
+  observable and available to explicitly authorized hedge paths, but they are
+  excluded from ordinary V3 alpha targeting.
 - Ordinary V3 target eligibility for `SPY`, `SH`, `PSQ`, and `DOG` is zero in
   the corrected baseline evidence.
 - The broad historical Alpaca `US_EQUITY` universe remains in force. This is

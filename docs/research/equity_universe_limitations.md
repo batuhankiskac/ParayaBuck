@@ -31,7 +31,7 @@ classification result.
 ## Reserved roles
 
 - `SPY` is `reference_only` and is never ordinary V3 alpha.
-- `SH`, `PSQ`, and `DOG` are approved hedge/reference instruments. They remain
+- `SH`, `PSQ`, and `DOG` are approved hedge-only instruments. They remain
   available for history and explicitly authorized hedge paths, but are excluded
   from ordinary V3 alpha targeting.
 - The corrected canonical V3 replay recorded zero ordinary target eligibility

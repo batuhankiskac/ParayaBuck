@@ -1,0 +1,25 @@
+{
+  "runner": ".venv/bin/pytest",
+  "tests": [
+    {
+      "nodeid": "tests/test_portfolio_engine_accounting.py::test_high_water_between_rebalances_feeds_later_drawdown",
+      "result": "PASS",
+      "output": "1 passed in 0.57s"
+    },
+    {
+      "nodeid": "tests/test_safety_incidents.py::test_drawdown_breach_persists_incident_and_epoch_reset_recovers",
+      "result": "PASS",
+      "output": "1 passed in 0.31s"
+    },
+    {
+      "nodeid": "tests/test_portfolio_runtime.py::test_entry_risk_latch_evaluates_from_account_poll",
+      "result": "PASS",
+      "output": "1 passed in 0.31s"
+    }
+  ],
+  "meaning": {
+    "offline": "drawdown-only breach is recorded as a shadow event and does not cap the target or freeze the curve",
+    "paper_live": "drawdown breach persists an operational incident and the verified risk-epoch reset clears the latch",
+    "entry_latch": "latched decisions emit risk-reducing SELL-only orders"
+  }
+}

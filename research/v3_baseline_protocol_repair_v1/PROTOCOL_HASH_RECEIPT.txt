@@ -1,0 +1,6 @@
+Protocol: research/v3_baseline_protocol_repair_v1/V3_BASELINE_PROTOCOL_V2.md
+SHA-256: b8a09e2f430c9ff68b707d79e17e4d7154b44e44ac51732716ba51d85eecd8b2
+Frozen at: 2026-09-18T19:49:41Z
+Production reference SHA: bdfa55ea58858b5f8eaa8b58b0ab8ae34dda7c53
+Economic outputs opened before this receipt: NO
+Observed 20.4359% result used to define the protocol: NO

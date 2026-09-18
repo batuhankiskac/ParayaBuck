@@ -1,0 +1,67 @@
+{
+  "audit_schema": "g5-audit-v1",
+  "audit_branch": "research/v3-baseline-protocol-repair-v1",
+  "production_sha": "bdfa55ea58858b5f8eaa8b58b0ab8ae34dda7c53",
+  "classification": "G5_MISSPECIFIED",
+  "old_gate": {
+    "name": "G5",
+    "definition": "full-period 1x offline alpha maximum drawdown <= risk.max_drawdown_pct",
+    "threshold_source": "risk.max_drawdown_pct",
+    "threshold_value": 0.05,
+    "threshold_semantic_type": "production_account_operational_entry_latch",
+    "offline_alpha_bound": false
+  },
+  "runtime_semantics": {
+    "drawdown_measure": "max(0, (peak_equity - equity) / peak_equity)",
+    "scope": "account equity high-water mark",
+    "paper_live_action": "persist portfolio_drawdown_halt and block new entries while allowing risk-reducing sells",
+    "paper_live_liquidation": false,
+    "resume": "verified reconciliation plus operator risk-epoch reset rebasing the high-water mark",
+    "offline_action": "record shadow event and continue alpha target/curve for drawdown-only breach",
+    "offline_max_drawdown_directly_bounded": false
+  },
+  "preexisting_evidence": [
+    {
+      "path": "docs/product_foundation.md",
+      "commit": "9220d7a1be79824cbdb4bdcc4d8365846e101050",
+      "date": "2026-08-25T22:23:04+03:00",
+      "meaning": "offline drawdown_halt_shadow_events do not freeze the alpha curve; operational drawdown recovery is an explicit risk-epoch reset"
+    },
+    {
+      "path": "docs/strategy_architecture.md",
+      "commit": "9220d7a1be79824cbdb4bdcc4d8365846e101050",
+      "date": "2026-08-25T22:23:04+03:00",
+      "meaning": "production halts entries on drawdown; backtest records shadow events and keeps trading"
+    },
+    {
+      "path": "docs/strategy_robustness.md",
+      "commit": "9220d7a1be79824cbdb4bdcc4d8365846e101050",
+      "date": "2026-08-25T22:23:04+03:00",
+      "meaning": "historical offline max drawdown is reported and documented risks are not universal gates"
+    },
+    {
+      "path": "docs/capital_utilization_cadence_verdict.md",
+      "commit": "9a3ff5883c17d10cfca78d85407bb409a81fb6bd",
+      "date": "2026-08-18T19:35:10+03:00",
+      "meaning": "historical economic acceptance used relative maxDD and operational shadow-day diagnostics, not a 5% absolute offline bound"
+    }
+  ],
+  "option_assessment": {
+    "A_no_absolute_offline_dd_threshold": "selected",
+    "B_preexisting_historical_absolute_threshold": "not_found",
+    "C_faithful_runtime_latch_replay": "not used because no predeclared deterministic operator reset policy exists",
+    "D_preexisting_relative_dd_criterion": "not applicable to this fixed baseline; historical relative criteria are comparative candidate rules"
+  },
+  "replacement_rule": {
+    "normal_1x_alpha_max_drawdown_threshold": null,
+    "normal_1x_alpha_max_drawdown": "reported_and_recomputed",
+    "risk_adjusted_gate": "full_1x_calmar_gt_zero remains in G4",
+    "validation_gate": "validation_1x_net_return_and_cagr_gt_zero remain in G3",
+    "cost_gate": "pre-result cost-stress gates remain frozen separately",
+    "shadow_semantics_gate": "offline shadow events and continuation semantics must independently verify"
+  },
+  "observed_result_influence": {
+    "observed_20_4359_percent_used_to_define_gate": false,
+    "observed_economic_outputs_opened_before_protocol_freeze": false
+  }
+}

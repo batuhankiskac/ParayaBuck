@@ -394,6 +394,7 @@ No production files, configuration, universe snapshots, or strategy code were ch
 ## Branch SHA
 
 * Base branch SHA: `5175a58b2fb4084e5c5a00854d3c3c94b0e819a1`
-* Final research-branch tip SHA is reported in the task handoff after commit.
+* Report artifact commit SHA: `e08029e7c8136741a7d7825c8cd3abf0daf0f6d8`
+* Final research-branch tip SHA is reported in the task handoff after this provenance update.
 
 No new alpha candidate is proposed.

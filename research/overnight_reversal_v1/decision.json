@@ -1,0 +1,239 @@
+{
+  "candidate": "equity_overnight_reversal_v1",
+  "candidate_version": "1.0.0-research",
+  "design_branch_sha": "7ec53efecc4d37cab17d0d96f194389b4513a69b",
+  "economic_branch": "research/overnight-reversal-v1",
+  "economic_head_at_verification": "cfb43847f19048bde57680244ba6fda45b89e795",
+  "frozen_parameters": {
+    "per_name_weight": 0.09166666666666667,
+    "top_n": 6
+  },
+  "gate_results": {
+    "all_pass": false,
+    "gates": {
+      "G1": {
+        "evidence": {
+          "valid_common_pair_pct": 0.9986266053691558
+        },
+        "pass": true
+      },
+      "G2": {
+        "evidence": {},
+        "pass": false
+      },
+      "G3": {
+        "evidence": {
+          "full_deltas": [
+            -1.0108327526268597,
+            -1.3361622188610467,
+            -0.46489819465904936
+          ],
+          "validation_deltas": [
+            -0.8947069220695059,
+            -1.235142028555235,
+            -0.40522772706691024
+          ]
+        },
+        "pass": false
+      },
+      "G4": {
+        "evidence": {
+          "years": [
+            {
+              "annualized_one_way_realized_turnover": 160.93813706383088,
+              "annualized_one_way_target_turnover": 160.08232445704908,
+              "annualized_volatility": 0.19353867641646819,
+              "average_exposure": 0.4079707684845416,
+              "average_positions": 4.46613545816733,
+              "benchmark_return": -0.19481640559204982,
+              "cagr": -0.031881060326351296,
+              "calmar": -0.2391140467315141,
+              "costs_pct_gross_gain": null,
+              "costs_pct_starting_capital": 0.04914922558859893,
+              "decision_count": 251,
+              "dividend_total": 4175.512580375323,
+              "duration_days": 364,
+              "end_date": "2022-12-30",
+              "ending_equity": 78713.52280011916,
+              "fee_cost": 127.73533291185683,
+              "fill_count": 1762,
+              "gross_notional": 12893396.111048857,
+              "max_concentration": 0.11223012757507425,
+              "max_drawdown": 0.1333299350754935,
+              "max_positions": 6,
+              "max_target_weight": 0.09166666666666667,
+              "net_return": -0.03179511850953154,
+              "net_total_return": -0.03179511850953154,
+              "positive_month_ratio": 0.5,
+              "profit_factor": 0.9681563192379596,
+              "realized_pnl": -3392.2823727150926,
+              "realized_transaction_costs": 3995.754166226508,
+              "realized_turnover": 160.49721066091627,
+              "rebalance_count": 251,
+              "sharpe": -0.07118139774267125,
+              "slippage_cost": 2578.6792222097674,
+              "sortino": -0.1099281359480265,
+              "spread_cost": 1289.3396111048837,
+              "start_date": "2022-01-03",
+              "starting_equity": 81298.41555740396,
+              "target_turnover": 159.64374274620786,
+              "worst_month_return": -0.08127590807407759
+            },
+            {
+              "annualized_one_way_realized_turnover": 169.26984807380498,
+              "annualized_one_way_target_turnover": 169.7680883969062,
+              "annualized_volatility": 0.1294845511649423,
+              "average_exposure": 0.43634519058170707,
+              "average_positions": 4.78,
+              "benchmark_return": 0.24286797583871556,
+              "cagr": -0.14696477213618986,
+              "calmar": -0.7155162546376824,
+              "costs_pct_gross_gain": null,
+              "costs_pct_starting_capital": 0.048284992238931075,
+              "decision_count": 250,
+              "dividend_total": 4175.512580375323,
+              "duration_days": 364,
+              "end_date": "2023-12-29",
+              "ending_equity": 67174.65548686832,
+              "fee_cost": 158.95835787695862,
+              "fill_count": 1861,
+              "gross_notional": 12139078.26541909,
+              "max_concentration": 0.10671929425951852,
+              "max_drawdown": 0.2053968322642911,
+              "max_positions": 6,
+              "max_target_weight": 0.09166666666666667,
+              "net_return": -0.1465932015589242,
+              "net_total_return": -0.1465932015589242,
+              "positive_month_ratio": 0.3333333333333333,
+              "profit_factor": 0.8457187314323611,
+              "realized_pnl": -11300.346080061674,
+              "realized_transaction_costs": 3800.681837502678,
+              "realized_turnover": 168.8060950653836,
+              "rebalance_count": 250,
+              "sharpe": -1.1627069111521822,
+              "slippage_cost": 2427.815653083813,
+              "sortino": -1.732054945842487,
+              "spread_cost": 1213.9078265419064,
+              "start_date": "2023-01-03",
+              "starting_equity": 78713.52280011916,
+              "target_turnover": 169.3029703465037,
+              "worst_month_return": -0.0782732333819508
+            },
+            {
+              "annualized_one_way_realized_turnover": 170.14298241125942,
+              "annualized_one_way_target_turnover": 169.11925685909668,
+              "annualized_volatility": 0.14857684718996675,
+              "average_exposure": 0.45914631133827755,
+              "average_positions": 5.0396825396825395,
+              "benchmark_return": 0.23304790557741262,
+              "cagr": 0.0023726381529205476,
+              "calmar": 0.015267752292686555,
+              "costs_pct_gross_gain": 20.981178521964623,
+              "costs_pct_starting_capital": 0.050190390456458754,
+              "decision_count": 252,
+              "dividend_total": 4175.512580375323,
+              "duration_days": 368,
+              "end_date": "2024-12-31",
+              "ending_equity": 67335.34818504704,
+              "fee_cost": 143.645343732697,
+              "fill_count": 1890,
+              "gross_notional": 10759589.479771066,
+              "max_concentration": 0.1188305194832381,
+              "max_drawdown": 0.15540192868187094,
+              "max_positions": 6,
+              "max_target_weight": 0.09166666666666667,
+              "net_return": 0.0023921625948664094,
+              "net_total_return": 0.0023921625948664094,
+              "positive_month_ratio": 0.4166666666666667,
+              "profit_factor": 0.9968187650621038,
+              "realized_pnl": -195.18717640127653,
+              "realized_transaction_costs": 3371.5221876640203,
+              "realized_turnover": 171.5414178831328,
+              "rebalance_count": 252,
+              "sharpe": 0.08993620637746416,
+              "slippage_cost": 2151.9178959542155,
+              "sortino": 0.13309869029551766,
+              "spread_cost": 1075.9589479771078,
+              "start_date": "2024-01-02",
+              "starting_equity": 67174.65548686832,
+              "target_turnover": 170.50927814834955,
+              "worst_month_return": -0.06415716240651281
+            },
+            {
+              "annualized_one_way_realized_turnover": 163.9431460618001,
+              "annualized_one_way_target_turnover": 164.12708115154538,
+              "annualized_volatility": 0.18278715213391,
+              "average_exposure": 0.42378650812478613,
+              "average_positions": 4.64,
+              "benchmark_return": 0.16352716352716334,
+              "cagr": -0.35407479628322336,
+              "calmar": -0.9754032100934007,
+              "costs_pct_gross_gain": null,
+              "costs_pct_starting_capital": 0.039223566339079,
+              "decision_count": 250,
+              "dividend_total": 4175.512580375323,
+              "duration_days": 365,
+              "end_date": "2025-12-31",
+              "ending_equity": 43493.5984937666,
+              "fee_cost": 69.98750105427143,
+              "fill_count": 1800,
+              "gross_notional": 8570483.31815636,
+              "max_concentration": 0.12019505791296438,
+              "max_drawdown": 0.36300351753949894,
+              "max_positions": 6,
+              "max_target_weight": 0.09166666666666667,
+              "net_return": -0.35407479628322336,
+              "net_total_return": -0.35407479628322336,
+              "positive_month_ratio": 0.16666666666666666,
+              "profit_factor": 0.6489281297870196,
+              "realized_pnl": -24839.48308506974,
+              "realized_transaction_costs": 2641.1324965011754,
+              "realized_turnover": 163.9431460618001,
+              "rebalance_count": 250,
+              "sharpe": -2.2970453668923962,
+              "slippage_cost": 1714.0966636312692,
+              "sortino": -2.567002432685773,
+              "spread_cost": 857.0483318156346,
+              "start_date": "2025-01-02",
+              "starting_equity": 67335.34818504704,
+              "target_turnover": 164.12708115154538,
+              "worst_month_return": -0.1068240061156237
+            }
+          ]
+        },
+        "pass": false
+      },
+      "G5": {
+        "evidence": {},
+        "pass": false
+      },
+      "G6": {
+        "evidence": {},
+        "pass": false
+      },
+      "G7": {
+        "evidence": {},
+        "pass": false
+      },
+      "G8": {
+        "evidence": {},
+        "pass": false
+      },
+      "G9": {
+        "evidence": {
+          "maximum_allocation": 0.55,
+          "maximum_positions": 6
+        },
+        "pass": true
+      }
+    },
+    "near_miss_is_fail": true,
+    "promotion_authorization": false
+  },
+  "independent_verification_status": "PASS",
+  "live_authorized": false,
+  "no_auto_promotion": true,
+  "paper_authorized": false,
+  "result_validity": "RESEARCH_RUN_VALID",
+  "verdict": "RESEARCH_REJECT"
+}

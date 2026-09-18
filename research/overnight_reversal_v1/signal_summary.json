@@ -1,0 +1,20 @@
+{
+  "average_observation_set_size": 29.823861497929997,
+  "average_selected_names": 5.869025216409485,
+  "average_valid_eligible_names": 285.1569439217162,
+  "decision_count": 2657,
+  "file": "signal_audit.csv.gz",
+  "incomplete_observation_decisions": 49,
+  "non_reference_pool_observations": 758704,
+  "pool_row_count": 761361,
+  "reason_counts": {
+    "decision_incomplete_observation_set": 1421,
+    "not_selected_rank": 59570,
+    "outside_observation_set": 682119,
+    "reference_only": 2657,
+    "top_n6": 15594
+  },
+  "selected_row_count": 15594,
+  "valid_common_pair_count": 757662,
+  "valid_common_pair_pct": 0.9986266053691558
+}

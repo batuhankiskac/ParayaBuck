@@ -1,0 +1,494 @@
+{
+  "A/1x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 18.091111262737886,
+      "annualized_one_way_target_turnover": 18.13230934389585,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.005057851281000478,
+      "fill_count": 221,
+      "gross_notional": 2635901.437271814,
+      "realized_transaction_costs": 814.2035323925915,
+      "rebalance_count": 52
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 18.8679186024744,
+      "annualized_one_way_target_turnover": 18.92435633739645,
+      "costs_pct_gross_gain": 0.056306023980736135,
+      "costs_pct_starting_capital": 0.005970956589134214,
+      "fill_count": 226,
+      "gross_notional": 2653282.993054585,
+      "realized_transaction_costs": 828.2204080163579,
+      "rebalance_count": 52
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 16.4636523071401,
+      "annualized_one_way_target_turnover": 16.489978749987284,
+      "costs_pct_gross_gain": 0.048352117785997364,
+      "costs_pct_starting_capital": 0.005623307672422215,
+      "fill_count": 199,
+      "gross_notional": 2770482.0575503297,
+      "realized_transaction_costs": 862.7134068237993,
+      "rebalance_count": 53
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 19.735687289806805,
+      "annualized_one_way_target_turnover": 19.77147479219373,
+      "costs_pct_gross_gain": 0.0628478232726978,
+      "costs_pct_starting_capital": 0.0063495371195059335,
+      "fill_count": 244,
+      "gross_notional": 3551125.470436494,
+      "realized_transaction_costs": 1087.4200623503064,
+      "rebalance_count": 52
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 19.858757103699723,
+      "annualized_one_way_target_turnover": 19.899900289359948,
+      "costs_pct_gross_gain": 0.07717443174833254,
+      "costs_pct_starting_capital": 0.0036797299925196863,
+      "fill_count": 149,
+      "gross_notional": 2204652.4952457873,
+      "realized_transaction_costs": 693.8578643453194,
+      "rebalance_count": 30
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 16.490401762525828,
+      "annualized_one_way_target_turnover": 16.547068709310548,
+      "costs_pct_gross_gain": 0.05318546106025499,
+      "costs_pct_starting_capital": 0.032431509193212894,
+      "fill_count": 1015,
+      "gross_notional": 10450773.773320025,
+      "realized_transaction_costs": 3243.1509193212896,
+      "rebalance_count": 256
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 17.601025573416024,
+      "annualized_one_way_target_turnover": 17.492218690605362,
+      "costs_pct_gross_gain": 0.07718440944601568,
+      "costs_pct_starting_capital": 0.07529566193249684,
+      "fill_count": 2054,
+      "gross_notional": 24266218.226879034,
+      "realized_transaction_costs": 7529.566193249684,
+      "rebalance_count": 495
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 18.533026451296,
+      "annualized_one_way_target_turnover": 18.52334281741593,
+      "costs_pct_gross_gain": 0.11719588410689466,
+      "costs_pct_starting_capital": 0.026627311380522236,
+      "fill_count": 1039,
+      "gross_notional": 13815444.45355901,
+      "realized_transaction_costs": 4286.415273928377,
+      "rebalance_count": 239
+    }
+  },
+  "A/2x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 18.091605703759477,
+      "annualized_one_way_target_turnover": 18.134290130896435,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.0100894900039542,
+      "fill_count": 221,
+      "gross_notional": 2562188.2466750005,
+      "realized_transaction_costs": 1582.8341657023122,
+      "rebalance_count": 52
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 18.875312536006568,
+      "annualized_one_way_target_turnover": 18.926775256523342,
+      "costs_pct_gross_gain": 0.11958781734498727,
+      "costs_pct_starting_capital": 0.01190841811959037,
+      "fill_count": 226,
+      "gross_notional": 2563998.8847525655,
+      "realized_transaction_costs": 1600.69318838,
+      "rebalance_count": 52
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 16.469287137896593,
+      "annualized_one_way_target_turnover": 16.491909656985335,
+      "costs_pct_gross_gain": 0.10148178297605423,
+      "costs_pct_starting_capital": 0.011219242500742162,
+      "fill_count": 199,
+      "gross_notional": 2662625.830172588,
+      "realized_transaction_costs": 1658.2268296263444,
+      "rebalance_count": 53
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 19.740836330356608,
+      "annualized_one_way_target_turnover": 19.77425888495402,
+      "costs_pct_gross_gain": 0.13412988716391855,
+      "costs_pct_starting_capital": 0.012662885236501574,
+      "fill_count": 244,
+      "gross_notional": 3393735.9555113376,
+      "realized_transaction_costs": 2078.513511781651,
+      "rebalance_count": 52
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 19.86378942755088,
+      "annualized_one_way_target_turnover": 19.90244555857369,
+      "costs_pct_gross_gain": 0.16720966920295136,
+      "costs_pct_starting_capital": 0.007347676066588933,
+      "fill_count": 149,
+      "gross_notional": 2097082.6873827318,
+      "realized_transaction_costs": 1319.9251265518606,
+      "rebalance_count": 30
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 16.49734386728437,
+      "annualized_one_way_target_turnover": 16.549279525125442,
+      "costs_pct_gross_gain": 0.11249454030832863,
+      "costs_pct_starting_capital": 0.06398633413152356,
+      "fill_count": 1016,
+      "gross_notional": 10309048.121729374,
+      "realized_transaction_costs": 6398.633413152356,
+      "rebalance_count": 256
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 17.59084940091786,
+      "annualized_one_way_target_turnover": 17.494477730224318,
+      "costs_pct_gross_gain": 0.16723917291962268,
+      "costs_pct_starting_capital": 0.14638826235194513,
+      "fill_count": 2055,
+      "gross_notional": 23588679.7262236,
+      "realized_transaction_costs": 14638.826235194512,
+      "rebalance_count": 495
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 18.533224814618954,
+      "annualized_one_way_target_turnover": 18.5256544674447,
+      "costs_pct_gross_gain": 0.26882367989641454,
+      "costs_pct_starting_capital": 0.05252561822972793,
+      "fill_count": 1039,
+      "gross_notional": 13279631.604494223,
+      "realized_transaction_costs": 8240.192822042165,
+      "rebalance_count": 239
+    }
+  },
+  "A/3x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 18.091647684385226,
+      "annualized_one_way_target_turnover": 18.135483080152824,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.015100810966701537,
+      "fill_count": 220,
+      "gross_notional": 2491942.5512050265,
+      "realized_transaction_costs": 2309.1185318156845,
+      "rebalance_count": 52
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 18.869790945802027,
+      "annualized_one_way_target_turnover": 18.91595025460046,
+      "costs_pct_gross_gain": 0.192556245885301,
+      "costs_pct_starting_capital": 0.017794731026468263,
+      "fill_count": 224,
+      "gross_notional": 2477363.2071320987,
+      "realized_transaction_costs": 2319.893223186978,
+      "rebalance_count": 52
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 16.474930859843422,
+      "annualized_one_way_target_turnover": 16.49384308020896,
+      "costs_pct_gross_gain": 0.16013364183117826,
+      "costs_pct_starting_capital": 0.016787929046006546,
+      "fill_count": 199,
+      "gross_notional": 2559428.262972196,
+      "realized_transaction_costs": 2390.8956200551365,
+      "rebalance_count": 53
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 19.745984509872944,
+      "annualized_one_way_target_turnover": 19.77704533684892,
+      "costs_pct_gross_gain": 0.21566612221399506,
+      "costs_pct_starting_capital": 0.018940235308960104,
+      "fill_count": 244,
+      "gross_notional": 3243900.420395745,
+      "realized_transaction_costs": 2980.211373542991,
+      "rebalance_count": 52
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 19.86882445298154,
+      "annualized_one_way_target_turnover": 19.90499289787791,
+      "costs_pct_gross_gain": 0.27361245252909505,
+      "costs_pct_starting_capital": 0.011003872021707894,
+      "fill_count": 149,
+      "gross_notional": 1995109.2728829635,
+      "realized_transaction_costs": 1883.4976187995871,
+      "rebalance_count": 30
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 16.50433880964352,
+      "annualized_one_way_target_turnover": 16.55152346391437,
+      "costs_pct_gross_gain": 0.17895947778105292,
+      "costs_pct_starting_capital": 0.09469380315830185,
+      "fill_count": 1016,
+      "gross_notional": 10170496.114330236,
+      "realized_transaction_costs": 9469.380315830185,
+      "rebalance_count": 256
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 17.579544493565,
+      "annualized_one_way_target_turnover": 17.495292878817175,
+      "costs_pct_gross_gain": 0.27357881992844085,
+      "costs_pct_starting_capital": 0.21352996683230532,
+      "fill_count": 2052,
+      "gross_notional": 22938239.828918267,
+      "realized_transaction_costs": 21352.996683230533,
+      "rebalance_count": 495
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 18.530858104075822,
+      "annualized_one_way_target_turnover": 18.52491085809175,
+      "costs_pct_gross_gain": 0.47275253401489364,
+      "costs_pct_starting_capital": 0.07771460922961303,
+      "fill_count": 1036,
+      "gross_notional": 12767743.71458803,
+      "realized_transaction_costs": 11883.61636740039,
+      "rebalance_count": 239
+    }
+  },
+  "B/1x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 160.93813706383088,
+      "annualized_one_way_target_turnover": 160.08232445704908,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.04914922558859893,
+      "fill_count": 1762,
+      "gross_notional": 12893396.111048857,
+      "realized_transaction_costs": 3995.754166226508,
+      "rebalance_count": 251
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 169.26984807380498,
+      "annualized_one_way_target_turnover": 169.7680883969062,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.048284992238931075,
+      "fill_count": 1861,
+      "gross_notional": 12139078.26541909,
+      "realized_transaction_costs": 3800.681837502678,
+      "rebalance_count": 250
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 170.14298241125942,
+      "annualized_one_way_target_turnover": 169.11925685909668,
+      "costs_pct_gross_gain": 20.981178521964623,
+      "costs_pct_starting_capital": 0.050190390456458754,
+      "fill_count": 1890,
+      "gross_notional": 10759589.479771066,
+      "realized_transaction_costs": 3371.5221876640203,
+      "rebalance_count": 252
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 163.9431460618001,
+      "annualized_one_way_target_turnover": 164.12708115154538,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.039223566339079,
+      "fill_count": 1800,
+      "gross_notional": 8570483.31815636,
+      "realized_transaction_costs": 2641.1324965011754,
+      "rebalance_count": 250
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 176.22018679587796,
+      "annualized_one_way_target_turnover": 177.26422796622853,
+      "costs_pct_gross_gain": 0.1530703910954204,
+      "costs_pct_starting_capital": 0.038642743652061905,
+      "fill_count": 1117,
+      "gross_notional": 5420145.4751960235,
+      "realized_transaction_costs": 1680.7119771003286,
+      "rebalance_count": 144
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 176.17077733889923,
+      "annualized_one_way_target_turnover": 175.5678709855729,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.24596497006489557,
+      "fill_count": 9648,
+      "gross_notional": 79162642.17784066,
+      "realized_transaction_costs": 24596.497006489557,
+      "rebalance_count": 1259
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 172.41894191174796,
+      "annualized_one_way_target_turnover": 171.57800174668253,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.40086299671484305,
+      "fill_count": 18078,
+      "gross_notional": 128945334.82743207,
+      "realized_transaction_costs": 40086.2996714843,
+      "rebalance_count": 2406
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 166.9377899786064,
+      "annualized_one_way_target_turnover": 167.22520005757593,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.19053019125640364,
+      "fill_count": 8430,
+      "gross_notional": 49782692.6495914,
+      "realized_transaction_costs": 15489.802664994757,
+      "rebalance_count": 1147
+    }
+  },
+  "B/2x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 160.89319966225528,
+      "annualized_one_way_target_turnover": 160.10473404825794,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.09590260339124562,
+      "fill_count": 1762,
+      "gross_notional": 9799587.439205552,
+      "realized_transaction_costs": 6072.860542859017,
+      "rebalance_count": 251
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 169.3374062130301,
+      "annualized_one_way_target_turnover": 169.7924070369198,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.09417839529553965,
+      "fill_count": 1861,
+      "gross_notional": 8775466.527252495,
+      "realized_transaction_costs": 5495.057451848329,
+      "rebalance_count": 250
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 170.4142093154622,
+      "annualized_one_way_target_turnover": 169.47362734358367,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.09869043339784973,
+      "fill_count": 1891,
+      "gross_notional": 7438321.927935556,
+      "realized_transaction_costs": 4661.274955792837,
+      "rebalance_count": 252
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 163.71044106949574,
+      "annualized_one_way_target_turnover": 163.94186898043577,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.07664529878316557,
+      "fill_count": 1797,
+      "gross_notional": 5669171.911680668,
+      "realized_transaction_costs": 3494.984403532148,
+      "rebalance_count": 250
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 174.40998441459712,
+      "annualized_one_way_target_turnover": 175.370955726618,
+      "costs_pct_gross_gain": 0.3696925454638594,
+      "costs_pct_starting_capital": 0.07517144450710496,
+      "fill_count": 1105,
+      "gross_notional": 3404206.970444969,
+      "realized_transaction_costs": 2110.3856363709997,
+      "rebalance_count": 144
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 175.98143718957635,
+      "annualized_one_way_target_turnover": 174.81939553727312,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.4379724514476368,
+      "fill_count": 9603,
+      "gross_notional": 70452346.4029463,
+      "realized_transaction_costs": 43797.24514476368,
+      "rebalance_count": 1259
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 172.61769677370572,
+      "annualized_one_way_target_turnover": 171.09653553587327,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.6563180813516722,
+      "fill_count": 18019,
+      "gross_notional": 105539101.17946553,
+      "realized_transaction_costs": 65631.80813516723,
+      "rebalance_count": 2406
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 166.57613358763186,
+      "annualized_one_way_target_turnover": 167.03503117767346,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.34481138170579456,
+      "fill_count": 8416,
+      "gross_notional": 35086754.77651924,
+      "realized_transaction_costs": 21834.562990403316,
+      "rebalance_count": 1147
+    }
+  },
+  "B/3x": {
+    "2022": {
+      "annualized_one_way_realized_turnover": 160.02199499180531,
+      "annualized_one_way_target_turnover": 159.37219820098588,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.13608106395782887,
+      "fill_count": 1754,
+      "gross_notional": 7090484.785809816,
+      "realized_transaction_costs": 6587.712240630872,
+      "rebalance_count": 251
+    },
+    "2023": {
+      "annualized_one_way_realized_turnover": 168.21664401057063,
+      "annualized_one_way_target_turnover": 168.70108125176628,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.13731520824826782,
+      "fill_count": 1849,
+      "gross_notional": 5954520.207118146,
+      "realized_transaction_costs": 5593.011448794251,
+      "rebalance_count": 250
+    },
+    "2024": {
+      "annualized_one_way_realized_turnover": 168.51718882340333,
+      "annualized_one_way_target_turnover": 167.6511009752957,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.14230159244818175,
+      "fill_count": 1870,
+      "gross_notional": 4787524.874810289,
+      "realized_transaction_costs": 4498.926958715537,
+      "rebalance_count": 252
+    },
+    "2025": {
+      "annualized_one_way_realized_turnover": 163.67322732811823,
+      "annualized_one_way_target_turnover": 163.95558469830286,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.11233300125037537,
+      "fill_count": 1796,
+      "gross_notional": 3469614.36016994,
+      "realized_transaction_costs": 3209.372246980247,
+      "rebalance_count": 250
+    },
+    "2026_partial": {
+      "annualized_one_way_realized_turnover": 173.71438584264772,
+      "annualized_one_way_target_turnover": 174.45985305578546,
+      "costs_pct_gross_gain": 0.7132267830532208,
+      "costs_pct_starting_capital": 0.10952855304671505,
+      "fill_count": 1100,
+      "gross_notional": 1969317.0269303876,
+      "realized_transaction_costs": 1831.0182593529428,
+      "rebalance_count": 144
+    },
+    "development": {
+      "annualized_one_way_realized_turnover": 175.07744977720844,
+      "annualized_one_way_target_turnover": 173.33719247939575,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.5766345508063362,
+      "fill_count": 9521,
+      "gross_notional": 61814598.524603546,
+      "realized_transaction_costs": 57663.45508063362,
+      "rebalance_count": 1259
+    },
+    "full": {
+      "annualized_one_way_realized_turnover": 172.12211572764335,
+      "annualized_one_way_target_turnover": 169.8879045009286,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.7938349623510712,
+      "fill_count": 17890,
+      "gross_notional": 85086059.77944212,
+      "realized_transaction_costs": 79383.49623510712,
+      "rebalance_count": 2406
+    },
+    "validation": {
+      "annualized_one_way_realized_turnover": 165.3353472911948,
+      "annualized_one_way_target_turnover": 166.12485723297792,
+      "costs_pct_gross_gain": null,
+      "costs_pct_starting_capital": 0.4486665782513882,
+      "fill_count": 8369,
+      "gross_notional": 23271461.25483858,
+      "realized_transaction_costs": 21720.041154473907,
+      "rebalance_count": 1147
+    }
+  }
+}

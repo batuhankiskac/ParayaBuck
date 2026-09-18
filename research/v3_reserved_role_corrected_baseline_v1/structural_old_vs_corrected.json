@@ -1,0 +1,190 @@
+{
+  "comparison": {
+    "affected_roles": [],
+    "comparison": "same prepared data/universe/lifecycle/corporate-actions/engine path; only ordinary_alpha_excluded_symbols differs",
+    "context_role_hits": {
+      "candidate_pool": {
+        "DOG": 495,
+        "PSQ": 495,
+        "SH": 495,
+        "SPY": 495
+      },
+      "corrected_target": {},
+      "observation": {
+        "DOG": 495,
+        "PSQ": 495,
+        "SH": 495,
+        "SPY": 495
+      },
+      "old_target": {}
+    },
+    "corrected_decision_count": 495,
+    "corrected_reserved_target_count": 0,
+    "corrected_target_role_weight_sum": {},
+    "decision_count": 495,
+    "old_decision_count": 495,
+    "old_target_role_weight_sum": {},
+    "pre_fix_raw_score_identity_test": "tests/test_equity_residual_momentum_v3.py::test_reserved_roles_are_observable_but_not_ordinary_alpha_targets",
+    "pre_fix_receipt": "RESERVED_ROLE_DEFECT_RECEIPT.md",
+    "target_change_count": 0,
+    "target_changes": []
+  },
+  "coverage_checks": {
+    "corrected_curve_timestamps": 2406,
+    "expected_curve_timestamps": 2406,
+    "old_corrected_curve_timestamps_equal": true,
+    "old_curve_timestamps": 2406,
+    "snapshot_effective_at_not_after_decision": true
+  },
+  "metadata": {
+    "actual_common_endpoint": "2026-07-30T04:00:00+00:00",
+    "bar_normalization": {
+      "normalized_market": "lowercase market enum",
+      "normalized_timeframe": "1d for raw 1d and 1Day; no price/timestamp/row changes",
+      "raw_market_values": {
+        "EQUITY": 7771468,
+        "equity": 3915364
+      },
+      "raw_timeframe_values": {
+        "1Day": 7771468,
+        "1d": 3915364
+      }
+    },
+    "bars_manifest": {
+      "active_histories": 6858,
+      "adjustment": "split",
+      "byte_size": 882354549,
+      "dataset": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "entity_count": 9010,
+      "feed": "sip",
+      "first_date": "2016-01-04T05:00:00+00:00",
+      "generated_at": "2026-08-25T19:37:29.940497+00:00",
+      "inactive_histories": 2152,
+      "last_date": "2026-07-31T04:00:00Z",
+      "lifetime_table": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+      "lifetime_table_hash": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+      "note": "Symmetric full PIT dataset v5: broad active + inactive supported equities, provider asset UUID identity, zero placeholders",
+      "row_count": 11686832,
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "symbol_count": 9010
+    },
+    "branch": "research/v3-reserved-role-corrected-baseline-v1",
+    "corporate_action_summary": {
+      "action_counts": {
+        "cash_dividends": 141908,
+        "forward_splits": 270,
+        "reverse_splits": 1207,
+        "stock_dividends": 61
+      },
+      "applied_cash_dividend_count": 141908,
+      "row_count": 143446,
+      "semantics": "split-adjusted bars; cash_dividends applied as explicit dividend cash flows; split/stock-dividend rows not re-applied",
+      "split_rows_not_applied": 1538
+    },
+    "corporate_actions_manifest": {
+      "action_breakdown": {
+        "cash_dividends": 141908,
+        "cash_mergers": 0,
+        "forward_splits": 270,
+        "name_changes": 0,
+        "reverse_splits": 1207,
+        "spinoffs": 0,
+        "stock_dividends": 61,
+        "stock_mergers": 0,
+        "unit_splits": 0
+      },
+      "byte_size": 14713370,
+      "dataset": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "first_ex_date": "2016-01-04",
+      "generated_at": "2026-08-25T19:42:48.345239+00:00",
+      "last_ex_date": "2026-12-15",
+      "note": "Symmetric v5 corporate actions dataset covering all 9,010 universe symbols",
+      "row_count": 143446,
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "universe_symbol_count": 9010
+    },
+    "development_end": "2021-12-31T23:59:59.999999+00:00",
+    "end_bound": "2026-07-30T23:59:59.999999+00:00",
+    "hashes": {
+      "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "config_sha256": "414692bd0827240496253bdba67d9e1fca9748d7e29744be823fdc370fe8a353",
+      "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23",
+      "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "lifecycle_summary": {
+      "event_class_counts": {
+        "<none>": 6859,
+        "POSSIBLE_DELISTING": 2151
+      },
+      "final_bar_match_count": 9010,
+      "horizon_censored_count": 1,
+      "inactive_without_terminal_event": [
+        "EOSEW"
+      ],
+      "row_count": 9010,
+      "semantics": "POSSIBLE_DELISTING entities close only on their real final observed bar; FINAL_SURVIVOR rows at the dataset horizon receive no synthetic terminal event",
+      "status_counts": {
+        "active": 6858,
+        "inactive": 2152
+      },
+      "symbol_count": 9010,
+      "terminal_lifecycle_count": 2151
+    },
+    "main_sha": "bdfa55ea58858b5f8eaa8b58b0ab8ae34dda7c53",
+    "origin_main_sha": "bdfa55ea58858b5f8eaa8b58b0ab8ae34dda7c53",
+    "parameters": {
+      "beta_window_bars": 273,
+      "exclude_symbols": [
+        "SPY"
+      ],
+      "formation_bars": 252,
+      "ivol_reject_quantile": 0.7,
+      "max_single_weight": 0.1,
+      "rebalance_frequency": "weekly",
+      "residual_vol_window": 63,
+      "skip_bars": 21,
+      "top_n": 8
+    },
+    "prepared_evaluation_bar_count": 10834588,
+    "prepared_warmup_bar_count": 846642,
+    "research_head_sha": "bdfa55ea58858b5f8eaa8b58b0ab8ae34dda7c53",
+    "reserved_roles": [
+      "SPY",
+      "SH",
+      "PSQ",
+      "DOG"
+    ],
+    "role_boundary": [
+      "SPY",
+      "SH",
+      "PSQ",
+      "DOG"
+    ],
+    "role_latest_bars": {
+      "DOG": "2026-07-30T04:00:00+00:00",
+      "PSQ": "2026-07-30T04:00:00+00:00",
+      "SH": "2026-07-30T04:00:00+00:00",
+      "SPY": "2026-07-30T04:00:00+00:00"
+    },
+    "start": "2017-01-03T00:00:00+00:00",
+    "strategy": "equity_residual_momentum_v3",
+    "strategy_spec": {
+      "display_name": "Residual Momentum v3 (MH-RAW consensus)",
+      "market": "equity",
+      "minimum_history_bars": 274,
+      "name": "equity_residual_momentum_v3",
+      "primary_timeframe": "1d",
+      "rebalance_policy": "weekly",
+      "required_timeframes": [],
+      "supported_timeframes": [
+        "1d"
+      ],
+      "version": "3.0.0"
+    },
+    "strategy_version": "3.0.0",
+    "universe_hash": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+    "universe_snapshot_count": 2657,
+    "validation_start": "2022-01-03T00:00:00+00:00"
+  },
+  "phase": "structural_old_vs_corrected_before_economic_outputs"
+}

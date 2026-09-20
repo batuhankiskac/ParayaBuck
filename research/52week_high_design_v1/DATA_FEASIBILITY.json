@@ -1,0 +1,103 @@
+{
+  "audit_date": "2026-09-20",
+  "status": "STRUCTURALLY_FEASIBLE_WITH_BLOCKING_NORMALIZATION_AND_EXECUTION_GATES",
+  "canonical_package": {
+    "bars": {
+      "path": "data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+      "feed": "sip",
+      "adjustment": "split"
+    },
+    "lifetimes": {
+      "path": "data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    },
+    "corporate_actions": {
+      "path": "data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "hashes_verified": true
+  },
+  "bars": {
+    "rows": 11686832,
+    "symbols": 9010,
+    "normalized_sessions": 2659,
+    "first_session": "2016-01-04",
+    "last_session": "2026-07-31",
+    "missing_high": 0,
+    "missing_close": 0,
+    "nonfinite_high_or_close": 0,
+    "nonpositive_high": 0,
+    "nonpositive_close": 0,
+    "invalid_ohlc_ordering": 0,
+    "duplicate_symbol_session_rows": 0,
+    "weekend_rows": 0,
+    "nonpositive_volume_rows": 676621,
+    "spy": {
+      "present": true,
+      "rows": 2658,
+      "first_session": "2016-01-04",
+      "last_session": "2026-07-30"
+    }
+  },
+  "history_252": {
+    "symbols_eventually_scoreable": 7572,
+    "symbols_never_scoreable": 1438,
+    "symbols_exactly_252": 9,
+    "scoreable_symbol_sessions": 9612486,
+    "late_start_history_proxy": 5904,
+    "late_start_under_252": 1432,
+    "dynamic_shortening_allowed": false
+  },
+  "lifetimes": {
+    "rows": 9010,
+    "active": 6858,
+    "inactive": 2152,
+    "explicit_terminal_entities": 2151,
+    "unresolved_inactive_terminal_entities": 1,
+    "unresolved_symbol": "EOSEW",
+    "bars_outside_boundaries": 0,
+    "identity_duplicates": 0,
+    "rename_chains_present": 1,
+    "complete_ticker_change_coverage_proven": false
+  },
+  "corporate_actions": {
+    "rows": 143446,
+    "cash_dividends": 141908,
+    "stock_dividends": 61,
+    "forward_splits": 270,
+    "reverse_splits": 1207,
+    "duplicate_cash_dividend_economic_keys": 157,
+    "duplicate_raw_ids": 0,
+    "signal_uses_dividends": false,
+    "reapply_splits": false
+  },
+  "split_safety": {
+    "prices_declared_split_adjusted": true,
+    "material_forward_events_two_sided": 256,
+    "material_reverse_events_two_sided": 1103,
+    "mechanical_open_discontinuities": 0,
+    "mechanical_close_discontinuities": 0,
+    "extreme_reverse_split_session_highs": 3,
+    "highest_close_preferred": true
+  },
+  "raw_encoding": {
+    "timeframe_1Day_rows": 7771468,
+    "timeframe_1d_rows": 3915364,
+    "mixed_encoding_within_symbol": false
+  },
+  "loader_compatibility": {
+    "generic_bar_loader_directly_compatible": false,
+    "generic_corporate_action_loader_directly_compatible": false,
+    "required_action": "Freeze and test the canonical baseline normalization, dividend deduplication, and lifetime path before economics."
+  },
+  "fail_closed_policy": {
+    "minimum_valid_completed_sessions": 252,
+    "missing_or_nonpositive_decision_close": "unscoreable",
+    "invalid_close_inside_window": "unscoreable",
+    "stale_final_bar": "unscoreable",
+    "ambiguous_or_missing_lifecycle": "unscoreable",
+    "price_imputation": false
+  },
+  "no_outcome_peek": true
+}

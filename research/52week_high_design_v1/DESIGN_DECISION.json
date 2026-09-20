@@ -1,0 +1,23 @@
+{
+  "decision": "DESIGN_BLOCKED_DATA_OR_EXECUTION",
+  "candidate": "equity_52week_high_close_v1",
+  "starting_main_sha": "db1a6e9e4af4a5000dca0a54a971ce99577c676c",
+  "origin_main_sha_after_fetch": "db1a6e9e4af4a5000dca0a54a971ce99577c676c",
+  "literature_support": "conditional_moderate",
+  "hypothesis_distinctness": "path_dependent_but_not_proven_independent_of_momentum",
+  "data_structural_feasibility": true,
+  "economic_test_authorized": false,
+  "blocking_gates": [
+    "canonical_bar_and_action_loader_normalization",
+    "explicit_lifetime_loading_and_ambiguous_identity_fail_closed_policy",
+    "last_completed_session_of_month_decision_scheduler",
+    "broad_pool_rank_through_decision_bar_before_observation_truncation",
+    "effective_dated_regulatory_fee_scaling_at_1x_2x_3x",
+    "deterministic_control_reproduction_and_causality_tests"
+  ],
+  "production_code_changed": false,
+  "production_config_changed": false,
+  "paper_live_changed": false,
+  "local_economic_outcomes_inspected": false,
+  "next_permitted_step": "Implement and verify only the frozen research harness prerequisites, then re-evaluate G1 before any economic output."
+}

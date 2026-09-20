@@ -237,6 +237,30 @@ def equity_regulatory_fee(
     return cat + taf + quantity * price * sec_fee_rate
 
 
+def _prepare_corporate_actions(
+    actions: list[CorporateAction] | None,
+    *,
+    cutoff: datetime | None,
+) -> list[CorporateAction]:
+    """Return one replay-safe action per economic event, in event order."""
+    prepared: list[CorporateAction] = []
+    seen: set[tuple[str, datetime, CorporateActionType, float]] = set()
+    for action in actions or []:
+        if cutoff is not None and action.timestamp <= cutoff:
+            continue
+        key = (
+            canonical_symbol(action.symbol, Market.EQUITY),
+            action.timestamp,
+            action.action_type,
+            action.value,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        prepared.append(action)
+    return sorted(prepared, key=lambda item: item.timestamp)
+
+
 class PortfolioBacktestEngine:
     """Portfolio-aware backtest engine with next-open fills.
 
@@ -271,6 +295,7 @@ class PortfolioBacktestEngine:
         equity_cat_per_share: float = 0.0,
         equity_sec_fee_rate: float = 0.0,
         equity_use_effective_dated_fees: bool = False,
+        equity_regulatory_fee_multiplier: float = 1.0,
         benchmark_symbol: str = "SPY",
         max_participation_pct: float = 0.10,
         liquidity_lookback_bars: int = 20,
@@ -321,6 +346,8 @@ class PortfolioBacktestEngine:
         )
         if any(not math.isfinite(value) or value < 0 for value in cost_inputs):
             raise ValueError("Cost inputs must be finite and non-negative")
+        if not math.isfinite(equity_regulatory_fee_multiplier) or equity_regulatory_fee_multiplier <= 0:
+            raise ValueError("Equity regulatory fee multiplier must be finite and positive")
         self.strategy = strategy
         self.rebalance_policy = rebalance_policy
         self.starting_equity = starting_equity
@@ -333,6 +360,7 @@ class PortfolioBacktestEngine:
         self.equity_cat_per_share = equity_cat_per_share
         self.equity_sec_fee_rate = equity_sec_fee_rate
         self.equity_use_effective_dated_fees = equity_use_effective_dated_fees
+        self.equity_regulatory_fee_multiplier = equity_regulatory_fee_multiplier
         self.benchmark_symbol = benchmark_symbol
         self.max_participation_pct = max_participation_pct
         self.liquidity_lookback_bars = liquidity_lookback_bars
@@ -493,6 +521,7 @@ class PortfolioBacktestEngine:
                 key=lambda bar: (bar.timestamp, bar.symbol),
             )
         watermark = self.state.last_processed_bar
+        cutoff: datetime | None = None
         if watermark:
             cutoff = datetime.fromisoformat(watermark)
             ordered = [bar for bar in ordered if bar.timestamp > cutoff]
@@ -504,7 +533,7 @@ class PortfolioBacktestEngine:
         for bar in warmup or []:
             self._ingest(bar)
             self._ingest_execution(bar)
-        action_queue = sorted(corporate_actions or [], key=lambda item: item.timestamp)
+        action_queue = _prepare_corporate_actions(corporate_actions, cutoff=cutoff)
         action_index = 0
         decision_index = 0
         curve: list[float] = []
@@ -802,7 +831,7 @@ class PortfolioBacktestEngine:
             from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 
             rates = rates_for_trade_date(trade_date)
-            return equity_regulatory_fee(
+            fee = equity_regulatory_fee(
                 side,
                 quantity,
                 price,
@@ -811,15 +840,17 @@ class PortfolioBacktestEngine:
                 cat_per_share=rates.cat_per_share,
                 sec_fee_rate=rates.sec_fee_rate,
             )
-        return equity_regulatory_fee(
-            side,
-            quantity,
-            price,
-            taf_per_share=self.equity_taf_per_share,
-            taf_cap=self.equity_taf_cap,
-            cat_per_share=self.equity_cat_per_share,
-            sec_fee_rate=self.equity_sec_fee_rate,
-        )
+        else:
+            fee = equity_regulatory_fee(
+                side,
+                quantity,
+                price,
+                taf_per_share=self.equity_taf_per_share,
+                taf_cap=self.equity_taf_cap,
+                cat_per_share=self.equity_cat_per_share,
+                sec_fee_rate=self.equity_sec_fee_rate,
+            )
+        return fee * self.equity_regulatory_fee_multiplier
 
     def _fill_side(self, bar: Bar, side: OrderSide) -> None:
         symbol = bar.symbol

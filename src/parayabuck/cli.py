@@ -158,7 +158,7 @@ def _add_backtest_arguments(
         parser.add_argument(
             "--cost-stress",
             action="store_true",
-            help="also run 2x and 3x slippage/spread/crypto-fee assumptions",
+            help="also run 2x and 3x slippage/spread/crypto-fee/equity-regulatory-fee assumptions",
         )
 
 

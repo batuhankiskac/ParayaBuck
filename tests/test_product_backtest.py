@@ -417,6 +417,33 @@ def test_product_backtest_credits_explicit_dividend_once(tmp_path) -> None:
     assert "explicit dividend cash flows" in run.report.summary["price_adjustment_model"]
 
 
+def test_product_cost_multiplier_includes_equity_regulatory_fees(tmp_path) -> None:
+    config = _config(tmp_path)
+    config = replace(
+        config,
+        backtest=replace(
+            config.backtest,
+            slippage_bps=0.0,
+            spread_bps=0.0,
+            commission=0.0,
+            equity_use_effective_dated_fees=False,
+            equity_taf_per_share=0.0002,
+            equity_taf_cap=10.0,
+            equity_cat_per_share=0.00003,
+            equity_sec_fee_rate=0.00002,
+        ),
+    )
+
+    base = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=1.0, persist=False)
+    stressed = run_product_backtest(config, _bars(), market=Market.EQUITY, cost_multiplier=2.0, persist=False)
+
+    assert base.result.fee_total > 0
+    # Higher fees slightly reduce later order quantities, so the portfolio's
+    # aggregate fee total is nearly, but not algebraically, twice the base run.
+    assert stressed.result.fee_total == pytest.approx(base.result.fee_total * 2.0, rel=5e-6)
+    assert stressed.report.summary["regulatory_fee_model"]["cost_multiplier"] == 2.0
+
+
 def test_equity_csv_rejects_weekend_execution_bars(tmp_path) -> None:
     csv_path = tmp_path / "weekend.csv"
     csv_path.write_text(

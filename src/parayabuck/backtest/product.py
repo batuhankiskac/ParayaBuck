@@ -9,6 +9,7 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
 
@@ -30,7 +31,8 @@ from parayabuck.execution.portfolio import (
     PortfolioExecutionPolicy,
     portfolio_risk_limits_from_config,
 )
-from parayabuck.markets.timeframes import is_regular_equity_time
+from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.markets.timeframes import TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from, rebalance_policy_for
 
 try:
@@ -40,6 +42,22 @@ except ImportError:  # pragma: no cover
     build_numeric_history = None  # type: ignore
 
 _MAX_OPTIMIZATION_COMBINATIONS = 256
+_CSV_TIMEFRAME_ALIASES = {"1d": "1d", "1Day": "1d"}
+_LEGACY_ACTION_COLUMNS = {"timestamp", "symbol", "action_type", "value"}
+_CANONICAL_ACTION_COLUMNS = {
+    "action_type",
+    "symbol",
+    "ex_date",
+    "record_date",
+    "payable_date",
+    "rate",
+    "old_rate",
+    "new_rate",
+    "source_symbol",
+    "target_symbol",
+    "raw_id",
+}
+_CANONICAL_NON_CASH_ACTION_TYPES = {"stock_dividends", "forward_splits", "reverse_splits"}
 
 
 @dataclass(frozen=True)
@@ -50,6 +68,15 @@ class ProductBacktestResult:
     universe: PointInTimeUniverse
     output_dir: str
     score: float
+
+
+def _canonical_csv_timeframe(raw_timeframe: object) -> str:
+    timeframe = str(raw_timeframe)
+    if timeframe in _CSV_TIMEFRAME_ALIASES:
+        return _CSV_TIMEFRAME_ALIASES[timeframe]
+    if timeframe in TIMEFRAME_MINUTES:
+        return timeframe
+    raise ValueError(f"Unsupported CSV timeframe: {timeframe}")
 
 
 def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
@@ -66,7 +93,7 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             market = Market(str(raw.get("market") or default_market.value).lower())
-            timeframe = str(raw.get("timeframe") or ("1h" if market == Market.CRYPTO else "1d"))
+            timeframe = _canonical_csv_timeframe(raw.get("timeframe") or ("1h" if market == Market.CRYPTO else "1d"))
             if market == Market.EQUITY:
                 if timestamp.weekday() >= 5:
                     raise ValueError(f"Equity CSV contains a weekend bar: {timestamp.isoformat()}")
@@ -88,30 +115,77 @@ def load_csv_bars(path: str | Path, *, default_market: Market) -> list[Bar]:
     return rows
 
 
+def _action_value(raw_value: object, *, row_number: int) -> Decimal:
+    try:
+        value = Decimal(str(raw_value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"Corporate-action row {row_number} has an invalid value") from exc
+    if not value.is_finite() or value <= 0:
+        raise ValueError(f"Corporate-action row {row_number} value must be finite and positive")
+    return value
+
+
+def _legacy_action_timestamp(raw_timestamp: object, *, row_number: int) -> datetime:
+    try:
+        timestamp = datetime.fromisoformat(str(raw_timestamp))
+    except ValueError as exc:
+        raise ValueError(f"Corporate-action row {row_number} has an invalid timestamp") from exc
+    return timestamp if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+
+
+def _canonical_action_timestamp(raw_ex_date: object, *, row_number: int) -> datetime:
+    value = str(raw_ex_date)
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"Corporate-action row {row_number} has an invalid ex_date") from exc
+    return parsed.replace(tzinfo=UTC)
+
+
 def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
     """Load explicit dividend cash flows for split-adjusted equity price data."""
     actions: list[CorporateAction] = []
+    seen: set[tuple[str, datetime, CorporateActionType, Decimal]] = set()
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        required = {"timestamp", "symbol", "action_type", "value"}
-        if not required.issubset(reader.fieldnames or ()):
-            missing = sorted(required - set(reader.fieldnames or ()))
+        fieldnames = set(reader.fieldnames or ())
+        if _LEGACY_ACTION_COLUMNS.issubset(fieldnames):
+            schema = "legacy"
+        elif _CANONICAL_ACTION_COLUMNS.issubset(fieldnames):
+            schema = "canonical_v5"
+        elif {"ex_date", "rate"} & fieldnames:
+            missing = sorted(_CANONICAL_ACTION_COLUMNS - fieldnames)
+            raise ValueError(f"Canonical corporate-action CSV is missing required columns: {', '.join(missing)}")
+        else:
+            missing = sorted(_LEGACY_ACTION_COLUMNS - fieldnames)
             raise ValueError(f"Corporate-action CSV is missing required columns: {', '.join(missing)}")
-        for raw in reader:
-            timestamp = datetime.fromisoformat(str(raw["timestamp"]))
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            action_type = CorporateActionType(str(raw["action_type"]).lower())
-            if action_type != CorporateActionType.DIVIDEND:
-                raise ValueError(
-                    "Product backtests use split-adjusted prices; only explicit dividend actions may be supplied"
-                )
+
+        for row_number, raw in enumerate(reader, start=2):
+            raw_action_type = str(raw["action_type"]).lower()
+            if schema == "canonical_v5" and raw_action_type in _CANONICAL_NON_CASH_ACTION_TYPES:
+                continue
+            expected_action_type = "dividend" if schema == "legacy" else "cash_dividends"
+            if raw_action_type != expected_action_type:
+                raise ValueError(f"Unsupported corporate-action type on row {row_number}: {raw_action_type}")
+            timestamp = (
+                _legacy_action_timestamp(raw["timestamp"], row_number=row_number)
+                if schema == "legacy"
+                else _canonical_action_timestamp(raw["ex_date"], row_number=row_number)
+            )
+            value = _action_value(raw["value"] if schema == "legacy" else raw["rate"], row_number=row_number)
+            raw_symbol = str(raw["symbol"])
+            symbol = canonical_symbol(raw_symbol, Market.EQUITY)
+            action_type = CorporateActionType.DIVIDEND
+            key = (symbol, timestamp, action_type, value)
+            if key in seen:
+                continue
+            seen.add(key)
             actions.append(
                 CorporateAction(
                     timestamp,
-                    str(raw["symbol"]),
+                    raw_symbol if schema == "legacy" else symbol,
                     action_type,
-                    float(raw["value"]),
+                    float(value),
                 )
             )
     return actions
@@ -291,6 +365,7 @@ def run_product_backtest(
         equity_cat_per_share=config.backtest.equity_cat_per_share,
         equity_sec_fee_rate=config.backtest.equity_sec_fee_rate,
         equity_use_effective_dated_fees=config.backtest.equity_use_effective_dated_fees,
+        equity_regulatory_fee_multiplier=cost_multiplier,
         benchmark_symbol=benchmark,
         universe=universe,
         universe_version=hash_point_in_time_universe(universe),
@@ -352,6 +427,7 @@ def run_product_backtest(
                 "equity_cat_per_share": config.backtest.equity_cat_per_share,
                 "equity_sec_fee_rate": config.backtest.equity_sec_fee_rate,
                 "equity_use_effective_dated_fees": config.backtest.equity_use_effective_dated_fees,
+                "cost_multiplier": cost_multiplier,
                 "note": (
                     "SEC Section 31, FINRA TAF and CAT fees are approximated per "
                     "trade date from the official rate schedules when "

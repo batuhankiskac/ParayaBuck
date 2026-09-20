@@ -1,0 +1,21 @@
+{
+  "action_type_counts": {
+    "cash_dividends": 141908,
+    "forward_splits": 270,
+    "reverse_splits": 1207,
+    "stock_dividends": 61
+  },
+  "deduplication_key": [
+    "canonical_symbol",
+    "ex_date_utc",
+    "DIVIDEND",
+    "decimal_rate"
+  ],
+  "duplicate_economic_events": 157,
+  "eligible_cash_dividend_rows": 141908,
+  "engine_replay_watermark_filter": "actions at or before persisted last_processed_bar are excluded",
+  "final_applied_event_count": 141751,
+  "non_cash_actions_applied": 0,
+  "raw_action_count": 143446,
+  "source_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+}

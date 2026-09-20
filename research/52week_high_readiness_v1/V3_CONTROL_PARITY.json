@@ -1,0 +1,133 @@
+{
+  "candidate_economics_inspected": false,
+  "control": "equity_residual_momentum_v3 Control-A 1x only",
+  "corrected_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "expected_counts": {
+    "curve_points": 2406,
+    "fills": 2054,
+    "targets": 495,
+    "terminal_events": 5
+  },
+  "fresh_counts": {
+    "curve_points": 2406,
+    "fills": 2054,
+    "targets": 495,
+    "terminal_events": 5
+  },
+  "fresh_full_summary": {
+    "annualized_volatility": 0.11261830572359442,
+    "average_cash_ratio": 0.48342113273391724,
+    "average_exposure": 0.5165788672660827,
+    "average_holding_hours": 519.5382059800664,
+    "average_holdings_count": 5.621363258520366,
+    "average_loss": -575.5579877450574,
+    "average_positions": 5.621363258520366,
+    "average_win": 651.0994834646656,
+    "benchmark_return": 2.2943501821089103,
+    "benchmark_symbol": "SPY",
+    "best_trade": 8321.051365563395,
+    "cagr": 0.07371375522816082,
+    "calmar": 0.36070803628542575,
+    "closed_positions": 908,
+    "duration_days": 3494,
+    "end_date": "2026-07-30T04:00:00+00:00",
+    "ending_equity": 197552.94167944646,
+    "excess_return": -1.3188207653144457,
+    "expectancy": 98.56324367966917,
+    "fee_total": 227.15590821576458,
+    "gross_return": 1.084507543406482,
+    "max_drawdown": 0.20435850553058274,
+    "max_drawdown_duration_days": 1090,
+    "maximum_concentration": 0.12338638219148666,
+    "maximum_exposure": 0.5500000000000002,
+    "maximum_positions": 6,
+    "net_return": 0.9755294167944646,
+    "number_of_trades": 908,
+    "positive_month_ratio": 0.6260869565217392,
+    "profit_factor": 1.3801792787980676,
+    "realized_pnl_count": 1059,
+    "realized_pnl_total": 89495.42526113961,
+    "rebalance_count": 495,
+    "sharpe": 0.6880223979481336,
+    "slippage_cost_total": 4868.2735233559315,
+    "sortino": 0.8840837382328571,
+    "spread_cost_total": 2434.1367616779658,
+    "start_date": "2017-01-03T05:00:00+00:00",
+    "starting_equity": 100000,
+    "strategy_name": "equity_residual_momentum_v3",
+    "strategy_version": "3.0.0",
+    "total_return": 0.9755294167944646,
+    "turnover": 168.4876256260701,
+    "win_rate": 0.5495594713656388,
+    "worst_month_return": -0.07939869835946267,
+    "worst_trade": -4373.003191147248,
+    "worst_year_return": -0.1383416774859545
+  },
+  "fresh_periods": {
+    "development": {
+      "cagr": 0.10001537119368642,
+      "calmar": 0.6439180784149391,
+      "max_drawdown": 0.1553231296749472,
+      "net_total_return": 0.6097814806281461,
+      "sharpe": 0.876974974665227,
+      "sortino": 1.0681022935181659
+    },
+    "full": {
+      "cagr": 0.07371375522816082,
+      "calmar": 0.36070803628542575,
+      "max_drawdown": 0.20435850553058274,
+      "net_total_return": 0.9755294167944646,
+      "sharpe": 0.6880223979481336,
+      "sortino": 0.8840837382328571
+    },
+    "validation": {
+      "cagr": 0.04573641618845725,
+      "calmar": 0.24123536005035864,
+      "max_drawdown": 0.18959250492510563,
+      "net_total_return": 0.22720346864942287,
+      "sharpe": 0.46715257595214604,
+      "sortino": 0.6409732460097591
+    }
+  },
+  "hashes": {
+    "expected_fills": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "expected_targets": "b3b0bbec1b5767bcfe08838c2c849fd80486851473ad1c776a485fdc8966031e",
+    "expected_terminal_events": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7",
+    "fresh_fills": "cb46efe20372da28f40626b7a86f2421cebb8761ee5d7b4350861eae6d142160",
+    "fresh_targets": "b3b0bbec1b5767bcfe08838c2c849fd80486851473ad1c776a485fdc8966031e",
+    "fresh_terminal_events": "85cef16704d7bf8e208eaa879cca10289986951f1854c3188826f3810797fbe7"
+  },
+  "max_absolute_metric_difference": 0.0,
+  "metric_differences": {
+    "development": {
+      "cagr": 0.0,
+      "calmar": 0.0,
+      "max_drawdown": 0.0,
+      "net_total_return": 0.0,
+      "sharpe": 0.0,
+      "sortino": 0.0
+    },
+    "full": {
+      "cagr": 0.0,
+      "calmar": 0.0,
+      "max_drawdown": 0.0,
+      "net_total_return": 0.0,
+      "sharpe": 0.0,
+      "sortino": 0.0
+    },
+    "validation": {
+      "cagr": 0.0,
+      "calmar": 0.0,
+      "max_drawdown": 0.0,
+      "net_total_return": 0.0,
+      "sharpe": 0.0,
+      "sortino": 0.0
+    }
+  },
+  "parity_passed": true,
+  "source_counts": {
+    "actions_after_economic_dedup": 141751,
+    "bars": 11686832,
+    "lifetimes": 9010
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "candidate": "equity_52week_high_close_v1",
+  "candidate_economics_inspected": false,
+  "decision_timestamp": "2026-01-30T21:00:00+00:00",
+  "eligible_pool_after": [
+    "DOG",
+    "PSQ",
+    "S00",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07",
+    "S08",
+    "S09",
+    "SH",
+    "SPY"
+  ],
+  "eligible_pool_before": [
+    "DOG",
+    "PSQ",
+    "S00",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07",
+    "S08",
+    "S09",
+    "SH",
+    "SPY"
+  ],
+  "future_data_visible": false,
+  "history_count": 252,
+  "history_last_equals_t": true,
+  "maximum_visible_timestamp": "2026-01-30T21:00:00+00:00",
+  "month_end_cases": [
+    {
+      "completed_session": "2026-01-30T21:00:00+00:00",
+      "decides": true,
+      "next_open": "2026-02-02T14:30:00+00:00"
+    },
+    {
+      "completed_session": "2024-11-29T18:00:00+00:00",
+      "decides": true,
+      "next_open": "2024-12-02T14:30:00+00:00"
+    },
+    {
+      "completed_session": "2025-12-31T21:00:00+00:00",
+      "decides": true,
+      "next_open": "2026-01-02T14:30:00+00:00"
+    }
+  ],
+  "observation_capacity": 8,
+  "observation_set": [
+    "S00",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05",
+    "S06",
+    "S07"
+  ],
+  "production_registry_contains_candidate": false,
+  "ranked": [
+    [
+      "S00",
+      1.0
+    ],
+    [
+      "S01",
+      0.99
+    ],
+    [
+      "S02",
+      0.98
+    ],
+    [
+      "S03",
+      0.97
+    ],
+    [
+      "S04",
+      0.96
+    ],
+    [
+      "S05",
+      0.95
+    ],
+    [
+      "S06",
+      0.94
+    ],
+    [
+      "S07",
+      0.93
+    ],
+    [
+      "S08",
+      0.92
+    ],
+    [
+      "S09",
+      0.91
+    ]
+  ],
+  "reserved_roles": [
+    "DOG",
+    "PSQ",
+    "SH",
+    "SPY"
+  ],
+  "reserved_targets": [],
+  "scanner_eligibility_unchanged": true,
+  "selected": [
+    "S00",
+    "S01",
+    "S02",
+    "S03",
+    "S04",
+    "S05"
+  ],
+  "target_cash_weight": 0.44999999999999996,
+  "target_weights": [
+    [
+      "S00",
+      0.09166666666666667
+    ],
+    [
+      "S01",
+      0.09166666666666667
+    ],
+    [
+      "S02",
+      0.09166666666666667
+    ],
+    [
+      "S03",
+      0.09166666666666667
+    ],
+    [
+      "S04",
+      0.09166666666666667
+    ],
+    [
+      "S05",
+      0.09166666666666667
+    ]
+  ]
+}

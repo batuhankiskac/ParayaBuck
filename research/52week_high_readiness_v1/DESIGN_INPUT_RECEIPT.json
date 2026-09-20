@@ -1,0 +1,25 @@
+{
+  "actual_hashes": {
+    "CANDIDATE_DESIGN.md": "37c33a08e4aa4aed7e0dbc97fdce2083b033eaf18462c5e93f1f62fe49adb8b5",
+    "CAUSALITY_AUDIT.md": "78c7c0a191c24ff0fcf95fda2addd8a938b15be0efdb9e0a3132d816c7746359",
+    "DATA_FEASIBILITY.json": "9562161144c5a98d3a63dd7caeb709e481cd0af04e2d958fad12e80cb8209509",
+    "FINAL_DESIGN_REPORT.md": "af883ae6f7a54272c4ad8e856e399a831e7f4ed18834d29224429bed51808fa6",
+    "FUTURE_TEST_PROTOCOL.md": "9ff021dddece81681b25b33df75eaa03c0931e5e5b7eafad4b879e229eb02be1"
+  },
+  "candidate_economics_inspected": false,
+  "corrected_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "corrected_origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "design_sha": "72b51a0e5c03f2ce0a8790b197cf360b26b33cd3",
+  "expected_hashes": {
+    "CANDIDATE_DESIGN.md": "37c33a08e4aa4aed7e0dbc97fdce2083b033eaf18462c5e93f1f62fe49adb8b5",
+    "CAUSALITY_AUDIT.md": "78c7c0a191c24ff0fcf95fda2addd8a938b15be0efdb9e0a3132d816c7746359",
+    "DATA_FEASIBILITY.json": "9562161144c5a98d3a63dd7caeb709e481cd0af04e2d958fad12e80cb8209509",
+    "FINAL_DESIGN_REPORT.md": "af883ae6f7a54272c4ad8e856e399a831e7f4ed18834d29224429bed51808fa6",
+    "FUTURE_TEST_PROTOCOL.md": "9ff021dddece81681b25b33df75eaa03c0931e5e5b7eafad4b879e229eb02be1"
+  },
+  "hashes_match": true,
+  "live_enabled": false,
+  "paper_strategy": "equity_residual_momentum_v3",
+  "starting_main_sha": "db1a6e9e4af4a5000dca0a54a971ce99577c676c",
+  "starting_origin_main_sha": "db1a6e9e4af4a5000dca0a54a971ce99577c676c"
+}

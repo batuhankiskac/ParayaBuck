@@ -1,0 +1,39 @@
+{
+  "commission": 0.0,
+  "effective_dated_boundary_cases": [
+    {
+      "one_x": 0.966,
+      "three_x": 2.8979999999999997,
+      "trade_date": "2024-05-21",
+      "two_x": 1.932
+    },
+    {
+      "one_x": 2.946,
+      "three_x": 8.838000000000001,
+      "trade_date": "2024-05-22",
+      "two_x": 5.892
+    },
+    {
+      "one_x": 2.9810000000000003,
+      "three_x": 8.943000000000001,
+      "trade_date": "2024-09-01",
+      "two_x": 5.962000000000001
+    },
+    {
+      "one_x": 0.166,
+      "three_x": 0.498,
+      "trade_date": "2025-12-01",
+      "two_x": 0.332
+    },
+    {
+      "one_x": 2.255,
+      "three_x": 6.765,
+      "trade_date": "2026-04-04",
+      "two_x": 4.51
+    }
+  ],
+  "gross_fill_geometry_unchanged_test": "tests/test_equity_regulatory_fee_multiplier.py::test_multiplier_does_not_change_gross_fill_geometry",
+  "passed": true,
+  "product_wiring_test": "tests/test_product_backtest.py::test_product_cost_multiplier_includes_equity_regulatory_fees",
+  "semantics": "slippage, half-spread, crypto taker fee, and dated equity regulatory fee scale; commission remains zero"
+}

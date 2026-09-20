@@ -1,0 +1,27 @@
+{
+  "candidate": "equity_52week_high_close_v1",
+  "candidate_economics_inspected": false,
+  "corrected_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "decision": "G1_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "design_sha": "72b51a0e5c03f2ce0a8790b197cf360b26b33cd3",
+  "evidence_commit_sha": "9ecf59de6f17a933847f602d16f7aa6e38632696",
+  "failed_requirements": [],
+  "frozen_g1": {
+    "all_in_fee_scaling": "PASS",
+    "broad_pool_through_t": "PASS",
+    "candidate_ranker_target_structural_parity": "PASS",
+    "canonical_hashes_rows_sessions": "PASS",
+    "canonical_loader": "PASS",
+    "fresh_v3_control": "PASS",
+    "lifetime_dividend_semantics": "PASS",
+    "month_end_semantics": "PASS",
+    "no_lookahead": "PASS",
+    "reserved_role_exclusions": "PASS"
+  },
+  "independent_verification": {
+    "check_count": 51,
+    "failures": [],
+    "passed": true
+  },
+  "scope": "G1 only; does not authorize or contain candidate economics"
+}

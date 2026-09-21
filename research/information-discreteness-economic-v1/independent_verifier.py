@@ -13,7 +13,7 @@ import json
 import math
 import subprocess
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +24,9 @@ OUTPUT = Path(__file__).resolve().parent
 BARS_PATH = ROOT / "data/historical/equity_pit_symmetric_2016_2026_v5.csv"
 EXPECTED_BARS_SHA = "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
 ENDPOINT = datetime.fromisoformat("2026-07-30T04:00:00+00:00")
-DEV_START = datetime.fromisoformat("2017-01-03T04:00:00+00:00")
-DEV_END = datetime.fromisoformat("2021-12-31T04:00:00+00:00")
-VAL_START = datetime.fromisoformat("2022-01-03T04:00:00+00:00")
+DEV_START_DATE = date(2017, 1, 3)
+DEV_END_DATE = date(2021, 12, 31)
+VAL_START_DATE = date(2022, 1, 3)
 
 
 def _json(path: Path) -> Any:
@@ -48,7 +48,17 @@ def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
 
-def _period_metrics(payload: Any, start: datetime, end: datetime) -> dict[str, float | int | None]:
+def _timestamp_for_date(payload: Any, target: date) -> datetime:
+    for item in payload["equity_curve"]:
+        timestamp = datetime.fromisoformat(str(item["timestamp"]))
+        if timestamp.date() == target:
+            return timestamp
+    raise ValueError(f"No curve session for {target.isoformat()}")
+
+
+def _period_metrics(payload: Any, start_date: date, end_date: date) -> dict[str, float | int | None]:
+    start = _timestamp_for_date(payload, start_date)
+    end = _timestamp_for_date(payload, end_date)
     points = [
         (datetime.fromisoformat(str(item["timestamp"])), float(item["equity"]))
         for item in payload["equity_curve"]
@@ -172,9 +182,9 @@ def _verify_result(path: Path, period_metrics: Any) -> dict[str, object]:
     summary = payload["summary"]
     checks: list[str] = []
     for name, (start, end) in {
-        "development": (DEV_START, DEV_END),
-        "validation": (VAL_START, ENDPOINT),
-        "full": (DEV_START, ENDPOINT),
+        "development": (DEV_START_DATE, DEV_END_DATE),
+        "validation": (VAL_START_DATE, ENDPOINT.date()),
+        "full": (DEV_START_DATE, ENDPOINT.date()),
     }.items():
         recomputed = _period_metrics(payload, start, end)
         stored = period_metrics[name]

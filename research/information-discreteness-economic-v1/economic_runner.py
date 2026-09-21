@@ -16,7 +16,7 @@ import subprocess
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from statistics import mean
 from typing import Any, cast
@@ -42,10 +42,10 @@ from parayabuck.portfolio import PortfolioStrategy, portfolio_strategy_from
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = Path(__file__).resolve().parent
 ENDPOINT = datetime.fromisoformat("2026-07-30T04:00:00+00:00")
-DEV_START = datetime.fromisoformat("2017-01-03T04:00:00+00:00")
-DEV_END = datetime.fromisoformat("2021-12-31T04:00:00+00:00")
-VAL_START = datetime.fromisoformat("2022-01-03T04:00:00+00:00")
-VAL_END = ENDPOINT
+DEV_START_DATE = date(2017, 1, 3)
+DEV_END_DATE = date(2021, 12, 31)
+VAL_START_DATE = date(2022, 1, 3)
+VAL_END_DATE = date(2026, 7, 30)
 DATA_ROOT = ROOT / "data" / "historical"
 BARS_PATH = DATA_ROOT / "equity_pit_symmetric_2016_2026_v5.csv"
 LIFETIMES_PATH = DATA_ROOT / "equity_entity_lifetimes_full_v5.csv"
@@ -354,6 +354,15 @@ def _raw_result_payload(
     }
 
 
+def _timestamp_for_date(result: PortfolioBacktestResult, target: date) -> datetime:
+    for timestamp in result.curve_timestamps:
+        if timestamp.date() == target:
+            if not isinstance(timestamp, datetime):
+                raise RuntimeError("Curve timestamp is not a datetime")
+            return timestamp
+    raise RuntimeError(f"No curve session for frozen date {target.isoformat()}")
+
+
 def _period_points(result: PortfolioBacktestResult, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
     points = [
         (timestamp, equity)
@@ -463,8 +472,10 @@ def _period_metrics(result: PortfolioBacktestResult, start: datetime, end: datet
     }
 
 
-def _periods() -> dict[str, tuple[datetime, datetime]]:
-    return {"development": (DEV_START, DEV_END), "validation": (VAL_START, VAL_END), "full": (DEV_START, VAL_END)}
+def _periods(result: PortfolioBacktestResult) -> dict[str, tuple[datetime, datetime]]:
+    development = (_timestamp_for_date(result, DEV_START_DATE), _timestamp_for_date(result, DEV_END_DATE))
+    validation = (_timestamp_for_date(result, VAL_START_DATE), _timestamp_for_date(result, VAL_END_DATE))
+    return {"development": development, "validation": validation, "full": (development[0], validation[1])}
 
 
 def _report_metrics(result: PortfolioBacktestResult, period: tuple[datetime, datetime]) -> dict[str, object]:
@@ -575,7 +586,11 @@ def _turnover_diagnostics(result: PortfolioBacktestResult) -> dict[str, object]:
     scheduled = [record for record in result.rebalances if record.reason == "scheduled"]
     turnovers = sorted(record.realized_turnover for record in scheduled)
     p95 = turnovers[math.ceil(0.95 * len(turnovers)) - 1] if turnovers else 0.0
-    years = max((ENDPOINT - DEV_START).total_seconds() / (365.0 * 86_400), 1.0 / 365.0)
+    years = max(
+        (ENDPOINT - datetime.combine(DEV_START_DATE, datetime.min.time(), tzinfo=ENDPOINT.tzinfo)).total_seconds()
+        / (365.0 * 86_400),
+        1.0 / 365.0,
+    )
     yearly: dict[str, float] = defaultdict(float)
     for record in scheduled:
         yearly[str(record.decision_timestamp.year)] += record.realized_turnover
@@ -692,8 +707,8 @@ def _write_manifest(
             "candidate": CANDIDATE_NAME,
             "control": CONTROL_NAME,
             "endpoint": ENDPOINT.isoformat(),
-            "development": [DEV_START.isoformat(), DEV_END.isoformat()],
-            "validation": [VAL_START.isoformat(), VAL_END.isoformat()],
+            "development_dates": [DEV_START_DATE.isoformat(), DEV_END_DATE.isoformat()],
+            "validation_dates": [VAL_START_DATE.isoformat(), VAL_END_DATE.isoformat()],
             "cost_multipliers": [1.0, 2.0, 3.0],
             "schedule_count": len(schedule),
             "schedule_sha256": hashlib.sha256("\n".join(item.isoformat() for item in schedule).encode()).hexdigest(),
@@ -784,14 +799,16 @@ def main() -> int:
         results["control_a"][label] = control.result
         reports["control_a"][label] = control.report
         metrics["control_a"][label] = {
-            name: _report_metrics(control.result, window) for name, window in _periods().items()
+            name: _report_metrics(control.result, window) for name, window in _periods(control.result).items()
         }
         b_result, b_report, b_strategy = _run_candidate_with_actions(
             config, universe_b, terminal_lifecycles, prepared, schedule, actions, multiplier
         )
         results["candidate_b"][label] = b_result
         reports["candidate_b"][label] = b_report
-        metrics["candidate_b"][label] = {name: _report_metrics(b_result, window) for name, window in _periods().items()}
+        metrics["candidate_b"][label] = {
+            name: _report_metrics(b_result, window) for name, window in _periods(b_result).items()
+        }
         _json_dump(
             OUTPUT / f"CONTROL_A_{label}_RESULTS.json",
             _raw_result_payload(control.result, control.report, arm="control_a", multiplier=multiplier),

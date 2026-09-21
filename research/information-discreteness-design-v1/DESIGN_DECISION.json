@@ -1,0 +1,51 @@
+{
+  "decision": "DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "candidate_name": "equity_information_discreteness_continuous_v1",
+  "candidate_version": "1.0.0",
+  "architecture": "A_separate_raw_price_momentum_alternative",
+  "starting_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "local_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "paper_identity": "equity_residual_momentum_v3",
+  "live_enabled": false,
+  "live_hard_dollar_cap": 0,
+  "frozen_spec": {
+    "return_source": "raw_split_adjusted_close_to_close_simple_returns",
+    "past_return": "PRET = C[t-21] / C[t-273] - 1",
+    "formation_returns": 252,
+    "skip_returns": 21,
+    "required_aligned_closes": 274,
+    "id_formula": "sign(PRET) * (N_negative / 252 - N_positive / 252)",
+    "zero_return_policy": "retain_in_denominator; neither_positive_nor_negative",
+    "eligibility": "PIT_scanner_eligible_and_PRET_greater_than_zero",
+    "ranking": "ID_ascending_then_canonical_symbol_ascending_over_PIT_pool_and_observation_set",
+    "cadence": "monthly_last_completed_regular_nyse_session",
+    "top_n": 6,
+    "weighting": "equal_weight_with_per_position_cap",
+    "allocation": "min(0.55 / n, 0.10)_per_selected_name",
+    "execution": "completed_bar_decision_to_next_tradable_open_proxy",
+    "missing_data": "fail_closed_unscoreable_no_synthetic_zero_or_shortening",
+    "reserved_roles": {
+      "reference_only": ["SPY"],
+      "hedge_only": ["SH", "PSQ", "DOG"]
+    }
+  },
+  "data_and_causality": {
+    "structurally_feasible": true,
+    "pit_semantics_available": true,
+    "lifetime_ambiguity_fails_closed": true,
+    "corporate_action_semantics_available": true,
+    "no_external_dataset_required": true,
+    "broad_us_equity_taxonomy_limitation_disclosed": true
+  },
+  "economic_boundary": {
+    "candidate_outcomes_inspected": false,
+    "candidate_pnl_or_nav_calculated": false,
+    "candidate_forward_returns_inspected": false,
+    "candidate_optimized": false,
+    "candidate_vs_v3_compared": false,
+    "production_or_paper_changed": false
+  },
+  "future_protocol": "FUTURE_TEST_PROTOCOL.md",
+  "no_alternate_candidate_proposed": true
+}

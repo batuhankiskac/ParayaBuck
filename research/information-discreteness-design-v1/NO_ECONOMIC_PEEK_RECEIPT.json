@@ -1,0 +1,38 @@
+{
+  "artifact": "no_economic_peek_receipt",
+  "scope": "information_discreteness_design_v1",
+  "created_from_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "branch": "research/information-discreteness-design-v1",
+  "git_worktree_clean_at_start": true,
+  "allowed_structural_checks": {
+    "bar_shape_counts": true,
+    "lifetime_shape_counts": true,
+    "corporate_action_shape_counts": true,
+    "synthetic_formula_mechanics": true
+  },
+  "forbidden_checks": {
+    "full_historical_candidate_ranking": false,
+    "candidate_forward_returns": false,
+    "candidate_pnl": false,
+    "candidate_nav": false,
+    "candidate_ic": false,
+    "candidate_hit_rate": false,
+    "future_return_regression": false,
+    "candidate_vs_v3_correlation": false,
+    "candidate_sharpe": false,
+    "candidate_cagr": false,
+    "candidate_drawdown": false,
+    "candidate_optimization": false
+  },
+  "economic_artifacts_present": false,
+  "candidate_pnl_artifacts_present": false,
+  "candidate_forward_return_tables_present": false,
+  "local_outcome_claim": false,
+  "structural_counts_recorded": {
+    "equity_1d_bars": 11686832,
+    "lifetime_identities": 9010,
+    "identities_with_274_closes": 7432,
+    "cash_actions_after_loader": 141751
+  },
+  "attestation": "This package freezes one candidate design and a later economic-test protocol. No candidate outcome was inspected or calculated during the design campaign."
+}

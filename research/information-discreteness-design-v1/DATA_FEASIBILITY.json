@@ -1,0 +1,86 @@
+{
+  "artifact": "information_discreteness_design_v1",
+  "scope": "structural_pre_outcome_only",
+  "decision": "DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "repository": "/Users/batuhankiskac/Desktop/ParayaBuck",
+  "starting_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "data_identity": {
+    "bars_sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139",
+    "lifetimes_sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596",
+    "corporate_actions_sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+  },
+  "bars": {
+    "market": "equity",
+    "timeframe": "1d",
+    "row_count": 11686832,
+    "identity_count": 9010,
+    "min_timestamp": "2016-01-04T05:00:00+00:00",
+    "max_timestamp": "2026-07-31T04:00:00+00:00",
+    "session": "regular",
+    "extended_hours": false,
+    "price_semantics": "split_adjusted_close_for_signal",
+    "weekend_or_invalid_session_rows_rejected": true
+  },
+  "formation_requirement": {
+    "formation_returns": 252,
+    "skip_returns": 21,
+    "required_aligned_closes": 274,
+    "symbols_with_at_least_required_closes": 7432,
+    "symbols_below_required_closes": 1578,
+    "dynamic_shortening_allowed": false,
+    "missing_session_policy": "fail_closed_unscoreable"
+  },
+  "lifetimes": {
+    "rows": 9010,
+    "explicit_terminal_count": 2151,
+    "horizon_censored_count": 6858,
+    "unresolved_count": 1,
+    "rename_chain_count": 1,
+    "ambiguous_identity_policy": "fail_closed",
+    "future_terminal_status_used_for_prior_score": false
+  },
+  "corporate_actions": {
+    "cash_actions_retained_after_loader": 141751,
+    "retained_action_types": ["dividend"],
+    "cash_dividends_in_signal": false,
+    "cash_dividends_applied_once_to_account_pnl": true,
+    "stock_dividend_rows_reapplied": false,
+    "forward_split_rows_reapplied": false,
+    "reverse_split_rows_reapplied": false
+  },
+  "pit_and_roles": {
+    "scanner_policy_unchanged": true,
+    "minimum_price": 5,
+    "minimum_median_dollar_volume": 20000000,
+    "minimum_data_completeness": 0.95,
+    "minimum_atr_pct": 0.005,
+    "maximum_atr_pct": 0.12,
+    "spread_quality_ceiling_bps": 50,
+    "maximum_per_sector": 5,
+    "maximum_stream_symbols": 30,
+    "reference_only": ["SPY"],
+    "hedge_only": ["SH", "PSQ", "DOG"],
+    "ordinary_alpha_target_excludes_reserved_roles": true,
+    "broad_us_equity_product_taxonomy_limitation": true
+  },
+  "execution_and_cost_contract": {
+    "decision_bar": "completed_regular_session_bar",
+    "fill_proxy": "next_tradable_bar_open",
+    "same_close_execution": false,
+    "slippage_bps": 2,
+    "spread_bps": 2,
+    "commission": 0,
+    "effective_dated_equity_fees": true,
+    "future_stress_scales": [1, 2, 3]
+  },
+  "economic_peek": {
+    "candidate_rankings_inspected": false,
+    "candidate_forward_returns_inspected": false,
+    "candidate_pnl_or_nav_calculated": false,
+    "ic_or_hit_rate_calculated": false,
+    "candidate_vs_v3_comparison_calculated": false,
+    "sharpe_cagr_drawdown_calculated": false
+  },
+  "conclusion": "The corrected data path can form an exact 12-1 daily sign-count signal with PIT eligibility, strict lifetimes, and current execution semantics. This is structural feasibility only; economic merit is intentionally untested."
+}

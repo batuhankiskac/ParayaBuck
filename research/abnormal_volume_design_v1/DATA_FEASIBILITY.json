@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-21",
+  "repository_commit": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "economic_outcomes_read": false,
+  "canonical_artifact": {
+    "rows": 11686832,
+    "security_identities": 9010,
+    "first_date": "2016-01-04",
+    "last_date": "2026-07-31",
+    "benchmark_last_date": "2026-07-30",
+    "sessions": 2659,
+    "sessions_through_benchmark_last_date": 2658,
+    "calendar_months": 127,
+    "rows_per_session_min": 3106,
+    "rows_per_session_max": 6763
+  },
+  "volume_profile": {
+    "finite_nonnegative_rows": 11686832,
+    "strictly_positive_rows": 11010211,
+    "zero_rows": 676621,
+    "negative_rows": 0,
+    "missing_or_nonnumeric_rows": 0,
+    "security_identities_with_any_zero": 4222,
+    "zero_rows_with_nonzero_ohlc": 676621
+  },
+  "provider_basis": {
+    "feed": "sip",
+    "adjustment": "split",
+    "price_volume_reciprocal_adjustment_expected": true,
+    "absolute_share_volume_point_in_time_safe": false,
+    "own_window_rank_scale_invariant": true
+  },
+  "corporate_actions": {
+    "forward_splits": 270,
+    "reverse_splits": 1207
+  },
+  "lifecycle": {
+    "records": 9010,
+    "possible_delisting_terminals": 2151,
+    "horizon_censored_active": 6858,
+    "unresolved_inactive_identities": ["EOSEW"],
+    "ordinary_cli_passes_lifetimes": false
+  },
+  "signal_inputs": {
+    "split_adjusted_close": "available",
+    "split_adjusted_volume": "available_with_zero_row_exclusions",
+    "point_in_time_shares_outstanding": "unavailable",
+    "point_in_time_common_stock_taxonomy": "unavailable",
+    "point_in_time_scanner_membership": "available"
+  },
+  "implementation_gaps": [
+    "generic monthly policy does not implement prior-month-close to next-month-first-open execution",
+    "ordinary CLI does not pass v5 terminal lifecycles to the engine",
+    "CSV loader converts blank volume to zero unless raw input is prevalidated",
+    "manifest contains a partial 2026-07-31 endpoint that must be capped at 2026-07-30"
+  ],
+  "decision": "CONDITIONALLY_FEASIBLE",
+  "conditions": [
+    "G1 input, causality, schedule, split-invariance, and exclusion tests pass before outcomes",
+    "all 50 signal observations have finite positive close and volume",
+    "blank CSV volume cannot be silently normalized to zero",
+    "a dedicated research harness loads terminal lifecycles and implements the frozen schedule",
+    "the unresolved EOSEW identity is rejected and the common endpoint is 2026-07-30",
+    "reserved-role symbols cannot become targets",
+    "no turnover or common-stock-only claim"
+  ]
+}

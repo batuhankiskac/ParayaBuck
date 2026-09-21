@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-21",
+  "repository_commit": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "design_branch": "research/abnormal-volume-design-v1",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "scope": "pre-outcome design only",
+  "prohibited_outputs_computed": false,
+  "backtest_run": false,
+  "future_returns_read": false,
+  "candidate_economics_read": false,
+  "ic_hit_rate_bucket_or_parameter_performance_read": false,
+  "archived_outcome_artifacts_read": false,
+  "allowed_reads": [
+    "repository structure and source semantics",
+    "canonical documentation and configuration",
+    "market-data schema, counts, missingness, zero-volume, split-boundary, and chronology checks without joining future returns",
+    "primary and later academic literature"
+  ],
+  "independent_review": {
+    "status": "PASS_SCOPE_LIMITED",
+    "reviewer": "/root/hvrp_later_literature",
+    "finding": "No prohibited output or archived-outcome evidence was found in the worktree or artifacts; only 14 new research-design artifacts were present and no tracked code/config diff existed.",
+    "scope_limit": "Artifact and worktree inspection cannot prove the absence of unpersisted commands or external reads; it establishes no evidence of prohibited economic peeking in the auditable record."
+  }
+}

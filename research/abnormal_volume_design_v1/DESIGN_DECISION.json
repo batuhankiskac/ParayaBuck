@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-21",
+  "repository_commit": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "decision": "DESIGN_READY_FOR_FROZEN_ECONOMIC_TEST",
+  "literature_gate": "CONDITIONAL_PASS",
+  "data_gate": "CONDITIONALLY_FEASIBLE",
+  "split_volume_gate": "CONDITIONALLY_USABLE",
+  "v3_distinctness_gate": "DISTINCT_SIGNAL_AND_CADENCE",
+  "universe_gate": "UNIVERSE_LIMITATION_ACCEPTABLE_FOR_SHARED_A_B_TEST",
+  "causality_status": "PREDICTIVE_HYPOTHESIS_CAUSALLY_UNRESOLVED",
+  "candidate_count": 1,
+  "parameters_frozen": true,
+  "economic_test_run": false,
+  "production_changes": false,
+  "paper_or_live_promotion": false,
+  "possible_future_result_if_all_gates_pass": "ALPHA_VALID_COMBINATION_UNTESTED",
+  "failure_result": "ALPHA_REJECTED"
+}

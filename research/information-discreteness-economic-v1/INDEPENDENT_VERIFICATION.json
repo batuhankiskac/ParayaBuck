@@ -1,0 +1,90 @@
+{
+  "branch": "research/information-discreteness-economic-v1",
+  "causality": "every persisted fill decision_timestamp is strictly before fill timestamp",
+  "cost_scaling": {
+    "passed": true,
+    "totals": {
+      "fee_total": [
+        59.941229428893365,
+        118.9363580696711,
+        176.94515504444757
+      ],
+      "slippage_cost_total": [
+        1238.9019463396685,
+        2457.542925727956,
+        3655.39318623184
+      ],
+      "spread_cost_total": [
+        619.4509731698342,
+        1228.771462863978,
+        1827.69659311592
+      ]
+    }
+  },
+  "head": "cffceb95a0b73f8e4cafafce6b5c9393eef01a74",
+  "metrics": "development/validation/full curves recomputed from persisted continuous path",
+  "passed": true,
+  "result_checks": {
+    "candidate_b/1x": {
+      "identity": "equity_information_discreteness_continuous_v1",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    },
+    "candidate_b/2x": {
+      "identity": "equity_information_discreteness_continuous_v1",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    },
+    "candidate_b/3x": {
+      "identity": "equity_information_discreteness_continuous_v1",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    },
+    "control_a/1x": {
+      "identity": "equity_residual_momentum_v3",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    },
+    "control_a/2x": {
+      "identity": "equity_residual_momentum_v3",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    },
+    "control_a/3x": {
+      "identity": "equity_residual_momentum_v3",
+      "passed": true,
+      "periods_checked": [
+        "development",
+        "validation",
+        "full"
+      ]
+    }
+  },
+  "roles": "SPY, SH, PSQ and DOG absent from ordinary target weights",
+  "signal_recomputation": {
+    "passed": true,
+    "scoreable_records_checked": 2911,
+    "symbols_checked": 372
+  },
+  "verified_at": "2026-09-21T11:40:48.636567+03:00"
+}

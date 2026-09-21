@@ -1,0 +1,1116 @@
+{
+  "attribution_only_g2_metrics": {
+    "development": {
+      "cagr": 0.04512523577885541,
+      "calmar": 0.22634992803343829,
+      "net_total_return": 0.24662731953112282,
+      "sharpe": 0.38830877328352165,
+      "sortino": 0.46536374972657835
+    },
+    "full": {
+      "cagr": 0.04215067695639174,
+      "calmar": 0.21142942592912864,
+      "net_total_return": 0.48487116804457364,
+      "sharpe": 0.3827964598456445,
+      "sortino": 0.48078515881535927
+    },
+    "validation": {
+      "cagr": 0.04085029275729535,
+      "calmar": 0.2892935518112013,
+      "net_total_return": 0.2009022544616319,
+      "sharpe": 0.39317753270685774,
+      "sortino": 0.5290496634400927
+    }
+  },
+  "attribution_only_largest_removed_g2": true,
+  "attribution_only_method": "subtract that entity's realized-PnL events from the persisted curve; no reselection or retuning",
+  "attribution_only_removed_positive_pnl": 9307.674682214772,
+  "attribution_only_removed_sector": "other",
+  "attribution_only_removed_symbol": "QLD",
+  "contributions": [
+    {
+      "fees": 0.9931317122823581,
+      "positive_pnl_contribution_fraction": 0.0793908572767895,
+      "realized_pnl": 9307.674682214772,
+      "sector": "other",
+      "symbol": "QLD"
+    },
+    {
+      "fees": 1.049234161900517,
+      "positive_pnl_contribution_fraction": 0.06997573806352904,
+      "realized_pnl": 8203.859082569921,
+      "sector": "other",
+      "symbol": "NOW"
+    },
+    {
+      "fees": 0.4888847539049537,
+      "positive_pnl_contribution_fraction": 0.04880641292584692,
+      "realized_pnl": 5721.996581241548,
+      "sector": "other",
+      "symbol": "APO"
+    },
+    {
+      "fees": 1.5477038922343853,
+      "positive_pnl_contribution_fraction": 0.04243072275172448,
+      "realized_pnl": 4974.519452881148,
+      "sector": "technology",
+      "symbol": "XLK"
+    },
+    {
+      "fees": 0.6614932146690758,
+      "positive_pnl_contribution_fraction": 0.040651928913517967,
+      "realized_pnl": 4765.97611501251,
+      "sector": "other",
+      "symbol": "TDG"
+    },
+    {
+      "fees": 0.7021735464678223,
+      "positive_pnl_contribution_fraction": 0.03594736016511821,
+      "realized_pnl": 4214.418959286706,
+      "sector": "broad_market",
+      "symbol": "QQQ"
+    },
+    {
+      "fees": 2.080792662969989,
+      "positive_pnl_contribution_fraction": 0.035775228620559166,
+      "realized_pnl": 4194.23849425259,
+      "sector": "other",
+      "symbol": "VGT"
+    },
+    {
+      "fees": 1.0289430413652825,
+      "positive_pnl_contribution_fraction": 0.03383350544655324,
+      "realized_pnl": 3966.593545621352,
+      "sector": "other",
+      "symbol": "COST"
+    },
+    {
+      "fees": 0.16778153322145534,
+      "positive_pnl_contribution_fraction": 0.03271340201343356,
+      "realized_pnl": 3835.2741629679813,
+      "sector": "other",
+      "symbol": "ARKK"
+    },
+    {
+      "fees": 0.7568810960039094,
+      "positive_pnl_contribution_fraction": 0.02771550028284815,
+      "realized_pnl": 3249.3270527134187,
+      "sector": "other",
+      "symbol": "TER"
+    },
+    {
+      "fees": 0.5225848832978719,
+      "positive_pnl_contribution_fraction": 0.027455573798201686,
+      "realized_pnl": 3218.8536299117695,
+      "sector": "other",
+      "symbol": "FICO"
+    },
+    {
+      "fees": 0.1288202509373542,
+      "positive_pnl_contribution_fraction": 0.024437108952646936,
+      "realized_pnl": 2864.9729717879404,
+      "sector": "other",
+      "symbol": "HPQ"
+    },
+    {
+      "fees": 0.3324795073003746,
+      "positive_pnl_contribution_fraction": 0.022706285204181966,
+      "realized_pnl": 2662.053581123125,
+      "sector": "other",
+      "symbol": "PCAR"
+    },
+    {
+      "fees": 0.7152057428910995,
+      "positive_pnl_contribution_fraction": 0.020319276240506733,
+      "realized_pnl": 2382.2039402512514,
+      "sector": "other",
+      "symbol": "SPOT"
+    },
+    {
+      "fees": 0.15869177308370017,
+      "positive_pnl_contribution_fraction": 0.01968821284590938,
+      "realized_pnl": 2308.2189376672886,
+      "sector": "other",
+      "symbol": "CPRT"
+    },
+    {
+      "fees": 0.8380058141900297,
+      "positive_pnl_contribution_fraction": 0.01968652630753359,
+      "realized_pnl": 2308.0212102326777,
+      "sector": "other",
+      "symbol": "BNY"
+    },
+    {
+      "fees": 0.5854009007242558,
+      "positive_pnl_contribution_fraction": 0.019167236598800545,
+      "realized_pnl": 2247.1404005210743,
+      "sector": "communications",
+      "symbol": "XLC"
+    },
+    {
+      "fees": 0.3011397358142153,
+      "positive_pnl_contribution_fraction": 0.019154672283062665,
+      "realized_pnl": 2245.6673774614405,
+      "sector": "other",
+      "symbol": "Z"
+    },
+    {
+      "fees": 0.049507484204126345,
+      "positive_pnl_contribution_fraction": 0.018636715901331116,
+      "realized_pnl": 2184.94288516976,
+      "sector": "other",
+      "symbol": "CVNA"
+    },
+    {
+      "fees": 0.3545069679461075,
+      "positive_pnl_contribution_fraction": 0.01826277335188153,
+      "realized_pnl": 2141.1023760796497,
+      "sector": "other",
+      "symbol": "LITE"
+    },
+    {
+      "fees": 0.3735449447813729,
+      "positive_pnl_contribution_fraction": 0.01746437122703627,
+      "realized_pnl": 2047.4988114054424,
+      "sector": "other",
+      "symbol": "EMXC"
+    },
+    {
+      "fees": 0.9723198669194285,
+      "positive_pnl_contribution_fraction": 0.017296667237089388,
+      "realized_pnl": 2027.83742677153,
+      "sector": "other",
+      "symbol": "GDDY"
+    },
+    {
+      "fees": 1.53841698289339,
+      "positive_pnl_contribution_fraction": 0.016875940954032376,
+      "realized_pnl": 1978.5120572355984,
+      "sector": "other",
+      "symbol": "AEP"
+    },
+    {
+      "fees": 0.5847451456229722,
+      "positive_pnl_contribution_fraction": 0.016721533850573407,
+      "realized_pnl": 1960.409581246347,
+      "sector": "industrials",
+      "symbol": "GE"
+    },
+    {
+      "fees": 0.8007164995426688,
+      "positive_pnl_contribution_fraction": 0.01625023789552335,
+      "realized_pnl": 1905.1554930664463,
+      "sector": "other",
+      "symbol": "CTAS"
+    },
+    {
+      "fees": 0.8185370655743069,
+      "positive_pnl_contribution_fraction": 0.01541518761990814,
+      "realized_pnl": 1807.255349708346,
+      "sector": "other",
+      "symbol": "RSG"
+    },
+    {
+      "fees": 0.33295934353317475,
+      "positive_pnl_contribution_fraction": 0.014636440855954919,
+      "realized_pnl": 1715.9561524540145,
+      "sector": "other",
+      "symbol": "DECK"
+    },
+    {
+      "fees": 0.4526156127495482,
+      "positive_pnl_contribution_fraction": 0.014307055311813362,
+      "realized_pnl": 1677.3394452530179,
+      "sector": "other",
+      "symbol": "AMT"
+    },
+    {
+      "fees": 0.18136842948061027,
+      "positive_pnl_contribution_fraction": 0.014290716303220777,
+      "realized_pnl": 1675.423882405781,
+      "sector": "other",
+      "symbol": "TTD"
+    },
+    {
+      "fees": 0.32846195785011745,
+      "positive_pnl_contribution_fraction": 0.012283195091899814,
+      "realized_pnl": 1440.0648625695756,
+      "sector": "other",
+      "symbol": "ACWI"
+    },
+    {
+      "fees": 0.6853468344229936,
+      "positive_pnl_contribution_fraction": 0.012244924463737985,
+      "realized_pnl": 1435.5780668725292,
+      "sector": "other",
+      "symbol": "STT"
+    },
+    {
+      "fees": 0.2762128291914843,
+      "positive_pnl_contribution_fraction": 0.010891681614009122,
+      "realized_pnl": 1276.9257403534161,
+      "sector": "other",
+      "symbol": "APH"
+    },
+    {
+      "fees": 0.6265345161639401,
+      "positive_pnl_contribution_fraction": 0.009488942414674826,
+      "realized_pnl": 1112.470530027691,
+      "sector": "other",
+      "symbol": "BLDR"
+    },
+    {
+      "fees": 0.4536601222276371,
+      "positive_pnl_contribution_fraction": 0.008431402238908864,
+      "realized_pnl": 988.4859774351403,
+      "sector": "other",
+      "symbol": "CHD"
+    },
+    {
+      "fees": 0.2892892714471455,
+      "positive_pnl_contribution_fraction": 0.007434909673684,
+      "realized_pnl": 871.6585625601235,
+      "sector": "other",
+      "symbol": "ENPH"
+    },
+    {
+      "fees": 0.43353709835291143,
+      "positive_pnl_contribution_fraction": 0.007254143005743127,
+      "realized_pnl": 850.4657275625666,
+      "sector": "other",
+      "symbol": "FISV"
+    },
+    {
+      "fees": 0.07031339832892539,
+      "positive_pnl_contribution_fraction": 0.007133794039953873,
+      "realized_pnl": 836.3561806911682,
+      "sector": "other",
+      "symbol": "SGOL"
+    },
+    {
+      "fees": 0.06090942952686407,
+      "positive_pnl_contribution_fraction": 0.006384539273565025,
+      "realized_pnl": 748.5145845822788,
+      "sector": "other",
+      "symbol": "PM"
+    },
+    {
+      "fees": 0.4454293362779199,
+      "positive_pnl_contribution_fraction": 0.0061722416947367,
+      "realized_pnl": 723.6251090515291,
+      "sector": "other",
+      "symbol": "DPZ"
+    },
+    {
+      "fees": 0.01287602224267245,
+      "positive_pnl_contribution_fraction": 0.005898867131952802,
+      "realized_pnl": 691.5750521046177,
+      "sector": "other",
+      "symbol": "TMUS"
+    },
+    {
+      "fees": 0.5801155733404979,
+      "positive_pnl_contribution_fraction": 0.005873468434977085,
+      "realized_pnl": 688.5973438783678,
+      "sector": "other",
+      "symbol": "ADM"
+    },
+    {
+      "fees": 0.46702759615582495,
+      "positive_pnl_contribution_fraction": 0.0052869926519851845,
+      "realized_pnl": 619.8397314236438,
+      "sector": "other",
+      "symbol": "COO"
+    },
+    {
+      "fees": 0.225101306227833,
+      "positive_pnl_contribution_fraction": 0.004796158908797269,
+      "realized_pnl": 562.2950598915163,
+      "sector": "other",
+      "symbol": "AKAM"
+    },
+    {
+      "fees": 0.6650575276768887,
+      "positive_pnl_contribution_fraction": 0.004741680814906778,
+      "realized_pnl": 555.9081232512932,
+      "sector": "other",
+      "symbol": "TSS"
+    },
+    {
+      "fees": 0.27145623663704477,
+      "positive_pnl_contribution_fraction": 0.0045938943284947265,
+      "realized_pnl": 538.5818392793846,
+      "sector": "other",
+      "symbol": "CLX"
+    },
+    {
+      "fees": 0.40055872576839313,
+      "positive_pnl_contribution_fraction": 0.004567548678750466,
+      "realized_pnl": 535.4931116157416,
+      "sector": "other",
+      "symbol": "IAU"
+    },
+    {
+      "fees": 0.21483025248212811,
+      "positive_pnl_contribution_fraction": 0.004549127306470387,
+      "realized_pnl": 533.333415319918,
+      "sector": "other",
+      "symbol": "CRM"
+    },
+    {
+      "fees": 0.2342045435897157,
+      "positive_pnl_contribution_fraction": 0.004514719135344043,
+      "realized_pnl": 529.2994487620632,
+      "sector": "other",
+      "symbol": "TNDM"
+    },
+    {
+      "fees": 0.21148538664419333,
+      "positive_pnl_contribution_fraction": 0.004306037311948534,
+      "realized_pnl": 504.83387941463855,
+      "sector": "other",
+      "symbol": "DIA"
+    },
+    {
+      "fees": 0.361663955625309,
+      "positive_pnl_contribution_fraction": 0.0039604502816757425,
+      "realized_pnl": 464.31773231022555,
+      "sector": "other",
+      "symbol": "ARKG"
+    },
+    {
+      "fees": 0.015526873722555477,
+      "positive_pnl_contribution_fraction": 0.0037193719499258797,
+      "realized_pnl": 436.05404097564684,
+      "sector": "technology",
+      "symbol": "AAPL"
+    },
+    {
+      "fees": 0.21897832832591166,
+      "positive_pnl_contribution_fraction": 0.0033972301353769035,
+      "realized_pnl": 398.28657864800635,
+      "sector": "other",
+      "symbol": "ILMN"
+    },
+    {
+      "fees": 0.20854024201490295,
+      "positive_pnl_contribution_fraction": 0.003169420645172079,
+      "realized_pnl": 371.5785080076405,
+      "sector": "other",
+      "symbol": "EQIX"
+    },
+    {
+      "fees": 0.23495121790879211,
+      "positive_pnl_contribution_fraction": 0.0030136812641918167,
+      "realized_pnl": 353.31983763807915,
+      "sector": "other",
+      "symbol": "ADSK"
+    },
+    {
+      "fees": 0.30074080653802027,
+      "positive_pnl_contribution_fraction": 0.0028375266644158383,
+      "realized_pnl": 332.6677151553321,
+      "sector": "energy",
+      "symbol": "XLE"
+    },
+    {
+      "fees": 0.23687170022452847,
+      "positive_pnl_contribution_fraction": 0.0028271581682947316,
+      "realized_pnl": 331.4521269610567,
+      "sector": "other",
+      "symbol": "CDNS"
+    },
+    {
+      "fees": 0.23325520956797183,
+      "positive_pnl_contribution_fraction": 0.0028256501949807766,
+      "realized_pnl": 331.27533424817767,
+      "sector": "industrials",
+      "symbol": "XLI"
+    },
+    {
+      "fees": 0.24943377172936987,
+      "positive_pnl_contribution_fraction": 0.0028185313207376925,
+      "realized_pnl": 330.4407272439075,
+      "sector": "other",
+      "symbol": "EXEL"
+    },
+    {
+      "fees": 0.22928627180362204,
+      "positive_pnl_contribution_fraction": 0.0027871528845747106,
+      "realized_pnl": 326.7619626372546,
+      "sector": "other",
+      "symbol": "CNP"
+    },
+    {
+      "fees": 0.444702263081313,
+      "positive_pnl_contribution_fraction": 0.0025096128967518495,
+      "realized_pnl": 294.2235570000066,
+      "sector": "other",
+      "symbol": "LMT"
+    },
+    {
+      "fees": 0.41533331102346704,
+      "positive_pnl_contribution_fraction": 0.002401771325680333,
+      "realized_pnl": 281.58035984629515,
+      "sector": "other",
+      "symbol": "AFL"
+    },
+    {
+      "fees": 0.31059819355289575,
+      "positive_pnl_contribution_fraction": 0.002341210263192229,
+      "realized_pnl": 274.4802643518817,
+      "sector": "other",
+      "symbol": "CVX"
+    },
+    {
+      "fees": 0.2487675223004408,
+      "positive_pnl_contribution_fraction": 0.002112053242403848,
+      "realized_pnl": 247.6142110832095,
+      "sector": "other",
+      "symbol": "JCI"
+    },
+    {
+      "fees": 0.8779874755333317,
+      "positive_pnl_contribution_fraction": 0.0017902629628500377,
+      "realized_pnl": 209.88796223387936,
+      "sector": "other",
+      "symbol": "BAX"
+    },
+    {
+      "fees": 0.19588773994534572,
+      "positive_pnl_contribution_fraction": 0.001775065285212104,
+      "realized_pnl": 208.10620745466235,
+      "sector": "other",
+      "symbol": "AAP"
+    },
+    {
+      "fees": 0.24901194651898612,
+      "positive_pnl_contribution_fraction": 0.001735204191280581,
+      "realized_pnl": 203.4329477429261,
+      "sector": "other",
+      "symbol": "AXON"
+    },
+    {
+      "fees": 0.4308747594281234,
+      "positive_pnl_contribution_fraction": 0.0017335826785255734,
+      "realized_pnl": 203.2428438224702,
+      "sector": "healthcare",
+      "symbol": "TMO"
+    },
+    {
+      "fees": 0.23025594224182175,
+      "positive_pnl_contribution_fraction": 0.001723179898950027,
+      "realized_pnl": 202.02323628324942,
+      "sector": "other",
+      "symbol": "PEG"
+    },
+    {
+      "fees": 0.21924135324523075,
+      "positive_pnl_contribution_fraction": 0.0016956734431891013,
+      "realized_pnl": 198.7984173221588,
+      "sector": "other",
+      "symbol": "AON"
+    },
+    {
+      "fees": 0.21310228602734388,
+      "positive_pnl_contribution_fraction": 0.0014779940367757177,
+      "realized_pnl": 173.2779837431435,
+      "sector": "other",
+      "symbol": "EW"
+    },
+    {
+      "fees": 0.24429015821169608,
+      "positive_pnl_contribution_fraction": 0.0013217855408696108,
+      "realized_pnl": 154.9643149862602,
+      "sector": "other",
+      "symbol": "WPM"
+    },
+    {
+      "fees": 0.44986693222856855,
+      "positive_pnl_contribution_fraction": 0.0010354504114993936,
+      "realized_pnl": 121.39477907639886,
+      "sector": "other",
+      "symbol": "APD"
+    },
+    {
+      "fees": 0.2089978601876862,
+      "positive_pnl_contribution_fraction": 0.0009050667768797519,
+      "realized_pnl": 106.1087814621726,
+      "sector": "other",
+      "symbol": "ALL"
+    },
+    {
+      "fees": 0.4254889467391515,
+      "positive_pnl_contribution_fraction": 0.0008322518220461997,
+      "realized_pnl": 97.57205651879543,
+      "sector": "other",
+      "symbol": "ADP"
+    },
+    {
+      "fees": 0.26734458409664463,
+      "positive_pnl_contribution_fraction": 0.0007674538665027469,
+      "realized_pnl": 89.97523352230917,
+      "sector": "other",
+      "symbol": "XOP"
+    },
+    {
+      "fees": 0.3639695015861085,
+      "positive_pnl_contribution_fraction": 0.0007314884175868913,
+      "realized_pnl": 85.75869386281784,
+      "sector": "other",
+      "symbol": "BTI"
+    },
+    {
+      "fees": 0.247876256613402,
+      "positive_pnl_contribution_fraction": 0.0007026892126211773,
+      "realized_pnl": 82.38231476676219,
+      "sector": "other",
+      "symbol": "A"
+    },
+    {
+      "fees": 0.026668352579480793,
+      "positive_pnl_contribution_fraction": 0.0006198490206724212,
+      "realized_pnl": 72.67024484184564,
+      "sector": "other",
+      "symbol": "GILD"
+    },
+    {
+      "fees": 0.23401700667654163,
+      "positive_pnl_contribution_fraction": 0.0005689247319197804,
+      "realized_pnl": 66.6999514177523,
+      "sector": "other",
+      "symbol": "PLAN"
+    },
+    {
+      "fees": 0.7747816736732163,
+      "positive_pnl_contribution_fraction": 0.0005598345614115742,
+      "realized_pnl": 65.63423235640917,
+      "sector": "other",
+      "symbol": "MPC"
+    },
+    {
+      "fees": 0.21733485147153558,
+      "positive_pnl_contribution_fraction": 0.0005002964572891577,
+      "realized_pnl": 58.654067090839035,
+      "sector": "other",
+      "symbol": "EXC"
+    },
+    {
+      "fees": 0.35159087623750157,
+      "positive_pnl_contribution_fraction": 0.0004869426763641939,
+      "realized_pnl": 57.088488220796194,
+      "sector": "other",
+      "symbol": "FTNT"
+    },
+    {
+      "fees": 0.060352120441425,
+      "positive_pnl_contribution_fraction": 0.00048521378508757255,
+      "realized_pnl": 56.88579539046679,
+      "sector": "other",
+      "symbol": "BRK.A"
+    },
+    {
+      "fees": 0.06534662698821016,
+      "positive_pnl_contribution_fraction": 0.00033998141964405404,
+      "realized_pnl": 39.85895304054796,
+      "sector": "other",
+      "symbol": "BRK.B"
+    },
+    {
+      "fees": 0.07960194943333104,
+      "positive_pnl_contribution_fraction": 0.00025715758183983694,
+      "realized_pnl": 30.14880045299614,
+      "sector": "other",
+      "symbol": "EFA"
+    },
+    {
+      "fees": 0.30460543645192295,
+      "positive_pnl_contribution_fraction": 0.0002082535800157389,
+      "realized_pnl": 24.415362683831027,
+      "sector": "other",
+      "symbol": "BP"
+    },
+    {
+      "fees": 0.2695601707455818,
+      "positive_pnl_contribution_fraction": 0.00016411898992329524,
+      "realized_pnl": 19.241084172374993,
+      "sector": "other",
+      "symbol": "QID"
+    },
+    {
+      "fees": 0.5944268860993989,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -295.1881324904105,
+      "sector": "healthcare",
+      "symbol": "ABBV"
+    },
+    {
+      "fees": 0.5446252990865896,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1394.238312870147,
+      "sector": "other",
+      "symbol": "ACGL"
+    },
+    {
+      "fees": 0.28264327562241204,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1567.2105865154954,
+      "sector": "other",
+      "symbol": "AEM"
+    },
+    {
+      "fees": 0.626881742354173,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2255.8554692542552,
+      "sector": "other",
+      "symbol": "ALGN"
+    },
+    {
+      "fees": 0.26231017339923723,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -929.715379629478,
+      "sector": "consumer_discretionary",
+      "symbol": "AMZN"
+    },
+    {
+      "fees": 0.3011857416321891,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -526.5373302401521,
+      "sector": "other",
+      "symbol": "ANET"
+    },
+    {
+      "fees": 0.31954360089373024,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1844.6443286171443,
+      "sector": "other",
+      "symbol": "ANF"
+    },
+    {
+      "fees": 0.5161526969650333,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -3995.7177682991137,
+      "sector": "other",
+      "symbol": "AR"
+    },
+    {
+      "fees": 0.08031206773435139,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -985.7077220676325,
+      "sector": "other",
+      "symbol": "ARKF"
+    },
+    {
+      "fees": 0.07601036920249674,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -592.1934488636585,
+      "sector": "other",
+      "symbol": "ARKW"
+    },
+    {
+      "fees": 0.361702574179548,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -4575.342164447154,
+      "sector": "other",
+      "symbol": "B"
+    },
+    {
+      "fees": 0.4687870481284009,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -791.545429735814,
+      "sector": "other",
+      "symbol": "BA"
+    },
+    {
+      "fees": 0.24075856473312424,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -23.155359767173834,
+      "sector": "other",
+      "symbol": "BALL"
+    },
+    {
+      "fees": 0.19322177608160063,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -678.749093252597,
+      "sector": "other",
+      "symbol": "CBOE"
+    },
+    {
+      "fees": 0.21151767918673653,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -454.8748490463609,
+      "sector": "other",
+      "symbol": "CCI"
+    },
+    {
+      "fees": 0.47209710654784987,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -259.1240475377336,
+      "sector": "other",
+      "symbol": "CF"
+    },
+    {
+      "fees": 0.21695424612211223,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -385.98202872654184,
+      "sector": "other",
+      "symbol": "CFG"
+    },
+    {
+      "fees": 0.1957533941034847,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1066.4704952863733,
+      "sector": "other",
+      "symbol": "CGNX"
+    },
+    {
+      "fees": 0.2756205163501433,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -751.0414380010225,
+      "sector": "other",
+      "symbol": "CIEN"
+    },
+    {
+      "fees": 0.008201428533724976,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1614.2309038757628,
+      "sector": "other",
+      "symbol": "CLS"
+    },
+    {
+      "fees": 0.4252257454031325,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -171.16729965213312,
+      "sector": "other",
+      "symbol": "CME"
+    },
+    {
+      "fees": 0.3424997709977752,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -951.2417975215811,
+      "sector": "other",
+      "symbol": "COR"
+    },
+    {
+      "fees": 0.11813781303590226,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1146.4789895225995,
+      "sector": "other",
+      "symbol": "CRWD"
+    },
+    {
+      "fees": 0.514114462048191,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1531.6988145956416,
+      "sector": "other",
+      "symbol": "CSL"
+    },
+    {
+      "fees": 0.4041853778267424,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -564.7678556688516,
+      "sector": "other",
+      "symbol": "DATA"
+    },
+    {
+      "fees": 0.41763152595027386,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2140.7931206184903,
+      "sector": "other",
+      "symbol": "DINO"
+    },
+    {
+      "fees": 0.21804431610014352,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -34.01353456732947,
+      "sector": "other",
+      "symbol": "DOC"
+    },
+    {
+      "fees": 0.0232571355850612,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -161.8385227616667,
+      "sector": "other",
+      "symbol": "DTE"
+    },
+    {
+      "fees": 0.6349941595955619,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1280.5813360713612,
+      "sector": "other",
+      "symbol": "DVMT"
+    },
+    {
+      "fees": 0.1913180248473274,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2081.5383593796537,
+      "sector": "other",
+      "symbol": "EFX"
+    },
+    {
+      "fees": 1.0929736851276262,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -3538.8814193958588,
+      "sector": "other",
+      "symbol": "EME"
+    },
+    {
+      "fees": 0.24528424427475354,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2671.0140675893635,
+      "sector": "other",
+      "symbol": "EQT"
+    },
+    {
+      "fees": 0.45993940079348195,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -268.39037966810986,
+      "sector": "other",
+      "symbol": "ES"
+    },
+    {
+      "fees": 0.22722989249070014,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -125.89719994983635,
+      "sector": "other",
+      "symbol": "EVRG"
+    },
+    {
+      "fees": 0.3628829933630652,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2063.496012809347,
+      "sector": "other",
+      "symbol": "EWT"
+    },
+    {
+      "fees": 0.06294172441243662,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1157.9313885911513,
+      "sector": "other",
+      "symbol": "EXR"
+    },
+    {
+      "fees": 0.22198376021101138,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -150.5807808830886,
+      "sector": "other",
+      "symbol": "FFIV"
+    },
+    {
+      "fees": 0.21908387895437,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -75.08033538703108,
+      "sector": "other",
+      "symbol": "FNV"
+    },
+    {
+      "fees": 0.4598328989591407,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -734.7509499740968,
+      "sector": "other",
+      "symbol": "GD"
+    },
+    {
+      "fees": 0.21423509906111604,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -951.8614375149101,
+      "sector": "other",
+      "symbol": "GEN"
+    },
+    {
+      "fees": 0.0049126484572885425,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -9.463281510400352,
+      "sector": "other",
+      "symbol": "GEV"
+    },
+    {
+      "fees": 0.5322218870523729,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -789.6832648557273,
+      "sector": "other",
+      "symbol": "GIS"
+    },
+    {
+      "fees": 0.22542296062417,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -271.29979215053055,
+      "sector": "other",
+      "symbol": "GLW"
+    },
+    {
+      "fees": 0.4254100568629746,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -991.999644663986,
+      "sector": "communications",
+      "symbol": "GOOGL"
+    },
+    {
+      "fees": 0.055601247879371915,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1710.8931674389496,
+      "sector": "other",
+      "symbol": "IAUM"
+    },
+    {
+      "fees": 0.20082819258769258,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1970.4450465940138,
+      "sector": "other",
+      "symbol": "INFO"
+    },
+    {
+      "fees": 0.0655441464006935,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -2374.001966470375,
+      "sector": "other",
+      "symbol": "INMD"
+    },
+    {
+      "fees": 0.22299351439692044,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -15.807124446601543,
+      "sector": "other",
+      "symbol": "INXN"
+    },
+    {
+      "fees": 0.6014316153692094,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1621.9930794414715,
+      "sector": "other",
+      "symbol": "IPGP"
+    },
+    {
+      "fees": 1.3397272225984795,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -661.6935517343572,
+      "sector": "other",
+      "symbol": "ISRG"
+    },
+    {
+      "fees": 1.2073906356782849,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -529.5651736524214,
+      "sector": "other",
+      "symbol": "JEPQ"
+    },
+    {
+      "fees": 0.5665120282702693,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -628.6924170841188,
+      "sector": "consumer_staples",
+      "symbol": "KO"
+    },
+    {
+      "fees": 0.2205896885936766,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -60.65362322152353,
+      "sector": "healthcare",
+      "symbol": "LLY"
+    },
+    {
+      "fees": 0.27786696304712194,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -646.4814337755708,
+      "sector": "other",
+      "symbol": "LPLA"
+    },
+    {
+      "fees": 0.0332771008907641,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -95.16790934360344,
+      "sector": "other",
+      "symbol": "NDAQ"
+    },
+    {
+      "fees": 0.4578925524688146,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -859.2942725483971,
+      "sector": "other",
+      "symbol": "NEE"
+    },
+    {
+      "fees": 0.26736563698141586,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -247.17467135720713,
+      "sector": "consumer_staples",
+      "symbol": "PEP"
+    },
+    {
+      "fees": 0.07466418969637513,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -470.60532383652026,
+      "sector": "other",
+      "symbol": "PLD"
+    },
+    {
+      "fees": 0.2659034184063147,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -890.4559830823782,
+      "sector": "other",
+      "symbol": "RCL"
+    },
+    {
+      "fees": 0.4218607093553525,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1794.1316162880898,
+      "sector": "other",
+      "symbol": "SVIX"
+    },
+    {
+      "fees": 0.4245536932630888,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -255.26283664208853,
+      "sector": "other",
+      "symbol": "TNL"
+    },
+    {
+      "fees": 0.19388685422622307,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -412.36596891832403,
+      "sector": "other",
+      "symbol": "URI"
+    },
+    {
+      "fees": 0.29741562635386165,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -801.3088380217666,
+      "sector": "real_estate",
+      "symbol": "XLRE"
+    },
+    {
+      "fees": 0.2322906689782185,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1530.6521559241487,
+      "sector": "utilities",
+      "symbol": "XLU"
+    },
+    {
+      "fees": 0.07259516849743514,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -514.8110524833659,
+      "sector": "consumer_discretionary",
+      "symbol": "XLY"
+    },
+    {
+      "fees": 0.5366379252478984,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -834.9568413320172,
+      "sector": "energy",
+      "symbol": "XOM"
+    },
+    {
+      "fees": 0.4242319749321535,
+      "positive_pnl_contribution_fraction": 0.0,
+      "realized_pnl": -1555.0876533864714,
+      "sector": "other",
+      "symbol": "ZION"
+    }
+  ],
+  "decisions_with_at_least_five_names_count": 114,
+  "decisions_with_at_least_five_names_fraction": 1.0,
+  "decisions_with_six_slots_available": 114,
+  "largest_entity_positive_pnl_fraction": 0.0793908572767895,
+  "max_realized_weight_concentration": 0.11801676067391516,
+  "positive_pnl_total": 117238.62169373424
+}

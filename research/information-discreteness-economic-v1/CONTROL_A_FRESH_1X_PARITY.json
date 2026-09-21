@@ -1,0 +1,8 @@
+{
+  "control_identity": "equity_residual_momentum_v3",
+  "cost_multiplier": 1.0,
+  "independent_verifier": "INDEPENDENT_VERIFICATION.json recomputed all persisted curves and boundaries",
+  "note": "No archived V3 result was substituted for this fresh run.",
+  "passed": true,
+  "path": "fresh canonical run_product_backtest product path"
+}

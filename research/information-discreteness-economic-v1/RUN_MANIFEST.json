@@ -1,0 +1,49 @@
+{
+  "branch_state": {
+    "branch": "research/information-discreteness-economic-v1",
+    "clean": true,
+    "head": "800f3831de1cbeb52a7716a2192d126dd00472f6",
+    "main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de"
+  },
+  "candidate": "equity_information_discreteness_continuous_v1",
+  "candidate_universe_hash": "49f53682b309767617571cd41140d797d95db5676ac5ae4d80a96a31042149f8",
+  "control": "equity_residual_momentum_v3",
+  "control_universe_hash": "d39bb34d562e70c45a96d70723885eca834a5c3d5410c6974d7694fe32759520",
+  "cost_multipliers": [
+    1.0,
+    2.0,
+    3.0
+  ],
+  "data": {
+    "actions": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_survivorship_full_corporate_actions_v5.csv",
+      "sha256": "a0a60755a3f6adfc06a5ef0e6ed82852e1584c20fdb62cefed92b765dc9adc23"
+    },
+    "bars": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_pit_symmetric_2016_2026_v5.csv",
+      "sha256": "bb7aaae86bc1909c6b0a1094a59430f5ed9900bb3ec63891bbdcda8cda055139"
+    },
+    "lifetimes": {
+      "path": "/Users/batuhankiskac/Desktop/ParayaBuck/data/historical/equity_entity_lifetimes_full_v5.csv",
+      "sha256": "ed675d9b6ba7f173b65ae2b5272ffb62e09d6a007ed36ea22d3aba7a36774596"
+    }
+  },
+  "development_dates": [
+    "2017-01-03",
+    "2021-12-31"
+  ],
+  "endpoint": "2026-07-30T04:00:00+00:00",
+  "experiment": "information_discreteness_economic_v1",
+  "live_enabled": false,
+  "paper_identity": "equity_residual_momentum_v3",
+  "paper_live_changes": false,
+  "production_changes": false,
+  "runtime_mode": "paper",
+  "schedule_count": 127,
+  "schedule_policy": "last completed regular NYSE session per calendar month, SPY timestamp authority",
+  "schedule_sha256": "95485b42df5f450e60696aaaf14efbc4c8433af198828dd3a923e7813a27eb20",
+  "validation_dates": [
+    "2022-01-03",
+    "2026-07-30"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "all_pass": false,
+  "gates": {
+    "G1_validity_causality_data_pit_roles_identity_independent_verifier": true,
+    "G2_candidate_positive_dev_validation_full": true,
+    "G3_full_relative_risk_adjusted": false,
+    "G4_validation_relative": false,
+    "G5_full_drawdown_calmar": false,
+    "G6_cost_stress": false,
+    "G7_turnover_execution": true,
+    "G8_concentration": true,
+    "G9_scope_identity": true
+  },
+  "improved_full_risk_adjusted_metrics": 0
+}

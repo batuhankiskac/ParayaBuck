@@ -1,0 +1,2536 @@
+{
+  "interpretation": "descriptive only; no overlap gate was added",
+  "mean_b_also_a_selected_fraction": 0.13742690058479531,
+  "mean_jaccard": 0.07880591630591631,
+  "observations": 114,
+  "rank_overlap_correlation": null,
+  "rank_overlap_note": "Not available from persisted post-overlay target records; selected-set overlap remains descriptive only.",
+  "rows": [
+    {
+      "a_selected": [
+        "AMAT",
+        "BAC",
+        "FITB",
+        "GEN",
+        "LNC",
+        "ZION"
+      ],
+      "a_timestamp": "2017-02-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "CFG",
+        "DPZ",
+        "EXEL",
+        "GLW",
+        "URI",
+        "ZION"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2017-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AMAT",
+        "BA",
+        "BAC",
+        "GEN",
+        "LNC"
+      ],
+      "a_timestamp": "2017-03-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "CFG",
+        "CNP",
+        "DOC",
+        "DPZ",
+        "EXEL",
+        "ZION"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "DE",
+        "GD",
+        "GEN",
+        "JPM",
+        "LHX"
+      ],
+      "a_timestamp": "2017-04-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "DOC",
+        "DPZ",
+        "GEN",
+        "ISRG",
+        "QQQ",
+        "ZION"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2017-04-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AMAT",
+        "ANET",
+        "BAC",
+        "DGX",
+        "GD"
+      ],
+      "a_timestamp": "2017-05-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AKAM",
+        "ALGN",
+        "DPZ",
+        "GEN",
+        "QQQ",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ADBE",
+        "CBOE",
+        "CHKP",
+        "ISRG",
+        "TMUS"
+      ],
+      "a_timestamp": "2017-06-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "APH",
+        "DPZ",
+        "ISRG",
+        "QLD",
+        "QQQ",
+        "TER"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2017-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CCL",
+        "DRI",
+        "EG",
+        "ISRG",
+        "MAR"
+      ],
+      "a_timestamp": "2017-07-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "APH",
+        "DPZ",
+        "QLD",
+        "QQQ",
+        "TER",
+        "ZION"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CBOE",
+        "ELV",
+        "MCD",
+        "RCL",
+        "TNL"
+      ],
+      "a_timestamp": "2017-08-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ALL",
+        "AON",
+        "APH",
+        "DPZ",
+        "QLD",
+        "QQQ"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ADBE",
+        "CBOE",
+        "MCD"
+      ],
+      "a_timestamp": "2017-09-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AON",
+        "BA",
+        "BAX",
+        "EQIX",
+        "ISRG",
+        "QQQ"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-09-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BA",
+        "BAX",
+        "CDNS",
+        "ISRG",
+        "MCD",
+        "RTN"
+      ],
+      "a_timestamp": "2017-10-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "AON",
+        "DPZ",
+        "DVMT",
+        "GD",
+        "ISRG",
+        "TNL"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2017-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BA",
+        "CBOE",
+        "DHI",
+        "ISRG",
+        "MAR",
+        "RHT"
+      ],
+      "a_timestamp": "2017-11-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AON",
+        "BAX",
+        "CGNX",
+        "DVMT",
+        "IPGP",
+        "QQQ"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BA",
+        "CBOE",
+        "DHI",
+        "MAR",
+        "MCHI",
+        "STZ"
+      ],
+      "a_timestamp": "2017-12-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AON",
+        "DVMT",
+        "IPGP",
+        "LMT",
+        "QQQ",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2017-12-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CAT",
+        "CBOE",
+        "MAR",
+        "STZ"
+      ],
+      "a_timestamp": "2018-01-29T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANET",
+        "IPGP",
+        "QQQ",
+        "TER",
+        "TNL",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABT",
+        "CAT",
+        "EL",
+        "ELV",
+        "MAR",
+        "TSS"
+      ],
+      "a_timestamp": "2018-02-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ALGN",
+        "ANET",
+        "BAX",
+        "ISRG",
+        "LMT",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CME",
+        "EL",
+        "PVH",
+        "RHT",
+        "RTN"
+      ],
+      "a_timestamp": "2018-03-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANET",
+        "DVMT",
+        "IPGP",
+        "LMT",
+        "NOW",
+        "VGT"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-03-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "EL",
+        "ETFC",
+        "RHT"
+      ],
+      "a_timestamp": "2018-04-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANET",
+        "CBOE",
+        "ISRG",
+        "LMT",
+        "TDG",
+        "TER"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "ETFC",
+        "KDP"
+      ],
+      "a_timestamp": "2018-05-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANET",
+        "BAX",
+        "LMT",
+        "MPC",
+        "TDG",
+        "TSS"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AKAM",
+        "AMZN",
+        "CPRT",
+        "ETFC",
+        "GDDY"
+      ],
+      "a_timestamp": "2018-06-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ALGN",
+        "ANET",
+        "DIA",
+        "DINO",
+        "GDDY",
+        "LMT"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1,
+      "timestamp": "2018-06-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "AMZN",
+        "CPRT",
+        "ETFC"
+      ],
+      "a_timestamp": "2018-07-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ALGN",
+        "DVMT",
+        "FFIV",
+        "GDDY",
+        "PEG",
+        "TSS"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "AMZN",
+        "CNC",
+        "CRM",
+        "FFIV",
+        "GDDY"
+      ],
+      "a_timestamp": "2018-08-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ALGN",
+        "CF",
+        "FFIV",
+        "GDDY",
+        "TSS",
+        "XLI"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2018-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AMZN",
+        "CNC",
+        "COP",
+        "FDC",
+        "FOX",
+        "GDDY"
+      ],
+      "a_timestamp": "2018-09-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ALGN",
+        "AMZN",
+        "DINO",
+        "FFIV",
+        "GDDY",
+        "IPGP"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2018-09-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BSX",
+        "CNC",
+        "FFIV"
+      ],
+      "a_timestamp": "2018-10-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ALGN",
+        "AMZN",
+        "CF",
+        "CRM",
+        "DINO",
+        "FFIV"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2018-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BSX",
+        "ESRX",
+        "FOX",
+        "FOXA",
+        "LLY",
+        "MSI"
+      ],
+      "a_timestamp": "2018-11-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AMZN",
+        "CF",
+        "DINO",
+        "FFIV",
+        "FTNT",
+        "GDDY"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BALL",
+        "BSX",
+        "ELV",
+        "FOX",
+        "FOXA",
+        "MSI"
+      ],
+      "a_timestamp": "2018-12-31T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AAP",
+        "AMZN",
+        "CF",
+        "FFIV",
+        "LLY",
+        "NOW"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2018-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABT",
+        "BSX",
+        "FOX",
+        "FOXA",
+        "MSFT"
+      ],
+      "a_timestamp": "2019-01-28T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AMZN",
+        "DATA",
+        "EW",
+        "EXC",
+        "FFIV",
+        "LLY"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABT",
+        "BALL",
+        "BSX",
+        "FOX",
+        "FOXA",
+        "LLY"
+      ],
+      "a_timestamp": "2019-02-25T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "AEP",
+        "AMT",
+        "AMZN",
+        "CHD",
+        "EXC",
+        "LLY"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2019-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADSK",
+        "BALL",
+        "BSX",
+        "CDNS",
+        "CRM",
+        "LLY"
+      ],
+      "a_timestamp": "2019-03-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ADP",
+        "AEP",
+        "AMT",
+        "EXC",
+        "LLY",
+        "TNDM"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2019-03-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABT",
+        "AEP",
+        "AMT",
+        "AWK",
+        "CDNS",
+        "EXC"
+      ],
+      "a_timestamp": "2019-04-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.5,
+      "b_selected": [
+        "ADP",
+        "AEP",
+        "AMT",
+        "DATA",
+        "EXC",
+        "LLY"
+      ],
+      "intersection_count": 3,
+      "jaccard": 0.3333333333333333,
+      "timestamp": "2019-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AES",
+        "AMT",
+        "BALL",
+        "CDNS",
+        "DHR",
+        "TDG"
+      ],
+      "a_timestamp": "2019-05-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "AEP",
+        "AMT",
+        "COST",
+        "EXC",
+        "LLY",
+        "VGT"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2019-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AEP",
+        "AMT",
+        "DHR",
+        "FDS",
+        "MSI",
+        "WP"
+      ],
+      "a_timestamp": "2019-06-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "AEP",
+        "AMT",
+        "BALL",
+        "CHD",
+        "COST",
+        "LLY"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2019-06-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AMT",
+        "APD",
+        "AWK",
+        "DHR",
+        "MSI",
+        "TDG"
+      ],
+      "a_timestamp": "2019-07-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ADP",
+        "BALL",
+        "CME",
+        "COST",
+        "LLY",
+        "TMO"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AMT",
+        "APD",
+        "AZO",
+        "CDNS",
+        "DHR",
+        "MSI"
+      ],
+      "a_timestamp": "2019-08-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AEP",
+        "BALL",
+        "CME",
+        "COST",
+        "LLY",
+        "TSS"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-08-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APD",
+        "AWK",
+        "AZO",
+        "CDNS",
+        "EXR",
+        "MSI"
+      ],
+      "a_timestamp": "2019-09-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AMT",
+        "BALL",
+        "COO",
+        "COST",
+        "LLY",
+        "NEE"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AWK",
+        "CPRT",
+        "CTAS",
+        "ES",
+        "ETR",
+        "NEE"
+      ],
+      "a_timestamp": "2019-10-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "AEP",
+        "CCI",
+        "COST",
+        "ES",
+        "EVRG",
+        "NEE"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2019-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ASML",
+        "AZO",
+        "CHTR",
+        "CPAY",
+        "ETR",
+        "NEE"
+      ],
+      "a_timestamp": "2019-11-25T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "APD",
+        "COST",
+        "ES",
+        "INXN",
+        "ISRG",
+        "TMO"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-11-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ASML",
+        "CDW",
+        "CPB",
+        "CPRT",
+        "ETR"
+      ],
+      "a_timestamp": "2019-12-30T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "APD",
+        "CDNS",
+        "COO",
+        "ISRG",
+        "TMO",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2019-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ASML",
+        "ETR",
+        "NEE"
+      ],
+      "a_timestamp": "2020-01-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2020-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ETR",
+        "NEE"
+      ],
+      "a_timestamp": "2020-02-24T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "APD",
+        "EFX",
+        "ES",
+        "INFO",
+        "NEE",
+        "XLU"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2020-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AGN",
+        "CHTR",
+        "CSGP",
+        "MSFT",
+        "TIF"
+      ],
+      "a_timestamp": "2020-03-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "APD",
+        "ES"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2020-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ADBE",
+        "AMAT",
+        "CHTR",
+        "MSFT",
+        "TIF"
+      ],
+      "a_timestamp": "2020-04-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ES"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2020-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "EQIX",
+        "LLY",
+        "MSFT",
+        "ZNGA"
+      ],
+      "a_timestamp": "2020-05-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "CME",
+        "ENPH",
+        "ES",
+        "FNV",
+        "IAU",
+        "WPM"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2020-05-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AMZN",
+        "ASML",
+        "CDNS",
+        "CLX",
+        "QLD"
+      ],
+      "a_timestamp": "2020-06-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ACWI",
+        "ENPH",
+        "IAU",
+        "ILMN",
+        "PLAN",
+        "QLD"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2020-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "ADBE",
+        "ARKK",
+        "ASML",
+        "QLD",
+        "TMUS"
+      ],
+      "a_timestamp": "2020-07-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ADSK",
+        "ARKK",
+        "IAU",
+        "QLD",
+        "QQQ",
+        "VGT"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2020-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AMZN",
+        "ARKK",
+        "CLX",
+        "QLD",
+        "ZNGA"
+      ],
+      "a_timestamp": "2020-08-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "A",
+        "ARKK",
+        "IAU",
+        "QLD",
+        "QQQ",
+        "XLC"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2020-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "ARKK",
+        "CDNS",
+        "CMG",
+        "NOW",
+        "QLD"
+      ],
+      "a_timestamp": "2020-09-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ARKK",
+        "IAU",
+        "QLD",
+        "QQQ",
+        "VGT",
+        "XLK"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2020-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ARKK",
+        "CMG",
+        "NOW",
+        "QLD"
+      ],
+      "a_timestamp": "2020-10-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.4,
+      "b_selected": [
+        "ARKK",
+        "QLD",
+        "QQQ",
+        "VGT",
+        "XLK"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2857142857142857,
+      "timestamp": "2020-10-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AAPL",
+        "AMZN",
+        "ARKK",
+        "FDX",
+        "MTCH",
+        "NOW"
+      ],
+      "a_timestamp": "2020-11-30T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ARKK",
+        "QLD",
+        "QQQ",
+        "TTD",
+        "VGT",
+        "Z"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2020-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ARKK",
+        "FCX",
+        "FDX",
+        "MTCH",
+        "NVDA"
+      ],
+      "a_timestamp": "2020-12-28T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ARKG",
+        "ARKK",
+        "ARKW",
+        "QQQ",
+        "TTD",
+        "VGT"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1,
+      "timestamp": "2020-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ARKK",
+        "ARKW",
+        "FDX",
+        "ICLN",
+        "MTCH",
+        "VIPS"
+      ],
+      "a_timestamp": "2021-01-25T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.4,
+      "b_selected": [
+        "ARKK",
+        "ARKW",
+        "QQQ",
+        "TTD",
+        "VGT"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2222222222222222,
+      "timestamp": "2021-01-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALGN",
+        "ARKK",
+        "ARKW",
+        "ICLN"
+      ],
+      "a_timestamp": "2021-02-22T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ARKF",
+        "ARKG",
+        "ARKK",
+        "ARKW",
+        "QLD",
+        "QQQ"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.25,
+      "timestamp": "2021-02-26T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APTV",
+        "ARKW",
+        "DE",
+        "ZBRA"
+      ],
+      "a_timestamp": "2021-03-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ARKK",
+        "ARKW",
+        "QLD",
+        "QQQ",
+        "TTD",
+        "XLC"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1111111111111111,
+      "timestamp": "2021-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALLY",
+        "DE",
+        "EXPE",
+        "GM",
+        "SCHW",
+        "URI"
+      ],
+      "a_timestamp": "2021-04-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ARKK",
+        "ARKW",
+        "QLD",
+        "TTD",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2021-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALLY",
+        "COF",
+        "DE",
+        "HPQ",
+        "JCI",
+        "SCHW"
+      ],
+      "a_timestamp": "2021-05-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ACWI",
+        "HPQ",
+        "QLD",
+        "QQQ",
+        "TTD",
+        "XLC"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2021-05-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALLY",
+        "COF",
+        "DE",
+        "DELL",
+        "JCI",
+        "SCHW"
+      ],
+      "a_timestamp": "2021-06-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ACWI",
+        "BRK.A",
+        "BRK.B",
+        "EFA",
+        "HPQ",
+        "TTD"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2021-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALLY",
+        "AMAT",
+        "EXR",
+        "JCI",
+        "KSU",
+        "SCHW"
+      ],
+      "a_timestamp": "2021-07-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ACWI",
+        "EFA",
+        "HPQ",
+        "JCI",
+        "QLD",
+        "TTD"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2021-07-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AXP",
+        "EFX",
+        "EPAM",
+        "EXR",
+        "FTNT",
+        "JCI"
+      ],
+      "a_timestamp": "2021-08-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ACWI",
+        "EFA",
+        "EXR",
+        "FTNT",
+        "HPQ",
+        "QQQ"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2021-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "DHR",
+        "EFX",
+        "EPAM",
+        "JCI"
+      ],
+      "a_timestamp": "2021-09-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ACWI",
+        "EFA",
+        "FTNT",
+        "HPQ",
+        "JCI",
+        "QQQ"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1111111111111111,
+      "timestamp": "2021-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "A",
+        "DHR",
+        "EFX",
+        "GOOGL",
+        "JCI",
+        "WAT"
+      ],
+      "a_timestamp": "2021-10-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "EFA",
+        "FTNT",
+        "GOOGL",
+        "HPQ",
+        "INMD",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2021-10-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AIG",
+        "AON",
+        "AZO",
+        "EFX",
+        "FTNT",
+        "LLY"
+      ],
+      "a_timestamp": "2021-11-29T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.25,
+      "b_selected": [
+        "EFA",
+        "FTNT",
+        "HPQ",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1111111111111111,
+      "timestamp": "2021-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AZO",
+        "COST",
+        "DPZ",
+        "LOW",
+        "PLD",
+        "TMO"
+      ],
+      "a_timestamp": "2021-12-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "FTNT",
+        "HPQ",
+        "ISRG",
+        "PLD",
+        "QQQ",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2021-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AZO",
+        "COST",
+        "CVS",
+        "PLD",
+        "TMO",
+        "ZTS"
+      ],
+      "a_timestamp": "2022-01-31T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "FTNT",
+        "ISRG",
+        "JCI",
+        "PLD",
+        "XLRE",
+        "XLY"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2022-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADM",
+        "AMP",
+        "AZO",
+        "CVS",
+        "CVX",
+        "PLD"
+      ],
+      "a_timestamp": "2022-02-28T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "FTNT",
+        "JCI",
+        "PLD",
+        "RSG",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2022-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABBV",
+        "ANET",
+        "AZO",
+        "COST",
+        "CVS",
+        "DLTR"
+      ],
+      "a_timestamp": "2022-03-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "ABBV",
+        "PLD",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2022-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABBV",
+        "ADM",
+        "ANET",
+        "BG",
+        "COST",
+        "DLTR"
+      ],
+      "a_timestamp": "2022-04-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.5,
+      "b_selected": [
+        "ABBV",
+        "XLRE"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.14285714285714285,
+      "timestamp": "2022-04-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABBV",
+        "ANET",
+        "CTVA"
+      ],
+      "a_timestamp": "2022-05-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "AR",
+        "CTAS",
+        "CVX",
+        "KO",
+        "RSG"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2022-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABBV",
+        "ACC",
+        "COR",
+        "CTVA",
+        "ELV",
+        "XME"
+      ],
+      "a_timestamp": "2022-06-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.2,
+      "b_selected": [
+        "ABBV",
+        "AR",
+        "CTAS",
+        "CVX",
+        "KO"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1,
+      "timestamp": "2022-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ABBV",
+        "BMY",
+        "CI",
+        "COR",
+        "CTVA",
+        "LLY"
+      ],
+      "a_timestamp": "2022-07-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "ADM",
+        "CVX",
+        "KO",
+        "MPC",
+        "PEP"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2022-07-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ANET",
+        "CDNS",
+        "CI",
+        "CSL",
+        "CTVA",
+        "LLY"
+      ],
+      "a_timestamp": "2022-08-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "ADM",
+        "AR",
+        "CSL",
+        "CVX",
+        "KO"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2022-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AJG",
+        "AZO",
+        "CI",
+        "CSL",
+        "CTVA",
+        "LLY"
+      ],
+      "a_timestamp": "2022-09-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ADM",
+        "CVX"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2022-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AJG",
+        "AZO",
+        "CI",
+        "CTVA",
+        "LPLA",
+        "TMUS"
+      ],
+      "a_timestamp": "2022-10-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ABBV",
+        "AEP",
+        "CVX",
+        "EQT",
+        "KO",
+        "MPC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2022-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADM",
+        "AZO",
+        "CI",
+        "CVX",
+        "TMUS"
+      ],
+      "a_timestamp": "2022-11-28T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "CSL",
+        "CVX",
+        "EQT",
+        "MPC",
+        "XOM"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1,
+      "timestamp": "2022-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADP",
+        "AJG",
+        "AZO",
+        "CI",
+        "CVX",
+        "DE"
+      ],
+      "a_timestamp": "2022-12-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ABBV",
+        "ADM",
+        "AEP",
+        "BTI",
+        "GD",
+        "GIS"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2022-12-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BIIB",
+        "BP",
+        "CAT",
+        "DE",
+        "FLEX",
+        "XOM"
+      ],
+      "a_timestamp": "2023-01-30T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ABBV",
+        "GD",
+        "GIS",
+        "LPLA",
+        "QID",
+        "XOM"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2023-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ACGL",
+        "AMP",
+        "APD",
+        "BIIB",
+        "CAT",
+        "GILD"
+      ],
+      "a_timestamp": "2023-02-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AEP",
+        "GD",
+        "LPLA",
+        "TDG",
+        "XLE",
+        "XOP"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2023-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BIIB",
+        "BLDR",
+        "CEG",
+        "DECK",
+        "DHI",
+        "FICO"
+      ],
+      "a_timestamp": "2023-03-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "BP",
+        "CLX",
+        "GIS",
+        "LPLA",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2023-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BA",
+        "BKNG",
+        "BLDR",
+        "CDNS",
+        "DECK",
+        "FIVE"
+      ],
+      "a_timestamp": "2023-04-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ACGL",
+        "AXON",
+        "GIS",
+        "LPLA",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2023-04-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BA",
+        "BIIB",
+        "BKNG",
+        "CPRT",
+        "DECK",
+        "FICO"
+      ],
+      "a_timestamp": "2023-05-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ACGL",
+        "AXON",
+        "LPLA",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2023-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BIIB",
+        "BKNG",
+        "CPRT",
+        "FICO",
+        "LLY",
+        "TDG"
+      ],
+      "a_timestamp": "2023-06-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "APO",
+        "BA",
+        "BLDR",
+        "GE",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2023-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ACGL",
+        "CPRT",
+        "DHI",
+        "GE",
+        "LLY",
+        "TDG"
+      ],
+      "a_timestamp": "2023-07-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "APO",
+        "BA",
+        "BLDR",
+        "GE",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2023-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CARR",
+        "CPRT",
+        "FDX",
+        "GE",
+        "ITB",
+        "TDG"
+      ],
+      "a_timestamp": "2023-08-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "APO",
+        "BA",
+        "BLDR",
+        "PCAR",
+        "RCL",
+        "TDG"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2023-08-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CPRT",
+        "CRH",
+        "FICO",
+        "GE",
+        "ITB"
+      ],
+      "a_timestamp": "2023-09-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "APO",
+        "BLDR",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2023-09-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CPRT",
+        "FDX",
+        "GE",
+        "GOOGL",
+        "META"
+      ],
+      "a_timestamp": "2023-10-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "APO",
+        "BLDR",
+        "CPRT",
+        "GE",
+        "PCAR",
+        "TDG"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2023-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CDNS",
+        "CPRT",
+        "GE",
+        "META",
+        "NOW"
+      ],
+      "a_timestamp": "2023-11-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ACGL",
+        "APO",
+        "CPRT",
+        "DECK",
+        "SPOT",
+        "TDG"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2023-11-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ADBE",
+        "CBOE",
+        "DELL",
+        "META",
+        "NOW",
+        "UBER"
+      ],
+      "a_timestamp": "2023-12-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "APO",
+        "BLDR",
+        "CPRT",
+        "DECK",
+        "NOW",
+        "SPOT"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2023-12-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BKNG",
+        "FERG",
+        "FICO",
+        "META",
+        "NOW",
+        "UBER"
+      ],
+      "a_timestamp": "2024-01-29T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "APO",
+        "CPRT",
+        "NOW"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2024-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AKAM",
+        "COR",
+        "GDDY",
+        "NOW",
+        "STX",
+        "TDG"
+      ],
+      "a_timestamp": "2024-02-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "APO",
+        "COST",
+        "CRWD",
+        "CTAS",
+        "NOW",
+        "TDG"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2024-02-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CMG",
+        "COR",
+        "COST",
+        "CRH",
+        "GE",
+        "RSG"
+      ],
+      "a_timestamp": "2024-03-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "APO",
+        "COR",
+        "COST",
+        "CRWD",
+        "CTAS",
+        "NOW"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2024-03-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALL",
+        "COR",
+        "CRH",
+        "ETN",
+        "PCAR",
+        "RSG"
+      ],
+      "a_timestamp": "2024-04-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.25,
+      "b_selected": [
+        "APO",
+        "COR",
+        "COST",
+        "NOW"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.1111111111111111,
+      "timestamp": "2024-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALL",
+        "CMG",
+        "COR",
+        "ETN",
+        "TDG"
+      ],
+      "a_timestamp": "2024-05-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANF",
+        "APO",
+        "CTAS",
+        "NOW",
+        "SPOT",
+        "VGT"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2024-05-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALL",
+        "APH",
+        "BSX",
+        "COST",
+        "EME",
+        "GDDY"
+      ],
+      "a_timestamp": "2024-06-24T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.5,
+      "b_selected": [
+        "ANF",
+        "COST",
+        "EME",
+        "GDDY",
+        "NOW",
+        "VGT"
+      ],
+      "intersection_count": 3,
+      "jaccard": 0.3333333333333333,
+      "timestamp": "2024-06-28T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ALL",
+        "BSX",
+        "CB",
+        "CL",
+        "COST",
+        "GDDY"
+      ],
+      "a_timestamp": "2024-07-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "COST",
+        "FICO",
+        "GDDY",
+        "GOOGL",
+        "NOW",
+        "VGT"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2024-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AXP",
+        "BNY",
+        "BSX",
+        "CL",
+        "CTAS",
+        "JPM"
+      ],
+      "a_timestamp": "2024-08-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "FICO",
+        "GDDY",
+        "NOW",
+        "SVIX",
+        "VGT",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2024-08-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AFL",
+        "BSX",
+        "CL",
+        "COST",
+        "LMT",
+        "TMUS"
+      ],
+      "a_timestamp": "2024-09-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "AFL",
+        "FICO",
+        "GDDY",
+        "NOW",
+        "RSG",
+        "VGT"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2024-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AFL",
+        "BSX",
+        "CL",
+        "LMT",
+        "MSI",
+        "PEG"
+      ],
+      "a_timestamp": "2024-10-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "AFL",
+        "FICO",
+        "NOW"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2024-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CBOE",
+        "FIS",
+        "GLW",
+        "KMI",
+        "MSI",
+        "TMUS"
+      ],
+      "a_timestamp": "2024-11-25T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "EME",
+        "FICO",
+        "FISV",
+        "GDDY",
+        "RSG",
+        "VGT"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2024-11-29T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BNY",
+        "FISV",
+        "FOXA",
+        "GDDY",
+        "KMI",
+        "MSI"
+      ],
+      "a_timestamp": "2024-12-30T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.5,
+      "b_selected": [
+        "BNY",
+        "FICO",
+        "FISV",
+        "GDDY",
+        "JEPQ",
+        "RSG"
+      ],
+      "intersection_count": 3,
+      "jaccard": 0.3333333333333333,
+      "timestamp": "2024-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BNY",
+        "BSX",
+        "FISV",
+        "GDDY",
+        "PM",
+        "TMUS"
+      ],
+      "a_timestamp": "2025-01-27T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "EME",
+        "FICO",
+        "FISV",
+        "GDDY",
+        "JEPQ",
+        "RSG"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2025-01-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AEE",
+        "BNY",
+        "BSX",
+        "CBRE",
+        "ETR",
+        "FTNT"
+      ],
+      "a_timestamp": "2025-02-24T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "EME",
+        "GDDY",
+        "JEPQ",
+        "PM",
+        "RSG",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-02-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BNY",
+        "FISV",
+        "FTNT",
+        "GILD",
+        "MMM",
+        "TZA"
+      ],
+      "a_timestamp": "2025-03-31T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "DTE",
+        "GDDY",
+        "JEPQ",
+        "PM",
+        "RSG",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "AJG",
+        "BNY",
+        "BRO",
+        "BSX",
+        "FTNT",
+        "KMI"
+      ],
+      "a_timestamp": "2025-04-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "DTE",
+        "GDDY",
+        "IAU",
+        "PM",
+        "RSG",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "BSX",
+        "BTI",
+        "DRI",
+        "ETR",
+        "IAU",
+        "PM"
+      ],
+      "a_timestamp": "2025-05-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.3333333333333333,
+      "b_selected": [
+        "AAPL",
+        "BTI",
+        "PM",
+        "RSG",
+        "TMUS",
+        "XLC"
+      ],
+      "intersection_count": 2,
+      "jaccard": 0.2,
+      "timestamp": "2025-05-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CME",
+        "DRI",
+        "GE",
+        "IAU",
+        "PM",
+        "RCL"
+      ],
+      "a_timestamp": "2025-06-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "CVNA",
+        "NDAQ",
+        "PM",
+        "RSG",
+        "TMUS",
+        "XLC"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2025-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "BTI",
+        "CRS",
+        "GE",
+        "IAU",
+        "RCL"
+      ],
+      "a_timestamp": "2025-07-28T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "CVNA",
+        "GILD",
+        "NDAQ",
+        "PM",
+        "TMUS",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-07-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "BTI",
+        "GE",
+        "JCI",
+        "PM",
+        "VXX"
+      ],
+      "a_timestamp": "2025-08-25T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "CVNA",
+        "GEV",
+        "JEPQ",
+        "NDAQ",
+        "PM",
+        "XLC"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2025-08-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "BA",
+        "EME",
+        "GDX",
+        "GE",
+        "RCL"
+      ],
+      "a_timestamp": "2025-09-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ANET",
+        "BNY",
+        "CVNA",
+        "GEV",
+        "JEPQ",
+        "XLC"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-09-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "GE",
+        "GLW",
+        "INSM",
+        "JBL",
+        "SGOL"
+      ],
+      "a_timestamp": "2025-10-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "ANET",
+        "CVNA",
+        "IAU",
+        "JEPQ",
+        "SGOL",
+        "XLC"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.09090909090909091,
+      "timestamp": "2025-10-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "CVS",
+        "EWY",
+        "GE",
+        "GLW",
+        "IAU"
+      ],
+      "a_timestamp": "2025-11-24T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ACWI",
+        "ANET",
+        "AXON",
+        "CIEN",
+        "CLS",
+        "JEPQ"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-11-28T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "ARGX",
+        "COR",
+        "GLW",
+        "GOOGL",
+        "IAU"
+      ],
+      "a_timestamp": "2025-12-29T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "ACWI",
+        "ANET",
+        "CIEN"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2025-12-31T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "APH",
+        "COPX",
+        "GLW",
+        "GOOGL",
+        "IAU",
+        "XME"
+      ],
+      "a_timestamp": "2026-01-26T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-01-30T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CAT",
+        "EWY",
+        "GOOGL",
+        "TEVA",
+        "WBD",
+        "XME"
+      ],
+      "a_timestamp": "2026-02-23T05:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "B",
+        "EWT",
+        "IAU",
+        "IAUM",
+        "JEPQ",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-02-27T05:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CAT",
+        "GOOGL",
+        "WBD"
+      ],
+      "a_timestamp": "2026-03-30T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "AEM",
+        "B",
+        "EMXC",
+        "JEPQ",
+        "LITE",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-03-31T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ATI",
+        "CAT",
+        "FIVE",
+        "GEV",
+        "SU",
+        "WBD"
+      ],
+      "a_timestamp": "2026-04-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "B",
+        "BNY",
+        "CIEN",
+        "LITE",
+        "STT",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-04-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CASY",
+        "CAT",
+        "DVN",
+        "FTI",
+        "MTZ",
+        "WBD"
+      ],
+      "a_timestamp": "2026-05-26T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "B",
+        "BNY",
+        "CIEN",
+        "EWT",
+        "JEPQ",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-05-29T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "ATI",
+        "CAT",
+        "CNQ",
+        "GOOGL",
+        "WBD",
+        "XOM"
+      ],
+      "a_timestamp": "2026-06-29T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.0,
+      "b_selected": [
+        "CIEN",
+        "EWT",
+        "JEPQ",
+        "STT",
+        "VGT",
+        "XLK"
+      ],
+      "intersection_count": 0,
+      "jaccard": 0.0,
+      "timestamp": "2026-06-30T04:00:00+00:00"
+    },
+    {
+      "a_selected": [
+        "CMI",
+        "EWT",
+        "MPC"
+      ],
+      "a_timestamp": "2026-07-27T04:00:00+00:00",
+      "b_also_a_selected_fraction": 0.16666666666666666,
+      "b_selected": [
+        "CIEN",
+        "COHR",
+        "EMXC",
+        "EWT",
+        "VGT",
+        "XLK"
+      ],
+      "intersection_count": 1,
+      "jaccard": 0.125,
+      "timestamp": "2026-07-30T04:00:00+00:00"
+    }
+  ]
+}

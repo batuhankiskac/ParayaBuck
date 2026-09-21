@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-21",
+  "decision": "QUANTILE_SPEC_REPAIRED",
+  "repair_class": "PRE_OUTCOME_SPECIFICATION_REPAIR",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "candidate_family_changed": false,
+  "original_frozen_design_sha": "4f454f5deb4c77151b574f87c29228c859cfc884",
+  "original_readiness_sha": "93e85169b9e1417902d3c13ac91fc1c304dda4f8",
+  "original_blocker": "FROZEN_Q90_CONVENTION_UNSPECIFIED",
+  "updated_main_sha": "980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+  "quantile_method": "repository_empirical_rejection_threshold_order_statistic",
+  "quantile_formula": "j=1+floor(9*(n-1)/10); Q0.90=x_(j)",
+  "reference_count": 49,
+  "one_based_index": 44,
+  "interpolation": "none",
+  "semantic_difference_count": 2,
+  "candidate_economics_run": false,
+  "production_or_configuration_changed": false,
+  "paper_or_live_promotion": false,
+  "next_authorized_stage": "G1_READINESS_V2_ONLY_AFTER_FROZEN_DESIGN_V2_SHA"
+}

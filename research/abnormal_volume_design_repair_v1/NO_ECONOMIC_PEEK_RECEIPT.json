@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-21",
+  "stage": "abnormal_volume_design_repair_v1",
+  "repair_class": "PRE_OUTCOME_SPECIFICATION_REPAIR",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",
+  "backtest_run": false,
+  "candidate_targets_calculated": false,
+  "future_returns_read": false,
+  "candidate_pnl_or_nav_calculated": false,
+  "cagr_sharpe_sortino_calmar_or_drawdown_calculated": false,
+  "ic_hit_rate_or_bucket_returns_calculated": false,
+  "parameter_performance_sweep_run": false,
+  "candidate_v3_outcome_correlation_calculated": false,
+  "archived_candidate_outcomes_read": false,
+  "allowed_reads": [
+    "original frozen design at 4f454f5deb4c77151b574f87c29228c859cfc884",
+    "original blocked readiness at 93e85169b9e1417902d3c13ac91fc1c304dda4f8",
+    "primary Gervais-Kaniel-Mingelgrin methodology",
+    "candidate-neutral repository source and history predating the abnormal-volume campaign",
+    "accepted month-end maintenance at 980c6b90b7f316bcec6a9466dfc9b0e1756cc748",
+    "synthetic contemporaneous quantile examples without returns"
+  ],
+  "independent_review": {
+    "status": "PASS_SCOPE_LIMITED",
+    "artifact_author": "/root/quantile_research",
+    "reviewer": "/root/readiness_v2_runner_plan",
+    "parent_confirmation": "/root",
+    "finding": "Independent artifact and repository-diff review found no candidate targets, future returns, economic outputs, estimator-performance comparisons, or production/configuration changes in Stage B.",
+    "scope_limit": "Repository and artifact inspection cannot prove the absence of unpersisted commands or external reads."
+  }
+}

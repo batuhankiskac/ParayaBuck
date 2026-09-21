@@ -1,0 +1,57 @@
+{
+  "artifact": "information_discreteness_economic_v1_frozen_input_receipt",
+  "repository": "/Users/batuhankiskac/Desktop/ParayaBuck",
+  "economic_branch": "research/information-discreteness-economic-v1",
+  "design_branch": "research/information-discreteness-design-v1",
+  "design_commit": "a822083eef4123d960ee7886d52951bfb20b29bd",
+  "starting_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "local_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "origin_main_sha": "839e92cf90e23cf83ce3cd2eb1b3ce34fefb97de",
+  "worktree_clean_before_economic_run": true,
+  "paper_identity": "equity_residual_momentum_v3",
+  "live_enabled": false,
+  "live_hard_dollar_cap": 0,
+  "candidate_identity": "equity_information_discreteness_continuous_v1",
+  "authority_directory": "research/information-discreteness-design-v1",
+  "authorities": [
+    {
+      "path": "research/information-discreteness-design-v1/CANDIDATE_DESIGN.md",
+      "sha256": "e81f4201c448fff6f7dbb2f04f90a70244cf368f274d7e923139d792f8b1e0dd"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/FUTURE_TEST_PROTOCOL.md",
+      "sha256": "25ca25f6e94fb61992260af7463d8f3f0851565fee3da5bd53afb963e412e050"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/DATA_FEASIBILITY.json",
+      "sha256": "111acb1cc6121b27682ad58a1e563dcbc362eaa2c0fd09a3dfd10eb3ad6c2e64"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/V3_DISTINCTNESS_AUDIT.md",
+      "sha256": "59d19d87abcfd45b60acb34862ffeb2ff6de4c0a628d3652c641ae406aad0e2e"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/CAUSALITY_AUDIT.md",
+      "sha256": "2c6e5ae1802dc3df0b61e2e83133bef68a16d707aeb077363c3704b98fbf9d3f"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/DESIGN_RED_TEAM.md",
+      "sha256": "63c529a7ff7ce65940e1030928468f10e8f7f74a08547b4fdc82db09bd52beff"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/NO_ECONOMIC_PEEK_RECEIPT.json",
+      "sha256": "2acc5f581f1b0c4260fbff85e14551a01acd9cccc651a8541858ec8e1e7f446f"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/DESIGN_DECISION.json",
+      "sha256": "c59caa3f258d6ecc9c340c00de0ec607dbbe9b64dd987d9dda72c49269a07119"
+    },
+    {
+      "path": "research/information-discreteness-design-v1/FINAL_DESIGN_REPORT.md",
+      "sha256": "c66a9f560faf79701c5edee8a4b1057a7cad3fb2d261b6a461684b38cf11728a"
+    }
+  ],
+  "authority_resolution": "Frozen design artifacts are authoritative over prompt summaries for formula, indexing, chronology, costs, and gates.",
+  "prior_candidate_b_economic_artifact_found": false,
+  "production_or_paper_change_authorized": false
+}

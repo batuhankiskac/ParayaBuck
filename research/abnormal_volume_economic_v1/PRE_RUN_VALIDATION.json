@@ -34,7 +34,12 @@
     "partial_and_unfilled_expiry_audit_persisted": true,
     "cash_dividend_duplicate_key_policy": "first canonical CSV occurrence wins, matching load_csv_corporate_actions"
   },
-  "candidate_run_started": false,
+  "pre_outcome_harness_commit": "ec3d20cf8e85cbe929e4f0293f1162d2c41ef875",
+  "focused_pre_run_tests": "120 passed",
+  "full_pre_run_tests": "1132 passed, 1 skipped; 6 sandbox-blocked localhost tests rerun outside sandbox and passed",
+  "static_pre_run_checks": "Ruff, Ruff format, mypy, py_compile, JSON validation, git diff --check passed",
+  "candidate_run_started": true,
+  "candidate_run_started_at_utc": "2026-09-21T15:47:53Z",
   "branch": "research/abnormal-volume-economic-v1",
   "branch_base_sha": "ec37b0f1671191f1842f5f952977bb60c772fa4b",
   "candidate": "AV49_D1_NORMALRET_M1_LONG / DESIGN_V2",

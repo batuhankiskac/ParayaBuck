@@ -1,0 +1,30 @@
+{
+  "campaign": "cash_based_operating_profitability_design_v1",
+  "status": "NO_ECONOMIC_PEEK_VERIFIED",
+  "allowed_outputs": [
+    "published literature results",
+    "accounting values and formula semantics",
+    "SEC source and accession provenance",
+    "standard-tag and component coverage counts",
+    "contemporaneous accounting ranks if needed",
+    "issuer and security mapping coverage",
+    "filing acceptance and data-vintage ages"
+  ],
+  "not_computed": [
+    "local candidate forward returns",
+    "PnL or NAV",
+    "CAGR, Sharpe or Sortino",
+    "maximum drawdown",
+    "information coefficient",
+    "hit rate",
+    "return buckets",
+    "economic parameter sweeps",
+    "candidate versus V3 outcome correlation"
+  ],
+  "market_bar_files_opened_by_structural_audit": false,
+  "candidate_frozen": false,
+  "backtest_authorized": false,
+  "combination_test_authorized": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false
+}

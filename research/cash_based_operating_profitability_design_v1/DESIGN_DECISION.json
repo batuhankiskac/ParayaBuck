@@ -1,0 +1,23 @@
+{
+  "campaign": "cash_based_operating_profitability_design_v1",
+  "decision": "DESIGN_REJECT_NO_DEFENSIBLE_HYPOTHESIS",
+  "primary_formula_verified": true,
+  "sec_accession_vintage_verdict": "OFFICIAL_SEC_ACCESSION_VINTAGE_FEASIBLE",
+  "missing_data_verdict": "SEC_MISSINGNESS_REQUIRES_FAIL_CLOSED_EXCLUSION",
+  "financial_exclusion_verdict": "PIT_FINANCIAL_EXCLUSION_FEASIBLE",
+  "security_mapping_verdict": "SECURITY_MAPPING_FEASIBLE_FAIL_CLOSED",
+  "modern_evidence_verdict": "MODERN_CBOP_LONG_LEG_EVIDENCE_INSUFFICIENT",
+  "concentration_verdict": "CBOP_REQUIRES_DIVERSIFICATION_INCOMPATIBLE_WITH_ARCHITECTURE",
+  "primary_reason": "Exact CbOP remains a credible diversified accounting factor, but modern large/liquid long-only evidence does not establish an independent edge and no external evidence supports compressing it into six names or one future satellite slot.",
+  "secondary_reasons": [
+    "SEC missing facts cannot inherit Compustat missing-to-zero semantics",
+    "SG&A/R&D and working-capital mappings require accession-specific relationships",
+    "value-weighted paper evidence cannot be reproduced with current canonical PIT market capitalization",
+    "the account-wide six-position limit conflicts with concurrent crypto inventory"
+  ],
+  "candidate_frozen": false,
+  "economic_test_authorized": false,
+  "combination_test_authorized": false,
+  "paper_change_authorized": false,
+  "live_change_authorized": false
+}

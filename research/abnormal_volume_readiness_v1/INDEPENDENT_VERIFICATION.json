@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "BLOCKER_VERIFIED",
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "runner_output_present": false,
+  "selection_reconstruction_performed": false,
+  "agreement": "G1_BLOCKED_DATA_OR_EXECUTION",
+  "reviewer": "/root/freeze_audit",
+  "verified": [
+    "frozen design branch, ancestry, remote state, and all 14 file hashes",
+    "canonical bars, lifetimes, and corporate-action hashes",
+    "absence of a frozen or repository-global strategy quantile convention",
+    "synthetic proof that accepted quantile methods can reverse eligible-name ordering",
+    "zero decisions, targets, or economic outputs and no source/config/production changes"
+  ],
+  "reason": "A uniquely defined independent selection reconstruction is impossible until the frozen Q0.90 convention is supplied; both runner and verifier remain fail-closed.",
+  "economic_outputs_inspected": false
+}

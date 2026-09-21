@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "canonical_endpoint": "2026-07-30",
+  "scheduled_boundaries_reconstructed": 0,
+  "population_decisions_reconstructed": 0,
+  "targets_produced": 0,
+  "economic_outputs_produced": 0,
+  "coverage_status": "NOT_RUN_FAIL_CLOSED",
+  "blocker": "Frozen selection-relevant Q0.90 estimator/interpolation convention is unspecified."
+}

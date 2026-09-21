@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "expected_main_sha": "86123374e41735d8d163c7fbed5bf5edfc43468d",
+  "frozen_design_branch": "research/abnormal-volume-design-v1",
+  "frozen_design_sha": "4f454f5deb4c77151b574f87c29228c859cfc884",
+  "frozen_design_remote_state": "pushed",
+  "files": [
+    {"path": "research/abnormal_volume_design_v1/CANDIDATE_DESIGN.md", "sha256": "f60618a5daf54ee81f39c4aca7cce8a48fd0c87f6e17d1d4ae0b6e77c1af3e58"},
+    {"path": "research/abnormal_volume_design_v1/CAUSALITY_AUDIT.md", "sha256": "12e5b21793016cbc2970efc141d084b8bba4efdafe72ee2fc60bf9e2d7750a4f"},
+    {"path": "research/abnormal_volume_design_v1/CURRENT_CAPABILITY_AUDIT.md", "sha256": "3f6e46bfc739f2f85a064e88da31881b3e45f5d636218d2476ca4e2905bce19c"},
+    {"path": "research/abnormal_volume_design_v1/DATA_FEASIBILITY.json", "sha256": "a68c9b07b0cb49b20c14dcaa05b31d4bb6c32db43100d8265deb55f49c795ec8"},
+    {"path": "research/abnormal_volume_design_v1/DESIGN_DECISION.json", "sha256": "ca79c4651b744512b33069836fecfa9acb9649385aceaff3b2c152fea91dce6e"},
+    {"path": "research/abnormal_volume_design_v1/DESIGN_RED_TEAM.md", "sha256": "0fe8041c7a46c73523c8225c7cf6e382b2ce3222426ed6469022342d3be9bd78"},
+    {"path": "research/abnormal_volume_design_v1/FINAL_DESIGN_REPORT.md", "sha256": "65ea2321746e26c13564a2ac8ec1b0d54f7c9849dc8ef11580f156d31defa157"},
+    {"path": "research/abnormal_volume_design_v1/FUTURE_TEST_PROTOCOL.md", "sha256": "c2be548745d0bfbd3583ef9d2405fae5aea272c72c0bec4e3444641f22d8cbe1"},
+    {"path": "research/abnormal_volume_design_v1/LITERATURE_REVIEW.md", "sha256": "72da20b0ae68dfac1477000952bd7928c4ed744a6e83a6452a6ca2ce9a91b208"},
+    {"path": "research/abnormal_volume_design_v1/NO_ECONOMIC_PEEK_RECEIPT.json", "sha256": "1a5f2d017690871d9071fba5b2f48721359a15ec7d170ff42d84b4be9d06526c"},
+    {"path": "research/abnormal_volume_design_v1/SPLIT_VOLUME_AUDIT.md", "sha256": "709a7897ba75104463137864853d49d0de3aaa8b7d6a2306f191120372f2226f"},
+    {"path": "research/abnormal_volume_design_v1/UNIVERSE_LIMITATION_AUDIT.md", "sha256": "1d605ceb2c7d3523551de1bdd4cef1a18578b5a2e886cf883970db25e4cfb81a"},
+    {"path": "research/abnormal_volume_design_v1/V3_DISTINCTNESS_AUDIT.md", "sha256": "a3c7c073ed4b0e0c083fc51578fc1f3656404de76dd7932b51e9b6f756dc2653"},
+    {"path": "research/abnormal_volume_design_v1/VOLUME_SEMANTICS_AUDIT.md", "sha256": "f50a61c6ff40c70917c43243ea4d7c30a4caecf8d989dae86231821c4acff6a0"}
+  ]
+}

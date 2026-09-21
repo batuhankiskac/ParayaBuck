@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "PASS_EXISTING_REPOSITORY_BLOCKED_CANDIDATE_HARNESS",
+  "candidate_harness_tests": {
+    "status": "NOT_RUN",
+    "reason": "No faithful candidate harness can be built before the frozen Q0.90 convention is specified."
+  },
+  "existing_focused_tests": {
+    "status": "PASS",
+    "passed": 36,
+    "duration_seconds": 3.72,
+    "scope": [
+      "backtest lifetimes",
+      "terminal lifecycle",
+      "canonical CSV loaders",
+      "PIT universe parity"
+    ]
+  },
+  "full_pytest": {
+    "sandbox_run": "1120 passed, 1 skipped, 6 loopback socket tests blocked by PermissionError",
+    "permitted_loopback_rerun": "6 passed",
+    "effective_status": "PASS_WITH_SANDBOX_RERUN"
+  },
+  "ruff_check": "PASS",
+  "ruff_format_check": "PASS_247_FILES",
+  "mypy": "PASS_132_SOURCE_FILES",
+  "git_diff_check": "PASS",
+  "production_isolation": "PASS_10_PROTECTED_PATHS",
+  "economic_tests_run": false
+}

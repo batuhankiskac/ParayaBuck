@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "candidate": "AV49_D1_NORMALRET_M1_LONG",
+  "decision": "G1_BLOCKED_DATA_OR_EXECUTION",
+  "frozen_design_sha": "4f454f5deb4c77151b574f87c29228c859cfc884",
+  "blocking_gate": "G1.2_FROZEN_SIGNAL_IDENTITY",
+  "reason_code": "FROZEN_Q90_CONVENTION_UNSPECIFIED",
+  "reason": "The selection-relevant prior-49 0.90 quantile has no frozen estimator/interpolation convention; choosing one can change selected names.",
+  "design_modified": false,
+  "candidate_economics_run": false,
+  "production_changed": false
+}

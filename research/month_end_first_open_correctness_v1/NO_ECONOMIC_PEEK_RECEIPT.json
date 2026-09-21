@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "stage": "candidate_neutral_month_end_maintenance",
+  "abnormal_volume_candidate_imported": false,
+  "abnormal_volume_targets_calculated": false,
+  "abnormal_volume_future_returns_calculated": false,
+  "abnormal_volume_economics_calculated": false,
+  "parameter_performance_sweep_run": false,
+  "allowed_control": "Fresh canonical incumbent V3 pre/post maintenance parity at frozen 1x/2x/3x costs",
+  "production_strategy_or_config_changed": false,
+  "broker_orders_placed": false,
+  "status": "PASS_SCOPE_LIMITED",
+  "reviewer": "/root/quantile_research",
+  "finding": "No abnormal-volume candidate implementation, import, targets, future returns, economics, correlation, or parameter sweep was found; only the explicitly allowed incumbent V3 maintenance parity was run.",
+  "scope_limit": "Repository and artifact inspection cannot prove the absence of unpersisted external actions."
+}

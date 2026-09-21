@@ -20,7 +20,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, cast
 
 try:
     from .frozen_candidate_strategy import EquityInformationDiscretenessContinuous1dV1
@@ -323,10 +323,11 @@ class CoreSatelliteStrategy(PortfolioStrategy):
         return replace(context, history=history, prices=prices)
 
     def _core_decision(self, context: PortfolioContext) -> None:
-        ranked, residual_vols = self.v3._score_candidates(context)
+        v3 = cast(Any, self.v3)
+        ranked, residual_vols = v3._score_candidates(context)
         filtered = tuple((score, symbol) for score, symbol in ranked if symbol != self.reservation_symbol)
         selected = tuple(symbol for _score, symbol in filtered[:CORE_MAX_POSITIONS])
-        raw = dict(self.v3._position_weights(selected, residual_vols))
+        raw = dict(v3._position_weights(selected, residual_vols))
         raw_total = sum(raw.values())
         scale = min(1.0, CORE_ALLOCATION / raw_total) if raw_total > 0 else 1.0
         source_rank = {symbol: index for index, (_score, symbol) in enumerate(ranked, start=1)}
@@ -701,15 +702,17 @@ def _source_attribution(
         cost_events.append(
             {"timestamp": fill.timestamp.isoformat(), "symbol": fill.symbol, "source": source, "cost": cost}
         )
-    for event in result.terminal_events:
-        timestamp = datetime.fromisoformat(str(event["timestamp"]))
-        source = _source_map_for_timestamp(strategy, timestamp).get(str(event["symbol"]), "v3_core")
+    for terminal_event in result.terminal_events:
+        timestamp = datetime.fromisoformat(str(terminal_event["timestamp"]))
+        source = _source_map_for_timestamp(strategy, timestamp).get(str(terminal_event["symbol"]), "v3_core")
         cost = (
-            float(event.get("slippage_cost", 0.0)) + float(event.get("spread_cost", 0.0)) + float(event.get("fee", 0.0))
+            _as_float(terminal_event.get("slippage_cost"))
+            + _as_float(terminal_event.get("spread_cost"))
+            + _as_float(terminal_event.get("fee"))
         )
         source_costs[source] += cost
         cost_events.append(
-            {"timestamp": timestamp.isoformat(), "symbol": event["symbol"], "source": source, "cost": cost}
+            {"timestamp": timestamp.isoformat(), "symbol": terminal_event["symbol"], "source": source, "cost": cost}
         )
 
     # Dividend attribution is reconstructed from the actual fill inventory and
@@ -760,10 +763,14 @@ def _source_attribution(
         raise RuntimeError(f"Source attribution mismatch: {total_realized} != {expected_realized}")
     source_rows: dict[str, dict[str, object]] = {}
     source_symbol_pnl: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    for event in source_events:
-        source_symbol_pnl[str(event["source"])][str(event["symbol"])] += _as_float(event.get("net_pnl"))
-    for event in dividends:
-        source_symbol_pnl[str(event["source"])][str(event["symbol"])] += _as_float(event.get("amount"))
+    for source_event in source_events:
+        source_symbol_pnl[str(source_event["source"])][str(source_event["symbol"])] += _as_float(
+            source_event.get("net_pnl")
+        )
+    for dividend_event in dividends:
+        source_symbol_pnl[str(dividend_event["source"])][str(dividend_event["symbol"])] += _as_float(
+            dividend_event.get("amount")
+        )
     for source in ("v3_core", "id_satellite"):
         net = source_realized.get(source, 0.0)
         costs = source_costs.get(source, 0.0)
